@@ -182,6 +182,39 @@ void main() {
         self._invert_prog["tex"].value = 0
         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
 
+    def _effect_reactivity(self, effect: BaseEffect | None) -> float:
+        """Return per-effect reactivity override (default 1.0)."""
+        if effect is None:
+            return 1.0
+        cfg = getattr(effect, "config", None)
+        if not isinstance(cfg, dict):
+            return 1.0
+        try:
+            value = float(cfg.get("reactivity", 1.0))
+        except Exception:
+            return 1.0
+        return max(0.1, min(5.0, value))
+
+    def _audio_for_effect(self, source: AudioData, effect: BaseEffect | None) -> AudioData:
+        """Build an effect-local audio view with optional reactivity scaling.
+
+        Global reactivity is already applied by AudioManager. This method applies
+        an additional per-effect multiplier from `[effects.<ClassName>].reactivity`.
+        """
+        r = self._effect_reactivity(effect)
+        if abs(r - 1.0) < 1e-6:
+            return source
+
+        out = AudioData()
+        out.bass = min(1.0, source.bass * r)
+        out.mid = min(1.0, source.mid * r)
+        out.treble = min(1.0, source.treble * r)
+        out.beat = source.beat
+        out.bpm = source.bpm
+        out.fft = np.clip(source.fft * r, 0.0, 1.0)
+        out.waveform = source.waveform.copy()
+        return out
+
     def _build_blend_pipeline(self) -> None:
         """FBO-pair + transition shader used for cross-effect blending."""
         self._fbo_a = self._make_fbo()
@@ -567,9 +600,11 @@ void main() {
             # Update effects
             if not self._paused:
                 if self._current_effect:
-                    self._current_effect.update(dt, self._audio)
+                    audio_cur = self._audio_for_effect(self._audio, self._current_effect)
+                    self._current_effect.update(dt, audio_cur)
                 if self._next_effect:
-                    self._next_effect.update(dt, self._audio)
+                    audio_next = self._audio_for_effect(self._audio, self._next_effect)
+                    self._next_effect.update(dt, audio_next)
 
             # Keep persistent name overlay in sync with the active effect.
             # ANSIViewer shows the current art title; all other effects show NAME.

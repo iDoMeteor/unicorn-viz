@@ -67,6 +67,11 @@ Aliases:
 
 Per-effect parameter overrides.  Keyed by **Python class name**.
 
+Per-effect reactivity override:
+- Optional key: `reactivity`
+- Effective per-effect audio multiplier = `audio.reactivity * effects.<ClassName>.reactivity`
+- If omitted, per-effect `reactivity` defaults to `1.0`
+
 For a complete list of every effect's tweakable settings and defaults, see:
 
 - [Effect Settings Reference](effect-settings.md)
@@ -92,6 +97,7 @@ Available parameters per effect:
 | Effect            | Parameter   | Range      | Meaning                         |
 |-------------------|-------------|------------|---------------------------------|
 | All               | `speed`     | 0.05–10.0  | Animation rate multiplier       |
+| All               | `reactivity`| 0.1–5.0    | Additional per-effect audio multiplier |
 | ANSIViewer        | `glow`      | 0.0–1.0    | Phosphor glow intensity         |
 | ANSIViewer        | `crt`       | 0.0–1.0    | CRT barrel distortion strength  |
 | ANSIViewer        | `slide_time`| 5.0–300.0  | Seconds per art piece           |

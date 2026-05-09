@@ -6,12 +6,16 @@ Notes:
 - Keys are **class names**, not display names.
 - If an effect does not list settings here, it currently has no user-tweakable parameters.
 - Global audio reactivity and playlist behavior are controlled outside `[effects]`.
+- Every effect can optionally define `reactivity` under `[effects.<ClassName>]`.
+	This multiplies `audio.reactivity` for that effect only.
 
 ## Usage Pattern
 
 ```toml
 [effects.ClassName]
 param_name = value
+# Optional for all effects:
+# reactivity = 1.0
 ```
 
 Example:
