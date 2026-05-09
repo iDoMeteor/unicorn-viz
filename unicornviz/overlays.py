@@ -272,6 +272,7 @@ class Overlays:
         " Space       Pause/resume",
         " R           Random mode",
         " + / -       Speed up/dn",
+        " G / Shift+G Reactivity +/-",
         " A           Audio source",
         " M           MIDI device",
         " TAB         Name overlay",
@@ -512,8 +513,8 @@ void main() {
 
     def _render_help(self) -> None:
         pad = 30.0
-        scale = 3.4
-        lh = 8 * scale + 6
+        scale = 2.95
+        lh = 8 * scale + 5
 
         # Left: generic hotkeys
         y = pad
@@ -522,7 +523,7 @@ void main() {
             y += lh
 
         # Right: direct effect shortcut columns
-        col_scale = 2.7
+        col_scale = 2.45
         col_lh = 8 * col_scale + 4
         col1_x = self._width * 0.47
         col2_x = self._width * 0.66
