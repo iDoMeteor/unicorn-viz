@@ -64,6 +64,13 @@ glow = 1.0
 speed = 1.0
 ```
 
+### `CrystalPyramids` (`Crystal Pyramids`)
+
+```toml
+[effects.CrystalPyramids]
+speed = 1.0
+```
+
 ### `Cosmos` (`Cosmos`)
 
 ```toml

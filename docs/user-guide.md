@@ -101,6 +101,7 @@ python -m unicornviz --help
 | `P` / `←`         | Previous effect                                               |
 | `1`–`9`           | Jump directly to effect #1–9                                 |
 | `!@#$%^&*()`      | Jump directly to effect #10–20 (Shift+1–0)                  |
+| `Ctrl+1`–`Ctrl+0` | Jump directly to effect #21–30                               |
 | `,`               | ANSI Viewer — own art                                         |
 | `.`               | ANSI Viewer — ACiD art                                        |
 | `U`               | Jump to Unicorn Tears                                         |

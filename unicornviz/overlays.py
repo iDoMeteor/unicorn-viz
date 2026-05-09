@@ -265,6 +265,7 @@ class Overlays:
         " P / Left    Prev effect",
         " 1-9         Jump #1-9",
         " !@#$%^&*()  Jump #10-20",
+        " Ctrl+1-0    Jump #21-30",
         " ,           ANSI art",
         " .           ACiD art",
         " F           Fullscreen",
