@@ -1,13 +1,18 @@
 """
-Tunnel — classic texture-mapped infinite tunnel.
-Audio-reactive: beat pulses radius/twist, bass drives spin speed.
+Tunnel 2.0 — fully procedural infinite tunnel, no texture dependency.
+
+Features:
+  - Three nested tunnels with independent twist/speed for parallax depth
+  - Prismatic colour cycling driven by angle + depth + time
+  - Glowing ring pulses that race toward the viewer on every beat
+  - Chromatic aberration on tube edges driven by bass
+  - Hex/diamond wall pattern etched into the tunnel surface
+  - Mid controls hue rotation speed; treble brightens edge glow
+  - No vignette by default
 """
 from __future__ import annotations
 
-import numpy as np
 import moderngl
-from PIL import Image
-from pathlib import Path
 
 from unicornviz.effects.base import BaseEffect, AudioData
 
@@ -23,109 +28,163 @@ void main() {
 
 _FRAG = """
 #version 330
-uniform sampler2D tunnel_tex;
 uniform float iTime;
 uniform float iSpeed;
 uniform float iBass;
+uniform float iMid;
+uniform float iTreble;
 uniform float iBeat;
-in vec2 v_uv;
+uniform float iVignette;
+uniform vec2  iResolution;
+
+in  vec2 v_uv;
 out vec4 fragColor;
 
-#define PI 3.14159265
+#define PI  3.14159265359
+#define TAU 6.28318530718
+
+vec3 palette(float t) {
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 0.85, 0.65);
+    vec3 d = vec3(0.00, 0.15, 0.35);
+    return a + b * cos(TAU * (c * t + d));
+}
+
+// Diamond/hex tile pattern for tunnel walls
+float wallPattern(float angle, float depth) {
+    float ua = angle * 8.0;
+    float ud = depth * 12.0;
+    float da = abs(fract(ua) - 0.5);
+    float dd = abs(fract(ud) - 0.5);
+    float line = smoothstep(0.46, 0.50, max(da, dd));
+    return 1.0 - line * 0.55;
+}
+
+// One tunnel layer: returns colour contribution
+vec3 tunnelLayer(vec2 p, float t, float twist_rate, float fly_speed,
+                 float radius, float hue_off, float ca_amt) {
+    float dist  = length(p);
+    float angle = atan(p.y, p.x) / TAU;        // 0..1
+
+    // Perspective depth from origin
+    float depth = radius / (dist + 0.0001);
+
+    float twist = t * twist_rate + iBass * 0.35;
+    float fly   = t * fly_speed;
+
+    float ua = angle + twist;
+    float ud = depth - fly;
+
+    // Chromatic-aberration sampling (R shifted, B counter-shifted)
+    float dist_r = length(p * (1.0 + ca_amt));
+    float dist_b = length(p * (1.0 - ca_amt));
+    float depth_r = radius / (dist_r + 0.0001);
+    float depth_b = radius / (dist_b + 0.0001);
+
+    // Tunnel wall tile: use chromatic-split depths for R and B
+    float wall   = wallPattern(ua, ud);
+    float wall_r = wallPattern(ua + ca_amt * 0.12, depth_r - fly);
+    float wall_b = wallPattern(ua - ca_amt * 0.12, depth_b - fly);
+
+    // Prismatic colour: angle + depth + time + mid hue rotation
+    float hue = fract(ua * 0.5 + ud * 0.08 + t * (0.04 + iMid * 0.12) + hue_off);
+    vec3 col = palette(hue);
+
+    // Edge glow at tunnel mouth (near centre)
+    float edge = smoothstep(0.4, 0.0, dist) * (0.35 + iTreble * 0.55);
+    col += palette(hue + 0.33) * edge;
+
+    // Apply wall pattern with chromatic split
+    col.r *= wall_r;
+    col.g *= wall;
+    col.b *= wall_b;
+
+    // Depth fog: fade far rings
+    float fog = exp(-dist * 1.4);
+    col *= fog + 0.15;
+
+    // Bass-driven brightness swell
+    col *= 0.7 + iBass * 0.6;
+
+    return col;
+}
+
+// Beat ring pulse: a bright ring expanding outward from centre
+float beatRing(vec2 p, float t, float beat) {
+    if (beat < 0.01) return 0.0;
+    float r   = length(p);
+    // Ring starts small and expands to ~1.2 as beat decays
+    float ring_r = (1.0 - beat) * 1.1;
+    float ring = smoothstep(0.04, 0.0, abs(r - ring_r));
+    return ring * beat * 1.2;
+}
 
 void main() {
-    vec2 p = v_uv;   // -1..1
-    p.x *= 1.777;    // aspect correct
+    float ar = iResolution.x / iResolution.y;
+    vec2 p = v_uv * vec2(ar, 1.0);
+    float t = iTime * iSpeed;
 
-    float dist  = length(p);
-    float angle = atan(p.y, p.x) / PI;  // -1..1
+    // Three nested tunnels at different scales/speeds for parallax depth
+    vec3 col  = tunnelLayer(p,         t, 0.18, 0.42, 0.28, 0.00, iBass * 0.04);
+    col      += tunnelLayer(p * 1.55,  t, 0.24, 0.60, 0.28, 0.35, iBass * 0.03) * 0.65;
+    col      += tunnelLayer(p * 2.4,   t, 0.31, 0.85, 0.28, 0.62, iBass * 0.02) * 0.40;
 
-    // Tunnel mapping: tex_u = angle, tex_v = 1/dist → scrolling depth
-    float depth = 0.3 / (dist + 0.01);
-    float twist = iTime * iSpeed * 0.15 + iBass * 0.5;
+    // Beat ring flash
+    float ring = beatRing(v_uv * vec2(ar, 1.0), t, iBeat);
+    col += palette(fract(t * 0.15)) * ring;
 
-    vec2 uv = vec2(angle + twist, depth - iTime * iSpeed * 0.4);
-    uv.x += iBeat * 0.1;   // beat-snap horizontal shift
+    // Optional vignette (off by default)
+    if (iVignette > 0.01) {
+        col *= 1.0 - iVignette * smoothstep(0.5, 1.2, length(v_uv));
+    }
 
-    vec3 col = texture(tunnel_tex, uv).rgb;
-
-    // Darken edges (vignette)
-    float vig = 1.0 - smoothstep(0.6, 1.2, dist);
-    col *= vig;
-
-    // Scanlines
-    col *= 0.88 + 0.12 * sin(gl_FragCoord.y * 3.14159 * 2.0);
+    // Filmic tone-map + gamma
+    col = col / (col + 0.6);
+    col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
 
     fragColor = vec4(col, 1.0);
 }
 """
 
 
-def _make_default_tunnel_texture(ctx: moderngl.Context) -> moderngl.Texture:
-    """Generate a procedural brick/grid tunnel texture."""
-    W, H = 256, 256
-    data = np.zeros((H, W, 3), dtype=np.uint8)
-    for y in range(H):
-        for x in range(W):
-            brick_x = (x + (y // 16) * 8) % 32
-            brick_y = y % 16
-            in_mortar = brick_x < 2 or brick_y < 2
-            if in_mortar:
-                data[y, x] = [30, 30, 30]
-            else:
-                shade = int(120 + 60 * ((x % 32) / 32.0))
-                data[y, x] = [shade, shade // 2, shade // 3]
-    tex = ctx.texture((W, H), 3, data=data.tobytes())
-    tex.filter = moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR
-    tex.repeat_x = True
-    tex.repeat_y = True
-    tex.build_mipmaps()
-    return tex
-
-
 class Tunnel(BaseEffect):
-    NAME = "Tunnel"
+    """Procedural infinite tunnel with prismatic colour and beat ring pulses."""
+
+    NAME   = "Tunnel"
     AUTHOR = "unicorn-viz"
-    TAGS = ["classic", "audio"]
+    TAGS   = ["classic", "audio", "futuristic"]
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {"speed": 1.0, "vignette": 0.0}
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
-        self._bass = 0.0
-        self._beat = 0.0
-
-        # Load custom texture if provided
-        tex_path = Path(self.config.get("texture", "assets/textures/tunnel.png"))
-        if tex_path.exists():
-            img = Image.open(tex_path).convert("RGB")
-            w, h = img.size
-            self._tex = self.ctx.texture((w, h), 3, data=img.tobytes())
-            self._tex.filter = moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR
-            self._tex.repeat_x = True
-            self._tex.repeat_y = True
-            self._tex.build_mipmaps()
-        else:
-            self._tex = _make_default_tunnel_texture(self.ctx)
+        self._bass   = 0.0
+        self._mid    = 0.0
+        self._treble = 0.0
+        self._beat   = 0.0
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
+        self._bass   = audio.bass
+        self._mid    = audio.mid
+        self._treble = audio.treble
         if audio.beat > 0.5:
             self._beat = 1.0
-        self._beat = max(0.0, self._beat - dt * 4.0)
+        self._beat = max(0.0, self._beat - dt * 3.5)
 
     def render(self) -> None:
-        self._prog["iTime"].value = self.time
-        self._prog["iSpeed"].value = self.parameters["speed"]
-        self._prog["iBass"].value = self._bass
-        self._prog["iBeat"].value = self._beat
-        self._tex.use(location=0)
-        self._prog["tunnel_tex"].value = 0
+        self._prog["iTime"].value       = self.time
+        self._prog["iResolution"].value = (float(self.width), float(self.height))
+        self._prog["iSpeed"].value      = float(self.parameters["speed"])
+        self._prog["iVignette"].value   = float(self.parameters["vignette"])
+        self._prog["iBass"].value       = self._bass
+        self._prog["iMid"].value        = self._mid
+        self._prog["iTreble"].value     = self._treble
+        self._prog["iBeat"].value       = self._beat
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:
         self._vao.release()
         self._vbo.release()
         self._prog.release()
-        self._tex.release()
