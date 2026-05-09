@@ -1,14 +1,20 @@
 """
-Fractal Zoom — Mandelbrot set with smooth colouring and audio-reactive zoom.
-Beat triggers a zoom burst; bass shifts the palette; treble adds iteration depth.
+Fractal Zoom 2.0 — non-black Mandelbrot voyage with nebula interior shading.
+
+Fixes and upgrades:
+  - No hard-black trap: inside-set pixels render as animated dark-nebula detail
+  - Orbit-trap based colouring for richer structures during deep zoom
+  - Safer precision lifecycle: reset before precision collapse
+  - Slow camera drift + target jitter for long-run non-repeating motion
+  - Beat pulses zoom and palette, but settles quickly
 """
 from __future__ import annotations
 
 import math
-import moderngl
-import numpy as np
 
-from unicornviz.effects.base import BaseEffect, AudioData
+import moderngl
+
+from unicornviz.effects.base import AudioData, BaseEffect
 
 _VERT = """
 #version 330
@@ -28,6 +34,9 @@ uniform float iCenterY;
 uniform float iZoom;
 uniform float iPalShift;
 uniform float iBass;
+uniform float iMid;
+uniform float iTreble;
+uniform float iBeat;
 uniform float iRotation;
 uniform int   iMaxIter;
 
@@ -37,125 +46,173 @@ out vec4 fragColor;
 vec3 palette(float t) {
     vec3 a = vec3(0.5, 0.5, 0.5);
     vec3 b = vec3(0.5, 0.5, 0.5);
-    vec3 c = vec3(1.0, 1.0, 0.5);
-    vec3 d = vec3(0.8, 0.9, 0.3);
+    vec3 c = vec3(1.0, 0.9, 0.7);
+    vec3 d = vec3(0.05, 0.18, 0.36);
     return a + b * cos(6.28318 * (c * t + d));
+}
+
+float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
 }
 
 void main() {
     vec2 uv = v_uv * vec2(iResolution.x / iResolution.y, 1.0);
-    
-    // Apply rotation to the uv coordinates
+
+    // Camera rotation
     float c = cos(iRotation);
     float s = sin(iRotation);
     uv = vec2(c * uv.x - s * uv.y, s * uv.x + c * uv.y);
-    
-    vec2 centre = vec2(iCenterX, iCenterY);
-    vec2 cplx = centre + uv / iZoom;
+
+    vec2 center = vec2(iCenterX, iCenterY);
+    vec2 cplx = center + uv / iZoom;
 
     vec2 z = vec2(0.0);
-    float smooth_iter = 0.0;
+    float orbit = 1e9;
+    float trap = 1e9;
     int i;
+    float m2 = 0.0;
+
     for (i = 0; i < iMaxIter; i++) {
-        z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + cplx;
-        if (dot(z, z) > 256.0) {
-            smooth_iter = float(i) - log2(log2(dot(z, z)));
+        z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + cplx;
+        m2 = dot(z, z);
+        orbit = min(orbit, abs(length(z) - 0.5));
+        trap = min(trap, abs(z.x) + abs(z.y));
+        if (m2 > 256.0) {
             break;
         }
     }
 
-    if (i == iMaxIter) {
-        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
+    vec3 col;
+    if (i < iMaxIter) {
+        // Escaped points: smooth iterations + orbit trap detail
+        float smooth_i = float(i) - log2(log2(m2));
+        float t = smooth_i / float(iMaxIter);
+        float trap_mod = exp(-12.0 * orbit);
+        float hue = t + iPalShift + iBass * 0.06 + trap_mod * 0.2;
+        col = palette(hue);
+        col += palette(hue + 0.23) * trap_mod * (0.35 + iTreble * 0.35);
+    } else {
+        // Inside set: never black; render dark nebula texture with subtle life.
+        float n = hash(floor((uv + vec2(3.0, 1.7)) * 120.0 + iPalShift * 30.0));
+        float swirl = 0.5 + 0.5 * sin(uv.x * 24.0 + uv.y * 19.0 + iPalShift * 10.0);
+        float glow = exp(-5.0 * trap);
+        vec3 deep = vec3(0.015, 0.012, 0.028);
+        vec3 neb = vec3(0.06, 0.035, 0.11);
+        col = mix(deep, neb, n * 0.45 + swirl * 0.35);
+        col += vec3(0.08, 0.05, 0.14) * glow * (0.5 + iMid * 0.4);
     }
 
-    float t = smooth_iter / float(iMaxIter) + iPalShift + iBass * 0.1;
-    vec3 col = palette(t);
-    
-    // If stuck at max iterations, show a subtle dark gradient instead of pure black
-    if (i == iMaxIter) {
-        vec2 dist = abs(uv - vec2(0.5)) * 2.0;
-        float d = length(dist);
-        col = mix(vec3(0.02), vec3(0.08, 0.05, 0.12), smoothstep(2.0, 0.5, d));
-    }
-    
+    // Beat flash (small)
+    col += iBeat * 0.06 * vec3(0.6, 0.4, 1.0);
+
+    // Filmic tone map + gamma
+    col = col / (col + 0.7);
+    col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
+
     fragColor = vec4(col, 1.0);
 }
 """
 
-
-# Interesting Mandelbrot zoom targets
 _TARGETS = [
-    (-0.7269,    0.1889),    # Seahorse valley
-    (-0.5251993,  0.5260),   # Elephant valley  
-    (-0.74543,   0.11301),   # Deep spiral
-    (-1.2561,    0.3820),    # Bulb boundary
-    (0.2806,     0.5338),    # Mini-brot cluster
-    (-0.8614678, 0.2325938), # Glynn valley
+    (-0.7269, 0.1889),
+    (-0.5251993, 0.5260),
+    (-0.74543, 0.11301),
+    (-1.2561, 0.3820),
+    (0.2806, 0.5338),
+    (-0.8614678, 0.2325938),
 ]
 
 
 class FractalZoom(BaseEffect):
-    NAME = "Fractal Zoom"
-    AUTHOR = "unicorn-viz"
-    TAGS = ["futuristic", "audio", "psychedelic"]
+    NAME = 'Fractal Zoom'
+    AUTHOR = 'unicorn-viz'
+    TAGS = ['futuristic', 'audio', 'psychedelic']
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0, "max_iter": 180}
+        self.parameters = {'speed': 1.0, 'max_iter': 220}
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
 
-        # Randomize initial state so we never see the same fractal startup
         self._target_idx = int(self.rng.integers(0, len(_TARGETS)))
         self._cx, self._cy = _TARGETS[self._target_idx]
-        # Start with randomized zoom in valid range to avoid black screen
-        self._zoom = float(self.rng.uniform(0.4, 0.9))
-        self._zoom_vel = 1.0   # zoom multiplier per second
-        self._pal_shift = 0.0
+        self._zoom = float(self.rng.uniform(0.55, 0.95))
         self._rotation = float(self.rng.uniform(-math.pi, math.pi))
+        self._pal_shift = float(self.rng.uniform(0.0, 1.0))
+
         self._bass = 0.0
-        self._beat_zoom = 0.0
+        self._mid = 0.0
+        self._treble = 0.0
+        self._beat = 0.0
+        self._beat_zoom = 1.0
+
+        # Long-run drift target to avoid repetitive framing.
+        self._drift_x = 0.0
+        self._drift_y = 0.0
+        self._target_drift_x = float(self.rng.uniform(-0.03, 0.03))
+        self._target_drift_y = float(self.rng.uniform(-0.03, 0.03))
+        self._retarget_t = 0.0
+        self._retarget_interval = float(self.rng.uniform(6.0, 11.0))
+
+    def _choose_next_target(self) -> None:
+        self._zoom = float(self.rng.uniform(0.55, 0.95))
+        self._target_idx = (self._target_idx + 1) % len(_TARGETS)
+        self._cx, self._cy = _TARGETS[self._target_idx]
+        self._cx += float(self.rng.uniform(-0.035, 0.035))
+        self._cy += float(self.rng.uniform(-0.035, 0.035))
+        self._rotation = float(self.rng.uniform(-math.pi, math.pi))
+        self._pal_shift = float(self.rng.uniform(0.0, 1.0))
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         self._bass = audio.bass
+        self._mid = audio.mid
+        self._treble = audio.treble
 
         if audio.beat > 0.5:
-            self._beat_zoom = 2.5    # burst multiplier
-        self._beat_zoom = max(1.0, self._beat_zoom - dt * 3.0)
+            self._beat = 1.0
+            self._beat_zoom = 2.2
+        self._beat = max(0.0, self._beat - dt * 4.0)
+        self._beat_zoom = max(1.0, self._beat_zoom - dt * 2.8)
 
-        speed = self.parameters["speed"] * self._beat_zoom
-        self._zoom *= math.exp(dt * 0.18 * speed)  # Slower zoom for mesmerizing effect
-        self._pal_shift = (self._pal_shift + dt * 0.04 * speed) % 1.0  # Slower color shift
-        self._rotation += dt * 0.12 * speed  # Much slower rotation for contemplation
+        speed = float(self.parameters['speed'])
+        zoom_rate = 0.12 * speed * self._beat_zoom
+        self._zoom *= math.exp(dt * zoom_rate)
+        self._rotation += dt * (0.08 + self._bass * 0.06) * speed
+        self._pal_shift = (self._pal_shift + dt * (0.032 + self._mid * 0.04) * speed) % 1.0
 
-        # Jump to next target when zoomed too deep (precision limit ~1e13)
-        if self._zoom > 1e10:
-            self._zoom = float(self.rng.uniform(0.5, 0.95))  # Randomize zoom on reset
-            self._target_idx = (self._target_idx + 1) % len(_TARGETS)
-            self._cx, self._cy = _TARGETS[self._target_idx]
-            # Randomize target center slightly within a local region for variety
-            self._cx += float(self.rng.uniform(-0.05, 0.05))
-            self._cy += float(self.rng.uniform(-0.05, 0.05))
-            self._rotation = float(self.rng.uniform(-math.pi, math.pi))  # Fresh rotation
+        # Retarget drift every few seconds.
+        self._retarget_t += dt
+        if self._retarget_t >= self._retarget_interval:
+            self._retarget_t = 0.0
+            self._retarget_interval = float(self.rng.uniform(6.0, 11.0))
+            self._target_drift_x = float(self.rng.uniform(-0.05, 0.05))
+            self._target_drift_y = float(self.rng.uniform(-0.05, 0.05))
+
+        blend = min(1.0, dt * 0.35)
+        self._drift_x += (self._target_drift_x - self._drift_x) * blend
+        self._drift_y += (self._target_drift_y - self._drift_y) * blend
+
+        # Reset well before precision trouble to avoid black traps.
+        if self._zoom > 2.0e7:
+            self._choose_next_target()
 
     def render(self) -> None:
-        self._prog["iResolution"].value = (float(self.width), float(self.height))
-        self._prog["iCenterX"].value  = float(self._cx)
-        self._prog["iCenterY"].value  = float(self._cy)
-        self._prog["iZoom"].value = float(self._zoom)
-        self._prog["iPalShift"].value = self._pal_shift
-        self._prog["iBass"].value = self._bass
-        self._prog["iRotation"].value = float(self._rotation)
-        self._prog["iMaxIter"].value = int(self.parameters["max_iter"]
-                                           + audio_iter_boost(self._bass))
+        self._prog['iResolution'].value = (float(self.width), float(self.height))
+        self._prog['iCenterX'].value = float(self._cx + self._drift_x / max(self._zoom, 1.0))
+        self._prog['iCenterY'].value = float(self._cy + self._drift_y / max(self._zoom, 1.0))
+        self._prog['iZoom'].value = float(self._zoom)
+        self._prog['iPalShift'].value = float(self._pal_shift)
+        self._prog['iBass'].value = float(self._bass)
+        self._prog['iMid'].value = float(self._mid)
+        self._prog['iTreble'].value = float(self._treble)
+        self._prog['iBeat'].value = float(self._beat)
+        self._prog['iRotation'].value = float(self._rotation)
+        self._prog['iMaxIter'].value = int(self.parameters['max_iter'] + self._bass * 26.0)
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:
         self._vao.release()
         self._vbo.release()
         self._prog.release()
-
-
-def audio_iter_boost(bass: float) -> float:
-    return bass * 30
