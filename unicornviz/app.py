@@ -242,7 +242,7 @@ void main() {
         float n = hash(floor((v_uv + vec2(phase * 0.13, -phase * 0.11)) * vec2(1920.0, 1080.0)));
         float edge = smoothstep(t - 0.04, t + 0.04, n);
         col = mix(a, b, edge);
-    } else {
+    } else if (mode == 5) {
         // zoom blend
         vec2 c = vec2(0.5);
         vec2 uza = c + (v_uv - c) * (1.0 + 0.12 * t + iAudioImpact * 0.05);
@@ -250,6 +250,46 @@ void main() {
         vec4 az = texture(tex_a, clamp(uza, 0.0, 1.0));
         vec4 bz = texture(tex_b, clamp(uzb, 0.0, 1.0));
         col = mix(az, bz, t);
+    } else if (mode == 6) {
+        // radial wipe from center outward
+        float r = length(v_uv - vec2(0.5));
+        float edge = smoothstep(t * 0.85 - 0.03, t * 0.85 + 0.03, r);
+        col = mix(b, a, edge);
+    } else if (mode == 7) {
+        // luma threshold reveal
+        float l = dot(b.rgb, vec3(0.2126, 0.7152, 0.0722));
+        float edge = smoothstep(t - 0.08, t + 0.08, l);
+        col = mix(a, b, edge);
+    } else if (mode == 8) {
+        // stripe wipe with animated bands
+        float bands = 0.5 + 0.5 * sin((v_uv.x * 24.0 + v_uv.y * 14.0) + phase * 10.0);
+        float edge = smoothstep(t - 0.06, t + 0.06, bands);
+        col = mix(a, b, edge);
+    } else if (mode == 9) {
+        // angular sweep around center
+        vec2 p = v_uv - vec2(0.5);
+        float a0 = atan(p.y, p.x) / 6.2831853 + 0.5;
+        float edge = smoothstep(t - 0.04, t + 0.04, fract(a0 + phase * 0.2));
+        col = mix(a, b, edge);
+    } else if (mode == 10) {
+        // soft glitch slide bands
+        float n = hash(floor(v_uv * vec2(48.0, 96.0) + phase * 7.0));
+        vec2 j = vec2((n - 0.5) * 0.03 * (1.0 - t), 0.0);
+        vec4 ag = texture(tex_a, clamp(v_uv + j, 0.0, 1.0));
+        vec4 bg = texture(tex_b, clamp(v_uv - j, 0.0, 1.0));
+        col = mix(ag, bg, smoothstep(0.0, 1.0, t));
+    } else {
+        // prism split blend
+        float s = (1.0 - t) * 0.02;
+        vec3 ar = texture(tex_a, clamp(v_uv + vec2( s, 0.0), 0.0, 1.0)).rgb;
+        vec3 ag = texture(tex_a, clamp(v_uv,                    0.0, 1.0)).rgb;
+        vec3 ab = texture(tex_a, clamp(v_uv + vec2(-s, 0.0), 0.0, 1.0)).rgb;
+        vec3 br = texture(tex_b, clamp(v_uv + vec2(-s, 0.0), 0.0, 1.0)).rgb;
+        vec3 bg = texture(tex_b, clamp(v_uv,                    0.0, 1.0)).rgb;
+        vec3 bb = texture(tex_b, clamp(v_uv + vec2( s, 0.0), 0.0, 1.0)).rgb;
+        vec3 ca = vec3(ar.r, ag.g, ab.b);
+        vec3 cb = vec3(br.r, bg.g, bb.b);
+        col = vec4(mix(ca, cb, t), 1.0);
     }
 
     // Light-wrap from frame difference to soften hard transitions.
@@ -325,6 +365,12 @@ void main() {
             "scanwipe_y",
             "dissolve",
             "zoomblend",
+            "radialwipe",
+            "lumawipe",
+            "stripewipe",
+            "anglesweep",
+            "glitchsoft",
+            "prismsplit",
         ]
         if requested in ("random", "shuffle"):
             # Transition 2.0: choose style by effect vibe tags.
@@ -333,18 +379,21 @@ void main() {
             tags = set(curr_tags + next_tags)
 
             if "psychedelic" in tags or "crystal" in tags:
-                weighted = ["dissolve", "zoomblend", "smoothfade", "crossfade"]
+                weighted = ["dissolve", "zoomblend", "prismsplit", "anglesweep", "smoothfade", "crossfade"]
             elif "classic" in tags:
-                weighted = ["scanwipe_x", "scanwipe_y", "crossfade", "smoothfade"]
+                weighted = ["scanwipe_x", "scanwipe_y", "stripewipe", "crossfade", "smoothfade"]
             elif "simulation" in tags or "particles" in tags:
-                weighted = ["zoomblend", "dissolve", "smoothfade", "crossfade"]
+                weighted = ["zoomblend", "dissolve", "radialwipe", "glitchsoft", "smoothfade", "crossfade"]
             else:
                 weighted = transition_types
             self._transition_kind = str(self._rng.choice(weighted))
         elif requested == "scanwipe":
             self._transition_kind = "scanwipe_y"
         elif requested == "cut":
-            self._transition_kind = "crossfade"
+            # Keep cut soft for performance environments.
+            self._transition_kind = "smoothfade"
+        elif requested == "radial":
+            self._transition_kind = "radialwipe"
         elif requested in transition_types:
             self._transition_kind = requested
         else:
@@ -623,6 +672,12 @@ void main() {
                     "scanwipe_y": 3,
                     "dissolve": 4,
                     "zoomblend": 5,
+                    "radialwipe": 6,
+                    "lumawipe": 7,
+                    "stripewipe": 8,
+                    "anglesweep": 9,
+                    "glitchsoft": 10,
+                    "prismsplit": 11,
                 }
 
                 # Transition composite to screen
@@ -636,9 +691,10 @@ void main() {
                 self._blend_prog["t"].value = self._transition_t
                 self._blend_prog["mode"].value = mode_map.get(self._transition_kind, 0)
                 self._blend_prog["dir"].value = self._transition_dir
-                self._blend_prog["phase"].value = self._transition_phase + self.time * 0.2
+                self._transition_phase += (1.0 / TARGET_FPS) * (0.6 + audio_impact * 1.4)
+                self._blend_prog["phase"].value = self._transition_phase
                 self._blend_prog["iAudioImpact"].value = audio_impact
-                self._blend_prog["iPalShift"].value = (self.time * 0.07) % 1.0
+                self._blend_prog["iPalShift"].value = (self._transition_phase * 0.31) % 1.0
                 self._blend_prog["iLightWrap"].value = 0.10 + audio_impact * 0.28
                 self._blend_vao.render(moderngl.TRIANGLE_STRIP)
 

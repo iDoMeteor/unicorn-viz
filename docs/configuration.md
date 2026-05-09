@@ -21,8 +21,13 @@ All settings live in `config.toml` in the project root.
 |----------------------|--------|----------------|-----------------------------------------------------|
 | `mode`               | str    | `"sequential"` | Playlist mode: `"sequential"` or `"random"`         |
 | `effect_duration`    | int    | `20`           | Seconds before auto-advancing to the next effect    |
-| `transition`         | str    | `"crossfade"`  | Transition type: `"crossfade"`, `"smoothfade"`, `"scanwipe_x"`, `"scanwipe_y"`, `"dissolve"`, `"zoomblend"`, `"shuffle"` |
+| `transition`         | str    | `"crossfade"`  | Transition type: `"crossfade"`, `"smoothfade"`, `"scanwipe_x"`, `"scanwipe_y"`, `"dissolve"`, `"zoomblend"`, `"radialwipe"`, `"lumawipe"`, `"stripewipe"`, `"anglesweep"`, `"glitchsoft"`, `"prismsplit"`, `"shuffle"` |
 | `transition_duration`| float  | `1.0`          | Transition length in seconds                        |
+
+Aliases:
+- `scanwipe` -> `scanwipe_y`
+- `radial` -> `radialwipe`
+- `cut` -> `smoothfade` (intentionally soft; avoids harsh hard cuts)
 
 ---
 
