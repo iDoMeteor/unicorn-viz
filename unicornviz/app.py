@@ -49,6 +49,8 @@ class App:
         self._next_effect: BaseEffect | None = None
         self._transition_t: float = 0.0
         self._transition_kind: str = "crossfade"
+        self._transition_dir: tuple[float, float] = (1.0, 0.0)
+        self._transition_phase: float = 0.0
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._transition_duration: float = self.cfg.get(
@@ -200,6 +202,11 @@ uniform sampler2D tex_a;
 uniform sampler2D tex_b;
 uniform float t;
 uniform int mode;
+    uniform vec2 dir;
+    uniform float phase;
+    uniform float iAudioImpact;
+    uniform float iPalShift;
+    uniform float iLightWrap;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -208,47 +215,53 @@ float hash(vec2 p) {
 }
 
 void main() {
-    vec4 a = texture(tex_a, v_uv);
-    vec4 b = texture(tex_b, v_uv);
+    vec2 nd = normalize(dir);
+    vec2 uv_a = v_uv - nd * (1.0 - t) * (0.018 + iAudioImpact * 0.012);
+    vec2 uv_b = v_uv + nd * (1.0 - t) * (0.018 + iAudioImpact * 0.012);
+    vec4 a = texture(tex_a, clamp(uv_a, 0.0, 1.0));
+    vec4 b = texture(tex_b, clamp(uv_b, 0.0, 1.0));
+    vec4 col;
 
     if (mode == 0) {
         // linear crossfade
-        fragColor = mix(a, b, t);
-        return;
-    }
-    if (mode == 1) {
+        col = mix(a, b, t);
+    } else if (mode == 1) {
         // smoothstep crossfade
         float s = smoothstep(0.0, 1.0, t);
-        fragColor = mix(a, b, s);
-        return;
-    }
-    if (mode == 2) {
+        col = mix(a, b, s);
+    } else if (mode == 2) {
         // horizontal wipe
-        float edge = smoothstep(t - 0.02, t + 0.02, v_uv.x);
-        fragColor = mix(a, b, edge);
-        return;
-    }
-    if (mode == 3) {
+        float edge = smoothstep(t - 0.02, t + 0.02, v_uv.x + nd.x * 0.08);
+        col = mix(a, b, edge);
+    } else if (mode == 3) {
         // vertical wipe
-        float edge = smoothstep(t - 0.02, t + 0.02, v_uv.y);
-        fragColor = mix(a, b, edge);
-        return;
-    }
-    if (mode == 4) {
-        // dissolve noise threshold
-        float n = hash(floor(v_uv * vec2(1920.0, 1080.0)));
+        float edge = smoothstep(t - 0.02, t + 0.02, v_uv.y + nd.y * 0.08);
+        col = mix(a, b, edge);
+    } else if (mode == 4) {
+        // dissolve noise threshold with mild temporal flow
+        float n = hash(floor((v_uv + vec2(phase * 0.13, -phase * 0.11)) * vec2(1920.0, 1080.0)));
         float edge = smoothstep(t - 0.04, t + 0.04, n);
-        fragColor = mix(a, b, edge);
-        return;
+        col = mix(a, b, edge);
+    } else {
+        // zoom blend
+        vec2 c = vec2(0.5);
+        vec2 uza = c + (v_uv - c) * (1.0 + 0.12 * t + iAudioImpact * 0.05);
+        vec2 uzb = c + (v_uv - c) * (1.12 - 0.12 * t - iAudioImpact * 0.05);
+        vec4 az = texture(tex_a, clamp(uza, 0.0, 1.0));
+        vec4 bz = texture(tex_b, clamp(uzb, 0.0, 1.0));
+        col = mix(az, bz, t);
     }
 
-    // zoom blend
-    vec2 c = vec2(0.5);
-    vec2 uv_a = c + (v_uv - c) * (1.0 + 0.12 * t);
-    vec2 uv_b = c + (v_uv - c) * (1.12 - 0.12 * t);
-    vec4 az = texture(tex_a, clamp(uv_a, 0.0, 1.0));
-    vec4 bz = texture(tex_b, clamp(uv_b, 0.0, 1.0));
-    fragColor = mix(az, bz, t);
+    // Light-wrap from frame difference to soften hard transitions.
+    vec3 wrap = abs(a.rgb - b.rgb);
+    col.rgb += wrap * iLightWrap * (0.25 + 0.75 * iAudioImpact);
+
+    // Subtle palette remap pulse for transition cohesion.
+    float lum = dot(col.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 remap = 0.6 + 0.4 * cos(6.28318 * (lum + vec3(0.0, 0.33, 0.67) + iPalShift));
+    col.rgb = mix(col.rgb, col.rgb * remap, 0.08 + 0.18 * iAudioImpact);
+
+    fragColor = vec4(clamp(col.rgb, 0.0, 1.0), 1.0);
 }
 """
         self._blend_prog = self._ctx.program(
@@ -314,7 +327,20 @@ void main() {
             "zoomblend",
         ]
         if requested in ("random", "shuffle"):
-            self._transition_kind = str(self._rng.choice(transition_types))
+            # Transition 2.0: choose style by effect vibe tags.
+            next_tags = [t.lower() for t in getattr(cls, "TAGS", [])]
+            curr_tags = [t.lower() for t in getattr(self._current_effect, "TAGS", [])] if self._current_effect else []
+            tags = set(curr_tags + next_tags)
+
+            if "psychedelic" in tags or "crystal" in tags:
+                weighted = ["dissolve", "zoomblend", "smoothfade", "crossfade"]
+            elif "classic" in tags:
+                weighted = ["scanwipe_x", "scanwipe_y", "crossfade", "smoothfade"]
+            elif "simulation" in tags or "particles" in tags:
+                weighted = ["zoomblend", "dissolve", "smoothfade", "crossfade"]
+            else:
+                weighted = transition_types
+            self._transition_kind = str(self._rng.choice(weighted))
         elif requested == "scanwipe":
             self._transition_kind = "scanwipe_y"
         elif requested == "cut":
@@ -326,6 +352,9 @@ void main() {
         log.info("Transition → %s", self._transition_kind)
 
         self._transition_t = 0.0
+        a = float(self._rng.uniform(0.0, np.pi * 2.0))
+        self._transition_dir = (float(np.cos(a)), float(np.sin(a)))
+        self._transition_phase = float(self._rng.uniform(0.0, 1.0))
         self._demo_timer = 0.0
 
     def show_splash(self) -> None:
@@ -550,9 +579,19 @@ void main() {
                     self._current_effect.render()
         else:
             # Transition in progress
+            audio_impact = 0.0
+            if self._audio is not None:
+                audio_impact = min(
+                    1.0,
+                    float(self._audio.bass) * 0.45
+                    + float(self._audio.mid) * 0.30
+                    + float(self._audio.treble) * 0.15
+                    + float(self._audio.beat) * 0.40,
+                )
             self._transition_t += (
                 (1.0 / self._transition_duration)
                 * (1.0 / TARGET_FPS)
+                * (1.0 + audio_impact * 0.45)
             )
             if self._transition_t >= 1.0:
                 # Finish transition
@@ -596,6 +635,11 @@ void main() {
                 self._blend_prog["tex_b"].value = 1
                 self._blend_prog["t"].value = self._transition_t
                 self._blend_prog["mode"].value = mode_map.get(self._transition_kind, 0)
+                self._blend_prog["dir"].value = self._transition_dir
+                self._blend_prog["phase"].value = self._transition_phase + self.time * 0.2
+                self._blend_prog["iAudioImpact"].value = audio_impact
+                self._blend_prog["iPalShift"].value = (self.time * 0.07) % 1.0
+                self._blend_prog["iLightWrap"].value = 0.10 + audio_impact * 0.28
                 self._blend_vao.render(moderngl.TRIANGLE_STRIP)
 
     def _on_resize(self, w: int, h: int) -> None:
