@@ -47,6 +47,7 @@ uniform vec2      iResolution;
 uniform float     iBass;
 uniform float     iMid;
 uniform float     iTime;
+uniform float     iEnergy;
 // Raindrop
 uniform vec2  iDrop;     // UV position; (−1,−1) = no drop this frame
 uniform float iDropAmt;
@@ -69,8 +70,8 @@ void main() {
     float w  = texture(curr, v_uv + vec2(-px.x, 0.0)).r;
 
     // Wave equation with damping
-    float speed   = 0.49 + iBass * 0.04;
-    float damping = 0.992 - iMid * 0.004;
+    float speed   = 0.49 + iBass * 0.04 + iEnergy * 0.03;
+    float damping = 0.992 - iMid * 0.004 - iEnergy * 0.003;
     float next = ((n + s + e + w) * speed - p) * damping;
 
     // Continuous turbulence driven by mid/bass
@@ -82,6 +83,21 @@ void main() {
         float d = length(v_uv - iDrop) * min(iResolution.x, iResolution.y);
         if (d < 4.0) {
             next += iDropAmt * (1.0 - d / 4.0);
+        }
+    }
+
+    // High-energy density injection: synthetic micro-drops during intense parts.
+    if (iEnergy > 0.35) {
+        float min_res = min(iResolution.x, iResolution.y);
+        for (int k = 0; k < 3; k++) {
+            float fk = float(k);
+            vec2 rp = vec2(
+                hash(vec2(iTime * (0.73 + fk * 0.21), fk + 11.3)),
+                hash(vec2(iTime * (0.59 + fk * 0.17), fk + 23.7))
+            );
+            float d = length(v_uv - rp) * min_res;
+            float r = mix(2.0, 5.5, iEnergy);
+            next += smoothstep(r, 0.0, d) * iEnergy * 0.10;
         }
     }
 
@@ -186,6 +202,7 @@ class Water(BaseEffect):
         self._beat   = 0.0
         self._drop   = (-1.0, -1.0)
         self._drop_amt = 0.0
+        self._energy = 0.0
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -193,11 +210,12 @@ class Water(BaseEffect):
         self._bass   = audio.bass   * amp
         self._mid    = audio.mid    * amp
         self._treble = audio.treble * amp
+        self._energy = min(1.0, 0.55 * self._bass + 0.35 * self._mid + 0.20 * self._treble)
 
         if audio.beat > 0.5:
             self._beat = 1.0
             self._drop = (random.random(), random.random())
-            self._drop_amt = 0.35 + self._bass * 0.45
+            self._drop_amt = 0.45 + self._bass * 0.70
         else:
             self._drop = (-1.0, -1.0)
         self._beat = max(0.0, self._beat - dt * 4.0)
@@ -205,7 +223,12 @@ class Water(BaseEffect):
         # Mid-driven continuous ripple points
         if self._mid > 0.3 and random.random() < self._mid * 0.4:
             self._drop = (random.random(), random.random())
-            self._drop_amt = self._mid * 0.15
+            self._drop_amt = self._mid * 0.18
+
+        # Intense sections: denser random impacts for a heavier storm feel.
+        if self._energy > 0.55 and random.random() < self._energy * 0.95:
+            self._drop = (random.random(), random.random())
+            self._drop_amt = max(self._drop_amt, 0.14 + self._energy * 0.26)
 
     def render(self) -> None:
         ctx = self.ctx
@@ -233,6 +256,7 @@ class Water(BaseEffect):
         self._sim_prog["iBass"].value      = self._bass
         self._sim_prog["iMid"].value       = self._mid
         self._sim_prog["iTime"].value      = self.time
+        self._sim_prog["iEnergy"].value    = self._energy
         self._sim_prog["iDrop"].value      = self._drop
         self._sim_prog["iDropAmt"].value   = self._drop_amt
         self._sim_vao.render(moderngl.TRIANGLE_STRIP)

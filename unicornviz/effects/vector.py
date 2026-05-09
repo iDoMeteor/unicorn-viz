@@ -109,9 +109,24 @@ _FRAG = """
 #version 330
 uniform vec3  uColor;
 uniform float uBrightness;
+uniform float uTime;
+uniform float uSparkle;
 out vec4 fragColor;
+
+float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
+}
+
 void main() {
-    fragColor = vec4(uColor * uBrightness, 1.0);
+    vec3 col = uColor * uBrightness;
+
+    // Subtle sparkle touches: occasional pixel glints on wire edges.
+    float spark = step(0.997, hash(floor(gl_FragCoord.xy * 0.35) + floor(uTime * 10.0)));
+    col += vec3(1.0, 0.95, 0.85) * spark * uSparkle;
+
+    fragColor = vec4(col, 1.0);
 }
 """
 
@@ -160,6 +175,7 @@ class Vector(BaseEffect):
         self._bass = 0.0
         self._beat = 0.0
         self._mid  = 0.0
+        self._treble = 0.0
         self._shape_idx = int(self.rng.integers(0, len(_SHAPES)))
         self._rx = float(self.rng.uniform(0.0, math.tau))
         self._ry = float(self.rng.uniform(0.0, math.tau))
@@ -189,6 +205,7 @@ class Vector(BaseEffect):
         super().update(dt, audio)
         self._bass = audio.bass
         self._mid  = audio.mid
+        self._treble = audio.treble
         if audio.beat > 0.5:
             self._beat = 1.0
             self._shape_idx = (self._shape_idx + 1) % len(_SHAPES)
@@ -236,6 +253,8 @@ class Vector(BaseEffect):
             self._prog["uScale"].value  = scale_val
             self._prog["uColor"].value  = col
             self._prog["uBrightness"].value = bright
+            self._prog["uTime"].value = self.time
+            self._prog["uSparkle"].value = 0.05 + self._treble * 0.16 + self._beat * 0.12
             self._vaos[idx].render(moderngl.LINES, vertices=self._n_lines[idx])
 
     def destroy(self) -> None:
