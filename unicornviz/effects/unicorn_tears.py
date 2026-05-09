@@ -227,8 +227,15 @@ void main() {
             vec2 auv = tp / (tr * 1.65);
             auv = vec2(auv.x * 0.62, auv.y * 0.78 + 0.12);
             auv = auv * 0.5 + 0.5;
-            // Scale avatar down to ~50% of prior size inside the tear.
-            auv = (auv - 0.5) * 2.0 + 0.5;
+            // Randomized cameo zoom:
+            // 1.0 = old size (before recent scale-down),
+            // 4.0 = twice as far out as current 2.0 scale.
+            float zoom_scale = mix(
+                1.0,
+                4.0,
+                hash1(float(i) * 31.7 + floor(iTime * 0.23) * 1.91)
+            );
+            auv = (auv - 0.5) * zoom_scale + 0.5;
             auv += vec2(sin(iTime * 1.3 + float(i)) * 0.012, cos(iTime * 1.1 + float(i)) * 0.010);
 
             // Keep only valid UV and strongly clamp into tear interior.
