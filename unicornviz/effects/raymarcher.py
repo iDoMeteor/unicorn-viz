@@ -24,6 +24,7 @@ _FRAG = """
 uniform float iTime;
 uniform vec2  iResolution;
 uniform float iBass;
+uniform float iMid;
 uniform float iTreble;
 uniform float iBeat;
 uniform float iSpeed;
@@ -31,11 +32,10 @@ uniform float iSpeed;
 in  vec2 v_uv;
 out vec4 fragColor;
 
-#define MAX_STEPS 80
-#define MAX_DIST  20.0
+#define MAX_STEPS 96
+#define MAX_DIST  26.0
 #define SURF_DIST 0.001
 
-// ── SDFs ───────────────────────────────────────────────────────────────────
 float sdSphere(vec3 p, float r) { return length(p) - r; }
 
 float sdBox(vec3 p, vec3 b) {
@@ -48,54 +48,68 @@ float sdTorus(vec3 p, vec2 t) {
     return length(q) - t.y;
 }
 
-// Smooth union
 float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
-    return mix(b, a, h) - k*h*(1.0-h);
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
 }
 
-// Rotation
-mat2 rot2(float a) { float c=cos(a),s=sin(a); return mat2(c,-s,s,c); }
+mat2 rot2(float a) {
+    float c = cos(a), s = sin(a);
+    return mat2(c, -s, s, c);
+}
+
+float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
+}
 
 float scene(vec3 p) {
     float t = iTime * iSpeed;
-    float bass  = iBass * 0.4;
-    float shockwave = iBeat * exp(-length(p) * 1.5) * 0.3;
+    float bass = iBass * 0.6;
 
-    // Spinning torus
-    vec3 pt = p;
-    pt.xz *= rot2(t * 0.7);
-    pt.xy *= rot2(t * 0.4);
-    float tor = sdTorus(pt, vec2(0.9 + bass, 0.25 + bass * 0.3));
+    vec3 pc = p;
+    pc.xz *= rot2(t * 0.35 + p.y * 0.08);
+    pc.xy *= rot2(t * 0.22);
 
-    // Pulsing sphere cluster
-    float sphs = 1e10;
-    for (int i = 0; i < 5; i++) {
-        float fi = float(i) / 5.0 * 6.28318;
-        vec3 sc = vec3(cos(fi + t*0.5) * 1.4, sin(fi*2.0 + t*0.3)*0.5, sin(fi + t*0.5) * 1.4);
-        sphs = smin(sphs, sdSphere(p - sc, 0.25 + bass * 0.2), 0.3);
+    // Crystal core
+    float crystal = sdBox(pc, vec3(0.52 + bass * 0.15, 0.58, 0.42));
+    crystal = max(crystal, -sdSphere(pc, 0.86));
+
+    // Orbital ring
+    vec3 pr = p;
+    pr.y += sin(t + p.x * 0.6) * 0.06;
+    pr.xz *= rot2(t * 0.7);
+    float ring = sdTorus(pr, vec2(1.25 + bass * 0.2, 0.11 + iTreble * 0.08));
+
+    // Orbiting shards
+    float shards = 1e9;
+    for (int i = 0; i < 6; i++) {
+        float fi = float(i) / 6.0 * 6.28318;
+        vec3 c = vec3(cos(fi + t * 0.6) * 1.7, sin(fi * 2.0 + t * 0.9) * 0.45, sin(fi + t * 0.6) * 1.7);
+        vec3 ps = p - c;
+        ps.xy *= rot2(t * 0.9 + fi);
+        ps.yz *= rot2(t * 0.6 + fi * 0.7);
+        float shard = sdBox(ps, vec3(0.18, 0.03, 0.07 + iMid * 0.04));
+        shards = min(shards, shard);
     }
 
-    // Central morphing box→sphere
-    float morph = sin(t * 0.5) * 0.5 + 0.5;
-    vec3 pb = p;
-    pb.xy *= rot2(t * 0.3);
-    pb.yz *= rot2(t * 0.2);
-    float box = mix(sdBox(pb, vec3(0.5)), sdSphere(pb, 0.65), morph);
-    box -= bass * 0.12;
+    // Shock pulse from beat
+    float shock = iBeat * exp(-length(p) * 1.1) * 0.22;
 
-    float d = smin(smin(tor, sphs, 0.5), box, 0.4);
-    d += shockwave;
+    float d = smin(crystal, ring, 0.28);
+    d = smin(d, shards, 0.22);
+    d += shock;
 
-    // Infinite floor with bumps
-    float floor_d = p.y + 2.0 + 0.06 * sin(p.x * 4.0 + t) * sin(p.z * 4.0 + t * 0.7);
-    d = smin(d, floor_d, 0.3);
+    // Slightly warped floor for depth cues
+    float floor_d = p.y + 2.15 + 0.08 * sin(p.x * 3.6 + t * 0.7) * sin(p.z * 3.2 + t * 0.5);
+    d = smin(d, floor_d, 0.35);
 
     return d;
 }
 
 vec3 normal(vec3 p) {
-    vec2 e = vec2(0.001, 0.0);
+    vec2 e = vec2(0.0012, 0.0);
     return normalize(vec3(
         scene(p + e.xyy) - scene(p - e.xyy),
         scene(p + e.yxy) - scene(p - e.yxy),
@@ -115,22 +129,31 @@ float raymarch(vec3 ro, vec3 rd) {
 }
 
 vec3 palette(float t) {
-    vec3 a = vec3(0.5);
-    vec3 b = vec3(0.5);
-    vec3 c = vec3(1.0, 0.7, 0.4);
-    vec3 dd = vec3(0.00, 0.15, 0.20);
-    return a + b * cos(6.28318 * (c*t + dd));
+    vec3 a = vec3(0.5, 0.5, 0.52);
+    vec3 b = vec3(0.5, 0.45, 0.48);
+    vec3 c = vec3(1.0, 0.9, 0.65);
+    vec3 d = vec3(0.06, 0.18, 0.38);
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+float sparkleField(vec3 p, float t) {
+    vec2 cell = floor(p.xz * 6.0 + p.y * 0.7);
+    float h = hash(cell);
+    if (h < 0.94) return 0.0;
+    float tw = 0.5 + 0.5 * sin(t * (2.2 + h * 2.5) + h * 6.28318);
+    float d = length(fract(p.xz * 6.0) - 0.5);
+    return smoothstep(0.24, 0.01, d) * tw;
 }
 
 void main() {
     vec2 uv = v_uv * vec2(iResolution.x / iResolution.y, 1.0);
     float t = iTime * iSpeed;
 
-    // Camera orbit
-    vec3 ro = vec3(sin(t*0.25)*4.0, 1.5 + sin(t*0.1)*0.5, cos(t*0.25)*4.0);
-    vec3 target = vec3(0.0, 0.0, 0.0);
-    vec3 fwd = normalize(target - ro);
-    vec3 right = normalize(cross(vec3(0,1,0), fwd));
+    // Cinematic orbit camera
+    vec3 ro = vec3(sin(t * 0.24) * 4.8, 1.35 + sin(t * 0.13) * 0.45, cos(t * 0.24) * 4.8);
+    vec3 ta = vec3(0.0, 0.15, 0.0);
+    vec3 fwd = normalize(ta - ro);
+    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
     vec3 up = cross(fwd, right);
     vec3 rd = normalize(fwd + uv.x * right + uv.y * up);
 
@@ -140,37 +163,47 @@ void main() {
     if (d < MAX_DIST) {
         vec3 p = ro + rd * d;
         vec3 n = normal(p);
-        vec3 light = normalize(vec3(1.5, 2.5, 1.0));
 
-        float diff = max(dot(n, light), 0.0);
-        float spec = pow(max(dot(reflect(-light, n), -rd), 0.0), 32.0);
-        float ao   = 1.0 - clamp(scene(p + n * 0.15) / 0.15, 0.0, 1.0) * 0.5;
+        vec3 l1 = normalize(vec3(1.8, 2.4, 0.8));
+        vec3 l2 = normalize(vec3(-1.4, 1.2, -1.8));
 
-        float dist_col = d / MAX_DIST;
-        col = palette(dist_col + iTreble * 0.2 + iTime * 0.05);
-        col *= diff * 0.8 + 0.2;
-        col += spec * 0.4 * (0.8 + iBass * 0.4);
+        float diff1 = max(dot(n, l1), 0.0);
+        float diff2 = max(dot(n, l2), 0.0) * 0.55;
+        float spec = pow(max(dot(reflect(-l1, n), -rd), 0.0), 52.0);
+
+        float ao = 1.0 - clamp(scene(p + n * 0.14) / 0.14, 0.0, 1.0) * 0.55;
+        float fres = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+
+        float tone = d / MAX_DIST + iTreble * 0.18 + iTime * 0.06 + iMid * 0.15;
+        col = palette(tone);
+        col *= 0.18 + diff1 * 0.95 + diff2;
+        col += vec3(1.0, 0.95, 0.9) * spec * (0.35 + iBass * 0.55);
+        col += palette(tone + 0.37) * fres * (0.35 + iTreble * 0.45);
+
+        float spark = sparkleField(p, t);
+        col += vec3(0.95, 0.85, 1.0) * spark * (0.4 + iTreble * 0.9);
         col *= ao;
 
-        // Fog
-        float fog = exp(-d * 0.08);
-        col = mix(vec3(0.02, 0.01, 0.04), col, fog);
+        // Volumetric-ish glow/fog
+        float fog = exp(-d * 0.07);
+        vec3 fogCol = vec3(0.02, 0.01, 0.05) + palette(iTime * 0.03) * 0.08;
+        col = mix(fogCol, col, fog);
     } else {
-        // Background – starfield gradient
-        col = vec3(0.01, 0.01, 0.03) + length(uv) * 0.02;
+        // Background with subtle prismatic sparkles
+        float v = 0.5 + 0.5 * sin(uv.x * 6.0 + t * 0.25) * cos(uv.y * 7.0 - t * 0.2);
+        vec3 bg = mix(vec3(0.01, 0.01, 0.035), vec3(0.05, 0.02, 0.09), v);
+        float st = smoothstep(0.995, 1.0, hash(floor((uv + 2.0) * 90.0)));
+        bg += vec3(0.7, 0.6, 1.0) * st * (0.45 + 0.55 * sin(t * 1.8 + uv.x * 24.0));
+        col = bg;
     }
 
-    // Beat flash
-    col += iBeat * 0.08 * vec3(0.5, 0.3, 1.0);
+    col += iBeat * 0.1 * vec3(0.65, 0.4, 1.0);
+    col *= 1.0 - 0.22 * dot(v_uv, v_uv);
 
-    // Vignette
-    col *= 1.0 - 0.25 * dot(v_uv, v_uv);
+    col = col / (col + 0.75);
+    col = pow(col, vec3(0.4545));
 
-    // Tone map
-    col = col / (col + 0.8);
-    col = pow(col, vec3(0.4545));   // gamma
-
-    fragColor = vec4(col, 1.0);
+    fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
 """
 
@@ -185,12 +218,14 @@ class Raymarcher(BaseEffect):
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
         self._bass = 0.0
+        self._mid = 0.0
         self._treble = 0.0
         self._beat = 0.0
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         self._bass = audio.bass
+        self._mid = audio.mid
         self._treble = audio.treble
         if audio.beat > 0.5:
             self._beat = 1.0
@@ -200,6 +235,7 @@ class Raymarcher(BaseEffect):
         self._prog["iTime"].value = self.time
         self._prog["iResolution"].value = (float(self.width), float(self.height))
         self._prog["iBass"].value = self._bass
+        self._prog["iMid"].value = self._mid
         self._prog["iTreble"].value = self._treble
         self._prog["iBeat"].value = self._beat
         self._prog["iSpeed"].value = self.parameters["speed"]
