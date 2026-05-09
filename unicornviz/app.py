@@ -57,6 +57,7 @@ class App:
             "demo", "transition_duration", default=1.0
         )
         self._audio: AudioData | None = None
+        self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
         self._splash_config: dict | None = None
         self._fbo_a: moderngl.Framebuffer | None = None
@@ -182,36 +183,47 @@ void main() {
         self._invert_prog["tex"].value = 0
         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
 
-    def _effect_reactivity(self, effect: BaseEffect | None) -> float:
-        """Return per-effect reactivity override (default 1.0)."""
+    def _effect_reactivity(self, effect: BaseEffect | None) -> float | None:
+        """Return per-effect reactivity override, or None if not set."""
         if effect is None:
-            return 1.0
+            return None
         cfg = getattr(effect, "config", None)
         if not isinstance(cfg, dict):
-            return 1.0
+            return None
+        if "reactivity" not in cfg:
+            return None
         try:
             value = float(cfg.get("reactivity", 1.0))
         except Exception:
-            return 1.0
+            return None
         return max(0.1, min(5.0, value))
 
     def _audio_for_effect(self, source: AudioData, effect: BaseEffect | None) -> AudioData:
         """Build an effect-local audio view with optional reactivity scaling.
 
-        Global reactivity is already applied by AudioManager. This method applies
-        an additional per-effect multiplier from `[effects.<ClassName>].reactivity`.
+        Global reactivity is already applied by AudioManager. If an effect defines
+        `[effects.<ClassName>].reactivity`, treat it as the absolute desired
+        reactivity for that effect (not an extra multiplier).
         """
-        r = self._effect_reactivity(effect)
-        if abs(r - 1.0) < 1e-6:
+        r_override = self._effect_reactivity(effect)
+        if r_override is None:
+            return source
+
+        global_r = 1.0
+        if self._audio_manager is not None:
+            global_r = max(0.1, self._audio_manager.get_reactivity())
+
+        scale = r_override / global_r
+        if abs(scale - 1.0) < 1e-6:
             return source
 
         out = AudioData()
-        out.bass = min(1.0, source.bass * r)
-        out.mid = min(1.0, source.mid * r)
-        out.treble = min(1.0, source.treble * r)
+        out.bass = min(1.0, source.bass * scale)
+        out.mid = min(1.0, source.mid * scale)
+        out.treble = min(1.0, source.treble * scale)
         out.beat = source.beat
         out.bpm = source.bpm
-        out.fft = np.clip(source.fft * r, 0.0, 1.0)
+        out.fft = np.clip(source.fft * scale, 0.0, 1.0)
         out.waveform = source.waveform.copy()
         return out
 
@@ -474,6 +486,7 @@ void main() {
         # Subsystems (audio starts before splash so splash can react to music)
         audio_manager = AudioManager(self.cfg)
         audio_manager.start()
+        self._audio_manager = audio_manager
 
         # Splash screen — shown before any effect loads
         splash_path = self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")

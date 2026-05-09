@@ -272,7 +272,7 @@ class Overlays:
         " Space       Pause/resume",
         " R           Random mode",
         " + / -       Speed up/dn",
-        " G / Shift+G Reactivity +/-",
+        " G / Shift+G  +/-   Ctrl+G reset",
         " A           Audio source",
         " M           MIDI device",
         " TAB         Name overlay",

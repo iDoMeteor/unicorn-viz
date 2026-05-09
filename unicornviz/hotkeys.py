@@ -131,11 +131,13 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_g:
             am = self._audio
-            if mod & sdl2.KMOD_SHIFT:
-                am._reactivity = max(0.1, round(am._reactivity - 0.1, 2))
+            if mod & sdl2.KMOD_CTRL:
+                val = am.reset_reactivity()
+            elif mod & sdl2.KMOD_SHIFT:
+                val = am.set_reactivity(round(am.get_reactivity() - 0.1, 2))
             else:
-                am._reactivity = min(5.0, round(am._reactivity + 0.1, 2))
-            o.flash_message(f"Audio reactivity: {am._reactivity:.1f}x", 1.5)
+                val = am.set_reactivity(round(am.get_reactivity() + 0.1, 2))
+            o.flash_message(f"Audio reactivity: {val:.1f}x", 1.5)
 
         elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
             if not self._shortcut_effects:

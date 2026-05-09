@@ -111,6 +111,7 @@ python -m unicornviz --help
 | `Space`           | Pause / resume                                                |
 | `F`               | Toggle fullscreen                                             |
 | `G` / `Shift+G`   | Audio reactivity +0.1 / −0.1                                  |
+| `Ctrl+G`          | Reset audio reactivity to configured default                   |
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
 | `Tab`             | Toggle effect-name overlay                                    |

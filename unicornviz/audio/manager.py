@@ -28,6 +28,8 @@ class AudioManager:
         self._reactivity = float(
             cfg.get("audio", "reactivity", default=cfg.get("audio", "gain", default=1.0))
         )
+        self._reactivity = max(0.1, min(5.0, self._reactivity))
+        self._reactivity_default = self._reactivity
         self._capture = AudioCapture(
             device_hint=device_hint,
             buffer_seconds=buffer_seconds,
@@ -44,6 +46,20 @@ class AudioManager:
 
     def stop(self) -> None:
         self._capture.stop()
+
+    def get_reactivity(self) -> float:
+        """Return current global audio reactivity multiplier."""
+        return float(self._reactivity)
+
+    def set_reactivity(self, value: float) -> float:
+        """Set current global reactivity, clamped to a safe range."""
+        self._reactivity = max(0.1, min(5.0, float(value)))
+        return float(self._reactivity)
+
+    def reset_reactivity(self) -> float:
+        """Reset current reactivity to the config-defined default."""
+        self._reactivity = float(self._reactivity_default)
+        return float(self._reactivity)
 
     def get_audio_data(self) -> AudioData:
         """Called every frame from the main loop."""
