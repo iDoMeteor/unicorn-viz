@@ -13,8 +13,11 @@ Audio reactivity:
 from __future__ import annotations
 
 import math
+from pathlib import Path
+
 import moderngl
 import numpy as np
+from PIL import Image
 
 from unicornviz.effects.base import BaseEffect, AudioData
 
@@ -43,6 +46,8 @@ uniform float iBeat;
 uniform float iShakeX;
 uniform float iShakeY;
 uniform float iHueShift;
+uniform float iAvatarMix;
+uniform sampler2D avatar_tex;
 uniform float tearX[N];
 uniform float tearY[N];
 uniform float tearR[N];
@@ -208,6 +213,32 @@ void main() {
         sp += sparkle(tp, tr * 0.12) * iBeat;
         tc += iriPalette(hue * 1.4 + 0.25) * sp * (0.75 + iTreble * 0.7);
 
+        // Optional avatar cameo: occasional, subtle, and tear-masked.
+        // Never rendered as a square because it is multiplied by fill/rim masks.
+        if (iAvatarMix > 0.001) {
+            // Per-tear random gate + slow global time gate for occasional appearances.
+            float tear_gate = step(0.62, hash1(float(i) * 9.17 + floor(iTime * 0.23)));
+            float time_gate = smoothstep(0.78, 0.96,
+                0.5 + 0.5 * sin(iTime * 0.7 + float(i) * 1.9)
+            );
+            float cameo = tear_gate * time_gate * iAvatarMix;
+
+            // Map local tear space into avatar UV and gently bend with flow.
+            vec2 auv = tp / (tr * 1.65);
+            auv = vec2(auv.x * 0.62, auv.y * 0.78 + 0.12);
+            auv = auv * 0.5 + 0.5;
+            auv += vec2(sin(iTime * 1.3 + float(i)) * 0.012, cos(iTime * 1.1 + float(i)) * 0.010);
+
+            // Keep only valid UV and strongly clamp into tear interior.
+            float in_uv = step(0.0, auv.x) * step(0.0, auv.y) * step(auv.x, 1.0) * step(auv.y, 1.0);
+            float in_tear = smoothstep(0.020, -0.030, dG);
+
+            vec3 avatar_col = texture(avatar_tex, auv).rgb;
+            // Match local palette so cameo feels integrated.
+            avatar_col = mix(avatar_col, iriPalette(hue + 0.18), 0.22);
+            tc = mix(tc, tc + avatar_col * 0.55, cameo * in_uv * in_tear);
+        }
+
         tearAcc  += tc;
         alphaAcc += max(0.0, fillG) + rim * 0.25;
     }
@@ -239,10 +270,32 @@ class UnicornTears(BaseEffect):
     AUTHOR = "unicorn-viz"
     TAGS   = ["psychedelic", "audio", "futuristic"]
 
+    def _load_avatar_texture(self) -> tuple[moderngl.Texture, float]:
+        """Load optional avatar texture used for occasional tear cameos."""
+        candidates = [
+            Path('drop-ins/unicorn-tears-01/images/unicorn-tears-avatar-01.png'),
+            Path('images/unicorn-tears-avatar-01.png'),
+        ]
+        for path in candidates:
+            if path.exists():
+                img = Image.open(path).convert('RGB')
+                w, h = img.size
+                tex = self.ctx.texture((w, h), 3, data=img.tobytes())
+                tex.filter = moderngl.LINEAR, moderngl.LINEAR
+                tex.repeat_x = False
+                tex.repeat_y = False
+                return tex, 1.0
+
+        # Fallback: 1x1 black texture and disabled mix.
+        tex = self.ctx.texture((1, 1), 3, data=bytes([0, 0, 0]))
+        tex.filter = moderngl.LINEAR, moderngl.LINEAR
+        return tex, 0.0
+
     def _init(self) -> None:
         self.parameters = {"speed": 1.0}
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
+        self._avatar_tex, self._avatar_mix = self._load_avatar_texture()
 
         # Randomise every tear at startup
         self._tx    = self.rng.uniform(0.08, 0.92, _N).astype(float)
@@ -321,6 +374,9 @@ class UnicornTears(BaseEffect):
         self._prog["iShakeX"].value     = float(self._shake_x)
         self._prog["iShakeY"].value     = float(self._shake_y)
         self._prog["iHueShift"].value   = float(self._hue_shift)
+        self._prog["iAvatarMix"].value  = float(self._avatar_mix)
+        self._avatar_tex.use(location=0)
+        self._prog["avatar_tex"].value  = 0
         # moderngl 5.x exposes GLSL arrays as a single member; pass as flat tuple.
         self._prog["tearX"].value   = tuple(float(v) for v in self._tx)
         self._prog["tearY"].value   = tuple(float(v) for v in self._ty)
@@ -331,4 +387,5 @@ class UnicornTears(BaseEffect):
     def destroy(self) -> None:
         self._vao.release()
         self._vbo.release()
+        self._avatar_tex.release()
         self._prog.release()
