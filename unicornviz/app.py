@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
+_SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
 
 
 class App:
@@ -299,7 +300,7 @@ void main() {
                 self._width,
                 self._height,
                 image_path=config["path"],
-                duration=config["duration_audio"],
+                duration=_SPLASH_TOTAL_DURATION,
                 bass_supplier=_splash_bass,
             )
             splash.run(self._window)
@@ -321,8 +322,8 @@ void main() {
 
         # Splash screen — shown before any effect loads
         splash_path = self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")
-        splash_duration_audio = float(self.cfg.get("splash", "duration_audio", default=10.0))
-        splash_duration_silent = float(self.cfg.get("splash", "duration_silent", default=4.0))
+        splash_duration_audio = _SPLASH_TOTAL_DURATION
+        splash_duration_silent = _SPLASH_TOTAL_DURATION
         if Path(splash_path).exists():
             from unicornviz.splash import Splash
 
@@ -334,7 +335,7 @@ void main() {
                 self._width,
                 self._height,
                 image_path=splash_path,
-                duration=splash_duration_audio,  # Will be adjusted based on audio detection
+                duration=_SPLASH_TOTAL_DURATION,
                 bass_supplier=_splash_bass,
             )
             # Decide duration based on audio during splash run

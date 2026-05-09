@@ -35,6 +35,7 @@ _CS = [b'\xd9\x74\xea\xf4\x01\x36\xa2\xcb', b'\x97\xd3\xf5\xf5\x0b\xb3\x7b\x3d',
 
 _FADE_IN  = 0.6
 _FADE_OUT = 0.8
+_STATIC_PHASE = 1.0  # First second: fully static image
 
 def _vk(p: Path) -> bool:
     """Verify palette key matches animation seed table."""
@@ -67,6 +68,7 @@ uniform float     hue_time;
 uniform float     prism_strength;
 uniform float     twinkle_strength;
 uniform float     bloom_strength;
+uniform float     anim_mix;
 in  vec2 v_uv;
 out vec4 fragColor;
 
@@ -80,14 +82,14 @@ void main() {
     vec2 uv = v_uv;
 
     // Gentle pulse-linked camera wobble for subtle life.
-    float shake = pulse * 0.003;
+    float shake = pulse * 0.003 * anim_mix;
     uv += vec2(
         sin(hue_time * 12.0 + uv.y * 16.0),
         cos(hue_time * 10.0 + uv.x * 14.0)
     ) * shake;
 
     // Prismatic split (chromatic aberration): RGB sampled at slight offsets.
-    float ca = (0.0015 + 0.0045 * pulse) * prism_strength;
+    float ca = (0.0015 + 0.0045 * pulse) * prism_strength * anim_mix;
     float r = texture(splash_tex, uv + vec2(ca, 0.0)).r;
     float g = texture(splash_tex, uv).g;
     float b = texture(splash_tex, uv - vec2(ca, 0.0)).b;
@@ -117,15 +119,15 @@ void main() {
             stars += smoothstep(0.16, 0.0, d) * tw * smoothstep(0.95, 1.0, h);
         }
     }
-    stars *= twinkle_strength * (1.0 - smoothstep(0.08, 0.45, luma));
+    stars *= twinkle_strength * anim_mix * (1.0 - smoothstep(0.08, 0.45, luma));
 
     // Soft bloom around bright highlights.
-    float bloom = hi * hi * bloom_strength * (0.35 + pulse * 0.65);
+    float bloom = hi * hi * bloom_strength * anim_mix * (0.35 + pulse * 0.65);
 
-    rgb *= 1.0 + pulse * 0.35;
-    rgb = mix(rgb, rgb * tint, clamp(pulse * 0.65, 0.0, 0.8));
-    rgb += vec3(0.08) * pulse;
-    rgb += vec3(0.42, 0.38, 0.28) * hi * pulse * pulse;
+    rgb *= 1.0 + pulse * 0.35 * anim_mix;
+    rgb = mix(rgb, rgb * tint, clamp(pulse * 0.65 * anim_mix, 0.0, 0.8));
+    rgb += vec3(0.08) * pulse * anim_mix;
+    rgb += vec3(0.42, 0.38, 0.28) * hi * pulse * pulse * anim_mix;
     rgb += vec3(stars) * vec3(0.75, 0.88, 1.0);
     rgb += vec3(0.30, 0.24, 0.20) * bloom;
 
@@ -248,7 +250,7 @@ class Splash:
 
             if self._done or elapsed >= self._duration:
                 # Final frame at alpha 0 so there's no pop
-                self._render(0.0, 0.0, elapsed * 1.5)
+                self._render(0.0, 0.0, elapsed * 1.5, 0.0)
                 sdl2.SDL_GL_SwapWindow(window)
                 break
 
@@ -261,13 +263,18 @@ class Splash:
                 remaining = self._duration - elapsed
                 alpha = max(0.0, remaining / _FADE_OUT)
 
-            self._render(alpha, self._pulse, elapsed * 1.5)
+            if elapsed < _STATIC_PHASE:
+                # Phase 1: static image only, no animation.
+                self._render(alpha, 0.0, 0.0, 0.0)
+            else:
+                # Phase 2: fully animated splash.
+                self._render(alpha, self._pulse, elapsed * 1.5, 1.0)
             sdl2.SDL_GL_SwapWindow(window)
             sdl2.SDL_Delay(16)   # ~60 fps cap
 
         return quit_requested
 
-    def _render(self, alpha: float, pulse: float, hue_time: float) -> None:
+    def _render(self, alpha: float, pulse: float, hue_time: float, anim_mix: float) -> None:
         ctx = self._ctx
         ctx.screen.use()
         ctx.viewport = (0, 0, self._width, self._height)
@@ -282,6 +289,7 @@ class Splash:
         self._prog["prism_strength"].value = 1.0
         self._prog["twinkle_strength"].value = 0.95
         self._prog["bloom_strength"].value = 0.9
+        self._prog["anim_mix"].value = float(max(0.0, min(1.0, anim_mix)))
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     @property
