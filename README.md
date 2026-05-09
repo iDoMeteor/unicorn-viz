@@ -2,6 +2,20 @@
 
 A fullscreen OpenGL 3.3 demoscene visualizer written in Python 3.11+, designed for Linux (Wayland-first, X11 fallback). Renders audio-reactive effects, classic CP437 ANSI art, live audio input capture via PipeWire/ALSA, and MIDI control.
 
+## Demo Video
+
+<iframe
+  src="https://rumble.com/embed/v79jc7e"
+  title="Unicorn Viz Beta Demo"
+  width="100%"
+  height="480"
+  frameborder="0"
+  allowfullscreen>
+</iframe>
+
+If the embed does not render in your Markdown viewer, watch it here:
+https://rumble.com/v79jc7e-unicorn-viz-beta-made-by-me.html
+
 **Perfect for:** live music performances, streaming/recording with OBS, BBS nostalgia, synth/electronic art.
 
 ---
