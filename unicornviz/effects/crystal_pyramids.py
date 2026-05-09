@@ -119,12 +119,12 @@ void main() {
     col += rayField(uv, t, 0.30 + iMid * 0.25 + iBeat * 0.55);
     col += rayField(uv.yx * vec2(1.0, -1.0), t * 0.83 + 1.7, 0.18 + iBeat * 0.35);
 
-    // Golden floor reflection base.
+    // Cool crystal floor reflection base (no gold wash).
     float ground = smoothstep(-0.30, -0.12, v_uv.y);
-    vec3 goldA = vec3(0.18, 0.12, 0.03);
-    vec3 goldB = vec3(0.95, 0.76, 0.24);
+    vec3 floorA = vec3(0.05, 0.06, 0.08);
+    vec3 floorB = vec3(0.35, 0.42, 0.55);
     float gleam = 0.5 + 0.5 * sin(uv.x * 10.0 + t * 1.1) * cos(uv.x * 3.7 - t * 0.7);
-    vec3 groundCol = mix(goldA, goldB, gleam * 0.55 + iBass * 0.20);
+    vec3 groundCol = mix(floorA, floorB, gleam * 0.55 + iBass * 0.14);
     col = mix(col, groundCol, ground * 0.88);
 
     // Pyramids (three layers)
@@ -165,7 +165,7 @@ void main() {
     vec2 apex2 = c2;
     col += rainbow(t * 0.1 + 0.2) * exp(-length(uv - apex2) * 13.0) * (0.28 + iBeat * 1.35);
 
-    // Gold support feet under pyramid corners (reference-like detail).
+    // Subtle metallic support feet under pyramid corners (cooler tone).
     vec2 g0 = vec2(-0.24, -0.25);
     vec2 g1 = vec2( 0.34, -0.25);
     vec2 g2 = vec2( 0.05, -0.07);
@@ -173,10 +173,10 @@ void main() {
     goldFeet += smoothstep(0.050, 0.0, length(uv - g0));
     goldFeet += smoothstep(0.050, 0.0, length(uv - g1));
     goldFeet += smoothstep(0.040, 0.0, length(uv - g2));
-    vec3 gold = mix(vec3(0.35, 0.24, 0.05), vec3(1.00, 0.82, 0.25), 0.5 + 0.5 * sin(t * 1.4 + uv.x * 20.0));
-    col += gold * goldFeet * (0.36 + iBass * 0.30);
+    vec3 metal = mix(vec3(0.36, 0.38, 0.44), vec3(0.88, 0.92, 1.00), 0.5 + 0.5 * sin(t * 1.4 + uv.x * 20.0));
+    col += metal * goldFeet * (0.28 + iBass * 0.22);
 
-    // Floating diamonds
+    // Floating diamonds: cool-white body with subtle spectral dispersion.
     vec3 dcol = vec3(0.0);
     for (int i = 0; i < 9; i++) {
         float fi = float(i);
@@ -186,13 +186,16 @@ void main() {
         dc += vec2(sin(t * (0.7 + hx) + fi) * 0.05, cos(t * (0.9 + hy) + fi * 1.3) * 0.03);
         float dd = sdDiamond(uv, dc, 0.032 + hx * 0.018);
         float dm = smoothstep(0.004, -0.004, dd);
-        dcol += mix(vec3(0.88, 0.93, 1.0), rainbow(hx + t * 0.07), 0.45) * dm;
+        float drim = smoothstep(0.040, 0.0, abs(dd));
+        vec3 body = vec3(0.86, 0.93, 1.0) * dm;
+        vec3 dispersion = rainbow(hx + t * 0.07 + drim * 0.3) * drim * 0.26;
+        dcol += body + dispersion;
 
         // Sparkle near diamonds
         float sp = sparkle(uv - dc, 0.06 + hx * 0.03);
-        dcol += vec3(1.0, 0.95, 0.88) * sp * (0.10 + iTreble * 0.35);
+        dcol += vec3(0.96, 0.98, 1.0) * sp * (0.12 + iTreble * 0.34);
     }
-    col += dcol * (0.22 + iTreble * 0.26 + iBeat * 0.22);
+    col += dcol * (0.24 + iTreble * 0.24 + iBeat * 0.20);
 
     // Subtle grain for lens-like richness
     float grain = hash(floor((uv + vec2(t * 0.02, 0.0)) * 420.0));
