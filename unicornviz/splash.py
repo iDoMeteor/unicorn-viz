@@ -64,10 +64,35 @@ uniform sampler2D splash_tex;
 uniform float     alpha;
 uniform float     pulse;
 uniform float     hue_time;
+uniform float     prism_strength;
+uniform float     twinkle_strength;
+uniform float     bloom_strength;
 in  vec2 v_uv;
 out vec4 fragColor;
+
+float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
+}
+
 void main() {
-    vec4 col = texture(splash_tex, v_uv);
+    vec2 uv = v_uv;
+
+    // Gentle pulse-linked camera wobble for subtle life.
+    float shake = pulse * 0.003;
+    uv += vec2(
+        sin(hue_time * 12.0 + uv.y * 16.0),
+        cos(hue_time * 10.0 + uv.x * 14.0)
+    ) * shake;
+
+    // Prismatic split (chromatic aberration): RGB sampled at slight offsets.
+    float ca = (0.0015 + 0.0045 * pulse) * prism_strength;
+    float r = texture(splash_tex, uv + vec2(ca, 0.0)).r;
+    float g = texture(splash_tex, uv).g;
+    float b = texture(splash_tex, uv - vec2(ca, 0.0)).b;
+    float a = texture(splash_tex, uv).a;
+    vec4 col = vec4(r, g, b, a);
 
     // Audio-reactive tint: stays in 0.75..1.0 range so it never darkens.
     vec3 tint = vec3(
@@ -78,10 +103,31 @@ void main() {
     vec3 rgb = col.rgb;
     float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
     float hi = smoothstep(0.55, 0.92, luma);
+
+    // Twinkling stars in dark regions only (keeps logo/text readable).
+    float stars = 0.0;
+    for (int k = 0; k < 3; k++) {
+        float scale = 35.0 + float(k) * 22.0;
+        vec2 cell = floor(uv * scale);
+        float h = hash(cell + float(k) * 13.7);
+        if (h > 0.94) {
+            vec2 fp = fract(uv * scale) - 0.5;
+            float d = length(fp);
+            float tw = 0.5 + 0.5 * sin(hue_time * (1.4 + h) + h * 6.28318);
+            stars += smoothstep(0.16, 0.0, d) * tw * smoothstep(0.95, 1.0, h);
+        }
+    }
+    stars *= twinkle_strength * (1.0 - smoothstep(0.08, 0.45, luma));
+
+    // Soft bloom around bright highlights.
+    float bloom = hi * hi * bloom_strength * (0.35 + pulse * 0.65);
+
     rgb *= 1.0 + pulse * 0.35;
     rgb = mix(rgb, rgb * tint, clamp(pulse * 0.65, 0.0, 0.8));
     rgb += vec3(0.08) * pulse;
     rgb += vec3(0.42, 0.38, 0.28) * hi * pulse * pulse;
+    rgb += vec3(stars) * vec3(0.75, 0.88, 1.0);
+    rgb += vec3(0.30, 0.24, 0.20) * bloom;
 
     fragColor = vec4(clamp(rgb, 0.0, 1.0), col.a * alpha);
 }
@@ -233,6 +279,9 @@ class Splash:
         self._prog["alpha"].value = float(alpha)
         self._prog["pulse"].value = float(max(0.0, min(1.0, pulse)))
         self._prog["hue_time"].value = float(hue_time)
+        self._prog["prism_strength"].value = 1.0
+        self._prog["twinkle_strength"].value = 0.95
+        self._prog["bloom_strength"].value = 0.9
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     @property
