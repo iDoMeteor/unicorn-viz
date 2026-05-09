@@ -197,7 +197,20 @@ class HotkeyHandler:
             self._screenshot()
 
         elif sym == sdl2.SDLK_u:
-            a.show_splash()
+            if mod & sdl2.KMOD_SHIFT:
+                a.show_splash()
+                o.flash_message("Splash replay", 1.5)
+            else:
+                unicorn_cls = None
+                for cls in p.effects:
+                    if cls.__name__ == "UnicornTears" or cls.NAME == "Unicorn Tears":
+                        unicorn_cls = cls
+                        break
+                if unicorn_cls is not None:
+                    a.goto_effect(unicorn_cls)
+                    o.flash_name(unicorn_cls.NAME)
+                else:
+                    o.flash_message("Unicorn Tears not found", 1.5)
 
         elif sym == sdl2.SDLK_t:
             a._auto_advance = not a._auto_advance

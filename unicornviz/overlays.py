@@ -278,7 +278,8 @@ class Overlays:
         " H           This help",
         " ESC         Quit",
         " T           Auto-advance on/off",
-        " U           Show splash anytime",
+        " U           Unicorn Tears",
+        " Shift+U     Show splash anytime",
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
