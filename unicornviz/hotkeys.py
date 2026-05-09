@@ -217,6 +217,10 @@ class HotkeyHandler:
             mode = "ON" if a._auto_advance else "OFF"
             o.flash_message(f"Auto-advance: {mode}", 1.5)
 
+        elif sym == sdl2.SDLK_i:
+            enabled = a.toggle_invert()
+            o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
+
     def _screenshot(self) -> None:
         import datetime
         import numpy as np

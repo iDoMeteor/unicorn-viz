@@ -61,6 +61,10 @@ class App:
         self._fbo_b: moderngl.Framebuffer | None = None
         self._blend_prog: moderngl.Program | None = None
         self._blend_vao: moderngl.VertexArray | None = None
+        self._invert_prog: moderngl.Program | None = None
+        self._invert_vao: moderngl.VertexArray | None = None
+        self._invert_vbo: moderngl.Buffer | None = None
+        self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
@@ -137,6 +141,44 @@ class App:
         self._ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         log.info("OpenGL %s", self._ctx.info["GL_VERSION"])
         self._build_blend_pipeline()
+        self._build_invert_pipeline()
+
+    def _build_invert_pipeline(self) -> None:
+        """Build fullscreen pass that inverts a texture's colors."""
+        vert = """
+#version 330
+in vec2 in_vert;
+out vec2 v_uv;
+void main() {
+    v_uv = in_vert * 0.5 + 0.5;
+    gl_Position = vec4(in_vert, 0.0, 1.0);
+}
+"""
+        frag = """
+#version 330
+uniform sampler2D tex;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    vec4 c = texture(tex, v_uv);
+    fragColor = vec4(vec3(1.0) - c.rgb, c.a);
+}
+"""
+        self._invert_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+        verts = np.array([-1, -1, -1, 1, 1, -1, 1, 1], dtype=np.float32)
+        self._invert_vbo = self._ctx.buffer(verts)
+        self._invert_vao = self._ctx.vertex_array(
+            self._invert_prog, [(self._invert_vbo, "2f", "in_vert")]
+        )
+
+    def _render_inverted_from_tex(self, tex: moderngl.Texture) -> None:
+        """Render a texture to screen through the invert post-process pass."""
+        self._ctx.screen.use()
+        self._ctx.viewport = (0, 0, self._width, self._height)
+        self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+        tex.use(location=0)
+        self._invert_prog["tex"].value = 0
+        self._invert_vao.render(moderngl.TRIANGLE_STRIP)
 
     def _build_blend_pipeline(self) -> None:
         """FBO-pair + transition shader used for cross-effect blending."""
@@ -256,6 +298,8 @@ void main() {
 
     def _switch_effect(self, cls: Type[BaseEffect]) -> None:
         """Begin transition to a new effect."""
+        # Invert does not carry through transitions.
+        self._invert_colors = False
         if self._next_effect is not None:
             self._next_effect.destroy()
         self._next_effect = self._instantiate(cls)
@@ -476,6 +520,12 @@ void main() {
         if self._next_effect:
             self._next_effect.destroy()
         overlays.destroy()
+        if self._invert_vao:
+            self._invert_vao.release()
+        if self._invert_vbo:
+            self._invert_vbo.release()
+        if self._invert_prog:
+            self._invert_prog.release()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
@@ -484,12 +534,20 @@ void main() {
         ctx = self._ctx
 
         if self._next_effect is None:
-            # No transition — render current directly to screen
-            ctx.screen.use()
-            ctx.viewport = (0, 0, self._width, self._height)
-            ctx.clear(0.0, 0.0, 0.0, 1.0)
-            if self._current_effect:
-                self._current_effect.render()
+            # No transition — render current effect; optionally apply invert pass.
+            if self._invert_colors:
+                self._fbo_a.use()
+                ctx.viewport = (0, 0, self._width, self._height)
+                ctx.clear(0.0, 0.0, 0.0, 1.0)
+                if self._current_effect:
+                    self._current_effect.render()
+                self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
+            else:
+                ctx.screen.use()
+                ctx.viewport = (0, 0, self._width, self._height)
+                ctx.clear(0.0, 0.0, 0.0, 1.0)
+                if self._current_effect:
+                    self._current_effect.render()
         else:
             # Transition in progress
             self._transition_t += (
@@ -568,12 +626,19 @@ void main() {
 
     def goto_ansi(self, ansi_dir: str) -> None:
         """Launch ANSIViewer with an explicit art directory."""
+        # Invert does not carry through transitions.
+        self._invert_colors = False
         from unicornviz.effects.ansi_viewer import ANSIViewer
         if self._next_effect is not None:
             self._next_effect.destroy()
         cfg_override = {"ansi_dir": ansi_dir}
         self._next_effect = ANSIViewer(self._ctx, self._width, self._height, cfg_override)
         self._transition_t = 0.0
+
+    def toggle_invert(self) -> bool:
+        """Toggle color inversion for the active effect frame only."""
+        self._invert_colors = not self._invert_colors
+        return self._invert_colors
 
     @property
     def paused(self) -> bool:

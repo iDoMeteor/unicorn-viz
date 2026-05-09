@@ -278,6 +278,7 @@ class Overlays:
         " H           This help",
         " ESC         Quit",
         " T           Auto-advance on/off",
+        " I           Invert colors toggle",
         " U           Unicorn Tears",
         " Shift+U     Show splash anytime",
     ]
