@@ -102,10 +102,10 @@ vec3 tunnelLayer(vec2 p, float t, float twist_rate, float fly_speed,
 
     // Depth fog: fade far rings
     float fog = exp(-dist * 1.4);
-    col *= fog + 0.15;
+    col *= fog + 0.10;
 
     // Bass-driven brightness swell
-    col *= 0.7 + iBass * 0.6;
+    col *= 0.62 + iBass * 0.52;
 
     return col;
 }
@@ -142,6 +142,9 @@ void main() {
     // Filmic tone-map + gamma
     col = col / (col + 0.6);
     col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
+    // Slight default contrast boost + darker baseline.
+    col = clamp((col - 0.5) * 1.08 + 0.5, 0.0, 1.0);
+    col *= 0.93;
 
     fragColor = vec4(col, 1.0);
 }
