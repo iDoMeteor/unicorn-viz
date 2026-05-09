@@ -140,8 +140,13 @@ class HotkeyHandler:
         elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
             if not self._shortcut_effects:
                 return
-            # 1-9 keys: idx 0-8 (Shift+1-9 generates ! through ) symbols, handled separately)
-            idx = sym - sdl2.SDLK_1
+            # Support both SDL behaviors for Shift+number:
+            # 1) symbol keysyms (!@#$...) handled below
+            # 2) number keysyms with KMOD_SHIFT handled here
+            if mod & sdl2.KMOD_SHIFT:
+                idx = 10 + (sym - sdl2.SDLK_1)   # 10..18
+            else:
+                idx = sym - sdl2.SDLK_1          # 0..8
             cls = self._shortcut_effects[idx % len(self._shortcut_effects)]
             log.info("Scene change → %s (key index %d)", cls.NAME, idx)
             a.goto_effect(cls)
@@ -150,8 +155,8 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_0:
             if not self._shortcut_effects:
                 return
-            # 0 = index 9 (Shift+0 generates ) symbol, handled separately)
-            idx = 9
+            # Support both SDL behaviors for Shift+0: idx 19 (')')
+            idx = 19 if (mod & sdl2.KMOD_SHIFT) else 9
             cls = self._shortcut_effects[idx % len(self._shortcut_effects)]
             a.goto_effect(cls)
             o.flash_name(cls.NAME)
