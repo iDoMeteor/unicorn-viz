@@ -90,15 +90,42 @@ float sparkle(vec2 p, float size) {
     return core * core * (0.5 + 0.8 * rays);
 }
 
-// Deep-space background: multi-scale star-field + nebula wisps.
+// Deep-space background: smooth organic twinkling stars + nebula wisps.
 vec3 background(vec2 uv, float t, float bass) {
+    // Organic smooth star field: use continuous Voronoi-like twinkling
     float stars = 0.0;
-    for (int k = 0; k < 4; k++) {
-        vec2  cell = floor(uv * (80.0 + float(k) * 40.0));
-        float h    = hash(cell + float(k) * 17.3);
-        float pulse = 0.5 + 0.5 * sin(t * (0.8 + h) + h * 6.28318);
-        if (h > 0.93) stars += pulse * smoothstep(0.93, 1.0, h) * 0.9;
+    for (int k = 0; k < 3; k++) {
+        float scale = 25.0 + float(k) * 18.0;
+        vec2 grid_pos = floor(uv * scale);
+        vec2 local_pos = fract(uv * scale);
+        
+        // Find closest Voronoi seed in neighbourhood
+        float min_dist = 2.0;
+        float closest_h = 0.0;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                vec2 nb = grid_pos + vec2(float(dx), float(dy));
+                float h = hash(nb + float(k) * 13.7);
+                // Star probability: roughly 6-8% density per octave
+                if (h > 0.92) {
+                    vec2 seed_offset = vec2(hash(nb + 41.2), hash(nb + 71.9)) - 0.5;
+                    vec2 seed = nb + seed_offset + 0.5;
+                    float d = length(local_pos + grid_pos - seed);
+                    if (d < min_dist) {
+                        min_dist = d;
+                        closest_h = h;
+                    }
+                }
+            }
+        }
+        // Smooth twinkle: combines continuous position-based modulation with time
+        if (min_dist < 0.12) {
+            float twinkle = 0.6 + 0.4 * sin(t * (1.2 + closest_h) + closest_h * 6.28318);
+            twinkle *= smoothstep(0.12, 0.02, min_dist);
+            stars += twinkle * 0.5;
+        }
     }
+    // Nebula wisps
     float nx = sin(uv.x * 4.1 + t * 0.08) * cos(uv.y * 3.7 - t * 0.06);
     float ny = cos(uv.x * 3.3 - t * 0.07) * sin(uv.y * 4.9 + t * 0.05);
     float nebula = 0.5 + 0.5 * (nx * 0.5 + ny * 0.5);
@@ -111,12 +138,14 @@ void main() {
     vec2 uv = v_uv;
     float ar = iResolution.x / max(iResolution.y, 1.0);
     uv.x *= ar;
+    uv.y = 1.0 - uv.y;  // Flip vertically
 
     uv.x += iShakeX;
-    uv.y += iShakeY;
+    uv.y -= iShakeY;  // Invert shake for consistency
 
     vec2 bg_uv = v_uv;
     bg_uv.x *= ar;
+    bg_uv.y = 1.0 - bg_uv.y;  // Flip background too
     vec3 col = background(bg_uv, iTime, iBass);
 
     vec3 tearAcc = vec3(0.0);
