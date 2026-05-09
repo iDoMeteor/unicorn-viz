@@ -500,7 +500,7 @@ void main() {
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
         if overlays.unmapped_effects:
             log.warning(
-                "Effects without direct shortcuts (beyond 20): %s",
+                "Effects without direct shortcuts (beyond 30): %s",
                 ", ".join(overlays.unmapped_effects),
             )
         hotkeys = HotkeyHandler(

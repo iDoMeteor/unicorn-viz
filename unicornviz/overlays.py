@@ -286,6 +286,7 @@ class Overlays:
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     SHIFT_KEYS = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]
+    CTRL_KEYS = ["C-1", "C-2", "C-3", "C-4", "C-5", "C-6", "C-7", "C-8", "C-9", "C-0"]
 
     def __init__(
         self,
@@ -307,11 +308,69 @@ class Overlays:
         self._name_text: str = ""
         self._num_shortcuts: list[str] = []
         self._shift_shortcuts: list[str] = []
+        self._ctrl_shortcuts: list[str] = []
         self._unmapped_effects: list[str] = []
 
         self._font_tex = _build_font_texture(ctx)
         self._prog = self._build_program()
         self._build_vbo()
+        self._build_panel_vbo()
+
+    def _build_panel_vbo(self) -> None:
+        """Build shader/VAO for simple colored overlay rectangles."""
+        vert = """
+#version 330
+in vec2 in_vert;
+void main() {
+    gl_Position = vec4(in_vert, 0.0, 1.0);
+}
+"""
+        frag = """
+#version 330
+uniform vec4 color;
+out vec4 fragColor;
+void main() {
+    fragColor = color;
+}
+"""
+        self._panel_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+        self._panel_vbo = self._ctx.buffer(reserve=6 * 2 * 4)
+        self._panel_vao = self._ctx.vertex_array(
+            self._panel_prog,
+            [(self._panel_vbo, "2f", "in_vert")],
+        )
+
+    def _draw_rect(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        color: tuple[float, float, float, float],
+    ) -> None:
+        """Draw a solid-color rectangle in screen pixels."""
+        def px(px_val: float) -> float:
+            return (px_val / self._width) * 2.0 - 1.0
+
+        def py(py_val: float) -> float:
+            return 1.0 - (py_val / self._height) * 2.0
+
+        x0 = px(x)
+        x1 = px(x + w)
+        y0 = py(y)
+        y1 = py(y + h)
+        verts = np.array([
+            x0, y0,
+            x1, y0,
+            x0, y1,
+            x1, y0,
+            x1, y1,
+            x0, y1,
+        ], dtype=np.float32)
+        self._panel_vbo.write(verts)
+        self._panel_prog["color"].value = color
+        self._ctx.enable(moderngl.BLEND)
+        self._panel_vao.render(moderngl.TRIANGLES, vertices=6)
 
     def _build_program(self) -> moderngl.Program:
         vert = """
@@ -447,6 +506,8 @@ void main() {
             )
 
         if self._show_help:
+            # 50% black underlay for readability.
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.5))
             self._render_help()
 
     def _render_help(self) -> None:
@@ -463,23 +524,28 @@ void main() {
         # Right: direct effect shortcut columns
         col_scale = 2.7
         col_lh = 8 * col_scale + 4
-        col1_x = self._width * 0.53
-        col2_x = self._width * 0.76
+        col1_x = self._width * 0.47
+        col2_x = self._width * 0.66
+        col3_x = self._width * 0.82
         cy = pad
 
         self._draw_text("1-0 shortcuts", col1_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         self._draw_text("!-) shortcuts", col2_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         cy += col_lh
         self._draw_text("-------------", col1_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         self._draw_text("-------------", col2_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         cy += col_lh
 
-        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts))
+        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts), len(self._ctrl_shortcuts))
         for i in range(max_rows):
             if i < len(self._num_shortcuts):
                 self._draw_text(self._num_shortcuts[i], col1_x, cy, scale=col_scale, color=(0.8, 1.0, 0.9, 0.95))
             if i < len(self._shift_shortcuts):
                 self._draw_text(self._shift_shortcuts[i], col2_x, cy, scale=col_scale, color=(0.9, 0.85, 1.0, 0.95))
+            if i < len(self._ctrl_shortcuts):
+                self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
             cy += col_lh
 
         if self._unmapped_effects:
@@ -495,6 +561,7 @@ void main() {
         """Build help overlay columns for 1-0 and !-) effect shortcut mappings."""
         self._num_shortcuts = []
         self._shift_shortcuts = []
+        self._ctrl_shortcuts = []
         self._unmapped_effects = []
 
         names = [cls.NAME for cls in effects]
@@ -511,8 +578,15 @@ void main() {
             else:
                 self._shift_shortcuts.append(f"{key} -> (none)")
 
-        if len(names) > 20:
-            self._unmapped_effects = names[20:]
+        for i, key in enumerate(self.CTRL_KEYS):
+            idx = 20 + i
+            if idx < len(names):
+                self._ctrl_shortcuts.append(f"{key} -> {names[idx]}")
+            else:
+                self._ctrl_shortcuts.append(f"{key} -> (none)")
+
+        if len(names) > 30:
+            self._unmapped_effects = names[30:]
 
     @property
     def unmapped_effects(self) -> list[str]:
@@ -552,3 +626,6 @@ void main() {
         self._font_tex.release()
         self._prog.release()
         self._vbo.release()
+        self._panel_prog.release()
+        self._panel_vbo.release()
+        self._panel_vao.release()
