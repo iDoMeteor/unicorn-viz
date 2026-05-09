@@ -120,9 +120,13 @@ vec3 background(vec2 uv, float t, float bass) {
         }
         // Smooth twinkle: combines continuous position-based modulation with time
         if (min_dist < 0.12) {
-            float twinkle = 0.6 + 0.4 * sin(t * (1.2 + closest_h) + closest_h * 6.28318);
+            float pulse_freq = 1.8 + closest_h * 2.0;  // Vary pulse speed per star
+            float twinkle = 0.5 + 0.5 * sin(t * pulse_freq + closest_h * 6.28318);
+            twinkle = twinkle * twinkle;  // Brightness curve for more pulsing prominence
             twinkle *= smoothstep(0.12, 0.02, min_dist);
-            stars += twinkle * 0.5;
+            // Subtle color tint: each star has a slight warm/cool shift
+            float color_tint = 0.5 + 0.5 * cos(closest_h * 6.28318 + t * 0.3);
+            stars += twinkle * (0.6 + 0.4 * color_tint);
         }
     }
     // Nebula wisps
@@ -256,6 +260,8 @@ class UnicornTears(BaseEffect):
         self._shake_x = 0.0
         self._shake_y = 0.0
         self._hue_shift = 0.0
+        self._burst_timer = 0.0
+        self._burst_interval = 8.5  # Random burst every ~8-12 seconds
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -272,8 +278,24 @@ class UnicornTears(BaseEffect):
         self._shake_y *= max(0.0, 1.0 - dt * 14.0)
         self._hue_shift = (self._hue_shift + dt * (0.06 + self._mid * 0.12)) % 1.0
 
+        # Random drop burst mechanic
+        self._burst_timer += dt
+        should_burst = False
+        if self._burst_timer >= self._burst_interval:
+            self._burst_timer = 0.0
+            self._burst_interval = float(self.rng.uniform(8.0, 12.0))
+            should_burst = True
+
         spd = float(self.parameters["speed"])
         for i in range(_N):
+            # Random drops: some tears spawn at top with high velocity when burst happens
+            if should_burst and float(self.rng.uniform(0.0, 1.0)) < 0.35:
+                self._ty[i]  = -0.05
+                self._tx[i]  = float(self.rng.uniform(0.08, 0.92))
+                self._spd[i] = float(self.rng.uniform(0.35, 0.50))  # Drop fast!
+                # Reset speed after burst
+                self._spd[i] *= 0.6  # Slow down burst after drop
+            
             fall = self._spd[i] * spd * (1.0 + self._bass * 0.55) * dt
             self._ty[i] += fall
             self._tx[i] += (
