@@ -53,6 +53,17 @@ vec3 rainbow(float t) {
     return a + b * cos(TAU * (c * t + d));
 }
 
+vec3 rayField(vec2 uv, float t, float gain) {
+    vec2 src = vec2(-0.20, -0.10);
+    vec2 p = uv - src;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float wave = sin(ang * 28.0 + t * 2.2) * 0.5 + 0.5;
+    float beams = pow(max(0.0, wave), 3.0) * exp(-rad * 1.2);
+    vec3 col = rainbow(ang / TAU + t * 0.10 + rad * 0.15);
+    return col * beams * gain;
+}
+
 // 2D triangle SDF for upright pyramid silhouette
 float sdTriangle(vec2 p, vec2 a, vec2 b, vec2 c) {
     vec2 ba = b - a; vec2 pa = p - a;
@@ -75,6 +86,10 @@ float sdTriangle(vec2 p, vec2 a, vec2 b, vec2 c) {
     return mix(d, -d, inside);
 }
 
+float edgeTri(float d) {
+    return smoothstep(0.06, 0.0, abs(d));
+}
+
 float sdDiamond(vec2 p, vec2 c, float r) {
     p -= c;
     p = abs(p);
@@ -93,36 +108,29 @@ float sparkle(vec2 p, float size) {
 void main() {
     float ar = iResolution.x / max(iResolution.y, 1.0);
     vec2 uv = vec2(v_uv.x * ar, v_uv.y);
-    float t = iTime * (0.45 + iSpeed * 0.65);
+    float t = iTime * (0.42 + iSpeed * 0.70);
 
-    // Sky gradient
-    vec3 skyA = vec3(0.02, 0.03, 0.11);
-    vec3 skyB = vec3(0.10, 0.05, 0.22);
-    float skyMix = smoothstep(-1.0, 0.8, v_uv.y);
-    vec3 col = mix(skyA, skyB, skyMix);
+    // Stage: deep-black backdrop with a soft spotlight around the hero prism.
+    vec3 col = vec3(0.01, 0.01, 0.02);
+    float spot = exp(-length(uv - vec2(0.04, 0.18)) * 2.8);
+    col += vec3(0.12, 0.12, 0.14) * spot * 0.45;
 
-    // Rainbow rays shooting from horizon center
-    vec2 src = vec2(0.0, -0.28);
-    vec2 rp = uv - src;
-    float ang = atan(rp.y, rp.x);
-    float rad = length(rp);
-    float rayWave = sin(ang * 16.0 + t * (1.5 + iMid * 1.4));
-    float rayMask = pow(max(0.0, 1.0 - rad * 0.8), 2.0) * (0.4 + 1.1 * iBeat);
-    vec3 rays = rainbow(ang / TAU + t * 0.08 + iMid * 0.2) * max(0.0, rayWave) * rayMask;
-    col += rays * (0.22 + iBeat * 0.9);
+    // Stronger refracted rainbow rays (our style).
+    col += rayField(uv, t, 0.30 + iMid * 0.25 + iBeat * 0.55);
+    col += rayField(uv.yx * vec2(1.0, -1.0), t * 0.83 + 1.7, 0.18 + iBeat * 0.35);
 
-    // Gold desert / ground
-    float ground = smoothstep(-0.26, -0.08, v_uv.y);
-    vec3 goldA = vec3(0.25, 0.16, 0.03);
-    vec3 goldB = vec3(0.86, 0.62, 0.16);
-    float dunes = 0.5 + 0.5 * sin(uv.x * 8.0 + t * 0.9) * sin(uv.x * 3.0 - t * 0.5);
-    vec3 groundCol = mix(goldA, goldB, dunes * 0.45 + iBass * 0.25);
-    col = mix(col, groundCol, ground);
+    // Golden floor reflection base.
+    float ground = smoothstep(-0.30, -0.12, v_uv.y);
+    vec3 goldA = vec3(0.18, 0.12, 0.03);
+    vec3 goldB = vec3(0.95, 0.76, 0.24);
+    float gleam = 0.5 + 0.5 * sin(uv.x * 10.0 + t * 1.1) * cos(uv.x * 3.7 - t * 0.7);
+    vec3 groundCol = mix(goldA, goldB, gleam * 0.55 + iBass * 0.20);
+    col = mix(col, groundCol, ground * 0.88);
 
     // Pyramids (three layers)
-    vec2 a1 = vec2(-0.95, -0.20), b1 = vec2(-0.20, -0.20), c1 = vec2(-0.57, 0.50);
-    vec2 a2 = vec2(-0.35, -0.22), b2 = vec2( 0.45, -0.22), c2 = vec2( 0.05, 0.62);
-    vec2 a3 = vec2( 0.20, -0.20), b3 = vec2( 1.05, -0.20), c3 = vec2( 0.62, 0.46);
+    vec2 a1 = vec2(-0.72, -0.20), b1 = vec2(-0.30, -0.20), c1 = vec2(-0.51, 0.42);
+    vec2 a2 = vec2(-0.24, -0.24), b2 = vec2( 0.34, -0.24), c2 = vec2( 0.05, 0.72); // hero
+    vec2 a3 = vec2( 0.38, -0.20), b3 = vec2( 0.84, -0.20), c3 = vec2( 0.61, 0.40);
 
     float d1 = sdTriangle(uv, a1, b1, c1);
     float d2 = sdTriangle(uv, a2, b2, c2);
@@ -132,26 +140,43 @@ void main() {
     float p2 = smoothstep(0.004, -0.004, d2);
     float p3 = smoothstep(0.004, -0.004, d3);
 
-    // Crystal facets from diagonal stripe field
-    float f1 = 0.5 + 0.5 * sin((uv.x * 24.0 + uv.y * 31.0) + t * (1.2 + iMid));
-    float f2 = 0.5 + 0.5 * sin((uv.x * 29.0 - uv.y * 20.0) - t * (0.9 + iMid * 0.7));
-    float facets = f1 * 0.6 + f2 * 0.4;
+    // Crystal facets from crossing planes; stronger refractive look.
+    float f1 = 0.5 + 0.5 * sin((uv.x * 36.0 + uv.y * 45.0) + t * (1.4 + iMid));
+    float f2 = 0.5 + 0.5 * sin((uv.x * 48.0 - uv.y * 34.0) - t * (1.0 + iMid * 0.9));
+    float f3 = 0.5 + 0.5 * sin((uv.x * 22.0 + uv.y * 60.0) + t * 0.8);
+    float facets = f1 * 0.45 + f2 * 0.35 + f3 * 0.20;
 
-    vec3 crystal = mix(vec3(0.30, 0.72, 0.95), vec3(0.92, 0.80, 1.00), facets);
-    crystal = mix(crystal, rainbow(facets + t * 0.08), 0.35 + iMid * 0.25);
+    // Refraction sample from the rainbow ray field with slight lensing.
+    vec2 lens = normalize(uv - c2) * (0.012 + (1.0 - facets) * 0.018);
+    vec3 refr = rayField(uv + lens, t + facets * 0.7, 1.0);
+
+    vec3 crystal = mix(vec3(0.82, 0.90, 0.98), vec3(0.58, 0.78, 0.96), facets);
+    crystal += refr * (0.55 + iMid * 0.45);
+    crystal = mix(crystal, rainbow(facets + t * 0.05), 0.18 + iMid * 0.12);
 
     float pyramidMask = max(max(p1, p2), p3);
-    col = mix(col, crystal, pyramidMask * (0.58 + iBass * 0.18));
+    col = mix(col, crystal, pyramidMask * (0.70 + iBass * 0.16));
 
     // Pyramid edges and apex glows
-    float edge = (smoothstep(0.05, 0.0, abs(d1)) + smoothstep(0.05, 0.0, abs(d2)) + smoothstep(0.05, 0.0, abs(d3))) * 0.35;
-    col += vec3(1.0, 0.95, 0.86) * edge * (0.22 + iTreble * 0.5);
+    float edge = (edgeTri(d1) + edgeTri(d2) + edgeTri(d3)) * 0.38;
+    float fres = pow(1.0 - clamp(abs(uv.y - c2.y) * 2.2, 0.0, 1.0), 2.0);
+    col += vec3(1.0, 0.98, 0.93) * edge * (0.30 + iTreble * 0.55 + fres * 0.25);
 
     vec2 apex2 = c2;
-    col += rainbow(t * 0.1 + 0.2) * exp(-length(uv - apex2) * 12.0) * (0.25 + iBeat * 1.2);
+    col += rainbow(t * 0.1 + 0.2) * exp(-length(uv - apex2) * 13.0) * (0.28 + iBeat * 1.35);
+
+    // Gold support feet under pyramid corners (reference-like detail).
+    vec2 g0 = vec2(-0.24, -0.25);
+    vec2 g1 = vec2( 0.34, -0.25);
+    vec2 g2 = vec2( 0.05, -0.07);
+    float goldFeet = 0.0;
+    goldFeet += smoothstep(0.050, 0.0, length(uv - g0));
+    goldFeet += smoothstep(0.050, 0.0, length(uv - g1));
+    goldFeet += smoothstep(0.040, 0.0, length(uv - g2));
+    vec3 gold = mix(vec3(0.35, 0.24, 0.05), vec3(1.00, 0.82, 0.25), 0.5 + 0.5 * sin(t * 1.4 + uv.x * 20.0));
+    col += gold * goldFeet * (0.36 + iBass * 0.30);
 
     // Floating diamonds
-    float diamonds = 0.0;
     vec3 dcol = vec3(0.0);
     for (int i = 0; i < 9; i++) {
         float fi = float(i);
@@ -161,18 +186,17 @@ void main() {
         dc += vec2(sin(t * (0.7 + hx) + fi) * 0.05, cos(t * (0.9 + hy) + fi * 1.3) * 0.03);
         float dd = sdDiamond(uv, dc, 0.032 + hx * 0.018);
         float dm = smoothstep(0.004, -0.004, dd);
-        diamonds += dm;
-        dcol += rainbow(hx + t * 0.07) * dm;
+        dcol += mix(vec3(0.88, 0.93, 1.0), rainbow(hx + t * 0.07), 0.45) * dm;
 
         // Sparkle near diamonds
         float sp = sparkle(uv - dc, 0.06 + hx * 0.03);
         dcol += vec3(1.0, 0.95, 0.88) * sp * (0.10 + iTreble * 0.35);
     }
-    col += dcol * (0.25 + iTreble * 0.25 + iBeat * 0.2);
+    col += dcol * (0.22 + iTreble * 0.26 + iBeat * 0.22);
 
-    // Subtle grain for painterly richness
-    float grain = hash(floor((uv + vec2(t * 0.02, 0.0)) * 340.0));
-    col += (grain - 0.5) * 0.03;
+    // Subtle grain for lens-like richness
+    float grain = hash(floor((uv + vec2(t * 0.02, 0.0)) * 420.0));
+    col += (grain - 0.5) * 0.02;
 
     // Tone map + gamma
     col = col / (col + 0.65);

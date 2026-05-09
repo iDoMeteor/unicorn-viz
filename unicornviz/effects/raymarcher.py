@@ -64,11 +64,41 @@ float hash(vec2 p) {
     return fract(p.x * p.y);
 }
 
+float matNoise(vec3 p) {
+    float n = 0.0;
+    n += sin(p.x * 7.1 + p.y * 5.3 + p.z * 3.7) * 0.50;
+    n += sin(p.x * 13.7 - p.y * 9.1 + p.z * 6.3) * 0.25;
+    n += sin(p.x * 21.2 + p.y * 17.9 - p.z * 11.3) * 0.125;
+    return n * 0.5 + 0.5;
+}
+
+vec3 palette(float t);
+
+vec3 envColor(vec3 rd, float t) {
+    float h = 0.5 + 0.5 * rd.y;
+    float bands = 0.5 + 0.5 * sin(rd.x * 12.0 + rd.z * 10.0 + t * 0.8);
+    vec3 top = vec3(0.03, 0.02, 0.08);
+    vec3 bot = vec3(0.00, 0.00, 0.03);
+    vec3 sky = mix(bot, top, h);
+    sky += palette(bands + t * 0.03) * 0.08;
+    float stars = smoothstep(0.995, 1.0, hash(floor((rd.xz + 2.0) * 140.0)));
+    sky += vec3(0.7, 0.6, 1.0) * stars * 0.55;
+    return sky;
+}
+
 float scene(vec3 p) {
     float t = iTime * iSpeed;
     float bass = iBass * 0.6;
 
+    // Global group motion so shard cluster drifts as a unit.
+    vec3 group = vec3(
+        sin(t * 0.33) * 0.45,
+        sin(t * 0.27 + 1.3) * 0.30,
+        cos(t * 0.29) * 0.45
+    );
+
     vec3 pc = p;
+    pc -= group * 0.20;
     pc.xz *= rot2(t * 0.35 + p.y * 0.08);
     pc.xy *= rot2(t * 0.22);
 
@@ -78,6 +108,7 @@ float scene(vec3 p) {
 
     // Orbital ring
     vec3 pr = p;
+    pr -= group * 0.15;
     pr.y += sin(t + p.x * 0.6) * 0.06;
     pr.xz *= rot2(t * 0.7);
     float ring = sdTorus(pr, vec2(1.25 + bass * 0.2, 0.11 + iTreble * 0.08));
@@ -86,7 +117,11 @@ float scene(vec3 p) {
     float shards = 1e9;
     for (int i = 0; i < 6; i++) {
         float fi = float(i) / 6.0 * 6.28318;
-        vec3 c = vec3(cos(fi + t * 0.6) * 1.7, sin(fi * 2.0 + t * 0.9) * 0.45, sin(fi + t * 0.6) * 1.7);
+        vec3 c = vec3(
+            cos(fi + t * 0.6) * 1.7,
+            sin(fi * 2.0 + t * 0.9) * 0.45,
+            sin(fi + t * 0.6) * 1.7
+        ) + group * 0.55;
         vec3 ps = p - c;
         ps.xy *= rot2(t * 0.9 + fi);
         ps.yz *= rot2(t * 0.6 + fi * 0.7);
@@ -175,26 +210,29 @@ void main() {
         float fres = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
 
         float tone = d / MAX_DIST + iTreble * 0.18 + iTime * 0.06 + iMid * 0.15;
-        col = palette(tone);
-        col *= 0.18 + diff1 * 0.95 + diff2;
-        col += vec3(1.0, 0.95, 0.9) * spec * (0.35 + iBass * 0.55);
-        col += palette(tone + 0.37) * fres * (0.35 + iTreble * 0.45);
+        float m = matNoise(p * 1.8 + vec3(iTime * 0.12));
+        vec3 baseA = palette(tone);
+        vec3 baseB = palette(tone + 0.24 + m * 0.2);
+        vec3 base = mix(baseA, baseB, 0.45 + m * 0.35);
 
-        float spark = sparkleField(p, t);
+        col = base * (0.16 + diff1 * 0.95 + diff2);
+        col += vec3(1.0, 0.95, 0.9) * spec * (0.45 + iBass * 0.70);
+
+        // Fresnel-tinted reflection from procedural environment.
+        vec3 rdir = reflect(rd, n);
+        vec3 env = envColor(rdir, t);
+        col += env * fres * (0.55 + iTreble * 0.50);
+
+        float spark = sparkleField(p, t + m * 2.0);
         col += vec3(0.95, 0.85, 1.0) * spark * (0.4 + iTreble * 0.9);
         col *= ao;
 
         // Volumetric-ish glow/fog
         float fog = exp(-d * 0.07);
-        vec3 fogCol = vec3(0.02, 0.01, 0.05) + palette(iTime * 0.03) * 0.08;
+        vec3 fogCol = vec3(0.02, 0.01, 0.05) + palette(iTime * 0.03 + m * 0.2) * 0.10;
         col = mix(fogCol, col, fog);
     } else {
-        // Background with subtle prismatic sparkles
-        float v = 0.5 + 0.5 * sin(uv.x * 6.0 + t * 0.25) * cos(uv.y * 7.0 - t * 0.2);
-        vec3 bg = mix(vec3(0.01, 0.01, 0.035), vec3(0.05, 0.02, 0.09), v);
-        float st = smoothstep(0.995, 1.0, hash(floor((uv + 2.0) * 90.0)));
-        bg += vec3(0.7, 0.6, 1.0) * st * (0.45 + 0.55 * sin(t * 1.8 + uv.x * 24.0));
-        col = bg;
+        col = envColor(normalize(vec3(uv, 1.5)), t);
     }
 
     col += iBeat * 0.1 * vec3(0.65, 0.4, 1.0);
