@@ -37,6 +37,10 @@ uniform vec2  iDrift;
 uniform float iRoll;
 uniform float iFlow;
 uniform float iMicroBurst;
+uniform vec3  iLayerScaleMul;
+uniform vec3  iLayerDensity;
+uniform float iNebulaTone;
+uniform float iTwinkleBias;
 
 in  vec2 v_uv;
 out vec4 fragColor;
@@ -64,9 +68,9 @@ vec3 nebula(vec2 uv, float t) {
     vec3 cold = vec3(0.03, 0.04, 0.14);
     vec3 warm = vec3(0.10, 0.03, 0.18);
     vec3 accent = vec3(0.04, 0.09, 0.20);
-    vec3 col = mix(cold, warm, n + mid * 0.25);
+    vec3 col = mix(cold, warm, n + mid * 0.25 + iNebulaTone * 0.25);
     col = mix(col, accent, smoothstep(0.5, 0.85, n) * 0.55);
-    return col * (0.8 + iBass * 0.35);
+    return col * (0.72 + iBass * 0.42 + iNebulaTone * 0.12);
 }
 
 // ── Single parallax star layer ─────────────────────────────────────────────
@@ -86,8 +90,8 @@ vec3 starLayer(vec2 uv, float t, float scale, float speed, float density) {
     float sz = 0.008 + h * 0.012;
 
     // Organic twinkle: two sine frequencies per star
-    float tw1 = sin(t * (1.4 + h * 1.8) + h * 6.28318);
-    float tw2 = sin(t * (2.6 + h * 1.2) + h * 12.5664);
+    float tw1 = sin(t * (1.4 + h * 1.8 + iTwinkleBias * 0.8) + h * 6.28318);
+    float tw2 = sin(t * (2.6 + h * 1.2 + iTwinkleBias * 1.2) + h * 12.5664);
     float twinkle = 0.55 + 0.28 * tw1 + 0.17 * tw2;
     twinkle = max(0.0, twinkle);
 
@@ -153,9 +157,27 @@ void main() {
     vec3 col = nebula(uv * (0.5 + flow * 0.08), t + flow * 0.7);
 
     // Three parallax star layers: deep / mid / near
-    col += starLayer(uv + vec2(flow * 0.10, -flow * 0.06), t * (1.0 + flow * 0.12), 42.0, 0.12, 0.91 - flow * 0.02);
-    col += starLayer(uv + vec2(0.17 - flow * 0.07, 0.09 + flow * 0.05), t * (1.4 + flow * 0.16), 72.0, 0.22, 0.88 - flow * 0.03);
-    col += starLayer(uv + vec2(0.41 + flow * 0.04, -0.12 - flow * 0.06), t * (2.1 + flow * 0.20), 110.0, 0.38, 0.84 - flow * 0.04);
+    col += starLayer(
+        uv + vec2(flow * 0.10, -flow * 0.06),
+        t * (1.0 + flow * 0.12),
+        42.0 * iLayerScaleMul.x,
+        0.12,
+        clamp(iLayerDensity.x - flow * 0.02, 0.76, 0.95)
+    );
+    col += starLayer(
+        uv + vec2(0.17 - flow * 0.07, 0.09 + flow * 0.05),
+        t * (1.4 + flow * 0.16),
+        72.0 * iLayerScaleMul.y,
+        0.22,
+        clamp(iLayerDensity.y - flow * 0.03, 0.72, 0.93)
+    );
+    col += starLayer(
+        uv + vec2(0.41 + flow * 0.04, -0.12 - flow * 0.06),
+        t * (2.1 + flow * 0.20),
+        110.0 * iLayerScaleMul.z,
+        0.38,
+        clamp(iLayerDensity.z - flow * 0.04, 0.68, 0.91)
+    );
 
     // Warp streaks from beat
     col += warpStreaks(v_uv + iDrift * 0.5, t + flow * 0.4, iWarp + iMicroBurst * 0.2);
@@ -208,6 +230,19 @@ class Starfield(BaseEffect):
         self._retarget_timer = 0.0
         self._retarget_interval = float(self.rng.uniform(5.0, 10.0))
 
+        # Startup style randomization for visual diversity.
+        self._layer_scale_mul = self.rng.uniform(0.86, 1.18, 3).astype(float)
+        self._layer_density = self.rng.uniform(0.80, 0.93, 3).astype(float)
+        self._nebula_tone = float(self.rng.uniform(0.0, 1.0))
+        self._twinkle_bias = float(self.rng.uniform(0.0, 1.0))
+
+        self._target_layer_scale_mul = self._layer_scale_mul.copy()
+        self._target_layer_density = self._layer_density.copy()
+        self._target_nebula_tone = self._nebula_tone
+        self._target_twinkle_bias = self._twinkle_bias
+        self._style_timer = 0.0
+        self._style_interval = float(self.rng.uniform(10.0, 18.0))
+
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         self._bass   = audio.bass
@@ -230,12 +265,26 @@ class Starfield(BaseEffect):
             self._target_roll = float(self.rng.uniform(-0.14, 0.14))
             self._target_flow = float(self.rng.uniform(0.0, 1.0))
 
+        # Evolve style profile over longer windows for more diversity.
+        self._style_timer += dt
+        if self._style_timer >= self._style_interval:
+            self._style_timer = 0.0
+            self._style_interval = float(self.rng.uniform(10.0, 18.0))
+            self._target_layer_scale_mul = self.rng.uniform(0.84, 1.22, 3).astype(float)
+            self._target_layer_density = self.rng.uniform(0.78, 0.94, 3).astype(float)
+            self._target_nebula_tone = float(self.rng.uniform(0.0, 1.0))
+            self._target_twinkle_bias = float(self.rng.uniform(0.0, 1.0))
+
         # Smoothly approach targets.
         blend = min(1.0, dt * 0.35)
         self._drift_x += (self._target_drift_x - self._drift_x) * blend
         self._drift_y += (self._target_drift_y - self._drift_y) * blend
         self._roll += (self._target_roll - self._roll) * blend
         self._flow += (self._target_flow - self._flow) * blend
+        self._layer_scale_mul += (self._target_layer_scale_mul - self._layer_scale_mul) * min(1.0, dt * 0.22)
+        self._layer_density += (self._target_layer_density - self._layer_density) * min(1.0, dt * 0.20)
+        self._nebula_tone += (self._target_nebula_tone - self._nebula_tone) * min(1.0, dt * 0.24)
+        self._twinkle_bias += (self._target_twinkle_bias - self._twinkle_bias) * min(1.0, dt * 0.20)
 
     def render(self) -> None:
         self._prog["iTime"].value       = self.time
@@ -249,6 +298,10 @@ class Starfield(BaseEffect):
         self._prog["iRoll"].value       = self._roll
         self._prog["iFlow"].value       = self._flow
         self._prog["iMicroBurst"].value = self._micro_burst
+        self._prog["iLayerScaleMul"].value = tuple(float(v) for v in self._layer_scale_mul)
+        self._prog["iLayerDensity"].value = tuple(float(v) for v in self._layer_density)
+        self._prog["iNebulaTone"].value = self._nebula_tone
+        self._prog["iTwinkleBias"].value = self._twinkle_bias
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:
