@@ -25,10 +25,10 @@ zoom = 1.8
 
 ## Built-in Effects
 
-### `AlienBiome` (`Wavey Gravy`)
+### `WaveyGravy` (`Wavey Gravy`)
 
 ```toml
-[effects.AlienBiome]
+[effects.WaveyGravy]
 speed = 1.0
 ```
 
@@ -188,6 +188,13 @@ speed = 1.0
 
 ```toml
 [effects.Vector]
+speed = 1.0
+```
+
+### `UnicornTears` (`Unicorn Tears`) — drop-in, key `U`
+
+```toml
+[effects.UnicornTears]
 speed = 1.0
 ```
 

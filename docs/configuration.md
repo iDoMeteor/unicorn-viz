@@ -49,10 +49,12 @@ All settings live in `config.toml` in the project root.
 
 ## `[ansi]`
 
-| Key        | Type | Default            | Description                                                        |
-|------------|------|--------------------|--------------------------------------------------------------------|
-| `ansi_dir_auto` | str  | `"assets/ansi"` | Directory (or comma-separated list) used by ANSI Viewer in normal playlist mode |
-| `ansi_dir` | str  | `"assets/ansi"`    | Legacy fallback key for autoplay ANSI directory (kept for backward compatibility) |
+| Key              | Type | Default              | Description                                                              |
+|------------------|------|----------------------|--------------------------------------------------------------------------|
+| `ansi_dir_auto`  | str  | `"assets/ansi"`      | Directory used by ANSI Viewer in normal playlist mode                    |
+| `ansi_own_dir`   | str  | `"assets/ansi"`      | Own hand-crafted art — launched with `,`                                 |
+| `ansi_acid_dir`  | str  | `"assets/ansi/acid"` | ACiD Productions art — launched with `.`                                 |
+| `ansi_dir`       | str  | `"assets/ansi"`      | Legacy fallback key (kept for backward compatibility)                    |
 
 ---
 
@@ -91,6 +93,8 @@ Available parameters per effect:
 | AudioSpectrum     | `mode`      | 0, 1, 2    | 0=bars, 1=waveform, 2=both      |
 | AudioSpectrum     | `glow`      | 0.0–1.0    | Bar glow                        |
 | FractalZoom       | `max_iter`  | 32–512     | Iteration depth                 |
+| UnicornTears      | `speed`     | 0.05–10.0  | Fall speed multiplier           |
+| Raymarcher        | `speed`     | 0.05–10.0  | Scene animation speed           |
 
 ---
 

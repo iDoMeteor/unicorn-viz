@@ -95,22 +95,29 @@ python -m unicornviz --help
 
 ## Keyboard Shortcuts
 
-| Key            | Action                                      |
-|----------------|---------------------------------------------|
-| `N` / `→`      | Next effect                                 |
-| `P` / `←`      | Previous effect                             |
-| `1`–`9`        | Jump directly to effect #1–9               |
-| `R`            | Toggle random / sequential playlist mode   |
-| `Space`        | Pause / resume                              |
-| `F`            | Toggle fullscreen                           |
-| `+` / `=`      | Speed up current effect (×1.25)             |
-| `-`            | Slow down current effect (×0.8)             |
-| `Tab`          | Toggle effect-name overlay                  |
-| `H`            | Toggle help panel                           |
-| `A`            | Audio device selector                       |
-| `M`            | MIDI device selector                        |
-| `S`            | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`) |
-| `Esc`          | Quit                                        |
+| Key               | Action                                                        |
+|-------------------|---------------------------------------------------------------|
+| `N` / `→`         | Next effect                                                   |
+| `P` / `←`         | Previous effect                                               |
+| `1`–`9`           | Jump directly to effect #1–9                                 |
+| `!@#$%^&*()`      | Jump directly to effect #10–20 (Shift+1–0)                  |
+| `,`               | ANSI Viewer — own art                                         |
+| `.`               | ANSI Viewer — ACiD art                                        |
+| `U`               | Jump to Unicorn Tears                                         |
+| `Shift+U`         | Replay splash screen                                          |
+| `R`               | Toggle random / sequential playlist mode                      |
+| `T`               | Toggle auto-advance on / off                                  |
+| `Space`           | Pause / resume                                                |
+| `F`               | Toggle fullscreen                                             |
+| `G` / `Shift+G`   | Audio reactivity +0.1 / −0.1                                  |
+| `+` / `=`         | Speed up current effect (×1.25)                               |
+| `-`               | Slow down current effect (×0.8)                               |
+| `Tab`             | Toggle effect-name overlay                                    |
+| `H`               | Toggle help panel                                             |
+| `A`               | Audio device selector                                         |
+| `M`               | MIDI device selector                                          |
+| `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
+| `Esc`             | Quit                                                          |
 
 ---
 

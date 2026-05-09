@@ -85,15 +85,24 @@ unicorn-viz/
 │       ├── ansi_viewer.py
 │       ├── audio_spectrum.py
 │       ├── copper_bars.py
+│       ├── curtains.py
+│       ├── cube_3d.py
+│       ├── dali.py
+│       ├── escher.py
 │       ├── fire.py
 │       ├── fractal_zoom.py
 │       ├── metaballs.py
 │       ├── particle_storm.py
 │       ├── plasma.py
-│       ├── raymarcher.py
+│       ├── raymarcher.py      ← 2.0: crystalline SDF scene + sparkles
 │       ├── sine_scroller.py
 │       ├── starfield.py
-│       └── tunnel.py
+│       ├── tunnel.py
+│       ├── van_gogh.py
+│       ├── vector.py
+│       ├── water.py
+│       ├── wavey_gravy.py
+│       └── unicorn_tears.py   ← drop-in, keyed U
 ├── config.toml
 ├── requirements.txt
 └── run.sh
@@ -444,6 +453,27 @@ See the **Windows 11** section in the user guide.  Key changes needed:
 3. OpenGL 3.3 core is supported on macOS 10.9+, but Apple deprecated OpenGL
    in macOS 10.14.  For long-term support, consider a Metal backend via
    `moderngl-window` with the `pyobjc` backend.
+
+---
+
+## Drop-in Effects
+
+Drop-in effects live under `drop-ins/<name>/` and ship as a separate
+unit (planned as git submodules).  They are **not** committed to the main
+repository — `drop-ins/` is in `.gitignore`.
+
+Conventions for a drop-in:
+- Place the `.py` file in `unicornviz/effects/` (auto-discovered).
+- Set `NAME`, `AUTHOR`, `TAGS` on the class.
+- Exclude the class name from `Playlist.shortcut_effects` if it deserves a
+  dedicated hotkey.
+- Add a dedicated hotkey in `hotkeys.py` and a matching line in `Overlays.HELP_TEXT`.
+
+Current drop-ins:
+
+| Name            | Key   | Notes                          |
+|-----------------|-------|--------------------------------|
+| Unicorn Tears   | `U`   | Prismatic teardrops + starfield |
 
 ---
 
