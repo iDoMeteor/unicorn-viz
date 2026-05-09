@@ -55,6 +55,34 @@ float hash1(float v) {
     return fract(sin(v * 127.1 + 91.3) * 43758.5453);
 }
 
+vec3 coreCluster(vec2 uv, float t, float flow, float beat, float treble) {
+    vec3 col = vec3(0.0);
+    for (int i = 0; i < 6; i++) {
+        float fi = float(i);
+        float h1 = hash1(fi * 9.37 + 1.2);
+        float h2 = hash1(fi * 7.11 + 3.7);
+
+        // Moving orbital centers with slight wobble.
+        float a = t * (0.22 + h1 * 0.36) + fi * 1.07;
+        float r = 0.14 + h2 * 0.46 + flow * 0.08;
+        vec2 c = vec2(cos(a), sin(a)) * r;
+        c += vec2(sin(t * (0.6 + h2) + fi), cos(t * (0.7 + h1) + fi * 0.9)) * 0.07;
+
+        // Pop-in/pop-out envelope.
+        float life = 0.5 + 0.5 * sin(t * (0.95 + h1 * 1.4) + fi * 2.41 + flow * 2.0);
+        float pop = smoothstep(0.72, 0.96, life);
+        pop *= smoothstep(0.02, 0.20, 1.0 - life);
+
+        float d = length(uv - c);
+        float core = exp(-d * (16.0 + h2 * 12.0));
+        float ring = smoothstep(0.10 + h2 * 0.07, 0.095 + h2 * 0.07, d);
+
+        vec3 tint = 0.55 + 0.45 * cos(6.28318 * (vec3(h1, h1 + 0.33, h1 + 0.67) + t * 0.03));
+        col += tint * (core * 0.55 + ring * 0.35) * pop * (0.35 + treble * 0.65 + beat * 0.35);
+    }
+    return col;
+}
+
 // ── Nebula aurora background ───────────────────────────────────────────────
 vec3 nebula(vec2 uv, float t) {
     float mid = iMid;
@@ -181,6 +209,9 @@ void main() {
 
     // Warp streaks from beat
     col += warpStreaks(v_uv + iDrift * 0.5, t + flow * 0.4, iWarp + iMicroBurst * 0.2);
+
+    // Multi-core blooms: moving cloned center structures with pop in/out timing.
+    col += coreCluster(uv, t, flow, iWarp + iMicroBurst * 0.4, iTreble);
 
     // Warp centre flash
     if (iWarp > 0.01) {
