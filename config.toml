@@ -3,7 +3,7 @@ fullscreen = true
 
 [demo]
 mode = "random"
-effect_duration = 60
+effect_duration = 17
 transition = "shuffle"
 
 [audio]
@@ -26,6 +26,9 @@ level = "INFO"
 auto_record = true
 directory = "recordings"
 capture_audio = true
+
+[render]
+internal_scale = 0.85
 
 [overlays]
 flash_messages = false
