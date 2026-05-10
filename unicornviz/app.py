@@ -50,6 +50,11 @@ _TRANSITION_MODE_MAP = {
 }
 
 
+def _clamp_render_scale(value: float) -> float:
+    """Clamp internal render scale to a sane range."""
+    return max(0.5, min(1.0, value))
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -84,9 +89,17 @@ class App:
         self._invert_prog: moderngl.Program | None = None
         self._invert_vao: moderngl.VertexArray | None = None
         self._invert_vbo: moderngl.Buffer | None = None
+        self._present_prog: moderngl.Program | None = None
+        self._present_vao: moderngl.VertexArray | None = None
+        self._present_vbo: moderngl.Buffer | None = None
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
+        self._render_scale = _clamp_render_scale(
+            float(self.cfg.get('render', 'internal_scale', default=1.0))
+        )
+        self._render_width = max(1, int(round(self._width * self._render_scale)))
+        self._render_height = max(1, int(round(self._height * self._render_scale)))
         self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
         self._audio = AudioData()
 
@@ -154,14 +167,43 @@ class App:
             self._width  = w_i.value or self._width
             self._height = h_i.value or self._height
             log.info("Fullscreen drawable size: %dx%d", self._width, self._height)
+        self._update_render_target_size()
 
     def _init_moderngl(self) -> None:
         self._ctx = moderngl.create_context()
         self._ctx.enable(moderngl.BLEND)
         self._ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         log.info("OpenGL %s", self._ctx.info["GL_VERSION"])
+        self._build_present_pipeline()
         self._build_blend_pipeline()
         self._build_invert_pipeline()
+
+    def _build_present_pipeline(self) -> None:
+        """Build fullscreen pass that copies a texture to screen."""
+        vert = """
+#version 330
+in vec2 in_vert;
+out vec2 v_uv;
+void main() {
+    v_uv = in_vert * 0.5 + 0.5;
+    gl_Position = vec4(in_vert, 0.0, 1.0);
+}
+"""
+        frag = """
+#version 330
+uniform sampler2D tex;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    fragColor = texture(tex, v_uv);
+}
+"""
+        self._present_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+        verts = np.array([-1, -1, -1, 1, 1, -1, 1, 1], dtype=np.float32)
+        self._present_vbo = self._ctx.buffer(verts)
+        self._present_vao = self._ctx.vertex_array(
+            self._present_prog, [(self._present_vbo, '2f', 'in_vert')]
+        )
 
     def _build_invert_pipeline(self) -> None:
         """Build fullscreen pass that inverts a texture's colors."""
@@ -199,6 +241,15 @@ void main() {
         tex.use(location=0)
         self._invert_prog["tex"].value = 0
         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
+
+    def _present_from_tex(self, tex: moderngl.Texture) -> None:
+        """Render a texture to screen without post-processing."""
+        self._ctx.screen.use()
+        self._ctx.viewport = (0, 0, self._width, self._height)
+        self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+        tex.use(location=0)
+        self._present_prog['tex'].value = 0
+        self._present_vao.render(moderngl.TRIANGLE_STRIP)
 
     def _effect_reactivity(self, effect: BaseEffect | None) -> float | None:
         """Return per-effect reactivity override, or None if not set."""
@@ -391,10 +442,15 @@ void main() {
         self._blend_vbo = vbo  # keep ref so it's not GC'd
 
     def _make_fbo(self) -> moderngl.Framebuffer:
-        tex = self._ctx.texture((self._width, self._height), 4)
+        tex = self._ctx.texture((self._render_width, self._render_height), 4)
         tex.filter = moderngl.LINEAR, moderngl.LINEAR
-        depth = self._ctx.depth_renderbuffer((self._width, self._height))
+        depth = self._ctx.depth_renderbuffer((self._render_width, self._render_height))
         return self._ctx.framebuffer(color_attachments=[tex], depth_attachment=depth)
+
+    def _update_render_target_size(self) -> None:
+        """Recompute scaled internal render target dimensions."""
+        self._render_width = max(1, int(round(self._width * self._render_scale)))
+        self._render_height = max(1, int(round(self._height * self._render_scale)))
 
     def _set_cursor_visible(self, visible: bool) -> None:
         """Show cursor only when Ctrl is held; otherwise keep it hidden."""
@@ -685,6 +741,12 @@ void main() {
             self._invert_vbo.release()
         if self._invert_prog:
             self._invert_prog.release()
+        if self._present_vao:
+            self._present_vao.release()
+        if self._present_vbo:
+            self._present_vbo.release()
+        if self._present_prog:
+            self._present_prog.release()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
@@ -694,13 +756,16 @@ void main() {
 
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert pass.
-            if self._invert_colors:
+            if self._invert_colors or self._render_scale < 0.999:
                 self._fbo_a.use()
-                ctx.viewport = (0, 0, self._width, self._height)
+                ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 if self._current_effect:
                     self._current_effect.render()
-                self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
+                if self._invert_colors:
+                    self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
+                else:
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
             else:
                 ctx.screen.use()
                 ctx.viewport = (0, 0, self._width, self._height)
@@ -729,20 +794,29 @@ void main() {
                     self._current_effect.destroy()
                 self._current_effect = self._next_effect
                 self._next_effect = None
-                ctx.screen.use()
-                ctx.viewport = (0, 0, self._width, self._height)
-                ctx.clear(0.0, 0.0, 0.0, 1.0)
-                if self._current_effect:
-                    self._current_effect.render()
+                if self._render_scale < 0.999:
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    if self._current_effect:
+                        self._current_effect.render()
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
+                else:
+                    ctx.screen.use()
+                    ctx.viewport = (0, 0, self._width, self._height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    if self._current_effect:
+                        self._current_effect.render()
             else:
                 # Render A into FBO a
                 self._fbo_a.use()
-                ctx.viewport = (0, 0, self._width, self._height)
+                ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._current_effect.render()
 
                 # Render B into FBO b
                 self._fbo_b.use()
+                ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._next_effect.render()
 
@@ -767,11 +841,16 @@ void main() {
     def _on_resize(self, w: int, h: int) -> None:
         self._width = w
         self._height = h
+        self._update_render_target_size()
         if self._current_effect:
             self._current_effect.resize(w, h)
         if self._next_effect:
             self._next_effect.resize(w, h)
         # Rebuild FBOs at new size
+        if self._fbo_a:
+            self._fbo_a.release()
+        if self._fbo_b:
+            self._fbo_b.release()
         self._fbo_a = self._make_fbo()
         self._fbo_b = self._make_fbo()
 

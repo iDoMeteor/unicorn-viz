@@ -52,6 +52,14 @@ Aliases:
 
 ---
 
+## `[render]`
+
+| Key              | Type   | Default | Description                                              |
+|------------------|--------|---------|----------------------------------------------------------|
+| `internal_scale` | float  | `1.0`   | Internal effect render scale before upscaling to screen. Use `0.5`–`1.0` for extra headroom on heavy scenes. |
+
+---
+
 ## `[overlays]`
 
 | Key              | Type   | Default | Description                                              |

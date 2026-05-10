@@ -63,6 +63,9 @@ _DEFAULTS: dict[str, Any] = {
         "sequence": [],
         "start_effect": "Audio Spectrum",
     },
+    "render": {
+        "internal_scale": 1.0,
+    },
     "logging": {
         "level": "INFO",
         "directory": "logs",
