@@ -8,3 +8,4 @@ __pycache__/
 .venv/
 drop-ins/
 recordings/
+plan.md

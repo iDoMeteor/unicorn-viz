@@ -32,7 +32,14 @@
 - `[doing]` Add multi-monitor support.
   Notes:
   - first slice implemented: explicit `window.display_index` / `--display-index` selection for startup and fullscreen target display
-  - remaining work: cloned displays, richer extended-desktop behavior, and screenshot/recording implications
+  - implemented: `display_mode` options (`single`, `span_all`, `mirror_all`) with shared readback and mirror output pipeline
+  - remaining work: screenshot/recording implications in mixed-mode topologies and long-run mirror performance validation
+- `[todo]` Refactor multi-monitor implementation into a drop-in subsystem module.
+  Notes:
+  - extract multi-head responsibilities from `app.py` into a dedicated module (`display/multihead.py`)
+  - define clear interfaces for: display discovery, primary window policy, mirror output lifecycle, shared frame fan-out, and SDL event routing
+  - perform extraction as behavior-preserving first pass, then do targeted optimizations in a second pass
+  - risk: moderate-to-large refactor due to current coupling with app init/render/event/cleanup paths
 - `[todo]` Verify recent Ubuntu/Debian and Fedora compatibility matrix.
 - `[todo]` Build a robust installer for supported Linux distributions.
 - `[todo]` Evaluate packaging for Flatpak and Snap.
