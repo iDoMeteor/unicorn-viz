@@ -4,3 +4,12 @@
 [submodule "drop-ins/unicorn-tears-01"]
 	path = drop-ins/unicorn-tears-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-unicorn-tears-01.git
+[submodule "drop-ins/cyber-war-01"]
+	path = drop-ins/cyber-war-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-cyber-war-01.git
+[submodule "drop-ins/hacker-terminal-01"]
+	path = drop-ins/hacker-terminal-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-hacker-terminal-01.git
+[submodule "drop-ins/alien-invasion-01"]
+	path = drop-ins/alien-invasion-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-alien-invasion-01.git
