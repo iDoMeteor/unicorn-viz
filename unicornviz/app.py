@@ -741,8 +741,9 @@ void main() {
 
             # Render
             self._render(dt)
-            overlays.render(dt)
+            overlays.render(dt, include_recording_indicator=False)
             self._capture_recording_frame()
+            overlays.render_live_recording_indicator()
 
             sdl2.SDL_GL_SwapWindow(self._window)
 

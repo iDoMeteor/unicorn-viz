@@ -76,11 +76,12 @@ Aliases:
 | `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |
 | `capture_audio`  | bool   | `false`      | Reserved for future audio muxing; ignored in v1. |
 | `filename_prefix`| str    | `"unicornviz"` | Prefix used for timestamped recording filenames. |
-| `show_indicator` | bool   | `true`       | Show a persistent `REC` indicator while recording. |
+| `show_indicator` | bool   | `true`       | Show a live-only recording indicator while recording. It is shown only when the name overlay is visible and is never burned into saved recordings. |
 
 Notes:
 - V1 records video only.
-- Recording captures the final on-screen composed output, including overlays that are visible.
+- Recording captures the final on-screen composed output.
+- The recording indicator is drawn only after frame capture, so it is visible live but not included in recordings.
 - Recording may reduce runtime performance because frame capture currently uses synchronous screen readback.
 
 ---

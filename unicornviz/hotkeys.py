@@ -66,7 +66,7 @@ class HotkeyHandler:
         sym_name = sdl2.SDL_GetKeyName(sym)
         if isinstance(sym_name, bytes):
             sym_name = sym_name.decode("utf-8", errors="replace")
-        log.info("Key: %s (mod=0x%04x)", sym_name, mod)
+        log.debug("Key: %s (mod=0x%04x)", sym_name, mod)
 
         if sym == sdl2.SDLK_ESCAPE:
             a._running = False  # noqa: SLF001

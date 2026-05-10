@@ -486,7 +486,21 @@ void main() {
         self._ctx.enable(moderngl.BLEND)
         self._vao.render(moderngl.TRIANGLES, vertices=len(data) // 4)
 
-    def render(self, dt: float) -> None:
+    def _render_recording_indicator(self) -> None:
+        """Draw the live-only recording indicator when the name overlay is visible."""
+        if not (self._recording_active and self._show_recording_indicator):
+            return
+        if not (self._show_name and self._name_text):
+            return
+        self._draw_text(
+            '.',
+            self._width - 84,
+            0,
+            scale=10.0,
+            color=(1.0, 0.12, 0.12, 0.98),
+        )
+
+    def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         if self._show_help:
             self._help_timer -= dt
@@ -512,14 +526,8 @@ void main() {
                 color=(0.0, 1.0, 1.0, 0.85),
             )
 
-        if self._recording_active and self._show_recording_indicator:
-            self._draw_text(
-                'REC',
-                self._width - 120,
-                20,
-                scale=4.0,
-                color=(1.0, 0.15, 0.15, 0.92),
-            )
+        if include_recording_indicator:
+            self._render_recording_indicator()
 
         if self._show_help:
             # 50% black underlay for readability.
@@ -646,6 +654,10 @@ void main() {
 
     def set_recording_state(self, active: bool) -> None:
         self._recording_active = active
+
+    def render_live_recording_indicator(self) -> None:
+        """Draw only the recording indicator for live display after frame capture."""
+        self._render_recording_indicator()
 
     def resize(self, w: int, h: int) -> None:
         self._width = w

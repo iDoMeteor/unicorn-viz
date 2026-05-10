@@ -137,7 +137,11 @@ When enabled, recording captures:
 - effects
 - transitions
 - invert pass
-- overlays that are visible on screen
+- standard overlays that are visible before frame capture
+
+Live recording indicator:
+- when the name overlay is visible, a small red recording dot is shown live on screen
+- that dot is not included in saved recordings
 
 Recording can reduce performance because the current implementation reads back
 frames synchronously from the final screen output.

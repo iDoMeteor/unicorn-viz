@@ -278,6 +278,71 @@ Reason:
 
 ---
 
+## Phase 2 — Audio Mux Feasibility
+
+Goal:
+1. add optional audio capture to recorded output without destabilizing the current V1 video path
+
+### Recommended approach
+
+Use ffmpeg to mux a second audio input directly, rather than trying to reuse the in-process `sounddevice` stream.
+
+Why:
+1. the current app audio path is designed for analysis/reactivity, not for writing muxable encoded output
+2. ffmpeg already handles A/V muxing, resampling, and sync much better than a first-pass custom solution would
+3. it keeps the recording code simpler and isolates audio capture failures from the reactivity path
+
+### Linux-first strategy
+
+Preferred V2 path:
+1. configurable ffmpeg audio input source
+2. likely PulseAudio/PipeWire input via ffmpeg device flags
+
+Possible future config additions:
+
+```toml
+[recording]
+capture_audio = true
+audio_input_format = "pulse"
+audio_input_device = "default"
+audio_codec = "aac"
+audio_bitrate = "192k"
+```
+
+Expected ffmpeg shape:
+
+```bash
+ffmpeg \
+  -y \
+  -f rawvideo -pix_fmt rgb24 -video_size WIDTHxHEIGHT -framerate FPS -i - \
+  -f pulse -i default \
+  -c:v libx264 -preset veryfast -crf 18 \
+  -c:a aac -b:a 192k \
+  -pix_fmt yuv420p \
+  output.mp4
+```
+
+### Main concerns
+
+1. Device naming varies across PipeWire/Pulse setups.
+2. The current app may react to one source while ffmpeg records another unless recording audio input is explicitly configurable.
+3. Auto-fallback monitor selection in the app does not automatically translate to a good ffmpeg input string.
+4. Startup ordering matters: we need the video recorder and audio input to come up without hanging the app.
+
+### Recommended V2 scope boundary
+
+Include:
+1. optional audio capture with explicit config
+2. Linux-first Pulse/PipeWire support
+3. graceful fallback to video-only if audio input fails
+
+Do not include initially:
+1. perfect automatic audio-device mirroring from the app reactivity input
+2. per-platform audio mux support beyond Linux
+3. live waveform/level monitoring in the recorder UI
+
+---
+
 ## Validation Plan
 
 ### Automated / headless

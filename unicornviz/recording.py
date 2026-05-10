@@ -112,6 +112,17 @@ class Recorder:
 
         output_path = self._build_output_path()
         command = self._build_command(output_path)
+        log.debug(
+            'Recording start requested: size=%dx%d fps=%d codec=%s preset=%s crf=%d output=%s',
+            self._width,
+            self._height,
+            self._fps,
+            self._codec,
+            self._preset,
+            self._crf,
+            output_path,
+        )
+        log.debug('Recording command: %s', ' '.join(command))
         try:
             self._process = subprocess.Popen(
                 command,
@@ -155,6 +166,7 @@ class Recorder:
         output_path = self._current_path
         if process is None:
             return output_path
+        log.debug('Stopping recording: %s', output_path)
         try:
             if process.stdin is not None:
                 process.stdin.close()
