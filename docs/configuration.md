@@ -13,6 +13,12 @@ All settings live in `config.toml` in the project root.
 | `fullscreen` | bool    | `false`        | Start in fullscreen mode                   |
 | `title`      | str     | `"Unicorn Viz"`| Window title bar text                      |
 | `display_index` | int  | `0`            | SDL display / monitor index to target at startup and when entering fullscreen. |
+| `display_mode` | str   | `"single"`   | Display layout mode: `"single"`, `"span_all"`, or `"mirror_all"`. |
+
+Notes:
+- `single`: render to one targeted display only.
+- `span_all`: create one large window stretched across the combined bounds of all displays.
+- `mirror_all`: render on the targeted display and mirror the final live output to every other detected display.
 
 ---
 

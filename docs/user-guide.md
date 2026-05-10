@@ -129,6 +129,19 @@ python -m unicornviz --help
 
 ---
 
+## Multi-Monitor
+
+Unicorn Viz currently supports three display layout modes:
+
+- `single`: render on one selected display
+- `span_all`: spread one large window across all detected displays
+- `mirror_all`: show the main output on the selected display and mirror it to the others
+
+Use `window.display_index` to choose the targeted display, and `window.display_mode`
+to select the layout mode.
+
+---
+
 ## Recording
 
 Unicorn Viz can record the final on-screen output to MP4 using `ffmpeg`.

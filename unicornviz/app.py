@@ -103,6 +103,12 @@ class App:
             self.cfg.get('window', 'display_index', default=0)
         )
         self._display_index = 0
+        self._display_mode_requested = str(
+            self.cfg.get('window', 'display_mode', default='single')
+        ).lower()
+        self._display_mode = 'single'
+        self._display_layouts: list[tuple[int, int, int, int]] = []
+        self._mirror_outputs: list[dict[str, object]] = []
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
@@ -118,12 +124,15 @@ class App:
     def _log_video_displays(self) -> int:
         """Log visible SDL displays and return the detected display count."""
         count = int(sdl2.SDL_GetNumVideoDisplays())
+        self._display_layouts = []
         if count <= 0:
             log.warning('SDL reported no video displays; defaulting to display 0')
+            self._display_layouts = [(0, 0, self._width, self._height)]
             return 1
         for idx in range(count):
             bounds = sdl2.SDL_Rect()
             if sdl2.SDL_GetDisplayBounds(idx, bounds) == 0:
+                self._display_layouts.append((bounds.x, bounds.y, bounds.w, bounds.h))
                 log.info(
                     'Display %d: origin=(%d,%d) size=%dx%d',
                     idx,
@@ -133,6 +142,17 @@ class App:
                     bounds.h,
                 )
         return count
+
+    def _resolve_display_mode(self) -> str:
+        """Resolve the configured display mode against supported values."""
+        allowed = {'single', 'span_all', 'mirror_all'}
+        if self._display_mode_requested not in allowed:
+            log.warning(
+                'Requested display_mode=%r is invalid; using single',
+                self._display_mode_requested,
+            )
+            return 'single'
+        return self._display_mode_requested
 
     def _resolve_display_index(self) -> int:
         """Resolve the configured display index against available SDL displays."""
@@ -147,6 +167,14 @@ class App:
 
     def _display_bounds(self, display_index: int) -> sdl2.SDL_Rect | None:
         """Return display bounds for the selected SDL display, if available."""
+        if 0 <= display_index < len(self._display_layouts):
+            x, y, w, h = self._display_layouts[display_index]
+            bounds = sdl2.SDL_Rect()
+            bounds.x = x
+            bounds.y = y
+            bounds.w = w
+            bounds.h = h
+            return bounds
         bounds = sdl2.SDL_Rect()
         if sdl2.SDL_GetDisplayBounds(display_index, bounds) != 0:
             log.warning(
@@ -156,6 +184,16 @@ class App:
             )
             return None
         return bounds
+
+    def _all_display_bounds(self) -> tuple[int, int, int, int]:
+        """Return the union bounds of all visible SDL displays."""
+        if not self._display_layouts:
+            return 0, 0, self._width, self._height
+        min_x = min(layout[0] for layout in self._display_layouts)
+        min_y = min(layout[1] for layout in self._display_layouts)
+        max_x = max(layout[0] + layout[2] for layout in self._display_layouts)
+        max_y = max(layout[1] + layout[3] for layout in self._display_layouts)
+        return min_x, min_y, max_x - min_x, max_y - min_y
 
     def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
         """Compute startup window coordinates centered on the selected display."""
@@ -170,8 +208,116 @@ class App:
         """Move the existing SDL window to the configured display center."""
         if self._window is None:
             return
+        if self._display_mode == 'span_all':
+            x, y, w, h = self._all_display_bounds()
+            sdl2.SDL_SetWindowPosition(self._window, x, y)
+            sdl2.SDL_SetWindowSize(self._window, w, h)
+            return
         x, y = self._window_position_for_display(self._display_index)
         sdl2.SDL_SetWindowPosition(self._window, x, y)
+
+    def _destroy_mirror_outputs(self) -> None:
+        """Destroy auxiliary mirror windows and SDL renderers/textures."""
+        for output in self._mirror_outputs:
+            texture = output.get('texture')
+            renderer = output.get('renderer')
+            window = output.get('window')
+            if texture is not None:
+                sdl2.SDL_DestroyTexture(texture)
+            if renderer is not None:
+                sdl2.SDL_DestroyRenderer(renderer)
+            if window is not None:
+                sdl2.SDL_DestroyWindow(window)
+        self._mirror_outputs.clear()
+
+    def _create_mirror_outputs(self) -> None:
+        """Create lightweight SDL windows that mirror the main output."""
+        self._destroy_mirror_outputs()
+        if self._display_mode != 'mirror_all' or len(self._display_layouts) <= 1:
+            return
+        title = self.cfg.get('window', 'title', default='Unicorn Viz')
+        source_w = max(1, self._width)
+        source_h = max(1, self._height)
+        for idx, (x, y, w, h) in enumerate(self._display_layouts):
+            if idx == self._display_index:
+                continue
+            flags = sdl2.SDL_WINDOW_BORDERLESS | sdl2.SDL_WINDOW_SHOWN
+            window = sdl2.SDL_CreateWindow(
+                f'{title} Mirror'.encode(),
+                x,
+                y,
+                w,
+                h,
+                flags,
+            )
+            if not window:
+                log.warning('Failed to create mirror window for display %d: %s', idx, sdl2.SDL_GetError().decode())
+                continue
+            renderer = sdl2.SDL_CreateRenderer(window, -1, sdl2.SDL_RENDERER_ACCELERATED)
+            if not renderer:
+                renderer = sdl2.SDL_CreateRenderer(window, -1, sdl2.SDL_RENDERER_SOFTWARE)
+            if not renderer:
+                log.warning('Failed to create mirror renderer for display %d: %s', idx, sdl2.SDL_GetError().decode())
+                sdl2.SDL_DestroyWindow(window)
+                continue
+            texture = sdl2.SDL_CreateTexture(
+                renderer,
+                sdl2.SDL_PIXELFORMAT_RGB24,
+                sdl2.SDL_TEXTUREACCESS_STREAMING,
+                source_w,
+                source_h,
+            )
+            if not texture:
+                log.warning('Failed to create mirror texture for display %d: %s', idx, sdl2.SDL_GetError().decode())
+                sdl2.SDL_DestroyRenderer(renderer)
+                sdl2.SDL_DestroyWindow(window)
+                continue
+            self._mirror_outputs.append(
+                {
+                    'window': window,
+                    'renderer': renderer,
+                    'texture': texture,
+                    'display_index': idx,
+                }
+            )
+        if self._mirror_outputs:
+            log.info('Mirror outputs active on displays: %s', ', '.join(str(int(output['display_index'])) for output in self._mirror_outputs))
+
+    def _resize_mirror_textures(self) -> None:
+        """Recreate mirror textures when the main output size changes."""
+        if not self._mirror_outputs:
+            return
+        source_w = max(1, self._width)
+        source_h = max(1, self._height)
+        for output in self._mirror_outputs:
+            old_texture = output.get('texture')
+            renderer = output.get('renderer')
+            if renderer is None:
+                continue
+            if old_texture is not None:
+                sdl2.SDL_DestroyTexture(old_texture)
+            output['texture'] = sdl2.SDL_CreateTexture(
+                renderer,
+                sdl2.SDL_PIXELFORMAT_RGB24,
+                sdl2.SDL_TEXTUREACCESS_STREAMING,
+                source_w,
+                source_h,
+            )
+
+    def _present_mirror_outputs(self, frame_bytes: bytes) -> None:
+        """Present a copied frame to all active mirror windows."""
+        if not self._mirror_outputs:
+            return
+        pitch = self._width * 3
+        for output in self._mirror_outputs:
+            texture = output.get('texture')
+            renderer = output.get('renderer')
+            if texture is None or renderer is None:
+                continue
+            sdl2.SDL_UpdateTexture(texture, None, frame_bytes, pitch)
+            sdl2.SDL_RenderClear(renderer)
+            sdl2.SDL_RenderCopy(renderer, texture, None, None)
+            sdl2.SDL_RenderPresent(renderer)
 
     def _init_sdl(self) -> None:
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
@@ -197,11 +343,17 @@ class App:
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_DEPTH_SIZE, 24)
 
         flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_RESIZABLE
-        if self._fullscreen:
+        self._display_mode = self._resolve_display_mode()
+        if self._display_mode == 'span_all' and self._fullscreen:
+            flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_BORDERLESS
+        elif self._fullscreen:
             flags |= sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
 
         self._display_index = self._resolve_display_index()
-        x_pos, y_pos = self._window_position_for_display(self._display_index)
+        if self._display_mode == 'span_all':
+            x_pos, y_pos, self._width, self._height = self._all_display_bounds()
+        else:
+            x_pos, y_pos = self._window_position_for_display(self._display_index)
 
         title = self.cfg.get("window", "title", default="Unicorn Viz")
         self._window = sdl2.SDL_CreateWindow(
@@ -234,12 +386,13 @@ class App:
             self._width  = w_i.value or self._width
             self._height = h_i.value or self._height
             log.info(
-                'Fullscreen drawable size on display %d: %dx%d',
-                self._display_index,
+                'Fullscreen drawable size in %s mode: %dx%d',
+                self._display_mode,
                 self._width,
                 self._height,
             )
         self._update_render_target_size()
+        self._create_mirror_outputs()
 
     def _init_moderngl(self) -> None:
         self._ctx = moderngl.create_context()
@@ -818,6 +971,8 @@ void main() {
             overlays.render(dt, include_recording_indicator=False)
             self._capture_recording_frame()
             overlays.render_live_recording_indicator()
+            if self._mirror_outputs:
+                self._present_mirror_outputs(self._ctx.screen.read(components=3, alignment=1))
 
             sdl2.SDL_GL_SwapWindow(self._window)
 
@@ -843,6 +998,7 @@ void main() {
             self._present_vbo.release()
         if self._present_prog:
             self._present_prog.release()
+        self._destroy_mirror_outputs()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
@@ -946,6 +1102,7 @@ void main() {
             self._current_effect.resize(w, h)
         if self._next_effect:
             self._next_effect.resize(w, h)
+        self._resize_mirror_textures()
         # Rebuild FBOs at new size
         if self._fbo_a:
             self._fbo_a.release()
@@ -960,12 +1117,25 @@ void main() {
 
     def toggle_fullscreen(self) -> None:
         self._fullscreen = not self._fullscreen
-        flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
-        if self._fullscreen:
-            self._move_window_to_display()
-        sdl2.SDL_SetWindowFullscreen(self._window, flag)
-        if not self._fullscreen:
-            self._move_window_to_display()
+        if self._display_mode == 'span_all':
+            flags = sdl2.SDL_WINDOW_BORDERLESS if self._fullscreen else 0
+            sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE if self._fullscreen else sdl2.SDL_TRUE)
+            x, y, w, h = self._all_display_bounds()
+            if self._fullscreen:
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+            else:
+                x, y = self._window_position_for_display(self._display_index)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, self.cfg.get('window', 'width', default=1920), self.cfg.get('window', 'height', default=1080))
+            _ = flags
+        else:
+            flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
+            if self._fullscreen:
+                self._move_window_to_display()
+            sdl2.SDL_SetWindowFullscreen(self._window, flag)
+            if not self._fullscreen:
+                self._move_window_to_display()
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
