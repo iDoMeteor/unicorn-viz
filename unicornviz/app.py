@@ -30,6 +30,7 @@ from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
+from unicornviz.display import MultiHeadController
 
 log = logging.getLogger(__name__)
 
@@ -99,20 +100,9 @@ class App:
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
-        self._display_index_requested = int(
-            self.cfg.get('window', 'display_index', default=0)
-        )
         self._display_index = 0
-        self._display_mode_requested = str(
-            self.cfg.get('window', 'display_mode', default='single')
-        ).lower()
         self._display_mode = 'single'
-        self._display_layouts: list[tuple[int, int, int, int]] = []
-        self._mirror_outputs: list[dict[str, object]] = []
-        self._readback_pbos: list[moderngl.Buffer] = []
-        self._readback_index = 0
-        self._readback_primed = False
-        self._readback_size = 0
+        self._multihead = MultiHeadController(self.cfg)
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
@@ -126,300 +116,64 @@ class App:
     # ------------------------------------------------------------------ #
 
     def _log_video_displays(self) -> int:
-        """Log visible SDL displays and return the detected display count."""
-        count = int(sdl2.SDL_GetNumVideoDisplays())
-        self._display_layouts = []
-        if count <= 0:
-            log.warning('SDL reported no video displays; defaulting to display 0')
-            self._display_layouts = [(0, 0, self._width, self._height)]
-            return 1
-        for idx in range(count):
-            bounds = sdl2.SDL_Rect()
-            if sdl2.SDL_GetDisplayBounds(idx, bounds) == 0:
-                self._display_layouts.append((bounds.x, bounds.y, bounds.w, bounds.h))
-                log.info(
-                    'Display %d: origin=(%d,%d) size=%dx%d',
-                    idx,
-                    bounds.x,
-                    bounds.y,
-                    bounds.w,
-                    bounds.h,
-                )
-        return count
+        return self._multihead.log_video_displays(self._width, self._height)
 
     def _resolve_display_mode(self) -> str:
-        """Resolve the configured display mode against supported values."""
-        allowed = {'single', 'span_all', 'mirror_all'}
-        if self._display_mode_requested not in allowed:
-            log.warning(
-                'Requested display_mode=%r is invalid; using single',
-                self._display_mode_requested,
-            )
-            return 'single'
-        return self._display_mode_requested
+        self._display_mode = self._multihead.resolve_display_mode()
+        return self._display_mode
 
     def _resolve_display_index(self) -> int:
-        """Resolve the configured display index against available SDL displays."""
-        count = self._log_video_displays()
-        if self._display_index_requested < 0 or self._display_index_requested >= count:
-            if self._display_mode == 'span_all':
-                log.debug(
-                    'Requested display_index=%d is out of range in span_all mode; using display 0 for restore position',
-                    self._display_index_requested,
-                )
-            else:
-                log.warning(
-                    'Requested display_index=%d is out of range; using display 0',
-                    self._display_index_requested,
-                )
-            return 0
-        return self._display_index_requested
+        self._display_index = self._multihead.resolve_display_index(self._width, self._height)
+        return self._display_index
 
     def _display_bounds(self, display_index: int) -> sdl2.SDL_Rect | None:
-        """Return display bounds for the selected SDL display, if available."""
-        if 0 <= display_index < len(self._display_layouts):
-            x, y, w, h = self._display_layouts[display_index]
-            bounds = sdl2.SDL_Rect()
-            bounds.x = x
-            bounds.y = y
-            bounds.w = w
-            bounds.h = h
-            return bounds
-        bounds = sdl2.SDL_Rect()
-        if sdl2.SDL_GetDisplayBounds(display_index, bounds) != 0:
-            log.warning(
-                'SDL_GetDisplayBounds failed for display %d: %s',
-                display_index,
-                sdl2.SDL_GetError().decode(),
-            )
-            return None
-        return bounds
+        return self._multihead.display_bounds(display_index, self._width, self._height)
 
     def _all_display_bounds(self) -> tuple[int, int, int, int]:
-        """Return the union bounds of all visible SDL displays."""
-        if not self._display_layouts:
-            return 0, 0, self._width, self._height
-        min_x = min(layout[0] for layout in self._display_layouts)
-        min_y = min(layout[1] for layout in self._display_layouts)
-        max_x = max(layout[0] + layout[2] for layout in self._display_layouts)
-        max_y = max(layout[1] + layout[3] for layout in self._display_layouts)
-        return min_x, min_y, max_x - min_x, max_y - min_y
+        return self._multihead.all_display_bounds(self._width, self._height)
 
     def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
-        """Compute startup window coordinates centered on the selected display."""
-        bounds = self._display_bounds(display_index)
-        if bounds is None:
-            return sdl2.SDL_WINDOWPOS_CENTERED, sdl2.SDL_WINDOWPOS_CENTERED
-        x = bounds.x + max(0, (bounds.w - self._width) // 2)
-        y = bounds.y + max(0, (bounds.h - self._height) // 2)
-        return x, y
+        return self._multihead.window_position_for_display(display_index, self._width, self._height)
 
     def _move_window_to_display(self) -> None:
-        """Move the existing SDL window to the configured display center."""
-        if self._window is None:
-            return
-        if self._display_mode == 'span_all':
-            x, y, w, h = self._all_display_bounds()
-            sdl2.SDL_SetWindowPosition(self._window, x, y)
-            sdl2.SDL_SetWindowSize(self._window, w, h)
-            return
-        x, y = self._window_position_for_display(self._display_index)
-        sdl2.SDL_SetWindowPosition(self._window, x, y)
+        self._multihead.move_window_to_display(self._window, self._width, self._height)
 
     def _destroy_mirror_outputs(self) -> None:
-        """Destroy auxiliary mirror windows and SDL renderers/textures."""
-        for output in self._mirror_outputs:
-            texture = output.get('texture')
-            renderer = output.get('renderer')
-            window = output.get('window')
-            if texture is not None:
-                sdl2.SDL_DestroyTexture(texture)
-            if renderer is not None:
-                sdl2.SDL_DestroyRenderer(renderer)
-            if window is not None:
-                sdl2.SDL_DestroyWindow(window)
-        self._mirror_outputs.clear()
+        self._multihead.destroy_mirror_outputs()
 
     def _create_mirror_outputs(self) -> None:
-        """Create lightweight SDL windows that mirror the main output."""
-        self._destroy_mirror_outputs()
-        if self._display_mode != 'mirror_all' or len(self._display_layouts) <= 1:
-            return
         title = self.cfg.get('window', 'title', default='Unicorn Viz')
-        source_w = max(1, self._width)
-        source_h = max(1, self._height)
-        for idx, (x, y, w, h) in enumerate(self._display_layouts):
-            if idx == self._display_index:
-                continue
-            flags = sdl2.SDL_WINDOW_BORDERLESS | sdl2.SDL_WINDOW_SHOWN
-            window = sdl2.SDL_CreateWindow(
-                f'{title} Mirror'.encode(),
-                x,
-                y,
-                w,
-                h,
-                flags,
-            )
-            if not window:
-                log.warning('Failed to create mirror window for display %d: %s', idx, sdl2.SDL_GetError().decode())
-                continue
-            renderer = sdl2.SDL_CreateRenderer(window, -1, sdl2.SDL_RENDERER_ACCELERATED)
-            if not renderer:
-                renderer = sdl2.SDL_CreateRenderer(window, -1, sdl2.SDL_RENDERER_SOFTWARE)
-            if not renderer:
-                log.warning('Failed to create mirror renderer for display %d: %s', idx, sdl2.SDL_GetError().decode())
-                sdl2.SDL_DestroyWindow(window)
-                continue
-            texture = sdl2.SDL_CreateTexture(
-                renderer,
-                sdl2.SDL_PIXELFORMAT_RGB24,
-                sdl2.SDL_TEXTUREACCESS_STREAMING,
-                source_w,
-                source_h,
-            )
-            if not texture:
-                log.warning('Failed to create mirror texture for display %d: %s', idx, sdl2.SDL_GetError().decode())
-                sdl2.SDL_DestroyRenderer(renderer)
-                sdl2.SDL_DestroyWindow(window)
-                continue
-            self._mirror_outputs.append(
-                {
-                    'window': window,
-                    'renderer': renderer,
-                    'texture': texture,
-                    'display_index': idx,
-                    'window_id': int(sdl2.SDL_GetWindowID(window)),
-                }
-            )
-        if self._mirror_outputs:
-            log.info('Mirror outputs active on displays: %s', ', '.join(str(int(output['display_index'])) for output in self._mirror_outputs))
+        self._multihead.create_mirror_outputs(title, self._width, self._height)
 
     def _resize_mirror_textures(self) -> None:
-        """Recreate mirror textures when the main output size changes."""
-        if not self._mirror_outputs:
-            return
-        source_w = max(1, self._width)
-        source_h = max(1, self._height)
-        for output in self._mirror_outputs:
-            old_texture = output.get('texture')
-            renderer = output.get('renderer')
-            if renderer is None:
-                continue
-            if old_texture is not None:
-                sdl2.SDL_DestroyTexture(old_texture)
-            output['texture'] = sdl2.SDL_CreateTexture(
-                renderer,
-                sdl2.SDL_PIXELFORMAT_RGB24,
-                sdl2.SDL_TEXTUREACCESS_STREAMING,
-                source_w,
-                source_h,
-            )
+        self._multihead.resize_mirror_textures(self._width, self._height)
 
     def _present_mirror_outputs(self, frame_bytes: bytes) -> None:
-        """Present a copied frame to all active mirror windows.
-
-        ``frame_bytes`` is raw RGB24 pixel data read from the OpenGL screen.
-        OpenGL stores rows bottom-to-top while SDL textures are top-to-bottom,
-        so the output is presented with a vertical flip via SDL_RenderCopyEx.
-        """
-        if not self._mirror_outputs:
-            return
-        pitch = self._width * 3
-        src_ar = self._width / max(self._height, 1)
-        for output in self._mirror_outputs:
-            texture = output.get('texture')
-            renderer = output.get('renderer')
-            if texture is None or renderer is None:
-                continue
-            sdl2.SDL_UpdateTexture(texture, None, frame_bytes, pitch)
-            sdl2.SDL_RenderClear(renderer)
-            out_w = ctypes.c_int(0)
-            out_h = ctypes.c_int(0)
-            sdl2.SDL_GetRendererOutputSize(renderer, out_w, out_h)
-            dst_rect = None
-            if out_w.value > 0 and out_h.value > 0:
-                dst_ar = out_w.value / out_h.value
-                if abs(dst_ar - src_ar) > 1e-3:
-                    if dst_ar > src_ar:
-                        h = out_h.value
-                        w = int(round(h * src_ar))
-                        x = (out_w.value - w) // 2
-                        y = 0
-                    else:
-                        w = out_w.value
-                        h = int(round(w / src_ar))
-                        x = 0
-                        y = (out_h.value - h) // 2
-                    dst_rect = sdl2.SDL_Rect(x, y, max(1, w), max(1, h))
-            sdl2.SDL_RenderCopyEx(
-                renderer,
-                texture,
-                None,
-                dst_rect,
-                0.0,
-                None,
-                sdl2.SDL_FLIP_VERTICAL,
-            )
-            sdl2.SDL_RenderPresent(renderer)
+        self._multihead.present_mirror_outputs(frame_bytes, self._width, self._height)
 
     def _is_mirror_window_id(self, window_id: int) -> bool:
-        """Return True if the given SDL window id belongs to a mirror window."""
-        for output in self._mirror_outputs:
-            if int(output.get('window_id', -1)) == window_id:
-                return True
-        return False
+        return self._multihead.is_mirror_window_id(window_id)
 
     def _rebuild_multihead_outputs(self) -> None:
-        """Refresh display topology and mirror windows after SDL display events."""
-        self._log_video_displays()
-        if self._display_index_requested < 0 or self._display_index_requested >= len(self._display_layouts):
-            self._display_index = 0
-        else:
-            self._display_index = self._display_index_requested
-        if self._display_mode == 'mirror_all':
-            self._create_mirror_outputs()
-            self._resize_mirror_textures()
+        title = self.cfg.get('window', 'title', default='Unicorn Viz')
+        self._display_index = self._multihead.rebuild_multihead_outputs(
+            self._width,
+            self._height,
+            title,
+        )
 
     def _release_readback_pbos(self) -> None:
-        """Release async readback buffers."""
-        for pbo in self._readback_pbos:
-            pbo.release()
-        self._readback_pbos.clear()
-        self._readback_index = 0
-        self._readback_primed = False
-        self._readback_size = 0
+        self._multihead.release_readback_pbos()
 
     def _ensure_readback_pbos(self, size: int) -> None:
-        """Create or resize readback buffers used for shared frame capture."""
         if self._ctx is None:
             return
-        if len(self._readback_pbos) == 2 and self._readback_size == size:
-            return
-        self._release_readback_pbos()
-        self._readback_pbos = [self._ctx.buffer(reserve=size), self._ctx.buffer(reserve=size)]
-        self._readback_size = size
+        self._multihead.ensure_readback_pbos(self._ctx, size)
 
     def _read_shared_frame(self) -> bytes | None:
-        """Capture one shared frame for recording/mirror using staged readback.
-
-        Uses two GPU buffers to pipeline readback one frame behind when possible.
-        """
         if self._ctx is None:
             return None
-        size = self._width * self._height * 3
-        self._ensure_readback_pbos(size)
-        if len(self._readback_pbos) != 2:
-            return None
-        write_idx = self._readback_index
-        read_idx = 1 - write_idx
-        self._ctx.screen.read_into(self._readback_pbos[write_idx], components=3, alignment=1)
-        frame: bytes | None = None
-        if self._readback_primed:
-            frame = self._readback_pbos[read_idx].read()
-        else:
-            self._readback_primed = True
-        self._readback_index = read_idx
-        return frame
+        return self._multihead.read_shared_frame(self._ctx, self._width, self._height)
 
     def _init_sdl(self) -> None:
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
@@ -438,10 +192,10 @@ class App:
 
         # Multi-head modes rely on explicit window placement; Wayland may ignore
         # this by design, so try X11 automatically if available.
-        if self._display_mode_requested != 'single':
+        if self._multihead.requested_mode != 'single':
             current_driver = sdl2.SDL_GetCurrentVideoDriver().decode().lower()
             if current_driver == 'wayland':
-                log.warning('display_mode=%s requested on Wayland; attempting X11 fallback for reliable multi-head placement', self._display_mode_requested)
+                log.warning('display_mode=%s requested on Wayland; attempting X11 fallback for reliable multi-head placement', self._multihead.requested_mode)
                 sdl2.SDL_Quit()
                 os.environ['SDL_VIDEODRIVER'] = 'x11'
                 if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
@@ -452,7 +206,7 @@ class App:
                             f"SDL_Init failed after fallback attempts: {sdl2.SDL_GetError().decode()}"
                         )
                 else:
-                    log.info('Using x11 for display_mode=%s', self._display_mode_requested)
+                    log.info('Using x11 for display_mode=%s', self._multihead.requested_mode)
 
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MAJOR_VERSION, 3)
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MINOR_VERSION, 3)
@@ -1107,7 +861,7 @@ void main() {
             need_frame_for_recording = (
                 self._recorder is not None and self._recorder.is_recording
             )
-            need_frame_for_mirror = bool(self._mirror_outputs)
+            need_frame_for_mirror = self._multihead.has_mirror_outputs
             shared_frame: bytes | None = None
             if need_frame_for_recording or need_frame_for_mirror:
                 try:
