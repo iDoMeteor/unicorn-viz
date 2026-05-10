@@ -120,13 +120,12 @@ void main() {
     col += rayField(uv, t, 0.30 + iMid * 0.25 + iBeat * 0.55);
     col += rayField(uv.yx * vec2(1.0, -1.0), t * 0.83 + 1.7, 0.18 + iBeat * 0.35);
 
-    // Cool crystal floor reflection base (no gold wash).
-    float ground = smoothstep(-0.30, -0.12, v_uv.y);
+    // Subtle lower-floor crystal base only; avoid broad scrolling curtain wash.
+    float ground = 1.0 - smoothstep(-0.42, -0.06, v_uv.y);
     vec3 floorA = vec3(0.05, 0.06, 0.08);
     vec3 floorB = vec3(0.35, 0.42, 0.55);
-    float gleam = 0.5 + 0.5 * sin(uv.x * 10.0 + t * 1.1) * cos(uv.x * 3.7 - t * 0.7);
-    vec3 groundCol = mix(floorA, floorB, gleam * 0.55 + iBass * 0.14);
-    col = mix(col, groundCol, ground * 0.88);
+    vec3 groundCol = mix(floorA, floorB, 0.22 + iBass * 0.12);
+    col = mix(col, groundCol, ground * 0.36);
 
     // Pyramids (three layers)
     vec2 a1 = vec2(-0.72, -0.20), b1 = vec2(-0.30, -0.20), c1 = vec2(-0.51, 0.42);

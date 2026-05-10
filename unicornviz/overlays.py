@@ -528,7 +528,7 @@ void main() {
         col_scale = 2.45
         col_lh = 8 * col_scale + 4
         col1_x = self._width * 0.47
-        col2_x = self._width * 0.66
+        col2_x = col1_x + (20.0 * 8.0 * col_scale)
         col3_x = col1_x
         cy = pad
 
