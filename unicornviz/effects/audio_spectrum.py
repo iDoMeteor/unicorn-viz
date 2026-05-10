@@ -225,6 +225,38 @@ void main() {
 _N_BARS = 64
 _N_WAVE = 512
 
+# Frequency mapping constants.
+# AudioCapture defaults to a 48 kHz stream and Analyzer runs an rfft with
+# n=1024 (fft_bands * 2), so each FFT bin spans sample_rate / n_fft Hz.
+# Bin i covers approximately i * 46.875 Hz at 48 kHz.
+_FFT_BINS = 512
+_FFT_NFFT = 1024
+_SAMPLE_RATE_ASSUMED = 48000
+_BIN_HZ = _SAMPLE_RATE_ASSUMED / _FFT_NFFT  # ~46.875 Hz/bin
+_F_MIN = 30.0     # Hz; below this is mostly DC/sub-bass rumble
+_F_MAX = 16000.0  # Hz; covers full musical range without wasting bars on hiss
+
+
+def _build_log_band_edges(
+    n_bars: int,
+    n_fft_bins: int,
+    bin_hz: float,
+    f_min: float,
+    f_max: float,
+) -> np.ndarray:
+    """Build log-spaced FFT bin edges so each EQ bar covers a perceptual band."""
+    edges = np.logspace(np.log10(f_min), np.log10(f_max), n_bars + 1)
+    bin_idx = np.clip(
+        np.round(edges / bin_hz).astype(np.int32),
+        1,
+        n_fft_bins - 1,
+    )
+    # Force monotonic increase so each bar gets at least one bin.
+    for i in range(1, len(bin_idx)):
+        if bin_idx[i] <= bin_idx[i - 1]:
+            bin_idx[i] = bin_idx[i - 1] + 1
+    return np.clip(bin_idx, 0, n_fft_bins)
+
 
 def _bar_colour(i: int, n: int) -> tuple[float, float, float]:
     """HSV-like rainbow across bar index."""
@@ -281,14 +313,35 @@ class AudioSpectrum(BaseEffect):
         self._mid    = 0.0
         self._treble = 0.0
 
+        # Log-spaced band edges: each EQ bar covers [edges[i], edges[i+1]) bins.
+        self._band_edges = _build_log_band_edges(
+            _N_BARS, _FFT_BINS, _BIN_HZ, _F_MIN, _F_MAX,
+        )
+        # Mild pink-noise compensation so a flat spectrum looks roughly even
+        # across the whole bar range. Computed from band centres so it does
+        # not depend on per-frame audio.
+        center_freqs = np.sqrt(
+            (self._band_edges[:-1] * _BIN_HZ).clip(min=_F_MIN)
+            * (self._band_edges[1:] * _BIN_HZ).clip(min=_F_MIN)
+        )
+        self._band_gain = (center_freqs / _F_MIN).astype(np.float32) ** 0.35
+
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         self._bass   = audio.bass
         self._mid    = audio.mid
         self._treble = audio.treble
 
-        if audio.fft is not None and len(audio.fft) >= _N_BARS:
-            self._fft[:] = audio.fft[:_N_BARS]
+        if audio.fft is not None and len(audio.fft) >= self._band_edges[-1]:
+            src = audio.fft
+            for i in range(_N_BARS):
+                lo = int(self._band_edges[i])
+                hi = int(self._band_edges[i + 1])
+                if hi <= lo:
+                    hi = lo + 1
+                # Mean of bins in band, weighted by mild pink-noise gain.
+                self._fft[i] = float(src[lo:hi].mean()) * self._band_gain[i]
+            np.clip(self._fft, 0.0, 1.0, out=self._fft)
         else:
             self._fft.fill(0.0)
 

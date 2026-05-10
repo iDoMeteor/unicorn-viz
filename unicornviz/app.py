@@ -305,7 +305,12 @@ class App:
             )
 
     def _present_mirror_outputs(self, frame_bytes: bytes) -> None:
-        """Present a copied frame to all active mirror windows."""
+        """Present a copied frame to all active mirror windows.
+
+        ``frame_bytes`` is raw RGB24 pixel data read from the OpenGL screen.
+        OpenGL stores rows bottom-to-top while SDL textures are top-to-bottom,
+        so the output is presented with a vertical flip via SDL_RenderCopyEx.
+        """
         if not self._mirror_outputs:
             return
         pitch = self._width * 3
@@ -316,7 +321,15 @@ class App:
                 continue
             sdl2.SDL_UpdateTexture(texture, None, frame_bytes, pitch)
             sdl2.SDL_RenderClear(renderer)
-            sdl2.SDL_RenderCopy(renderer, texture, None, None)
+            sdl2.SDL_RenderCopyEx(
+                renderer,
+                texture,
+                None,
+                None,
+                0.0,
+                None,
+                sdl2.SDL_FLIP_VERTICAL,
+            )
             sdl2.SDL_RenderPresent(renderer)
 
     def _init_sdl(self) -> None:
@@ -969,10 +982,22 @@ void main() {
             self._render(dt)
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
-            self._capture_recording_frame()
+            need_frame_for_recording = (
+                self._recorder is not None and self._recorder.is_recording
+            )
+            need_frame_for_mirror = bool(self._mirror_outputs)
+            shared_frame: bytes | None = None
+            if need_frame_for_recording or need_frame_for_mirror:
+                try:
+                    shared_frame = self._ctx.screen.read(components=3, alignment=1)
+                except Exception as exc:
+                    log.error('Frame readback failed: %s', exc)
+                    shared_frame = None
+            if need_frame_for_recording and shared_frame is not None:
+                self._write_recording_frame(shared_frame)
             overlays.render_live_recording_indicator()
-            if self._mirror_outputs:
-                self._present_mirror_outputs(self._ctx.screen.read(components=3, alignment=1))
+            if need_frame_for_mirror and shared_frame is not None:
+                self._present_mirror_outputs(shared_frame)
 
             sdl2.SDL_GL_SwapWindow(self._window)
 
@@ -1118,17 +1143,18 @@ void main() {
     def toggle_fullscreen(self) -> None:
         self._fullscreen = not self._fullscreen
         if self._display_mode == 'span_all':
-            flags = sdl2.SDL_WINDOW_BORDERLESS if self._fullscreen else 0
-            sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE if self._fullscreen else sdl2.SDL_TRUE)
-            x, y, w, h = self._all_display_bounds()
+            sdl2.SDL_SetWindowBordered(
+                self._window,
+                sdl2.SDL_FALSE if self._fullscreen else sdl2.SDL_TRUE,
+            )
             if self._fullscreen:
-                sdl2.SDL_SetWindowPosition(self._window, x, y)
-                sdl2.SDL_SetWindowSize(self._window, w, h)
+                x, y, w, h = self._all_display_bounds()
             else:
                 x, y = self._window_position_for_display(self._display_index)
-                sdl2.SDL_SetWindowPosition(self._window, x, y)
-                sdl2.SDL_SetWindowSize(self._window, self.cfg.get('window', 'width', default=1920), self.cfg.get('window', 'height', default=1080))
-            _ = flags
+                w = int(self.cfg.get('window', 'width', default=1920))
+                h = int(self.cfg.get('window', 'height', default=1080))
+            sdl2.SDL_SetWindowPosition(self._window, x, y)
+            sdl2.SDL_SetWindowSize(self._window, w, h)
         else:
             flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
             if self._fullscreen:
@@ -1179,11 +1205,17 @@ void main() {
             return
         try:
             frame = self._ctx.screen.read(components=3, alignment=1)
-            if not self._recorder.write_frame(frame):
-                self._sync_recording_overlay()
+            self._write_recording_frame(frame)
         except Exception as exc:
             log.error('Recording capture failed: %s', exc)
             self._recorder.stop()
+            self._sync_recording_overlay()
+
+    def _write_recording_frame(self, frame: bytes) -> None:
+        """Write a pre-read RGB frame to the active recorder."""
+        if self._recorder is None or not self._recorder.is_recording:
+            return
+        if not self._recorder.write_frame(frame):
             self._sync_recording_overlay()
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
