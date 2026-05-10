@@ -21,6 +21,9 @@ Notes:
 - `mirror_all`: render on the targeted display and mirror the final live output to every other detected display.
 - `span_all` and `mirror_all` are most reliable on X11. On Wayland compositors,
   explicit window positioning may be ignored by design.
+- when `display_mode` is not `single`, Unicorn Viz attempts an automatic X11
+    fallback at startup for more reliable placement; if fallback fails it
+    continues on Wayland with limitations.
 
 ---
 

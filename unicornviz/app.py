@@ -109,6 +109,10 @@ class App:
         self._display_mode = 'single'
         self._display_layouts: list[tuple[int, int, int, int]] = []
         self._mirror_outputs: list[dict[str, object]] = []
+        self._readback_pbos: list[moderngl.Buffer] = []
+        self._readback_index = 0
+        self._readback_primed = False
+        self._readback_size = 0
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
@@ -284,6 +288,7 @@ class App:
                     'renderer': renderer,
                     'texture': texture,
                     'display_index': idx,
+                    'window_id': int(sdl2.SDL_GetWindowID(window)),
                 }
             )
         if self._mirror_outputs:
@@ -357,6 +362,65 @@ class App:
             )
             sdl2.SDL_RenderPresent(renderer)
 
+    def _is_mirror_window_id(self, window_id: int) -> bool:
+        """Return True if the given SDL window id belongs to a mirror window."""
+        for output in self._mirror_outputs:
+            if int(output.get('window_id', -1)) == window_id:
+                return True
+        return False
+
+    def _rebuild_multihead_outputs(self) -> None:
+        """Refresh display topology and mirror windows after SDL display events."""
+        self._log_video_displays()
+        if self._display_index_requested < 0 or self._display_index_requested >= len(self._display_layouts):
+            self._display_index = 0
+        else:
+            self._display_index = self._display_index_requested
+        if self._display_mode == 'mirror_all':
+            self._create_mirror_outputs()
+            self._resize_mirror_textures()
+
+    def _release_readback_pbos(self) -> None:
+        """Release async readback buffers."""
+        for pbo in self._readback_pbos:
+            pbo.release()
+        self._readback_pbos.clear()
+        self._readback_index = 0
+        self._readback_primed = False
+        self._readback_size = 0
+
+    def _ensure_readback_pbos(self, size: int) -> None:
+        """Create or resize readback buffers used for shared frame capture."""
+        if self._ctx is None:
+            return
+        if len(self._readback_pbos) == 2 and self._readback_size == size:
+            return
+        self._release_readback_pbos()
+        self._readback_pbos = [self._ctx.buffer(reserve=size), self._ctx.buffer(reserve=size)]
+        self._readback_size = size
+
+    def _read_shared_frame(self) -> bytes | None:
+        """Capture one shared frame for recording/mirror using staged readback.
+
+        Uses two GPU buffers to pipeline readback one frame behind when possible.
+        """
+        if self._ctx is None:
+            return None
+        size = self._width * self._height * 3
+        self._ensure_readback_pbos(size)
+        if len(self._readback_pbos) != 2:
+            return None
+        write_idx = self._readback_index
+        read_idx = 1 - write_idx
+        self._ctx.screen.read_into(self._readback_pbos[write_idx], components=3, alignment=1)
+        frame: bytes | None = None
+        if self._readback_primed:
+            frame = self._readback_pbos[read_idx].read()
+        else:
+            self._readback_primed = True
+        self._readback_index = read_idx
+        return frame
+
     def _init_sdl(self) -> None:
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
             # Wayland may have failed — retry with x11
@@ -371,6 +435,24 @@ class App:
                 "SDL video driver: %s",
                 sdl2.SDL_GetCurrentVideoDriver().decode(),
             )
+
+        # Multi-head modes rely on explicit window placement; Wayland may ignore
+        # this by design, so try X11 automatically if available.
+        if self._display_mode_requested != 'single':
+            current_driver = sdl2.SDL_GetCurrentVideoDriver().decode().lower()
+            if current_driver == 'wayland':
+                log.warning('display_mode=%s requested on Wayland; attempting X11 fallback for reliable multi-head placement', self._display_mode_requested)
+                sdl2.SDL_Quit()
+                os.environ['SDL_VIDEODRIVER'] = 'x11'
+                if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
+                    log.warning('X11 fallback failed; continuing on Wayland (multi-head placement may be limited)')
+                    os.environ['SDL_VIDEODRIVER'] = 'wayland'
+                    if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
+                        raise RuntimeError(
+                            f"SDL_Init failed after fallback attempts: {sdl2.SDL_GetError().decode()}"
+                        )
+                else:
+                    log.info('Using x11 for display_mode=%s', self._display_mode_requested)
 
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MAJOR_VERSION, 3)
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MINOR_VERSION, 3)
@@ -948,6 +1030,14 @@ void main() {
                 elif event.type == sdl2.SDL_KEYUP:
                     self._update_ctrl_state(event.key.keysym.sym, False)
                 elif event.type == sdl2.SDL_WINDOWEVENT:
+                    if self._is_mirror_window_id(int(event.window.windowID)):
+                        if event.window.event in (
+                            sdl2.SDL_WINDOWEVENT_CLOSE,
+                            sdl2.SDL_WINDOWEVENT_HIDDEN,
+                        ):
+                            log.warning('Mirror window event %d received; rebuilding mirror outputs', int(event.window.event))
+                            self._create_mirror_outputs()
+                        continue
                     if event.window.event == sdl2.SDL_WINDOWEVENT_RESIZED:
                         self._on_resize(
                             event.window.data1, event.window.data2
@@ -957,6 +1047,13 @@ void main() {
                         self._set_cursor_visible(False)
                     elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_GAINED:
                         self._set_cursor_visible(self._ctrl_held)
+                elif event.type == sdl2.SDL_DISPLAYEVENT:
+                    if event.display.event in (
+                        sdl2.SDL_DISPLAYEVENT_CONNECTED,
+                        sdl2.SDL_DISPLAYEVENT_DISCONNECTED,
+                    ):
+                        log.info('SDL display topology change detected; rebuilding multi-head outputs')
+                        self._rebuild_multihead_outputs()
 
             # Dispatch pending MIDI events to active effect
             if hasattr(self, "_midi_manager"):
@@ -1014,7 +1111,7 @@ void main() {
             shared_frame: bytes | None = None
             if need_frame_for_recording or need_frame_for_mirror:
                 try:
-                    shared_frame = self._ctx.screen.read(components=3, alignment=1)
+                    shared_frame = self._read_shared_frame()
                 except Exception as exc:
                     log.error('Frame readback failed: %s', exc)
                     shared_frame = None
@@ -1049,6 +1146,7 @@ void main() {
         if self._present_prog:
             self._present_prog.release()
         self._destroy_mirror_outputs()
+        self._release_readback_pbos()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
@@ -1144,6 +1242,7 @@ void main() {
         self._width = w
         self._height = h
         self._update_render_target_size()
+        self._release_readback_pbos()
         if self._recorder and self._recorder.is_recording:
             self._recorder.stop()
             self._sync_recording_overlay()
