@@ -55,11 +55,19 @@
 
 ## Phase 3 — Assets and Media Expansion
 
-- `[todo]` Phase 3 gate: complete one full review pass across every existing built-in effect.
+- `[doing]` Add Performance HUD / diagnostics overlay for FPS, frame time, audio source, active transition, CPU, and RAM.
   Notes:
-  - validate visual quality, audio reactivity, and parameter sanity effect-by-effect
-  - capture any per-effect fixes/tuning required after the analyzer modernization
-  - do not start new Phase 3 asset/media features until this gate is marked done
+  - realtime metrics collection and rolling-window averaging
+  - minimal-impact rendering (single FBO-resident HUD, no per-frame allocations)
+  - hotkey toggle + config-file persistence for visibility preference
+- `[doing]` Create Cyber War effect (drop-in: digital battle-map style with offensive/defensive node animations).
+- `[doing]` Create Hacker Terminal effect (drop-in: animated shell/log streams with glitch transitions).
+- `[doing]` Create Alien Invasion effect (drop-in: UFO fleets, atmospheric beams, planetary scan overlays).
+- `[doing]` Revamp Sine Scroller to Sine Scroller 2.0 (in-tree).
+  Notes:
+  - multi-line wave animation with independent frequency per line
+  - polished color-per-beat transitions and bass-responsive amplification
+  - configurable text/font/speed with audio presets
 
 - `[todo]` Add `assets/images/` support.
   Notes:
@@ -86,6 +94,11 @@
   - playback/runtime format choice
   - audio sync hooks
   - GPU/runtime cost constraints
+- `[todo]` Phase 3 exit gate: complete one full review pass across every existing built-in effect.
+  Notes:
+  - validate visual quality, audio reactivity, and parameter sanity effect-by-effect
+  - capture any per-effect fixes/tuning required after the analyzer modernization
+  - close this gate when all Phase 3 asset/media tasks are complete and reviewed together
 
 ## Phase 4 — Product and Plugin Architecture
 
