@@ -158,10 +158,16 @@ class App:
         """Resolve the configured display index against available SDL displays."""
         count = self._log_video_displays()
         if self._display_index_requested < 0 or self._display_index_requested >= count:
-            log.warning(
-                'Requested display_index=%d is out of range; using display 0',
-                self._display_index_requested,
-            )
+            if self._display_mode == 'span_all':
+                log.debug(
+                    'Requested display_index=%d is out of range in span_all mode; using display 0 for restore position',
+                    self._display_index_requested,
+                )
+            else:
+                log.warning(
+                    'Requested display_index=%d is out of range; using display 0',
+                    self._display_index_requested,
+                )
             return 0
         return self._display_index_requested
 
@@ -314,6 +320,7 @@ class App:
         if not self._mirror_outputs:
             return
         pitch = self._width * 3
+        src_ar = self._width / max(self._height, 1)
         for output in self._mirror_outputs:
             texture = output.get('texture')
             renderer = output.get('renderer')
@@ -321,11 +328,29 @@ class App:
                 continue
             sdl2.SDL_UpdateTexture(texture, None, frame_bytes, pitch)
             sdl2.SDL_RenderClear(renderer)
+            out_w = ctypes.c_int(0)
+            out_h = ctypes.c_int(0)
+            sdl2.SDL_GetRendererOutputSize(renderer, out_w, out_h)
+            dst_rect = None
+            if out_w.value > 0 and out_h.value > 0:
+                dst_ar = out_w.value / out_h.value
+                if abs(dst_ar - src_ar) > 1e-3:
+                    if dst_ar > src_ar:
+                        h = out_h.value
+                        w = int(round(h * src_ar))
+                        x = (out_w.value - w) // 2
+                        y = 0
+                    else:
+                        w = out_w.value
+                        h = int(round(w / src_ar))
+                        x = 0
+                        y = (out_h.value - h) // 2
+                    dst_rect = sdl2.SDL_Rect(x, y, max(1, w), max(1, h))
             sdl2.SDL_RenderCopyEx(
                 renderer,
                 texture,
                 None,
-                None,
+                dst_rect,
                 0.0,
                 None,
                 sdl2.SDL_FLIP_VERTICAL,
