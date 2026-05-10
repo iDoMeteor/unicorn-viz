@@ -55,18 +55,20 @@ void main() {
     float layer3 = sin((uv.x + uv.y) * 14.0 + t * 0.6);
     
     float shimmer = 0.5 + 0.5 * sin((uv.x + uv.y) * 22.0 + t * 1.5);
-    float glow = (layer1 * 0.4 + layer2 * 0.35 + layer3 * 0.25) * 0.5 + 0.25;
+    float glow = (layer1 * 0.28 + layer2 * 0.24 + layer3 * 0.16) * 0.36 + 0.14;
     
     // Audio-reactive modulation
-    float bass_push = iBass * 0.18;
-    float mid_color = iMid * 0.12;
-    float treble_bright = iTreble * shimmer * 0.15;
+    float bass_push = iBass * 0.09;
+    float mid_color = iMid * 0.05;
+    float treble_bright = iTreble * shimmer * 0.06;
     
     float intensity = glow + bass_push + mid_color + treble_bright;
     intensity = clamp(intensity, 0.0, 1.0);
     
-    vec3 col = palette(intensity + t * 0.1 + mid_color);
-    col += vec3(0.02, 0.01, 0.04) * (1.0 - intensity);
+    vec3 base = vec3(0.015, 0.010, 0.035);
+    vec3 pal = palette(intensity + t * 0.1 + mid_color);
+    vec3 col = mix(base, pal, 0.32 + intensity * 0.24);
+    col += vec3(0.01, 0.005, 0.02) * (1.0 - intensity);
     
     fragColor = vec4(col, 1.0);
 }
