@@ -12,6 +12,7 @@ All settings live in `config.toml` in the project root.
 | `height`     | int     | `1080`         | Initial window height in pixels            |
 | `fullscreen` | bool    | `false`        | Start in fullscreen mode                   |
 | `title`      | str     | `"Unicorn Viz"`| Window title bar text                      |
+| `display_index` | int  | `0`            | SDL display / monitor index to target at startup and when entering fullscreen. |
 
 ---
 

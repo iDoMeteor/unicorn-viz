@@ -80,10 +80,14 @@ python -m unicornviz \
 	--mode random \
 	--transition shuffle \
 	--effect-duration 45 \
+	--display-index 1 \
 	--reactivity 2.0 \
 	--audio-device spotify \
 	--log-level DEBUG
 ```
+
+On multi-monitor setups, use `--display-index N` or `[window].display_index` in
+`config.toml` to target a specific SDL display for startup and fullscreen.
 
 Show all available options:
 

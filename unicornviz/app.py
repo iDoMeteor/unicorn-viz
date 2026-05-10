@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import ctypes
 from pathlib import Path
 from typing import Type
 
@@ -98,6 +99,10 @@ class App:
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
+        self._display_index_requested = int(
+            self.cfg.get('window', 'display_index', default=0)
+        )
+        self._display_index = 0
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
@@ -109,6 +114,64 @@ class App:
     # ------------------------------------------------------------------ #
     # SDL2 + moderngl init                                                 #
     # ------------------------------------------------------------------ #
+
+    def _log_video_displays(self) -> int:
+        """Log visible SDL displays and return the detected display count."""
+        count = int(sdl2.SDL_GetNumVideoDisplays())
+        if count <= 0:
+            log.warning('SDL reported no video displays; defaulting to display 0')
+            return 1
+        for idx in range(count):
+            bounds = sdl2.SDL_Rect()
+            if sdl2.SDL_GetDisplayBounds(idx, bounds) == 0:
+                log.info(
+                    'Display %d: origin=(%d,%d) size=%dx%d',
+                    idx,
+                    bounds.x,
+                    bounds.y,
+                    bounds.w,
+                    bounds.h,
+                )
+        return count
+
+    def _resolve_display_index(self) -> int:
+        """Resolve the configured display index against available SDL displays."""
+        count = self._log_video_displays()
+        if self._display_index_requested < 0 or self._display_index_requested >= count:
+            log.warning(
+                'Requested display_index=%d is out of range; using display 0',
+                self._display_index_requested,
+            )
+            return 0
+        return self._display_index_requested
+
+    def _display_bounds(self, display_index: int) -> sdl2.SDL_Rect | None:
+        """Return display bounds for the selected SDL display, if available."""
+        bounds = sdl2.SDL_Rect()
+        if sdl2.SDL_GetDisplayBounds(display_index, bounds) != 0:
+            log.warning(
+                'SDL_GetDisplayBounds failed for display %d: %s',
+                display_index,
+                sdl2.SDL_GetError().decode(),
+            )
+            return None
+        return bounds
+
+    def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
+        """Compute startup window coordinates centered on the selected display."""
+        bounds = self._display_bounds(display_index)
+        if bounds is None:
+            return sdl2.SDL_WINDOWPOS_CENTERED, sdl2.SDL_WINDOWPOS_CENTERED
+        x = bounds.x + max(0, (bounds.w - self._width) // 2)
+        y = bounds.y + max(0, (bounds.h - self._height) // 2)
+        return x, y
+
+    def _move_window_to_display(self) -> None:
+        """Move the existing SDL window to the configured display center."""
+        if self._window is None:
+            return
+        x, y = self._window_position_for_display(self._display_index)
+        sdl2.SDL_SetWindowPosition(self._window, x, y)
 
     def _init_sdl(self) -> None:
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
@@ -137,11 +200,14 @@ class App:
         if self._fullscreen:
             flags |= sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
 
+        self._display_index = self._resolve_display_index()
+        x_pos, y_pos = self._window_position_for_display(self._display_index)
+
         title = self.cfg.get("window", "title", default="Unicorn Viz")
         self._window = sdl2.SDL_CreateWindow(
             title.encode(),
-            sdl2.SDL_WINDOWPOS_CENTERED,
-            sdl2.SDL_WINDOWPOS_CENTERED,
+            x_pos,
+            y_pos,
             self._width,
             self._height,
             flags,
@@ -161,15 +227,18 @@ class App:
 
         # After fullscreen is applied the OS may give us a different size.
         # Query the actual drawable size and update width/height.
-        w_ptr = sdl2.SDL_GetWindowSize.__doc__ and None  # just for type inference
-        import ctypes
         w_i = ctypes.c_int(0)
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
         if self._fullscreen:
             self._width  = w_i.value or self._width
             self._height = h_i.value or self._height
-            log.info("Fullscreen drawable size: %dx%d", self._width, self._height)
+            log.info(
+                'Fullscreen drawable size on display %d: %dx%d',
+                self._display_index,
+                self._width,
+                self._height,
+            )
         self._update_render_target_size()
 
     def _init_moderngl(self) -> None:
@@ -892,7 +961,11 @@ void main() {
     def toggle_fullscreen(self) -> None:
         self._fullscreen = not self._fullscreen
         flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
+        if self._fullscreen:
+            self._move_window_to_display()
         sdl2.SDL_SetWindowFullscreen(self._window, flag)
+        if not self._fullscreen:
+            self._move_window_to_display()
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused

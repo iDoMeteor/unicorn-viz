@@ -28,6 +28,7 @@ _DEFAULTS: dict[str, Any] = {
         "height": 1080,
         "fullscreen": False,
         "title": "Unicorn Viz",
+        "display_index": 0,
     },
     "demo": {
         "mode": "sequential",

@@ -27,6 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     display.add_argument('--width', type=int, help='Window width in pixels.')
     display.add_argument('--height', type=int, help='Window height in pixels.')
     display.add_argument('--title', help='Window title.')
+    display.add_argument('--display-index', type=int, help='SDL display index / monitor to target at startup and for fullscreen.')
     fullscreen = display.add_mutually_exclusive_group()
     fullscreen.add_argument('--fullscreen', action='store_true', help='Start fullscreen.')
     fullscreen.add_argument('--windowed', action='store_true', help='Start windowed.')
@@ -79,6 +80,7 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     put('window', 'width', args.width)
     put('window', 'height', args.height)
     put('window', 'title', args.title)
+    put('window', 'display_index', args.display_index)
     if args.fullscreen:
         put('window', 'fullscreen', True)
     elif args.windowed:
