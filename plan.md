@@ -46,6 +46,12 @@
 
 ## Phase 3 — Assets and Media Expansion
 
+- `[todo]` Phase 3 gate: complete one full review pass across every existing built-in effect.
+  Notes:
+  - validate visual quality, audio reactivity, and parameter sanity effect-by-effect
+  - capture any per-effect fixes/tuning required after the analyzer modernization
+  - do not start new Phase 3 asset/media features until this gate is marked done
+
 - `[todo]` Add `assets/images/` support.
   Notes:
   - playlist-like loading behavior

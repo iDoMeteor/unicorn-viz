@@ -6,6 +6,10 @@ logs/
 __pycache__/
 *.pyc
 .venv/
-drop-ins/
+drop-ins/*
+!drop-ins/unicorn-tears-01/
+!drop-ins/unicorn-tears-01/**
+!drop-ins/multi-head-01/
+!drop-ins/multi-head-01/**
 recordings/
 plan.md
