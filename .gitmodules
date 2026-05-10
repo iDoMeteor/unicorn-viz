@@ -1,0 +1,6 @@
+[submodule "drop-ins/multi-head-01"]
+	path = drop-ins/multi-head-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-multi-head-01.git
+[submodule "drop-ins/unicorn-tears-01"]
+	path = drop-ins/unicorn-tears-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-unicorn-tears-01.git

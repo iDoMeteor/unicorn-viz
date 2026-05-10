@@ -260,3 +260,14 @@ out vec2 out_pos;
 
 Do **not** use: `pygame`, `tkinter`, `wx`, `pyglet`, `arcade`, `OpenGL.GL`
 (PyOpenGL), or any GUI framework.
+
+---
+
+## Drop-In Source Policy
+
+- Every drop-in under `drop-ins/` must live in its own dedicated **private**
+  GitHub repository.
+- The main `unicorn-viz` repository must track drop-ins as git submodules,
+  one submodule per drop-in directory.
+- Keep `unicornviz/` compatibility shims lightweight and point canonical
+  implementations to the corresponding drop-in submodule paths.

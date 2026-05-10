@@ -5,11 +5,9 @@ screenshots/
 logs/
 __pycache__/
 *.pyc
+**/__pycache__/
+**/*.py[cod]
 .venv/
 drop-ins/*
-!drop-ins/unicorn-tears-01/
-!drop-ins/unicorn-tears-01/**
-!drop-ins/multi-head-01/
-!drop-ins/multi-head-01/**
 recordings/
 plan.md
