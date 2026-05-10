@@ -67,6 +67,27 @@ python3.11 -m venv .venv
 .venv/bin/python -m unicornviz --help
 ```
 
+### Install on Windows 11 (Preview)
+
+```powershell
+# Install Python 3.11+ and ffmpeg (winget)
+winget install -e --id Python.Python.3.11
+winget install -e --id Gyan.FFmpeg
+
+# Clone and set up
+git clone https://github.com/iDoMeteor/unicorn-viz
+cd unicorn-viz
+py -3.11 -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip wheel
+.\.venv\Scripts\python -m pip install -r requirements.txt
+
+# Run
+.\.venv\Scripts\python -m unicornviz
+
+# CLI help
+.\.venv\Scripts\python -m unicornviz --help
+```
+
 ### Common CLI Overrides
 
 ```bash
@@ -205,6 +226,18 @@ You can control verbosity from config or CLI:
 ```bash
 .venv/bin/python -m unicornviz --log-level DEBUG
 ```
+
+## Platform / Packaging Tooling
+
+- Linux installer script (distro-aware):
+  - `./tools/install_linux.sh`
+- Containerized compatibility matrix (Ubuntu/Debian/Fedora):
+  - `./tools/compat_matrix.sh`
+- CI workflow for the matrix:
+  - `.github/workflows/compat-matrix.yml`
+- Packaging evaluation artifacts:
+  - `packaging/flatpak/io.unicornviz.UnicornViz.yml`
+  - `packaging/snap/snapcraft.yaml`
 
 ---
 

@@ -24,25 +24,34 @@
 
 ## Phase 2 — Platform and Display Support
 
-- `[todo]` Add first-class Windows support.
+- `[doing]` Add first-class Windows support.
   Notes:
-  - windowing/input behavior
-  - audio capture strategy on Windows
-  - packaging/runtime dependency handling
+  - implemented: Windows-safe SDL driver default path (no forced Wayland)
+  - implemented: Windows loopback/stereo-mix candidate audio selection logic
+  - implemented: windows-latest CI smoke job for CLI + effect discovery
+  - remaining: on-device rendering/audio validation on physical Windows host
 - `[doing]` Add multi-monitor support.
   Notes:
   - first slice implemented: explicit `window.display_index` / `--display-index` selection for startup and fullscreen target display
   - implemented: `display_mode` options (`single`, `span_all`, `mirror_all`) with shared readback and mirror output pipeline
   - remaining work: screenshot/recording implications in mixed-mode topologies and long-run mirror performance validation
-- `[todo]` Refactor multi-monitor implementation into a drop-in subsystem module.
+- `[done]` Refactor multi-monitor implementation into a drop-in subsystem module.
   Notes:
-  - extract multi-head responsibilities from `app.py` into a dedicated module (`display/multihead.py`)
-  - define clear interfaces for: display discovery, primary window policy, mirror output lifecycle, shared frame fan-out, and SDL event routing
-  - perform extraction as behavior-preserving first pass, then do targeted optimizations in a second pass
-  - risk: moderate-to-large refactor due to current coupling with app init/render/event/cleanup paths
-- `[todo]` Verify recent Ubuntu/Debian and Fedora compatibility matrix.
-- `[todo]` Build a robust installer for supported Linux distributions.
-- `[todo]` Evaluate packaging for Flatpak and Snap.
+  - canonical implementation now lives in `drop-ins/multi-head-01` private submodule
+  - app runtime now loads multi-head controller directly from drop-in source
+  - remaining optimization pass tracked under multi-monitor implementation work
+- `[done]` Verify recent Ubuntu/Debian and Fedora compatibility matrix.
+  Notes:
+  - implemented: `tools/compat_matrix.sh` (Ubuntu 22.04, Debian 12, Fedora 44)
+  - implemented: `.github/workflows/compat-matrix.yml` for CI validation
+- `[done]` Build a robust installer for supported Linux distributions.
+  Notes:
+  - implemented: `tools/install_linux.sh` distro-aware bootstrap (apt/dnf/pacman)
+  - includes venv creation and requirements installation
+- `[done]` Evaluate packaging for Flatpak and Snap.
+  Notes:
+  - implemented: initial manifests under `packaging/flatpak` and `packaging/snap`
+  - documented beta recommendation and current posture in developer docs
 
 ## Phase 3 — Assets and Media Expansion
 

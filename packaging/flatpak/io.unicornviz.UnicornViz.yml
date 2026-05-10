@@ -1,0 +1,20 @@
+app-id: io.unicornviz.UnicornViz
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: unicorn-viz
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=home
+modules:
+  - name: unicorn-viz
+    buildsystem: simple
+    build-commands:
+      - python3 -m pip install --no-deps --prefix=/app .
+    sources:
+      - type: dir
+        path: ../..

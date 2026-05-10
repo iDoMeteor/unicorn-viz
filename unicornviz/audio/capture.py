@@ -5,6 +5,7 @@ Feeds a ring buffer consumed by the analyzer on the main thread.
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 from collections import deque
@@ -55,8 +56,19 @@ def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | N
         if 'obs' in name:
             log.info("Audio: OBS detected: device %d (%s)", i, d['name'])
 
+    is_windows = sys.platform.startswith('win')
+    hostapi_names: dict[int, str] = {}
+    try:
+        hostapis = sd.query_hostapis()
+        for idx, info in enumerate(hostapis):
+            hostapi_names[idx] = str(info.get('name', '')).lower()
+    except Exception:
+        hostapi_names = {}
+
     # Rank candidates:
     # 0 = ALSA loopback (optional)
+    # 0 = WASAPI loopback (Windows)
+    # 1 = stereo mix / what-u-hear (Windows)
     # 1 = preferred app sources (Spotify/VLC/MPV)
     # 2 = browser app sources (often silent unless tab is active)
     # 3 = pipewire/default input
@@ -66,9 +78,14 @@ def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | N
         if d.get('max_input_channels', 0) < 1:
             continue
         name = d['name'].lower()
+        hostapi_name = hostapi_names.get(int(d.get('hostapi', -1)), '')
         rank = 99
 
-        if try_alsa and 'loopback' in name:
+        if is_windows and 'wasapi' in hostapi_name and 'loopback' in name:
+            rank = 0
+        elif is_windows and any(key in name for key in ('stereo mix', 'what u hear')):
+            rank = 1
+        elif try_alsa and 'loopback' in name:
             rank = 0
             log.info("Audio: ALSA loopback device available: %d (%s)", i, d['name'])
         elif any(key in name for key in ('spotify', 'vlc', 'mpv')):
@@ -127,6 +144,16 @@ def _find_monitor_device(hint: str) -> int | None:
         if "obs" in name and "monitor" in name:
             log.info("Audio: auto-selected OBS monitor device %d (%s)", i, d["name"])
             return i
+
+    # On Windows, prefer WASAPI loopback/stereo-mix style sources.
+    if sys.platform.startswith('win'):
+        for i, d in enumerate(devices):
+            if d.get('max_input_channels', 0) < 1:
+                continue
+            name = d['name'].lower()
+            if 'loopback' in name or 'stereo mix' in name or 'what u hear' in name:
+                log.info('Audio: auto-selected Windows loopback-style device %d (%s)', i, d['name'])
+                return i
 
     # Fall back to any PipeWire/PulseAudio monitor sink
     for i, d in enumerate(devices):

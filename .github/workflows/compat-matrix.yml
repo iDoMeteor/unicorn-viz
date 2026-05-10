@@ -1,0 +1,43 @@
+name: Compatibility Matrix
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  linux-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Docker compatibility matrix
+        run: |
+          chmod +x tools/compat_matrix.sh
+          ./tools/compat_matrix.sh
+
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install -r requirements.txt
+
+      - name: CLI and discovery smoke
+        run: |
+          python -m unicornviz --help
+          python -c "from unicornviz.effects.registry import get_effects; assert len(get_effects()) > 0; print('effects', len(get_effects()))"

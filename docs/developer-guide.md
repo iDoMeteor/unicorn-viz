@@ -431,19 +431,14 @@ Recommended CI matrix (GitHub Actions):
 
 ### Windows 11
 
-See the **Windows 11** section in the user guide.  Key changes needed:
+Current status:
 
-1. `pysdl2-dll` already ships the SDL2 DLL on Windows — nothing extra needed.
-2. Replace Wayland driver detection with a Windows-safe default:
-   ```python
-   if sys.platform != "win32" and "SDL_VIDEODRIVER" not in os.environ:
-       os.environ["SDL_VIDEODRIVER"] = "wayland"
-   ```
-3. Audio: replace `sounddevice` PipeWire monitor with WASAPI loopback.
-   `sounddevice` supports WASAPI on Windows; set `device` to the loopback
-   device name (see `sounddevice.query_devices()`).
-4. `python-rtmidi` has Windows binaries on PyPI — MIDI works out of the box.
-5. Packaging: use `PyInstaller` or `cx_Freeze` to bundle the venv.
+1. `pysdl2-dll` already ships SDL2 DLLs on Windows.
+2. Audio auto-selection includes Windows loopback-style sources
+    (WASAPI loopback / Stereo Mix / What-U-Hear style devices).
+3. CLI and pure-Python startup smoke paths are platform-neutral.
+4. Full rendering/audio runtime validation is still required on a physical
+    Windows machine before GA.
 
 ### macOS
 
@@ -458,22 +453,37 @@ See the **Windows 11** section in the user guide.  Key changes needed:
 
 ## Drop-in Effects
 
-Drop-in effects live under `drop-ins/<name>/` and ship as a separate
-unit (planned as git submodules).  They are **not** committed to the main
-repository — `drop-ins/` is in `.gitignore`.
+Drop-ins live under `drop-ins/<name>/` and each one is tracked as its own
+private GitHub repository via a git submodule.
 
 Conventions for a drop-in:
-- Place the `.py` file in `unicornviz/effects/` (auto-discovered).
+- Keep canonical source in `drop-ins/<name>/`.
+- Add it as a submodule in the main repository.
 - Set `NAME`, `AUTHOR`, `TAGS` on the class.
-- Exclude the class name from `Playlist.shortcut_effects` if it deserves a
-  dedicated hotkey.
-- Add a dedicated hotkey in `hotkeys.py` and a matching line in `Overlays.HELP_TEXT`.
+- Ensure the main app can discover/load it through `unicornviz/dropins.py`.
 
 Current drop-ins:
 
 | Name            | Key   | Notes                          |
 |-----------------|-------|--------------------------------|
 | Unicorn Tears   | `U`   | Prismatic teardrops + starfield |
+
+Current subsystem drop-ins:
+
+| Name         | Purpose                |
+|--------------|------------------------|
+| multi-head-01| Display/multi-monitor controller |
+
+## Packaging Evaluation
+
+Phase 2 includes evaluation scaffolds (not GA packaging):
+
+- Flatpak manifest: `packaging/flatpak/io.unicornviz.UnicornViz.yml`
+- Snap manifest: `packaging/snap/snapcraft.yaml`
+
+Recommendation for beta: keep shipping source + venv workflow, and use these
+manifests as iterative packaging baselines while compatibility matrix checks
+continue to mature.
 
 ---
 

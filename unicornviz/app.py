@@ -7,14 +7,15 @@ import logging
 import os
 import time
 import ctypes
+import sys
 from pathlib import Path
 from typing import Type
 
 import moderngl
 import numpy as np
 
-# Wayland-first, fall back to x11 automatically
-if "SDL_VIDEODRIVER" not in os.environ:
+# Wayland-first on Linux, leave default driver selection elsewhere.
+if sys.platform != 'win32' and "SDL_VIDEODRIVER" not in os.environ:
     os.environ["SDL_VIDEODRIVER"] = "wayland"
 
 import sdl2

@@ -1,0 +1,27 @@
+name: unicorn-viz
+base: core22
+version: '0.1.0'
+summary: Audio-reactive demoscene visualizer
+description: |
+  Unicorn Viz is a fullscreen OpenGL visualizer with audio-reactive effects,
+  ANSI art rendering, and MIDI controls.
+
+grade: devel
+confinement: devmode
+
+apps:
+  unicorn-viz:
+    command: bin/unicorn-viz
+    plugs:
+      - opengl
+      - x11
+      - wayland
+      - audio-playback
+      - audio-record
+
+parts:
+  unicorn-viz:
+    plugin: python
+    source: ../..
+    requirements:
+      - requirements.txt
