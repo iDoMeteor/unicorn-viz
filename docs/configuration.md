@@ -52,6 +52,14 @@ Aliases:
 
 ---
 
+## `[overlays]`
+
+| Key              | Type   | Default | Description                                              |
+|------------------|--------|---------|----------------------------------------------------------|
+| `flash_messages` | bool   | `true`  | Show transient effect/status popups for scene changes, pause/resume, reactivity, etc. |
+
+---
+
 ## `[ansi]`
 
 | Key              | Type | Default              | Description                                                              |
@@ -71,7 +79,6 @@ Per-effect reactivity override:
 - Optional key: `reactivity`
 - If set, this is the absolute reactivity used by that effect
 - If omitted, the effect uses global `audio.reactivity`
-- If omitted, per-effect `reactivity` defaults to `1.0`
 
 For a complete list of every effect's tweakable settings and defaults, see:
 

@@ -288,22 +288,25 @@ class AudioSpectrum(BaseEffect):
         self._treble = audio.treble
 
         if audio.fft is not None and len(audio.fft) >= _N_BARS:
-            raw = audio.fft[:_N_BARS].copy()
+            self._fft[:] = audio.fft[:_N_BARS]
         else:
-            raw = np.zeros(_N_BARS, dtype=np.float32)
+            self._fft.fill(0.0)
 
         # Smooth + peak hold
-        self._smooth = self._smooth * 0.8 + raw * 0.2
-        self._peak_hold = np.maximum(self._peak_hold - dt * 0.4, 0.0)
+        self._smooth *= 0.8
+        self._smooth += self._fft * 0.2
+        np.subtract(self._peak_hold, dt * 0.4, out=self._peak_hold)
+        np.maximum(self._peak_hold, 0.0, out=self._peak_hold)
         new_peaks = self._smooth > self._peak
         self._peak[new_peaks] = self._smooth[new_peaks]
         self._peak_hold[new_peaks] = 1.5
-        self._peak = np.where(self._peak_hold > 0, self._peak, self._peak * 0.99)
+        decay_mask = self._peak_hold <= 0.0
+        self._peak[decay_mask] *= 0.99
 
         if audio.waveform is not None and len(audio.waveform) >= _N_WAVE:
-            self._wave = audio.waveform[:_N_WAVE].copy()
+            self._wave[:] = audio.waveform[:_N_WAVE]
         else:
-            self._wave = np.zeros(_N_WAVE, dtype=np.float32)
+            self._wave.fill(0.0)
 
     def _build_bars(self) -> tuple[np.ndarray, int]:
         """Build bars as stacked discrete blocks (80s boombox style)."""

@@ -264,7 +264,7 @@ class Overlays:
         " N / Right   Next effect",
         " P / Left    Prev effect",
         " 1-9         Jump #1-9",
-        " !@#$%^&*()  Jump #10-20",
+        " Shift+1-0   Jump #10-20",
         " Ctrl+1-0    Jump #21-30",
         " ,           ANSI art",
         " .           ACiD art",
@@ -286,18 +286,20 @@ class Overlays:
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-    SHIFT_KEYS = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]
-    CTRL_KEYS = ["C-1", "C-2", "C-3", "C-4", "C-5", "C-6", "C-7", "C-8", "C-9", "C-0"]
+    SHIFT_KEYS = ["S+1", "S+2", "S+3", "S+4", "S+5", "S+6", "S+7", "S+8", "S+9", "S+0"]
+    CTRL_KEYS = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8", "Ctrl+9", "Ctrl+0"]
 
     def __init__(
         self,
         ctx: moderngl.Context,
         width: int,
         height: int,
+        flash_messages: bool = True,
     ) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
+        self._flash_enabled = flash_messages
 
         self._show_name = False
         self._show_help = False
@@ -527,26 +529,32 @@ void main() {
         col_lh = 8 * col_scale + 4
         col1_x = self._width * 0.47
         col2_x = self._width * 0.66
-        col3_x = self._width * 0.82
+        col3_x = col1_x
         cy = pad
 
         self._draw_text("1-0 shortcuts", col1_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        self._draw_text("!-) shortcuts", col2_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+        self._draw_text("Shift shortcuts", col2_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         cy += col_lh
         self._draw_text("-------------", col1_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        self._draw_text("-------------", col2_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+        self._draw_text("---------------", col2_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         cy += col_lh
 
-        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts), len(self._ctrl_shortcuts))
+        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts))
         for i in range(max_rows):
             if i < len(self._num_shortcuts):
                 self._draw_text(self._num_shortcuts[i], col1_x, cy, scale=col_scale, color=(0.8, 1.0, 0.9, 0.95))
             if i < len(self._shift_shortcuts):
                 self._draw_text(self._shift_shortcuts[i], col2_x, cy, scale=col_scale, color=(0.9, 0.85, 1.0, 0.95))
-            if i < len(self._ctrl_shortcuts):
-                self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
+            cy += col_lh
+
+        cy += col_lh * 0.9
+        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+        cy += col_lh
+        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+        cy += col_lh
+
+        for i in range(len(self._ctrl_shortcuts)):
+            self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
             cy += col_lh
 
         if self._unmapped_effects:
@@ -559,7 +567,7 @@ void main() {
             )
 
     def set_effect_shortcuts(self, effects: list[type["BaseEffect"]]) -> None:
-        """Build help overlay columns for 1-0 and !-) effect shortcut mappings."""
+        """Build help overlay columns for plain, shifted, and ctrl shortcuts."""
         self._num_shortcuts = []
         self._shift_shortcuts = []
         self._ctrl_shortcuts = []
@@ -598,11 +606,15 @@ void main() {
     # ------------------------------------------------------------------ #
 
     def flash_name(self, name: str, duration: float = 3.0) -> None:
+        if not self._flash_enabled:
+            return
         self._name_text = name
         self._flash_text = f">> {name}"
         self._flash_timer = duration
 
     def flash_message(self, msg: str, duration: float = 2.0) -> None:
+        if not self._flash_enabled:
+            return
         self._flash_text = msg
         self._flash_timer = duration
 

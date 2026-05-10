@@ -110,10 +110,11 @@ void main() {
     vec2 uv = vec2(v_uv.x * ar, v_uv.y);
     float t = iTime * (0.42 + iSpeed * 0.70);
 
-    // Stage: deep-black backdrop with a soft spotlight around the hero prism.
+    // Stage: deep-black backdrop with a tighter spotlight around the hero prism.
     vec3 col = vec3(0.01, 0.01, 0.02);
-    float spot = exp(-length(uv - vec2(0.04, 0.18)) * 2.8);
-    col += vec3(0.12, 0.12, 0.14) * spot * 0.45;
+    vec2 spot_uv = (uv - vec2(0.04, 0.18)) * vec2(1.15, 2.35);
+    float spot = exp(-dot(spot_uv, spot_uv) * 1.6);
+    col += vec3(0.06, 0.07, 0.09) * spot * 0.26;
 
     // Stronger refracted rainbow rays (our style).
     col += rayField(uv, t, 0.30 + iMid * 0.25 + iBeat * 0.55);

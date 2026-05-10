@@ -100,7 +100,7 @@ python -m unicornviz --help
 | `N` / `→`         | Next effect                                                   |
 | `P` / `←`         | Previous effect                                               |
 | `1`–`9`           | Jump directly to effect #1–9                                 |
-| `!@#$%^&*()`      | Jump directly to effect #10–20 (Shift+1–0)                  |
+| `Shift+1`–`Shift+0` | Jump directly to effect #10–20                            |
 | `Ctrl+1`–`Ctrl+0` | Jump directly to effect #21–30                               |
 | `,`               | ANSI Viewer — own art                                         |
 | `.`               | ANSI Viewer — ACiD art                                        |

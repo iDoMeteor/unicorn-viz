@@ -23,10 +23,21 @@ class Analyzer:
     def __init__(self, fft_bands: int = _FFT_BANDS) -> None:
         self._bands = fft_bands
         self._smoothed = np.zeros(fft_bands, dtype=np.float32)
-        # Spectral flux history for beat detection
-        self._flux_history: list[float] = [0.0] * _ONSET_WINDOW
+        self._window_cache: dict[int, np.ndarray] = {}
+        self._flux_history = np.zeros(_ONSET_WINDOW, dtype=np.float32)
+        self._flux_index = 0
+        self._flux_count = 0
         self._prev_spectrum = np.zeros(fft_bands, dtype=np.float32)
+        self._flux_delta = np.zeros(fft_bands, dtype=np.float32)
         self._beat_cooldown = 0.0   # frames remaining before next beat
+
+    def _window_for(self, n: int) -> np.ndarray:
+        """Return a cached Hann window for the given block length."""
+        window = self._window_cache.get(n)
+        if window is None:
+            window = np.hanning(n).astype(np.float32)
+            self._window_cache[n] = window
+        return window
 
     def process(self, pcm: np.ndarray | None) -> AudioData:
         data = AudioData()
@@ -36,7 +47,7 @@ class Analyzer:
 
         # Window + FFT
         n = len(pcm)
-        window = np.hanning(n).astype(np.float32)
+        window = self._window_for(n)
         windowed = pcm[:n] * window
         rms = float(np.sqrt(np.mean(windowed * windowed)))
         spectrum = np.abs(np.fft.rfft(windowed, n=self._bands * 2))
@@ -54,19 +65,19 @@ class Analyzer:
             spectrum *= 0.0
 
         # Smoothed FFT
-        self._smoothed = (
-            self._smoothed * _SMOOTHING + spectrum * (1.0 - _SMOOTHING)
-        )
-        data.fft = self._smoothed.copy()
+        self._smoothed *= _SMOOTHING
+        self._smoothed += spectrum * (1.0 - _SMOOTHING)
+        data.fft[:] = self._smoothed
 
         # Waveform (last 512 samples normalised)
         wlen = min(512, len(pcm))
         wform = pcm[-wlen:]
         peak = np.abs(wform).max()
         if energy > 1e-5 and peak > 1e-6:
-            data.waveform = (wform / peak).astype(np.float32)
+            data.waveform.fill(0.0)
+            data.waveform[:wlen] = (wform / peak).astype(np.float32)
         else:
-            data.waveform = np.zeros_like(wform, dtype=np.float32)
+            data.waveform.fill(0.0)
 
         # Band energy
         lo = max(1, self._bands // 32)   # bass: ~0–1 kHz
@@ -80,19 +91,19 @@ class Analyzer:
         data.treble = min(1.0, data.treble)
 
         # Spectral flux onset detection
-        flux = float(
-            np.sum(np.maximum(spectrum - self._prev_spectrum, 0.0))
-        )
-        self._prev_spectrum = spectrum.copy()
-        self._flux_history.append(flux)
-        if len(self._flux_history) > _ONSET_WINDOW:
-            self._flux_history.pop(0)
+        np.subtract(spectrum, self._prev_spectrum, out=self._flux_delta)
+        np.maximum(self._flux_delta, 0.0, out=self._flux_delta)
+        flux = float(np.sum(self._flux_delta))
+        np.copyto(self._prev_spectrum, spectrum)
+        self._flux_history[self._flux_index] = flux
+        self._flux_index = (self._flux_index + 1) % _ONSET_WINDOW
+        self._flux_count = min(self._flux_count + 1, _ONSET_WINDOW)
 
         if self._beat_cooldown > 0:
             self._beat_cooldown -= 1
             data.beat = 0.0
         else:
-            arr = np.array(self._flux_history, dtype=np.float32)
+            arr = self._flux_history if self._flux_count == _ONSET_WINDOW else self._flux_history[:self._flux_count]
             mean = arr.mean()
             std = arr.std()
             if std > 1e-6 and flux > mean + _BEAT_THRESHOLD * std:

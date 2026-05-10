@@ -16,7 +16,7 @@ Notes:
 [effects.ClassName]
 param_name = value
 # Optional for all effects:
-# reactivity = 1.0
+# reactivity = 1.0  # absolute override; omit to use global audio.reactivity
 ```
 
 Example:

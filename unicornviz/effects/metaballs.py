@@ -5,7 +5,9 @@ Audio-reactive: bass grows orb radii, beat fires a new orb burst.
 from __future__ import annotations
 
 import math
+
 import moderngl
+import numpy as np
 
 from unicornviz.effects.base import BaseEffect, AudioData
 
@@ -91,6 +93,7 @@ class Metaballs(BaseEffect):
         self._freqs = self.rng.uniform(0.25, 1.25, (_MAX_BALLS, 4))
         self._amps = self.rng.uniform(0.35, 1.25, (_MAX_BALLS, 2))
         self._radii = self.rng.uniform(0.10, 0.24, _MAX_BALLS)
+        self._ball_data = np.zeros(_MAX_BALLS * 3, dtype=np.float32)
 
         self._bass = 0.0
         self._mid = 0.0
@@ -128,8 +131,8 @@ class Metaballs(BaseEffect):
 
     def render(self) -> None:
         t = self.time * self.parameters["speed"]
-        balls = []
         for i in range(_MAX_BALLS):
+            base = i * 3
             if i < self._ball_count:
                 x = (
                     math.sin(t * self._freqs[i, 0] + self._phases[i, 0]) * self._amps[i, 0]
@@ -142,9 +145,11 @@ class Metaballs(BaseEffect):
                 x *= 1.05
                 y *= 0.88
                 r = self._radii[i] * (1.0 + self._bass * 0.75 + self._mid * 0.25)
-                balls.extend([x, y, r])
+                self._ball_data[base] = x
+                self._ball_data[base + 1] = y
+                self._ball_data[base + 2] = r
             else:
-                balls.extend([0.0, 0.0, 0.0])
+                self._ball_data[base:base + 3] = 0.0
 
         self._prog["iTime"].value = self.time
         self._prog["iBeat"].value = self._beat
@@ -153,7 +158,7 @@ class Metaballs(BaseEffect):
         self._prog["iTreble"].value = self._treble
         self._prog["iBallCount"].value = int(self._ball_count)
         # Set entire float array in one call (moderngl exposes 'balls' not 'balls[0]')
-        self._prog["balls"].value = tuple(balls)
+        self._prog["balls"].value = tuple(self._ball_data)
 
         self._vao.render(moderngl.TRIANGLE_STRIP)
 

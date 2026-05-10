@@ -386,11 +386,11 @@ class UnicornTears(BaseEffect):
         self._prog["iAvatarMix"].value  = float(self._avatar_mix)
         self._avatar_tex.use(location=0)
         self._prog["avatar_tex"].value  = 0
-        # moderngl 5.x exposes GLSL arrays as a single member; pass as flat tuple.
-        self._prog["tearX"].value   = tuple(float(v) for v in self._tx)
-        self._prog["tearY"].value   = tuple(float(v) for v in self._ty)
-        self._prog["tearR"].value   = tuple(float(v) for v in self._tr)
-        self._prog["tearHue"].value = tuple(float(v) for v in self._hue)
+        # moderngl 5.x accepts numpy arrays directly for GLSL float arrays.
+        self._prog["tearX"].value   = self._tx
+        self._prog["tearY"].value   = self._ty
+        self._prog["tearR"].value   = self._tr
+        self._prog["tearHue"].value = self._hue
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:

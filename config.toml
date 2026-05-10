@@ -21,3 +21,6 @@ start_effect = "Audio Spectrum"
 
 [logging]
 level = "INFO"
+
+[overlays]
+flash_messages = false

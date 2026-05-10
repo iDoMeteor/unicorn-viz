@@ -67,6 +67,9 @@ _DEFAULTS: dict[str, Any] = {
         "level": "INFO",
         "directory": "logs",
     },
+    "overlays": {
+        "flash_messages": True,
+    },
 }
 
 

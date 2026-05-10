@@ -20,6 +20,7 @@ import sdl2
 import sdl2.ext
 
 from unicornviz.config import Config
+from unicornviz.effects.ansi_viewer import ANSIViewer
 from unicornviz.effects.base import AudioData, BaseEffect
 from unicornviz.effects.registry import get_effects
 from unicornviz.audio.manager import AudioManager
@@ -33,6 +34,20 @@ log = logging.getLogger(__name__)
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
 _SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
+_TRANSITION_MODE_MAP = {
+    'crossfade': 0,
+    'smoothfade': 1,
+    'scanwipe_x': 2,
+    'scanwipe_y': 3,
+    'dissolve': 4,
+    'zoomblend': 5,
+    'radialwipe': 6,
+    'lumawipe': 7,
+    'stripewipe': 8,
+    'anglesweep': 9,
+    'glitchsoft': 10,
+    'prismsplit': 11,
+}
 
 
 class App:
@@ -59,6 +74,8 @@ class App:
         self._audio: AudioData | None = None
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
+        self._audio_scratch_current = AudioData()
+        self._audio_scratch_next = AudioData()
         self._splash_config: dict | None = None
         self._fbo_a: moderngl.Framebuffer | None = None
         self._fbo_b: moderngl.Framebuffer | None = None
@@ -198,7 +215,29 @@ void main() {
             return None
         return max(0.1, min(5.0, value))
 
-    def _audio_for_effect(self, source: AudioData, effect: BaseEffect | None) -> AudioData:
+    def _fill_audio_scratch(
+        self,
+        target: AudioData,
+        source: AudioData,
+        scale: float,
+    ) -> AudioData:
+        """Populate a reusable AudioData scratch buffer from a source snapshot."""
+        target.bass = min(1.0, source.bass * scale)
+        target.mid = min(1.0, source.mid * scale)
+        target.treble = min(1.0, source.treble * scale)
+        target.beat = source.beat
+        target.bpm = source.bpm
+        np.multiply(source.fft, scale, out=target.fft)
+        np.clip(target.fft, 0.0, 1.0, out=target.fft)
+        target.waveform[:] = source.waveform
+        return target
+
+    def _audio_for_effect(
+        self,
+        source: AudioData,
+        effect: BaseEffect | None,
+        target: AudioData,
+    ) -> AudioData:
         """Build an effect-local audio view with optional reactivity scaling.
 
         Global reactivity is already applied by AudioManager. If an effect defines
@@ -217,15 +256,7 @@ void main() {
         if abs(scale - 1.0) < 1e-6:
             return source
 
-        out = AudioData()
-        out.bass = min(1.0, source.bass * scale)
-        out.mid = min(1.0, source.mid * scale)
-        out.treble = min(1.0, source.treble * scale)
-        out.beat = source.beat
-        out.bpm = source.bpm
-        out.fft = np.clip(source.fft * scale, 0.0, 1.0)
-        out.waveform = source.waveform.copy()
-        return out
+        return self._fill_audio_scratch(target, source, scale)
 
     def _build_blend_pipeline(self) -> None:
         """FBO-pair + transition shader used for cross-effect blending."""
@@ -515,13 +546,6 @@ void main() {
                 sdl2.SDL_DestroyWindow(self._window)
                 sdl2.SDL_Quit()
                 return
-            # Store splash for later replay (hotkey U)
-            self._splash_config = {
-                "path": splash_path,
-                "duration_audio": splash_duration_audio,
-                "duration_silent": splash_duration_silent,
-                "bass_supplier": _splash_bass,
-            }
             splash.destroy()
 
         # Store splash config for later replay via hotkey U
@@ -542,7 +566,12 @@ void main() {
             raise RuntimeError("No effects found — check unicornviz/effects/")
 
         playlist = Playlist(effects, self.cfg)
-        overlays = Overlays(self._ctx, self._width, self._height)
+        overlays = Overlays(
+            self._ctx,
+            self._width,
+            self._height,
+            flash_messages=bool(self.cfg.get('overlays', 'flash_messages', default=True)),
+        )
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
         if overlays.unmapped_effects:
             log.warning(
@@ -585,6 +614,11 @@ void main() {
                         self._on_resize(
                             event.window.data1, event.window.data2
                         )
+                    elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_LOST:
+                        self._ctrl_held = False
+                        self._set_cursor_visible(False)
+                    elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_GAINED:
+                        self._set_cursor_visible(self._ctrl_held)
 
             # Dispatch pending MIDI events to active effect
             if hasattr(self, "_midi_manager"):
@@ -593,12 +627,8 @@ void main() {
             # Auto-playlist advance
             if not self._paused and self._next_effect is None and self._auto_advance:
                 allow_advance = True
-                try:
-                    from unicornviz.effects.ansi_viewer import ANSIViewer
-                    if isinstance(self._current_effect, ANSIViewer):
-                        allow_advance = self._current_effect.reached_bottom
-                except Exception:
-                    pass
+                if isinstance(self._current_effect, ANSIViewer):
+                    allow_advance = self._current_effect.reached_bottom
 
                 self._demo_timer += dt
                 if self._demo_timer >= effect_duration and allow_advance:
@@ -613,27 +643,30 @@ void main() {
             # Update effects
             if not self._paused:
                 if self._current_effect:
-                    audio_cur = self._audio_for_effect(self._audio, self._current_effect)
+                    audio_cur = self._audio_for_effect(
+                        self._audio,
+                        self._current_effect,
+                        self._audio_scratch_current,
+                    )
                     self._current_effect.update(dt, audio_cur)
                 if self._next_effect:
-                    audio_next = self._audio_for_effect(self._audio, self._next_effect)
+                    audio_next = self._audio_for_effect(
+                        self._audio,
+                        self._next_effect,
+                        self._audio_scratch_next,
+                    )
                     self._next_effect.update(dt, audio_next)
 
             # Keep persistent name overlay in sync with the active effect.
             # ANSIViewer shows the current art title; all other effects show NAME.
-            try:
-                if self._current_effect is not None:
-                    from unicornviz.effects.ansi_viewer import ANSIViewer
-                    if isinstance(self._current_effect, ANSIViewer):
-                        overlays._name_text = self._current_effect.current_title
-                    else:
-                        overlays._name_text = self._current_effect.NAME
-            except Exception:
-                if self._current_effect is not None:
+            if self._current_effect is not None:
+                if isinstance(self._current_effect, ANSIViewer):
+                    overlays._name_text = self._current_effect.current_title
+                else:
                     overlays._name_text = self._current_effect.NAME
 
             # Render
-            self._render()
+            self._render(dt)
             overlays.render(dt)
 
             sdl2.SDL_GL_SwapWindow(self._window)
@@ -656,7 +689,7 @@ void main() {
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
 
-    def _render(self) -> None:
+    def _render(self, dt: float) -> None:
         ctx = self._ctx
 
         if self._next_effect is None:
@@ -687,7 +720,7 @@ void main() {
                 )
             self._transition_t += (
                 (1.0 / self._transition_duration)
-                * (1.0 / TARGET_FPS)
+                * dt
                 * (1.0 + audio_impact * 0.45)
             )
             if self._transition_t >= 1.0:
@@ -713,21 +746,6 @@ void main() {
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._next_effect.render()
 
-                mode_map = {
-                    "crossfade": 0,
-                    "smoothfade": 1,
-                    "scanwipe_x": 2,
-                    "scanwipe_y": 3,
-                    "dissolve": 4,
-                    "zoomblend": 5,
-                    "radialwipe": 6,
-                    "lumawipe": 7,
-                    "stripewipe": 8,
-                    "anglesweep": 9,
-                    "glitchsoft": 10,
-                    "prismsplit": 11,
-                }
-
                 # Transition composite to screen
                 ctx.screen.use()
                 ctx.viewport = (0, 0, self._width, self._height)
@@ -737,9 +755,9 @@ void main() {
                 self._blend_prog["tex_a"].value = 0
                 self._blend_prog["tex_b"].value = 1
                 self._blend_prog["t"].value = self._transition_t
-                self._blend_prog["mode"].value = mode_map.get(self._transition_kind, 0)
+                self._blend_prog["mode"].value = _TRANSITION_MODE_MAP.get(self._transition_kind, 0)
                 self._blend_prog["dir"].value = self._transition_dir
-                self._transition_phase += (1.0 / TARGET_FPS) * (0.6 + audio_impact * 1.4)
+                self._transition_phase += dt * (0.6 + audio_impact * 1.4)
                 self._blend_prog["phase"].value = self._transition_phase
                 self._blend_prog["iAudioImpact"].value = audio_impact
                 self._blend_prog["iPalShift"].value = (self._transition_phase * 0.31) % 1.0
@@ -776,7 +794,6 @@ void main() {
         """Launch ANSIViewer with an explicit art directory."""
         # Invert does not carry through transitions.
         self._invert_colors = False
-        from unicornviz.effects.ansi_viewer import ANSIViewer
         if self._next_effect is not None:
             self._next_effect.destroy()
         cfg_override = {"ansi_dir": ansi_dir}

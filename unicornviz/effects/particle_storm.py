@@ -13,6 +13,8 @@ Upgrades over 1.0:
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import moderngl
 
@@ -254,7 +256,6 @@ class ParticleStorm(BaseEffect):
 
         # Drift emitters slowly between beats
         t = self.time * 0.18
-        import math
         self._o0 = (math.sin(t) * 0.45, math.cos(t * 0.7) * 0.35) if audio.beat <= 0.5 else self._o0
         self._o1 = (math.cos(t * 1.1 + 2.1) * 0.5, math.sin(t * 0.9 + 1.0) * 0.4) if audio.beat <= 0.5 else self._o1
         self._o2 = (math.sin(t * 0.8 + 4.2) * 0.3, math.cos(t * 1.2 + 3.1) * 0.45) if audio.beat <= 0.5 else self._o2

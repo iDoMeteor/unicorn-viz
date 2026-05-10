@@ -74,7 +74,6 @@ class AudioManager:
             data.mid    = min(1.0, data.mid    * self._reactivity)
             data.treble = min(1.0, data.treble * self._reactivity)
             if data.fft is not None:
-                import numpy as _np
-                data.fft = _np.clip(data.fft * self._reactivity, 0.0, 1.0)
+                data.fft = np.clip(data.fft * self._reactivity, 0.0, 1.0)
         self._last_data = data
         return self._last_data
