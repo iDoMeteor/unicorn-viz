@@ -277,6 +277,7 @@ class Overlays:
         " M           MIDI device",
         " TAB         Name overlay",
         " S           Screenshot",
+        " V           Toggle recording",
         " H           This help",
         " ESC         Quit",
         " T           Auto-advance on/off",
@@ -295,11 +296,14 @@ class Overlays:
         width: int,
         height: int,
         flash_messages: bool = True,
+        show_recording_indicator: bool = True,
     ) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
         self._flash_enabled = flash_messages
+        self._show_recording_indicator = show_recording_indicator
+        self._recording_active = False
 
         self._show_name = False
         self._show_help = False
@@ -508,6 +512,15 @@ void main() {
                 color=(0.0, 1.0, 1.0, 0.85),
             )
 
+        if self._recording_active and self._show_recording_indicator:
+            self._draw_text(
+                'REC',
+                self._width - 120,
+                20,
+                scale=4.0,
+                color=(1.0, 0.15, 0.15, 0.92),
+            )
+
         if self._show_help:
             # 50% black underlay for readability.
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.5))
@@ -630,6 +643,9 @@ void main() {
 
     def toggle_midi_selector(self) -> None:
         self._show_midi = not self._show_midi
+
+    def set_recording_state(self, active: bool) -> None:
+        self._recording_active = active
 
     def resize(self, w: int, h: int) -> None:
         self._width = w

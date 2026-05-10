@@ -28,6 +28,7 @@ from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
+from unicornviz.recording import Recorder
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +80,8 @@ class App:
         self._audio: AudioData | None = None
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
+        self._overlays: Overlays | None = None
+        self._recorder: Recorder | None = None
         self._audio_scratch_current = AudioData()
         self._audio_scratch_next = AudioData()
         self._splash_config: dict | None = None
@@ -204,6 +207,13 @@ void main() {
         self._present_vao = self._ctx.vertex_array(
             self._present_prog, [(self._present_vbo, '2f', 'in_vert')]
         )
+
+    def _sync_recording_overlay(self) -> None:
+        """Keep the recording indicator state in sync with the recorder."""
+        if self._overlays is not None:
+            self._overlays.set_recording_state(
+                self._recorder is not None and self._recorder.is_recording
+            )
 
     def _build_invert_pipeline(self) -> None:
         """Build fullscreen pass that inverts a texture's colors."""
@@ -627,7 +637,9 @@ void main() {
             self._width,
             self._height,
             flash_messages=bool(self.cfg.get('overlays', 'flash_messages', default=True)),
+            show_recording_indicator=bool(self.cfg.get('recording', 'show_indicator', default=True)),
         )
+        self._overlays = overlays
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
         if overlays.unmapped_effects:
             log.warning(
@@ -644,6 +656,12 @@ void main() {
 
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
+        self._recorder = Recorder(self.cfg, self._width, self._height)
+        self._sync_recording_overlay()
+        if self._recorder.enabled and self._recorder.auto_record:
+            started, _ = self.start_recording()
+            if started:
+                log.info('Auto-record enabled')
         self._running = True
 
         prev_time = time.perf_counter()
@@ -724,10 +742,13 @@ void main() {
             # Render
             self._render(dt)
             overlays.render(dt)
+            self._capture_recording_frame()
 
             sdl2.SDL_GL_SwapWindow(self._window)
 
         # Cleanup
+        if self._recorder:
+            self._recorder.stop()
         audio_manager.stop()
         midi_manager.stop()
         if self._current_effect:
@@ -842,6 +863,10 @@ void main() {
         self._width = w
         self._height = h
         self._update_render_target_size()
+        if self._recorder and self._recorder.is_recording:
+            self._recorder.stop()
+            self._sync_recording_overlay()
+            log.warning('Recording stopped due to resize/fullscreen change')
         if self._current_effect:
             self._current_effect.resize(w, h)
         if self._next_effect:
@@ -865,6 +890,52 @@ void main() {
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
+
+    def start_recording(self) -> tuple[bool, str]:
+        """Start recording if recording support is enabled."""
+        if self._recorder is None:
+            self._recorder = Recorder(self.cfg, self._width, self._height)
+        if not self._recorder.enabled:
+            self._sync_recording_overlay()
+            return False, 'Recording disabled'
+        if self._recorder.is_recording:
+            self._sync_recording_overlay()
+            return True, 'Recording already on'
+        started = self._recorder.start()
+        self._sync_recording_overlay()
+        if started:
+            return True, 'Recording: ON'
+        return False, self._recorder.last_error or 'Recording failed'
+
+    def stop_recording(self) -> tuple[bool, str]:
+        """Stop recording and report where the file was saved."""
+        if self._recorder is None or not self._recorder.is_recording:
+            self._sync_recording_overlay()
+            return False, 'Recording already off'
+        path = self._recorder.stop()
+        self._sync_recording_overlay()
+        if path is not None:
+            return False, f'Recording saved: {path}'
+        return False, 'Recording: OFF'
+
+    def toggle_recording(self) -> tuple[bool, str]:
+        """Toggle in-app recording on or off."""
+        if self._recorder is not None and self._recorder.is_recording:
+            return self.stop_recording()
+        return self.start_recording()
+
+    def _capture_recording_frame(self) -> None:
+        """Capture the final on-screen frame for recording."""
+        if self._ctx is None or self._recorder is None or not self._recorder.is_recording:
+            return
+        try:
+            frame = self._ctx.screen.read(components=3, alignment=1)
+            if not self._recorder.write_frame(frame):
+                self._sync_recording_overlay()
+        except Exception as exc:
+            log.error('Recording capture failed: %s', exc)
+            self._recorder.stop()
+            self._sync_recording_overlay()
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)

@@ -114,12 +114,33 @@ python -m unicornviz --help
 | `Ctrl+G`          | Reset audio reactivity to configured default                   |
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
+| `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle effect-name overlay                                    |
 | `H`               | Toggle help panel                                             |
 | `A`               | Audio device selector                                         |
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
+
+---
+
+## Recording
+
+Unicorn Viz can record the final on-screen output to MP4 using `ffmpeg`.
+
+Defaults:
+- recordings are saved under `recordings/`
+- auto-record is off by default
+- recording is video-only in the current version
+
+When enabled, recording captures:
+- effects
+- transitions
+- invert pass
+- overlays that are visible on screen
+
+Recording can reduce performance because the current implementation reads back
+frames synchronously from the final screen output.
 
 ---
 

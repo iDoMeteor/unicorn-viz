@@ -66,6 +66,21 @@ _DEFAULTS: dict[str, Any] = {
     "render": {
         "internal_scale": 1.0,
     },
+    "recording": {
+        "enabled": True,
+        "auto_record": False,
+        "directory": "recordings",
+        "ffmpeg_path": "ffmpeg",
+        "container": "mp4",
+        "fps": 60,
+        "codec": "libx264",
+        "preset": "veryfast",
+        "crf": 18,
+        "pixel_format": "yuv420p",
+        "capture_audio": False,
+        "filename_prefix": "unicornviz",
+        "show_indicator": True,
+    },
     "logging": {
         "level": "INFO",
         "directory": "logs",

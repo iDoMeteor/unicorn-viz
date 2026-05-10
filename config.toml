@@ -22,5 +22,9 @@ start_effect = "Audio Spectrum"
 [logging]
 level = "INFO"
 
+[recording]
+auto_record = true
+directory = "recordings"
+
 [overlays]
 flash_messages = false

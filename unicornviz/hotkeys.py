@@ -207,6 +207,10 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_s:
             self._screenshot()
 
+        elif sym == sdl2.SDLK_v:
+            _active, msg = a.toggle_recording()
+            o.flash_message(msg, 2.0)
+
         elif sym == sdl2.SDLK_u:
             if mod & sdl2.KMOD_SHIFT:
                 a.show_splash()

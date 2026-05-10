@@ -60,6 +60,31 @@ Aliases:
 
 ---
 
+## `[recording]`
+
+| Key              | Type   | Default      | Description |
+|------------------|--------|--------------|-------------|
+| `enabled`        | bool   | `true`       | Master gate for in-app recording and the recording hotkey. |
+| `auto_record`    | bool   | `false`      | Automatically start recording after startup completes. |
+| `directory`      | str    | `"recordings"` | Output directory for saved recordings. |
+| `ffmpeg_path`    | str    | `"ffmpeg"`  | Path to the ffmpeg executable used for recording. |
+| `container`      | str    | `"mp4"`     | Output container extension for saved recordings. |
+| `fps`            | int    | `60`         | Recording frame rate passed to ffmpeg. |
+| `codec`          | str    | `"libx264"` | Video codec used for recording. |
+| `preset`         | str    | `"veryfast"`| ffmpeg encoder preset for performance/quality tradeoff. |
+| `crf`            | int    | `18`         | H.264 quality target; lower is higher quality. |
+| `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |
+| `capture_audio`  | bool   | `false`      | Reserved for future audio muxing; ignored in v1. |
+| `filename_prefix`| str    | `"unicornviz"` | Prefix used for timestamped recording filenames. |
+| `show_indicator` | bool   | `true`       | Show a persistent `REC` indicator while recording. |
+
+Notes:
+- V1 records video only.
+- Recording captures the final on-screen composed output, including overlays that are visible.
+- Recording may reduce runtime performance because frame capture currently uses synchronous screen readback.
+
+---
+
 ## `[overlays]`
 
 | Key              | Type   | Default | Description                                              |
