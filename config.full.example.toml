@@ -24,7 +24,7 @@ transition_duration = 1.0
 device = ""
 fft_bands = 512
 buffer_seconds = 10.0
-reactivity = 1.5
+reactivity = 1.0
 # low, medium, high
 latency = "high"
 # if true, include ALSA loopback devices in auto-fallback candidates

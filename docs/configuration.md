@@ -50,7 +50,7 @@ Aliases:
 | `device`         | str    | `""`    | Device name substring (empty = auto-detect PipeWire monitor) |
 | `fft_bands`      | int    | `512`   | Number of FFT frequency bins                                 |
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
-| `reactivity`     | float  | `1.5`   | Master visual response multiplier                            |
+| `reactivity`     | float  | `1.0`   | Master visual response multiplier                            |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
 | `try_alsa_loopback` | bool | `false` | Try ALSA loopback devices before app/default sources        |
 

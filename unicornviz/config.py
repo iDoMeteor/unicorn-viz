@@ -41,7 +41,7 @@ _DEFAULTS: dict[str, Any] = {
         "device": "",
         "fft_bands": 512,
         "buffer_seconds": 10.0,  # Large buffer for GPU rendering stalls and resolution flexibility
-        "reactivity": 1.5,
+        "reactivity": 1.0,
         "latency": "high",
         "try_alsa_loopback": False,
     },

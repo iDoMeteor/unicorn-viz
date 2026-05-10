@@ -7,7 +7,7 @@ effect_duration = 120
 transition = "shuffle"
 
 [audio]
-reactivity = 2.25
+reactivity = 1.0
 latency = "high"
 try_alsa_loopback = false
 
