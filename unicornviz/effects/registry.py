@@ -18,13 +18,13 @@ do not re-import modules.
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import inspect
 import logging
 from pathlib import Path
 from typing import Type
 
 from unicornviz.effects.base import BaseEffect
+from unicornviz.dropins import discover_dropin_effect_classes
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +33,8 @@ _registry: list[Type[BaseEffect]] = []
 
 
 def _discover() -> None:
+    seen: set[tuple[str, str]] = set()
+
     pkg_dir = Path(__file__).parent
     for path in sorted(pkg_dir.glob("*.py")):
         if path.stem in ("__init__", "base", "registry"):
@@ -47,10 +49,21 @@ def _discover() -> None:
             if (
                 issubclass(obj, BaseEffect)
                 and obj is not BaseEffect
-                and obj not in _registry
             ):
+                key = (obj.__module__, obj.__name__)
+                if key in seen:
+                    continue
                 _registry.append(obj)
+                seen.add(key)
                 log.debug("Registered effect: %s", obj.NAME)
+
+    for obj in discover_dropin_effect_classes(BaseEffect):
+        key = (obj.__module__, obj.__name__)
+        if key in seen:
+            continue
+        _registry.append(obj)
+        seen.add(key)
+        log.debug('Registered drop-in effect: %s', obj.NAME)
 
 
 def get_effects() -> list[Type[BaseEffect]]:

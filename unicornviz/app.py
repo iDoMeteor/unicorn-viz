@@ -30,7 +30,7 @@ from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
-from unicornviz.display import MultiHeadController
+from unicornviz.dropins import load_dropin_symbol
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +56,11 @@ _TRANSITION_MODE_MAP = {
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
+
+
+def _load_multihead_controller_class() -> type:
+    """Load MultiHeadController directly from the multi-head drop-in."""
+    return load_dropin_symbol('multi-head-01/multihead.py', 'MultiHeadController')
 
 
 class App:
@@ -102,7 +107,8 @@ class App:
         self._height = self.cfg.get("window", "height", default=1080)
         self._display_index = 0
         self._display_mode = 'single'
-        self._multihead = MultiHeadController(self.cfg)
+        multihead_cls = _load_multihead_controller_class()
+        self._multihead = multihead_cls(self.cfg)
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
