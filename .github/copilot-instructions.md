@@ -271,3 +271,8 @@ Do **not** use: `pygame`, `tkinter`, `wx`, `pyglet`, `arcade`, `OpenGL.GL`
   one submodule per drop-in directory.
 - Keep `unicornviz/` compatibility shims lightweight and point canonical
   implementations to the corresponding drop-in submodule paths.
+- When adding a new drop-in, the agent should automatically create a new
+  private GitHub repository for it and wire it into `drop-ins/` as a submodule.
+- When modifying a drop-in, the agent must commit and push changes in the
+  drop-in's own repository first, then commit and push the updated submodule
+  pointer in the main `unicorn-viz` repository.
