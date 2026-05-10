@@ -2,6 +2,30 @@
 
 This plan covers immediate implementation of built-in recording for Unicorn Viz.
 
+## Current Status
+
+Implemented:
+1. ffmpeg-backed in-app MP4 recording
+2. auto-record on startup
+3. configurable recording directory
+4. hotkey toggle (`V`)
+5. final composed frame capture from the live app
+6. live-only recording indicator that is not burned into saved recordings
+7. Linux-first Pulse/PipeWire audio mux support via sink-monitor capture
+8. CLI overrides for recording startup, directory, fps, CRF, ffmpeg path, and audio input device
+
+Validated:
+1. video-only recording
+2. video + audio recording
+3. clean file finalization on normal stop and app exit
+
+Still open / future work:
+1. long-run stability investigation for occasional degraded recorded audio under sustained load
+2. async readback / lower-overhead capture path
+3. cross-platform audio mux support beyond Linux
+4. richer recording HUD (timer/source display)
+5. optional direct display of resolved recording audio source
+
 Goals:
 1. Record what the user actually sees in-app.
 2. Support automatic recording on startup.
@@ -29,6 +53,11 @@ Reason:
 1. V1 is enough to ship a usable feature fast.
 2. V1 reuses the existing render pipeline and records the exact on-screen output.
 3. The main risk is performance due to synchronous readback, which is acceptable for first implementation if clearly documented and configurable.
+
+Status note:
+1. V1 is implemented.
+2. Linux-first audio mux support is also implemented.
+3. Remaining work is now mostly stability/polish rather than basic feature delivery.
 
 ---
 
@@ -91,6 +120,7 @@ When implementing, your local `config.toml` should get:
 [recording]
 auto_record = true
 directory = "recordings"
+capture_audio = true
 ```
 
 ---
@@ -128,6 +158,18 @@ If `recording.auto_record = true`:
 
 Optional variant:
 1. add a future flag if splash recording is wanted later
+
+Implemented behavior:
+1. auto-record now starts after startup initialization and after the splash path completes
+2. recording stops cleanly on app exit
+3. recording is intentionally stopped on resize/fullscreen changes because ffmpeg rawvideo expects fixed dimensions
+
+### Recording indicator
+
+Implemented behavior:
+1. the live recording indicator is shown only when the name overlay is visible
+2. it is rendered as a small red dot rather than `REC`
+3. it is drawn only after frame capture, so it never appears in saved recordings
 
 ---
 
@@ -174,6 +216,9 @@ Flow:
    - vertically flip if needed before writing to ffmpeg
 4. stop recorder cleanly on exit
 
+Status:
+1. implemented
+
 ### 3. Hotkey
 
 Modify:
@@ -188,6 +233,10 @@ Behavior:
 1. if recording disabled in config, hotkey is ignored
 2. if recording starts, show `REC ON` flash or indicator
 3. if recording stops, show saved output path
+
+Status:
+1. implemented with `V`
+2. current live indicator is a red dot gated by the name overlay, not a `REC ON` burn-in banner
 
 ### 4. Config docs
 
@@ -209,6 +258,9 @@ Recommended CLI additions:
 5. `--record-crf`
 
 This keeps runtime control consistent with the rest of the app.
+
+Status:
+1. implemented for startup toggle, directory, fps, CRF, ffmpeg path, and audio input device
 
 ---
 
@@ -254,6 +306,10 @@ Mitigation:
 2. keep recording optional
 3. let user combine with `render.internal_scale`
 4. use `veryfast` preset by default
+
+Current note:
+1. this remains the main likely cause of long-run recording instability under sustained load
+2. `render.internal_scale` helps GPU cost but does not remove final screen readback cost
 
 ### 2. Backpressure if ffmpeg cannot keep up
 
@@ -330,6 +386,7 @@ ffmpeg \
 2. The current app may react to one source while ffmpeg records another unless recording audio input is explicitly configured to match.
 3. Auto-fallback monitor selection in the app does not automatically translate to a good ffmpeg input string.
 4. Startup ordering matters: we need the video recorder and audio input to come up without hanging the app.
+5. Long recordings may still show degraded recorded audio under heavy load; this needs dedicated investigation.
 
 ### Remaining follow-up scope
 

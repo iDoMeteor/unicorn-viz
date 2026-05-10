@@ -273,6 +273,7 @@ class Overlays:
         " R           Random mode",
         " + / -       Speed up/dn",
         " G / Shift+G  +/-   Ctrl+G reset",
+        " E           EQ / spectrum",
         " A           Audio source",
         " M           MIDI device",
         " TAB         Name overlay",
@@ -304,6 +305,7 @@ class Overlays:
         self._flash_enabled = flash_messages
         self._show_recording_indicator = show_recording_indicator
         self._recording_active = False
+        self._recording_elapsed_seconds = 0.0
 
         self._show_name = False
         self._show_help = False
@@ -492,12 +494,23 @@ void main() {
             return
         if not (self._show_name and self._name_text):
             return
+        elapsed = max(0, int(self._recording_elapsed_seconds))
+        minutes, seconds = divmod(elapsed, 60)
+        hours, minutes = divmod(minutes, 60)
+        timer_text = f'{hours:02d}:{minutes:02d}:{seconds:02d}' if hours else f'{minutes:02d}:{seconds:02d}'
         self._draw_text(
             '.',
             self._width - 84,
             0,
             scale=10.0,
             color=(1.0, 0.12, 0.12, 0.98),
+        )
+        self._draw_text(
+            timer_text,
+            self._width - 210,
+            24,
+            scale=2.8,
+            color=(1.0, 0.45, 0.45, 0.92),
         )
 
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
@@ -652,8 +665,9 @@ void main() {
     def toggle_midi_selector(self) -> None:
         self._show_midi = not self._show_midi
 
-    def set_recording_state(self, active: bool) -> None:
+    def set_recording_state(self, active: bool, elapsed_seconds: float = 0.0) -> None:
         self._recording_active = active
+        self._recording_elapsed_seconds = elapsed_seconds if active else 0.0
 
     def render_live_recording_indicator(self) -> None:
         """Draw only the recording indicator for live display after frame capture."""

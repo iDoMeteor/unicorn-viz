@@ -3,7 +3,7 @@ fullscreen = true
 
 [demo]
 mode = "random"
-effect_duration = 17
+effect_duration = 120
 transition = "shuffle"
 
 [audio]
@@ -23,7 +23,7 @@ start_effect = "Audio Spectrum"
 level = "INFO"
 
 [recording]
-auto_record = true
+auto_record = false
 directory = "recordings"
 capture_audio = true
 

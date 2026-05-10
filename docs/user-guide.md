@@ -114,6 +114,7 @@ python -m unicornviz --help
 | `Ctrl+G`          | Reset audio reactivity to configured default                   |
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
+| `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle effect-name overlay                                    |
 | `H`               | Toggle help panel                                             |
@@ -144,7 +145,7 @@ Audio recording:
 - if no audio source is specified, Unicorn Viz records from the default sink monitor so desktop playback is captured instead of the default microphone
 
 Live recording indicator:
-- when the name overlay is visible, a small red recording dot is shown live on screen
+- when the name overlay is visible, a small red recording dot and elapsed timer are shown live on screen
 - that dot is not included in saved recordings
 
 Recording can reduce performance because the current implementation reads back

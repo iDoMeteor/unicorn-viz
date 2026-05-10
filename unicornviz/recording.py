@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import signal
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +42,8 @@ class Recorder:
         self._height = height
         self._process: subprocess.Popen[bytes] | None = None
         self._current_path: Path | None = None
+        self._started_at: float = 0.0
+        self._resolved_audio_input: tuple[str, str] | None = None
         self._last_error: str = ''
 
     @property
@@ -66,6 +69,16 @@ class Recorder:
     @property
     def last_error(self) -> str:
         return self._last_error
+
+    @property
+    def elapsed_seconds(self) -> float:
+        if not self.is_recording or self._started_at == 0.0:
+            return 0.0
+        return max(0.0, time.monotonic() - self._started_at)
+
+    @property
+    def resolved_audio_input(self) -> tuple[str, str] | None:
+        return self._resolved_audio_input
 
     def _build_output_path(self) -> Path:
         self._directory.mkdir(parents=True, exist_ok=True)
@@ -119,12 +132,15 @@ class Recorder:
         ]
         if self._capture_audio:
             audio_format, audio_device = self._resolve_audio_input()
+            self._resolved_audio_input = (audio_format, audio_device)
             command += [
                 '-f',
                 audio_format,
                 '-i',
                 audio_device,
             ]
+        else:
+            self._resolved_audio_input = None
         command += [
             '-vf',
             'vflip',
@@ -182,7 +198,14 @@ class Recorder:
                 stderr=subprocess.DEVNULL,
             )
             self._current_path = output_path
+            self._started_at = time.monotonic()
             self._last_error = ''
+            if self._resolved_audio_input is not None:
+                log.info(
+                    'Recording audio source: %s (%s)',
+                    self._resolved_audio_input[1],
+                    self._resolved_audio_input[0],
+                )
             log.info('Recording started: %s', output_path)
             return True
         except FileNotFoundError:
@@ -238,4 +261,5 @@ class Recorder:
         finally:
             self._process = None
             self._current_path = None
+            self._started_at = 0.0
         return output_path

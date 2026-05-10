@@ -24,6 +24,7 @@ _SAMPLE_RATE = 48000   # PipeWire default; 44100 fallback attempted at runtime
 _BLOCK_SIZE = 1024
 _CHANNELS = 2
 _WARMUP_DURATION = 0.3  # seconds: time to let buffer stabilize after stream opens
+_STATUS_LOG_INTERVAL = 2.0
 
 
 def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | None]:
@@ -168,6 +169,8 @@ class AudioCapture:
         self._candidate_index = 0
         self._silent_blocks = 0
         self._stream_opened_time: float = 0.0  # Track when stream opens for warmup
+        self._last_status_log_time = 0.0
+        self._suppressed_status_count = 0
 
     def _open_stream(self, device: int | None) -> None:
         native_rate: int = _SAMPLE_RATE
@@ -243,7 +246,20 @@ class AudioCapture:
         status,
     ) -> None:
         if status:
-            log.warning("Audio callback status: %s", status)
+            now = time.time()
+            if now - self._last_status_log_time >= _STATUS_LOG_INTERVAL:
+                if self._suppressed_status_count > 0:
+                    log.warning(
+                        'Audio callback status: %s (%d similar warnings suppressed)',
+                        status,
+                        self._suppressed_status_count,
+                    )
+                else:
+                    log.warning('Audio callback status: %s', status)
+                self._last_status_log_time = now
+                self._suppressed_status_count = 0
+            else:
+                self._suppressed_status_count += 1
         mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
         rms = float(np.sqrt(np.mean(mono * mono)))
         if rms < 0.002:

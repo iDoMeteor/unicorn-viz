@@ -211,8 +211,12 @@ void main() {
     def _sync_recording_overlay(self) -> None:
         """Keep the recording indicator state in sync with the recorder."""
         if self._overlays is not None:
+            elapsed_seconds = 0.0
+            if self._recorder is not None:
+                elapsed_seconds = self._recorder.elapsed_seconds
             self._overlays.set_recording_state(
-                self._recorder is not None and self._recorder.is_recording
+                self._recorder is not None and self._recorder.is_recording,
+                elapsed_seconds=elapsed_seconds,
             )
 
     def _build_invert_pipeline(self) -> None:
@@ -741,6 +745,7 @@ void main() {
 
             # Render
             self._render(dt)
+            self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             self._capture_recording_frame()
             overlays.render_live_recording_indicator()

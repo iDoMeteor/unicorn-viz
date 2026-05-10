@@ -110,6 +110,19 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
 
+        elif sym == sdl2.SDLK_e:
+            eq_cls = None
+            for cls in p.effects:
+                if cls.__name__ == 'AudioSpectrum' or cls.NAME in {'Audio Spectrum', 'EQ'}:
+                    eq_cls = cls
+                    break
+            if eq_cls is not None:
+                log.info('Scene change → %s (EQ hotkey)', eq_cls.NAME)
+                a.goto_effect(eq_cls)
+                o.flash_name(eq_cls.NAME)
+            else:
+                o.flash_message('Audio Spectrum not found', 1.5)
+
         elif sym == sdl2.SDLK_r:
             p.toggle_random()
             mode = p.mode.upper()
