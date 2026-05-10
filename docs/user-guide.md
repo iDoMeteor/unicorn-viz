@@ -131,13 +131,17 @@ Unicorn Viz can record the final on-screen output to MP4 using `ffmpeg`.
 Defaults:
 - recordings are saved under `recordings/`
 - auto-record is off by default
-- recording is video-only in the current version
+- audio capture is off by default
 
 When enabled, recording captures:
 - effects
 - transitions
 - invert pass
 - standard overlays that are visible before frame capture
+
+Audio recording:
+- on Linux/PipeWire, set `capture_audio = true` under `[recording]`
+- if no audio source is specified, Unicorn Viz records from the default sink monitor so desktop playback is captured instead of the default microphone
 
 Live recording indicator:
 - when the name overlay is visible, a small red recording dot is shown live on screen

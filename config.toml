@@ -25,6 +25,7 @@ level = "INFO"
 [recording]
 auto_record = true
 directory = "recordings"
+capture_audio = true
 
 [overlays]
 flash_messages = false

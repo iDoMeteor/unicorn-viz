@@ -74,12 +74,17 @@ Aliases:
 | `preset`         | str    | `"veryfast"`| ffmpeg encoder preset for performance/quality tradeoff. |
 | `crf`            | int    | `18`         | H.264 quality target; lower is higher quality. |
 | `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |
-| `capture_audio`  | bool   | `false`      | Reserved for future audio muxing; ignored in v1. |
+| `capture_audio`  | bool   | `false`      | Capture audio alongside video when supported by the configured ffmpeg input backend. |
+| `audio_input_format` | str | `"pulse"`  | ffmpeg input backend used for audio capture. Linux/PipeWire setups should use `pulse`. |
+| `audio_input_device` | str | `""`       | Audio input source name for recording. Empty auto-resolves to the default sink monitor on Linux/PipeWire. |
+| `audio_codec`    | str    | `"aac"`     | Audio codec used when audio recording is enabled. |
+| `audio_bitrate`  | str    | `"192k"`    | Audio bitrate passed to ffmpeg. |
 | `filename_prefix`| str    | `"unicornviz"` | Prefix used for timestamped recording filenames. |
 | `show_indicator` | bool   | `true`       | Show a live-only recording indicator while recording. It is shown only when the name overlay is visible and is never burned into saved recordings. |
 
 Notes:
-- V1 records video only.
+- Linux/PipeWire/Pulse setups can record audio by enabling `capture_audio = true`.
+- If `audio_input_device` is empty, Unicorn Viz resolves the default sink monitor via `pactl` so recordings capture desktop playback instead of the default microphone source.
 - Recording captures the final on-screen composed output.
 - The recording indicator is drawn only after frame capture, so it is visible live but not included in recordings.
 - Recording may reduce runtime performance because frame capture currently uses synchronous screen readback.

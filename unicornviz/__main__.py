@@ -53,10 +53,14 @@ def _build_parser() -> argparse.ArgumentParser:
     record_toggle = recording.add_mutually_exclusive_group()
     record_toggle.add_argument('--record', action='store_true', help='Automatically start recording after startup.')
     record_toggle.add_argument('--no-record', action='store_true', help='Disable automatic recording on startup.')
+    audio_toggle = recording.add_mutually_exclusive_group()
+    audio_toggle.add_argument('--record-audio', action='store_true', help='Enable audio recording/muxing when recording video.')
+    audio_toggle.add_argument('--no-record-audio', action='store_true', help='Disable audio recording/muxing.')
     recording.add_argument('--record-dir', help='Directory for saved recordings.')
     recording.add_argument('--record-fps', type=int, help='Recording output FPS.')
     recording.add_argument('--record-crf', type=int, help='Recording video quality CRF value.')
     recording.add_argument('--ffmpeg-path', help='Path to the ffmpeg executable.')
+    recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
     logging_group = parser.add_argument_group('logging')
     logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help='Console/file log level.')
@@ -97,10 +101,15 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         put('recording', 'auto_record', True)
     elif args.no_record:
         put('recording', 'auto_record', False)
+    if args.record_audio:
+        put('recording', 'capture_audio', True)
+    elif args.no_record_audio:
+        put('recording', 'capture_audio', False)
     put('recording', 'directory', args.record_dir)
     put('recording', 'fps', args.record_fps)
     put('recording', 'crf', args.record_crf)
     put('recording', 'ffmpeg_path', args.ffmpeg_path)
+    put('recording', 'audio_input_device', args.record_audio_device)
     put('logging', 'level', args.log_level)
     return overrides
 

@@ -280,8 +280,9 @@ Reason:
 
 ## Phase 2 — Audio Mux Feasibility
 
-Goal:
-1. add optional audio capture to recorded output without destabilizing the current V1 video path
+Status:
+1. implemented for Linux-first Pulse/PipeWire capture
+2. still needs broader runtime validation and cross-platform follow-up
 
 ### Recommended approach
 
@@ -294,42 +295,43 @@ Why:
 
 ### Linux-first strategy
 
-Preferred V2 path:
+Current path:
 1. configurable ffmpeg audio input source
-2. likely PulseAudio/PipeWire input via ffmpeg device flags
+2. PulseAudio/PipeWire input via ffmpeg device flags
+3. empty device string auto-resolves to the default sink monitor via `pactl`
 
-Possible future config additions:
+Implemented config:
 
 ```toml
 [recording]
 capture_audio = true
 audio_input_format = "pulse"
-audio_input_device = "default"
+audio_input_device = ""
 audio_codec = "aac"
 audio_bitrate = "192k"
 ```
 
-Expected ffmpeg shape:
+Current ffmpeg shape:
 
 ```bash
 ffmpeg \
   -y \
   -f rawvideo -pix_fmt rgb24 -video_size WIDTHxHEIGHT -framerate FPS -i - \
-  -f pulse -i default \
+  -f pulse -i <default-sink>.monitor \
   -c:v libx264 -preset veryfast -crf 18 \
   -c:a aac -b:a 192k \
   -pix_fmt yuv420p \
   output.mp4
 ```
 
-### Main concerns
+### Remaining concerns
 
 1. Device naming varies across PipeWire/Pulse setups.
-2. The current app may react to one source while ffmpeg records another unless recording audio input is explicitly configurable.
+2. The current app may react to one source while ffmpeg records another unless recording audio input is explicitly configured to match.
 3. Auto-fallback monitor selection in the app does not automatically translate to a good ffmpeg input string.
 4. Startup ordering matters: we need the video recorder and audio input to come up without hanging the app.
 
-### Recommended V2 scope boundary
+### Remaining follow-up scope
 
 Include:
 1. optional audio capture with explicit config
