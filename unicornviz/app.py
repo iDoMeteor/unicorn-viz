@@ -882,7 +882,7 @@ void main() {
                 'frame_ms': f"{(dt * 1000.0):.2f}",
                 'resolution': f"{self._width}x{self._height}",
                 'render_scale': f"{self._render_scale:.2f}",
-                'playlist': f"{p.mode.upper()} {p.index + 1}/{len(p.effects)}",
+                'playlist': f"{playlist.mode.upper()} {playlist.index + 1}/{len(playlist.effects)}",
                 'paused': 'YES' if self._paused else 'NO',
                 'fullscreen': 'YES' if self._fullscreen else 'NO',
                 'auto_advance': 'ON' if self._auto_advance else 'OFF',
