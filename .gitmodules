@@ -13,3 +13,6 @@
 [submodule "drop-ins/alien-invasion-01"]
 	path = drop-ins/alien-invasion-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-alien-invasion-01.git
+[submodule "drop-ins/textures-01"]
+	path = drop-ins/textures-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-textures-01.git

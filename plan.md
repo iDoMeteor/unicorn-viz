@@ -73,11 +73,11 @@
   Notes:
   - playlist-like loading behavior
   - splash-style animation/reactive presentation
-- `[todo]` Add `assets/textures/` support.
+- `[done]` Add `assets/textures/` support.
   Notes:
-  - texture pack discovery and metadata
-  - effect-level texture slot binding/conventions
-  - optional audio-reactive UV/modulation hooks
+  - implemented as drop-in `textures-01` with configurable `texture_dirs`
+  - includes 20 bundled patterns (including paisley and plaid)
+  - implemented audio-reactive texture montage/showcase effect
 - `[todo]` Add `assets/videos/` support for MP4 playback.
   Notes:
   - playlist integration
