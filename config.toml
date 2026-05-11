@@ -34,32 +34,26 @@ internal_scale = 1
 flash_messages = false
 
 # ---------------------------------------------------------------------------
-# System camera overlay  —  always-on PiP above all effects, below the HUD.
-# Requires opencv-python-headless: pip install opencv-python-headless
+# Webcam auto-cycle  — how long to show each webcam effect before random-
+# picking the next one when KP Enter is active.
+# Default (0) falls back to demo.effect_duration.
 # ---------------------------------------------------------------------------
 # [webcam]
-# enabled        = true          # false disables camera entirely
-# device         = 0             # /dev/video index (Linux) or DirectShow (Windows)
-# width          = 1280
-# height         = 720
-# fps            = 30
+# cycle_interval = 30    # seconds; 0 = use demo.effect_duration
+
+# ---------------------------------------------------------------------------
+# WebcamOverlay effect  (drop-ins/webcam-01)
+# Live camera feed with animated background. Selected like any other effect.
+# Requires: opencv-python-headless (already in requirements.txt)
+# ---------------------------------------------------------------------------
+# [effects.WebcamOverlay]
+# camera_device  = 0             # /dev/video index (Linux) or DirectShow (Windows)
+# camera_width   = 1280
+# camera_height  = 720
+# camera_fps     = 30
 # pip_position   = "bottom_right"    # top_left | top_center | top_right |
 #                                     # left | center | right |
 #                                     # bottom_left | bottom_center | bottom_right |
 #                                     # fullscreen
 # pip_scale      = 0.33          # fraction of viewport width  (0.12 – 0.80)
-# log_frames     = false         # emit DEBUG log every 60 captured frames
-# cycle_interval = 0             # webcam effect auto-cycle interval in s (0 = effect_duration)
-
-# ---------------------------------------------------------------------------
-# WebcamOverlay effect  (drop-ins/webcam-01) — standalone effect w/ animated
-# background and camera PiP; selected via playlist like any other effect.
-# ---------------------------------------------------------------------------
-# [effects.WebcamOverlay]
-# camera_device  = 0
-# camera_width   = 1280
-# camera_height  = 720
-# camera_fps     = 30
-# pip_position   = "bottom_right"
-# pip_scale      = 0.33
-# enabled        = true
+# enabled        = true          # false disables camera worker

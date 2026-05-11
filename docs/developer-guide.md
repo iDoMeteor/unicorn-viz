@@ -28,7 +28,7 @@
 │  SDL2 window ─── moderngl context ─── fixed-timestep main loop  │
 │       │                                        │                 │
 │  HotkeyHandler ◄── SDL events            Overlays (HUD)         │
-│  MidiManager   ◄── rtmidi thread         CameraOverlay (PiP)    │
+│  MidiManager   ◄── rtmidi thread                                 │
 │       │                                        │                 │
 │  Playlist ──► effect_class ──► BaseEffect ──► render()           │
 │                                    │                             │
@@ -43,9 +43,8 @@ The main loop runs at **60 fps** with a fixed-timestep accumulator capped at
 2. `AudioManager.get_audio_data()` returns the latest `AudioData` snapshot.
 3. `effect.update(dt, audio)` advances effect state.
 4. `effect.render()` draws to the screen (or to an FBO during transitions).
-5. `CameraOverlay.render()` draws the webcam PiP above the effect.
-6. `Overlays.render(dt)` draws the HUD on top.
-7. `SDL_GL_SwapWindow` flips the buffer.
+5. `Overlays.render(dt)` draws the HUD on top.
+6. `SDL_GL_SwapWindow` flips the buffer.
 
 ---
 
@@ -81,7 +80,6 @@ unicorn-viz/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── app.py                 Main application class
-│   ├── camera_overlay.py      System-level webcam PiP overlay
 │   ├── config.py              TOML config loader
 │   ├── dropins.py             Drop-in loader utility
 │   ├── hotkeys.py             Keyboard + MIDI → action dispatcher
@@ -144,15 +142,15 @@ unicorn-viz/
 |--------|---------|
 | `run()` | Initialises subsystems, enters main loop, tears down on exit |
 | `_init_sdl()` | Creates SDL2 window (Wayland-first, X11 fallback) |
-| `_init_moderngl()` | Creates OpenGL 3.3 core context; initialises `CameraOverlay` |
+| `_init_moderngl()` | Creates OpenGL 3.3 core context via `moderngl.create_context()` |
 | `_switch_effect(cls)` | Instantiates a new effect and starts a transition |
 | `_render()` | Routes rendering through the transition FBO system |
 | `goto_effect(cls)` | Public — called by HotkeyHandler and tests |
 | `toggle_fullscreen()` | Calls `SDL_SetWindowFullscreen` |
 | `toggle_pause()` | Freezes `dt` accumulation |
-| `_on_resize(w, h)` | Updates viewport; propagates to active effects, overlays, and `CameraOverlay` |
-| `set_camera_layout(token)` | Delegates to `CameraOverlay.set_layout()` |
-| `scale_pip(delta)` | Delegates to `CameraOverlay.scale_pip()` |
+| `_on_resize(w, h)` | Updates viewport; propagates to active effects and overlays |
+| `set_camera_layout(token)` | Delegates to `current_effect.set_camera_layout()` (WebcamOverlay drop-in) |
+| `scale_pip(delta)` | Adjusts `current_effect.parameters['pip_scale']` (WebcamOverlay drop-in) |
 
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen

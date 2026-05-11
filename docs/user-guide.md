@@ -133,15 +133,15 @@ python -m unicornviz --help
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
 
-### Camera Overlay Controls (Numpad)
+### Camera / Webcam Controls (Numpad)
 
-These control the always-on system camera overlay, not the effect playlist.
+These controls only take effect while the **Webcam Overlay** drop-in effect is active.
 
 | Key         | Action                           |
 |-------------|----------------------------------|
-| `KP 7/8/9`  | Camera PiP to top row            |
-| `KP 4/5/6`  | Camera PiP to middle row         |
-| `KP 1/2/3`  | Camera PiP to bottom row         |
+| `KP 7/8/9`  | PiP to top row                   |
+| `KP 4/5/6`  | PiP to middle row                |
+| `KP 1/2/3`  | PiP to bottom row                |
 | `KP 0`      | Camera fullscreen                |
 | `KP .`      | Hide camera                      |
 | `KP -`      | Shrink PiP                       |
@@ -157,42 +157,6 @@ These control the always-on system camera overlay, not the effect playlist.
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
-
----
-
-## Camera Overlay
-
-Unicorn Viz has a built-in **system camera overlay** that renders your webcam as a PiP on top of every effect, below the HUD. It is independent of the playlist.
-
-### Enabling
-
-Uncomment and adjust the `[webcam]` section in `config.toml`:
-
-```toml
-[webcam]
-enabled      = true
-device       = 0              # /dev/video0
-width        = 1280
-height       = 720
-fps          = 30
-pip_position = "bottom_right"
-pip_scale    = 0.33
-```
-
-### Requirements
-
-`opencv-python-headless >= 4.9` (already in `requirements.txt`).
-
-### Camera not appearing?
-
-1. Confirm `enabled = true` in `[webcam]`.
-2. Check device index: `ls /dev/video*` on Linux. Try `device = 0`, `1`, `2` in turn.
-3. The overlay auto-retries every 3 s if the device is busy (e.g. Cheese is open). Close Cheese and it will reconnect.
-4. Add `log_frames = true` to `[webcam]` and run with `--log-level DEBUG` to see per-frame capture status.
-
-### WebcamOverlay effect
-
-There is also a standalone **Webcam Overlay** playlist *effect* (`drop-ins/webcam-01`) with an animated neon background. It appears in the normal playlist and can be selected like any other effect. The system camera overlay and the drop-in effect use independent camera workers.
 
 ---
 
@@ -460,13 +424,12 @@ SDL_VIDEODRIVER=x11 python -m unicornviz
 - The Raymarcher and Particle Storm are heavy; skip them via `[playlist] sequence`.
 - Reduce `Fractal Zoom` max_iter: `[effects.FractalZoom] max_iter = 80`.
 
-### Camera overlay not showing
+### Camera / Webcam not working
 
-1. Ensure `[webcam] enabled = true` is set (it defaults to `false`).
-2. List available video devices: `ls /dev/video*`
-3. Try setting `device = 0`, `1`, `2` in turn.
-4. Close any app holding the camera (Cheese, OBS) — the overlay retries automatically every 3 s.
-5. Enable frame logging: add `log_frames = true` under `[webcam]` and run with `--log-level DEBUG`.
+1. The Webcam Overlay is a **drop-in effect** — navigate to it in the playlist.
+2. Check device index in `[effects.WebcamOverlay] camera_device = 0`; try `1`, `2` if needed.
+3. Close any app holding the camera (Cheese, OBS) — the drop-in retries automatically every 3 s.
+4. Run with `--log-level DEBUG` to see V4L2 open/read details.
 
 ### Screenshot is blank / upside-down
 
