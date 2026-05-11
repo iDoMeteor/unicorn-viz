@@ -288,15 +288,15 @@ class HotkeyHandler:
         # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
         elif sym == sdl2.SDLK_KP_0:
             if a.set_camera_layout('0'):
-                o.flash_message('Webcam layout: fullscreen', 1.5)
+                o.flash_message('Camera: fullscreen', 1.5)
             else:
-                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+                o.flash_message('Camera: not available', 1.2)
 
         elif sym == sdl2.SDLK_KP_PERIOD:
             if a.set_camera_layout('.'):
-                o.flash_message('Webcam layout: hidden', 1.5)
+                o.flash_message('Camera: hidden', 1.5)
             else:
-                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+                o.flash_message('Camera: not available', 1.2)
 
         elif sym in (
             sdl2.SDLK_KP_1, sdl2.SDLK_KP_2, sdl2.SDLK_KP_3,
@@ -315,43 +315,43 @@ class HotkeyHandler:
                 '7': 'top-left', '8': 'top-center', '9': 'top-right',
             }
             if a.set_camera_layout(token):
-                o.flash_message(f"Webcam layout: {labels[token]}", 1.5)
+                o.flash_message(f"Camera: {labels[token]}", 1.5)
             else:
-                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+                o.flash_message('Camera: not available', 1.2)
 
-        # Webcam effect navigation / PiP sizing (KP operator row)
+        # Camera treatment cycling / PiP sizing (KP operator row)
         elif sym == sdl2.SDLK_KP_DIVIDE:
             name = a.goto_prev_webcam_effect()
             if name:
-                o.flash_message(f'Webcam prev: {name}', 1.5)
+                o.flash_message(f'Camera treatment: {name}', 1.5)
             else:
-                o.flash_message('No webcam effects available', 1.2)
+                o.flash_message('Camera: not available', 1.2)
 
         elif sym == sdl2.SDLK_KP_MULTIPLY:
             name = a.goto_next_webcam_effect()
             if name:
-                o.flash_message(f'Webcam next: {name}', 1.5)
+                o.flash_message(f'Camera treatment: {name}', 1.5)
             else:
-                o.flash_message('No webcam effects available', 1.2)
+                o.flash_message('Camera: not available', 1.2)
 
         elif sym == sdl2.SDLK_KP_MINUS:
             val = a.scale_pip(-0.05)
             if val > 0:
-                o.flash_message(f'Webcam PiP: {val:.0%}', 1.0)
+                o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
             else:
-                o.flash_message('No pip_scale on active effect', 1.0)
+                o.flash_message('Camera: not available', 1.0)
 
         elif sym == sdl2.SDLK_KP_PLUS:
             val = a.scale_pip(0.05)
             if val > 0:
-                o.flash_message(f'Webcam PiP: {val:.0%}', 1.0)
+                o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
             else:
-                o.flash_message('No pip_scale on active effect', 1.0)
+                o.flash_message('Camera: not available', 1.0)
 
         elif sym == sdl2.SDLK_KP_ENTER:
             active = a.toggle_webcam_auto_cycle()
             state = 'ON' if active else 'OFF'
-            o.flash_message(f'Webcam auto-cycle: {state}', 1.5)
+            o.flash_message(f'Camera treatment auto-cycle: {state}', 1.5)
 
     def _screenshot(self) -> None:
         import datetime

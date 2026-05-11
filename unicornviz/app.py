@@ -64,6 +64,11 @@ def _load_multihead_controller_class() -> type:
     return load_dropin_symbol('multi-head-01/multihead.py', 'MultiHeadController')
 
 
+def _load_webcam_system_class() -> type:
+    """Load WebcamSystem directly from the webcam-01 drop-in."""
+    return load_dropin_symbol('webcam-01/webcam_overlay.py', 'WebcamSystem')
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -81,11 +86,10 @@ class App:
         self._transition_dir: tuple[float, float] = (1.0, 0.0)
         self._transition_phase: float = 0.0
         self._previous_effect_name: str = '-'
-        self._webcam_effects: list = []
-        self._webcam_index: int = 0
         self._webcam_auto_cycle: bool = False
         self._webcam_cycle_timer: float = 0.0
         self._webcam_cycle_interval: float = 0.0
+        self._webcam_system = None
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._transition_duration: float = self.cfg.get(
@@ -289,6 +293,21 @@ class App:
         self._build_present_pipeline()
         self._build_blend_pipeline()
         self._build_invert_pipeline()
+        # System-level webcam overlay (always-on PiP above effects, below HUD).
+        try:
+            webcam_cls = _load_webcam_system_class()
+            cam_cfg = self.cfg.get('webcam', default={}) or {}
+            if not isinstance(cam_cfg, dict):
+                cam_cfg = {}
+            self._webcam_system = webcam_cls(self._ctx, self._width, self._height, cam_cfg)
+            self._webcam_system.start()
+            self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
+                self.cfg.get('demo', 'effect_duration', default=20)
+            )
+            log.info('WebcamSystem loaded from drop-in')
+        except Exception as exc:
+            log.warning('WebcamSystem not available: %s', exc)
+            self._webcam_system = None
 
     def _build_present_pipeline(self) -> None:
         """Build fullscreen pass that copies a texture to screen."""
@@ -748,13 +767,6 @@ void main() {
 
         playlist = Playlist(effects, self.cfg)
 
-        # Build webcam-tagged effects subset for KP navigation.
-        self._webcam_effects = [
-            cls for cls in effects
-            if 'webcam' in [t.lower() for t in getattr(cls, 'TAGS', [])]
-        ]
-        log.info('Webcam effects available: %s', [c.NAME for c in self._webcam_effects])
-
         overlays = Overlays(
             self._ctx,
             self._width,
@@ -839,18 +851,6 @@ void main() {
             if hasattr(self, "_midi_manager"):
                 pass   # MidiManager uses a callback thread; forward via action hooks
 
-            # Webcam auto-cycle (independent timer, independent of main playlist advance).
-            if self._webcam_auto_cycle and self._webcam_effects and self._next_effect is None:
-                self._webcam_cycle_timer += dt
-                if self._webcam_cycle_timer >= self._webcam_cycle_interval:
-                    self._webcam_cycle_timer = 0.0
-                    cls = self._webcam_effects[
-                        int(self._rng.integers(0, len(self._webcam_effects)))
-                    ]
-                    self._switch_effect(cls)
-                    if self._overlays is not None:
-                        self._overlays.flash_message(f'Webcam auto: {cls.NAME}', 1.5)
-
             # Auto-playlist advance
             if not self._paused and self._next_effect is None and self._auto_advance:
                 allow_advance = True
@@ -932,6 +932,9 @@ void main() {
 
             # Render
             self._render(dt)
+            if self._webcam_system is not None:
+                audio = self._audio or AudioData()
+                self._webcam_system.render(dt, audio.bass, audio.treble)
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             need_frame_for_recording = (
@@ -958,6 +961,9 @@ void main() {
             self._recorder.stop()
         audio_manager.stop()
         midi_manager.stop()
+        if self._webcam_system is not None:
+            self._webcam_system.destroy()
+            self._webcam_system = None
         if self._current_effect:
             self._current_effect.destroy()
         if self._next_effect:
@@ -1071,6 +1077,8 @@ void main() {
     def _on_resize(self, w: int, h: int) -> None:
         self._width = w
         self._height = h
+        if self._webcam_system is not None:
+            self._webcam_system.resize(w, h)
         self._update_render_target_size()
         self._release_readback_pbos()
         if self._recorder and self._recorder.is_recording:
@@ -1193,53 +1201,35 @@ void main() {
         return self._invert_colors
 
     def goto_next_webcam_effect(self) -> str | None:
-        """Advance to the next webcam-tagged effect and return its name."""
-        if not self._webcam_effects:
+        """Advance to next camera treatment. Returns treatment name or None."""
+        if self._webcam_system is None:
             return None
-        self._webcam_index = (self._webcam_index + 1) % len(self._webcam_effects)
-        cls = self._webcam_effects[self._webcam_index]
-        self._switch_effect(cls)
-        return cls.NAME
+        return self._webcam_system.next_treatment()
 
     def goto_prev_webcam_effect(self) -> str | None:
-        """Step back to the previous webcam-tagged effect and return its name."""
-        if not self._webcam_effects:
+        """Step back to previous camera treatment. Returns treatment name or None."""
+        if self._webcam_system is None:
             return None
-        self._webcam_index = (self._webcam_index - 1) % len(self._webcam_effects)
-        cls = self._webcam_effects[self._webcam_index]
-        self._switch_effect(cls)
-        return cls.NAME
+        return self._webcam_system.prev_treatment()
 
     def toggle_webcam_auto_cycle(self) -> bool:
-        """Toggle auto-cycling between webcam effects. Returns the new on/off state."""
-        self._webcam_auto_cycle = not self._webcam_auto_cycle
-        self._webcam_cycle_timer = 0.0
-        return self._webcam_auto_cycle
+        """Toggle auto-cycling camera treatments. Returns the new on/off state."""
+        if self._webcam_system is None:
+            return False
+        return self._webcam_system.toggle_auto_cycle()
 
     def scale_pip(self, delta: float) -> float:
-        """Adjust pip_scale on the active webcam effect by delta. Returns new value or 0."""
-        if self._current_effect is None:
+        """Adjust webcam PiP scale. Returns new value, or 0 if unavailable."""
+        if self._webcam_system is None:
             return 0.0
-        params = getattr(self._current_effect, 'parameters', {})
-        if 'pip_scale' not in params:
-            return 0.0
-        new_val = max(0.12, min(0.80, float(params['pip_scale']) + delta))
-        params['pip_scale'] = new_val
-        return new_val
+        return self._webcam_system.scale_pip(delta)
 
     def set_camera_layout(self, layout: str) -> bool:
-        """Set webcam layout on the active effect if it exposes set_camera_layout."""
-        if self._current_effect is None:
+        """Set webcam PiP position. Returns True when the system is available."""
+        if self._webcam_system is None:
             return False
-        setter = getattr(self._current_effect, 'set_camera_layout', None)
-        if setter is None or not callable(setter):
-            return False
-        try:
-            setter(layout)
-            return True
-        except Exception as exc:
-            log.warning('set_camera_layout %r failed: %s', layout, exc)
-            return False
+        self._webcam_system.set_layout(layout)
+        return True
 
     @property
     def paused(self) -> bool:

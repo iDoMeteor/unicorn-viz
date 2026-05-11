@@ -289,10 +289,10 @@ class Overlays:
         " T           Auto-advance on/off",
         " I           Invert colors toggle",
         " KP 1-9      Camera overlay position",
-        " KP 0 / KP . Camera fullscreen/hide",
-        " KP / *      Webcam effect prev/next",
+        " KP 0 / KP . Camera fullscreen / hide",
+        " KP / *      Camera treatment prev / next",
         " KP - +      Camera PiP size",
-        " KP Enter    Webcam effect auto-cycle",
+        " KP Enter    Camera treatment auto-cycle",
         " U           Unicorn Tears",
         " Shift+U     Show splash anytime",
     ]

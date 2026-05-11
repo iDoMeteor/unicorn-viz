@@ -34,26 +34,26 @@ internal_scale = 1
 flash_messages = false
 
 # ---------------------------------------------------------------------------
-# Webcam auto-cycle  — how long to show each webcam effect before random-
-# picking the next one when KP Enter is active.
-# Default (0) falls back to demo.effect_duration.
+# Webcam system overlay  (drop-ins/webcam-01)
+# Always-on camera PiP above every effect. Requires opencv-python-headless.
 # ---------------------------------------------------------------------------
 # [webcam]
-# cycle_interval = 30    # seconds; 0 = use demo.effect_duration
+# enabled        = true            # false disables camera entirely
+# device         = 0               # /dev/video index (Linux) or DirectShow (Windows)
+# width          = 1280
+# height         = 720
+# fps            = 30
+# pip_position   = "bottom_right"  # top_left | top_center | top_right |
+#                                   # left | center | right |
+#                                   # bottom_left | bottom_center | bottom_right |
+#                                   # fullscreen
+# pip_scale      = 0.33            # fraction of viewport width (0.12 – 0.80)
+# treatment      = "neon"          # raw | neon | glitch | vintage | thermal
+# cycle_interval = 0               # auto-cycle interval in s (0 = 30 s default)
 
 # ---------------------------------------------------------------------------
-# WebcamOverlay effect  (drop-ins/webcam-01)
-# Live camera feed with animated background. Selected like any other effect.
-# Requires: opencv-python-headless (already in requirements.txt)
+# Psychedelic effect  (unicornviz/effects/psychedelic.py)
+# Neon palette-sine field — split from the old webcam background shader.
 # ---------------------------------------------------------------------------
-# [effects.WebcamOverlay]
-# camera_device  = 0             # /dev/video index (Linux) or DirectShow (Windows)
-# camera_width   = 1280
-# camera_height  = 720
-# camera_fps     = 30
-# pip_position   = "bottom_right"    # top_left | top_center | top_right |
-#                                     # left | center | right |
-#                                     # bottom_left | bottom_center | bottom_right |
-#                                     # fullscreen
-# pip_scale      = 0.33          # fraction of viewport width  (0.12 – 0.80)
-# enabled        = true          # false disables camera worker
+# [effects.Psychedelic]
+# speed = 1.0
