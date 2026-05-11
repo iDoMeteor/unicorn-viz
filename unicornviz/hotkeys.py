@@ -131,26 +131,62 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_PLUS or sym == sdl2.SDLK_EQUALS:
             effect = a._current_effect  # noqa: SLF001
             if effect and "speed" in effect.parameters:
-                effect.parameters["speed"] = min(
-                    effect.parameters["speed"] * 1.25, 10.0
-                )
+                if mod & sdl2.KMOD_CTRL:
+                    effect.parameters["speed"] = 10.0
+                    o.flash_message("Speed: MAX", 1.5)
+                else:
+                    effect.parameters["speed"] = min(
+                        effect.parameters["speed"] * 1.25, 10.0
+                    )
+                    o.flash_message(f"Speed: {effect.parameters['speed']:.2f}x", 1.0)
 
         elif sym == sdl2.SDLK_MINUS:
             effect = a._current_effect  # noqa: SLF001
             if effect and "speed" in effect.parameters:
-                effect.parameters["speed"] = max(
-                    effect.parameters["speed"] * 0.8, 0.05
-                )
+                if mod & sdl2.KMOD_CTRL:
+                    effect.parameters["speed"] = 0.05
+                    o.flash_message("Speed: MIN", 1.5)
+                else:
+                    effect.parameters["speed"] = max(
+                        effect.parameters["speed"] * 0.8, 0.05
+                    )
+                    o.flash_message(f"Speed: {effect.parameters['speed']:.2f}x", 1.0)
 
         elif sym == sdl2.SDLK_g:
             am = self._audio
-            if mod & sdl2.KMOD_CTRL:
-                val = am.reset_reactivity()
-            elif mod & sdl2.KMOD_SHIFT:
-                val = am.set_reactivity(round(am.get_reactivity() - 0.1, 2))
+            if mod & sdl2.KMOD_SHIFT:
+                # G — reset speed to initial default
+                effect = a._current_effect  # noqa: SLF001
+                if effect and "speed" in effect.parameters:
+                    default = effect._initial_parameters.get("speed", 1.0)  # noqa: SLF001
+                    effect.parameters["speed"] = default
+                    o.flash_message(f"Speed reset: {default:.2f}x", 1.5)
             else:
+                # g — reset reactivity to config default
+                val = am.reset_reactivity()
+                o.flash_message(f"Reactivity reset: {val:.1f}x", 1.5)
+
+        elif sym == sdl2.SDLK_LEFTBRACKET:
+            am = self._audio
+            if mod & sdl2.KMOD_SHIFT:
+                # { — reactivity min
+                val = am.set_reactivity(0.1)
+                o.flash_message("Reactivity: MIN (0.1x)", 1.5)
+            else:
+                # [ — reactivity down
+                val = am.set_reactivity(round(am.get_reactivity() - 0.1, 2))
+                o.flash_message(f"Reactivity: {val:.1f}x", 1.0)
+
+        elif sym == sdl2.SDLK_RIGHTBRACKET:
+            am = self._audio
+            if mod & sdl2.KMOD_SHIFT:
+                # } — reactivity max
+                val = am.set_reactivity(5.0)
+                o.flash_message("Reactivity: MAX (5.0x)", 1.5)
+            else:
+                # ] — reactivity up
                 val = am.set_reactivity(round(am.get_reactivity() + 0.1, 2))
-            o.flash_message(f"Audio reactivity: {val:.1f}x", 1.5)
+                o.flash_message(f"Reactivity: {val:.1f}x", 1.0)
 
         elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
             if not self._shortcut_effects:

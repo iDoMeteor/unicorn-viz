@@ -121,6 +121,8 @@ class BaseEffect(ABC):
         # Per-effect tweakable parameters (exposed to MIDI mapping)
         self.parameters: dict[str, float] = {}
         self._init()
+        # Snapshot defaults so G can reset speed (and others) to initial values.
+        self._initial_parameters: dict[str, float] = dict(self.parameters)
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
