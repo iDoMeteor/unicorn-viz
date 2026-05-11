@@ -80,6 +80,7 @@ class App:
         self._transition_kind: str = "crossfade"
         self._transition_dir: tuple[float, float] = (1.0, 0.0)
         self._transition_phase: float = 0.0
+        self._previous_effect_name: str = '-'
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._transition_duration: float = self.cfg.get(
@@ -602,6 +603,8 @@ void main() {
         """Begin transition to a new effect."""
         # Invert does not carry through transitions.
         self._invert_colors = False
+        if self._current_effect is not None:
+            self._previous_effect_name = self._current_effect.NAME
         if self._next_effect is not None:
             self._next_effect.destroy()
         self._next_effect = self._instantiate(cls)
@@ -873,8 +876,9 @@ void main() {
             if self._recorder is not None and self._recorder.is_recording:
                 rec_state = 'ON'
             overlays.set_hud_state({
-                'title': 'Unicorn Viz HUD',
+                'title': 'Unicorn Viz Legacy HUD',
                 'effect': overlays._name_text,
+                'previous_effect': self._previous_effect_name,
                 'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
                 'transition': transition_name,
                 'transition_t': transition_pct,
@@ -1147,6 +1151,8 @@ void main() {
         """Launch ANSIViewer with an explicit art directory."""
         # Invert does not carry through transitions.
         self._invert_colors = False
+        if self._current_effect is not None:
+            self._previous_effect_name = self._current_effect.NAME
         if self._next_effect is not None:
             self._next_effect.destroy()
         cfg_override = {"ansi_dir": ansi_dir}

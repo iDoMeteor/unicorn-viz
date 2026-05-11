@@ -5,6 +5,7 @@ audio device selector, MIDI device selector, and generic flash messages.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -280,7 +281,7 @@ class Overlays:
         " E           EQ / spectrum",
         " A           Audio source",
         " M           MIDI device",
-        " TAB         Unicorn Viz HUD",
+        " TAB         Legacy HUD mode",
         " S           Screenshot",
         " V           Toggle recording",
         " H           This help",
@@ -322,8 +323,9 @@ class Overlays:
         self._flash_timer: float = 0.0
         self._name_text: str = ""
         self._hud_state: dict[str, str] = {
-            'title': 'Unicorn Viz HUD',
+            'title': 'Unicorn Viz Legacy HUD',
             'effect': '-',
+            'previous_effect': '-',
             'next_effect': '-',
             'transition': '-',
             'transition_t': '0%',
@@ -350,6 +352,7 @@ class Overlays:
         self._shift_shortcuts: list[str] = []
         self._ctrl_shortcuts: list[str] = []
         self._unmapped_effects: list[str] = []
+        self._hud_rect: tuple[float, float, float, float] | None = None
 
         self._font_tex = _build_font_texture(ctx)
         self._prog = self._build_program()
@@ -529,46 +532,64 @@ void main() {
         minutes, seconds = divmod(elapsed, 60)
         hours, minutes = divmod(minutes, 60)
         timer_text = f'{hours:02d}:{minutes:02d}:{seconds:02d}' if hours else f'{minutes:02d}:{seconds:02d}'
+
+        if self._hud_rect is not None:
+            x, y, w, _h = self._hud_rect
+            dot_x = x + w - 210.0
+            dot_y = y + 10.0
+            time_x = x + w - 178.0
+            time_y = y + 18.0
+        else:
+            dot_x = self._width - 84.0
+            dot_y = 0.0
+            time_x = self._width - 210.0
+            time_y = 24.0
+
         self._draw_text(
             '.',
-            self._width - 84,
-            0,
+            dot_x,
+            dot_y,
             scale=10.0,
             color=(1.0, 0.12, 0.12, 0.98),
         )
         self._draw_text(
             timer_text,
-            self._width - 210,
-            24,
+            time_x,
+            time_y,
             scale=2.8,
-            color=(1.0, 0.45, 0.45, 0.92),
+            color=(1.0, 0.16, 0.16, 0.95),
         )
 
     def _render_hud(self) -> None:
         """Render modern game-style status HUD panel."""
-        panel_w = min(940.0, self._width * 0.82)
+        panel_w = min(990.0, self._width * 0.86)
         panel_h = min(410.0, self._height * 0.72)
-        x = 24.0
-        y = 24.0
+        x = (self._width - panel_w) * 0.5
+        y = (self._height - panel_h) * 0.5
+        self._hud_rect = (x, y, panel_w, panel_h)
 
         # Layered glass panels
         self._draw_rect(x - 2.0, y - 2.0, panel_w + 4.0, panel_h + 4.0, (0.08, 0.95, 1.0, 0.26))
-        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.84))
-        self._draw_rect(x, y, panel_w, 54.0, (0.06, 0.12, 0.22, 0.92))
+        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.60))
+        self._draw_rect(x, y, panel_w, 78.0, (0.06, 0.12, 0.22, 0.72))
 
-        title = self._hud_state.get('title', 'Unicorn Viz HUD')
-        self._draw_text(title, x + 18.0, y + 10.0, scale=3.6, color=(0.62, 1.0, 1.0, 0.96))
-        self._draw_text('STATUS // LIVE', x + panel_w - 240.0, y + 14.0, scale=2.1, color=(0.72, 0.92, 1.0, 0.86))
+        title = self._hud_state.get('title', 'Unicorn Viz Legacy HUD')
+        tx = x + (panel_w - len(title) * 8.0 * 2.8) * 0.5
+        self._draw_text(title, tx, y + 8.0, scale=2.8, color=(0.62, 1.0, 1.0, 0.96))
+        now = datetime.datetime.now()
+        dt_line = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}"
+        dx = x + (panel_w - len(dt_line) * 8.0 * 2.0) * 0.5
+        self._draw_text(dt_line, dx, y + 38.0, scale=2.0, color=(0.94, 0.98, 1.0, 0.90))
 
         # Primary strip
-        self._draw_rect(x + 14.0, y + 68.0, panel_w - 28.0, 70.0, (0.08, 0.11, 0.18, 0.80))
-        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 78.0, scale=2.8, color=(0.92, 1.0, 1.0, 0.95))
-        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 106.0, scale=2.2, color=(0.68, 0.94, 1.0, 0.92))
+        self._draw_rect(x + 14.0, y + 90.0, panel_w - 28.0, 70.0, (0.08, 0.11, 0.18, 0.62))
+        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 100.0, scale=2.8, color=(0.92, 1.0, 1.0, 0.95))
+        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 128.0, scale=2.2, color=(0.68, 0.94, 1.0, 0.92))
 
         # Core stats columns
         left_x = x + 22.0
-        right_x = x + panel_w * 0.53
-        row0 = y + 152.0
+        right_x = x + panel_w * 0.51
+        row0 = y + 172.0
         lh = 24.0
 
         left_lines = [
@@ -586,16 +607,17 @@ void main() {
             f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
             f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
             f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
+            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
             f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
             f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
             f"INVERT      {self._hud_state.get('invert', 'OFF')}",
-            f"B/M/T       {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
+            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
         ]
 
         for i, ln in enumerate(left_lines):
-            self._draw_text(ln, left_x, row0 + i * lh, scale=2.0, color=(0.82, 0.94, 1.0, 0.95))
+            self._draw_text(ln, left_x, row0 + i * lh, scale=1.9, color=(0.82, 0.94, 1.0, 0.95))
         for i, ln in enumerate(right_lines):
-            self._draw_text(ln, right_x, row0 + i * lh, scale=2.0, color=(0.84, 1.0, 0.88, 0.95))
+            self._draw_text(ln, right_x, row0 + i * lh, scale=1.9, color=(0.84, 1.0, 0.88, 0.95))
 
         # Bottom accent
         self._draw_rect(x + 14.0, y + panel_h - 34.0, panel_w - 28.0, 12.0, (0.11, 0.95, 1.0, 0.45))

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Unicorn Viz
+Comment=Audio-reactive demoscene visualizer
+Exec=bash -lc 'cd /home/j/Repos/unicorn-viz && ./tools/launchers/linux/unicorn-viz.sh'
+Path=/home/j/Repos/unicorn-viz
+Icon=/home/j/Repos/unicorn-viz/assets/icons/unicorn-viz.png
+Terminal=false
+Categories=AudioVideo;Graphics;
+StartupNotify=true
