@@ -280,7 +280,7 @@ class Overlays:
         " E           EQ / spectrum",
         " A           Audio source",
         " M           MIDI device",
-        " TAB         Name overlay",
+        " TAB         Unicorn Viz HUD",
         " S           Screenshot",
         " V           Toggle recording",
         " H           This help",
@@ -319,6 +319,31 @@ class Overlays:
         self._flash_text: str = ""
         self._flash_timer: float = 0.0
         self._name_text: str = ""
+        self._hud_state: dict[str, str] = {
+            'title': 'Unicorn Viz HUD',
+            'effect': '-',
+            'next_effect': '-',
+            'transition': '-',
+            'transition_t': '0%',
+            'fps': '0.0',
+            'frame_ms': '0.0',
+            'resolution': '-',
+            'render_scale': '1.00',
+            'playlist': '-',
+            'paused': 'NO',
+            'fullscreen': 'NO',
+            'auto_advance': 'ON',
+            'reactivity': '1.0x',
+            'speed': '-',
+            'audio_source': '-',
+            'recording': 'OFF',
+            'bass': '0.00',
+            'mid': '0.00',
+            'treble': '0.00',
+            'display_mode': 'single',
+            'display_index': '0',
+            'invert': 'OFF',
+        }
         self._num_shortcuts: list[str] = []
         self._shift_shortcuts: list[str] = []
         self._ctrl_shortcuts: list[str] = []
@@ -517,6 +542,62 @@ void main() {
             color=(1.0, 0.45, 0.45, 0.92),
         )
 
+    def _render_hud(self) -> None:
+        """Render modern game-style status HUD panel."""
+        panel_w = min(940.0, self._width * 0.82)
+        panel_h = min(410.0, self._height * 0.72)
+        x = 24.0
+        y = 24.0
+
+        # Layered glass panels
+        self._draw_rect(x - 2.0, y - 2.0, panel_w + 4.0, panel_h + 4.0, (0.08, 0.95, 1.0, 0.26))
+        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.84))
+        self._draw_rect(x, y, panel_w, 54.0, (0.06, 0.12, 0.22, 0.92))
+
+        title = self._hud_state.get('title', 'Unicorn Viz HUD')
+        self._draw_text(title, x + 18.0, y + 10.0, scale=3.6, color=(0.62, 1.0, 1.0, 0.96))
+        self._draw_text('STATUS // LIVE', x + panel_w - 240.0, y + 14.0, scale=2.1, color=(0.72, 0.92, 1.0, 0.86))
+
+        # Primary strip
+        self._draw_rect(x + 14.0, y + 68.0, panel_w - 28.0, 70.0, (0.08, 0.11, 0.18, 0.80))
+        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 78.0, scale=2.8, color=(0.92, 1.0, 1.0, 0.95))
+        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 106.0, scale=2.2, color=(0.68, 0.94, 1.0, 0.92))
+
+        # Core stats columns
+        left_x = x + 22.0
+        right_x = x + panel_w * 0.53
+        row0 = y + 152.0
+        lh = 24.0
+
+        left_lines = [
+            f"FPS         {self._hud_state.get('fps', '0.0')}",
+            f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
+            f"RES         {self._hud_state.get('resolution', '-')}",
+            f"SCALE       {self._hud_state.get('render_scale', '1.00')}",
+            f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
+            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0x')}",
+            f"SPEED       {self._hud_state.get('speed', '-')}",
+            f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
+        ]
+        right_lines = [
+            f"PAUSED      {self._hud_state.get('paused', 'NO')}",
+            f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
+            f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
+            f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
+            f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
+            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
+            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
+            f"B/M/T       {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
+        ]
+
+        for i, ln in enumerate(left_lines):
+            self._draw_text(ln, left_x, row0 + i * lh, scale=2.0, color=(0.82, 0.94, 1.0, 0.95))
+        for i, ln in enumerate(right_lines):
+            self._draw_text(ln, right_x, row0 + i * lh, scale=2.0, color=(0.84, 1.0, 0.88, 0.95))
+
+        # Bottom accent
+        self._draw_rect(x + 14.0, y + panel_h - 34.0, panel_w - 28.0, 12.0, (0.11, 0.95, 1.0, 0.45))
+
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         if self._show_help:
@@ -536,12 +617,7 @@ void main() {
             )
 
         if self._show_name and self._name_text:
-            self._draw_text(
-                self._name_text,
-                20, 20,
-                scale=6.0,
-                color=(0.0, 1.0, 1.0, 0.85),
-            )
+            self._render_hud()
 
         if include_recording_indicator:
             self._render_recording_indicator()
@@ -658,6 +734,10 @@ void main() {
 
     def toggle_name_overlay(self) -> None:
         self._show_name = not self._show_name
+
+    def set_hud_state(self, state: dict[str, str]) -> None:
+        """Update the live HUD payload rendered by TAB overlay."""
+        self._hud_state.update(state)
 
     def toggle_help(self) -> None:
         self._show_help = not self._show_help

@@ -861,6 +861,43 @@ void main() {
                 else:
                     overlays._name_text = self._current_effect.NAME
 
+            # Feed modern TAB HUD with current runtime status.
+            fps_now = (1.0 / dt) if dt > 0.0 else 0.0
+            transition_name = self._transition_kind if self._next_effect is not None else 'none'
+            transition_pct = f"{int(max(0.0, min(1.0, self._transition_t)) * 100)}%"
+            audio_src = audio_manager.get_source_label() if audio_manager is not None else 'n/a'
+            effect_speed = '-'
+            if self._current_effect is not None and 'speed' in self._current_effect.parameters:
+                effect_speed = f"{self._current_effect.parameters['speed']:.2f}x"
+            rec_state = 'OFF'
+            if self._recorder is not None and self._recorder.is_recording:
+                rec_state = 'ON'
+            overlays.set_hud_state({
+                'title': 'Unicorn Viz HUD',
+                'effect': overlays._name_text,
+                'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
+                'transition': transition_name,
+                'transition_t': transition_pct,
+                'fps': f"{fps_now:.1f}",
+                'frame_ms': f"{(dt * 1000.0):.2f}",
+                'resolution': f"{self._width}x{self._height}",
+                'render_scale': f"{self._render_scale:.2f}",
+                'playlist': f"{p.mode.upper()} {p.index + 1}/{len(p.effects)}",
+                'paused': 'YES' if self._paused else 'NO',
+                'fullscreen': 'YES' if self._fullscreen else 'NO',
+                'auto_advance': 'ON' if self._auto_advance else 'OFF',
+                'reactivity': f"{audio_manager.get_reactivity():.1f}x" if audio_manager is not None else 'n/a',
+                'speed': effect_speed,
+                'audio_source': audio_src,
+                'recording': rec_state,
+                'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
+                'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',
+                'treble': f"{self._audio.treble:.2f}" if self._audio is not None else '0.00',
+                'display_mode': self._display_mode,
+                'display_index': str(self._display_index),
+                'invert': 'ON' if self._invert_colors else 'OFF',
+            })
+
             # Render
             self._render(dt)
             self._sync_recording_overlay()

@@ -61,6 +61,10 @@ class AudioManager:
         self._reactivity = float(self._reactivity_default)
         return float(self._reactivity)
 
+    def get_source_label(self) -> str:
+        """Return a user-facing label for the active audio input source."""
+        return self._capture.current_source_label()
+
     def get_audio_data(self) -> AudioData:
         """Called every frame from the main loop."""
         self._capture.maybe_fallback()

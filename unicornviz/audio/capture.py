@@ -377,3 +377,21 @@ class AudioCapture:
     @property
     def block_size(self) -> int:
         return _BLOCK_SIZE
+
+    def current_source_label(self) -> str:
+        """Return a human-readable label for the currently active audio source."""
+        if not _SD_AVAILABLE:
+            return 'disabled'
+        if not self._active:
+            return 'inactive'
+        device = None
+        if self._candidate_devices and 0 <= self._candidate_index < len(self._candidate_devices):
+            device = self._candidate_devices[self._candidate_index]
+        if device is None:
+            return 'default input'
+        try:
+            info = sd.query_devices(device)
+            name = str(info.get('name', f'device {device}')).strip()
+            return name or f'device {device}'
+        except Exception:
+            return f'device {device}'
