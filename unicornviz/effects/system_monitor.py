@@ -343,18 +343,26 @@ class SystemMonitor(BaseEffect):
         self._bar_prog["uTime"].value = self.time
         vao.render(moderngl.TRIANGLE_STRIP)
 
+    def _set_bg_uniform(self, name: str, value: float | int) -> None:
+        """Set background shader uniform only if it exists in the compiled program."""
+        try:
+            self._bg_prog[name].value = value
+        except KeyError:
+            # Some uniforms may be optimized out by GLSL if not referenced.
+            pass
+
     def render(self) -> None:
         t = self.time
 
         # ---- background ----
-        self._bg_prog["iTime"].value = t
-        self._bg_prog["iBass"].value = self._bass
-        self._bg_prog["iMid"].value = self._mid
-        self._bg_prog["iTreble"].value = self._treble
-        self._bg_prog["iCpuLoad"].value = self._smooth_cpu
-        self._bg_prog["iRamLoad"].value = self._smooth_ram
-        self._bg_prog["iFps"].value = float(self._fps)
-        self._bg_prog["iMode"].value = self._mode
+        self._set_bg_uniform("iTime", t)
+        self._set_bg_uniform("iBass", self._bass)
+        self._set_bg_uniform("iMid", self._mid)
+        self._set_bg_uniform("iTreble", self._treble)
+        self._set_bg_uniform("iCpuLoad", self._smooth_cpu)
+        self._set_bg_uniform("iRamLoad", self._smooth_ram)
+        self._set_bg_uniform("iFps", float(self._fps))
+        self._set_bg_uniform("iMode", self._mode)
         self.ctx.scissor = None
         self._bg_vao.render(moderngl.TRIANGLE_STRIP)
 
