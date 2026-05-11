@@ -19,3 +19,9 @@
 [submodule "drop-ins/webcam-01"]
 	path = drop-ins/webcam-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-webcam-01.git
+[submodule "drop-ins/disco-ball-01"]
+	path = drop-ins/disco-ball-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-disco-ball-01.git
+[submodule "drop-ins/tron-grid-01"]
+	path = drop-ins/tron-grid-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-tron-grid-01.git

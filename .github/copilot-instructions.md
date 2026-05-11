@@ -263,6 +263,20 @@ Do **not** use: `pygame`, `tkinter`, `wx`, `pyglet`, `arcade`, `OpenGL.GL`
 
 ---
 
+## config.toml Editing Policy
+
+The owner makes their own edits to `config.toml` at any time.
+
+- **Never modify or overwrite the user's existing `config.toml` settings without
+  explicitly asking first.**
+- Adding new commented-out sections (e.g., to document a new drop-in's options)
+  **is permitted without asking**, as long as the addition is clearly commented
+  and does not change any existing value.
+- Removing, reordering, or changing any uncommented value always requires
+  explicit user confirmation.
+
+---
+
 ## Drop-In Source Policy
 
 - Every drop-in under `drop-ins/` must live in its own dedicated **private**

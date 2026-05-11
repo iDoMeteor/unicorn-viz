@@ -28,7 +28,23 @@ directory = "recordings"
 capture_audio = true
 
 [render]
-internal_scale = 0.85
+internal_scale = 1
 
 [overlays]
 flash_messages = false
+
+# ---------------------------------------------------------------------------
+# Webcam Overlay drop-in  (drop-ins/webcam-01)
+# Uncomment and adjust to enable camera input.
+# ---------------------------------------------------------------------------
+# [effects.WebcamOverlay]
+# camera_device    = 0          # /dev/video index (Linux) or DirectShow index (Windows)
+# camera_width     = 1280
+# camera_height    = 720
+# camera_fps       = 30
+# pip_position     = "bottom_right"   # top_left | top_center | top_right |
+#                                     # left | center | right |
+#                                     # bottom_left | bottom_center | bottom_right |
+#                                     # fullscreen
+# pip_scale        = 0.33             # fraction of viewport width (0.12–0.8)
+# webcam_asset_dirs = ""              # extra comma-separated dirs for future overlays
