@@ -28,7 +28,7 @@
 │  SDL2 window ─── moderngl context ─── fixed-timestep main loop  │
 │       │                                        │                 │
 │  HotkeyHandler ◄── SDL events            Overlays (HUD)         │
-│  MidiManager   ◄── rtmidi thread                                 │
+│  MidiManager   ◄── rtmidi thread         CameraOverlay (PiP)    │
 │       │                                        │                 │
 │  Playlist ──► effect_class ──► BaseEffect ──► render()           │
 │                                    │                             │
@@ -43,8 +43,9 @@ The main loop runs at **60 fps** with a fixed-timestep accumulator capped at
 2. `AudioManager.get_audio_data()` returns the latest `AudioData` snapshot.
 3. `effect.update(dt, audio)` advances effect state.
 4. `effect.render()` draws to the screen (or to an FBO during transitions).
-5. `Overlays.render(dt)` draws the HUD on top.
-6. `SDL_GL_SwapWindow` flips the buffer.
+5. `CameraOverlay.render()` draws the webcam PiP above the effect.
+6. `Overlays.render(dt)` draws the HUD on top.
+7. `SDL_GL_SwapWindow` flips the buffer.
 
 ---
 
@@ -54,23 +55,41 @@ The main loop runs at **60 fps** with a fixed-timestep accumulator capped at
 unicorn-viz/
 ├── assets/
 │   ├── ansi/           Hand-crafted .ANS demo files
-│   │   └── acid/       Downloaded ACiD Productions art (18 files)
-│   └── fonts/          Optional font8x16.bin (CP437 8×16 VGA font)
+│   │   └── acid/       Downloaded ACiD Productions art
+│   ├── fonts/          Optional font8x16.bin (CP437 8×16 VGA font)
+│   └── icons/          unicorn-viz.png / .ico application icon
 ├── docs/
 │   ├── user-guide.md
-│   └── developer-guide.md
+│   ├── developer-guide.md
+│   ├── configuration.md
+│   └── effect-settings.md
+├── drop-ins/           Each folder is a git submodule
+│   ├── alien-invasion-01/
+│   ├── cyber-war-01/
+│   ├── disco-ball-01/
+│   ├── hacker-terminal-01/
+│   ├── multi-head-01/      (subsystem: display controller)
+│   ├── textures-01/
+│   ├── tron-grid-01/
+│   ├── unicorn-tears-01/
+│   └── webcam-01/
 ├── tools/
 │   ├── generate_ansi_art.py   Generates the hand-crafted .ANS files
-│   └── fetch_acid_ans.py      Downloads real ACiD art from 16colo.rs
+│   ├── fetch_acid_ans.py      Downloads real ACiD art from 16colo.rs
+│   └── launchers/             Linux .sh/.desktop, Windows .bat/.ps1
 ├── unicornviz/
-│   ├── __init__.py            Package docstring + layout overview
-│   ├── __main__.py            CLI entry point
+│   ├── __init__.py
+│   ├── __main__.py
 │   ├── app.py                 Main application class
+│   ├── camera_overlay.py      System-level webcam PiP overlay
 │   ├── config.py              TOML config loader
+│   ├── dropins.py             Drop-in loader utility
 │   ├── hotkeys.py             Keyboard + MIDI → action dispatcher
 │   ├── midi.py                MidiManager (python-rtmidi wrapper)
 │   ├── overlays.py            On-screen HUD rendering
 │   ├── playlist.py            Effect playlist management
+│   ├── recording.py           ffmpeg recording pipeline
+│   ├── splash.py              Animated splash screen
 │   ├── audio/
 │   │   ├── analyzer.py        FFT + beat detector
 │   │   ├── capture.py         sounddevice PipeWire/ALSA capture
@@ -82,27 +101,30 @@ unicorn-viz/
 │   └── effects/
 │       ├── base.py            BaseEffect ABC + AudioData
 │       ├── registry.py        Auto-discovery of effect subclasses
-│       ├── ansi_viewer.py
-│       ├── audio_spectrum.py
-│       ├── copper_bars.py
-│       ├── curtains.py
-│       ├── cube_3d.py
-│       ├── dali.py
-│       ├── escher.py
-│       ├── fire.py
-│       ├── fractal_zoom.py
-│       ├── metaballs.py
-│       ├── particle_storm.py
-│       ├── plasma.py
-│       ├── raymarcher.py      ← 2.0: crystalline SDF scene + sparkles
-│       ├── sine_scroller.py
-│       ├── starfield.py
-│       ├── tunnel.py
-│       ├── van_gogh.py
-│       ├── vector.py
-│       ├── water.py
-│       ├── wavey_gravy.py
-│       └── unicorn_tears.py   ← drop-in, keyed U
+│       ├── alien_biome.py     → Wavey Gravy
+│       ├── ansi_viewer.py     → ANSI Viewer
+│       ├── audio_spectrum.py  → Audio Spectrum
+│       ├── copper_bars.py     → Copper Bars
+│       ├── cosmos.py          → Cosmos
+│       ├── crystal_pyramids.py→ Crystal Pyramids
+│       ├── cube_3d.py         → 3D Cube
+│       ├── dali.py            → Dali
+│       ├── escher.py          → Escher
+│       ├── fire.py            → Curtains
+│       ├── fire_lifelike.py   → Fire
+│       ├── fractal_zoom.py    → Fractal Zoom
+│       ├── metaballs.py       → Metaballs
+│       ├── particle_storm.py  → Particle Storm
+│       ├── plasma.py          → Plasma
+│       ├── raymarcher.py      → Raymarcher
+│       ├── sine_scroller.py   → Sine Scroller 2.0
+│       ├── starfield.py       → Starfield
+│       ├── system_monitor.py  → System Monitor
+│       ├── tunnel.py          → Tunnel
+│       ├── van_gogh.py        → Van Gogh
+│       ├── vector.py          → Vector
+│       ├── water.py           → Water
+│       └── (+ drop-in effects loaded at runtime via dropins.py)
 ├── config.toml
 ├── requirements.txt
 └── run.sh
@@ -122,18 +144,22 @@ unicorn-viz/
 |--------|---------|
 | `run()` | Initialises subsystems, enters main loop, tears down on exit |
 | `_init_sdl()` | Creates SDL2 window (Wayland-first, X11 fallback) |
-| `_init_moderngl()` | Creates OpenGL 3.3 core context via `moderngl.create_context()` |
+| `_init_moderngl()` | Creates OpenGL 3.3 core context; initialises `CameraOverlay` |
 | `_switch_effect(cls)` | Instantiates a new effect and starts a transition |
 | `_render()` | Routes rendering through the transition FBO system |
 | `goto_effect(cls)` | Public — called by HotkeyHandler and tests |
 | `toggle_fullscreen()` | Calls `SDL_SetWindowFullscreen` |
 | `toggle_pause()` | Freezes `dt` accumulation |
-| `_on_resize(w, h)` | Updates viewport, propagates to active effects and overlays |
+| `_on_resize(w, h)` | Updates viewport; propagates to active effects, overlays, and `CameraOverlay` |
+| `set_camera_layout(token)` | Delegates to `CameraOverlay.set_layout()` |
+| `scale_pip(delta)` | Delegates to `CameraOverlay.scale_pip()` |
 
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen
-over `transition_duration` seconds.  Supported modes: `cut`, `crossfade`,
-`scanwipe`.
+over `transition_duration` seconds.  Supported modes: `crossfade`,
+`smoothfade`, `scanwipe_x`, `scanwipe_y`, `dissolve`, `zoomblend`,
+`radialwipe`, `lumawipe`, `stripewipe`, `anglesweep`, `glitchsoft`,
+`prismsplit`, `shuffle` (random pick each transition).
 
 ### Effects System
 
@@ -461,18 +487,27 @@ Conventions for a drop-in:
 - Add it as a submodule in the main repository.
 - Set `NAME`, `AUTHOR`, `TAGS` on the class.
 - Ensure the main app can discover/load it through `unicornviz/dropins.py`.
+- Any hotkeys the drop-in introduces **must** be added to `HELP_TEXT` in
+  `unicornviz/overlays.py` — that is the single source of truth.
 
-Current drop-ins:
+### Visual effect drop-ins
 
-| Name            | Key   | Notes                          |
-|-----------------|-------|--------------------------------|
-| Unicorn Tears   | `U`   | Prismatic teardrops + starfield |
+| Directory          | Class             | Effect Name      | Key |
+|--------------------|-------------------|------------------|-----|
+| `alien-invasion-01`| `AlienInvasion`   | Alien Invasion   | —   |
+| `cyber-war-01`     | `CyberWar`        | Cyber War        | —   |
+| `disco-ball-01`    | `DiscoBall`       | Disco Ball       | —   |
+| `hacker-terminal-01`| `HackerTerminal` | Hacker Terminal  | —   |
+| `textures-01`      | `TextureShowcase` | Texture Showcase | —   |
+| `tron-grid-01`     | `TronGrid`        | Tron Grid        | —   |
+| `unicorn-tears-01` | `UnicornTears`    | Unicorn Tears    | `U` |
+| `webcam-01`        | `WebcamOverlay`   | Webcam Overlay   | —   |
 
-Current subsystem drop-ins:
+### Subsystem drop-ins
 
-| Name         | Purpose                |
-|--------------|------------------------|
-| multi-head-01| Display/multi-monitor controller |
+| Directory     | Class                 | Purpose                              |
+|---------------|-----------------------|--------------------------------------|
+| `multi-head-01`| `MultiHeadController`| Multi-monitor display topology & mirroring |
 
 ## Packaging Evaluation
 
@@ -494,4 +529,6 @@ continue to mature.
 - [ ] `requirements.txt` pins are current and minimal
 - [ ] ANSI files present in `assets/ansi/acid/` (run `tools/fetch_acid_ans.py` if missing)
 - [ ] `run.sh` is executable (`chmod +x run.sh`)
+- [ ] All drop-in submodules committed and pushed in their own repos before main-repo pointer update
+- [ ] Every new hotkey is listed in `HELP_TEXT` in `unicornviz/overlays.py`
 - [ ] Screenshots taken at 1920×1080 for README

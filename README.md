@@ -120,18 +120,26 @@ py -3.11 -m venv .venv
 
 | Key      | Action                    |
 |----------|---------------------------|
-| `N` / Right arrow | Next effect |
-| `P` / Left arrow  | Previous effect |
-| `1-9`, `!@#$%^&*(` | Jump to effect |
-| `,` | ANSI art |
-| `.` | ACiD art |
-| `Space` | Pause/resume |
+| `N` / `→` | Next effect |
+| `P` / `←` | Previous effect |
+| `1`–`9`, `Shift+1`–`0`, `Ctrl+1`–`0` | Jump to effect |
+| `,` / `.` | ANSI own / ACiD art |
+| `Space` | Pause / resume |
 | `F` | Fullscreen |
 | `T` | Toggle auto-advance |
-| `U` | Show splash anytime |
-| `H` | Help overlay |
+| `I` | Invert colours |
+| `V` | Toggle recording |
 | `S` | Screenshot |
+| `U` | Unicorn Tears |
+| `Shift+U` | Replay splash |
+| `Tab` | Legacy HUD panel |
+| `H` | Help overlay |
 | `ESC` | Quit |
+| `KP 1`–`9` | Camera PiP position |
+| `KP 0` / `KP .` | Camera fullscreen / hide |
+| `KP -` / `+` | Camera PiP size |
+| `KP /` / `*` | Webcam effect prev / next |
+| `KP Enter` | Webcam effect auto-cycle |
 
 See [User Guide](docs/user-guide.md#keyboard-shortcuts) for full hotkey list.
 
@@ -187,6 +195,7 @@ Python packages:
 - `pysdl2`, `pysdl2-dll` — SDL2 bindings
 - `numpy`, `scipy` — Numerics & signal processing
 - `sounddevice >= 0.4` — Audio I/O
+- `opencv-python-headless >= 4.9` — Camera overlay
 - `python-rtmidi >= 1.5` (optional) — MIDI control
 - `Pillow` — Screenshots
 
@@ -259,22 +268,52 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 
 ## Effects Catalog
 
-**Geometric:**
-Copper Bars, Raymarcher, 3D Vector Field, 3D Cube
+**Built-in effects (auto-discovered from `unicornviz/effects/`):**
 
-**Procedural:**
-Fire, Water, Plasma, Noise, Perlin
+| Effect | Tags | Description |
+|--------|------|-------------|
+| ANSI Viewer | ansi, classic | Scrolling CP437 art with CRT phosphor shader |
+| Audio Spectrum | audio, visualizer | FFT bars + oscilloscope (3 modes) |
+| Copper Bars | classic, audio | Amiga-style oscillating colour bars |
+| Cosmos | space, audio | Deep-space nebula and stellar drift |
+| Crystal Pyramids | futuristic, audio | Audio-reactive crystalline geometry |
+| 3D Cube | classic, 3d | Rotating wireframe cube |
+| Curtains | classic, audio | Multi-colour sine-wave curtain effect |
+| Dali | art, surreal | Melting-clock surrealist scene |
+| Escher | art, optical | Impossible architecture tile shader |
+| Fire | classic, audio | Cellular-automaton lifelike flame |
+| Fractal Zoom | futuristic, audio | Deep Mandelbrot zoom with beat-burst |
+| Metaballs | futuristic, audio | GLSL SDF metaball field |
+| Particle Storm | futuristic, particles | 100 k GPU particles with curl noise |
+| Plasma | classic, audio | Sin/cos colour-field with palette drift |
+| Raymarcher | futuristic, 3d | SDF scene: torus, spheres, morphing geometry |
+| Sine Scroller 2.0 | classic, audio | Multi-sine bouncing text with rainbow colours |
+| Starfield | classic, audio | 3D warp-speed star tunnel |
+| System Monitor | diagnostic, hud | Live CPU/RAM/GPU + audio graphs |
+| Tunnel | classic, audio | Texture-mapped rotating tunnel |
+| Van Gogh | art, audio | Post-impressionist flowing brush-stroke field |
+| Vector | futuristic, audio | 3D vector-field flow simulation |
+| Water | simulation, audio | Procedural ripple surface |
+| Wavey Gravy | psychedelic, audio | Psychedelic waving sine-noise field |
 
-**Reactive:**
-EQ Visualizer, Spectrum Analyzer, Matrix Rain, Waveform
+**Drop-in effects (`drop-ins/`):**
 
-**Themed:**
-Alien, Cosmos, Van Gogh, Escher, Dali
+| Effect | Key | Description |
+|--------|-----|-------------|
+| Alien Invasion | — | UFO fleets + atmospheric probing beams |
+| Cyber War | — | Digital battle-map with hex-grid node attacks |
+| Disco Ball | — | Raymarched mirror-tile ball with spot beams |
+| Hacker Terminal | — | Animated shell/log streams with glitch transitions |
+| Texture Showcase | — | Ken Burns image montage with audio colour grade |
+| Tron Grid | — | First-person laser-grid corridor with shockwaves |
+| Unicorn Tears | `U` | Prismatic teardrops through a star-field |
+| Webcam Overlay | — | Live camera feed with animated background |
 
-**Other:**
-ANSI Viewer (CP437 art), Tunnel, Checkerboard, Solid Color
+**Subsystem drop-ins:**
 
-See [User Guide § Effects Reference](docs/user-guide.md#effects-reference) for descriptions and parameters.
+| Drop-in | Purpose |
+|---------|---------|
+| multi-head-01 | Multi-monitor display controller (single / span / mirror) |
 
 ---
 

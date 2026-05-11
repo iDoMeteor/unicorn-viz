@@ -165,12 +165,12 @@ palette = 0.0
 speed = 1.0
 ```
 
-### `SineScroller` (`Sine Scroller`)
+### `SineScroller` (`Sine Scroller 2.0`)
 
 ```toml
 [effects.SineScroller]
-speed = 1.5
-amplitude = 0.18
+speed      = 1.5
+amplitude  = 0.18
 font_scale = 4.0
 ```
 
@@ -179,7 +179,14 @@ font_scale = 4.0
 ```toml
 [effects.Starfield]
 speed = 0.5
-warp = 0.0
+warp  = 0.0
+```
+
+### `SystemMonitor` (`System Monitor`)
+
+```toml
+[effects.SystemMonitor]
+speed = 1.0
 ```
 
 ### `Tunnel` (`Tunnel`)
@@ -217,3 +224,73 @@ speed = 1.0
 amplitude = 1.0
 speed = 1.0
 ```
+
+---
+
+## Drop-in Effects
+
+These effects are loaded from `drop-ins/` at startup.  Config keys follow
+the same pattern: `[effects.<ClassName>]`.
+
+### `AlienInvasion` (`Alien Invasion`)
+
+```toml
+[effects.AlienInvasion]
+speed = 1.0
+```
+
+### `CyberWar` (`Cyber War`)
+
+```toml
+[effects.CyberWar]
+speed = 1.0
+```
+
+### `DiscoBall` (`Disco Ball`)
+
+```toml
+[effects.DiscoBall]
+speed     = 1.0
+num_tiles = 24    # tiles per row on the mirror grid
+```
+
+### `HackerTerminal` (`Hacker Terminal`)
+
+```toml
+[effects.HackerTerminal]
+speed = 1.0
+```
+
+### `TextureShowcase` (`Texture Showcase`)
+
+```toml
+[effects.TextureShowcase]
+speed        = 1.0
+slide_time   = 8.0            # seconds per image
+texture_dirs = "assets/textures"  # comma-separated image directories
+```
+
+### `TronGrid` (`Tron Grid`)
+
+```toml
+[effects.TronGrid]
+speed      = 1.0
+num_beams  = 8     # sweeping laser beams (1–12)
+grid_scale = 1.0
+```
+
+### `WebcamOverlay` (`Webcam Overlay`)
+
+```toml
+[effects.WebcamOverlay]
+camera_device  = 0
+camera_width   = 1280
+camera_height  = 720
+camera_fps     = 30
+pip_position   = "bottom_right"
+pip_scale      = 0.33
+enabled        = true    # false disables camera worker for this effect
+```
+
+> **Note:** This is the standalone playlist *effect*.  The always-on system camera
+> overlay is configured under `[webcam]` — see [configuration.md](configuration.md).

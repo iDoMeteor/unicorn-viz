@@ -118,6 +118,33 @@ Notes:
 | `ansi_dir_auto`  | str  | `"assets/ansi"`      | Directory used by ANSI Viewer in normal playlist mode                    |
 | `ansi_own_dir`   | str  | `"assets/ansi"`      | Own hand-crafted art — launched with `,`                                 |
 | `ansi_acid_dir`  | str  | `"assets/ansi/acid"` | ACiD Productions art — launched with `.`                                 |
+
+---
+
+## `[webcam]`
+
+Controls the **system-level camera overlay** — an always-on PiP rendered above
+every effect and below the HUD.  Requires `opencv-python-headless >= 4.9`
+(included in `requirements.txt`).
+
+| Key              | Type   | Default          | Description                                                      |
+|------------------|--------|------------------|------------------------------------------------------------------|
+| `enabled`        | bool   | `false`          | Master switch.  Set `true` to activate the camera overlay.       |
+| `device`         | int    | `0`              | `/dev/video` index on Linux; DirectShow device index on Windows. |
+| `width`          | int    | `1280`           | Requested capture width (actual may differ by device).           |
+| `height`         | int    | `720`            | Requested capture height.                                        |
+| `fps`            | int    | `30`             | Requested frame rate.                                            |
+| `pip_position`   | str    | `"bottom_right"` | PiP anchor: `top_left`, `top_center`, `top_right`, `left`, `center`, `right`, `bottom_left`, `bottom_center`, `bottom_right`, `fullscreen`. |
+| `pip_scale`      | float  | `0.33`           | PiP width as a fraction of viewport width (0.12 – 0.80).        |
+| `log_frames`     | bool   | `false`          | Emit a `DEBUG` log line every 60 captured frames.                |
+| `cycle_interval` | int    | `0`              | Webcam effect auto-cycle interval in seconds. `0` = use `demo.effect_duration`. |
+
+Notes:
+- The overlay opens the device with the **V4L2** backend on Linux and requests **MJPG** format for better throughput.
+- If `device` is unavailable, the overlay retries every 3 s automatically. It also tries `device+1` and `device+2` before giving up.
+- After 20 consecutive read failures the worker reconnects automatically.
+- Keypad controls (KP 1–9, KP 0, KP ., KP -/+) adjust the overlay live during any effect.
+- This is separate from the `WebcamOverlay` **playlist effect** (`drop-ins/webcam-01`), which has its own camera worker and appears in the effect list like any other effect.
 | `ansi_dir`       | str  | `"assets/ansi"`      | Legacy fallback key (kept for backward compatibility)                    |
 
 ---

@@ -33,8 +33,9 @@ pysdl2-dll
 numpy
 scipy
 sounddevice >= 0.4
-python-rtmidi >= 1.5   (optional — MIDI control)
-Pillow                 (screenshots)
+opencv-python-headless >= 4.9  (camera overlay)
+python-rtmidi >= 1.5           (optional — MIDI control)
+Pillow                         (screenshots)
 ```
 
 ---
@@ -114,18 +115,84 @@ python -m unicornviz --help
 | `T`               | Toggle auto-advance on / off                                  |
 | `Space`           | Pause / resume                                                |
 | `F`               | Toggle fullscreen                                             |
-| `G` / `Shift+G`   | Audio reactivity +0.1 / −0.1                                  |
-| `Ctrl+G`          | Reset audio reactivity to configured default                   |
+| `I`               | Toggle invert colours                                         |
+| `[` / `]`         | Reactivity −/+                                               |
+| `{` / `}`         | Reactivity MIN / MAX                                          |
+| `G`               | Reset reactivity to default                                   |
+| `Shift+G`         | Reset current effect speed to default                         |
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
+| `Ctrl++`          | Speed to MAX                                                  |
+| `Ctrl+-`          | Speed to MIN                                                  |
 | `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
-| `Tab`             | Toggle effect-name overlay                                    |
+| `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
 | `A`               | Audio device selector                                         |
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
+
+### Camera Overlay Controls (Numpad)
+
+These control the always-on system camera overlay, not the effect playlist.
+
+| Key         | Action                           |
+|-------------|----------------------------------|
+| `KP 7/8/9`  | Camera PiP to top row            |
+| `KP 4/5/6`  | Camera PiP to middle row         |
+| `KP 1/2/3`  | Camera PiP to bottom row         |
+| `KP 0`      | Camera fullscreen                |
+| `KP .`      | Hide camera                      |
+| `KP -`      | Shrink PiP                       |
+| `KP +`      | Grow PiP                         |
+| `KP /`      | Previous webcam effect           |
+| `KP *`      | Next webcam effect               |
+| `KP Enter`  | Toggle webcam effect auto-cycle  |
+| `E`               | Jump directly to Audio Spectrum / EQ                          |
+| `V`               | Toggle video recording on / off                               |
+| `Tab`             | Toggle Legacy HUD panel                                       |
+| `H`               | Toggle help panel                                             |
+| `A`               | Audio device selector                                         |
+| `M`               | MIDI device selector                                          |
+| `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
+| `Esc`             | Quit                                                          |
+
+---
+
+## Camera Overlay
+
+Unicorn Viz has a built-in **system camera overlay** that renders your webcam as a PiP on top of every effect, below the HUD. It is independent of the playlist.
+
+### Enabling
+
+Uncomment and adjust the `[webcam]` section in `config.toml`:
+
+```toml
+[webcam]
+enabled      = true
+device       = 0              # /dev/video0
+width        = 1280
+height       = 720
+fps          = 30
+pip_position = "bottom_right"
+pip_scale    = 0.33
+```
+
+### Requirements
+
+`opencv-python-headless >= 4.9` (already in `requirements.txt`).
+
+### Camera not appearing?
+
+1. Confirm `enabled = true` in `[webcam]`.
+2. Check device index: `ls /dev/video*` on Linux. Try `device = 0`, `1`, `2` in turn.
+3. The overlay auto-retries every 3 s if the device is busy (e.g. Cheese is open). Close Cheese and it will reconnect.
+4. Add `log_frames = true` to `[webcam]` and run with `--log-level DEBUG` to see per-frame capture status.
+
+### WebcamOverlay effect
+
+There is also a standalone **Webcam Overlay** playlist *effect* (`drop-ins/webcam-01`) with an animated neon background. It appears in the normal playlist and can be selected like any other effect. The system camera overlay and the drop-in effect use independent camera workers.
 
 ---
 
@@ -324,20 +391,46 @@ python -m unicornviz --log-level DEBUG
 
 ## Effects Reference
 
-| Effect            | Tags                  | Description                                      |
-|-------------------|-----------------------|--------------------------------------------------|
-| ANSI Viewer       | ansi, classic, audio  | Scrolling CP437 art with CRT phosphor shader     |
-| Audio Spectrum    | audio, visualizer     | FFT bars + oscilloscope (mode 0/1/2)             |
-| Copper Bars       | classic, audio        | Amiga-style oscillating colour bars              |
-| Fire              | classic               | Cellular-automaton fire with palette             |
-| Fractal Zoom      | futuristic, audio     | Mandelbrot deep zoom with beat-burst             |
-| Metaballs         | futuristic, audio     | GLSL SDF metaball field                          |
-| Particle Storm    | futuristic, audio     | 100k GPU particles, curl noise, transform feedback |
-| Plasma            | classic, audio        | Sin/cos colour-field with palette drift          |
-| Raymarcher        | futuristic, audio, 3d | SDF scene: torus, spheres, morphing box          |
-| Sine Scroller     | classic, audio        | Multi-sine bouncing text with rainbow colours    |
-| Starfield         | classic, audio        | 3-D warp-speed star tunnel                       |
-| Tunnel            | classic, audio        | Texture-mapped rotating tunnel with depth scroll |
+### Built-in Effects
+
+| Effect            | Class               | Tags                           | Description                                          |
+|-------------------|---------------------|--------------------------------|------------------------------------------------------|
+| ANSI Viewer       | `ANSIViewer`        | ansi, classic, audio           | Scrolling CP437 BBS art with CRT phosphor shader     |
+| Audio Spectrum    | `AudioSpectrum`     | audio, visualizer              | FFT bars + oscilloscope (mode 0/1/2), key `E`        |
+| Copper Bars       | `CopperBars`        | classic, amiga, audio          | Amiga-style oscillating colour bars                  |
+| Cosmos            | `Cosmos`            | space, audio                   | Deep-space nebula and stellar drift                  |
+| Crystal Pyramids  | `CrystalPyramids`   | futuristic, audio, crystal     | Audio-reactive crystalline pyramids                  |
+| 3D Cube           | `Cube3D`            | classic, 3d, audio             | Rotating wireframe cube                              |
+| Curtains          | `Curtains`          | classic, audio                 | Multi-colour oscillating curtain waves               |
+| Dali              | `Dali`              | art, surreal, audio            | Melting-clock surrealist scene                       |
+| Escher            | `Escher`            | art, optical, audio            | Impossible architecture tile shader                  |
+| Fire              | `Fire`              | classic, audio                 | Cellular-automaton lifelike flame                    |
+| Fractal Zoom      | `FractalZoom`       | futuristic, audio              | Deep Mandelbrot zoom with beat-burst                 |
+| Metaballs         | `Metaballs`         | futuristic, audio              | GLSL SDF metaball field                              |
+| Particle Storm    | `ParticleStorm`     | futuristic, particles, audio   | 100k GPU particles, curl noise, transform feedback   |
+| Plasma            | `Plasma`            | classic, audio                 | Sin/cos colour-field with palette drift              |
+| Raymarcher        | `Raymarcher`        | futuristic, audio, 3d          | SDF scene with torus, spheres, morphing geometry     |
+| Sine Scroller 2.0 | `SineScroller`      | classic, audio                 | Multi-sine bouncing text with rainbow colours        |
+| Starfield         | `Starfield`         | classic, audio                 | 3D warp-speed star tunnel                            |
+| System Monitor    | `SystemMonitor`     | diagnostic, hud, system        | Live CPU/RAM/GPU/audio performance graphs            |
+| Tunnel            | `Tunnel`            | classic, audio                 | Texture-mapped rotating tunnel with depth scroll     |
+| Van Gogh          | `VanGogh`           | art, audio                     | Post-impressionist flowing brush-stroke field        |
+| Vector            | `Vector`            | futuristic, audio, 3d          | 3D vector-field flow simulation                      |
+| Water             | `Water`             | simulation, audio, gpu         | Procedural ripple-wave surface                       |
+| Wavey Gravy       | `WaveyGravy`        | psychedelic, audio             | Psychedelic waving sine-noise field                  |
+
+### Drop-in Effects
+
+| Effect            | Class              | Key | Tags                         | Description                                       |
+|-------------------|--------------------|-----|------------------------------|---------------------------------------------------|
+| Alien Invasion    | `AlienInvasion`    | —   | scifi, audio, cosmic         | UFO fleets + atmospheric probing beams            |
+| Cyber War         | `CyberWar`         | —   | cyberpunk, audio, network    | Digital hex-grid battle-map                       |
+| Disco Ball        | `DiscoBall`        | —   | disco, raymarching, audio    | Raymarched mirror-tile ball with spot beams       |
+| Hacker Terminal   | `HackerTerminal`   | —   | cyberpunk, audio, glitch     | Animated shell/log streams with glitch transitions|
+| Texture Showcase  | `TextureShowcase`  | —   | textures, audio              | Ken Burns image montage with audio colour grade   |
+| Tron Grid         | `TronGrid`         | —   | tron, laser, raymarching     | First-person neon laser grid with shockwaves      |
+| Unicorn Tears     | `UnicornTears`     | `U` | psychedelic, audio           | Prismatic teardrops through a deep star-field     |
+| Webcam Overlay    | `WebcamOverlay`    | —   | webcam, overlay, camera      | Live camera feed with animated neon background    |
 
 ---
 
@@ -366,6 +459,14 @@ SDL_VIDEODRIVER=x11 python -m unicornviz
 - Reduce `[window] width/height` to 1280×720.
 - The Raymarcher and Particle Storm are heavy; skip them via `[playlist] sequence`.
 - Reduce `Fractal Zoom` max_iter: `[effects.FractalZoom] max_iter = 80`.
+
+### Camera overlay not showing
+
+1. Ensure `[webcam] enabled = true` is set (it defaults to `false`).
+2. List available video devices: `ls /dev/video*`
+3. Try setting `device = 0`, `1`, `2` in turn.
+4. Close any app holding the camera (Cheese, OBS) — the overlay retries automatically every 3 s.
+5. Enable frame logging: add `log_frames = true` under `[webcam]` and run with `--log-level DEBUG`.
 
 ### Screenshot is blank / upside-down
 
