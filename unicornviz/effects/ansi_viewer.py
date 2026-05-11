@@ -22,6 +22,10 @@ from unicornviz.ansi.renderer import canvas_to_texture
 
 log = logging.getLogger(__name__)
 
+# Baseline UV scroll rate for ANSI art auto-scroll.
+# Increased by 20% so default ANSI playback moves a bit faster.
+_BASE_SCROLL_RATE = 0.0144
+
 # ── Vertex / fragment shaders ─────────────────────────────────────────────────
 
 _VERT = """
@@ -185,7 +189,7 @@ class ANSIViewer(BaseEffect):
         self._beat = max(0.0, self._beat - dt * 4.0)
 
         # Scroll within current file
-        self._scroll += dt * 0.012 * self.parameters["speed"]
+        self._scroll += dt * _BASE_SCROLL_RATE * self.parameters["speed"]
         self._scroll %= 1.0
 
         # Optional internal file cycling (disabled by default).
