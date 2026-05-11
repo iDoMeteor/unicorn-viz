@@ -7,3 +7,4 @@ sounddevice>=0.4.6
 python-rtmidi>=1.5
 Pillow>=10.0
 psutil>=5.9
+opencv-python-headless>=4.9   # camera overlay + WebcamOverlay effect

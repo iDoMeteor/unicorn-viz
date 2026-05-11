@@ -28,6 +28,7 @@ from unicornviz.effects.registry import get_effects
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
+from unicornviz.camera_overlay import CameraOverlay
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
@@ -86,6 +87,7 @@ class App:
         self._webcam_auto_cycle: bool = False
         self._webcam_cycle_timer: float = 0.0
         self._webcam_cycle_interval: float = 0.0
+        self._camera_overlay: CameraOverlay | None = None
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._transition_duration: float = self.cfg.get(
@@ -289,6 +291,14 @@ class App:
         self._build_present_pipeline()
         self._build_blend_pipeline()
         self._build_invert_pipeline()
+        # System-level camera overlay (always-on PiP above effects, below HUD).
+        cam_cfg = self.cfg.get('webcam', default={}) or {}
+        if not isinstance(cam_cfg, dict):
+            cam_cfg = {}
+        self._camera_overlay = CameraOverlay(
+            self._ctx, self._width, self._height, cam_cfg
+        )
+        self._camera_overlay.start()
 
     def _build_present_pipeline(self) -> None:
         """Build fullscreen pass that copies a texture to screen."""
@@ -932,6 +942,8 @@ void main() {
 
             # Render
             self._render(dt)
+            if self._camera_overlay is not None:
+                self._camera_overlay.render()
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             need_frame_for_recording = (
@@ -958,6 +970,9 @@ void main() {
             self._recorder.stop()
         audio_manager.stop()
         midi_manager.stop()
+        if self._camera_overlay is not None:
+            self._camera_overlay.destroy()
+            self._camera_overlay = None
         if self._current_effect:
             self._current_effect.destroy()
         if self._next_effect:
@@ -1071,6 +1086,8 @@ void main() {
     def _on_resize(self, w: int, h: int) -> None:
         self._width = w
         self._height = h
+        if self._camera_overlay is not None:
+            self._camera_overlay.resize(w, h)
         self._update_render_target_size()
         self._release_readback_pbos()
         if self._recorder and self._recorder.is_recording:
@@ -1217,29 +1234,17 @@ void main() {
         return self._webcam_auto_cycle
 
     def scale_pip(self, delta: float) -> float:
-        """Adjust pip_scale on the active effect by delta. Returns new value or 0."""
-        if self._current_effect is None:
-            return 0.0
-        params = getattr(self._current_effect, 'parameters', {})
-        if 'pip_scale' not in params:
-            return 0.0
-        new_val = max(0.12, min(0.80, float(params['pip_scale']) + delta))
-        params['pip_scale'] = new_val
-        return new_val
+        """Nudge the system camera overlay PiP scale. Returns new value, or 0 if not enabled."""
+        if self._camera_overlay is not None and self._camera_overlay.enabled:
+            return self._camera_overlay.scale_pip(delta)
+        return 0.0
 
     def set_camera_layout(self, layout: str) -> bool:
-        """Set webcam layout on active effect if it exposes a camera layout API."""
-        if self._current_effect is None:
-            return False
-        setter = getattr(self._current_effect, 'set_camera_layout', None)
-        if setter is None or not callable(setter):
-            return False
-        try:
-            setter(layout)
+        """Set the system camera overlay PiP position. Returns True when enabled."""
+        if self._camera_overlay is not None and self._camera_overlay.enabled:
+            self._camera_overlay.set_layout(layout)
             return True
-        except Exception as exc:
-            log.warning('Failed to set camera layout %r: %s', layout, exc)
-            return False
+        return False
 
     @property
     def paused(self) -> bool:
