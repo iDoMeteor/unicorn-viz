@@ -1158,6 +1158,20 @@ void main() {
         self._invert_colors = not self._invert_colors
         return self._invert_colors
 
+    def set_camera_layout(self, layout: str) -> bool:
+        """Set webcam layout on active effect if it exposes a camera layout API."""
+        if self._current_effect is None:
+            return False
+        setter = getattr(self._current_effect, 'set_camera_layout', None)
+        if setter is None or not callable(setter):
+            return False
+        try:
+            setter(layout)
+            return True
+        except Exception as exc:
+            log.warning('Failed to set camera layout %r: %s', layout, exc)
+            return False
+
     @property
     def paused(self) -> bool:
         return self._paused

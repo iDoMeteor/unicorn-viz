@@ -83,12 +83,12 @@
   - playlist integration
   - fullscreen scaling and transitions
   - audio sync policy
-- `[todo]` Add webcam/video capture effect and overlay support.
+- `[doing]` Add webcam/video capture effect and overlay support.
   Notes:
-  - real-time frame capture from /dev/video* (Linux) / camera APIs (Windows/macOS)
-  - optional shader processing/distortion/glitch layers
-  - picture-in-picture overlay mode alongside effects
-  - optional chroma-key / background replacement
+  - implemented first-slice drop-in `webcam-01` with PiP/fullscreen/hide layouts
+  - keypad layout control integrated (`KP0`, `KP.`, `KP1-9`)
+  - configurable `pip_position` + camera device/resolution/fps in effect config
+  - remaining: chroma-key/background replacement and cross-platform camera tuning
 - `[todo]` Add `assets/sims/` support for IsaacLab/OpenUSD-style 3D animations.
   Notes:
   - playback/runtime format choice

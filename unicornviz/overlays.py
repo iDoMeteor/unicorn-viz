@@ -287,6 +287,8 @@ class Overlays:
         " ESC         Quit",
         " T           Auto-advance on/off",
         " I           Invert colors toggle",
+        " KP 1-9      Webcam PiP position",
+        " KP 0 / KP . Webcam fullscreen/hide",
         " U           Unicorn Tears",
         " Shift+U     Show splash anytime",
     ]

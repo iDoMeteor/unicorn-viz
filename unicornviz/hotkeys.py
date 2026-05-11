@@ -285,6 +285,40 @@ class HotkeyHandler:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
 
+        # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
+        elif sym == sdl2.SDLK_KP_0:
+            if a.set_camera_layout('0'):
+                o.flash_message('Webcam layout: fullscreen', 1.5)
+            else:
+                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+
+        elif sym == sdl2.SDLK_KP_PERIOD:
+            if a.set_camera_layout('.'):
+                o.flash_message('Webcam layout: hidden', 1.5)
+            else:
+                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+
+        elif sym in (
+            sdl2.SDLK_KP_1, sdl2.SDLK_KP_2, sdl2.SDLK_KP_3,
+            sdl2.SDLK_KP_4, sdl2.SDLK_KP_5, sdl2.SDLK_KP_6,
+            sdl2.SDLK_KP_7, sdl2.SDLK_KP_8, sdl2.SDLK_KP_9,
+        ):
+            kp_map = {
+                sdl2.SDLK_KP_1: '1', sdl2.SDLK_KP_2: '2', sdl2.SDLK_KP_3: '3',
+                sdl2.SDLK_KP_4: '4', sdl2.SDLK_KP_5: '5', sdl2.SDLK_KP_6: '6',
+                sdl2.SDLK_KP_7: '7', sdl2.SDLK_KP_8: '8', sdl2.SDLK_KP_9: '9',
+            }
+            token = kp_map[sym]
+            labels = {
+                '1': 'bottom-left', '2': 'bottom-center', '3': 'bottom-right',
+                '4': 'left', '5': 'center', '6': 'right',
+                '7': 'top-left', '8': 'top-center', '9': 'top-right',
+            }
+            if a.set_camera_layout(token):
+                o.flash_message(f"Webcam layout: {labels[token]}", 1.5)
+            else:
+                o.flash_message('Webcam layout: no active webcam effect', 1.2)
+
     def _screenshot(self) -> None:
         import datetime
         import numpy as np
