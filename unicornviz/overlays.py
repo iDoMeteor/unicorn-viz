@@ -290,6 +290,9 @@ class Overlays:
         " I           Invert colors toggle",
         " KP 1-9      Webcam PiP position",
         " KP 0 / KP . Webcam fullscreen/hide",
+        " KP / *      Webcam prev/next effect",
+        " KP - +      Webcam PiP size",
+        " KP Enter    Webcam auto-cycle",
         " U           Unicorn Tears",
         " Shift+U     Show splash anytime",
     ]

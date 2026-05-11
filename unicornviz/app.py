@@ -81,6 +81,11 @@ class App:
         self._transition_dir: tuple[float, float] = (1.0, 0.0)
         self._transition_phase: float = 0.0
         self._previous_effect_name: str = '-'
+        self._webcam_effects: list = []
+        self._webcam_index: int = 0
+        self._webcam_auto_cycle: bool = False
+        self._webcam_cycle_timer: float = 0.0
+        self._webcam_cycle_interval: float = 0.0
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._transition_duration: float = self.cfg.get(
@@ -742,6 +747,14 @@ void main() {
             raise RuntimeError("No effects found — check unicornviz/effects/")
 
         playlist = Playlist(effects, self.cfg)
+
+        # Build webcam-tagged effects subset for KP navigation.
+        self._webcam_effects = [
+            cls for cls in effects
+            if 'webcam' in [t.lower() for t in getattr(cls, 'TAGS', [])]
+        ]
+        log.info('Webcam effects available: %s', [c.NAME for c in self._webcam_effects])
+
         overlays = Overlays(
             self._ctx,
             self._width,
@@ -777,6 +790,9 @@ void main() {
         prev_time = time.perf_counter()
         self._demo_timer = 0.0
         effect_duration = self.cfg.get("demo", "effect_duration", default=20)
+        self._webcam_cycle_interval = float(
+            self.cfg.get('webcam', 'cycle_interval', default=0)
+        ) or float(effect_duration)
 
         while self._running:
             now = time.perf_counter()
@@ -822,6 +838,18 @@ void main() {
             # Dispatch pending MIDI events to active effect
             if hasattr(self, "_midi_manager"):
                 pass   # MidiManager uses a callback thread; forward via action hooks
+
+            # Webcam auto-cycle (independent timer, independent of main playlist advance).
+            if self._webcam_auto_cycle and self._webcam_effects and self._next_effect is None:
+                self._webcam_cycle_timer += dt
+                if self._webcam_cycle_timer >= self._webcam_cycle_interval:
+                    self._webcam_cycle_timer = 0.0
+                    cls = self._webcam_effects[
+                        int(self._rng.integers(0, len(self._webcam_effects)))
+                    ]
+                    self._switch_effect(cls)
+                    if self._overlays is not None:
+                        self._overlays.flash_message(f'Webcam auto: {cls.NAME}', 1.5)
 
             # Auto-playlist advance
             if not self._paused and self._next_effect is None and self._auto_advance:
@@ -1163,6 +1191,41 @@ void main() {
         """Toggle color inversion for the active effect frame only."""
         self._invert_colors = not self._invert_colors
         return self._invert_colors
+
+    def goto_next_webcam_effect(self) -> str | None:
+        """Advance to the next webcam-tagged effect and return its name."""
+        if not self._webcam_effects:
+            return None
+        self._webcam_index = (self._webcam_index + 1) % len(self._webcam_effects)
+        cls = self._webcam_effects[self._webcam_index]
+        self._switch_effect(cls)
+        return cls.NAME
+
+    def goto_prev_webcam_effect(self) -> str | None:
+        """Step back to the previous webcam-tagged effect and return its name."""
+        if not self._webcam_effects:
+            return None
+        self._webcam_index = (self._webcam_index - 1) % len(self._webcam_effects)
+        cls = self._webcam_effects[self._webcam_index]
+        self._switch_effect(cls)
+        return cls.NAME
+
+    def toggle_webcam_auto_cycle(self) -> bool:
+        """Toggle auto-cycling between webcam effects. Returns the new on/off state."""
+        self._webcam_auto_cycle = not self._webcam_auto_cycle
+        self._webcam_cycle_timer = 0.0
+        return self._webcam_auto_cycle
+
+    def scale_pip(self, delta: float) -> float:
+        """Adjust pip_scale on the active effect by delta. Returns new value or 0."""
+        if self._current_effect is None:
+            return 0.0
+        params = getattr(self._current_effect, 'parameters', {})
+        if 'pip_scale' not in params:
+            return 0.0
+        new_val = max(0.12, min(0.80, float(params['pip_scale']) + delta))
+        params['pip_scale'] = new_val
+        return new_val
 
     def set_camera_layout(self, layout: str) -> bool:
         """Set webcam layout on active effect if it exposes a camera layout API."""

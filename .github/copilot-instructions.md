@@ -290,3 +290,8 @@ The owner makes their own edits to `config.toml` at any time.
 - When modifying a drop-in, the agent must commit and push changes in the
   drop-in's own repository first, then commit and push the updated submodule
   pointer in the main `unicorn-viz` repository.
+- **Every drop-in that introduces hotkeys must add its control lines to
+  `HELP_TEXT` in `unicornviz/overlays.py`** so they appear in the `H` help
+  overlay automatically.  This is the single source of truth for all key
+  bindings; do not document keys anywhere else (no separate README sections,
+  no docstrings listing keys).

@@ -47,4 +47,13 @@ flash_messages = false
 #                                     # bottom_left | bottom_center | bottom_right |
 #                                     # fullscreen
 # pip_scale        = 0.33             # fraction of viewport width (0.12–0.8)
+# [webcam_asset_dirs] is a placeholder for future overlays
 # webcam_asset_dirs = ""              # extra comma-separated dirs for future overlays
+
+# ---------------------------------------------------------------------------
+# Webcam auto-cycle  — how long to show each webcam effect before random-
+# picking the next one when KP Enter is active.
+# Default (0) falls back to demo.effect_duration.
+# ---------------------------------------------------------------------------
+# [webcam]
+# cycle_interval = 30    # seconds; 0 = use demo.effect_duration

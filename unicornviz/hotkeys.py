@@ -319,6 +319,40 @@ class HotkeyHandler:
             else:
                 o.flash_message('Webcam layout: no active webcam effect', 1.2)
 
+        # Webcam effect navigation / PiP sizing (KP operator row)
+        elif sym == sdl2.SDLK_KP_DIVIDE:
+            name = a.goto_prev_webcam_effect()
+            if name:
+                o.flash_message(f'Webcam prev: {name}', 1.5)
+            else:
+                o.flash_message('No webcam effects available', 1.2)
+
+        elif sym == sdl2.SDLK_KP_MULTIPLY:
+            name = a.goto_next_webcam_effect()
+            if name:
+                o.flash_message(f'Webcam next: {name}', 1.5)
+            else:
+                o.flash_message('No webcam effects available', 1.2)
+
+        elif sym == sdl2.SDLK_KP_MINUS:
+            val = a.scale_pip(-0.05)
+            if val > 0:
+                o.flash_message(f'Webcam PiP: {val:.0%}', 1.0)
+            else:
+                o.flash_message('No pip_scale on active effect', 1.0)
+
+        elif sym == sdl2.SDLK_KP_PLUS:
+            val = a.scale_pip(0.05)
+            if val > 0:
+                o.flash_message(f'Webcam PiP: {val:.0%}', 1.0)
+            else:
+                o.flash_message('No pip_scale on active effect', 1.0)
+
+        elif sym == sdl2.SDLK_KP_ENTER:
+            active = a.toggle_webcam_auto_cycle()
+            state = 'ON' if active else 'OFF'
+            o.flash_message(f'Webcam auto-cycle: {state}', 1.5)
+
     def _screenshot(self) -> None:
         import datetime
         import numpy as np
