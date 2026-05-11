@@ -55,19 +55,19 @@
 
 ## Phase 3 — Assets and Media Expansion
 
-- `[doing]` Add Performance HUD / diagnostics overlay for FPS, frame time, audio source, active transition, CPU, and RAM.
+- `[done]` Add Performance HUD / diagnostics overlay for FPS, frame time, audio source, active transition, CPU, and RAM.
   Notes:
-  - realtime metrics collection and rolling-window averaging
-  - minimal-impact rendering (single FBO-resident HUD, no per-frame allocations)
-  - hotkey toggle + config-file persistence for visibility preference
-- `[doing]` Create Cyber War effect (drop-in: digital battle-map style with offensive/defensive node animations).
-- `[doing]` Create Hacker Terminal effect (drop-in: animated shell/log streams with glitch transitions).
-- `[doing]` Create Alien Invasion effect (drop-in: UFO fleets, atmospheric beams, planetary scan overlays).
-- `[doing]` Revamp Sine Scroller to Sine Scroller 2.0 (in-tree).
+  - implemented modern TAB overlay branded `Unicorn Viz HUD`
+  - implemented live runtime status feed (effect/transition/fps/frame-time/resolution/render-scale/playlist/state/reactivity/speed/audio source/recording/audio bands/display state)
+  - includes system-monitor style diagnostics and modern game-UI presentation
+- `[done]` Create Cyber War effect (drop-in: digital battle-map style with offensive/defensive node animations).
+- `[done]` Create Hacker Terminal effect (drop-in: animated shell/log streams with glitch transitions).
+- `[done]` Create Alien Invasion effect (drop-in: UFO fleets, atmospheric beams, planetary scan overlays).
+- `[done]` Revamp Sine Scroller to Sine Scroller 2.0 (in-tree).
   Notes:
-  - multi-line wave animation with independent frequency per line
-  - polished color-per-beat transitions and bass-responsive amplification
-  - configurable text/font/speed with audio presets
+  - implemented multi-line wave animation with independent frequency per line
+  - implemented polished color-per-beat transitions and bass-responsive amplification
+  - implemented configurable text/font/speed behavior and reduced background dominance
 
 - `[todo]` Add `assets/images/` support.
   Notes:
@@ -113,7 +113,8 @@
   - default global vignette strength/shape settings
   - per-effect opt-out/override for effects that already do their own edge darkening
   - decide whether vignette is a post-FBO pass or shader uniform convention
-  - document which effects intentionally ignore the global setting- `[decision]` Design frequency-response tuning system with genre profiles.
+  - document which effects intentionally ignore the global setting
+- `[decision]` Design frequency-response tuning system with genre profiles.
   Context:
   - Audio reactivity may currently be tuned toward general pop/mainstream frequencies
   - Testing with house/trance/edm reveals potentially suboptimal frequency targeting
@@ -123,7 +124,8 @@
   - where stored: config presets, hardcoded profiles, user-customizable bands?
   - which analysis parameters affected: FFT bands, smoothing, bass/mid/treble splits, reactivity curves?
   - UI: genre selector in hotkeys, or CLI flag, or audio auto-detect?
-  - fallback: should there be a "flat" auto-learn profile from current audio?- `[decision]` Design external plugin loading for paid effect packs.
+  - fallback: should there be a "flat" auto-learn profile from current audio?
+- `[decision]` Design external plugin loading for paid effect packs.
   Open questions:
   - local drop-in plugin directory vs hosted/cloud delivery
   - included effects vs third-party/paid effects separation
@@ -138,14 +140,14 @@
 - `[todo]` Video-reactive overlays/effect compositing pipeline.
 - `[todo]` Preset system for show setups (streaming, performance, ANSI-only, ambient, etc.).
 - `[todo]` Scene scheduler with timed sections and transition choreography.
-- `[todo]` Performance HUD / diagnostics overlay for FPS, frame time, audio source, and active transition, cpu, ram.
+- `[done]` Performance HUD / diagnostics overlay for FPS, frame time, audio source, and active transition, cpu, ram.
 - `[todo]` Add `assets/games/` effect mode for interactive/game-like visual scenes.
-- `[todo]` System Monitor effect (audio-reactive CPU/RAM/network/IO cyber dashboard).
-- `[todo]` Cyber War effect (digital battle-map style offensive/defensive node animations).
-- `[todo]` Hacker Terminal effect (animated shell/log streams with glitch transitions).
+- `[done]` System Monitor effect (audio-reactive CPU/RAM/network/IO cyber dashboard).
+- `[done]` Cyber War effect (digital battle-map style offensive/defensive node animations).
+- `[done]` Hacker Terminal effect (animated shell/log streams with glitch transitions).
 - `[todo]` Threat Matrix effect (heatmaps, trace routes, anomaly pulses, breach waves).
-- `[todo]` Alien Invasion effect (UFO fleets, atmospheric beams, planetary scan overlays).
-- `[todo]` Unicorn Tears effect (iridescent liquid/prism particle trails with dreamy bloom).
+- `[done]` Alien Invasion effect (UFO fleets, atmospheric beams, planetary scan overlays).
+- `[done]` Unicorn Tears effect (iridescent liquid/prism particle trails with dreamy bloom).
 - `[todo]` BBS! effect suite (dial-up rituals, ANSI login scenes, retro board status walls).
 
 ## Delivery Strategy
