@@ -24,17 +24,20 @@
 
 ## Phase 2 — Platform and Display Support
 
-- `[doing]` Add first-class Windows support.
+- `[done]` Add first-class Windows support.
   Notes:
   - implemented: Windows-safe SDL driver default path (no forced Wayland)
   - implemented: Windows loopback/stereo-mix candidate audio selection logic
   - implemented: windows-latest CI smoke job for CLI + effect discovery
-  - remaining: on-device rendering/audio validation on physical Windows host
-- `[doing]` Add multi-monitor support.
+  - implemented: Windows installer + launcher hardening (`install_windows.ps1` + `.bat` wrapper)
+  - validated: installer and runtime tested on physical Windows 11 host
+- `[done]` Add multi-monitor support.
   Notes:
-  - first slice implemented: explicit `window.display_index` / `--display-index` selection for startup and fullscreen target display
-  - implemented: `display_mode` options (`single`, `span_all`, `mirror_all`) with shared readback and mirror output pipeline
-  - remaining work: screenshot/recording implications in mixed-mode topologies and long-run mirror performance validation
+  - implemented: explicit `window.display_index` / `--display-index` selection for startup and fullscreen target display
+  - implemented: `display_mode` options (`single`, `span_all`, `mirror_all`)
+  - implemented: runtime display-mode hotkeys (`X`, `Shift+X`, `Ctrl+X`, `Alt+X`)
+  - implemented: GL-native single-window `mirror_all` tile-blit path (cross-platform stable)
+  - validated: mirror mode works on Fedora 37/GNOME, Fedora 44/MATE, and Windows 11
 - `[done]` Refactor multi-monitor implementation into a drop-in subsystem module.
   Notes:
   - canonical implementation now lives in `drop-ins/multi-head-01` private submodule
@@ -80,11 +83,12 @@
   - implemented as drop-in `textures-01` with configurable `texture_dirs`
   - includes 20 bundled patterns (including paisley and plaid)
   - implemented audio-reactive texture montage/showcase effect
-- `[todo]` Add `assets/videos/` support for MP4 playback.
+- `[done]` Add `assets/videos/` support for MP4 playback.
   Notes:
-  - playlist integration
-  - fullscreen scaling and transitions
-  - audio sync policy
+  - implemented as drop-in `videos-01` (`Video Showcase`)
+  - playlist integration complete
+  - clip loading/playback integrated with effect transitions
+  - baseline cross-platform validation performed during mirror-mode regression testing
 - `[done]` Add webcam/video capture effect and overlay support.
   Notes:
   - implemented as subsystem drop-in `webcam-01` loaded at startup (not a playlist effect)
