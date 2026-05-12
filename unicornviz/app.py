@@ -226,6 +226,26 @@ class App:
         if hasattr(self._multihead, '_display_mode'):
             setattr(self._multihead, '_display_mode', mode)
 
+    def _multihead_layouts(self) -> list[tuple[int, int, int, int]]:
+        """Return display layouts from the multi-head drop-in.
+
+        Falls back to the controller's private `_display_layouts` attribute
+        when an older drop-in submodule is loaded that lacks the public
+        `display_layouts` property.
+        """
+        layouts = getattr(self._multihead, 'display_layouts', None)
+        if layouts is None:
+            layouts = getattr(self._multihead, '_display_layouts', None)
+        return list(layouts) if layouts else []
+
+    def _multihead_mirror_layout(self, origin_x: int, origin_y: int) -> list[tuple[int, int, int, int]]:
+        """Return per-display rects in window-local coords, with fallback."""
+        fn = getattr(self._multihead, 'mirror_layout', None)
+        if callable(fn):
+            return list(fn(origin_x, origin_y))
+        # Fallback: derive from layouts directly.
+        return [(x - origin_x, y - origin_y, w, h) for (x, y, w, h) in self._multihead_layouts()]
+
     def _set_multihead_index(self, index: int) -> None:
         """Update drop-in internal display index fields when available."""
         if hasattr(self._multihead, '_display_index_requested'):
@@ -382,7 +402,7 @@ class App:
             x_pos, y_pos, win_w, win_h = self._all_display_bounds()
             # Logical canvas: prefer first display's dimensions for crisp 1:1
             # blits when displays share resolution. Falls back to configured size.
-            layouts = self._multihead.display_layouts
+            layouts = self._multihead_layouts()
             if layouts:
                 logical_w = layouts[0][2]
                 logical_h = layouts[0][3]
@@ -435,7 +455,7 @@ class App:
             # single-display size for effects/HUD/FBO sizing.
             self._window_width = w_i.value or self._window_width
             self._window_height = h_i.value or self._window_height
-            self._mirror_rects = self._multihead.mirror_layout(
+            self._mirror_rects = self._multihead_mirror_layout(
                 self._window_origin_x, self._window_origin_y
             )
             log.info(
@@ -1154,15 +1174,21 @@ void main() {
 
             # Render
             self._render(dt)
+            mirror_mode_active = (
+                self._display_mode == 'mirror_all' and bool(self._mirror_rects)
+            )
             if self._webcam_system is not None:
                 audio = self._audio or AudioData()
                 self._webcam_system.render(dt, audio.bass, audio.treble)
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
+            if mirror_mode_active:
+                # Compose stage finished into _fbo_a; now tile-blit to spanned window.
+                self._present_mirror_tiled(self._fbo_a.color_attachments[0])
             need_frame_for_recording = (
                 self._recorder is not None and self._recorder.is_recording
             )
-            need_frame_for_mirror = self._multihead.has_mirror_outputs
+            need_frame_for_mirror = False  # legacy path; GL-native handles mirror.
             shared_frame: bytes | None = None
             if need_frame_for_recording or need_frame_for_mirror:
                 try:
@@ -1223,16 +1249,25 @@ void main() {
                     self._current_effect.render()
                 if mirror_mode:
                     if self._invert_colors:
-                        # Invert into fbo_b, then tile fbo_b across mirror rects.
+                        # Invert into fbo_b, copy back into fbo_a so webcam/HUD
+                        # land on the inverted base in the same FBO chain.
                         self._fbo_b.use()
                         ctx.viewport = (0, 0, self._render_width, self._render_height)
                         ctx.clear(0.0, 0.0, 0.0, 1.0)
                         self._fbo_a.color_attachments[0].use(location=0)
                         self._invert_prog['tex'].value = 0
                         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
-                        self._present_mirror_tiled(self._fbo_b.color_attachments[0])
-                    else:
-                        self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+                        # Now blit fbo_b back into fbo_a as the compose target.
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    # Leave fbo_a bound at logical viewport so webcam/HUD compose
+                    # into the same target. Tile-blit happens at end of frame.
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
                 elif self._invert_colors:
                     self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
                 else:
@@ -1272,7 +1307,9 @@ void main() {
                     if self._current_effect:
                         self._current_effect.render()
                     if mirror_mode:
-                        self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+                        # Leave fbo_a bound; tile-blit at end of frame.
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
                     else:
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
@@ -1294,7 +1331,7 @@ void main() {
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._next_effect.render()
 
-                # Transition composite — to mirror FBO if mirror, else screen.
+                # Transition composite — to mirror compose FBO if mirror, else screen.
                 if mirror_mode:
                     composite_fbo = self._make_or_get_mirror_composite_fbo()
                     composite_fbo.use()
@@ -1317,7 +1354,14 @@ void main() {
                 self._blend_prog["iLightWrap"].value = 0.10 + audio_impact * 0.28
                 self._blend_vao.render(moderngl.TRIANGLE_STRIP)
                 if mirror_mode:
-                    self._present_mirror_tiled(self._mirror_composite_fbo.color_attachments[0])
+                    # Copy composite into fbo_a so webcam/HUD compose into it,
+                    # then tile-blit at end of frame.
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    self._mirror_composite_fbo.color_attachments[0].use(location=0)
+                    self._present_prog['tex'].value = 0
+                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
         """Lazy-create a single FBO used to compose mirror transitions."""
@@ -1336,7 +1380,7 @@ void main() {
             # Window grew/shrunk; logical size stays at one display worth.
             self._window_width = w
             self._window_height = h
-            self._mirror_rects = self._multihead.mirror_layout(
+            self._mirror_rects = self._multihead_mirror_layout(
                 self._window_origin_x, self._window_origin_y
             )
             if self._webcam_system is not None:
@@ -1491,13 +1535,13 @@ void main() {
         if self._display_mode == 'mirror_all':
             # Switch logical canvas to first display's resolution and rebuild
             # mirror viewport rects against the new window origin.
-            layouts = self._multihead.display_layouts
+            layouts = self._multihead_layouts()
             if layouts:
                 self._width = layouts[0][2]
                 self._height = layouts[0][3]
             self._window_width = w_i.value or self._window_width
             self._window_height = h_i.value or self._window_height
-            self._mirror_rects = self._multihead.mirror_layout(
+            self._mirror_rects = self._multihead_mirror_layout(
                 self._window_origin_x, self._window_origin_y
             )
             self._update_render_target_size()
