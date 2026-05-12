@@ -79,7 +79,8 @@ git clone https://github.com/iDoMeteor/unicorn-viz
 cd unicorn-viz
 
 # Automated installer (Python + ffmpeg + venv + pip deps)
-powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1
+# Double-click tools\install_windows.bat from Explorer, or run this from PowerShell.
+tools\install_windows.bat
 
 # Run
 .\.venv\Scripts\python -m unicornviz
@@ -97,6 +98,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipFfmpeg
 # Skip package manager installs (Python/ffmpeg must already exist)
 powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipPackageManagers
 ```
+
+If double-clicking the `.ps1` file opens it in an editor, use `tools\install_windows.bat` instead. It launches PowerShell with the correct execution policy and keeps the console open at the end.
 
 ### Common CLI Overrides
 

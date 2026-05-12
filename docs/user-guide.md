@@ -54,7 +54,7 @@ python3 -m venv .venv
 ```powershell
 git clone https://github.com/iDoMeteor/unicorn-viz
 cd unicorn-viz
-powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1
+tools\install_windows.bat
 ```
 
 Run:
@@ -62,6 +62,10 @@ Run:
 ```powershell
 .\.venv\Scripts\python -m unicornviz
 ```
+
+If `.ps1` files open in an editor on your machine, use the `.bat` wrapper.
+It launches the installer through PowerShell and keeps the window open so you
+can see failures instead of having the console vanish.
 
 ### Wayland / X11
 
