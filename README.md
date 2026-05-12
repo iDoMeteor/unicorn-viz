@@ -2,6 +2,11 @@
 
 A fullscreen OpenGL 3.3 demoscene visualizer written in Python 3.11+, designed for Linux (Wayland-first, X11 fallback). Renders audio-reactive effects, classic CP437 ANSI art, live audio input capture via PipeWire/ALSA, and MIDI control.
 
+## Repository Notice
+
+- Primary and stable repository: https://github.com/djunicorntears/unicorn-viz
+- Development and unstable repository: https://github.com/idometeor/unicorn-viz (developers only)
+
 ## Demo Video
 
 <iframe

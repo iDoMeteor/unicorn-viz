@@ -668,43 +668,46 @@ void main() {
             self._draw_text(line, pad, y, scale=scale, color=(0.2, 1.0, 0.4, 0.95))
             y += lh
 
-        # Right: direct effect shortcut columns
+        # Right: direct effect shortcuts in a 2x2 grid (1-0/Shift on top,
+        # Ctrl/Alt on bottom).
         col_scale = 2.0
         col_lh = 8 * col_scale + 3
         col1_x = self._width * 0.45
-        col2_x = col1_x + (16.0 * 8.0 * col_scale)
-        col3_x = col2_x + (16.0 * 8.0 * col_scale)
-        cy = pad
+        col2_x = self._width * 0.67
+        rows = max(
+            len(self._num_shortcuts),
+            len(self._shift_shortcuts),
+            len(self._ctrl_shortcuts),
+            len(self._alt_shortcuts),
+        )
 
-        self._draw_text("1-0 shortcuts", col1_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        self._draw_text("Shift shortcuts", col2_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        cy += col_lh
-        self._draw_text("-------------", col1_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        self._draw_text("---------------", col2_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        cy += col_lh
+        def _draw_shortcut_section(
+            title: str,
+            items: list[str],
+            x: float,
+            y0: float,
+            color: tuple[float, float, float, float],
+        ) -> None:
+            y = y0
+            self._draw_text(title, x, y, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+            y += col_lh
+            self._draw_text('-' * len(title), x, y, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+            y += col_lh
+            for i in range(rows):
+                text = items[i] if i < len(items) else '(none)'
+                self._draw_text(text, x, y, scale=col_scale, color=color)
+                y += col_lh
 
-        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts), len(self._ctrl_shortcuts))
-        for i in range(max_rows):
-            if i < len(self._num_shortcuts):
-                self._draw_text(self._num_shortcuts[i], col1_x, cy, scale=col_scale, color=(0.8, 1.0, 0.9, 0.95))
-            if i < len(self._shift_shortcuts):
-                self._draw_text(self._shift_shortcuts[i], col2_x, cy, scale=col_scale, color=(0.9, 0.85, 1.0, 0.95))
-            if i < len(self._ctrl_shortcuts):
-                self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
-            cy += col_lh
+        top_y = pad
+        block_h = (rows + 2) * col_lh
+        bottom_y = top_y + block_h + col_lh * 0.8
 
-        cy += col_lh * 0.7
-        col4_x = col1_x
-        self._draw_text("Alt shortcuts", col4_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-        cy += col_lh
-        self._draw_text("--------------", col4_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-        cy += col_lh
+        _draw_shortcut_section('1-0 shortcuts', self._num_shortcuts, col1_x, top_y, (0.8, 1.0, 0.9, 0.95))
+        _draw_shortcut_section('Shift shortcuts', self._shift_shortcuts, col2_x, top_y, (0.9, 0.85, 1.0, 0.95))
+        _draw_shortcut_section('Ctrl shortcuts', self._ctrl_shortcuts, col1_x, bottom_y, (0.85, 0.95, 1.0, 0.95))
+        _draw_shortcut_section('Alt shortcuts', self._alt_shortcuts, col2_x, bottom_y, (1.0, 0.9, 0.8, 0.95))
 
-        for i in range(len(self._alt_shortcuts)):
-            self._draw_text(self._alt_shortcuts[i], col4_x, cy, scale=col_scale, color=(1.0, 0.9, 0.8, 0.95))
-            cy += col_lh
+        cy = bottom_y + block_h
 
         if self._unmapped_effects:
             self._draw_text(
