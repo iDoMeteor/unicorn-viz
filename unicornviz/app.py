@@ -722,6 +722,17 @@ void main() {
         audio_manager.start()
         self._audio_manager = audio_manager
 
+        # Kick off background image decoding so disk I/O overlaps with the splash.
+        # warm_cache() after the splash will find bytes already in memory and
+        # only need to do fast GL uploads.
+        _pre_effects = get_effects()
+        for _cls in _pre_effects:
+            if getattr(_cls, 'NAME', '') == 'Image Showcase' and hasattr(_cls, 'prefetch_async'):
+                _img_cfg = self.cfg.get('effects', 'ImageShowcase', default={}) or {}
+                if bool(_img_cfg.get('preload_images', False)):
+                    _cls.prefetch_async(_img_cfg)
+                break
+
         # Splash screen — shown before any effect loads
         splash_path = self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")
         splash_duration_audio = _SPLASH_TOTAL_DURATION
@@ -774,7 +785,7 @@ void main() {
                 if bool(image_cfg.get('preload_images', False)):
                     try:
                         effect_cls.warm_cache(self._ctx, image_cfg)
-                        log.info('Warmed Image Showcase cache during startup')
+                        log.info('Image Showcase cache warmed (GL upload)')
                     except Exception as exc:
                         log.warning('Image Showcase cache warmup failed: %s', exc)
                 break
