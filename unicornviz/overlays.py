@@ -301,6 +301,10 @@ class Overlays:
         " Shift+X     Display mode: single",
         " Ctrl+X      Display mode: span_all",
         " Alt+X       Display mode: mirror_all",
+        "--- Sim Showcase (sims-01) ---",
+        " Ctrl+N      Next USD scene",
+        " Ctrl+P      Prev USD scene",
+        " Ctrl+R      Random USD scene",
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
