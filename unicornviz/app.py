@@ -190,6 +190,7 @@ class App:
         self._display_mode = 'single'
         multihead_cls = _load_multihead_controller_class()
         self._multihead = multihead_cls(self.cfg)
+        self._fullscreen_mode = str(self.cfg.get('window', 'fullscreen_mode', default='auto')).lower()
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
@@ -224,6 +225,34 @@ class App:
 
     def _move_window_to_display(self) -> None:
         self._multihead.move_window_to_display(self._window, self._width, self._height)
+
+    def _prefer_borderless_fullscreen(self) -> bool:
+        """Return True when fullscreen should use borderless windowing.
+
+        MATE/Marco on X11 tends to ignore SDL fullscreen placement hints, so
+        borderless fullscreen is the reliable fallback there.
+        """
+        if self._fullscreen_mode == 'borderless':
+            return True
+        if self._fullscreen_mode == 'desktop':
+            return False
+        session_bits = ' '.join(
+            filter(None, [
+                os.environ.get('XDG_CURRENT_DESKTOP', ''),
+                os.environ.get('XDG_SESSION_DESKTOP', ''),
+                os.environ.get('DESKTOP_SESSION', ''),
+            ])
+        ).upper()
+        return 'MATE' in session_bits
+
+    def _fullscreen_window_geometry(self) -> tuple[int, int, int, int]:
+        """Compute the target geometry for fullscreen window creation."""
+        if self._display_mode == 'span_all':
+            return self._all_display_bounds()
+        bounds = self._display_bounds(self._display_index)
+        if bounds is None:
+            return 0, 0, self._width, self._height
+        return bounds.x, bounds.y, bounds.w, bounds.h
 
     def _destroy_mirror_outputs(self) -> None:
         self._multihead.destroy_mirror_outputs()
@@ -308,11 +337,16 @@ class App:
         if self._display_mode == 'span_all' and self._fullscreen:
             flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_BORDERLESS
         elif self._fullscreen:
-            flags |= sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
+            if self._prefer_borderless_fullscreen():
+                flags |= sdl2.SDL_WINDOW_BORDERLESS
+            else:
+                flags |= sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
 
         self._display_index = self._resolve_display_index()
         if self._display_mode == 'span_all':
             x_pos, y_pos, self._width, self._height = self._all_display_bounds()
+        elif self._fullscreen and self._prefer_borderless_fullscreen():
+            x_pos, y_pos, self._width, self._height = self._fullscreen_window_geometry()
         else:
             x_pos, y_pos = self._window_position_for_display(self._display_index)
 
@@ -1216,12 +1250,20 @@ void main() {
             sdl2.SDL_SetWindowPosition(self._window, x, y)
             sdl2.SDL_SetWindowSize(self._window, w, h)
         else:
-            flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
-            if self._fullscreen:
-                self._move_window_to_display()
-            sdl2.SDL_SetWindowFullscreen(self._window, flag)
-            if not self._fullscreen:
-                self._move_window_to_display()
+            if self._fullscreen and self._prefer_borderless_fullscreen():
+                x, y, w, h = self._fullscreen_window_geometry()
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+            else:
+                flag = sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP if self._fullscreen else 0
+                if self._fullscreen:
+                    self._move_window_to_display()
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_TRUE)
+                sdl2.SDL_SetWindowFullscreen(self._window, flag)
+                if not self._fullscreen:
+                    self._move_window_to_display()
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
