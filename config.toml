@@ -67,4 +67,4 @@ flash_messages = false
 # [effects.ImageShowcase]
 # image_dir = ""               # override path; empty = bundled images folder
 # speed = 1.0
-# mix_time = 8.0               # seconds per image
+# mix_time = 10.0              # seconds per image

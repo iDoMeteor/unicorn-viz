@@ -276,8 +276,11 @@ texture_dirs = "assets/textures"  # comma-separated image directories
 [effects.ImageShowcase]
 image_dir = ""    # override path; empty = bundled drop-in images folder
 speed = 1.0
-mix_time = 8.0
+mix_time = 10.0
 ```
+
+Image Showcase shuffles its image order on load and rotates through ten
+presentation styles for more motion and variety.
 
 ### `TronGrid` (`Tron Grid`)
 
