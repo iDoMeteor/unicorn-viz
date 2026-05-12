@@ -186,6 +186,15 @@ class App:
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
+        # In mirror_all the SDL window spans all displays, while effects/HUD
+        # keep rendering at single-display logical size. _window_width/_height
+        # describe the actual SDL window framebuffer; _width/_height describe
+        # the logical canvas that effects render into.
+        self._window_width = self._width
+        self._window_height = self._height
+        self._window_origin_x = 0
+        self._window_origin_y = 0
+        self._mirror_rects: list[tuple[int, int, int, int]] = []
         self._display_index = 0
         self._display_mode = 'single'
         multihead_cls = _load_multihead_controller_class()
@@ -272,8 +281,12 @@ class App:
         self._multihead.destroy_mirror_outputs()
 
     def _create_mirror_outputs(self) -> None:
-        title = self.cfg.get('window', 'title', default='Unicorn Viz')
-        self._multihead.create_mirror_outputs(title, self._width, self._height)
+        """No-op: legacy SDL_Renderer mirror windows replaced by GL-native tile-blit.
+
+        See drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md for rationale and
+        the legacy approach (kept in MultiHeadController for fallback testing).
+        """
+        return
 
     def _resize_mirror_textures(self) -> None:
         self._multihead.resize_mirror_textures(self._width, self._height)
@@ -348,7 +361,7 @@ class App:
 
         flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_RESIZABLE
         self._display_mode = self._resolve_display_mode()
-        if self._display_mode == 'span_all' and self._fullscreen:
+        if self._display_mode in ('span_all', 'mirror_all') and self._fullscreen:
             flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_BORDERLESS
         elif self._fullscreen:
             if self._prefer_borderless_fullscreen():
@@ -357,20 +370,46 @@ class App:
                 flags |= sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
 
         self._display_index = self._resolve_display_index()
+        # In mirror_all the SDL window spans all displays so we can blit the
+        # rendered frame to each display's region as a viewport. Effects keep
+        # rendering at single-display logical size to preserve composition.
+        logical_w, logical_h = self._width, self._height
         if self._display_mode == 'span_all':
             x_pos, y_pos, self._width, self._height = self._all_display_bounds()
+            self._window_width = self._width
+            self._window_height = self._height
+        elif self._display_mode == 'mirror_all':
+            x_pos, y_pos, win_w, win_h = self._all_display_bounds()
+            # Logical canvas: prefer first display's dimensions for crisp 1:1
+            # blits when displays share resolution. Falls back to configured size.
+            layouts = self._multihead.display_layouts
+            if layouts:
+                logical_w = layouts[0][2]
+                logical_h = layouts[0][3]
+            self._width = logical_w
+            self._height = logical_h
+            self._window_width = win_w
+            self._window_height = win_h
+            self._window_origin_x = x_pos
+            self._window_origin_y = y_pos
         elif self._fullscreen and self._prefer_borderless_fullscreen():
             x_pos, y_pos, self._width, self._height = self._fullscreen_window_geometry()
+            self._window_width = self._width
+            self._window_height = self._height
         else:
             x_pos, y_pos = self._window_position_for_display(self._display_index)
+            self._window_width = self._width
+            self._window_height = self._height
 
         title = self.cfg.get("window", "title", default="Unicorn Viz")
+        win_create_w = self._window_width if self._display_mode == 'mirror_all' else self._width
+        win_create_h = self._window_height if self._display_mode == 'mirror_all' else self._height
         self._window = sdl2.SDL_CreateWindow(
             title.encode(),
             x_pos,
             y_pos,
-            self._width,
-            self._height,
+            win_create_w,
+            win_create_h,
             flags,
         )
         if not self._window:
@@ -391,9 +430,27 @@ class App:
         w_i = ctypes.c_int(0)
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
-        if self._fullscreen:
+        if self._display_mode == 'mirror_all':
+            # Window size = spanned canvas; logical _width/_height stay at
+            # single-display size for effects/HUD/FBO sizing.
+            self._window_width = w_i.value or self._window_width
+            self._window_height = h_i.value or self._window_height
+            self._mirror_rects = self._multihead.mirror_layout(
+                self._window_origin_x, self._window_origin_y
+            )
+            log.info(
+                'Mirror (GL-native) active: window=%dx%d logical=%dx%d rects=%s',
+                self._window_width,
+                self._window_height,
+                self._width,
+                self._height,
+                self._mirror_rects,
+            )
+        elif self._fullscreen:
             self._width  = w_i.value or self._width
             self._height = h_i.value or self._height
+            self._window_width = self._width
+            self._window_height = self._height
             log.info(
                 'Fullscreen drawable size in %s mode: %dx%d',
                 self._display_mode,
@@ -509,6 +566,23 @@ void main() {
         tex.use(location=0)
         self._present_prog['tex'].value = 0
         self._present_vao.render(moderngl.TRIANGLE_STRIP)
+
+    def _present_mirror_tiled(self, tex: moderngl.Texture) -> None:
+        """Blit a texture across all mirror display regions in the spanned window.
+
+        GL viewport y is bottom-up; SDL display rects are top-down.
+        """
+        self._ctx.screen.use()
+        self._ctx.viewport = (0, 0, self._window_width, self._window_height)
+        self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+        tex.use(location=0)
+        self._present_prog['tex'].value = 0
+        for dx, dy, dw, dh in self._mirror_rects:
+            gl_y = self._window_height - (dy + dh)
+            self._ctx.viewport = (dx, gl_y, dw, dh)
+            self._present_vao.render(moderngl.TRIANGLE_STRIP)
+        # Restore default viewport for any subsequent overlay passes.
+        self._ctx.viewport = (0, 0, self._window_width, self._window_height)
 
     def _effect_reactivity(self, effect: BaseEffect | None) -> float | None:
         """Return per-effect reactivity override, or None if not set."""
@@ -1137,16 +1211,29 @@ void main() {
 
     def _render(self, dt: float) -> None:
         ctx = self._ctx
+        mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
 
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert pass.
-            if self._invert_colors or self._render_scale < 0.999:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 if self._current_effect:
                     self._current_effect.render()
-                if self._invert_colors:
+                if mirror_mode:
+                    if self._invert_colors:
+                        # Invert into fbo_b, then tile fbo_b across mirror rects.
+                        self._fbo_b.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_a.color_attachments[0].use(location=0)
+                        self._invert_prog['tex'].value = 0
+                        self._invert_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._present_mirror_tiled(self._fbo_b.color_attachments[0])
+                    else:
+                        self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+                elif self._invert_colors:
                     self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
@@ -1178,13 +1265,16 @@ void main() {
                     self._current_effect.destroy()
                 self._current_effect = self._next_effect
                 self._next_effect = None
-                if self._render_scale < 0.999:
+                if mirror_mode or self._render_scale < 0.999:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
                     if self._current_effect:
                         self._current_effect.render()
-                    self._present_from_tex(self._fbo_a.color_attachments[0])
+                    if mirror_mode:
+                        self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+                    else:
+                        self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
                     ctx.screen.use()
                     ctx.viewport = (0, 0, self._width, self._height)
@@ -1204,9 +1294,14 @@ void main() {
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._next_effect.render()
 
-                # Transition composite to screen
-                ctx.screen.use()
-                ctx.viewport = (0, 0, self._width, self._height)
+                # Transition composite — to mirror FBO if mirror, else screen.
+                if mirror_mode:
+                    composite_fbo = self._make_or_get_mirror_composite_fbo()
+                    composite_fbo.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                else:
+                    ctx.screen.use()
+                    ctx.viewport = (0, 0, self._width, self._height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._fbo_a.color_attachments[0].use(location=0)
                 self._fbo_b.color_attachments[0].use(location=1)
@@ -1221,10 +1316,46 @@ void main() {
                 self._blend_prog["iPalShift"].value = (self._transition_phase * 0.31) % 1.0
                 self._blend_prog["iLightWrap"].value = 0.10 + audio_impact * 0.28
                 self._blend_vao.render(moderngl.TRIANGLE_STRIP)
+                if mirror_mode:
+                    self._present_mirror_tiled(self._mirror_composite_fbo.color_attachments[0])
+
+    def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
+        """Lazy-create a single FBO used to compose mirror transitions."""
+        existing = getattr(self, '_mirror_composite_fbo', None)
+        if existing is not None:
+            tex = existing.color_attachments[0]
+            if tex.size == (self._render_width, self._render_height):
+                return existing
+            existing.release()
+            tex.release()
+        self._mirror_composite_fbo = self._make_fbo()
+        return self._mirror_composite_fbo
 
     def _on_resize(self, w: int, h: int) -> None:
+        if self._display_mode == 'mirror_all':
+            # Window grew/shrunk; logical size stays at one display worth.
+            self._window_width = w
+            self._window_height = h
+            self._mirror_rects = self._multihead.mirror_layout(
+                self._window_origin_x, self._window_origin_y
+            )
+            if self._webcam_system is not None:
+                self._webcam_system.resize(self._width, self._height)
+            self._update_render_target_size()
+            self._release_readback_pbos()
+            if self._recorder and self._recorder.is_recording:
+                self._recorder.stop()
+                self._sync_recording_overlay()
+                log.warning('Recording stopped due to resize/fullscreen change')
+            if self._current_effect:
+                self._current_effect.resize(self._width, self._height)
+            if self._next_effect:
+                self._next_effect.resize(self._width, self._height)
+            return
         self._width = w
         self._height = h
+        self._window_width = w
+        self._window_height = h
         if self._webcam_system is not None:
             self._webcam_system.resize(w, h)
         self._update_render_target_size()
@@ -1332,6 +1463,13 @@ void main() {
                 x, y, w, h = self._all_display_bounds()
                 sdl2.SDL_SetWindowPosition(self._window, x, y)
                 sdl2.SDL_SetWindowSize(self._window, w, h)
+            elif self._display_mode == 'mirror_all':
+                x, y, w, h = self._all_display_bounds()
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+                self._window_origin_x = x
+                self._window_origin_y = y
             else:
                 w = int(self.cfg.get('window', 'width', default=1920))
                 h = int(self.cfg.get('window', 'height', default=1080))
@@ -1342,10 +1480,36 @@ void main() {
         w_i = ctypes.c_int(0)
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
-        self._on_resize(w_i.value or self._width, h_i.value or self._height)
-
         if self._display_mode == 'mirror_all':
-            self._create_mirror_outputs()
+            # Switch logical canvas to first display's resolution and rebuild
+            # mirror viewport rects against the new window origin.
+            layouts = self._multihead.display_layouts
+            if layouts:
+                self._width = layouts[0][2]
+                self._height = layouts[0][3]
+            self._window_width = w_i.value or self._window_width
+            self._window_height = h_i.value or self._window_height
+            self._mirror_rects = self._multihead.mirror_layout(
+                self._window_origin_x, self._window_origin_y
+            )
+            self._update_render_target_size()
+            if self._current_effect:
+                self._current_effect.resize(self._width, self._height)
+            if self._next_effect:
+                self._next_effect.resize(self._width, self._height)
+            if self._webcam_system is not None:
+                self._webcam_system.resize(self._width, self._height)
+            log.info(
+                'Mirror (GL-native) reconfigured: window=%dx%d logical=%dx%d rects=%s',
+                self._window_width,
+                self._window_height,
+                self._width,
+                self._height,
+                self._mirror_rects,
+            )
+        else:
+            self._mirror_rects = []
+            self._on_resize(w_i.value or self._width, h_i.value or self._height)
 
         return self._display_mode
 
