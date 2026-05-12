@@ -784,8 +784,11 @@ void main() {
                 image_cfg = self.cfg.get('effects', 'ImageShowcase', default={}) or {}
                 if bool(image_cfg.get('preload_images', False)):
                     try:
-                        effect_cls.warm_cache(self._ctx, image_cfg)
-                        log.info('Image Showcase cache warmed (GL upload)')
+                        if hasattr(effect_cls, 'prefetch_ready') and effect_cls.prefetch_ready(image_cfg):
+                            effect_cls.warm_cache(self._ctx, image_cfg)
+                            log.info('Image Showcase cache warmed (GL upload)')
+                        else:
+                            log.info('Image Showcase prefetch still running; skipping blocking warmup')
                     except Exception as exc:
                         log.warning('Image Showcase cache warmup failed: %s', exc)
                 break
