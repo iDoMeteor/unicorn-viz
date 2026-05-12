@@ -1446,6 +1446,14 @@ void main() {
                 sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
                 sdl2.SDL_SetWindowPosition(self._window, x, y)
                 sdl2.SDL_SetWindowSize(self._window, w, h)
+            elif self._display_mode == 'mirror_all':
+                x, y, w, h = self._all_display_bounds()
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+                self._window_origin_x = x
+                self._window_origin_y = y
             elif self._prefer_borderless_fullscreen():
                 x, y, w, h = self._fullscreen_window_geometry()
                 sdl2.SDL_SetWindowFullscreen(self._window, 0)
