@@ -61,5 +61,6 @@ pip_position   = "hidden"  # top_left | top_center | top_right |
 # ---------------------------------------------------------------------------
 # [effects.ImageShowcase]
 # image_dir = ""               # override path; empty = bundled images folder
+# preload_images = false        # true = warm image cache at startup
 # speed = 1.0
 # mix_time = 10.0              # seconds per image
