@@ -21,6 +21,17 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Refresh-PathFromRegistry {
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $merged = @()
+    if ($machinePath) { $merged += $machinePath }
+    if ($userPath) { $merged += $userPath }
+    if ($merged.Count -gt 0) {
+        $env:Path = ($merged -join ';')
+    }
+}
+
 function Test-PythonVersionAtLeast {
     param(
         [Parameter(Mandatory = $true)][string]$PythonExe,
@@ -67,6 +78,21 @@ function Get-PythonExe {
         }
         if ($python -and (Test-PythonVersionAtLeast $python 3 11)) {
             return $python
+        }
+    }
+
+    # Fallback scan of common Windows install paths (first-run after winget/choco).
+    $candidates = @()
+    if ($env:LocalAppData) {
+        $candidates += Get-ChildItem -Path "$env:LocalAppData\Programs\Python" -Filter python.exe -Recurse -ErrorAction SilentlyContinue
+    }
+    if ($env:ProgramFiles) {
+        $candidates += Get-ChildItem -Path "$env:ProgramFiles" -Filter python.exe -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'Python' }
+    }
+    foreach ($candidate in $candidates) {
+        $path = $candidate.FullName
+        if ($path -and (Test-PythonVersionAtLeast $path 3 11)) {
+            return $path
         }
     }
 
@@ -147,6 +173,7 @@ function Ensure-Ffmpeg {
 
 Ensure-Python
 Ensure-Ffmpeg
+Refresh-PathFromRegistry
 
 # If Python was just installed, PATH may not be refreshed in this shell yet.
 $hostPython = Get-PythonExe
