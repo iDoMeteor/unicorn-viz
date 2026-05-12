@@ -162,3 +162,12 @@
 - `[todo]` Tackle platform/display support next: Windows and multi-monitor support affect many subsystems.
 - `[todo]` Add media asset pipelines after runtime foundations are stable.
 - `[decision]` Finalize plugin/commercial model before implementing paid-effect distribution.
+
+## Config Policy Note
+
+- `[decision]` Define and enforce config source-of-truth policy.
+  Notes:
+  - maintain a project default config profile (or set of defaults/examples)
+  - allow user-local config overrides at runtime
+  - do not commit user-customized `config.toml` values to mainline
+  - document which config files are defaults/templates vs user-local state
