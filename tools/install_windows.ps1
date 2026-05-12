@@ -41,6 +41,19 @@ function Get-PythonExe {
     return $null
 }
 
+function Get-VenvPython {
+    $candidates = @(
+        '.venv\Scripts\python.exe',
+        '.venv\Scripts\python'
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+    return $null
+}
+
 function Ensure-Python {
     $pythonExe = Get-PythonExe
     if ($pythonExe) {
@@ -101,24 +114,52 @@ function Ensure-Ffmpeg {
 Ensure-Python
 Ensure-Ffmpeg
 
+# If Python was just installed, PATH may not be refreshed in this shell yet.
+$hostPython = Get-PythonExe
+if (-not $hostPython) {
+    throw 'Python appears installed but is not visible in this shell yet. Open a new PowerShell window and re-run tools\\install_windows.bat.'
+}
+
 if (-not (Test-Path 'requirements.txt')) {
     throw "requirements.txt not found in $projectRoot"
 }
 
 if (-not $SkipVenv) {
-    if (-not (Test-Path '.venv\Scripts\python.exe')) {
+    if (-not (Get-VenvPython)) {
         Write-Host 'Creating virtual environment (.venv)...' -ForegroundColor Yellow
+        $venvCreated = $false
         if (Test-Command 'py') {
             & py -$PythonVersion -m venv .venv
+            if ($LASTEXITCODE -eq 0) {
+                $venvCreated = $true
+            }
+            else {
+                # Fallback if exact version launcher key is unavailable.
+                & py -3 -m venv .venv
+                if ($LASTEXITCODE -eq 0) {
+                    $venvCreated = $true
+                }
+            }
         }
-        else {
+        if (-not $venvCreated) {
             & python -m venv .venv
+            if ($LASTEXITCODE -eq 0) {
+                $venvCreated = $true
+            }
+        }
+        if (-not $venvCreated -or -not (Get-VenvPython)) {
+            throw 'Failed to create .venv or locate venv Python executable. Ensure Python 3.11+ is installed, then retry in a new shell.'
         }
     }
 
+    $venvPython = Get-VenvPython
+    if (-not $venvPython) {
+        throw 'Virtual environment Python was not found after setup.'
+    }
+
     Write-Host 'Installing Python packages into .venv...' -ForegroundColor Yellow
-    & .\.venv\Scripts\python.exe -m pip install --upgrade pip wheel
-    & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+    & $venvPython -m pip install --upgrade pip wheel
+    & $venvPython -m pip install -r requirements.txt
 
     Write-Host ''
     Write-Host 'Install complete.' -ForegroundColor Green
