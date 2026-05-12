@@ -21,6 +21,7 @@ from the main thread only, so no locking is required.
 from __future__ import annotations
 
 import random
+from collections import deque
 from typing import Type
 
 from unicornviz.effects.base import BaseEffect
@@ -45,6 +46,9 @@ class Playlist:
             self._effects = list(effect_classes)
 
         self._mode = mode
+        self._shuffle_cycle: list[int] = []
+        self._shuffle_pos: int = 0
+        self._shuffle_recent: deque[int] = deque(maxlen=3)
 
         # Find starting index by NAME attribute (display name) or class name
         self._index = 0
@@ -54,26 +58,61 @@ class Playlist:
                     self._index = i
                     break
 
+        self._reset_shuffle_cycle(avoid_index=self._index)
+
+    def _reset_shuffle_cycle(self, avoid_index: int | None = None) -> None:
+        """Build a shuffled traversal order covering all effects exactly once."""
+        self._shuffle_cycle = list(range(len(self._effects)))
+        random.shuffle(self._shuffle_cycle)
+
+        blocked: set[int] = set(self._shuffle_recent)
+        if avoid_index is not None:
+            blocked.add(avoid_index)
+
+        # Move a blocked first pick to the end when alternatives exist.
+        if len(self._shuffle_cycle) > 1 and self._shuffle_cycle[0] in blocked:
+            for i, idx in enumerate(self._shuffle_cycle):
+                if idx not in blocked:
+                    self._shuffle_cycle[0], self._shuffle_cycle[i] = self._shuffle_cycle[i], self._shuffle_cycle[0]
+                    break
+        self._shuffle_pos = 0
+
+    def _advance_shuffle(self) -> Type[BaseEffect]:
+        if not self._shuffle_cycle or self._shuffle_pos >= len(self._shuffle_cycle):
+            self._reset_shuffle_cycle(avoid_index=self._index)
+        self._index = self._shuffle_cycle[self._shuffle_pos]
+        self._shuffle_pos += 1
+        self._shuffle_recent.append(self._index)
+        return self._effects[self._index]
+
     def current(self) -> Type[BaseEffect]:
         return self._effects[self._index]
 
     def advance(self) -> Type[BaseEffect]:
         if self._mode == "random":
-            self._index = random.randrange(len(self._effects))
+            return self._advance_shuffle()
         else:
             self._index = (self._index + 1) % len(self._effects)
         return self._effects[self._index]
 
     def go_prev(self) -> Type[BaseEffect]:
         self._index = (self._index - 1) % len(self._effects)
+        if self._mode == "random":
+            self._shuffle_recent.append(self._index)
+            self._reset_shuffle_cycle(avoid_index=self._index)
         return self._effects[self._index]
 
     def go_index(self, i: int) -> Type[BaseEffect]:
         self._index = i % len(self._effects)
+        if self._mode == "random":
+            self._shuffle_recent.append(self._index)
+            self._reset_shuffle_cycle(avoid_index=self._index)
         return self._effects[self._index]
 
     def toggle_random(self) -> None:
         self._mode = "random" if self._mode != "random" else "sequential"
+        if self._mode == "random":
+            self._reset_shuffle_cycle(avoid_index=self._index)
 
     @property
     def mode(self) -> str:

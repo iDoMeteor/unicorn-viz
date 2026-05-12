@@ -13,6 +13,12 @@ from typing import TYPE_CHECKING
 import moderngl
 import numpy as np
 
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    _PIL_AVAILABLE = True
+except Exception:
+    _PIL_AVAILABLE = False
+
 if TYPE_CHECKING:
     from unicornviz.effects.base import BaseEffect
 
@@ -219,12 +225,50 @@ _FONT_8X8 = [
 ]  # 96 chars × 8 bytes = 768 bytes
 
 
-def _build_font_texture(ctx: moderngl.Context) -> moderngl.Texture:
+def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, int, int, int]:
     """
-    Create a 1024×8 luminance texture: 128 chars × 8 px wide, 8 px tall.
-    Uses the embedded _FONT_8X8 table (ASCII 32–127) for the first 96 slots.
-    Falls back to loading assets/fonts/font8x8.bin if present.
+    Build overlay font atlas and return (texture, glyph_w, glyph_h, atlas_w, atlas_h).
+
+    Preferred path: render a grayscale atlas from a modern TTF font for cleaner
+    readability at mixed sizes.
+    Fallback path: legacy 8x8 bitmap atlas from assets/fonts/font8x8.bin or
+    embedded BIOS-style font data.
     """
+    if _PIL_AVAILABLE:
+        font_candidates = [
+            Path('assets/fonts/ui-font.ttf'),
+            Path('/usr/share/fonts/adobe-source-code-pro-fonts/SourceCodePro-Medium.otf'),
+            Path('/usr/share/fonts/google-noto-vf/NotoSansMono-VF.ttf'),
+            Path('/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf'),
+        ]
+        font_path = next((p for p in font_candidates if p.exists()), None)
+        if font_path is not None:
+            glyph_w = 13
+            glyph_h = 18
+            n_chars = 128
+            atlas_w = glyph_w * n_chars
+            atlas_h = glyph_h
+            atlas = Image.new('L', (atlas_w, atlas_h), 0)
+            draw = ImageDraw.Draw(atlas)
+            try:
+                font = ImageFont.truetype(str(font_path), size=17)
+                for code in range(32, 127):
+                    ch = chr(code)
+                    bbox = draw.textbbox((0, 0), ch, font=font)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    ox = code * glyph_w + max(0, (glyph_w - tw) // 2) - bbox[0]
+                    oy = max(0, (glyph_h - th) // 2) - bbox[1] - 1
+                    draw.text((ox, oy), ch, font=font, fill=255)
+
+                data = np.array(atlas, dtype=np.uint8)
+                tex = ctx.texture((atlas_w, atlas_h), 1, data=data.tobytes())
+                # Linear sampling keeps strokes cleaner when scaled.
+                tex.filter = moderngl.LINEAR, moderngl.LINEAR
+                return tex, glyph_w, glyph_h, atlas_w, atlas_h
+            except Exception:
+                pass
+
     N_CHARS = 128
     data = np.zeros((8, N_CHARS * 8), dtype=np.uint8)
 
@@ -253,58 +297,99 @@ def _build_font_texture(ctx: moderngl.Context) -> moderngl.Texture:
 
     tex = ctx.texture((N_CHARS * 8, 8), 1, data=data.tobytes())
     tex.filter = moderngl.NEAREST, moderngl.NEAREST
-    return tex
+    return tex, 8, 8, N_CHARS * 8, 8
 
 
 class Overlays:
     """Manages all HUD/overlay rendering."""
 
-    HELP_TEXT = [
-        " UNICORN VIZ  Hotkeys ",
-        "------------------------",
-        " N / Right   Next effect",
-        " P / Left    Prev effect",
-        " 1-9         Jump #1-9",
-        " Shift+1-0   Jump #10-20",
-        " Ctrl+1-0    Jump #21-30",
-        " ,           ANSI art",
-        " .           ACiD art",
-        " F           Fullscreen",
-        " Space       Pause/resume",
-        " R           Random mode",
-        " + / -       Speed up/dn",
-        " Ctrl+= / Ctrl+-  Speed MAX/MIN",
-        " G           Reset speed",
-        " [ / ]       Reactivity -/+",
-        " { / }       Reactivity MIN/MAX",
-        " g           Reset reactivity",
-        " E           EQ / spectrum",
-        " A           Audio source",
-        " M           MIDI device",
-        " TAB         Legacy HUD mode",
-        " S           Screenshot",
-        " V           Toggle recording",
-        " H           This help",
-        " ESC         Quit",
-        " T           Auto-advance on/off",
-        " ;  /  '     Advance interval -10s / +10s",
-        " \\           Advance interval reset to config",
-        " I           Invert colors toggle",
-        " KP 1-9      Camera overlay position",
-        " KP 0 / KP . Camera fullscreen / hide",
-        " KP / *      Camera treatment prev / next",
-        " KP - +      Camera PiP size",
-        " KP Enter    Camera treatment auto-cycle",
-        " U           Unicorn Tears",
-        " Shift+U     Show splash anytime",
-        " X           Display mode reset to config",
-        " Shift+X     Display mode: single",
-        " Ctrl+X      Display mode: span_all",
-        " Alt+X       Display mode: mirror_all",
-        "--- Sim Showcase (sims-01) ---",
-        " Ctrl+N      Next USD scene",
-        " Ctrl+P      Prev USD scene",
-        " Ctrl+R      Random USD scene",
+    HELP_SECTION_THEMES: dict[str, tuple[float, float, float]] = {
+        'Navigation': (0.18, 0.96, 0.86),
+        'Playback': (1.00, 0.68, 0.28),
+        'Audio + Visual': (0.64, 0.86, 1.00),
+        'Display + Capture': (0.96, 0.72, 1.00),
+        'Display Modes': (0.98, 0.94, 0.55),
+        'Camera Overlay': (0.72, 1.00, 0.66),
+    }
+    DYNAMIC_THEME_CYCLE: list[tuple[float, float, float]] = [
+        (0.88, 0.92, 1.00),
+        (0.84, 1.00, 0.86),
+        (1.00, 0.89, 0.84),
+        (0.90, 0.85, 1.00),
+        (0.98, 0.96, 0.72),
+    ]
+
+    CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
+        (
+            'Navigation',
+            [
+                ('N / Right', 'Next effect'),
+                ('P / Left', 'Prev effect'),
+                ('1-9', 'Jump #1-9'),
+                ('Shift+1-0', 'Jump #11-20'),
+                ('Ctrl+1-0', 'Jump #21-30'),
+                ('Alt+1-0', 'Jump #31-40'),
+                ('U', 'Unicorn Tears'),
+                ('Shift+U', 'Replay splash'),
+            ],
+        ),
+        (
+            'Playback',
+            [
+                ('Space', 'Pause / resume'),
+                ('R', 'Random mode'),
+                ('T', 'Auto-advance on/off'),
+                ('; / \'' , 'Advance interval -/+ 10s'),
+                ('\\', 'Reset advance interval'),
+                ('+ / -', 'Speed up / down'),
+                ('Ctrl+=/-', 'Speed MAX / MIN'),
+                ('G', 'Reset speed'),
+            ],
+        ),
+        (
+            'Audio + Visual',
+            [
+                ('[ / ]', 'Reactivity -/+'),
+                ('{ / }', 'Reactivity MIN / MAX'),
+                ('g', 'Reset reactivity'),
+                ('E', 'EQ / spectrum'),
+                ('A', 'Audio source'),
+                ('M', 'MIDI device'),
+                ('I', 'Invert colors'),
+            ],
+        ),
+        (
+            'Display + Capture',
+            [
+                (',', 'ANSI art'),
+                ('.', 'ACiD art'),
+                ('TAB', 'Toggle HUD'),
+                ('S', 'Screenshot'),
+                ('V', 'Toggle recording'),
+                ('H', 'Toggle help'),
+                ('ESC', 'Quit'),
+                ('F', 'Fullscreen'),
+            ],
+        ),
+        (
+            'Display Modes',
+            [
+                ('X', 'Mode from config'),
+                ('Shift+X', 'single'),
+                ('Ctrl+X', 'span_all'),
+                ('Alt+X', 'mirror_all'),
+            ],
+        ),
+        (
+            'Camera Overlay',
+            [
+                ('KP 1-9', 'PiP position'),
+                ('KP 0 / .', 'PiP fullscreen / hide'),
+                ('KP / *', 'Treatment prev / next'),
+                ('KP - +', 'PiP size'),
+                ('KP Enter', 'Treatment auto-cycle'),
+            ],
+        ),
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
@@ -351,9 +436,14 @@ class Overlays:
             'paused': 'NO',
             'fullscreen': 'NO',
             'auto_advance': 'ON',
+            'advance_time': '0.0/20.0s',
             'reactivity': '1.0x',
             'speed': '-',
             'audio_source': '-',
+            'preset_slot_label': 'PRESET IDX',
+            'preset_slot': '-/-',
+            'variant_slot_label': 'VARIANT',
+            'variant_slot': '-/-',
             'recording': 'OFF',
             'bass': '0.00',
             'mid': '0.00',
@@ -365,10 +455,18 @@ class Overlays:
         self._num_shortcuts: list[str] = []
         self._shift_shortcuts: list[str] = []
         self._ctrl_shortcuts: list[str] = []
+        self._alt_shortcuts: list[str] = []
         self._unmapped_effects: list[str] = []
         self._hud_rect: tuple[float, float, float, float] | None = None
+        self._dynamic_help_sections: dict[str, list[tuple[str, str]]] = {}
+        self._dynamic_help_order: list[str] = []
+        self._help_collapsed: dict[str, bool] = {}
+        self._help_focus_idx: int = 0
+        self._help_pulse_t: float = 0.0
 
-        self._font_tex = _build_font_texture(ctx)
+        self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h = _build_font_texture(ctx)
+        # Keep historical scale semantics (scale=1 roughly equals an 8 px cell).
+        self._font_scale_norm = 8.0 / float(max(1, self._glyph_h))
         self._prog = self._build_program()
         self._build_vbo()
         self._build_panel_vbo()
@@ -475,20 +573,20 @@ void main() {
         scale is pixels-per-cell (8 px = 1x).
         Returns float32 array of 6 vertices per character (2 tris).
         """
-        char_w = 8.0 * scale
-        char_h = 8.0 * scale
-        atlas_w = 128 * 8   # texture width in pixels (128 chars × 8 px each)
-        atlas_h = 8         # texture height in pixels
+        norm_scale = scale * self._font_scale_norm
+        char_w = float(self._glyph_w) * norm_scale
+        char_h = float(self._glyph_h) * norm_scale
+        atlas_w = float(self._atlas_w)
+        atlas_h = float(self._atlas_h)
 
         verts: list[float] = []
         cx = x
         for ch in text:
             code = ord(ch) & 0x7F
-            u0 = (code * 8) / atlas_w
-            u1 = u0 + 8.0 / atlas_w
-            # Vertical UV mapping for atlas sampling.
+            u0 = (code * self._glyph_w) / atlas_w
+            u1 = u0 + float(self._glyph_w) / atlas_w
             v0 = 0.0
-            v1 = 1.0
+            v1 = float(self._glyph_h) / atlas_h
 
             # NDC conversion
             def px(px_val: float) -> float:
@@ -577,34 +675,34 @@ void main() {
     def _render_hud(self) -> None:
         """Render modern game-style status HUD panel."""
         panel_w = min(990.0, self._width * 0.86)
-        panel_h = min(410.0, self._height * 0.72)
+        panel_h = min(490.0, self._height * 0.80)
         x = (self._width - panel_w) * 0.5
         y = (self._height - panel_h) * 0.5
         self._hud_rect = (x, y, panel_w, panel_h)
 
         # Layered glass panels
         self._draw_rect(x - 2.0, y - 2.0, panel_w + 4.0, panel_h + 4.0, (0.08, 0.95, 1.0, 0.26))
-        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.60))
-        self._draw_rect(x, y, panel_w, 78.0, (0.06, 0.12, 0.22, 0.72))
+        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.76))
+        self._draw_rect(x, y, panel_w, 92.0, (0.06, 0.12, 0.22, 0.76))
 
         title = self._hud_state.get('title', 'Unicorn Viz Legacy HUD')
-        tx = x + (panel_w - len(title) * 8.0 * 2.8) * 0.5
-        self._draw_text(title, tx, y + 8.0, scale=2.8, color=(0.62, 1.0, 1.0, 0.96))
+        tx = x + (panel_w - len(title) * 8.0 * 3.0) * 0.5
+        self._draw_text(title, tx, y + 10.0, scale=3.0, color=(0.62, 1.0, 1.0, 0.96))
         now = datetime.datetime.now()
         dt_line = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}"
-        dx = x + (panel_w - len(dt_line) * 8.0 * 2.0) * 0.5
-        self._draw_text(dt_line, dx, y + 38.0, scale=2.0, color=(0.94, 0.98, 1.0, 0.90))
+        dx = x + (panel_w - len(dt_line) * 8.0 * 2.2) * 0.5
+        self._draw_text(dt_line, dx, y + 46.0, scale=2.2, color=(0.94, 0.98, 1.0, 0.90))
 
         # Primary strip
-        self._draw_rect(x + 14.0, y + 90.0, panel_w - 28.0, 70.0, (0.08, 0.11, 0.18, 0.62))
-        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 100.0, scale=2.8, color=(0.92, 1.0, 1.0, 0.95))
-        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 128.0, scale=2.2, color=(0.68, 0.94, 1.0, 0.92))
+        self._draw_rect(x + 14.0, y + 106.0, panel_w - 28.0, 78.0, (0.08, 0.11, 0.18, 0.76))
+        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 116.0, scale=3.0, color=(0.92, 1.0, 1.0, 0.95))
+        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 146.0, scale=2.35, color=(0.68, 0.94, 1.0, 0.92))
 
         # Core stats columns
         left_x = x + 22.0
         right_x = x + panel_w * 0.51
-        row0 = y + 172.0
-        lh = 24.0
+        row0 = y + 202.0
+        lh = 26.0
 
         left_lines = [
             f"FPS         {self._hud_state.get('fps', '0.0')}",
@@ -620,6 +718,9 @@ void main() {
             f"PAUSED      {self._hud_state.get('paused', 'NO')}",
             f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
             f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
+            f"ADV TIMER   {self._hud_state.get('advance_time', '0.0/20.0s')}",
+            f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
+            f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
             f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
             f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
             f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
@@ -629,9 +730,9 @@ void main() {
         ]
 
         for i, ln in enumerate(left_lines):
-            self._draw_text(ln, left_x, row0 + i * lh, scale=1.9, color=(0.82, 0.94, 1.0, 0.95))
+            self._draw_text(ln, left_x, row0 + i * lh, scale=2.05, color=(0.82, 0.94, 1.0, 0.95))
         for i, ln in enumerate(right_lines):
-            self._draw_text(ln, right_x, row0 + i * lh, scale=1.9, color=(0.84, 1.0, 0.88, 0.95))
+            self._draw_text(ln, right_x, row0 + i * lh, scale=2.05, color=(0.84, 1.0, 0.88, 0.95))
 
         # Bottom accent
         self._draw_rect(x + 14.0, y + panel_h - 34.0, panel_w - 28.0, 12.0, (0.11, 0.95, 1.0, 0.45))
@@ -643,6 +744,7 @@ void main() {
             if self._help_timer <= 0.0:
                 self._show_help = False
                 self._help_timer = 0.0
+            self._help_pulse_t += dt
 
         if self._flash_timer > 0.0:
             self._flash_timer -= dt
@@ -666,65 +768,240 @@ void main() {
             self._render_help()
 
     def _render_help(self) -> None:
-        pad = 30.0
-        scale = 2.55
-        lh = 8 * scale + 4
+        panel_pad = 24.0
+        x = panel_pad
+        y = panel_pad
+        w = self._width - panel_pad * 2.0
+        h = self._height - panel_pad * 2.0
 
-        # Left: generic hotkeys
-        y = pad
-        for line in self.HELP_TEXT:
-            self._draw_text(line, pad, y, scale=scale, color=(0.2, 1.0, 0.4, 0.95))
-            y += lh
+        # Main glass panel with neon flare.
+        self._draw_rect(x, y, w, h, (0.03, 0.05, 0.10, 0.76))
+        self._draw_rect(x, y, w, 86.0, (0.07, 0.14, 0.24, 0.76))
+        self._draw_rect(x + 10.0, y + 82.0, w - 20.0, 3.0, (0.12, 0.94, 1.0, 0.65))
 
-        # Right: direct effect shortcuts in a 2x2 grid (1-0/Shift on top,
-        # Ctrl/Alt on bottom).
-        col_scale = 2.0
-        col_lh = 8 * col_scale + 3
-        col1_x = self._width * 0.45
-        col2_x = self._width * 0.67
+        self._draw_text('UNICORN VIZ - HELP', x + 18.0, y + 10.0, scale=2.95, color=(0.66, 1.0, 1.0, 0.98))
+        self._draw_text('Core controls, drop-ins, and live shortcuts', x + 18.0, y + 38.0, scale=1.95, color=(0.78, 0.9, 1.0, 0.92))
+        self._draw_text('1-9/0 toggle sections  Up/Down + Enter focus/toggle  Shift+= expand all  Shift+- collapse all', x + 420.0, y + 38.0, scale=1.34, color=(0.84, 0.92, 1.0, 0.86))
+        slot_label = self._hud_state.get('preset_slot_label', 'PRESET IDX')
+        self._draw_text(f"ACTIVE {slot_label}: {self._hud_state.get('preset_slot', '-/-')}", x + 18.0, y + 58.0, scale=1.5, color=(0.90, 1.0, 0.72, 0.94))
+        v_label = self._hud_state.get('variant_slot_label', 'VARIANT')
+        self._draw_text(f"ACTIVE {v_label}: {self._hud_state.get('variant_slot', '-/-')}", x + 520.0, y + 58.0, scale=1.5, color=(0.82, 0.95, 1.0, 0.94))
+
+        left_x = x + 14.0
+        left_y = y + 98.0
+        left_w = w * 0.64
+        left_h = h - 90.0
+
+        right_x = left_x + left_w + 10.0
+        right_y = left_y
+        right_w = x + w - right_x - 14.0
+        right_h = left_h
+
+        self._draw_rect(left_x, left_y, left_w, left_h, (0.02, 0.07, 0.11, 0.76))
+        self._draw_rect(right_x, right_y, right_w, right_h, (0.02, 0.09, 0.12, 0.76))
+
+        sections = self._iter_help_sections()
+        if sections:
+            self._help_focus_idx = max(0, min(self._help_focus_idx, len(sections) - 1))
+
+        card_title_scale = 2.30
+        item_scale = 2.10
+        card_line_h = 8 * item_scale + 2.0
+        card_pad = 8.0
+
+        col_gap = 10.0
+        col_w = (left_w - 3 * col_gap) / 2.0
+        col_x = [left_x + col_gap, left_x + col_gap * 2 + col_w]
+        col_y = [left_y + 8.0, left_y + 8.0]
+        col_max_y = left_y + left_h - 10.0
+
+        for sec_idx, (section, entries) in enumerate(sections):
+            if not entries:
+                continue
+            accent = self._help_theme_color(section)
+            collapsed = self._help_collapsed.get(section, False)
+            visible_entries = [] if collapsed else entries
+            section_h = card_pad * 2 + 8 * card_title_scale + 4 + len(visible_entries) * card_line_h
+            if collapsed:
+                section_h += card_line_h
+            idx = 0 if col_y[0] <= col_y[1] else 1
+            if col_y[idx] + section_h > col_max_y:
+                other = 1 - idx
+                if col_y[other] + section_h <= col_max_y:
+                    idx = other
+                else:
+                    continue
+
+            sx = col_x[idx]
+            sy = col_y[idx]
+            if sec_idx == self._help_focus_idx:
+                pulse = 0.5 + 0.5 * np.sin(self._help_pulse_t * 5.4)
+                glow_a = 0.16 + pulse * 0.20
+                edge_a = 0.34 + pulse * 0.26
+                self._draw_rect(sx - 4.0, sy - 4.0, col_w + 8.0, section_h + 8.0, (accent[0], accent[1], accent[2], glow_a))
+                self._draw_rect(sx - 2.0, sy - 2.0, col_w + 4.0, section_h + 4.0, (accent[0], accent[1], accent[2], edge_a))
+            self._draw_rect(sx, sy, col_w, section_h, (0.05 + accent[0] * 0.05, 0.08 + accent[1] * 0.06, 0.14 + accent[2] * 0.05, 0.62))
+            self._draw_rect(sx, sy, col_w, 3.0, (accent[0], accent[1], accent[2], 0.78))
+            marker = '>' if sec_idx == self._help_focus_idx else ' '
+            icon = '+' if collapsed else '-'
+            header = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
+            self._draw_text(header, sx + card_pad, sy + card_pad, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
+
+            yy = sy + card_pad + 8 * card_title_scale + 4
+            if collapsed:
+                self._draw_text('[collapsed]', sx + card_pad, yy, scale=item_scale, color=(0.78, 0.84, 0.92, 0.92))
+                yy += card_line_h
+            for key, desc in visible_entries:
+                line = f'{key:<12} {desc}'
+                self._draw_text(line, sx + card_pad, yy, scale=item_scale, color=(0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96))
+                yy += card_line_h
+
+            col_y[idx] += section_h + 8.0
+
+        # Right column: direct effect shortcut map.
+        self._draw_text('LIVE SHORTCUT MAP', right_x + 10.0, right_y + 10.0, scale=2.05, color=(1.0, 0.92, 0.58, 0.96))
+        self._draw_rect(right_x + 10.0, right_y + 30.0, right_w - 20.0, 2.0, (1.0, 0.72, 0.24, 0.65))
+
         rows = max(
             len(self._num_shortcuts),
             len(self._shift_shortcuts),
             len(self._ctrl_shortcuts),
             len(self._alt_shortcuts),
         )
+        sec_scale = 1.82
+        min_bottom_margin = 26.0
 
-        def _draw_shortcut_section(
-            title: str,
-            items: list[str],
-            x: float,
-            y0: float,
-            color: tuple[float, float, float, float],
-        ) -> None:
-            y = y0
-            self._draw_text(title, x, y, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
-            y += col_lh
-            self._draw_text('-' * len(title), x, y, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
-            y += col_lh
-            for i in range(rows):
+        def _shortcut_block_height(scale: float) -> float:
+            line_h = 8 * scale + 2.0
+            return (8 * 1.85 + 3.0) + float(min(rows, 12)) * line_h
+
+        top = right_y + 42.0
+        row_count = float(min(rows, 12))
+        while sec_scale > 1.18:
+            sec_lh = 8 * sec_scale + 2.0
+            top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
+            bottom_y = top + top_block_h + 28.0
+            total_h = bottom_y + _shortcut_block_height(sec_scale)
+            if total_h <= right_y + right_h - min_bottom_margin:
+                break
+            sec_scale -= 0.08
+
+        sec_lh = 8 * sec_scale + 2.0
+
+        def _draw_shortcut_block(title: str, items: list[str], bx: float, by: float, color: tuple[float, float, float, float]) -> None:
+            self._draw_text(title, bx, by, scale=1.85, color=(0.96, 1.0, 0.70, 0.96))
+            y0 = by + 8 * 1.85 + 3.0
+            for i in range(min(rows, 12)):
                 text = items[i] if i < len(items) else '(none)'
-                self._draw_text(text, x, y, scale=col_scale, color=color)
-                y += col_lh
+                self._draw_text(text, bx, y0 + i * sec_lh, scale=sec_scale, color=color)
 
-        top_y = pad
-        block_h = (rows + 2) * col_lh
-        bottom_y = top_y + block_h + col_lh * 0.8
-
-        _draw_shortcut_section('1-0 shortcuts', self._num_shortcuts, col1_x, top_y, (0.8, 1.0, 0.9, 0.95))
-        _draw_shortcut_section('Shift shortcuts', self._shift_shortcuts, col2_x, top_y, (0.9, 0.85, 1.0, 0.95))
-        _draw_shortcut_section('Ctrl shortcuts', self._ctrl_shortcuts, col1_x, bottom_y, (0.85, 0.95, 1.0, 0.95))
-        _draw_shortcut_section('Alt shortcuts', self._alt_shortcuts, col2_x, bottom_y, (1.0, 0.9, 0.8, 0.95))
-
-        cy = bottom_y + block_h
+        half = right_w * 0.48
+        top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
+        bottom_y = top + top_block_h + 28.0
+        _draw_shortcut_block('1-0', self._num_shortcuts, right_x + 10.0, top, (0.82, 1.0, 0.9, 0.95))
+        _draw_shortcut_block('SHIFT', self._shift_shortcuts, right_x + half, top, (0.92, 0.86, 1.0, 0.95))
+        _draw_shortcut_block('CTRL', self._ctrl_shortcuts, right_x + 10.0, bottom_y, (0.84, 0.94, 1.0, 0.95))
+        _draw_shortcut_block('ALT', self._alt_shortcuts, right_x + half, bottom_y, (1.0, 0.92, 0.82, 0.95))
 
         if self._unmapped_effects:
             self._draw_text(
-                f"No shortcut: {', '.join(self._unmapped_effects)}",
-                col1_x,
-                cy + col_lh,
-                scale=2.2,
-                color=(1.0, 0.55, 0.55, 0.95),
+                f"Extra effects (no direct key): {', '.join(self._unmapped_effects)}",
+                right_x + 10.0,
+                right_y + right_h - 20.0,
+                scale=1.16,
+                color=(1.0, 0.62, 0.62, 0.94),
             )
+
+    def _iter_help_sections(self) -> list[tuple[str, list[tuple[str, str]]]]:
+        """Return merged core + dynamic help sections in render order."""
+        sections: list[tuple[str, list[tuple[str, str]]]] = []
+        for section, entries in self.CORE_HELP_SECTIONS:
+            sections.append((section, list(entries)))
+        for section in self._dynamic_help_order:
+            entries = self._dynamic_help_sections.get(section, [])
+            if entries:
+                sections.append((section, list(entries)))
+        return sections
+
+    def _help_theme_color(self, section: str) -> tuple[float, float, float]:
+        """Return accent color for a help section."""
+        base = self.HELP_SECTION_THEMES.get(section)
+        if base is not None:
+            return base
+        # Deterministic fallback for drop-in sections.
+        idx = abs(hash(section)) % len(self.DYNAMIC_THEME_CYCLE)
+        return self.DYNAMIC_THEME_CYCLE[idx]
+
+    def register_help_entries(self, entries: list[tuple[str, str, str] | dict]) -> None:
+        """Register help entries discovered from effects/drop-ins.
+
+        Each entry may be:
+        - (section, key, description)
+        - {'section': str, 'key': str, 'description': str}
+        """
+        self._dynamic_help_sections = {}
+        self._dynamic_help_order = []
+
+        for item in entries:
+            section = ''
+            key = ''
+            desc = ''
+            if isinstance(item, dict):
+                section = str(item.get('section', '')).strip()
+                key = str(item.get('key', '')).strip()
+                desc = str(item.get('description', item.get('desc', item.get('action', '')))).strip()
+            elif isinstance(item, (tuple, list)) and len(item) >= 3:
+                section = str(item[0]).strip()
+                key = str(item[1]).strip()
+                desc = str(item[2]).strip()
+
+            if not (section and key and desc):
+                continue
+
+            bucket = self._dynamic_help_sections.setdefault(section, [])
+            entry = (key, desc)
+            if entry not in bucket:
+                bucket.append(entry)
+            if section not in self._dynamic_help_order:
+                self._dynamic_help_order.append(section)
+
+        # Keep collapse state for known sections, default to expanded.
+        valid = [name for name, _entries in self._iter_help_sections()]
+        self._help_collapsed = {k: v for k, v in self._help_collapsed.items() if k in valid}
+        for name in valid:
+            self._help_collapsed.setdefault(name, False)
+        if valid:
+            self._help_focus_idx = max(0, min(self._help_focus_idx, len(valid) - 1))
+
+    @property
+    def help_visible(self) -> bool:
+        return self._show_help
+
+    def help_section_count(self) -> int:
+        return len(self._iter_help_sections())
+
+    def toggle_help_section(self, index: int) -> bool:
+        sections = self._iter_help_sections()
+        if index < 0 or index >= len(sections):
+            return False
+        name, _entries = sections[index]
+        self._help_collapsed[name] = not self._help_collapsed.get(name, False)
+        self._help_focus_idx = index
+        return True
+
+    def set_all_help_sections_collapsed(self, collapsed: bool) -> None:
+        for name, _entries in self._iter_help_sections():
+            self._help_collapsed[name] = collapsed
+
+    def move_help_focus(self, delta: int) -> bool:
+        n = self.help_section_count()
+        if n <= 0:
+            return False
+        self._help_focus_idx = (self._help_focus_idx + delta) % n
+        return True
+
+    def toggle_help_focus_section(self) -> bool:
+        return self.toggle_help_section(self._help_focus_idx)
 
     def set_effect_shortcuts(self, effects: list[type["BaseEffect"]]) -> None:
         """Build help overlay columns for plain, shifted, ctrl, and alt shortcuts."""

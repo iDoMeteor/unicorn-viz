@@ -1,14 +1,16 @@
 [window]
 fullscreen = true
+display_mode  = "single"   # single | span_all | mirror_all
+display_index  = 0
 
 [demo]
-mode = "random"
-effect_duration = 120
+mode = "sequential"
+effect_duration = 30
 transition = "shuffle"
 
 [audio]
-reactivity = 1.1
-latency = "high"
+reactivity = 1.3
+latency = "low"
 try_alsa_loopback = false
 
 [ansi]
@@ -48,7 +50,7 @@ pip_position   = "hidden"  # top_left | top_center | top_right |
 #                                   # bottom_left | bottom_center | bottom_right |
 #                                   # fullscreen | hidden
 # pip_scale      = 0.33            # fraction of viewport width (0.12 – 0.80)
-# border_thickness = 8.0           # border/backplate thickness in pixels
+# border_thickness = 4.0           # border/backplate thickness in pixels
 # border_color   = [0.04, 0.72, 1.0, 0.28]  # RGBA 0.0 – 1.0
 # treatment      = "neon"          # raw | neon | glitch | vintage | thermal
 # cycle_interval = 0               # auto-cycle interval in s (0 = 30 s default)
@@ -59,8 +61,54 @@ pip_position   = "hidden"  # top_left | top_center | top_right |
 # Set image_dir to use a different folder instead; it is an override, not an
 # additional search path.
 # ---------------------------------------------------------------------------
-# [effects.ImageShowcase]
+[effects.ImageShowcase]
 # image_dir = ""               # override path; empty = bundled images folder
-# preload_images = false        # true = warm image cache at startup
+preload_images = true        # true = warm image cache at startup
 # speed = 1.0
-# mix_time = 10.0              # seconds per image
+mix_time = 15.0              # seconds per image
+
+# ---------------------------------------------------------------------------
+# Video Showcase drop-in  (drop-ins/videos-01)
+# By default, loads clips from drop-ins/videos-01/videos/.
+# Set video_dir to use a different folder instead; it is an override, not an
+# additional search path.
+# ---------------------------------------------------------------------------
+[effects.VideoShowcase]
+# video_dir      = ""          # override path; empty = bundled videos folder
+preload_videos = false        # true = open/prime clips at startup
+# speed          = 1.0
+mix_time       = 20.0        # seconds per clip
+
+# ---------------------------------------------------------------------------
+# Sim Showcase drop-in  (drop-ins/sims-01)
+# Supports public USD scene packs (robotics/simulation datasets).
+# Provide one folder in scene_dir or multiple comma-separated folders in
+# scene_dirs. Only .usda/.usdc/.usdz files are loaded.
+# ---------------------------------------------------------------------------
+# [effects.SimShowcase]
+# speed = 1.0
+# mix_time = 14.0
+# camera_energy = 1.0
+# scene_dir = "drop-ins/sims-01/scenes"
+# scene_dirs = "drop-ins/sims-01/scenes,assets/robotics-usd,assets/sims"
+
+# ---------------------------------------------------------------------------
+# ProjectM preset host drop-in  (drop-ins/projectm-01)
+# Requires an installed libprojectM runtime and a preset pack containing
+# .milk / .prjm files. This Phase 1 drop-in scans preset directories, renders
+# via the current Unicorn Viz GL context, and supports Ctrl+N/P/R preset
+# switching while the effect is active.
+# ---------------------------------------------------------------------------
+# [effects.ProjectMEffect]
+# speed = 1.0
+# preset_duration = 20.0
+# smooth_transition = true
+# lock_preset = false
+# start_clean = false
+# beat_sensitivity = 1.0
+# fps_hint = 60
+# projectm_library = ""
+# preset_dir = "drop-ins/projectm-01/presets"
+# preset_dirs = "drop-ins/projectm-01/presets,/opt/projectm/presets"
+# texture_dirs = "assets/projectm-textures"
+# start_preset = ""

@@ -120,6 +120,34 @@ speed = 1.5
 amplitude = 0.18
 font_scale = 4.0
 
+[effects.SimShowcase]
+speed = 1.0
+mix_time = 14.0
+camera_energy = 1.0
+# Single override directory (legacy):
+# scene_dir = "drop-ins/sims-01/scenes"
+# Multi-source directories (comma-separated). Useful for public robotics
+# training datasets exported as .usda/.usdc/.usdz:
+# scene_dirs = "drop-ins/sims-01/scenes,assets/robotics-usd,assets/sims"
+
+[effects.ProjectMEffect]
+speed = 1.0
+preset_duration = 20.0
+smooth_transition = true
+lock_preset = false
+start_clean = false
+beat_sensitivity = 1.0
+fps_hint = 60
+projectm_library = ""
+# Single override directory:
+# preset_dir = "drop-ins/projectm-01/presets"
+# Multiple preset packs (comma-separated):
+# preset_dirs = "drop-ins/projectm-01/presets,/opt/projectm/presets"
+# Optional texture search paths for presets that reference images:
+# texture_dirs = "assets/projectm-textures"
+# Optional startup preset file name or full path:
+# start_preset = "Geiss - Feedback Spiral.milk"
+
 [effects.Starfield]
 speed = 0.5
 warp = 0.0

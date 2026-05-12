@@ -286,6 +286,34 @@ For best performance, keep source images at or below the target display
 resolution. The effect caches decoded textures after warmup, but very large
 files still cost more to decode the first time they are loaded.
 
+### `ProjectMEffect` (`ProjectM Presets`)
+
+```toml
+[effects.ProjectMEffect]
+speed = 1.0
+preset_duration = 20.0
+smooth_transition = true
+lock_preset = false
+start_clean = false
+beat_sensitivity = 1.0
+fps_hint = 60
+projectm_library = ""   # optional explicit .so/.dll path
+preset_dir = ""         # single override dir
+preset_dirs = ""        # comma-separated additional preset dirs
+texture_dirs = ""       # comma-separated image search paths for presets
+start_preset = ""       # optional exact startup preset file/path
+```
+
+ProjectM Presets embeds libprojectM into Unicorn Viz as a drop-in effect.
+If libprojectM cannot be loaded, or no preset pack is present, the effect
+falls back to an internal shader so the playlist remains stable.
+
+Dedicated hotkeys while this effect is active:
+
+- `Ctrl+N` — next preset
+- `Ctrl+P` — previous preset
+- `Ctrl+R` — random preset
+
 ### `TronGrid` (`Tron Grid`)
 
 ```toml

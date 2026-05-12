@@ -31,7 +31,7 @@ from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
-from unicornviz.dropins import load_dropin_symbol
+from unicornviz.dropins import load_dropin_symbol, discover_dropin_help_entries
 
 log = logging.getLogger(__name__)
 
@@ -1016,6 +1016,35 @@ void main() {
         )
         self._overlays = overlays
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
+
+        dynamic_help: list[tuple[str, str, str]] = []
+        for effect_cls in effects:
+            raw_entries = getattr(effect_cls, 'HELP_ENTRIES', None)
+            if not isinstance(raw_entries, (list, tuple)):
+                continue
+            default_section = str(getattr(effect_cls, 'NAME', effect_cls.__name__))
+            for item in raw_entries:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    key = str(item[0]).strip()
+                    desc = str(item[1]).strip()
+                    if key and desc:
+                        dynamic_help.append((default_section, key, desc))
+                elif isinstance(item, (list, tuple)) and len(item) >= 3:
+                    section = str(item[0]).strip() or default_section
+                    key = str(item[1]).strip()
+                    desc = str(item[2]).strip()
+                    if section and key and desc:
+                        dynamic_help.append((section, key, desc))
+                elif isinstance(item, dict):
+                    section = str(item.get('section', default_section)).strip()
+                    key = str(item.get('key', '')).strip()
+                    desc = str(item.get('description', item.get('desc', item.get('action', '')))).strip()
+                    if section and key and desc:
+                        dynamic_help.append((section, key, desc))
+
+        dynamic_help.extend(discover_dropin_help_entries())
+        overlays.register_help_entries(dynamic_help)
+
         if overlays.unmapped_effects:
             log.warning(
                 "Effects without direct shortcuts (beyond 30): %s",
@@ -1132,7 +1161,11 @@ void main() {
                 if isinstance(self._current_effect, ANSIViewer):
                     overlays._name_text = self._current_effect.current_title
                 else:
-                    overlays._name_text = self._current_effect.NAME
+                    current_label = getattr(self._current_effect, 'current_label', '')
+                    if isinstance(current_label, str) and current_label:
+                        overlays._name_text = f"{self._current_effect.NAME} - {current_label}"
+                    else:
+                        overlays._name_text = self._current_effect.NAME
 
             # Feed modern TAB HUD with current runtime status.
             fps_now = (1.0 / dt) if dt > 0.0 else 0.0
@@ -1145,6 +1178,32 @@ void main() {
             rec_state = 'OFF'
             if self._recorder is not None and self._recorder.is_recording:
                 rec_state = 'ON'
+            advance_elapsed = max(0.0, self._demo_timer)
+            advance_total = max(0.1, self._effect_duration)
+            advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
+            slot_label = 'PRESET IDX'
+            preset_slot = '-/-'
+            variant_label = 'VARIANT'
+            variant_slot = '-/-'
+            if self._current_effect is not None:
+                label_text = getattr(self._current_effect, 'current_position_label', '')
+                if isinstance(label_text, str) and label_text.strip():
+                    slot_label = label_text.strip().upper()
+                slot_text = getattr(self._current_effect, 'current_position_text', '')
+                if isinstance(slot_text, str) and slot_text:
+                    preset_slot = slot_text
+                else:
+                    cur_idx = getattr(self._current_effect, 'current_index', None)
+                    cur_total = getattr(self._current_effect, 'current_total', None)
+                    if isinstance(cur_idx, int) and isinstance(cur_total, int) and cur_total > 0:
+                        preset_slot = f"{cur_idx + 1}/{cur_total}"
+
+                vlabel_text = getattr(self._current_effect, 'current_variant_label', '')
+                if isinstance(vlabel_text, str) and vlabel_text.strip():
+                    variant_label = vlabel_text.strip().upper()
+                vslot_text = getattr(self._current_effect, 'current_variant_text', '')
+                if isinstance(vslot_text, str) and vslot_text.strip():
+                    variant_slot = vslot_text.strip()
             overlays.set_hud_state({
                 'title': 'Unicorn Viz Legacy HUD',
                 'effect': overlays._name_text,
@@ -1160,9 +1219,14 @@ void main() {
                 'paused': 'YES' if self._paused else 'NO',
                 'fullscreen': 'YES' if self._fullscreen else 'NO',
                 'auto_advance': 'ON' if self._auto_advance else 'OFF',
+                'advance_time': advance_time,
                 'reactivity': f"{audio_manager.get_reactivity():.1f}x" if audio_manager is not None else 'n/a',
                 'speed': effect_speed,
                 'audio_source': audio_src,
+                'preset_slot_label': slot_label,
+                'preset_slot': preset_slot,
+                'variant_slot_label': variant_label,
+                'variant_slot': variant_slot,
                 'recording': rec_state,
                 'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
                 'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',

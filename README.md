@@ -82,11 +82,17 @@ cd unicorn-viz
 # Double-click tools\install_windows.bat from Explorer, or run this from PowerShell.
 tools\install_windows.bat
 
+# GUI installer (avatar icon + live log panel)
+powershell -ExecutionPolicy Bypass -File .\tools\install_windows_gui.ps1
+
 # Any installed Python 3.11+ interpreter is fine; the installer will pick it up
 # even if the exact "Python 3.11" launcher entry is missing.
 
 # Run
 .\.venv\Scripts\python -m unicornviz
+
+# GUI launcher (avatar icon)
+tools\launchers\windows\UnicornVizGUI.bat
 
 # CLI help
 .\.venv\Scripts\python -m unicornviz --help
@@ -100,9 +106,22 @@ powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipFfmpeg
 
 # Skip package manager installs (Python/ffmpeg must already exist)
 powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipPackageManagers
+
+# Force CLI installer mode via batch wrapper (default is GUI)
+tools\install_windows.bat --cli
 ```
 
 If double-clicking the `.ps1` file opens it in an editor, use `tools\install_windows.bat` instead. It launches PowerShell with the correct execution policy and keeps the console open at the end.
+
+Native installer packaging (Inno Setup):
+
+```powershell
+# From Windows with Inno Setup installed (ISCC on PATH)
+ISCC.exe .\packaging\windows\UnicornViz.iss
+```
+
+This produces `packaging\windows\UnicornVizInstaller.exe` with avatar icon,
+Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 
 ### Common CLI Overrides
 

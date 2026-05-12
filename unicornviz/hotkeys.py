@@ -68,6 +68,97 @@ class HotkeyHandler:
             sym_name = sym_name.decode("utf-8", errors="replace")
         log.debug("Key: %s (mod=0x%04x)", sym_name, mod)
 
+        effect = a._current_effect  # noqa: SLF001
+
+        # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.
+        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and effect is not None:
+            if sym == sdl2.SDLK_n:
+                method = getattr(effect, 'next_variant', None)
+                if callable(method):
+                    result = method()
+                    if result:
+                        o.flash_message(f'Variant: {result}', 1.5)
+                    return
+            elif sym == sdl2.SDLK_p:
+                method = getattr(effect, 'prev_variant', None)
+                if callable(method):
+                    result = method()
+                    if result:
+                        o.flash_message(f'Variant: {result}', 1.5)
+                    return
+            elif sym == sdl2.SDLK_r:
+                method = getattr(effect, 'random_variant', None)
+                if callable(method):
+                    result = method()
+                    if result:
+                        o.flash_message(f'Variant: {result}', 1.5)
+                    return
+
+        # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
+        if mod & sdl2.KMOD_CTRL and effect is not None:
+            if sym == sdl2.SDLK_n:
+                for method_name, label in (
+                    ('next_preset', 'Preset'),
+                    ('next_scene', 'Scene'),
+                    ('next_variant', 'Variant'),
+                ):
+                    method = getattr(effect, method_name, None)
+                    if callable(method):
+                        result = method()
+                        if result:
+                            o.flash_message(f'{label}: {result}', 1.5)
+                        return
+            elif sym == sdl2.SDLK_p:
+                for method_name, label in (
+                    ('prev_preset', 'Preset'),
+                    ('prev_scene', 'Scene'),
+                    ('prev_variant', 'Variant'),
+                ):
+                    method = getattr(effect, method_name, None)
+                    if callable(method):
+                        result = method()
+                        if result:
+                            o.flash_message(f'{label}: {result}', 1.5)
+                        return
+            elif sym == sdl2.SDLK_r:
+                for method_name, label in (
+                    ('random_preset', 'Preset'),
+                    ('random_scene', 'Scene'),
+                    ('random_variant', 'Variant'),
+                ):
+                    method = getattr(effect, method_name, None)
+                    if callable(method):
+                        result = method()
+                        if result:
+                            o.flash_message(f'{label}: {result}', 1.5)
+                        return
+
+        # Help overlay interaction mode: section expand/collapse and focus nav.
+        if getattr(o, 'help_visible', False):
+            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
+                if o.toggle_help_section(sym - sdl2.SDLK_1):
+                    return
+            elif sym == sdl2.SDLK_0:
+                if o.toggle_help_section(9):
+                    return
+            elif sym == sdl2.SDLK_UP:
+                if o.move_help_focus(-1):
+                    return
+            elif sym == sdl2.SDLK_DOWN:
+                if o.move_help_focus(1):
+                    return
+            elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                if o.toggle_help_focus_section():
+                    return
+            elif (mod & sdl2.KMOD_SHIFT) and sym in (sdl2.SDLK_EQUALS, sdl2.SDLK_PLUS):
+                o.set_all_help_sections_collapsed(False)
+                o.flash_message('Help: expanded all sections', 1.2)
+                return
+            elif (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_MINUS:
+                o.set_all_help_sections_collapsed(True)
+                o.flash_message('Help: collapsed all sections', 1.2)
+                return
+
         if sym == sdl2.SDLK_ESCAPE:
             a._running = False  # noqa: SLF001
 
@@ -191,8 +282,11 @@ class HotkeyHandler:
         elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
             if not self._shortcut_effects:
                 return
+            # Alt+1..9 -> effects 31..39
+            if mod & sdl2.KMOD_ALT:
+                idx = 30 + (sym - sdl2.SDLK_1)   # 30..38
             # Ctrl+1..9 -> effects 21..29
-            if mod & sdl2.KMOD_CTRL:
+            elif mod & sdl2.KMOD_CTRL:
                 idx = 20 + (sym - sdl2.SDLK_1)   # 20..28
             # Support both SDL behaviors for Shift+number:
             # 1) symbol keysyms (!@#$...) handled below
@@ -209,8 +303,11 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_0:
             if not self._shortcut_effects:
                 return
+            # Alt+0 -> effect 40 (index 39)
+            if mod & sdl2.KMOD_ALT:
+                idx = 39
             # Ctrl+0 -> effect 30 (index 29)
-            if mod & sdl2.KMOD_CTRL:
+            elif mod & sdl2.KMOD_CTRL:
                 idx = 29
             # Support both SDL behaviors for Shift+0: idx 19 (')')
             elif mod & sdl2.KMOD_SHIFT:
@@ -311,17 +408,6 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_i:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
-
-        # Alt+number: jump to effects 31–40
-        elif mod & sdl2.KMOD_ALT and sym >= sdl2.SDLK_1 and sym <= sdl2.SDLK_0:
-            digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-            key = sdl2.SDL_GetKeyName(sym).decode('utf-8', errors='replace')
-            if key in digits:
-                idx = 30 + digits.index(key)
-                cls = p.go_index(idx)
-                log.info("Scene change → %s (Alt+%s, effect %d)", cls.NAME, key, idx + 1)
-                a.goto_effect(cls)
-                o.flash_name(cls.NAME)
 
         # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
         elif sym == sdl2.SDLK_KP_0:
