@@ -768,6 +768,16 @@ void main() {
         if not effects:
             raise RuntimeError("No effects found — check unicornviz/effects/")
 
+        for effect_cls in effects:
+            if getattr(effect_cls, 'NAME', '') == 'Image Showcase' and hasattr(effect_cls, 'warm_cache'):
+                image_cfg = self.cfg.get('effects', 'ImageShowcase', default={}) or {}
+                try:
+                    effect_cls.warm_cache(self._ctx, image_cfg)
+                    log.info('Warmed Image Showcase cache during startup')
+                except Exception as exc:
+                    log.warning('Image Showcase cache warmup failed: %s', exc)
+                break
+
         playlist = Playlist(effects, self.cfg)
 
         overlays = Overlays(

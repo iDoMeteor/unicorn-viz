@@ -282,6 +282,10 @@ mix_time = 10.0
 Image Showcase shuffles its image order on load and rotates through ten
 presentation styles for more motion and variety.
 
+For best performance, keep source images at or below the target display
+resolution. The effect caches decoded textures after warmup, but very large
+files still cost more to decode the first time they are loaded.
+
 ### `TronGrid` (`Tron Grid`)
 
 ```toml
