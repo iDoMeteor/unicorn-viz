@@ -37,26 +37,19 @@ flash_messages = false
 # Webcam system overlay  (drop-ins/webcam-01)
 # Always-on camera PiP above every effect. Requires opencv-python-headless.
 # ---------------------------------------------------------------------------
-# [webcam]
+[webcam]
 # enabled        = true            # false disables camera entirely
 # device         = 0               # /dev/video index (Linux) or DirectShow (Windows)
 # width          = 1280
 # height         = 720
 # fps            = 30
-# pip_position   = "bottom_right"  # top_left | top_center | top_right |
+pip_position   = "hidden"  # top_left | top_center | top_right |
 #                                   # left | center | right |
 #                                   # bottom_left | bottom_center | bottom_right |
-#                                   # fullscreen
+#                                   # fullscreen | hidden
 # pip_scale      = 0.33            # fraction of viewport width (0.12 – 0.80)
 # treatment      = "neon"          # raw | neon | glitch | vintage | thermal
 # cycle_interval = 0               # auto-cycle interval in s (0 = 30 s default)
-
-# ---------------------------------------------------------------------------
-# Psychedelic effect  (unicornviz/effects/psychedelic.py)
-# Neon palette-sine field — split from the old webcam background shader.
-# ---------------------------------------------------------------------------
-# [effects.Psychedelic]
-# speed = 1.0
 
 # ---------------------------------------------------------------------------
 # Image Showcase drop-in  (drop-ins/images-01)
