@@ -69,10 +69,12 @@
   - implemented polished color-per-beat transitions and bass-responsive amplification
   - implemented configurable text/font/speed behavior and reduced background dominance
 
-- `[todo]` Add `assets/images/` support.
+- `[done]` Add `assets/images/` support.
   Notes:
-  - playlist-like loading behavior
-  - splash-style animation/reactive presentation
+  - implemented as drop-in `images-01`
+  - loads still images from its own bundled `images/` folder by default
+  - supports a single user-configurable `image_dir` override path (override, not addition)
+  - implemented audio-reactive slideshow / Ken Burns style image presentation
 - `[done]` Add `assets/textures/` support.
   Notes:
   - implemented as drop-in `textures-01` with configurable `texture_dirs`
@@ -83,11 +85,13 @@
   - playlist integration
   - fullscreen scaling and transitions
   - audio sync policy
-- `[doing]` Add webcam/video capture effect and overlay support.
+- `[done]` Add webcam/video capture effect and overlay support.
   Notes:
-  - implemented first-slice drop-in `webcam-01` with PiP/fullscreen/hide layouts
-  - keypad layout control integrated (`KP0`, `KP.`, `KP1-9`)
-  - configurable `pip_position` + camera device/resolution/fps in effect config
+  - implemented as subsystem drop-in `webcam-01` loaded at startup (not a playlist effect)
+  - live camera PiP is rendered above every main effect, below the HUD
+  - keypad layout control integrated (`KP0`, `KP.`, `KP1-9`, `KP-`, `KP+`)
+  - camera treatments cycle with `KP/` and `KP*`; auto-cycle via `KP Enter`
+  - the old webcam background visual was split into built-in effect `Psychedelic`
   - remaining: chroma-key/background replacement and cross-platform camera tuning
 - `[todo]` Add `assets/sims/` support for IsaacLab/OpenUSD-style 3D animations.
   Notes:
@@ -148,6 +152,8 @@
 - `[todo]` Threat Matrix effect (heatmaps, trace routes, anomaly pulses, breach waves).
 - `[done]` Alien Invasion effect (UFO fleets, atmospheric beams, planetary scan overlays).
 - `[done]` Unicorn Tears effect (iridescent liquid/prism particle trails with dreamy bloom).
+- `[done]` Psychedelic effect (neon palette-sine field split out from the old webcam visual background).
+- `[done]` Image Showcase effect (audio-reactive slideshow from bundled or overridden image directory).
 - `[todo]` BBS! effect suite (dial-up rituals, ANSI login scenes, retro board status walls).
 
 ## Delivery Strategy

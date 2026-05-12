@@ -57,3 +57,14 @@ flash_messages = false
 # ---------------------------------------------------------------------------
 # [effects.Psychedelic]
 # speed = 1.0
+
+# ---------------------------------------------------------------------------
+# Image Showcase drop-in  (drop-ins/images-01)
+# By default, loads bundled images from drop-ins/images-01/images/.
+# Set image_dir to use a different folder instead; it is an override, not an
+# additional search path.
+# ---------------------------------------------------------------------------
+# [effects.ImageShowcase]
+# image_dir = ""               # override path; empty = bundled images folder
+# speed = 1.0
+# mix_time = 8.0               # seconds per image

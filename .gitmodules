@@ -25,3 +25,6 @@
 [submodule "drop-ins/tron-grid-01"]
 	path = drop-ins/tron-grid-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-tron-grid-01.git
+[submodule "drop-ins/images-01"]
+	path = drop-ins/images-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-images-01.git

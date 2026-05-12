@@ -270,6 +270,15 @@ slide_time   = 8.0            # seconds per image
 texture_dirs = "assets/textures"  # comma-separated image directories
 ```
 
+### `ImageShowcase` (`Image Showcase`)
+
+```toml
+[effects.ImageShowcase]
+image_dir = ""    # override path; empty = bundled drop-in images folder
+speed = 1.0
+mix_time = 8.0
+```
+
 ### `TronGrid` (`Tron Grid`)
 
 ```toml

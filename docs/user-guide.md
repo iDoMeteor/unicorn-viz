@@ -394,7 +394,9 @@ python -m unicornviz --log-level DEBUG
 | Texture Showcase  | `TextureShowcase`  | —   | textures, audio              | Ken Burns image montage with audio colour grade   |
 | Tron Grid         | `TronGrid`         | —   | tron, laser, raymarching     | First-person neon laser grid with shockwaves      |
 | Unicorn Tears     | `UnicornTears`     | `U` | psychedelic, audio           | Prismatic teardrops through a deep star-field     |
-| Webcam Overlay    | `WebcamOverlay`    | —   | webcam, overlay, camera      | Live camera feed with animated neon background    |
+| Webcam System     | `WebcamSystem`     | keypad | System-wide camera PiP with switchable treatments | 
+| Image Showcase    | `ImageShowcase`    | —   | images, audio, slideshow     | Audio-reactive still-image slideshow              |
+| Webcam Overlay    | `WebcamOverlay`    | —   | webcam, overlay, camera      | Live camera feed with animated background          |
 
 ---
 

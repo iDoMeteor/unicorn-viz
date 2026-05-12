@@ -499,6 +499,8 @@ Conventions for a drop-in:
 | `textures-01`      | `TextureShowcase` | Texture Showcase | —   |
 | `tron-grid-01`     | `TronGrid`        | Tron Grid        | —   |
 | `unicorn-tears-01` | `UnicornTears`    | Unicorn Tears    | `U` |
+| `webcam-01`        | `WebcamSystem`    | Webcam System    | keypad |
+| `images-01`        | `ImageShowcase`   | Image Showcase   | —   |
 | `webcam-01`        | `WebcamOverlay`   | Webcam Overlay   | —   |
 
 ### Subsystem drop-ins

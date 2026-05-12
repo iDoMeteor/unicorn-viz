@@ -307,6 +307,8 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 | Texture Showcase | — | Ken Burns image montage with audio colour grade |
 | Tron Grid | — | First-person laser-grid corridor with shockwaves |
 | Unicorn Tears | `U` | Prismatic teardrops through a star-field |
+| Webcam System | KP controls | System-wide camera PiP with switchable treatments |
+| Image Showcase | — | Audio-reactive still-image slideshow |
 | Webcam Overlay | — | Live camera feed with animated background |
 
 **Subsystem drop-ins:**
