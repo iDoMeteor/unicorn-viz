@@ -54,6 +54,69 @@ _TRANSITION_MODE_MAP = {
 }
 
 
+class _NullMultiHeadController:
+    """Safe fallback when the multi-head drop-in is unavailable."""
+
+    requested_mode = 'single'
+
+    def __init__(self, cfg: Config) -> None:
+        self._cfg = cfg
+
+    def log_video_displays(self, width: int, height: int) -> int:
+        try:
+            return max(1, int(sdl2.SDL_GetNumVideoDisplays()))
+        except Exception:
+            return 1
+
+    def resolve_display_mode(self) -> str:
+        return 'single'
+
+    def resolve_display_index(self, width: int, height: int) -> int:
+        return 0
+
+    def display_bounds(self, display_index: int, width: int, height: int) -> sdl2.SDL_Rect | None:
+        return None
+
+    def all_display_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
+        return 0, 0, int(width), int(height)
+
+    def window_position_for_display(self, display_index: int, width: int, height: int) -> tuple[int, int]:
+        return sdl2.SDL_WINDOWPOS_CENTERED, sdl2.SDL_WINDOWPOS_CENTERED
+
+    def move_window_to_display(self, window, width: int, height: int) -> None:
+        return
+
+    def destroy_mirror_outputs(self) -> None:
+        return
+
+    def create_mirror_outputs(self, title: str, width: int, height: int) -> None:
+        return
+
+    def resize_mirror_textures(self, width: int, height: int) -> None:
+        return
+
+    def present_mirror_outputs(self, frame_bytes: bytes, width: int, height: int) -> None:
+        return
+
+    def is_mirror_window_id(self, window_id: int) -> bool:
+        return False
+
+    def rebuild_multihead_outputs(self, width: int, height: int, title: str, fullscreen: bool) -> int:
+        return 0
+
+    def release_readback_pbos(self) -> None:
+        return
+
+    def ensure_readback_pbos(self, ctx: moderngl.Context, size: int) -> None:
+        return
+
+    def read_shared_frame(self, ctx: moderngl.Context, width: int, height: int) -> bytes:
+        return b''
+
+    def has_mirror_outputs(self) -> bool:
+        return False
+
+
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
@@ -61,7 +124,11 @@ def _clamp_render_scale(value: float) -> float:
 
 def _load_multihead_controller_class() -> type:
     """Load MultiHeadController directly from the multi-head drop-in."""
-    return load_dropin_symbol('multi-head-01/multihead.py', 'MultiHeadController')
+    try:
+        return load_dropin_symbol('multi-head-01/multihead.py', 'MultiHeadController')
+    except Exception as exc:
+        log.warning('MultiHeadController unavailable (%s); falling back to single-display mode', exc)
+        return _NullMultiHeadController
 
 
 def _load_webcam_system_class() -> type:
