@@ -281,6 +281,18 @@ class HotkeyHandler:
             mode = "ON" if a._auto_advance else "OFF"
             o.flash_message(f"Auto-advance: {mode}", 1.5)
 
+        elif sym == sdl2.SDLK_SEMICOLON:
+            val = a.adjust_advance_interval(-10.0)
+            o.flash_message(f'Advance interval: {val:.0f}s', 1.5)
+
+        elif sym == sdl2.SDLK_QUOTE:
+            val = a.adjust_advance_interval(10.0)
+            o.flash_message(f'Advance interval: {val:.0f}s', 1.5)
+
+        elif sym == sdl2.SDLK_BACKSLASH:
+            val = a.reset_advance_interval()
+            o.flash_message(f'Advance interval: {val:.0f}s (reset)', 1.5)
+
         elif sym == sdl2.SDLK_i:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)

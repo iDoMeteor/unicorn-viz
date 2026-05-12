@@ -287,6 +287,8 @@ class Overlays:
         " H           This help",
         " ESC         Quit",
         " T           Auto-advance on/off",
+        " ;  /  '     Advance interval -10s / +10s",
+        " \\           Advance interval reset to config",
         " I           Invert colors toggle",
         " KP 1-9      Camera overlay position",
         " KP 0 / KP . Camera fullscreen / hide",

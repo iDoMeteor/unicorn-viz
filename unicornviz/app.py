@@ -92,6 +92,9 @@ class App:
         self._webcam_system = None
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
+        self._effect_duration: float = float(
+            self.cfg.get('demo', 'effect_duration', default=20)
+        )
         self._transition_duration: float = self.cfg.get(
             "demo", "transition_duration", default=1.0
         )
@@ -801,10 +804,13 @@ void main() {
 
         prev_time = time.perf_counter()
         self._demo_timer = 0.0
-        effect_duration = self.cfg.get("demo", "effect_duration", default=20)
+        self._effect_duration = float(
+            self.cfg.get('demo', 'effect_duration', default=20)
+        )
+        effect_duration = self._effect_duration
         self._webcam_cycle_interval = float(
             self.cfg.get('webcam', 'cycle_interval', default=0)
-        ) or float(effect_duration)
+        ) or float(self._effect_duration)
 
         while self._running:
             now = time.perf_counter()
@@ -858,7 +864,7 @@ void main() {
                     allow_advance = self._current_effect.reached_bottom
 
                 self._demo_timer += dt
-                if self._demo_timer >= effect_duration and allow_advance:
+                if self._demo_timer >= self._effect_duration and allow_advance:
                     self._demo_timer = 0.0
                     next_cls = playlist.advance()
                     log.info("Auto-advance → %s", next_cls.NAME)
@@ -1194,6 +1200,18 @@ void main() {
         cfg_override = {"ansi_dir": ansi_dir}
         self._next_effect = ANSIViewer(self._ctx, self._width, self._height, cfg_override)
         self._transition_t = 0.0
+
+    def adjust_advance_interval(self, delta: float) -> float:
+        """Adjust the auto-advance interval by delta seconds. Returns new value."""
+        self._effect_duration = max(10.0, self._effect_duration + delta)
+        return self._effect_duration
+
+    def reset_advance_interval(self) -> float:
+        """Reset the auto-advance interval to the configured value. Returns that value."""
+        self._effect_duration = float(
+            self.cfg.get('demo', 'effect_duration', default=20)
+        )
+        return self._effect_duration
 
     def toggle_invert(self) -> bool:
         """Toggle color inversion for the active effect frame only."""
