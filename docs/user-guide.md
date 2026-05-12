@@ -49,6 +49,20 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
+### Windows 11
+
+```powershell
+git clone https://github.com/iDoMeteor/unicorn-viz
+cd unicorn-viz
+powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1
+```
+
+Run:
+
+```powershell
+.\.venv\Scripts\python -m unicornviz
+```
+
 ### Wayland / X11
 
 Unicorn Viz defaults to the **Wayland** SDL driver.  If your compositor does

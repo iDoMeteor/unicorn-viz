@@ -75,22 +75,27 @@ python3.11 -m venv .venv
 ### Install on Windows 11 (Preview)
 
 ```powershell
-# Install Python 3.11+ and ffmpeg (winget)
-winget install -e --id Python.Python.3.11
-winget install -e --id Gyan.FFmpeg
-
-# Clone and set up
 git clone https://github.com/iDoMeteor/unicorn-viz
 cd unicorn-viz
-py -3.11 -m venv .venv
-.\.venv\Scripts\python -m pip install --upgrade pip wheel
-.\.venv\Scripts\python -m pip install -r requirements.txt
+
+# Automated installer (Python + ffmpeg + venv + pip deps)
+powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1
 
 # Run
 .\.venv\Scripts\python -m unicornviz
 
 # CLI help
 .\.venv\Scripts\python -m unicornviz --help
+```
+
+Installer options:
+
+```powershell
+# Skip ffmpeg install
+powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipFfmpeg
+
+# Skip package manager installs (Python/ffmpeg must already exist)
+powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipPackageManagers
 ```
 
 ### Common CLI Overrides
