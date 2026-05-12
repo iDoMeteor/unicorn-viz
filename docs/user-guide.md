@@ -63,6 +63,9 @@ Run:
 .\.venv\Scripts\python -m unicornviz
 ```
 
+The installer accepts any installed Python 3.11+ interpreter; it no longer
+depends on the exact `Python 3.11` launcher entry being present.
+
 If `.ps1` files open in an editor on your machine, use the `.bat` wrapper.
 It launches the installer through PowerShell and keeps the window open so you
 can see failures instead of having the console vanish.

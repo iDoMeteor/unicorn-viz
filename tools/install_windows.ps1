@@ -21,21 +21,53 @@ function Test-Command {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Test-PythonVersionAtLeast {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonExe,
+        [int]$Major = 3,
+        [int]$Minor = 11
+    )
+
+    & $PythonExe -c "import sys; raise SystemExit(0 if sys.version_info >= ($Major, $Minor) else 1)" | Out-Null
+    return $LASTEXITCODE -eq 0
+}
+
 function Get-PythonExe {
     if (Test-Path '.venv\Scripts\python.exe') {
         return (Resolve-Path '.venv\Scripts\python.exe').Path
     }
 
     if (Test-Command 'py') {
-        $target = "-$PythonVersion"
-        & py $target -c "import sys; print(sys.executable)" 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            return 'py ' + $target
+        $pyList = & py -0p 2>$null
+        if ($LASTEXITCODE -eq 0 -and $pyList) {
+            $matches = @()
+            foreach ($line in $pyList) {
+                if ($line -match '^\s*-?(?<major>\d+)\.(?<minor>\d+)(?:-\d+)?\s+(?<path>.+python(?:\.exe)?)\s*$') {
+                    $major = [int]$Matches.major
+                    $minor = [int]$Matches.minor
+                    $path = $Matches.path.Trim()
+                    if ($major -gt 3 -or ($major -eq 3 -and $minor -ge 11)) {
+                        $matches += [pscustomobject]@{ Major = $major; Minor = $minor; Path = $path }
+                    }
+                }
+            }
+            if ($matches) {
+                $best = $matches | Sort-Object Major, Minor -Descending | Select-Object -First 1
+                if (Test-Path $best.Path) {
+                    return $best.Path
+                }
+            }
         }
     }
 
     if (Test-Command 'python') {
-        return 'python'
+        $python = (Get-Command python).Source
+        if (-not $python) {
+            $python = (Get-Command python).Path
+        }
+        if ($python -and (Test-PythonVersionAtLeast $python 3 11)) {
+            return $python
+        }
     }
 
     return $null
@@ -64,6 +96,8 @@ function Ensure-Python {
     if ($SkipPackageManagers) {
         throw "Python not found and package manager installation is disabled (--SkipPackageManagers)."
     }
+
+    Write-Host 'Python 3.11+ not found on PATH/py launcher; trying package manager install...' -ForegroundColor Yellow
 
     if (Test-Command 'winget') {
         Write-Host 'Installing Python via winget...' -ForegroundColor Yellow
@@ -128,27 +162,15 @@ if (-not $SkipVenv) {
     if (-not (Get-VenvPython)) {
         Write-Host 'Creating virtual environment (.venv)...' -ForegroundColor Yellow
         $venvCreated = $false
-        if (Test-Command 'py') {
-            & py -$PythonVersion -m venv .venv
-            if ($LASTEXITCODE -eq 0) {
-                $venvCreated = $true
-            }
-            else {
-                # Fallback if exact version launcher key is unavailable.
-                & py -3 -m venv .venv
-                if ($LASTEXITCODE -eq 0) {
-                    $venvCreated = $true
-                }
-            }
-        }
-        if (-not $venvCreated) {
-            & python -m venv .venv
+        $hostPython = Get-PythonExe
+        if ($hostPython) {
+            & $hostPython -m venv .venv
             if ($LASTEXITCODE -eq 0) {
                 $venvCreated = $true
             }
         }
         if (-not $venvCreated -or -not (Get-VenvPython)) {
-            throw 'Failed to create .venv or locate venv Python executable. Ensure Python 3.11+ is installed, then retry in a new shell.'
+            throw 'Failed to create .venv or locate venv Python executable. Ensure a Python 3.11+ interpreter is installed, then retry in a new shell.'
         }
     }
 

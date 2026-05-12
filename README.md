@@ -82,6 +82,9 @@ cd unicorn-viz
 # Double-click tools\install_windows.bat from Explorer, or run this from PowerShell.
 tools\install_windows.bat
 
+# Any installed Python 3.11+ interpreter is fine; the installer will pick it up
+# even if the exact "Python 3.11" launcher entry is missing.
+
 # Run
 .\.venv\Scripts\python -m unicornviz
 
