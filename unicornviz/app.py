@@ -974,7 +974,6 @@ void main() {
                     if self._is_mirror_window_id(int(event.window.windowID)):
                         if event.window.event in (
                             sdl2.SDL_WINDOWEVENT_CLOSE,
-                            sdl2.SDL_WINDOWEVENT_HIDDEN,
                         ):
                             log.warning('Mirror window event %d received; rebuilding mirror outputs', int(event.window.event))
                             self._create_mirror_outputs()
