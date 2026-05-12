@@ -302,6 +302,7 @@ class Overlays:
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     SHIFT_KEYS = ["S+1", "S+2", "S+3", "S+4", "S+5", "S+6", "S+7", "S+8", "S+9", "S+0"]
     CTRL_KEYS = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8", "Ctrl+9", "Ctrl+0"]
+    ALT_KEYS = ["A+1", "A+2", "A+3", "A+4", "A+5", "A+6", "A+7", "A+8", "A+9", "A+0"]
 
     def __init__(
         self,
@@ -658,8 +659,8 @@ void main() {
 
     def _render_help(self) -> None:
         pad = 30.0
-        scale = 2.95
-        lh = 8 * scale + 5
+        scale = 2.55
+        lh = 8 * scale + 4
 
         # Left: generic hotkeys
         y = pad
@@ -668,36 +669,41 @@ void main() {
             y += lh
 
         # Right: direct effect shortcut columns
-        col_scale = 2.45
-        col_lh = 8 * col_scale + 4
-        col1_x = self._width * 0.47
-        col2_x = col1_x + (20.0 * 8.0 * col_scale)
-        col3_x = col1_x
+        col_scale = 2.0
+        col_lh = 8 * col_scale + 3
+        col1_x = self._width * 0.45
+        col2_x = col1_x + (16.0 * 8.0 * col_scale)
+        col3_x = col2_x + (16.0 * 8.0 * col_scale)
         cy = pad
 
         self._draw_text("1-0 shortcuts", col1_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         self._draw_text("Shift shortcuts", col2_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         cy += col_lh
         self._draw_text("-------------", col1_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         self._draw_text("---------------", col2_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         cy += col_lh
 
-        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts))
+        max_rows = max(len(self._num_shortcuts), len(self._shift_shortcuts), len(self._ctrl_shortcuts))
         for i in range(max_rows):
             if i < len(self._num_shortcuts):
                 self._draw_text(self._num_shortcuts[i], col1_x, cy, scale=col_scale, color=(0.8, 1.0, 0.9, 0.95))
             if i < len(self._shift_shortcuts):
                 self._draw_text(self._shift_shortcuts[i], col2_x, cy, scale=col_scale, color=(0.9, 0.85, 1.0, 0.95))
+            if i < len(self._ctrl_shortcuts):
+                self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
             cy += col_lh
 
-        cy += col_lh * 0.9
-        self._draw_text("Ctrl shortcuts", col3_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
+        cy += col_lh * 0.7
+        col4_x = col1_x
+        self._draw_text("Alt shortcuts", col4_x, cy, scale=col_scale, color=(0.9, 1.0, 0.3, 0.95))
         cy += col_lh
-        self._draw_text("--------------", col3_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
+        self._draw_text("--------------", col4_x, cy, scale=col_scale, color=(0.7, 0.9, 0.3, 0.9))
         cy += col_lh
 
-        for i in range(len(self._ctrl_shortcuts)):
-            self._draw_text(self._ctrl_shortcuts[i], col3_x, cy, scale=col_scale, color=(0.85, 0.95, 1.0, 0.95))
+        for i in range(len(self._alt_shortcuts)):
+            self._draw_text(self._alt_shortcuts[i], col4_x, cy, scale=col_scale, color=(1.0, 0.9, 0.8, 0.95))
             cy += col_lh
 
         if self._unmapped_effects:
@@ -710,10 +716,11 @@ void main() {
             )
 
     def set_effect_shortcuts(self, effects: list[type["BaseEffect"]]) -> None:
-        """Build help overlay columns for plain, shifted, and ctrl shortcuts."""
+        """Build help overlay columns for plain, shifted, ctrl, and alt shortcuts."""
         self._num_shortcuts = []
         self._shift_shortcuts = []
         self._ctrl_shortcuts = []
+        self._alt_shortcuts = []
         self._unmapped_effects = []
 
         names = [cls.NAME for cls in effects]
@@ -737,8 +744,15 @@ void main() {
             else:
                 self._ctrl_shortcuts.append(f"{key} -> (none)")
 
-        if len(names) > 30:
-            self._unmapped_effects = names[30:]
+        for i, key in enumerate(self.ALT_KEYS):
+            idx = 30 + i
+            if idx < len(names):
+                self._alt_shortcuts.append(f"{key} -> {names[idx]}")
+            else:
+                self._alt_shortcuts.append(f"{key} -> (none)")
+
+        if len(names) > 40:
+            self._unmapped_effects = names[40:]
 
     @property
     def unmapped_effects(self) -> list[str]:

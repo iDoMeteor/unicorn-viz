@@ -297,6 +297,17 @@ class HotkeyHandler:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
 
+        # Alt+number: jump to effects 31–40
+        elif mod & sdl2.KMOD_ALT and sym >= sdl2.SDLK_1 and sym <= sdl2.SDLK_0:
+            digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+            key = sdl2.SDL_GetKeyName(sym).decode('utf-8', errors='replace')
+            if key in digits:
+                idx = 30 + digits.index(key)
+                cls = p.go_index(idx)
+                log.info("Scene change → %s (Alt+%s, effect %d)", cls.NAME, key, idx + 1)
+                a.goto_effect(cls)
+                o.flash_name(cls.NAME)
+
         # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
         elif sym == sdl2.SDLK_KP_0:
             if a.set_camera_layout('0'):
