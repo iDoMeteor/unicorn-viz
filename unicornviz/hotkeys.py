@@ -276,6 +276,21 @@ class HotkeyHandler:
                 else:
                     o.flash_message("Unicorn Tears not found", 1.5)
 
+        elif sym == sdl2.SDLK_x:
+            # Display mode controls
+            if mod & sdl2.KMOD_ALT:
+                mode = a.set_display_mode('mirror_all')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_CTRL:
+                mode = a.set_display_mode('span_all')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_SHIFT:
+                mode = a.set_display_mode('single')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            else:
+                mode = a.set_display_mode(reset_to_config=True)
+                o.flash_message(f'Display mode: {mode} (config)', 1.5)
+
         elif sym == sdl2.SDLK_t:
             a._auto_advance = not a._auto_advance
             mode = "ON" if a._auto_advance else "OFF"

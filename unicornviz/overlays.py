@@ -297,6 +297,10 @@ class Overlays:
         " KP Enter    Camera treatment auto-cycle",
         " U           Unicorn Tears",
         " Shift+U     Show splash anytime",
+        " X           Display mode reset to config",
+        " Shift+X     Display mode: single",
+        " Ctrl+X      Display mode: span_all",
+        " Alt+X       Display mode: mirror_all",
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]

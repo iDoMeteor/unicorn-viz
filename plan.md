@@ -155,6 +155,8 @@
 - `[done]` Psychedelic effect (neon palette-sine field split out from the old webcam visual background).
 - `[done]` Image Showcase effect (audio-reactive slideshow from bundled or overridden image directory).
 - `[todo]` BBS! effect suite (dial-up rituals, ANSI login scenes, retro board status walls).
+- `[todo]` Black Hole Cathedral effect (gothic mega-structure orbiting an accretion lens with choir-like pulse reactivity).
+- `[todo]` Reactor Breach effect (industrial core meltdown with plasma vents, warning strobes, and containment-wave transitions).
 
 ## Delivery Strategy
 

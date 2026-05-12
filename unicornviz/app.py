@@ -210,6 +210,20 @@ class App:
         self._display_mode = self._multihead.resolve_display_mode()
         return self._display_mode
 
+    def _set_multihead_mode(self, mode: str) -> None:
+        """Update drop-in internal mode fields when available."""
+        if hasattr(self._multihead, '_display_mode_requested'):
+            setattr(self._multihead, '_display_mode_requested', mode)
+        if hasattr(self._multihead, '_display_mode'):
+            setattr(self._multihead, '_display_mode', mode)
+
+    def _set_multihead_index(self, index: int) -> None:
+        """Update drop-in internal display index fields when available."""
+        if hasattr(self._multihead, '_display_index_requested'):
+            setattr(self._multihead, '_display_index_requested', int(index))
+        if hasattr(self._multihead, '_display_index'):
+            setattr(self._multihead, '_display_index', int(index))
+
     def _resolve_display_index(self) -> int:
         self._display_index = self._multihead.resolve_display_index(self._width, self._height)
         return self._display_index
@@ -1267,6 +1281,74 @@ void main() {
                 sdl2.SDL_SetWindowFullscreen(self._window, flag)
                 if not self._fullscreen:
                     self._move_window_to_display()
+
+    def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
+        """Switch display mode at runtime.
+
+        Modes: single, span_all, mirror_all.
+        """
+        if reset_to_config:
+            requested = str(self.cfg.get('window', 'display_mode', default='single')).lower()
+            requested_index = int(self.cfg.get('window', 'display_index', default=0))
+        else:
+            requested = str(mode or self._display_mode).lower()
+            requested_index = self._display_index
+
+        allowed = {'single', 'span_all', 'mirror_all'}
+        if requested not in allowed:
+            requested = 'single'
+
+        self._set_multihead_mode(requested)
+        self._set_multihead_index(requested_index)
+        self._display_mode = requested
+
+        # Ensure display layout cache is fresh before geometry changes.
+        self._log_video_displays()
+        self._display_index = self._resolve_display_index()
+
+        # Tear down old mirror windows before mode transition.
+        self._destroy_mirror_outputs()
+
+        if self._fullscreen:
+            if self._display_mode == 'span_all':
+                x, y, w, h = self._all_display_bounds()
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+            elif self._prefer_borderless_fullscreen():
+                x, y, w, h = self._fullscreen_window_geometry()
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+            else:
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_TRUE)
+                self._move_window_to_display()
+                sdl2.SDL_SetWindowFullscreen(self._window, sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP)
+        else:
+            sdl2.SDL_SetWindowFullscreen(self._window, 0)
+            sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_TRUE)
+            if self._display_mode == 'span_all':
+                x, y, w, h = self._all_display_bounds()
+                sdl2.SDL_SetWindowPosition(self._window, x, y)
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+            else:
+                w = int(self.cfg.get('window', 'width', default=1920))
+                h = int(self.cfg.get('window', 'height', default=1080))
+                sdl2.SDL_SetWindowSize(self._window, w, h)
+                self._move_window_to_display()
+
+        # Keep app render targets/effects in sync with actual window size.
+        w_i = ctypes.c_int(0)
+        h_i = ctypes.c_int(0)
+        sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
+        self._on_resize(w_i.value or self._width, h_i.value or self._height)
+
+        if self._display_mode == 'mirror_all':
+            self._create_mirror_outputs()
+
+        return self._display_mode
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
