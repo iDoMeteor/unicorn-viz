@@ -15,6 +15,34 @@ from pathlib import Path
 from unicornviz.config import Config
 
 
+class _LogBandFilter(logging.Filter):
+    """Filter records by a coarse log band while always allowing errors.
+
+    Bands:
+      - DEBUG: allow DEBUG/INFO/WARNING and errors
+      - INFO:  allow INFO and errors (suppress DEBUG/WARNING)
+      - WARN:  allow WARNING and errors (suppress DEBUG/INFO)
+    """
+
+    def __init__(self, band: str) -> None:
+        super().__init__()
+        self._band = band
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Hard errors always show.
+        if record.levelno >= logging.ERROR:
+            return True
+
+        if self._band == 'DEBUG':
+            return record.levelno in (logging.DEBUG, logging.INFO, logging.WARNING)
+        if self._band == 'INFO':
+            return record.levelno == logging.INFO
+        if self._band == 'WARN':
+            return record.levelno == logging.WARNING
+        # Fallback: default logging behavior.
+        return True
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='unicorn-viz',
@@ -65,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
     logging_group = parser.add_argument_group('logging')
-    logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help='Console/file log level.')
+    logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL'], help='Console/file log level.')
 
     return parser
 
@@ -120,7 +148,18 @@ def _build_overrides(args: argparse.Namespace) -> dict:
 
 def _setup_logging(cfg: Config) -> None:
     level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
-    level = getattr(logging, level_name, logging.INFO)
+    if level_name == 'WARNING':
+        level_name = 'WARN'
+    if level_name in ('ERROR', 'CRITICAL'):
+        # Keep explicit high-severity modes meaningful.
+        level = getattr(logging, level_name, logging.ERROR)
+        band_filter: logging.Filter | None = None
+    elif level_name in ('DEBUG', 'INFO', 'WARN'):
+        level = logging.DEBUG
+        band_filter = _LogBandFilter(level_name)
+    else:
+        level = logging.DEBUG
+        band_filter = _LogBandFilter('INFO')
     log_dir = Path(str(cfg.get('logging', 'directory', default='logs')))
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"unicornviz_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -130,10 +169,14 @@ def _setup_logging(cfg: Config) -> None:
     console = logging.StreamHandler()
     console.setLevel(level)
     console.setFormatter(formatter)
+    if band_filter is not None:
+        console.addFilter(band_filter)
 
     file_handler = logging.FileHandler(log_path, encoding='utf-8')
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
+    if band_filter is not None:
+        file_handler.addFilter(band_filter)
 
     root = logging.getLogger()
     root.handlers.clear()
