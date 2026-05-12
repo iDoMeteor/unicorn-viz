@@ -387,7 +387,6 @@ class App:
                 self._height,
             )
         self._update_render_target_size()
-        self._create_mirror_outputs()
 
     def _init_moderngl(self) -> None:
         self._ctx = moderngl.create_context()
@@ -870,6 +869,10 @@ void main() {
             "duration_silent": splash_duration_silent,
             "audio_manager": audio_manager,
         }
+
+        # Mirror windows are created after splash so startup does not spend time
+        # presenting black frames to mirror outputs.
+        self._create_mirror_outputs()
 
         midi_device_hint = self.cfg.get("midi", "device", default="")
         midi_manager = MidiManager(device_hint=midi_device_hint)
