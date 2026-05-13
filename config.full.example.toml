@@ -170,6 +170,11 @@ projectm_library = ""
 # Optional startup preset file name or full path:
 # start_preset = "Geiss - Feedback Spiral.milk"
 
+[effects.Kaleidoscope]
+speed    = 1.0
+segments = 12.0    # mirror-image sectors: 6=wide triangles, 12=hex star, 18=tight circle
+zoom     = 0.62    # zoom into source material (0.3 fine detail – 2.0 broad forms)
+
 [effects.Starfield]
 speed = 0.5
 warp = 0.0
