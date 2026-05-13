@@ -1665,6 +1665,7 @@ void main() {
             if self._webcam_system is not None:
                 self._webcam_system.resize(self._width, self._height)
             self._update_render_target_size()
+            self._rebuild_fbos()
             self._release_readback_pbos()
             if self._recorder and self._recorder.is_recording:
                 self._recorder.stop()
@@ -1695,6 +1696,8 @@ void main() {
             self._current_effect.resize(w, h)
         if self._next_effect:
             self._next_effect.resize(w, h)
+        if self._overlays is not None:
+            self._overlays.resize(w, h)
         self._resize_mirror_textures()
         # Rebuild FBOs at new size
         if self._fbo_a:
@@ -1834,6 +1837,9 @@ void main() {
                 self._next_effect.resize(self._width, self._height)
             if self._webcam_system is not None:
                 self._webcam_system.resize(self._width, self._height)
+            if self._overlays is not None:
+                self._overlays.resize(self._width, self._height)
+            self._rebuild_fbos()
             log.info(
                 'Mirror (GL-native) reconfigured: window=%dx%d logical=%dx%d rects=%s',
                 self._window_width,
@@ -1845,6 +1851,8 @@ void main() {
         else:
             self._mirror_rects = []
             self._on_resize(w_i.value or self._width, h_i.value or self._height)
+            if self._overlays is not None:
+                self._overlays.resize(self._width, self._height)
 
         return self._display_mode
 
