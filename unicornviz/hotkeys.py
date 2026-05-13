@@ -206,23 +206,38 @@ class HotkeyHandler:
             o.flash_message(message, 1.8 if live else 1.2)
 
         elif sym == sdl2.SDLK_F6:
-            a._apply_random_speed()  # noqa: SLF001
             effect = a._current_effect  # noqa: SLF001
             if effect is None or 'speed' not in effect.parameters:
                 o.flash_message('Speed control not available', 1.2)
+                a._speed_randomized = False  # noqa: SLF001
             else:
-                speed = effect.parameters['speed']
-                lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
-                hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
-                o.flash_message(f'Speed random: {speed:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+                # Toggle randomization on/off
+                if a._speed_randomized:  # noqa: SLF001
+                    a._speed_randomized = False  # noqa: SLF001
+                    o.flash_message(f'Speed random OFF, current: {effect.parameters["speed"]:.2f}x', 1.2)
+                else:
+                    a._apply_random_speed()  # noqa: SLF001
+                    lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
+                    hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
+                    o.flash_message(f'Speed random ON: {effect.parameters["speed"]:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
 
         elif sym == sdl2.SDLK_F7:
-            a._apply_random_reactivity()  # noqa: SLF001
             am = self._audio
-            current = am.get_reactivity()
-            lo = float(a.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
-            hi = float(a.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
-            o.flash_message(f'Reactivity random: {current:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+            if am is None:
+                o.flash_message('Reactivity control not available', 1.2)
+                a._reactivity_randomized = False  # noqa: SLF001
+            else:
+                # Toggle randomization on/off
+                if a._reactivity_randomized:  # noqa: SLF001
+                    a._reactivity_randomized = False  # noqa: SLF001
+                    current = am.get_reactivity()
+                    o.flash_message(f'Reactivity random OFF, current: {current:.2f}x', 1.2)
+                else:
+                    a._apply_random_reactivity()  # noqa: SLF001
+                    lo = float(a.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
+                    hi = float(a.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
+                    current = am.get_reactivity()
+                    o.flash_message(f'Reactivity random ON: {current:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
 
         elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9:
             provider = a.set_stream_provider('rumble')
@@ -416,15 +431,21 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_z:
             if mod & sdl2.KMOD_SHIFT:
-                # Shift+Z — random zoom
-                a._apply_random_zoom()  # noqa: SLF001
+                # Shift+Z — toggle random zoom
                 if a._current_effect and 'zoom' in a._current_effect.parameters:  # noqa: SLF001
-                    zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
-                    lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
-                    hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
-                    o.flash_message(f'Zoom random: {zoom_val:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+                    if a._zoom_randomized:  # noqa: SLF001
+                        a._zoom_randomized = False  # noqa: SLF001
+                        zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
+                        o.flash_message(f'Zoom random OFF, current: {zoom_val:.2f}x', 1.2)
+                    else:
+                        a._apply_random_zoom()  # noqa: SLF001
+                        zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
+                        lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
+                        hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
+                        o.flash_message(f'Zoom random ON: {zoom_val:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
                 else:
                     o.flash_message('Zoom control not available', 1.2)
+                    a._zoom_randomized = False  # noqa: SLF001
 
         elif sym == sdl2.SDLK_u:
             if mod & sdl2.KMOD_SHIFT:
