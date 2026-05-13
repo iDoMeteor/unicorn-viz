@@ -610,20 +610,33 @@ void main() {
         self._burst_t = self._burst_duration
 
     def _burst_transform(self) -> tuple[float, float]:
-        """Return (scale, angle_radians) for the current burst animation frame."""
+        """Return (scale, angle_radians) for the current burst animation frame.
+        
+        Attack phase: spin full 360°, zoom to 4x.
+        Recovery phase: elastic rebound spin + zoom out with wobble.
+        """
         if self._burst_t <= 0.0:
             return 1.0, 0.0
         phase = 1.0 - (self._burst_t / self._burst_duration)  # 0=just started, 1=done
-        attack = 0.18
-        if phase < attack:
-            k = phase / attack
-            scale = 1.0 + 0.42 * k
-            angle = math.radians(24.0 * k)
+        attack_duration = 0.25  # 25% of burst is aggressive attack
+        
+        if phase < attack_duration:
+            # Attack: full 360 rotation + aggressive zoom
+            k = phase / attack_duration  # 0→1
+            angle = math.radians(360.0 * k)  # Complete rotation
+            scale = 1.0 + 3.0 * k  # Zoom to 4x
         else:
-            k = (phase - attack) / (1.0 - attack)  # 0→1
-            decay = (1.0 - k) ** 2.5
-            scale = 1.0 + 0.42 * decay
-            angle = math.radians(24.0) * ((1.0 - k) ** 2.0) * math.cos(k * math.pi * 1.8)
+            # Recovery: elastic spin-back + zoom-out with wobble
+            k = (phase - attack_duration) / (1.0 - attack_duration)  # 0→1
+            # Spin back with elastic rebound (overshoot then settle)
+            spin_decay = (1.0 - k) ** 1.6
+            spin_bounce = math.cos(k * math.pi * 2.8)  # Oscillate around zero
+            angle = math.radians(360.0) + math.radians(120.0) * spin_decay * spin_bounce
+            # Zoom back to 1.0 with wobble
+            zoom_base = 1.0 + 3.0 * spin_decay  # Exponential return
+            wobble = 0.12 * math.sin(k * math.pi * 4.2)  # High-frequency wobble
+            scale = zoom_base + wobble
+        
         return scale, angle
 
     def _present_burst_from_tex(self, tex: moderngl.Texture) -> None:
