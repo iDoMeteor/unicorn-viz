@@ -94,9 +94,7 @@ float sourceField(vec2 p, float t) {
 }
 
 void main() {
-    // uv_sq: square coords [-1,1]^2 for the circular tube vignette.
-    // uv:    aspect-corrected for geometry so circles are circular.
-    vec2 uv_sq = v_uv;
+    // uv: aspect-corrected for geometry so circles are circular.
     vec2 uv    = v_uv;
     uv.x      *= iResolution.x / iResolution.y;
 
@@ -135,9 +133,6 @@ void main() {
 
     // Beat iris flash — complementary hue for visible pop.
     col += iBeat * 0.22 * palette(hue + 0.5);
-
-    // Circular vignette (tube view): smooth circle in screen-square space.
-    col *= smoothstep(1.02, 0.88, length(uv_sq));
 
     fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
