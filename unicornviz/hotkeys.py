@@ -201,6 +201,22 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
 
+        elif sym == sdl2.SDLK_F8:
+            live, message = a.toggle_streaming()
+            o.flash_message(message, 1.8 if live else 1.2)
+
+        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9:
+            provider = a.set_stream_provider('rumble')
+            o.flash_message(f'Stream provider: {provider}', 1.2)
+
+        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F10:
+            provider = a.set_stream_provider('youtube')
+            o.flash_message(f'Stream provider: {provider}', 1.2)
+
+        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F11:
+            provider = a.set_stream_provider('custom')
+            o.flash_message(f'Stream provider: {provider}', 1.2)
+
         elif sym == sdl2.SDLK_e:
             eq_cls = None
             for cls in p.effects:

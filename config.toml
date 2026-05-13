@@ -36,6 +36,32 @@ internal_scale = 1
 flash_messages = false
 
 # ---------------------------------------------------------------------------
+# RTMP streaming subsystem  (drop-ins/streaming-01)
+# Streams the final single composed frame (not tiled multi-head mirror output)
+# plus live audio to an RTMP endpoint using ffmpeg.
+# ---------------------------------------------------------------------------
+[streaming]
+enabled = false
+auto_start = false
+provider = "rumble"
+endpoint = "rtmp://live-api-s.rumble.com/live"
+stream_key = ""
+# rumble_endpoint = "rtmp://live-api-s.rumble.com/live"
+# youtube_endpoint = "rtmp://a.rtmp.youtube.com/live2"
+# custom_endpoint = "rtmp://your.rtmp.server/live"
+# stream_url = ""              # full override URL; if set, endpoint/key are ignored
+# ffmpeg_path = "ffmpeg"
+# fps = 60
+# video_codec = "libx264"
+# preset = "veryfast"
+# pixel_format = "yuv420p"
+# include_audio = true
+# audio_input_format = "pulse"
+# audio_input_device = ""      # empty => default sink monitor (Pulse/PipeWire)
+# audio_codec = "aac"
+# audio_bitrate = "160k"
+
+# ---------------------------------------------------------------------------
 # Webcam system overlay  (drop-ins/webcam-01)
 # Always-on camera PiP above every effect. Requires opencv-python-headless.
 # ---------------------------------------------------------------------------

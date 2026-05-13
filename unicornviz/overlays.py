@@ -445,6 +445,8 @@ class Overlays:
             'variant_slot_label': 'VARIANT',
             'variant_slot': '-/-',
             'recording': 'OFF',
+            'streaming': 'OFF',
+            'streaming_provider': '-',
             'bass': '0.00',
             'mid': '0.00',
             'treble': '0.00',
@@ -675,7 +677,42 @@ void main() {
     def _render_hud(self) -> None:
         """Render modern game-style status HUD panel."""
         panel_w = min(990.0, self._width * 0.86)
-        panel_h = min(490.0, self._height * 0.80)
+        lh = 28.0
+        row0_offset = 188.0
+        row_text_scale = 2.05
+        row_text_h = 8.0 * row_text_scale + 4.0
+
+        left_lines = [
+            f"FPS         {self._hud_state.get('fps', '0.0')}",
+            f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
+            f"RES         {self._hud_state.get('resolution', '-')}",
+            f"SCALE       {self._hud_state.get('render_scale', '1.00')}",
+            f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
+            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0x')}",
+            f"SPEED       {self._hud_state.get('speed', '-')}",
+            f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
+        ]
+        right_lines = [
+            f"PAUSED      {self._hud_state.get('paused', 'NO')}",
+            f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
+            f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
+            f"ADV TIMER   {self._hud_state.get('advance_time', '0.0/20.0s')}",
+            f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
+            f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
+            f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
+            f"STREAMING   {self._hud_state.get('streaming', 'OFF')}",
+            f"STREAM SRV  {self._hud_state.get('streaming_provider', '-')}",
+            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
+            f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
+            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
+            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
+            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
+        ]
+
+        rows = max(len(left_lines), len(right_lines))
+        content_bottom = row0_offset + max(0, rows - 1) * lh + row_text_h
+        panel_h_needed = content_bottom + 34.0
+        panel_h = min(max(520.0, panel_h_needed), self._height * 0.92)
         x = (self._width - panel_w) * 0.5
         y = (self._height - panel_h) * 0.5
         self._hud_rect = (x, y, panel_w, panel_h)
@@ -701,33 +738,7 @@ void main() {
         # Core stats columns
         left_x = x + 22.0
         right_x = x + panel_w * 0.51
-        row0 = y + 202.0
-        lh = 26.0
-
-        left_lines = [
-            f"FPS         {self._hud_state.get('fps', '0.0')}",
-            f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
-            f"RES         {self._hud_state.get('resolution', '-')}",
-            f"SCALE       {self._hud_state.get('render_scale', '1.00')}",
-            f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
-            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0x')}",
-            f"SPEED       {self._hud_state.get('speed', '-')}",
-            f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
-        ]
-        right_lines = [
-            f"PAUSED      {self._hud_state.get('paused', 'NO')}",
-            f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
-            f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
-            f"ADV TIMER   {self._hud_state.get('advance_time', '0.0/20.0s')}",
-            f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
-            f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
-            f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
-            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
-            f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
-            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
-            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
-            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
-        ]
+        row0 = y + row0_offset
 
         for i, ln in enumerate(left_lines):
             self._draw_text(ln, left_x, row0 + i * lh, scale=2.05, color=(0.82, 0.94, 1.0, 0.95))
@@ -735,7 +746,7 @@ void main() {
             self._draw_text(ln, right_x, row0 + i * lh, scale=2.05, color=(0.84, 1.0, 0.88, 0.95))
 
         # Bottom accent
-        self._draw_rect(x + 14.0, y + panel_h - 34.0, panel_w - 28.0, 12.0, (0.11, 0.95, 1.0, 0.45))
+        self._draw_rect(x + 14.0, y + panel_h - 24.0, panel_w - 28.0, 10.0, (0.11, 0.95, 1.0, 0.45))
 
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""

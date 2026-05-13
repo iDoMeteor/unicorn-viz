@@ -54,6 +54,15 @@ _TRANSITION_MODE_MAP = {
 }
 
 
+def _smart_trim_label(text: str, limit: int = 56) -> str:
+    """Trim long HUD labels without losing the start and end context."""
+    if len(text) <= limit:
+        return text
+    head = max(20, int(limit * 0.58))
+    tail = max(12, limit - head - 3)
+    return f'{text[:head]}...{text[-tail:]}'
+
+
 class _NullMultiHeadController:
     """Safe fallback when the multi-head drop-in is unavailable."""
 
@@ -136,6 +145,11 @@ def _load_webcam_system_class() -> type:
     return load_dropin_symbol('webcam-01/webcam_overlay.py', 'WebcamSystem')
 
 
+def _load_rtmp_streamer_class() -> type:
+    """Load RTMPStreamer directly from the streaming-01 drop-in."""
+    return load_dropin_symbol('streaming-01/rtmp_streamer.py', 'RTMPStreamer')
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -157,6 +171,7 @@ class App:
         self._webcam_cycle_timer: float = 0.0
         self._webcam_cycle_interval: float = 0.0
         self._webcam_system = None
+        self._streamer = None
         self._rng = np.random.default_rng()
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
@@ -1061,6 +1076,26 @@ void main() {
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
+        try:
+            stream_cls = _load_rtmp_streamer_class()
+            stream_cfg = self.cfg.get('streaming', default={}) or {}
+            if not isinstance(stream_cfg, dict):
+                stream_cfg = {}
+            self._streamer = stream_cls(stream_cfg, self._width, self._height)
+            if self._streamer.enabled and self._streamer.auto_start:
+                if self._streamer.start():
+                    log.info('RTMP streamer auto-started: %s', self._streamer.destination_label)
+                else:
+                    log.warning('RTMP streamer auto-start failed: %s', self._streamer.last_error)
+            else:
+                log.info(
+                    'RTMP streamer loaded (enabled=%s auto_start=%s)',
+                    self._streamer.enabled,
+                    self._streamer.auto_start,
+                )
+        except Exception as exc:
+            log.warning('RTMP streamer unavailable: %s', exc)
+            self._streamer = None
         self._sync_recording_overlay()
         if self._recorder.enabled and self._recorder.auto_record:
             started, _ = self.start_recording()
@@ -1163,7 +1198,7 @@ void main() {
                 else:
                     current_label = getattr(self._current_effect, 'current_label', '')
                     if isinstance(current_label, str) and current_label:
-                        overlays._name_text = f"{self._current_effect.NAME} - {current_label}"
+                        overlays._name_text = _smart_trim_label(f"{self._current_effect.NAME} - {current_label}")
                     else:
                         overlays._name_text = self._current_effect.NAME
 
@@ -1178,6 +1213,12 @@ void main() {
             rec_state = 'OFF'
             if self._recorder is not None and self._recorder.is_recording:
                 rec_state = 'ON'
+            stream_state = 'OFF'
+            stream_provider = '-'
+            if self._streamer is not None and self._streamer.is_streaming:
+                stream_state = 'LIVE'
+            if self._streamer is not None:
+                stream_provider = str(getattr(self._streamer, 'provider', '-')).upper()
             advance_elapsed = max(0.0, self._demo_timer)
             advance_total = max(0.1, self._effect_duration)
             advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
@@ -1228,6 +1269,8 @@ void main() {
                 'variant_slot_label': variant_label,
                 'variant_slot': variant_slot,
                 'recording': rec_state,
+                'streaming': stream_state,
+                'streaming_provider': stream_provider,
                 'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
                 'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',
                 'treble': f"{self._audio.treble:.2f}" if self._audio is not None else '0.00',
@@ -1246,6 +1289,16 @@ void main() {
                 self._webcam_system.render(dt, audio.bass, audio.treble)
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
+            stream_frame: bytes | None = None
+            need_frame_for_streaming = (
+                self._streamer is not None and self._streamer.is_streaming
+            )
+            if need_frame_for_streaming:
+                try:
+                    stream_frame = self._read_streaming_frame()
+                except Exception as exc:
+                    log.error('Streaming frame readback failed: %s', exc)
+                    stream_frame = None
             if mirror_mode_active:
                 # Compose stage finished into _fbo_a; now tile-blit to spanned window.
                 self._present_mirror_tiled(self._fbo_a.color_attachments[0])
@@ -1262,6 +1315,9 @@ void main() {
                     shared_frame = None
             if need_frame_for_recording and shared_frame is not None:
                 self._write_recording_frame(shared_frame)
+            if need_frame_for_streaming and stream_frame is not None:
+                if not self._streamer.write_frame(stream_frame):
+                    log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
             overlays.render_live_recording_indicator()
             if need_frame_for_mirror and shared_frame is not None:
                 self._present_mirror_outputs(shared_frame)
@@ -1271,6 +1327,9 @@ void main() {
         # Cleanup
         if self._recorder:
             self._recorder.stop()
+        if self._streamer is not None:
+            self._streamer.stop()
+            self._streamer = None
         audio_manager.stop()
         midi_manager.stop()
         if self._webcam_system is not None:
@@ -1455,6 +1514,8 @@ void main() {
                 self._recorder.stop()
                 self._sync_recording_overlay()
                 log.warning('Recording stopped due to resize/fullscreen change')
+            if self._streamer is not None:
+                self._streamer.resize(self._width, self._height)
             if self._current_effect:
                 self._current_effect.resize(self._width, self._height)
             if self._next_effect:
@@ -1472,6 +1533,8 @@ void main() {
             self._recorder.stop()
             self._sync_recording_overlay()
             log.warning('Recording stopped due to resize/fullscreen change')
+        if self._streamer is not None:
+            self._streamer.resize(w, h)
         if self._current_effect:
             self._current_effect.resize(w, h)
         if self._next_effect:
@@ -1665,6 +1728,39 @@ void main() {
             return self.stop_recording()
         return self.start_recording()
 
+    def start_streaming(self) -> tuple[bool, str]:
+        """Start RTMP streaming if subsystem is available/enabled."""
+        if self._streamer is None:
+            return False, 'Streaming subsystem unavailable'
+        if not self._streamer.enabled:
+            return False, 'Streaming disabled in config'
+        if self._streamer.is_streaming:
+            return True, 'Streaming already live'
+        if self._streamer.start():
+            return True, f'Streaming LIVE: {self._streamer.destination_label}'
+        return False, self._streamer.last_error or 'Streaming start failed'
+
+    def stop_streaming(self) -> tuple[bool, str]:
+        """Stop RTMP streaming if active."""
+        if self._streamer is None:
+            return False, 'Streaming subsystem unavailable'
+        if not self._streamer.is_streaming:
+            return False, 'Streaming already off'
+        self._streamer.stop()
+        return False, 'Streaming OFF'
+
+    def toggle_streaming(self) -> tuple[bool, str]:
+        """Toggle RTMP streaming state."""
+        if self._streamer is not None and self._streamer.is_streaming:
+            return self.stop_streaming()
+        return self.start_streaming()
+
+    def set_stream_provider(self, provider: str) -> str:
+        """Set stream provider preset endpoint and return active provider."""
+        if self._streamer is None:
+            return 'unavailable'
+        return self._streamer.set_provider(provider, restart=True)
+
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""
         if self._ctx is None or self._recorder is None or not self._recorder.is_recording:
@@ -1683,6 +1779,20 @@ void main() {
             return
         if not self._recorder.write_frame(frame):
             self._sync_recording_overlay()
+
+    def _read_streaming_frame(self) -> bytes | None:
+        """Read one RGB24 frame for RTMP streaming.
+
+        In mirror mode this returns the logical composed frame (from `_fbo_a`)
+        so we stream the unmodified single canvas, not the tiled multi-head
+        desktop composition.
+        """
+        if self._ctx is None:
+            return None
+        mirror_mode_active = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
+        if mirror_mode_active and self._fbo_a is not None:
+            return self._fbo_a.read(components=3, alignment=1)
+        return self._ctx.screen.read(components=3, alignment=1)
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)

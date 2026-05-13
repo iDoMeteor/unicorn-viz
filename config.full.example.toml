@@ -41,6 +41,28 @@ level = "INFO"
 # directory for per-run log files
 directory = "logs"
 
+[streaming]
+enabled = false
+auto_start = false
+provider = "rumble"
+endpoint = "rtmp://live-api-s.rumble.com/live"
+stream_key = ""
+rumble_endpoint = "rtmp://live-api-s.rumble.com/live"
+youtube_endpoint = "rtmp://a.rtmp.youtube.com/live2"
+custom_endpoint = "rtmp://your.rtmp.server/live"
+# Optional full URL override (when set, endpoint/stream_key are ignored)
+stream_url = ""
+ffmpeg_path = "ffmpeg"
+fps = 60
+video_codec = "libx264"
+preset = "veryfast"
+pixel_format = "yuv420p"
+include_audio = true
+audio_input_format = "pulse"
+audio_input_device = ""
+audio_codec = "aac"
+audio_bitrate = "160k"
+
 [ansi]
 # default ANSI art directory
 ansi_dir_auto = "assets/ansi"

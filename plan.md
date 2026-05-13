@@ -7,6 +7,12 @@
 - `[done]` completed
 - `[decision]` needs product/architecture decision
 
+## Current Focus (May 12, 2026)
+
+- `[doing]` Effect review pass is in progress (systematic quality/perf pass across existing effects).
+- `[doing]` RTMP streaming subsystem drop-in is being implemented for personal live workflows.
+- `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
+
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
 - `[done]` Audit the codebase for optimization opportunities, architectural inconsistencies, and cleanup candidates.
@@ -102,11 +108,11 @@
   - playback/runtime format choice
   - audio sync hooks
   - GPU/runtime cost constraints
-- `[todo]` Phase 3 exit gate: complete one full review pass across every existing built-in effect.
+- `[todo]` Phase 3 review milestone: complete one full review pass across every existing built-in effect.
   Notes:
   - validate visual quality, audio reactivity, and parameter sanity effect-by-effect
   - capture any per-effect fixes/tuning required after the analyzer modernization
-  - close this gate when all Phase 3 asset/media tasks are complete and reviewed together
+  - close this milestone when all Phase 3 asset/media tasks are complete and reviewed together
 
 ## Phase 4 — Product and Plugin Architecture
 
