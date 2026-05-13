@@ -128,34 +128,39 @@ python -m unicornviz --help
 | `1`–`9`           | Jump directly to effect #1–9                                 |
 | `Shift+1`–`Shift+0` | Jump directly to effect #10–20                            |
 | `Ctrl+1`–`Ctrl+0` | Jump directly to effect #21–30                               |
-| `,`               | ANSI Viewer — own art                                         |
-| `.`               | ANSI Viewer — ACiD art                                        |
+| `u`               | Replay splash screen                                          |
 | `U`               | Jump to Unicorn Tears                                         |
-| `Shift+U`         | Replay splash screen                                          |
+| `Ctrl+U`          | Screen burst                                                  |
 | `R`               | Toggle random / sequential playlist mode                      |
 | `T`               | Toggle auto-advance on / off                                  |
 | `Space`           | Pause / resume                                                |
 | `F`               | Toggle fullscreen                                             |
 | `I`               | Toggle invert colours                                         |
-| `[` / `]`         | Reactivity −/+                                               |
+| `[` / `]`         | Reactivity −/+                                                |
 | `{` / `}`         | Reactivity MIN / MAX                                          |
 | `G`               | Reset reactivity to default                                   |
-| `Shift+G`         | Reset current effect speed to default                         |
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
-| `Ctrl++`          | Speed to MAX                                                  |
-| `Ctrl+-`          | Speed to MIN                                                  || `F6`              | Toggle randomize speed (armed state persists across effects) |
-| `F7`              | Toggle randomize reactivity (armed state persists)           |
-| `Z` / `Shift+Z`   | Zoom in / out (affects supported effects)                   |
-| `Ctrl+Z`          | Reset zoom to default                                        |
-| `Alt+Z`           | Toggle randomize zoom (armed state persists)                |
-| `K` / `Shift+K`   | Internal render scale up / down (performance tuning)         |
-| `Ctrl+K`          | Reset internal render scale to default                       |
-| `Alt+K`           | Toggle randomize render scale (armed state persists)         || `E`               | Jump directly to Audio Spectrum / EQ                          |
+| `Alt+=` / `Alt+-` | Toggle random speed ON / OFF                                  |
+| `Ctrl+=` / `Ctrl+-` | Speed MAX / MIN                                             |
+| `Ctrl+G`          | Reset speed to default                                        |
+| `Z` / `Shift+Z`   | Zoom in / out (affects supported effects)                     |
+| `Ctrl+Z`          | Reset zoom to default                                         |
+| `Alt+Z`           | Toggle randomize zoom (armed state persists)                  |
+| `,`               | Res scale down                                                |
+| `.`               | Res scale up                                                  |
+| `Shift+,`         | Res scale MIN                                                 |
+| `Shift+.`         | Res scale MAX                                                 |
+| `Ctrl+,` / `Ctrl+.` | Reset internal render scale                                  |
+| `Alt+,` / `Alt+.` | Toggle randomize render scale                                 |
+| `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
-| `A`               | Audio device selector                                         |
+| `a`               | ACiD art                                                      |
+| `Shift+A`         | ANSI own art                                                  |
+| `Ctrl+A`          | Audio device selector                                         |
+| `Alt+A` / `Alt+Shift+A` | Cycle audio profile (next / prev)                    |
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
@@ -164,21 +169,21 @@ python -m unicornviz --help
 
 ## Global Randomization Modes (Armed State)
 
-F6/F7/Alt+Z/Alt+K work differently than most effect controls: they toggle a **global armed state** that persists across effect transitions. Here's how it works:
+The randomization controls work as a **global armed state** that persists across effect transitions. Here’s how it works:
 
 **When a randomization mode is ON:**
 - If the current effect supports that parameter (speed, reactivity, zoom, or render scale), it randomizes within the configured range
 - If the current effect doesn't support it, the HUD displays `N/A *` (not just `N/A`), indicating the mode is globally armed but unavailable for this effect
 - When you switch to an effect that does support it, the parameter randomizes automatically using the armed randomization range
 
-**Armed state persists until you toggle it OFF** — you don't have to enable it for each effect. This is different from manual adjustments (Z/Shift+Z for zoom, K/Shift+K for render scale), which never affect the armed state.
+**Armed state persists until you toggle it OFF** — you don't have to enable it for each effect. This is different from manual adjustments (Z/Shift+Z for zoom, comma/period for render scale, and +/- for speed nudges), which never affect the armed state.
 
 **Per-effect customization:**
 Each effect can define its own randomization ranges in `config.toml` to override the global defaults:
 
 ```toml
 [effects.Fire]
-# Narrow the global F6 speed randomization range for this effect only
+# Narrow the global Alt+=/Alt+- speed randomization range for this effect only
 random_speed_min = 0.80
 random_speed_max = 1.35
 # Narrow the global Alt+Z zoom randomization range
@@ -186,7 +191,7 @@ random_zoom_min = 0.85
 random_zoom_max = 1.15
 ```
 
-When these are omitted, the effect falls back to the global `[hotkeys]` randomization ranges.
+When these are omitted, the effect falls back to the global `[hotkeys]` randomization ranges. The primary mnemonic bindings are `Alt+=/Alt+-` for speed randomization, `Ctrl+=/Ctrl+-` for speed reset, `Alt+,/Alt+.` for render-scale randomization, and `Ctrl+,/Ctrl+.` for render-scale reset.
 
 ## Effect Startup Randomization
 
@@ -221,7 +226,7 @@ Different music genres have distinct frequency characteristics. Unicorn Viz incl
 | `pop`        | Radio-friendly balance with treble emphasis                 |
 | `metal`      | Aggressive full-range, emphasized mids and treble           |
 
-**Switch profiles with `O` (next) / `Shift+O` (previous)** — profiles cycle with wraparound.
+**Switch profiles with `Alt+A` (next) / `Alt+Shift+A` (previous)** — profiles cycle with wraparound.
 
 **Set default profile in config:** `[audio] profile = "house"`
 

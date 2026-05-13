@@ -1934,6 +1934,15 @@ void main() {
         self._current_effect.parameters['speed'] = value
         self._speed_randomized = True
 
+    def _reset_speed(self) -> float | None:
+        """Reset current effect speed to its initial default if supported."""
+        if self._current_effect is None or 'speed' not in self._current_effect.parameters:
+            return None
+        default = self._current_effect._initial_parameters.get('speed', 1.0)  # noqa: SLF001
+        self._current_effect.parameters['speed'] = default
+        self._speed_randomized = False
+        return float(default)
+
     def _apply_random_reactivity(self) -> None:
         """Apply random reactivity using effect-local overrides when available."""
         if self._audio_manager is None:
@@ -2013,6 +2022,12 @@ void main() {
         """Reset render scale to config default."""
         self._render_scale = self._render_scale_default
         self._scale_randomized = False
+        self._rebuild_fbos()
+        return self._render_scale
+
+    def _set_render_scale(self, value: float) -> float:
+        """Set render scale to an explicit value and rebuild FBOs."""
+        self._render_scale = _clamp_render_scale(float(value))
         self._rebuild_fbos()
         return self._render_scale
 

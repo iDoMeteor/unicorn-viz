@@ -188,15 +188,17 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 | `N` / `→` | Next effect |
 | `P` / `←` | Previous effect |
 | `1`–`9`, `Shift+1`–`0`, `Ctrl+1`–`0` | Jump to effect |
-| `,` / `.` | ANSI own / ACiD art |
+| `u` / `U` / `Ctrl+U` | Splash / Unicorn Tears / screen burst |
+| `a` / `Shift+A` / `Ctrl+A` | ACiD art / ANSI art / audio source |
+| `,` / `.` / `<` / `>` | Res scale down / up / MIN / MAX |
+| `Ctrl+,` / `Ctrl+.` | Res scale reset |
+| `Alt+,` / `Alt+.` | Res scale random |
 | `Space` | Pause / resume |
 | `F` | Fullscreen |
 | `T` | Toggle auto-advance |
 | `I` | Invert colours |
 | `V` | Toggle recording |
 | `S` | Screenshot |
-| `U` | Unicorn Tears |
-| `Shift+U` | Replay splash |
 | `Tab` | Legacy HUD panel |
 | `H` | Help overlay |
 | `ESC` | Quit |

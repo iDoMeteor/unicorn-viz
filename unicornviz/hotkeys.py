@@ -196,13 +196,27 @@ class HotkeyHandler:
             o.toggle_help()
 
         elif sym == sdl2.SDLK_a:
-            o.toggle_audio_selector()
+            if mod & sdl2.KMOD_CTRL:
+                # Ctrl+A — audio source selector
+                o.toggle_audio_selector()
+            elif mod & sdl2.KMOD_SHIFT:
+                # Shift+A — our own ANSI art
+                ansi_dir = self._app.cfg.get("ansi", "ansi_own_dir",
+                                             default="assets/ansi")
+                a.goto_ansi(ansi_dir)
+                o.flash_message("ANSI: Own art", 2.0)
+            else:
+                # a — ACiD art
+                acid_dir = self._app.cfg.get("ansi", "ansi_acid_dir",
+                                             default="assets/ansi/acid")
+                a.goto_ansi(acid_dir)
+                o.flash_message("ACiD: Art", 2.0)
 
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
 
-        elif sym == sdl2.SDLK_o:
-            # Next audio profile (wraps around)
+        elif (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_a:
+            # Alt+A — next audio profile (wraps around)
             profiles = self._audio.list_profiles()
             current_profile = self._audio.get_profile()
             current_name = current_profile.name
@@ -215,8 +229,8 @@ class HotkeyHandler:
             o.flash_message(f'Audio Profile: {next_profile.name}', 1.2)
             log.info('Audio profile changed: %s → %s', current_name, next_profile.name)
 
-        elif (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_o:
-            # Previous audio profile (wraps around)
+        elif (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_a:
+            # Alt+Shift+A — previous audio profile (wraps around)
             profiles = self._audio.list_profiles()
             current_profile = self._audio.get_profile()
             current_name = current_profile.name
@@ -301,10 +315,18 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_PLUS or sym == sdl2.SDLK_EQUALS:
             effect = a._current_effect  # noqa: SLF001
             if effect and "speed" in effect.parameters:
-                if mod & sdl2.KMOD_CTRL:
+                if mod & sdl2.KMOD_ALT:
+                    # Alt+= — toggle random speed on
+                    a._apply_random_speed()  # noqa: SLF001
+                    a._speed_randomized = True  # noqa: SLF001
+                    lo, hi = a._random_range_for('speed', 0.25, 2.50)  # noqa: SLF001
+                    o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
+                elif mod & sdl2.KMOD_CTRL:
+                    # Ctrl+= — speed MAX
                     effect.parameters["speed"] = 10.0
                     o.flash_message("Speed  MAX", 1.5)
                 else:
+                    # = — speed up
                     effect.parameters["speed"] = min(
                         effect.parameters["speed"] * 1.25, 10.0
                     )
@@ -315,10 +337,16 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_MINUS:
             effect = a._current_effect  # noqa: SLF001
             if effect and "speed" in effect.parameters:
-                if mod & sdl2.KMOD_CTRL:
+                if mod & sdl2.KMOD_ALT:
+                    # Alt+- — toggle random speed off
+                    a._speed_randomized = False  # noqa: SLF001
+                    o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
+                elif mod & sdl2.KMOD_CTRL:
+                    # Ctrl+- — speed MIN
                     effect.parameters["speed"] = 0.05
                     o.flash_message("Speed  MIN", 1.5)
                 else:
+                    # - — speed down
                     effect.parameters["speed"] = max(
                         effect.parameters["speed"] * 0.8, 0.05
                     )
@@ -328,8 +356,8 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_g:
             am = self._audio
-            if mod & sdl2.KMOD_SHIFT:
-                # Shift+G — reset speed to initial default
+            if mod & sdl2.KMOD_CTRL:
+                # Ctrl+G — reset speed to initial default
                 effect = a._current_effect  # noqa: SLF001
                 if effect and "speed" in effect.parameters:
                     default = effect._initial_parameters.get("speed", 1.0)  # noqa: SLF001
@@ -438,18 +466,56 @@ class HotkeyHandler:
             o.flash_name(cls.NAME)
 
         elif sym == sdl2.SDLK_COMMA:
-            # Launch ANSI Viewer with our hand-crafted art
-            ansi_dir = self._app.cfg.get("ansi", "ansi_own_dir",
-                                         default="assets/ansi")
-            a.goto_ansi(ansi_dir)
-            o.flash_message("ANSI: Own art", 2.0)
+            # , = scale down, Shift+, (<) = scale MIN, Ctrl+, = scale reset, Alt+, = scale random
+            if mod & sdl2.KMOD_ALT:
+                # Alt+, — toggle random render scale
+                if a._scale_randomized:  # noqa: SLF001
+                    val = a._reset_render_scale()  # noqa: SLF001
+                    a._scale_randomized = False  # noqa: SLF001
+                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
+                else:
+                    a._apply_random_render_scale()  # noqa: SLF001
+                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
+                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
+            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+, — scale reset
+                val = a._reset_render_scale()  # noqa: SLF001
+                o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
+            elif mod & sdl2.KMOD_SHIFT:
+                # Shift+, (<) — scale MIN
+                lo, _hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
+                val = a._set_render_scale(lo)  # noqa: SLF001
+                o.flash_message(f'Res scale  MIN  {val:.2f}', 1.2)
+            else:
+                # , — scale down
+                val = a._apply_render_scale_delta(-0.05)  # noqa: SLF001
+                o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_PERIOD:
-            # Launch ANSI Viewer with ACiD art
-            acid_dir = self._app.cfg.get("ansi", "ansi_acid_dir",
-                                         default="assets/ansi/acid")
-            a.goto_ansi(acid_dir)
-            o.flash_message("ANSI: ACiD art", 2.0)
+            # . = scale up, Shift+. (>) = scale MAX, Ctrl+. = scale reset, Alt+. = scale random
+            if mod & sdl2.KMOD_ALT:
+                # Alt+. — toggle random render scale
+                if a._scale_randomized:  # noqa: SLF001
+                    val = a._reset_render_scale()  # noqa: SLF001
+                    a._scale_randomized = False  # noqa: SLF001
+                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
+                else:
+                    a._apply_random_render_scale()  # noqa: SLF001
+                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
+                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
+            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+. — scale reset
+                val = a._reset_render_scale()  # noqa: SLF001
+                o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
+            elif mod & sdl2.KMOD_SHIFT:
+                # Shift+. (>) — scale MAX
+                _lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
+                val = a._set_render_scale(hi)  # noqa: SLF001
+                o.flash_message(f'Res scale  MAX  {val:.2f}', 1.2)
+            else:
+                # . — scale up
+                val = a._apply_render_scale_delta(0.05)  # noqa: SLF001
+                o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_s:
             self._screenshot()
@@ -543,19 +609,19 @@ class HotkeyHandler:
                     o.flash_message("Unicorn Tears not found", 1.5)
 
         elif sym == sdl2.SDLK_x:
-            # Display mode controls
+            # Display mode controls: X=single, Shift+X=span, Ctrl+X=mirror, Alt+X=config
             if mod & sdl2.KMOD_ALT:
-                mode = a.set_display_mode('mirror_all')
-                o.flash_message(f'Display mode: {mode}', 1.5)
-            elif mod & sdl2.KMOD_CTRL:
-                mode = a.set_display_mode('span_all')
-                o.flash_message(f'Display mode: {mode}', 1.5)
-            elif mod & sdl2.KMOD_SHIFT:
-                mode = a.set_display_mode('single')
-                o.flash_message(f'Display mode: {mode}', 1.5)
-            else:
                 mode = a.set_display_mode(reset_to_config=True)
                 o.flash_message(f'Display mode: {mode} (config)', 1.5)
+            elif mod & sdl2.KMOD_CTRL:
+                mode = a.set_display_mode('mirror_all')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_SHIFT:
+                mode = a.set_display_mode('span_all')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            else:
+                mode = a.set_display_mode('single')
+                o.flash_message(f'Display mode: {mode}', 1.5)
 
         elif sym == sdl2.SDLK_t:
             a._auto_advance = not a._auto_advance
