@@ -66,7 +66,7 @@ class Plasma(BaseEffect):
     def _init(self) -> None:
         self.parameters = {
             "speed": float(self.config.get("speed", 1.0)),
-            "palette": 0.0,
+            "palette": float(self.rng.uniform(0.0, 1.0)),
         }
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()

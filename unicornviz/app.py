@@ -176,6 +176,7 @@ class App:
         self._speed_randomized: bool = False
         self._reactivity_randomized: bool = False
         self._zoom_randomized: bool = False
+        self._scale_randomized: bool = False
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
             self.cfg.get('demo', 'effect_duration', default=20)
@@ -221,6 +222,7 @@ class App:
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
+        self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))
         self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
@@ -1210,9 +1212,23 @@ void main() {
             transition_name = self._transition_kind if self._next_effect is not None else 'none'
             transition_pct = f"{int(max(0.0, min(1.0, self._transition_t)) * 100)}%"
             audio_src = audio_manager.get_source_label() if audio_manager is not None else 'n/a'
-            effect_speed = '-'
+            # Format reactive values: no trailing 'x', space before '*'
+            if audio_manager is not None:
+                _rv = audio_manager.get_reactivity()
+                react_str = f"{_rv:.1f}{' *' if self._reactivity_randomized else ''}"
+            else:
+                react_str = 'n/a'
             if self._current_effect is not None and 'speed' in self._current_effect.parameters:
-                effect_speed = f"{self._current_effect.parameters['speed']:.2f}x"
+                _sv = self._current_effect.parameters['speed']
+                speed_str = f"{_sv:.2f}{' *' if self._speed_randomized else ''}"
+            else:
+                speed_str = f"N/A{' *' if self._speed_randomized else ''}"
+            if self._current_effect is not None and 'zoom' in self._current_effect.parameters:
+                _zv = self._current_effect.parameters['zoom']
+                zoom_str = f"{_zv:.2f}{' *' if self._zoom_randomized else ''}"
+            else:
+                zoom_str = f"N/A{' *' if self._zoom_randomized else ''}"
+            scale_str = f"{self._render_scale:.2f}{' *' if self._scale_randomized else ''}"
             rec_state = 'OFF'
             if self._recorder is not None and self._recorder.is_recording:
                 rec_state = 'ON'
@@ -1249,7 +1265,7 @@ void main() {
                 if isinstance(vslot_text, str) and vslot_text.strip():
                     variant_slot = vslot_text.strip()
             overlays.set_hud_state({
-                'title': 'Unicorn Viz Legacy HUD',
+                'title': 'Unicorn Viz HUD',
                 'effect': overlays._name_text,
                 'previous_effect': self._previous_effect_name,
                 'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
@@ -1258,15 +1274,15 @@ void main() {
                 'fps': f"{fps_now:.1f}",
                 'frame_ms': f"{(dt * 1000.0):.2f}",
                 'resolution': f"{self._width}x{self._height}",
-                'render_scale': f"{self._render_scale:.2f}",
+                'render_scale': scale_str,
                 'playlist': f"{playlist.mode.upper()} {playlist.index + 1}/{len(playlist.effects)}",
                 'paused': 'YES' if self._paused else 'NO',
                 'fullscreen': 'YES' if self._fullscreen else 'NO',
                 'auto_advance': 'ON' if self._auto_advance else 'OFF',
                 'advance_time': advance_time,
-                'reactivity': f"{audio_manager.get_reactivity():.1f}x{'*' if self._reactivity_randomized else ''}" if audio_manager is not None else 'n/a',
-                'speed': effect_speed + ('*' if self._speed_randomized else ''),
-                'zoom': (f"{self._current_effect.parameters.get('zoom', 1.0):.2f}x{'*' if self._zoom_randomized else ''}" if self._current_effect is not None and 'zoom' in self._current_effect.parameters else '-'),
+                'reactivity': react_str,
+                'speed': speed_str,
+                'zoom': zoom_str,
                 'audio_source': audio_src,
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
@@ -1767,10 +1783,9 @@ void main() {
         return self._streamer.set_provider(provider, restart=True)
 
     def _apply_random_speed(self) -> None:
-        """Apply random speed to current effect and flag for re-apply on scene change."""
+        """Apply random speed to current effect if it supports it; flag always persists."""
         if self._current_effect is None or 'speed' not in self._current_effect.parameters:
-            self._speed_randomized = False
-            return
+            return  # flag stays as-is; will apply when a supporting effect becomes active
         lo = float(self.cfg.get('hotkeys', 'random_speed_min', default=0.25))
         hi = float(self.cfg.get('hotkeys', 'random_speed_max', default=2.50))
         if lo > hi:
@@ -1795,8 +1810,7 @@ void main() {
     def _apply_zoom_delta(self, delta: float) -> float:
         """Adjust zoom of current effect by delta. Returns new zoom or 0 if unavailable."""
         if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
-            self._zoom_randomized = False
-            return 0.0
+            return 0.0  # never touch the random flag here
         lo = float(self.cfg.get('hotkeys', 'zoom_min', default=0.1))
         hi = float(self.cfg.get('hotkeys', 'zoom_max', default=3.0))
         current = self._current_effect.parameters['zoom']
@@ -1804,11 +1818,19 @@ void main() {
         self._current_effect.parameters['zoom'] = new_val
         return new_val
 
-    def _apply_random_zoom(self) -> None:
-        """Apply random zoom to current effect and flag for re-apply on scene change."""
+    def _reset_zoom(self) -> float | None:
+        """Reset zoom to the effect's initial default. Returns reset value or None if unavailable."""
         if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
-            self._zoom_randomized = False
-            return
+            return None
+        default = self._current_effect._initial_parameters.get('zoom', 1.0)  # noqa: SLF001
+        self._current_effect.parameters['zoom'] = default
+        self._zoom_randomized = False
+        return default
+
+    def _apply_random_zoom(self) -> None:
+        """Apply random zoom to current effect if it supports it; flag always persists."""
+        if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
+            return  # flag stays as-is; will apply when a supporting effect becomes active
         lo = float(self.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
         hi = float(self.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
         if lo > hi:
@@ -1825,6 +1847,78 @@ void main() {
             self._apply_random_reactivity()
         if self._zoom_randomized:
             self._apply_random_zoom()
+        if self._scale_randomized:
+            self._apply_random_render_scale()
+
+    def _rebuild_fbos(self) -> None:
+        """Recompute render dimensions and recreate FBOs after a scale change."""
+        self._update_render_target_size()
+        if self._fbo_a:
+            self._fbo_a.release()
+        if self._fbo_b:
+            self._fbo_b.release()
+        self._fbo_a = self._make_fbo()
+        self._fbo_b = self._make_fbo()
+
+    def _apply_render_scale_delta(self, delta: float) -> float:
+        """Adjust internal render scale by delta. Returns new (clamped) value."""
+        self._render_scale = _clamp_render_scale(self._render_scale + delta)
+        self._rebuild_fbos()
+        return self._render_scale
+
+    def _reset_render_scale(self) -> float:
+        """Reset render scale to config default."""
+        self._render_scale = self._render_scale_default
+        self._scale_randomized = False
+        self._rebuild_fbos()
+        return self._render_scale
+
+    def _apply_random_render_scale(self) -> None:
+        """Apply random render scale and flag for re-apply on scene change."""
+        lo = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_min', default=0.5)))
+        hi = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_max', default=1.0)))
+        if lo > hi:
+            lo, hi = hi, lo
+        self._render_scale = _clamp_render_scale(float(self._rng.uniform(lo, hi)))
+        self._scale_randomized = True
+        self._rebuild_fbos()
+        if self._scale_randomized:
+            self._apply_random_render_scale()
+
+    def _rebuild_fbos(self) -> None:
+        """Recompute render dimensions and recreate FBOs after a scale change."""
+        self._update_render_target_size()
+        if self._fbo_a:
+            self._fbo_a.release()
+        if self._fbo_b:
+            self._fbo_b.release()
+        self._fbo_a = self._make_fbo()
+        self._fbo_b = self._make_fbo()
+
+    def _apply_render_scale_delta(self, delta: float) -> float:
+        """Adjust internal render scale by delta. Returns new value."""
+        new_val = _clamp_render_scale(self._render_scale + delta)
+        self._render_scale = new_val
+        self._rebuild_fbos()
+        return new_val
+
+    def _reset_render_scale(self) -> float:
+        """Reset render scale to config default."""
+        self._render_scale = self._render_scale_default
+        self._scale_randomized = False
+        self._rebuild_fbos()
+        return self._render_scale
+
+    def _apply_random_render_scale(self) -> None:
+        """Apply random render scale and flag for re-apply on scene change."""
+        lo = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_min', default=0.5)))
+        hi = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_max', default=1.0)))
+        if lo > hi:
+            lo, hi = hi, lo
+        value = _clamp_render_scale(float(self._rng.uniform(lo, hi)))
+        self._render_scale = value
+        self._scale_randomized = True
+        self._rebuild_fbos()
 
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""

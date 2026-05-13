@@ -142,7 +142,7 @@ class Fire(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "intensity": 0.90,
+            "intensity": float(self.rng.uniform(0.70, 1.00)),
             "speed": 1.0,
         }
         self._prog = self._make_program(_VERT, _FRAG)

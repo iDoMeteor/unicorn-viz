@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -343,8 +344,8 @@ class Overlays:
                 ('\\', 'Reset advance interval'),
                 ('+ / -', 'Speed up / down'),
                 ('Ctrl+=/-', 'Speed MAX / MIN'),
-                ('G', 'Reset speed'),
-                ('F6', 'Random speed (cfg range)'),
+                ('Shift+G', 'Reset speed'),
+                ('F6', 'Toggle random speed'),
             ],
         ),
         (
@@ -352,11 +353,14 @@ class Overlays:
             [
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
-                ('Alt+[ / Alt+]', 'Zoom -/+ (if available)'),
-                ('g', 'Reset reactivity'),
-                ('F6', 'Toggle random speed'),
+                ('Z / Shift+Z', 'Zoom in / out'),
+                ('Ctrl+Z', 'Reset zoom'),
+                ('Alt+Z', 'Toggle random zoom'),
+                ('K / Shift+K', 'Res scale up / down'),
+                ('Ctrl+K', 'Reset res scale'),
+                ('Alt+K', 'Toggle random res scale'),
+                ('G', 'Reset reactivity'),
                 ('F7', 'Toggle random reactivity'),
-                ('Shift+Z', 'Toggle random zoom'),
                 ('E', 'EQ / spectrum'),
                 ('A', 'Audio source'),
                 ('M', 'MIDI device'),
@@ -427,7 +431,7 @@ class Overlays:
         self._flash_timer: float = 0.0
         self._name_text: str = ""
         self._hud_state: dict[str, str] = {
-            'title': 'Unicorn Viz Legacy HUD',
+            'title': 'Unicorn Viz HUD',
             'effect': '-',
             'previous_effect': '-',
             'next_effect': '-',
@@ -470,6 +474,7 @@ class Overlays:
         self._help_collapsed: dict[str, bool] = {}
         self._help_focus_idx: int = 0
         self._help_pulse_t: float = 0.0
+        self._hud_t: float = 0.0
 
         self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h = _build_font_texture(ctx)
         # Keep historical scale semantics (scale=1 roughly equals an 8 px cell).
@@ -680,21 +685,37 @@ void main() {
         )
 
     def _render_hud(self) -> None:
-        """Render modern game-style status HUD panel."""
-        panel_w = min(990.0, self._width * 0.86)
+        """Render animated LCARS-style status HUD with pulsing glows, scan lines and decorations."""
+        panel_w = min(1000.0, self._width * 0.88)
         lh = 28.0
         row0_offset = 188.0
-        row_text_scale = 2.05
-        row_text_h = 8.0 * row_text_scale + 4.0
+        row_text_h = 8.0 * 2.05 + 4.0
+
+        # ── animation clocks ─────────────────────────────────────────────
+        t = self._hud_t
+        pulse_slow  = 0.5 + 0.5 * math.sin(t * 1.1)          # ~5.7 s period
+        pulse_med   = 0.5 + 0.5 * math.sin(t * 2.3)          # ~2.7 s period
+        pulse_fast  = 0.5 + 0.5 * math.sin(t * 4.7)          # ~1.3 s period
+        # racing scanline: 0→1 across the panel every 3 s
+        scan_h      = math.fmod(t * 0.33, 1.0)
+        # shimmer racing across the header left→right every 2.4 s
+        shimmer_x   = math.fmod(t * 0.42, 1.0)
+        # audio values (safe parse)
+        def _fv(key: str) -> float:
+            try: return float(self._hud_state.get(key, '0') or '0')
+            except ValueError: return 0.0
+        bass = min(_fv('bass'), 1.0)
+        mid  = min(_fv('mid'),  1.0)
 
         left_lines = [
             f"FPS         {self._hud_state.get('fps', '0.0')}",
             f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
             f"RES         {self._hud_state.get('resolution', '-')}",
-            f"SCALE       {self._hud_state.get('render_scale', '1.00')}",
+            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
-            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0x')}",
-            f"SPEED       {self._hud_state.get('speed', '-')}",
+            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
+            f"SPEED       {self._hud_state.get('speed', 'N/A')}",
+            f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
         ]
         right_lines = [
@@ -717,44 +738,279 @@ void main() {
         rows = max(len(left_lines), len(right_lines))
         content_bottom = row0_offset + max(0, rows - 1) * lh + row_text_h
         panel_h_needed = content_bottom + 34.0
-        panel_h = min(max(520.0, panel_h_needed), self._height * 0.92)
+        panel_h = min(max(520.0, panel_h_needed), self._height * 0.88)
         x = (self._width - panel_w) * 0.5
-        y = (self._height - panel_h) * 0.5
+        y = max(36.0, (self._height - panel_h) * 0.5)
         self._hud_rect = (x, y, panel_w, panel_h)
 
-        # Layered glass panels
-        self._draw_rect(x - 2.0, y - 2.0, panel_w + 4.0, panel_h + 4.0, (0.08, 0.95, 1.0, 0.26))
-        self._draw_rect(x, y, panel_w, panel_h, (0.03, 0.05, 0.10, 0.76))
-        self._draw_rect(x, y, panel_w, 92.0, (0.06, 0.12, 0.22, 0.76))
+        data_zone_y  = y + row0_offset - 8.0
+        data_zone_h  = rows * lh + 16.0
 
-        title = self._hud_state.get('title', 'Unicorn Viz Legacy HUD')
+        # ── layer 0: breathing outer halo ────────────────────────────────
+        halo_a = 0.06 + pulse_slow * 0.10
+        self._draw_rect(x - 18.0, y - 18.0, panel_w + 36.0, panel_h + 36.0, (0.08, 0.88, 1.0, halo_a * 0.5))
+        self._draw_rect(x - 8.0,  y - 8.0,  panel_w + 16.0, panel_h + 16.0, (0.08, 0.88, 1.0, halo_a))
+
+        # ── layer 1: main panel background ───────────────────────────────
+        self._draw_rect(x, y, panel_w, panel_h, (0.02, 0.04, 0.08, 0.65))
+
+        # ── layer 2: animated outer border (pulsing alpha) ───────────────
+        border_a = 0.50 + pulse_slow * 0.34
+        self._draw_rect(x - 1.0, y - 1.0, panel_w + 2.0, 2.0,          (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x - 1.0, y + panel_h - 1.0, panel_w + 2.0, 2.0, (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x - 1.0, y - 1.0, 2.0, panel_h + 2.0,          (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x + panel_w - 1.0, y - 1.0, 2.0, panel_h + 2.0, (0.10, 0.94, 1.0, border_a))
+
+        # ── sparkle sprite chasing the containment border ─────────────────
+        # Position 0→1 travels: top-left → top-right → bottom-right → bottom-left → back
+        # Speed: one full lap every 4 s
+        sprite_t = math.fmod(t * 0.20, 1.0)
+        perim    = 2.0 * (panel_w + panel_h)
+        dist     = sprite_t * perim
+        top_seg  = panel_w
+        right_seg= panel_h
+        bot_seg  = panel_w
+        # left_seg = panel_h (remainder)
+        if dist < top_seg:                              # top edge L→R
+            sx, sy = x + dist, y - 1.0
+        elif dist < top_seg + right_seg:               # right edge T→B
+            sx, sy = x + panel_w - 1.0, y + (dist - top_seg)
+        elif dist < top_seg + right_seg + bot_seg:     # bottom edge R→L
+            sx, sy = x + panel_w - (dist - top_seg - right_seg), y + panel_h - 1.0
+        else:                                           # left edge B→T
+            sx, sy = x - 1.0, y + panel_h - (dist - top_seg - right_seg - bot_seg)
+        # glow layers: wide soft bloom → tight mid → bright core
+        sp_a = 0.72 + 0.28 * math.sin(t * 11.3)   # fast inner flicker — starts at 0.72 floor
+        self._draw_rect(sx - 10.0, sy - 10.0, 22.0, 22.0, (0.10, 0.94, 1.0, sp_a * 0.22))
+        self._draw_rect(sx -  7.0, sy -  7.0, 16.0, 16.0, (0.10, 0.94, 1.0, sp_a * 0.46))
+        self._draw_rect(sx -  4.0, sy -  4.0, 10.0, 10.0, (0.50, 0.98, 1.0, sp_a * 0.76))
+        self._draw_rect(sx -  2.0, sy -  2.0,  6.0,  6.0, (0.80, 1.00, 1.0, sp_a * 0.92))
+        self._draw_rect(sx -  1.0, sy -  1.0,  4.0,  4.0, (1.00, 1.00, 1.0, min(1.0, sp_a * 1.10)))
+        # trailing ghost — half-lap behind
+        trail_t  = math.fmod(sprite_t + 0.5, 1.0)
+        trail_d  = trail_t * perim
+        if trail_d < top_seg:
+            tx2, ty2 = x + trail_d, y - 1.0
+        elif trail_d < top_seg + right_seg:
+            tx2, ty2 = x + panel_w - 1.0, y + (trail_d - top_seg)
+        elif trail_d < top_seg + right_seg + bot_seg:
+            tx2, ty2 = x + panel_w - (trail_d - top_seg - right_seg), y + panel_h - 1.0
+        else:
+            tx2, ty2 = x - 1.0, y + panel_h - (trail_d - top_seg - right_seg - bot_seg)
+        tr_a = 0.42 + 0.28 * math.sin(t * 7.1)
+        self._draw_rect(tx2 - 5.0, ty2 - 5.0, 12.0, 12.0, (0.78, 0.38, 1.00, tr_a * 0.38))
+        self._draw_rect(tx2 - 3.0, ty2 - 3.0,  8.0,  8.0, (0.78, 0.38, 1.00, tr_a * 0.65))
+        self._draw_rect(tx2 - 1.0, ty2 - 1.0,  4.0,  4.0, (1.00, 0.70, 1.00, tr_a * 0.90))
+
+        # ── layer 3: LCARS side decorative block stacks ───────────────────
+        # Each block has its own independent phase so they flash individually.
+        # Tuple: (height, base_rgb, base_alpha, phase_offset, phase_speed, strobe_speed)
+        side_w   = 18.0
+        block_defs = [
+            (28.0, (1.00, 0.58, 0.12), 0.68, 0.00, 2.30, 0.0 ),   # orange
+            (6.0,  None, 0, 0, 0, 0),
+            (8.0,  (1.00, 0.58, 0.12), 0.34, 0.70, 4.10, 7.3 ),   # orange thin – fast strobe
+            (6.0,  None, 0, 0, 0, 0),
+            (44.0, (0.10, 0.94, 1.00), 0.68, 1.10, 1.80, 0.0 ),   # teal large
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.78, 0.38, 1.00), 0.56, 2.20, 3.50, 0.0 ),   # violet
+            (6.0,  None, 0, 0, 0, 0),
+            (60.0, (1.00, 0.58, 0.12), 0.56, 0.50, 1.10, 0.0 ),   # orange long
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.10, 0.94, 1.00), 0.48, 1.80, 5.20, 11.7),   # teal – fast strobe
+            (6.0,  None, 0, 0, 0, 0),
+            (28.0, (0.98, 0.96, 0.30), 0.52, 0.90, 2.70, 0.0 ),   # yellow
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.78, 0.38, 1.00), 0.44, 3.10, 4.80, 9.1 ),   # violet – strobe
+            (6.0,  None, 0, 0, 0, 0),
+            (24.0, (1.00, 0.58, 0.12), 0.62, 1.60, 2.10, 0.0 ),   # orange
+        ]
+        side_rx = x + panel_w + 4.0
+        side_lx = x - 4.0 - side_w
+        by_r = y
+        by_l = y
+        for bdef in block_defs:
+            bh = bdef[0]
+            if bdef[1] is None:          # gap
+                by_r += bh
+                by_l += bh
+                continue
+            bh, rgb, base_a, phase, spd, strobe_spd = bdef
+            pulse_val = 0.5 + 0.5 * math.sin(t * spd + phase)
+            alpha = base_a + pulse_val * 0.28
+            if strobe_spd > 0:
+                # occasional fast strobe: rectified high-freq sine → sharp flash
+                strobe = max(0.0, math.sin(t * strobe_spd)) ** 3
+                alpha = min(1.0, alpha + strobe * 0.38)
+            bc = (rgb[0], rgb[1], rgb[2], min(1.0, alpha))
+            # right side
+            self._draw_rect(side_rx, by_r, side_w, bh, bc)
+            # edge highlight (inner thin bright line)
+            hi_a = min(1.0, alpha * 0.55 + pulse_val * 0.25)
+            self._draw_rect(side_rx, by_r, 2.0, bh, (1.0, 1.0, 1.0, hi_a))
+            # left side (mirrored — edge highlight on right edge of block)
+            self._draw_rect(side_lx, by_l, side_w, bh, bc)
+            self._draw_rect(side_lx + side_w - 2.0, by_l, 2.0, bh, (1.0, 1.0, 1.0, hi_a))
+            by_r += bh
+            by_l += bh
+
+        # ── layer 4: corner accent blocks + crosshair arms (pulsing orange) ───
+        corner_sz = 14.0
+        ca = 0.65 + pulse_fast * 0.30
+        self._draw_rect(x - 1.0, y - 1.0, corner_sz, corner_sz,                                   (1.0, 0.58, 0.12, ca))
+        self._draw_rect(x + panel_w - corner_sz + 1.0, y - 1.0, corner_sz, corner_sz,             (1.0, 0.58, 0.12, ca))
+        self._draw_rect(x - 1.0, y + panel_h - corner_sz + 1.0, corner_sz, corner_sz,             (1.0, 0.58, 0.12, ca))
+        self._draw_rect(x + panel_w - corner_sz + 1.0, y + panel_h - corner_sz + 1.0, corner_sz, corner_sz, (1.0, 0.58, 0.12, ca))
+        # Inner teal corner squares
+        ic = 6.0
+        ica = 0.52 + pulse_slow * 0.32
+        self._draw_rect(x + 2.0, y + 2.0, ic, ic, (0.10, 0.94, 1.0, ica))
+        self._draw_rect(x + panel_w - ic - 2.0, y + 2.0, ic, ic, (0.10, 0.94, 1.0, ica))
+        self._draw_rect(x + 2.0, y + panel_h - ic - 2.0, ic, ic, (0.10, 0.94, 1.0, ica))
+        self._draw_rect(x + panel_w - ic - 2.0, y + panel_h - ic - 2.0, ic, ic, (0.10, 0.94, 1.0, ica))
+        # Corner crosshair arms — thin lines extending inward from each corner
+        arm_len = 40.0
+        arm_a   = 0.28 + pulse_slow * 0.20
+        # top-left
+        self._draw_rect(x + corner_sz, y + 1.0,    arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))  # horiz
+        self._draw_rect(x + 1.0, y + corner_sz,    1.0, arm_len, (1.0, 0.58, 0.12, arm_a))  # vert
+        # top-right
+        self._draw_rect(x + panel_w - corner_sz - arm_len, y + 1.0,    arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + panel_w - 2.0, y + corner_sz,              1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        # bottom-left
+        self._draw_rect(x + corner_sz, y + panel_h - 2.0,              arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + 1.0, y + panel_h - corner_sz - arm_len,   1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        # bottom-right
+        self._draw_rect(x + panel_w - corner_sz - arm_len, y + panel_h - 2.0, arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + panel_w - 2.0, y + panel_h - corner_sz - arm_len, 1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+
+        # ── layer 5: header ──────────────────────────────────────────────
+        self._draw_rect(x, y, panel_w, 100.0, (0.05, 0.08, 0.16, 0.80))
+
+        # Header shimmer: bright spot racing left→right along the title bar
+        shim_w = panel_w * 0.18
+        shim_x = x + shimmer_x * (panel_w - shim_w)
+        self._draw_rect(shim_x, y, shim_w, 100.0, (1.0, 1.0, 1.0, 0.04 + pulse_fast * 0.04))
+
+        # Header separator — triple lines for LCARS depth
+        bar_a = 0.60 + pulse_slow * 0.22
+        self._draw_rect(x, y + 94.0, panel_w, 2.0, (1.0, 0.62, 0.20, bar_a * 0.5))
+        self._draw_rect(x, y + 97.0, panel_w, 4.0, (1.0, 0.62, 0.20, bar_a))
+        self._draw_rect(x, y + 102.0, panel_w, 1.0, (1.0, 0.62, 0.20, bar_a * 0.4))
+
+        # Title — no background rect; text pulses inversely to where the bg was
+        title = self._hud_state.get('title', 'Unicorn Viz')
         tx = x + (panel_w - len(title) * 8.0 * 3.0) * 0.5
-        self._draw_text(title, tx, y + 10.0, scale=3.0, color=(0.62, 1.0, 1.0, 0.96))
+        # Inverse of pulse_med: bright when pulse_med is low, dim when it peaks
+        title_a = 0.86 + (1.0 - pulse_med) * 0.14
+        self._draw_text(title, tx, y + 8.0, scale=3.0, color=(0.12, 0.98, 1.0, title_a))
+
+        # Date/time (orange)
         now = datetime.datetime.now()
         dt_line = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}"
         dx = x + (panel_w - len(dt_line) * 8.0 * 2.2) * 0.5
-        self._draw_text(dt_line, dx, y + 46.0, scale=2.2, color=(0.94, 0.98, 1.0, 0.90))
+        self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
 
-        # Primary strip
-        self._draw_rect(x + 14.0, y + 106.0, panel_w - 28.0, 78.0, (0.08, 0.11, 0.18, 0.76))
-        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 24.0, y + 116.0, scale=3.0, color=(0.92, 1.0, 1.0, 0.95))
-        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 24.0, y + 146.0, scale=2.35, color=(0.68, 0.94, 1.0, 0.92))
+        # ── layer 6: effect banner ───────────────────────────────────────
+        # Bass-reactive glow behind the banner
+        banner_glow_a = 0.06 + bass * 0.26 + pulse_slow * 0.04
+        self._draw_rect(x + 8.0, y + 104.0, panel_w - 16.0, 80.0, (0.04, 0.60 + bass * 0.40, 0.80, banner_glow_a))
+        self._draw_rect(x + 8.0, y + 104.0, panel_w - 16.0, 80.0, (0.03, 0.07, 0.14, 0.72))
+        # Racing horizontal highlight across the banner — complements the header shimmer
+        banner_race = math.fmod(t * 0.55 + 0.5, 1.0)   # offset so they don't sync
+        brace_w = panel_w * 0.20
+        brace_x = x + 8.0 + banner_race * (panel_w - 16.0 - brace_w)
+        self._draw_rect(brace_x, y + 104.0, brace_w, 80.0, (1.0, 1.0, 1.0, 0.03 + pulse_fast * 0.03))
+        # Left orange accent bar on banner
+        self._draw_rect(x, y + 104.0, 6.0, 80.0, (1.0, 0.62, 0.20, 0.76 + pulse_med * 0.20))
+        # Right orange accent bar on banner
+        self._draw_rect(x + panel_w - 6.0, y + 104.0, 6.0, 80.0, (1.0, 0.62, 0.20, 0.56 + pulse_slow * 0.22))
+        # Effect text — inverse pulse to banner glow (bright when glow is dim)
+        effect_a = 0.88 + (1.0 - pulse_slow) * 0.12
+        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 20.0, y + 112.0, scale=3.0, color=(0.12, 1.0, 1.0, effect_a))
+        self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 20.0, y + 148.0, scale=2.3, color=(1.0, 0.66 + pulse_fast * 0.12, 0.24, 0.94))
 
-        # Core stats columns
-        left_x = x + 22.0
-        right_x = x + panel_w * 0.51
-        row0 = y + row0_offset
+        # ── layer 7: data zone separator ─────────────────────────────────
+        self._draw_rect(x, data_zone_y - 4.0, panel_w, 1.0, (0.10, 0.94, 1.0, 0.24))
+        self._draw_rect(x, data_zone_y - 2.0, panel_w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.16))
+        # Mid-panel vertical divider
+        mid_div_x = x + panel_w * 0.50
+        self._draw_rect(mid_div_x - 1.0, data_zone_y, 1.0, data_zone_h, (0.10, 0.94, 1.0, 0.16))
+        self._draw_rect(mid_div_x,        data_zone_y, 1.0, data_zone_h, (0.10, 0.94, 1.0, 0.32))
+
+        # ── layer 8: vertical scan line ──────────────────────────────────
+        # A bright thin bar that travels top→bottom through the data zone
+        scan_y = data_zone_y + scan_h * data_zone_h
+        self._draw_rect(x + 8.0, scan_y - 1.0, panel_w - 16.0, 2.0, (0.10, 0.94, 1.0, 0.06))
+        self._draw_rect(x + 8.0, scan_y,        panel_w - 16.0, 1.0, (0.10, 0.94, 1.0, 0.18))
+
+        # ── layer 9: data rows ───────────────────────────────────────────
+        left_x   = x + 22.0
+        right_x  = x + panel_w * 0.52
+        row0     = y + row0_offset
+        col_half = panel_w * 0.46
+
+        # Left column accent stripe — runs full data zone height so it matches right column
+        stripe_h = max(len(left_lines), len(right_lines)) * lh + 8.0
+        stripe_a = 0.44 + pulse_med * 0.18 + bass * 0.18
+        self._draw_rect(x + 6.0, row0 - 4.0, 3.0, stripe_h, (0.10, 0.96, 1.0, stripe_a))
+        # Inner glow strip next to stripe
+        self._draw_rect(x + 10.0, row0 - 4.0, 2.0, stripe_h, (0.10, 0.96, 1.0, stripe_a * 0.35))
 
         for i, ln in enumerate(left_lines):
-            self._draw_text(ln, left_x, row0 + i * lh, scale=2.05, color=(0.82, 0.94, 1.0, 0.95))
-        for i, ln in enumerate(right_lines):
-            self._draw_text(ln, right_x, row0 + i * lh, scale=2.05, color=(0.84, 1.0, 0.88, 0.95))
+            row_y = row0 + i * lh
+            if i % 2 == 0:
+                self._draw_rect(left_x - 8.0, row_y - 2.0, col_half, lh + 2.0, (0.06, 0.10, 0.16, 0.35))
+            self._draw_text(ln, left_x, row_y, scale=2.05, color=(0.84, 0.98, 1.0, 0.96))
 
-        # Bottom accent
-        self._draw_rect(x + 14.0, y + panel_h - 24.0, panel_w - 28.0, 10.0, (0.11, 0.95, 1.0, 0.45))
+        # Right column accent stripe — orange, mid-reactive
+        rstripe_a = 0.48 + pulse_slow * 0.16 + mid * 0.18
+        self._draw_rect(x + panel_w - 9.0, row0 - 4.0, 3.0, len(right_lines) * lh + 8.0, (1.0, 0.62, 0.20, rstripe_a))
+        self._draw_rect(x + panel_w - 12.0, row0 - 4.0, 2.0, len(right_lines) * lh + 8.0, (1.0, 0.62, 0.20, rstripe_a * 0.35))
+
+        for i, ln in enumerate(right_lines):
+            row_y = row0 + i * lh
+            if i % 2 == 1:
+                self._draw_rect(right_x - 8.0, row_y - 2.0, col_half, lh + 2.0, (0.16, 0.08, 0.04, 0.35))
+            self._draw_text(ln, right_x, row_y, scale=2.05, color=(0.98, 0.68, 0.22, 0.96))
+
+        # ── layer 10: LCARS tick marks (right edge decoration) ───────────
+        # Three evenly spaced horizontal tick marks on the right border
+        tick_x = x + panel_w - 24.0
+        tick_positions = [0.25, 0.5, 0.75]
+        tick_colors = [
+            (0.10, 0.94, 1.0, 0.52 + pulse_slow * 0.24),
+            (1.00, 0.62, 0.20, 0.52 + pulse_med  * 0.24),
+            (0.78, 0.38, 1.00, 0.52 + pulse_fast * 0.24),
+        ]
+        for tp, tc in zip(tick_positions, tick_colors):
+            ty = y + tp * panel_h
+            self._draw_rect(tick_x,        ty - 1.0, 18.0, 1.0, (tc[0], tc[1], tc[2], tc[3] * 0.4))
+            self._draw_rect(tick_x,        ty,        18.0, 3.0, tc)
+            self._draw_rect(tick_x,        ty + 3.0, 18.0, 1.0, (tc[0], tc[1], tc[2], tc[3] * 0.4))
+        # Mirror on the left edge
+        ltick_x = x + 6.0
+        for tp, tc in zip(tick_positions, tick_colors):
+            ty = y + tp * panel_h
+            self._draw_rect(ltick_x, ty - 1.0, 18.0, 1.0, (tc[0], tc[1], tc[2], tc[3] * 0.4))
+            self._draw_rect(ltick_x, ty,        18.0, 3.0, tc)
+            self._draw_rect(ltick_x, ty + 3.0, 18.0, 1.0, (tc[0], tc[1], tc[2], tc[3] * 0.4))
+
+        # ── layer 11: bottom accent bar — segmented blocks ───────────────
+        seg_n   = 12
+        seg_gap = 4.0
+        seg_w   = (panel_w - (seg_n - 1) * seg_gap) / seg_n
+        for s in range(seg_n):
+            phase = math.sin(t * 1.8 + s * 0.52)
+            seg_a = 0.30 + 0.24 * (0.5 + 0.5 * phase)
+            sx = x + s * (seg_w + seg_gap)
+            self._draw_rect(sx, y + panel_h - 8.0, seg_w, 8.0, (0.12, 0.96, 1.0, seg_a))
+        # Solid thin line above segments
+        self._draw_rect(x, y + panel_h - 10.0, panel_w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
 
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
+        self._hud_t += dt
         if self._show_help:
             self._help_timer -= dt
             if self._help_timer <= 0.0:
@@ -779,43 +1035,186 @@ void main() {
             self._render_recording_indicator()
 
         if self._show_help:
-            # 50% black underlay for readability.
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.5))
+            # dark underlay behind help
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
 
     def _render_help(self) -> None:
-        panel_pad = 24.0
+        t  = self._hud_t
+        hp = self._help_pulse_t
+        pulse_slow  = 0.5 + 0.5 * math.sin(t * 1.1)
+        pulse_med   = 0.5 + 0.5 * math.sin(t * 2.3)
+        pulse_fast  = 0.5 + 0.5 * math.sin(t * 4.7)
+        shimmer_x   = math.fmod(t * 0.38, 1.0)
+
+        # shrunk margins so side decorations clear the screen
+        panel_pad = 44.0
         x = panel_pad
         y = panel_pad
-        w = self._width - panel_pad * 2.0
+        w = self._width  - panel_pad * 2.0
         h = self._height - panel_pad * 2.0
 
-        # Main glass panel with neon flare.
-        self._draw_rect(x, y, w, h, (0.03, 0.05, 0.10, 0.76))
-        self._draw_rect(x, y, w, 86.0, (0.07, 0.14, 0.24, 0.76))
-        self._draw_rect(x + 10.0, y + 82.0, w - 20.0, 3.0, (0.12, 0.94, 1.0, 0.65))
+        # ── outer halo (breathing) ────────────────────────────────────────
+        halo_a = 0.05 + pulse_slow * 0.08
+        self._draw_rect(x - 18.0, y - 18.0, w + 36.0, h + 36.0, (0.08, 0.88, 1.0, halo_a * 0.5))
+        self._draw_rect(x -  8.0, y -  8.0, w + 16.0, h + 16.0, (0.08, 0.88, 1.0, halo_a))
 
-        self._draw_text('UNICORN VIZ - HELP', x + 18.0, y + 10.0, scale=2.95, color=(0.66, 1.0, 1.0, 0.98))
-        self._draw_text('Core controls, drop-ins, and live shortcuts', x + 18.0, y + 38.0, scale=1.95, color=(0.78, 0.9, 1.0, 0.92))
-        self._draw_text('1-9/0 toggle sections  Up/Down + Enter focus/toggle  Shift+= expand all  Shift+- collapse all', x + 420.0, y + 38.0, scale=1.34, color=(0.84, 0.92, 1.0, 0.86))
+        # ── main background ───────────────────────────────────────────────
+        self._draw_rect(x, y, w, h, (0.02, 0.04, 0.09, 0.65))
+
+        # ── border (pulsing) ─────────────────────────────────────────────
+        border_a = 0.50 + pulse_slow * 0.34
+        self._draw_rect(x - 1.0, y - 1.0, w + 2.0, 2.0,      (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x - 1.0, y + h - 1.0, w + 2.0, 2.0,  (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x - 1.0, y - 1.0, 2.0, h + 2.0,      (0.10, 0.94, 1.0, border_a))
+        self._draw_rect(x + w - 1.0, y - 1.0, 2.0, h + 2.0,  (0.10, 0.94, 1.0, border_a))
+
+        # ── sparkle sprite chasing the help border ────────────────────────
+        sprite_t = math.fmod(t * 0.176, 1.0)   # slightly slower lap than HUD
+        perim    = 2.0 * (w + h)
+        dist     = sprite_t * perim
+        if dist < w:
+            hsx, hsy = x + dist, y - 1.0
+        elif dist < w + h:
+            hsx, hsy = x + w - 1.0, y + (dist - w)
+        elif dist < 2 * w + h:
+            hsx, hsy = x + w - (dist - w - h), y + h - 1.0
+        else:
+            hsx, hsy = x - 1.0, y + h - (dist - 2 * w - h)
+        sp_a = 0.72 + 0.28 * math.sin(t * 11.3)
+        self._draw_rect(hsx - 10.0, hsy - 10.0, 22.0, 22.0, (0.10, 0.94, 1.0, sp_a * 0.22))
+        self._draw_rect(hsx -  7.0, hsy -  7.0, 16.0, 16.0, (0.10, 0.94, 1.0, sp_a * 0.46))
+        self._draw_rect(hsx -  4.0, hsy -  4.0, 10.0, 10.0, (0.50, 0.98, 1.0, sp_a * 0.76))
+        self._draw_rect(hsx -  2.0, hsy -  2.0,  6.0,  6.0, (0.80, 1.00, 1.0, sp_a * 0.92))
+        self._draw_rect(hsx -  1.0, hsy -  1.0,  4.0,  4.0, (1.00, 1.00, 1.0, min(1.0, sp_a * 1.10)))
+        # ghost half-lap behind
+        ghost_t = math.fmod(sprite_t + 0.5, 1.0)
+        gd = ghost_t * perim
+        if gd < w:
+            ghx, ghy = x + gd, y - 1.0
+        elif gd < w + h:
+            ghx, ghy = x + w - 1.0, y + (gd - w)
+        elif gd < 2 * w + h:
+            ghx, ghy = x + w - (gd - w - h), y + h - 1.0
+        else:
+            ghx, ghy = x - 1.0, y + h - (gd - 2 * w - h)
+        tr_a = 0.42 + 0.28 * math.sin(t * 7.1)
+        self._draw_rect(ghx - 5.0, ghy - 5.0, 12.0, 12.0, (0.78, 0.38, 1.00, tr_a * 0.38))
+        self._draw_rect(ghx - 3.0, ghy - 3.0,  8.0,  8.0, (0.78, 0.38, 1.00, tr_a * 0.65))
+        self._draw_rect(ghx - 1.0, ghy - 1.0,  4.0,  4.0, (1.00, 0.70, 1.00, tr_a * 0.90))
+
+        # ── LCARS side block stacks ───────────────────────────────────────
+        side_w  = 16.0
+        side_rx = x + w + 4.0
+        side_lx = x - 4.0 - side_w
+        block_defs = [
+            (28.0, (1.00, 0.58, 0.12), 0.68, 0.00, 2.30, 0.0 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (8.0,  (1.00, 0.58, 0.12), 0.34, 0.70, 4.10, 7.3 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (44.0, (0.10, 0.94, 1.00), 0.68, 1.10, 1.80, 0.0 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.78, 0.38, 1.00), 0.56, 2.20, 3.50, 0.0 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (60.0, (1.00, 0.58, 0.12), 0.56, 0.50, 1.10, 0.0 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.10, 0.94, 1.00), 0.48, 1.80, 5.20, 11.7),
+            (6.0,  None, 0, 0, 0, 0),
+            (28.0, (0.98, 0.96, 0.30), 0.52, 0.90, 2.70, 0.0 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (14.0, (0.78, 0.38, 1.00), 0.44, 3.10, 4.80, 9.1 ),
+            (6.0,  None, 0, 0, 0, 0),
+            (24.0, (1.00, 0.58, 0.12), 0.62, 1.60, 2.10, 0.0 ),
+        ]
+        by_r = y;  by_l = y
+        for bdef in block_defs:
+            bh = bdef[0]
+            if bdef[1] is None:
+                by_r += bh;  by_l += bh;  continue
+            bh, rgb, base_a, phase, spd, strobe_spd = bdef
+            pv = 0.5 + 0.5 * math.sin(t * spd + phase)
+            alpha = base_a + pv * 0.28
+            if strobe_spd > 0:
+                alpha = min(1.0, alpha + max(0.0, math.sin(t * strobe_spd)) ** 3 * 0.38)
+            bc = (rgb[0], rgb[1], rgb[2], min(1.0, alpha))
+            hi_a = min(1.0, alpha * 0.55 + pv * 0.25)
+            self._draw_rect(side_rx, by_r, side_w, bh, bc)
+            self._draw_rect(side_rx, by_r, 2.0, bh, (1.0, 1.0, 1.0, hi_a))
+            self._draw_rect(side_lx, by_l, side_w, bh, bc)
+            self._draw_rect(side_lx + side_w - 2.0, by_l, 2.0, bh, (1.0, 1.0, 1.0, hi_a))
+            by_r += bh;  by_l += bh
+
+        # ── corner accent blocks + crosshair arms ────────────────────────
+        corner_sz = 14.0
+        ca = 0.65 + pulse_fast * 0.30
+        for cx_, cy_ in [(x-1, y-1), (x+w-corner_sz+1, y-1), (x-1, y+h-corner_sz+1), (x+w-corner_sz+1, y+h-corner_sz+1)]:
+            self._draw_rect(cx_, cy_, corner_sz, corner_sz, (1.0, 0.58, 0.12, ca))
+        ic = 6.0;  ica = 0.52 + pulse_slow * 0.32
+        for cx_, cy_ in [(x+2, y+2), (x+w-ic-2, y+2), (x+2, y+h-ic-2), (x+w-ic-2, y+h-ic-2)]:
+            self._draw_rect(cx_, cy_, ic, ic, (0.10, 0.94, 1.0, ica))
+        arm_len = 40.0;  arm_a = 0.28 + pulse_slow * 0.20
+        self._draw_rect(x + corner_sz,           y + 1.0,                1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + 1.0,                  y + corner_sz,          arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + w - corner_sz - 1.0,  y + 1.0,                1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + w - arm_len - 1.0,    y + 1.0,               arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + corner_sz,           y + h - 2.0,            arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + 1.0,                  y + h - corner_sz - arm_len, 1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + w - corner_sz - 1.0,  y + h - 2.0,           1.0, arm_len, (1.0, 0.58, 0.12, arm_a))
+        self._draw_rect(x + w - arm_len - 1.0,    y + h - 2.0,          arm_len, 1.0, (1.0, 0.58, 0.12, arm_a))
+
+        # ── header ───────────────────────────────────────────────────────
+        self._draw_rect(x, y, w, 86.0, (0.05, 0.08, 0.16, 0.80))
+        # header shimmer
+        shim_w = w * 0.18
+        self._draw_rect(x + shimmer_x * (w - shim_w), y, shim_w, 86.0, (1.0, 1.0, 1.0, 0.04 + pulse_fast * 0.03))
+        # triple separator bar
+        bar_a = 0.60 + pulse_slow * 0.22
+        self._draw_rect(x, y + 80.0, w, 2.0, (1.0, 0.62, 0.20, bar_a * 0.5))
+        self._draw_rect(x, y + 83.0, w, 4.0, (1.0, 0.62, 0.20, bar_a))
+        self._draw_rect(x, y + 88.0, w, 1.0, (1.0, 0.62, 0.20, bar_a * 0.4))
+        # title — inverse pulse
+        title_a = 0.86 + (1.0 - pulse_med) * 0.14
+        title_str = 'UNICORN VIZ - HELP'
+        self._draw_text(title_str, x + (w - len(title_str) * 8.0 * 2.95) * 0.5, y + 10.0, scale=2.95, color=(0.12, 0.98, 1.0, title_a))
+        self._draw_text('Core controls, drop-ins, and live shortcuts', x + 18.0, y + 40.0, scale=1.95, color=(0.78, 0.9, 1.0, 0.92))
+        self._draw_text('1-9/0 toggle sections  ↑↓+Enter focus/toggle  Shift+= expand all  Shift+- collapse all', x + 420.0, y + 40.0, scale=1.34, color=(0.84, 0.92, 1.0, 0.86))
         slot_label = self._hud_state.get('preset_slot_label', 'PRESET IDX')
-        self._draw_text(f"ACTIVE {slot_label}: {self._hud_state.get('preset_slot', '-/-')}", x + 18.0, y + 58.0, scale=1.5, color=(0.90, 1.0, 0.72, 0.94))
+        self._draw_text(f"ACTIVE {slot_label}: {self._hud_state.get('preset_slot', '-/-')}", x + 18.0, y + 60.0, scale=1.5, color=(0.90, 1.0, 0.72, 0.94))
         v_label = self._hud_state.get('variant_slot_label', 'VARIANT')
-        self._draw_text(f"ACTIVE {v_label}: {self._hud_state.get('variant_slot', '-/-')}", x + 520.0, y + 58.0, scale=1.5, color=(0.82, 0.95, 1.0, 0.94))
+        self._draw_text(f"ACTIVE {v_label}: {self._hud_state.get('variant_slot', '-/-')}", x + 520.0, y + 60.0, scale=1.5, color=(0.82, 0.95, 1.0, 0.94))
 
+        # ── left/right content panes ──────────────────────────────────────
         left_x = x + 14.0
         left_y = y + 98.0
         left_w = w * 0.64
-        left_h = h - 90.0
+        left_h = h - 100.0
 
         right_x = left_x + left_w + 10.0
         right_y = left_y
         right_w = x + w - right_x - 14.0
         right_h = left_h
 
-        self._draw_rect(left_x, left_y, left_w, left_h, (0.02, 0.07, 0.11, 0.76))
-        self._draw_rect(right_x, right_y, right_w, right_h, (0.02, 0.09, 0.12, 0.76))
+        # left pane: dark bg + left orange bar
+        self._draw_rect(left_x, left_y, left_w, left_h, (0.02, 0.07, 0.11, 0.62))
+        self._draw_rect(left_x, left_y, 5.0, left_h, (1.0, 0.62, 0.20, 0.68 + pulse_med * 0.18))
+        # right pane: dark bg + right teal bar
+        self._draw_rect(right_x, right_y, right_w, right_h, (0.02, 0.09, 0.12, 0.62))
+        self._draw_rect(right_x + right_w - 5.0, right_y, 5.0, right_h, (0.10, 0.94, 1.0, 0.60 + pulse_slow * 0.18))
+        # scan line across left pane
+        scan_h_lp = math.fmod(t * 0.28, 1.0)
+        scan_y_lp = left_y + scan_h_lp * left_h
+        self._draw_rect(left_x, scan_y_lp - 1.0, left_w, 2.0, (0.10, 0.94, 1.0, 0.04))
+        self._draw_rect(left_x, scan_y_lp,        left_w, 1.0, (0.10, 0.94, 1.0, 0.14))
 
+        # ── bottom segmented bar ──────────────────────────────────────────
+        seg_n = 12;  seg_gap = 4.0
+        seg_w_b = (w - (seg_n - 1) * seg_gap) / seg_n
+        for s in range(seg_n):
+            seg_a = 0.28 + 0.22 * (0.5 + 0.5 * math.sin(t * 1.8 + s * 0.52))
+            self._draw_rect(x + s * (seg_w_b + seg_gap), y + h - 8.0, seg_w_b, 8.0, (0.12, 0.96, 1.0, seg_a))
+        self._draw_rect(x, y + h - 10.0, w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
+
+        # ── section cards ─────────────────────────────────────────────────
         sections = self._iter_help_sections()
         if sections:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(sections) - 1))
@@ -826,8 +1225,8 @@ void main() {
         card_pad = 8.0
 
         col_gap = 10.0
-        col_w = (left_w - 3 * col_gap) / 2.0
-        col_x = [left_x + col_gap, left_x + col_gap * 2 + col_w]
+        col_w = (left_w - 14.0 - 3 * col_gap) / 2.0
+        col_x = [left_x + 14.0 + col_gap, left_x + 14.0 + col_gap * 2 + col_w]
         col_y = [left_y + 8.0, left_y + 8.0]
         col_max_y = left_y + left_h - 10.0
 
@@ -847,36 +1246,33 @@ void main() {
                     idx = other
                 else:
                     continue
-
-            sx = col_x[idx]
-            sy = col_y[idx]
+            sx2 = col_x[idx]
+            sy2 = col_y[idx]
             if sec_idx == self._help_focus_idx:
-                pulse = 0.5 + 0.5 * np.sin(self._help_pulse_t * 5.4)
+                pulse = 0.5 + 0.5 * math.sin(hp * 5.4)
                 glow_a = 0.16 + pulse * 0.20
                 edge_a = 0.34 + pulse * 0.26
-                self._draw_rect(sx - 4.0, sy - 4.0, col_w + 8.0, section_h + 8.0, (accent[0], accent[1], accent[2], glow_a))
-                self._draw_rect(sx - 2.0, sy - 2.0, col_w + 4.0, section_h + 4.0, (accent[0], accent[1], accent[2], edge_a))
-            self._draw_rect(sx, sy, col_w, section_h, (0.05 + accent[0] * 0.05, 0.08 + accent[1] * 0.06, 0.14 + accent[2] * 0.05, 0.62))
-            self._draw_rect(sx, sy, col_w, 3.0, (accent[0], accent[1], accent[2], 0.78))
+                self._draw_rect(sx2 - 4.0, sy2 - 4.0, col_w + 8.0, section_h + 8.0, (accent[0], accent[1], accent[2], glow_a))
+                self._draw_rect(sx2 - 2.0, sy2 - 2.0, col_w + 4.0, section_h + 4.0, (accent[0], accent[1], accent[2], edge_a))
+            self._draw_rect(sx2, sy2, col_w, section_h, (0.05 + accent[0] * 0.05, 0.08 + accent[1] * 0.06, 0.14 + accent[2] * 0.05, 0.62))
+            self._draw_rect(sx2, sy2, col_w, 3.0, (accent[0], accent[1], accent[2], 0.78))
             marker = '>' if sec_idx == self._help_focus_idx else ' '
             icon = '+' if collapsed else '-'
             header = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
-            self._draw_text(header, sx + card_pad, sy + card_pad, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
-
-            yy = sy + card_pad + 8 * card_title_scale + 4
+            self._draw_text(header, sx2 + card_pad, sy2 + card_pad, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
+            yy = sy2 + card_pad + 8 * card_title_scale + 4
             if collapsed:
-                self._draw_text('[collapsed]', sx + card_pad, yy, scale=item_scale, color=(0.78, 0.84, 0.92, 0.92))
+                self._draw_text('[collapsed]', sx2 + card_pad, yy, scale=item_scale, color=(0.78, 0.84, 0.92, 0.92))
                 yy += card_line_h
             for key, desc in visible_entries:
                 line = f'{key:<12} {desc}'
-                self._draw_text(line, sx + card_pad, yy, scale=item_scale, color=(0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96))
+                self._draw_text(line, sx2 + card_pad, yy, scale=item_scale, color=(0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96))
                 yy += card_line_h
-
             col_y[idx] += section_h + 8.0
 
-        # Right column: direct effect shortcut map.
+        # ── right pane: live shortcut map ─────────────────────────────────
         self._draw_text('LIVE SHORTCUT MAP', right_x + 10.0, right_y + 10.0, scale=2.05, color=(1.0, 0.92, 0.58, 0.96))
-        self._draw_rect(right_x + 10.0, right_y + 30.0, right_w - 20.0, 2.0, (1.0, 0.72, 0.24, 0.65))
+        self._draw_rect(right_x + 10.0, right_y + 30.0, right_w - 20.0, 2.0, (1.0, 0.72, 0.24, 0.60 + pulse_med * 0.20))
 
         rows = max(
             len(self._num_shortcuts),
@@ -914,10 +1310,10 @@ void main() {
         half = right_w * 0.48
         top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
         bottom_y = top + top_block_h + 28.0
-        _draw_shortcut_block('1-0', self._num_shortcuts, right_x + 10.0, top, (0.82, 1.0, 0.9, 0.95))
-        _draw_shortcut_block('SHIFT', self._shift_shortcuts, right_x + half, top, (0.92, 0.86, 1.0, 0.95))
-        _draw_shortcut_block('CTRL', self._ctrl_shortcuts, right_x + 10.0, bottom_y, (0.84, 0.94, 1.0, 0.95))
-        _draw_shortcut_block('ALT', self._alt_shortcuts, right_x + half, bottom_y, (1.0, 0.92, 0.82, 0.95))
+        _draw_shortcut_block('1-0',   self._num_shortcuts,   right_x + 10.0, top,      (0.82, 1.0,  0.9,  0.95))
+        _draw_shortcut_block('SHIFT', self._shift_shortcuts, right_x + half, top,      (0.92, 0.86, 1.0,  0.95))
+        _draw_shortcut_block('CTRL',  self._ctrl_shortcuts,  right_x + 10.0, bottom_y, (0.84, 0.94, 1.0,  0.95))
+        _draw_shortcut_block('ALT',   self._alt_shortcuts,   right_x + half, bottom_y, (1.0,  0.92, 0.82, 0.95))
 
         if self._unmapped_effects:
             self._draw_text(

@@ -207,19 +207,22 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_F6:
             effect = a._current_effect  # noqa: SLF001
-            if effect is None or 'speed' not in effect.parameters:
-                o.flash_message('Speed control not available', 1.2)
+            # Toggle is global — persists even when current effect lacks 'speed'.
+            if a._speed_randomized:  # noqa: SLF001
                 a._speed_randomized = False  # noqa: SLF001
-            else:
-                # Toggle randomization on/off
-                if a._speed_randomized:  # noqa: SLF001
-                    a._speed_randomized = False  # noqa: SLF001
-                    o.flash_message(f'Speed random OFF, current: {effect.parameters["speed"]:.2f}x', 1.2)
+                if effect is not None and 'speed' in effect.parameters:
+                    o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
                 else:
-                    a._apply_random_speed()  # noqa: SLF001
-                    lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
-                    hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
-                    o.flash_message(f'Speed random ON: {effect.parameters["speed"]:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+                    o.flash_message('Speed random OFF', 1.2)
+            else:
+                a._apply_random_speed()  # noqa: SLF001  (sets flag + applies if supported)
+                a._speed_randomized = True  # noqa: SLF001  ensure flag set even if not applied
+                lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
+                hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
+                if effect is not None and 'speed' in effect.parameters:
+                    o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
+                else:
+                    o.flash_message(f'Speed random ON  (armed)  [{lo:.2f}-{hi:.2f}]', 1.6)
 
         elif sym == sdl2.SDLK_F7:
             am = self._audio
@@ -231,13 +234,13 @@ class HotkeyHandler:
                 if a._reactivity_randomized:  # noqa: SLF001
                     a._reactivity_randomized = False  # noqa: SLF001
                     current = am.get_reactivity()
-                    o.flash_message(f'Reactivity random OFF, current: {current:.2f}x', 1.2)
+                    o.flash_message(f'Reactivity random OFF  {current:.2f}', 1.2)
                 else:
                     a._apply_random_reactivity()  # noqa: SLF001
                     lo = float(a.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
                     hi = float(a.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
                     current = am.get_reactivity()
-                    o.flash_message(f'Reactivity random ON: {current:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+                    o.flash_message(f'Reactivity random ON  {current:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
 
         elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9:
             provider = a.set_stream_provider('rumble')
@@ -274,82 +277,82 @@ class HotkeyHandler:
             if effect and "speed" in effect.parameters:
                 if mod & sdl2.KMOD_CTRL:
                     effect.parameters["speed"] = 10.0
-                    o.flash_message("Speed: MAX", 1.5)
+                    o.flash_message("Speed  MAX", 1.5)
                 else:
                     effect.parameters["speed"] = min(
                         effect.parameters["speed"] * 1.25, 10.0
                     )
-                    o.flash_message(f"Speed: {effect.parameters['speed']:.2f}x", 1.0)
+                    o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
+            else:
+                o.flash_message('Speed not available for this effect', 1.0)
 
         elif sym == sdl2.SDLK_MINUS:
             effect = a._current_effect  # noqa: SLF001
             if effect and "speed" in effect.parameters:
                 if mod & sdl2.KMOD_CTRL:
                     effect.parameters["speed"] = 0.05
-                    o.flash_message("Speed: MIN", 1.5)
+                    o.flash_message("Speed  MIN", 1.5)
                 else:
                     effect.parameters["speed"] = max(
                         effect.parameters["speed"] * 0.8, 0.05
                     )
-                    o.flash_message(f"Speed: {effect.parameters['speed']:.2f}x", 1.0)
+                    o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
+            else:
+                o.flash_message('Speed not available for this effect', 1.0)
 
         elif sym == sdl2.SDLK_g:
             am = self._audio
             if mod & sdl2.KMOD_SHIFT:
-                # G — reset speed to initial default
+                # Shift+G — reset speed to initial default
                 effect = a._current_effect  # noqa: SLF001
                 if effect and "speed" in effect.parameters:
                     default = effect._initial_parameters.get("speed", 1.0)  # noqa: SLF001
                     effect.parameters["speed"] = default
-                    o.flash_message(f"Speed reset: {default:.2f}x", 1.5)
+                    a._speed_randomized = False  # noqa: SLF001
+                    o.flash_message(f"Speed reset  {default:.2f}", 1.5)
+                else:
+                    o.flash_message('Speed control not available', 1.2)
             else:
-                # g — reset reactivity to config default
+                # G — reset reactivity to config default
                 val = am.reset_reactivity()
-                o.flash_message(f"Reactivity reset: {val:.1f}x", 1.5)
+                a._reactivity_randomized = False  # noqa: SLF001
+                o.flash_message(f"Reactivity reset  {val:.2f}", 1.5)
 
         elif sym == sdl2.SDLK_LEFTBRACKET:
             am = self._audio
             if mod & sdl2.KMOD_ALT:
-                # Alt+[ — zoom down
-                val = a.scale_pip(-0.05) if a._webcam_system else 0  # noqa: SLF001
-                if val > 0:
+                # Alt+[ — PiP size down (webcam)
+                if a._webcam_system:  # noqa: SLF001
+                    val = a.scale_pip(-0.05)
                     o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
                 else:
-                    val = a._apply_zoom_delta(-0.10)  # noqa: SLF001
-                    if val > 0:
-                        o.flash_message(f'Zoom: {val:.2f}x', 1.0)
-                    else:
-                        o.flash_message('Zoom control not available', 1.0)
+                    o.flash_message('Camera PiP not available', 1.0)
             elif mod & sdl2.KMOD_SHIFT:
                 # { — reactivity min
                 val = am.set_reactivity(0.1)
-                o.flash_message("Reactivity: MIN (0.1x)", 1.5)
+                o.flash_message("Reactivity  MIN  0.10", 1.5)
             else:
                 # [ — reactivity down
                 val = am.set_reactivity(round(am.get_reactivity() - 0.1, 2))
-                o.flash_message(f"Reactivity: {val:.1f}x", 1.0)
+                o.flash_message(f"Reactivity  {val:.2f}", 1.0)
 
         elif sym == sdl2.SDLK_RIGHTBRACKET:
             am = self._audio
             if mod & sdl2.KMOD_ALT:
-                # Alt+] — zoom up
-                val = a.scale_pip(0.05) if a._webcam_system else 0  # noqa: SLF001
-                if val > 0:
+                # Alt+] — PiP size up (webcam)
+                if a._webcam_system:  # noqa: SLF001
+                    val = a.scale_pip(0.05)
                     o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
                 else:
-                    val = a._apply_zoom_delta(0.10)  # noqa: SLF001
-                    if val > 0:
-                        o.flash_message(f'Zoom: {val:.2f}x', 1.0)
-                    else:
-                        o.flash_message('Zoom control not available', 1.0)
+                    o.flash_message('Camera PiP not available', 1.0)
             elif mod & sdl2.KMOD_SHIFT:
                 # } — reactivity max
                 val = am.set_reactivity(5.0)
-                o.flash_message("Reactivity: MAX (5.0x)", 1.5)
+                o.flash_message("Reactivity  MAX  5.00", 1.5)
             else:
                 # ] — reactivity up
                 val = am.set_reactivity(round(am.get_reactivity() + 0.1, 2))
-                o.flash_message(f"Reactivity: {val:.1f}x", 1.0)
+                o.flash_message(f"Reactivity  {val:.2f}", 1.0)
 
         elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
             if not self._shortcut_effects:
@@ -430,22 +433,71 @@ class HotkeyHandler:
             o.flash_message(msg, 2.0)
 
         elif sym == sdl2.SDLK_z:
-            if mod & sdl2.KMOD_SHIFT:
-                # Shift+Z — toggle random zoom
-                if a._current_effect and 'zoom' in a._current_effect.parameters:  # noqa: SLF001
-                    if a._zoom_randomized:  # noqa: SLF001
-                        a._zoom_randomized = False  # noqa: SLF001
-                        zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
-                        o.flash_message(f'Zoom random OFF, current: {zoom_val:.2f}x', 1.2)
-                    else:
-                        a._apply_random_zoom()  # noqa: SLF001
-                        zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
-                        lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
-                        hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
-                        o.flash_message(f'Zoom random ON: {zoom_val:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
-                else:
-                    o.flash_message('Zoom control not available', 1.2)
+            effect = a._current_effect  # noqa: SLF001
+            has_zoom = effect is not None and 'zoom' in effect.parameters  # noqa: SLF001
+            if mod & sdl2.KMOD_ALT:
+                # Alt+Z — toggle random zoom (global flag, applies when supported)
+                if a._zoom_randomized:  # noqa: SLF001
                     a._zoom_randomized = False  # noqa: SLF001
+                    if has_zoom:
+                        o.flash_message(f'Zoom random OFF  {effect.parameters["zoom"]:.2f}', 1.2)
+                    else:
+                        o.flash_message('Zoom random OFF', 1.2)
+                else:
+                    a._apply_random_zoom()  # noqa: SLF001  (sets flag + applies if supported)
+                    a._zoom_randomized = True  # noqa: SLF001  ensure flag set even if not applied
+                    lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
+                    hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
+                    if has_zoom:
+                        o.flash_message(f'Zoom random ON  {effect.parameters["zoom"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
+                    else:
+                        o.flash_message(f'Zoom random ON  (armed)  [{lo:.2f}-{hi:.2f}]', 1.6)
+            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+Z — reset zoom to default
+                val = a._reset_zoom()  # noqa: SLF001
+                if val is not None:
+                    o.flash_message(f'Zoom reset  {val:.2f}', 1.2)
+                else:
+                    o.flash_message('Zoom not available for this effect', 1.2)
+            elif mod & sdl2.KMOD_SHIFT:
+                # Shift+Z — zoom out
+                val = a._apply_zoom_delta(-0.10)  # noqa: SLF001
+                if val > 0:
+                    o.flash_message(f'Zoom  {val:.2f}', 1.0)
+                else:
+                    o.flash_message('Zoom not available for this effect', 1.0)
+            else:
+                # Z — zoom in
+                val = a._apply_zoom_delta(0.10)  # noqa: SLF001
+                if val > 0:
+                    o.flash_message(f'Zoom  {val:.2f}', 1.0)
+                else:
+                    o.flash_message('Zoom not available for this effect', 1.0)
+
+        elif sym == sdl2.SDLK_k:
+            if mod & sdl2.KMOD_ALT:
+                # Alt+K — toggle random render scale
+                if a._scale_randomized:  # noqa: SLF001
+                    val = a._reset_render_scale()  # noqa: SLF001  (turns off random, restores default)
+                    a._scale_randomized = False  # noqa: SLF001
+                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
+                else:
+                    a._apply_random_render_scale()  # noqa: SLF001
+                    lo = float(a.cfg.get('hotkeys', 'random_scale_min', default=0.5))
+                    hi = float(a.cfg.get('hotkeys', 'random_scale_max', default=1.0))
+                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
+            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+K — reset render scale to config default
+                val = a._reset_render_scale()  # noqa: SLF001
+                o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
+            elif mod & sdl2.KMOD_SHIFT:
+                # Shift+K — scale down
+                val = a._apply_render_scale_delta(-0.05)  # noqa: SLF001
+                o.flash_message(f'Res scale  {val:.2f}', 1.0)
+            else:
+                # K — scale up
+                val = a._apply_render_scale_delta(0.05)  # noqa: SLF001
+                o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_u:
             if mod & sdl2.KMOD_SHIFT:

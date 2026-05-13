@@ -153,7 +153,7 @@ class SineScroller(BaseEffect):
         self._mid = 0.0
         self._treble = 0.0
         self._beat_decay = 0.0
-        self._color_phase = 0.0
+        self._color_phase = float(self.rng.uniform(0.0, 1.0))
         self._shake_x = 0.0
         self._shake_y = 0.0
 

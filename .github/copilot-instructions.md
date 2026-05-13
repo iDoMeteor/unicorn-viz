@@ -295,3 +295,57 @@ The owner makes their own edits to `config.toml` at any time.
   overlay automatically.  This is the single source of truth for all key
   bindings; do not document keys anywhere else (no separate README sections,
   no docstrings listing keys).
+
+---
+
+## Drop-In Independence Rules
+
+The `unicornviz/` core package must **never hard-depend** on any drop-in.
+Every reference to drop-in code must follow this SOP:
+
+1. **All drop-in symbols must be loaded via `load_dropin_symbol()`** in
+   `unicornviz/dropins.py` — never via a direct import.
+2. **Every `load_dropin_symbol()` call must be wrapped in `try/except`** with
+   a graceful `None` or fallback value so the app starts cleanly when the
+   drop-in submodule is absent.
+3. **The fallback path must be fully functional** — missing a drop-in must
+   degrade gracefully (e.g., feature disabled, null controller used), never
+   crash or raise at startup.
+4. When adding a new optional drop-in integration to core, follow the existing
+   pattern in `app.py`: a private loader function `_load_<name>_class()` that
+   raises on missing file, called inside a `try/except` block that sets the
+   attribute to `None` on failure.
+5. After making any change to the core–drop-in boundary, verify independence by
+   confirming all three load sites (`multi-head-01`, `webcam-01`,
+   `streaming-01`) still have `try/except` guards and no new bare imports of
+   drop-in paths have been introduced.
+
+---
+
+## Effect Randomization Requirements
+
+Every visual effect must produce a **visually distinct appearance each time it
+becomes active** (on first load and on every scene transition back to it).
+`audio_spectrum.py` and `system_monitor.py` are explicitly exempt.
+
+**What `BaseEffect` already provides for free:**
+- `self.seed` — unique per instance from `np.random.SeedSequence()`
+- `self.rng` — `np.random.default_rng(self.seed)` — use this for all
+  per-instance randomisation; do not call `random` or `np.random` directly.
+- `self.time` — initialised to `rng.uniform(0.0, 10_000.0)` so purely
+  time-driven shaders already start at a random phase.
+
+**What effects must add themselves:**
+- Any parameter that is visible at frame 0 and does not vary purely with
+  `iTime` must be randomised in `_init()` using `self.rng`.  Examples:
+  - Colour/palette offset (`palette`, `hue_shift`, `color_phase`)
+  - Starting angle or rotation
+  - Discrete mode / style selection
+  - Intensity or density parameters with a meaningful visible range
+- Media showcase effects (images, videos, textures) must start at a random
+  index into their content list so the same asset is not always shown first.
+- Simulation effects that build state over time (fire, water, particles) should
+  seed their initial state with `self.rng` so runs never look identical at t=0.
+
+**Rule of thumb:** if two runs of the effect, viewed side-by-side from frame 0,
+are indistinguishable for the first several seconds, add startup randomisation.

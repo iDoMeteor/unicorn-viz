@@ -165,7 +165,7 @@ class Kaleidoscope(BaseEffect):
             'segments': float(self.config.get('segments', 12.0)),
             'zoom':     float(self.config.get('zoom',     0.62)),
         }
-        self._rotation: float = 0.0
+        self._rotation: float = float(self.rng.uniform(0.0, 6.28318))
         self._bass:     float = 0.0
         self._mid:      float = 0.0
         self._treble:   float = 0.0
