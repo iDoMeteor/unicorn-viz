@@ -108,6 +108,19 @@ class HotkeyHandler:
                         if result:
                             o.flash_message(f'{label}: {result}', 1.5)
                         return
+
+        # System-level post-process slot controls (Ctrl+Alt+number).
+        # Handle before help-overlay numeric controls and effect jump shortcuts.
+        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
+            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_8:
+                slot = int(sym - sdl2.SDLK_0)
+                message = a.select_postfx_slot(slot)
+                o.flash_message(message, 1.5)
+                return
+            if sym == sdl2.SDLK_0:
+                message = a.select_postfx_slot(0)
+                o.flash_message(message, 1.5)
+                return
             elif sym == sdl2.SDLK_p:
                 for method_name, label in (
                     ('prev_preset', 'Preset'),
@@ -196,7 +209,33 @@ class HotkeyHandler:
             o.toggle_help()
 
         elif sym == sdl2.SDLK_a:
-            if mod & sdl2.KMOD_CTRL:
+            if (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT):
+                # Alt+Shift+A — previous audio profile (wraps around)
+                profiles = self._audio.list_profiles()
+                current_profile = self._audio.get_profile()
+                current_name = current_profile.name
+                try:
+                    current_idx = profiles.index(current_profile.name)
+                except ValueError:
+                    current_idx = 0
+                prev_idx = (current_idx - 1) % len(profiles)
+                prev_profile = self._audio.set_profile(profiles[prev_idx])
+                o.flash_message(f'Audio Profile: {prev_profile.name}', 1.2)
+                log.info('Audio profile changed: %s → %s', current_name, prev_profile.name)
+            elif mod & sdl2.KMOD_ALT:
+                # Alt+A — next audio profile (wraps around)
+                profiles = self._audio.list_profiles()
+                current_profile = self._audio.get_profile()
+                current_name = current_profile.name
+                try:
+                    current_idx = profiles.index(current_profile.name)
+                except ValueError:
+                    current_idx = 0
+                next_idx = (current_idx + 1) % len(profiles)
+                next_profile = self._audio.set_profile(profiles[next_idx])
+                o.flash_message(f'Audio Profile: {next_profile.name}', 1.2)
+                log.info('Audio profile changed: %s → %s', current_name, next_profile.name)
+            elif mod & sdl2.KMOD_CTRL:
                 # Ctrl+A — audio source selector
                 o.toggle_audio_selector()
             elif mod & sdl2.KMOD_SHIFT:
@@ -214,34 +253,6 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
-
-        elif (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_a:
-            # Alt+A — next audio profile (wraps around)
-            profiles = self._audio.list_profiles()
-            current_profile = self._audio.get_profile()
-            current_name = current_profile.name
-            try:
-                current_idx = profiles.index(current_profile.name)
-            except ValueError:
-                current_idx = 0
-            next_idx = (current_idx + 1) % len(profiles)
-            next_profile = self._audio.set_profile(profiles[next_idx])
-            o.flash_message(f'Audio Profile: {next_profile.name}', 1.2)
-            log.info('Audio profile changed: %s → %s', current_name, next_profile.name)
-
-        elif (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_a:
-            # Alt+Shift+A — previous audio profile (wraps around)
-            profiles = self._audio.list_profiles()
-            current_profile = self._audio.get_profile()
-            current_name = current_profile.name
-            try:
-                current_idx = profiles.index(current_profile.name)
-            except ValueError:
-                current_idx = 0
-            prev_idx = (current_idx - 1) % len(profiles)
-            prev_profile = self._audio.set_profile(profiles[prev_idx])
-            o.flash_message(f'Audio Profile: {prev_profile.name}', 1.2)
-            log.info('Audio profile changed: %s → %s', current_name, prev_profile.name)
 
         elif sym == sdl2.SDLK_F8:
             live, message = a.toggle_streaming()

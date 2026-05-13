@@ -151,6 +151,11 @@ def _load_rtmp_streamer_class() -> type:
     return load_dropin_symbol('streaming-01/rtmp_streamer.py', 'RTMPStreamer')
 
 
+def _load_postfx_controller_class() -> type:
+    """Load PostFxController directly from the postfx-01 drop-in."""
+    return load_dropin_symbol('postfx-01/postfx_controller.py', 'PostFxController')
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -172,6 +177,7 @@ class App:
         self._webcam_cycle_timer: float = 0.0
         self._webcam_cycle_interval: float = 0.0
         self._webcam_system = None
+        self._postfx_controller = None
         self._streamer = None
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
@@ -530,6 +536,23 @@ class App:
         except Exception as exc:
             log.warning('WebcamSystem not available: %s', exc)
             self._webcam_system = None
+
+        # System-level post-process stack (optional drop-in).
+        try:
+            postfx_cls = _load_postfx_controller_class()
+            postfx_cfg = self.cfg.get('postfx', default={}) or {}
+            if not isinstance(postfx_cfg, dict):
+                postfx_cfg = {}
+            self._postfx_controller = postfx_cls(
+                self._ctx,
+                self._render_width,
+                self._render_height,
+                postfx_cfg,
+            )
+            log.info('PostFxController loaded from drop-in')
+        except Exception as exc:
+            log.warning('PostFxController not available: %s', exc)
+            self._postfx_controller = None
 
     def _build_present_pipeline(self) -> None:
         """Build fullscreen pass that copies a texture to screen."""
@@ -1397,6 +1420,7 @@ void main() {
                 'recording': rec_state,
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
+                'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'OFF',
                 'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
                 'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',
                 'treble': f"{self._audio.treble:.2f}" if self._audio is not None else '0.00',
@@ -1461,6 +1485,9 @@ void main() {
         if self._webcam_system is not None:
             self._webcam_system.destroy()
             self._webcam_system = None
+        if self._postfx_controller is not None:
+            self._postfx_controller.destroy()
+            self._postfx_controller = None
         if self._current_effect:
             self._current_effect.destroy()
         if self._next_effect:
@@ -1494,12 +1521,15 @@ void main() {
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
         burst_active = self._burst_t > 0.0
+        postfx_active = (
+            self._postfx_controller is not None and self._postfx_controller.is_active()
+        )
         # Advance burst timer
         if burst_active:
             self._burst_t = max(0.0, self._burst_t - dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1540,6 +1570,24 @@ void main() {
                         self._fbo_b.color_attachments[0].use(location=0)
                         self._present_prog['tex'].value = 0
                         self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    if postfx_active:
+                        # Post FX into fbo_b, then copy back into fbo_a.
+                        audio = self._audio or AudioData()
+                        self._postfx_controller.apply(
+                            self._fbo_a.color_attachments[0],
+                            self._fbo_b,
+                            dt,
+                            float(audio.bass),
+                            float(audio.mid),
+                            float(audio.treble),
+                            float(audio.beat),
+                        )
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     # Leave fbo_a bound at logical viewport so webcam/HUD compose
                     # into the same target. Tile-blit happens at end of frame.
                     self._fbo_a.use()
@@ -1548,6 +1596,18 @@ void main() {
                     self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
                 elif burst_active:
                     self._present_burst_from_tex(self._fbo_a.color_attachments[0])
+                elif postfx_active:
+                    audio = self._audio or AudioData()
+                    self._postfx_controller.apply(
+                        self._fbo_a.color_attachments[0],
+                        self._fbo_b,
+                        dt,
+                        float(audio.bass),
+                        float(audio.mid),
+                        float(audio.treble),
+                        float(audio.beat),
+                    )
+                    self._present_from_tex(self._fbo_b.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
             else:
@@ -1579,7 +1639,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999:
+                if mirror_mode or self._render_scale < 0.999 or postfx_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1589,6 +1649,18 @@ void main() {
                         # Leave fbo_a bound; tile-blit at end of frame.
                         self._fbo_a.use()
                         ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    elif postfx_active:
+                        audio = self._audio or AudioData()
+                        self._postfx_controller.apply(
+                            self._fbo_a.color_attachments[0],
+                            self._fbo_b,
+                            dt,
+                            float(audio.bass),
+                            float(audio.mid),
+                            float(audio.treble),
+                            float(audio.beat),
+                        )
+                        self._present_from_tex(self._fbo_b.color_attachments[0])
                     else:
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
@@ -1610,9 +1682,14 @@ void main() {
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
                 self._next_effect.render()
 
-                # Transition composite — to mirror compose FBO if mirror, else screen.
-                if mirror_mode:
-                    composite_fbo = self._make_or_get_mirror_composite_fbo()
+                # Transition composite — to mirror compose FBO if mirror,
+                # fbo_a when postfx is active, else directly to screen.
+                if mirror_mode or postfx_active:
+                    composite_fbo = (
+                        self._make_or_get_mirror_composite_fbo()
+                        if mirror_mode
+                        else self._fbo_a
+                    )
                     composite_fbo.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                 else:
@@ -1641,6 +1718,18 @@ void main() {
                     self._mirror_composite_fbo.color_attachments[0].use(location=0)
                     self._present_prog['tex'].value = 0
                     self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                elif postfx_active:
+                    audio = self._audio or AudioData()
+                    self._postfx_controller.apply(
+                        self._fbo_a.color_attachments[0],
+                        self._fbo_b,
+                        dt,
+                        float(audio.bass),
+                        float(audio.mid),
+                        float(audio.treble),
+                        float(audio.beat),
+                    )
+                    self._present_from_tex(self._fbo_b.color_attachments[0])
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
         """Lazy-create a single FBO used to compose mirror transitions."""
@@ -1677,6 +1766,8 @@ void main() {
                 self._current_effect.resize(self._width, self._height)
             if self._next_effect:
                 self._next_effect.resize(self._width, self._height)
+            if self._postfx_controller is not None:
+                self._postfx_controller.resize(self._render_width, self._render_height)
             return
         self._width = w
         self._height = h
@@ -1696,6 +1787,8 @@ void main() {
             self._current_effect.resize(w, h)
         if self._next_effect:
             self._next_effect.resize(w, h)
+        if self._postfx_controller is not None:
+            self._postfx_controller.resize(self._render_width, self._render_height)
         if self._overlays is not None:
             self._overlays.resize(w, h)
         self._resize_mirror_textures()
@@ -1837,6 +1930,8 @@ void main() {
                 self._next_effect.resize(self._width, self._height)
             if self._webcam_system is not None:
                 self._webcam_system.resize(self._width, self._height)
+            if self._postfx_controller is not None:
+                self._postfx_controller.resize(self._render_width, self._render_height)
             if self._overlays is not None:
                 self._overlays.resize(self._width, self._height)
             self._rebuild_fbos()
@@ -1858,6 +1953,12 @@ void main() {
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
+
+    def select_postfx_slot(self, slot: int) -> str:
+        """Select active post-process slot (0 disables)."""
+        if self._postfx_controller is None:
+            return 'Post FX: unavailable'
+        return self._postfx_controller.select_slot(slot)
 
     def start_recording(self) -> tuple[bool, str]:
         """Start recording if recording support is enabled."""
@@ -2011,6 +2112,8 @@ void main() {
     def _rebuild_fbos(self) -> None:
         """Recompute render dimensions and recreate FBOs after a scale change."""
         self._update_render_target_size()
+        if self._postfx_controller is not None:
+            self._postfx_controller.resize(self._render_width, self._render_height)
         if self._fbo_a:
             self._fbo_a.release()
         if self._fbo_b:
