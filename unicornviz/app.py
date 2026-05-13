@@ -637,6 +637,8 @@ void main() {
         self._burst_prog['uAngle'].value = angle
         self._burst_prog['uScale'].value = scale
         self._burst_vao.render(moderngl.TRIANGLE_STRIP)
+
+    def _sync_recording_overlay(self) -> None:
         """Keep the recording indicator state in sync with the recorder."""
         if self._overlays is not None:
             elapsed_seconds = 0.0
