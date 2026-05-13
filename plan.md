@@ -14,6 +14,7 @@
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
 - `[todo]` Design vignette/post-process system (see Phase 4).
 - `[todo]` Design external plugin loading for paid effect packs.
+- `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
@@ -146,8 +147,19 @@
   - Analyzer uses profile frequency splits instead of hardcoded Hz constants;
     `set_profile()` recalculates band slices at runtime
   - AudioManager loads profile from config (`audio.profile`)
-  - `O` / `Shift+O` hotkeys cycle profiles at runtime; HUD shows active profile
+  - `Alt+A` / `Alt+Shift+A` hotkeys cycle profiles at runtime; HUD shows active profile
+  - `O` / `Shift+O` retained as legacy profile-cycle aliases
   - config.toml default: `profile = "house"`
+
+- `[done]` Hotkey UX remap and consistency pass.
+  Notes:
+  - unicorn mnemonic layout: `u` = splash, `U` = Unicorn Tears, `Ctrl+u` = burst
+  - art/source grouping: `a` = ACiD art, `Shift+A` = own ANSI art, `Ctrl+A` = audio source
+  - audio profile cycling moved to `Alt+A` / `Alt+Shift+A` (legacy `O` aliases kept)
+  - speed controls unified: `+/-` nudge, `Ctrl+=/-` max/min, `Alt+=/-` random on/off, `Ctrl+G` reset
+  - render-scale controls moved to `,` / `.` cluster with Shift/Ctrl/Alt modifiers
+  - display mode controls remapped for recovery-first behavior: `X` single, `Shift+X` span, `Ctrl+X` mirror, `Alt+X` config
+  - help overlay and user docs updated with explicit lowercase/uppercase key labels
 - `[decision]` Design external plugin loading for paid effect packs.
   Open questions:
   - local drop-in plugin directory vs hosted/cloud delivery
