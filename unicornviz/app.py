@@ -1522,6 +1522,24 @@ void main() {
                         self._fbo_b.color_attachments[0].use(location=0)
                         self._present_prog['tex'].value = 0
                         self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    if burst_active:
+                        # Burst into fbo_b, copy back into fbo_a
+                        scale, angle = self._burst_transform()
+                        self._fbo_b.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_a.color_attachments[0].use(location=0)
+                        self._burst_prog['tex'].value = 0
+                        self._burst_prog['uAngle'].value = angle
+                        self._burst_prog['uScale'].value = scale
+                        self._burst_vao.render(moderngl.TRIANGLE_STRIP)
+                        # Now blit fbo_b back into fbo_a as the compose target.
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     # Leave fbo_a bound at logical viewport so webcam/HUD compose
                     # into the same target. Tile-blit happens at end of frame.
                     self._fbo_a.use()
