@@ -363,8 +363,10 @@ class Overlays:
                 ('F7', 'Toggle random reactivity'),
                 ('E', 'EQ / spectrum'),
                 ('A', 'Audio source'),
+                ('O / Shift+O', 'Audio profile cycle'),
                 ('M', 'MIDI device'),
                 ('I', 'Invert colors'),
+                ('Ctrl+U', 'Screen burst'),
             ],
         ),
         (
@@ -449,6 +451,7 @@ class Overlays:
             'reactivity': '1.0x',
             'speed': '-',
             'audio_source': '-',
+            'audio_profile': 'house',
             'preset_slot_label': 'PRESET IDX',
             'preset_slot': '-/-',
             'variant_slot_label': 'VARIANT',
@@ -717,6 +720,7 @@ void main() {
             f"SPEED       {self._hud_state.get('speed', 'N/A')}",
             f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
+            f"AUDIO PROF  {self._hud_state.get('audio_profile', 'house')}",
         ]
         right_lines = [
             f"PAUSED      {self._hud_state.get('paused', 'NO')}",

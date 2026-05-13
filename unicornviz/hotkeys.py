@@ -524,7 +524,10 @@ class HotkeyHandler:
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_u:
-            if mod & sdl2.KMOD_SHIFT:
+            if mod & sdl2.KMOD_CTRL:
+                a.trigger_burst()
+                o.flash_message('\U0001f300  BURST', 0.6)
+            elif mod & sdl2.KMOD_SHIFT:
                 a.show_splash()
                 o.flash_message("Splash replay", 1.5)
             else:

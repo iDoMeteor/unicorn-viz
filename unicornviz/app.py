@@ -4,6 +4,7 @@ Main application — SDL2 window (Wayland-first) + moderngl context + main loop.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import time
 import ctypes
@@ -202,6 +203,11 @@ class App:
         self._present_prog: moderngl.Program | None = None
         self._present_vao: moderngl.VertexArray | None = None
         self._present_vbo: moderngl.Buffer | None = None
+        self._burst_prog: moderngl.Program | None = None
+        self._burst_vao: moderngl.VertexArray | None = None
+        self._burst_vbo: moderngl.Buffer | None = None
+        self._burst_t: float = 0.0          # remaining burst seconds; 0 = inactive
+        self._burst_duration: float = 0.60  # total burst animation length in seconds
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
@@ -508,6 +514,7 @@ class App:
         self._build_present_pipeline()
         self._build_blend_pipeline()
         self._build_invert_pipeline()
+        self._build_burst_pipeline()
         # System-level webcam overlay (always-on PiP above effects, below HUD).
         try:
             webcam_cls = _load_webcam_system_class()
@@ -551,7 +558,85 @@ void main() {
             self._present_prog, [(self._present_vbo, '2f', 'in_vert')]
         )
 
-    def _sync_recording_overlay(self) -> None:
+    def _build_burst_pipeline(self) -> None:
+        """Build the screen-spin/scale post-process shader used by Ctrl+U."""
+        vert = """
+#version 330
+in vec2 in_vert;
+out vec2 v_uv;
+void main() {
+    v_uv = in_vert * 0.5 + 0.5;
+    gl_Position = vec4(in_vert, 0.0, 1.0);
+}
+"""
+        frag = """
+#version 330
+// Screen burst post-process — rotates and scales the frame around its centre.
+// Uniforms: uAngle (radians), uScale (>1 = zoom in), tex (frame texture).
+uniform sampler2D tex;
+uniform float uAngle;
+uniform float uScale;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    vec2 uv = v_uv - 0.5;
+    float c = cos(uAngle);
+    float s = sin(uAngle);
+    uv = mat2(c, -s, s, c) * uv;  // rotate
+    uv /= uScale;                   // scale (>1 zooms in)
+    uv += 0.5;
+    // Vignette for dramatic edge darkening during the burst
+    vec2 vig = v_uv - 0.5;
+    float vignette = 1.0 - dot(vig, vig) * 1.6;
+    vignette = clamp(vignette, 0.0, 1.0);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        vec4 col = texture(tex, uv);
+        col.rgb *= mix(1.0, vignette, 0.30);
+        fragColor = col;
+    }
+}
+"""
+        self._burst_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+        verts = np.array([-1, -1, -1, 1, 1, -1, 1, 1], dtype=np.float32)
+        self._burst_vbo = self._ctx.buffer(verts)
+        self._burst_vao = self._ctx.vertex_array(
+            self._burst_prog, [(self._burst_vbo, '2f', 'in_vert')]
+        )
+
+    def trigger_burst(self) -> None:
+        """Trigger the Ctrl+U screen-burst animation (restart if already playing)."""
+        self._burst_t = self._burst_duration
+
+    def _burst_transform(self) -> tuple[float, float]:
+        """Return (scale, angle_radians) for the current burst animation frame."""
+        if self._burst_t <= 0.0:
+            return 1.0, 0.0
+        phase = 1.0 - (self._burst_t / self._burst_duration)  # 0=just started, 1=done
+        attack = 0.18
+        if phase < attack:
+            k = phase / attack
+            scale = 1.0 + 0.42 * k
+            angle = math.radians(24.0 * k)
+        else:
+            k = (phase - attack) / (1.0 - attack)  # 0→1
+            decay = (1.0 - k) ** 2.5
+            scale = 1.0 + 0.42 * decay
+            angle = math.radians(24.0) * ((1.0 - k) ** 2.0) * math.cos(k * math.pi * 1.8)
+        return scale, angle
+
+    def _present_burst_from_tex(self, tex: moderngl.Texture) -> None:
+        """Render the burst-transformed frame to screen."""
+        scale, angle = self._burst_transform()
+        self._ctx.screen.use()
+        self._ctx.viewport = (0, 0, self._width, self._height)
+        self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+        tex.use(location=0)
+        self._burst_prog['tex'].value = 0
+        self._burst_prog['uAngle'].value = angle
+        self._burst_prog['uScale'].value = scale
+        self._burst_vao.render(moderngl.TRIANGLE_STRIP)
         """Keep the recording indicator state in sync with the recorder."""
         if self._overlays is not None:
             elapsed_seconds = 0.0
@@ -1289,6 +1374,7 @@ void main() {
                 'speed': speed_str,
                 'zoom': zoom_str,
                 'audio_source': audio_src,
+                'audio_profile': self._audio_manager.get_profile().name if self._audio_manager is not None else '-',
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
                 'variant_slot_label': variant_label,
@@ -1377,6 +1463,12 @@ void main() {
             self._present_vbo.release()
         if self._present_prog:
             self._present_prog.release()
+        if self._burst_vao:
+            self._burst_vao.release()
+        if self._burst_vbo:
+            self._burst_vbo.release()
+        if self._burst_prog:
+            self._burst_prog.release()
         self._destroy_mirror_outputs()
         self._release_readback_pbos()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
@@ -1386,10 +1478,13 @@ void main() {
     def _render(self, dt: float) -> None:
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
-
+        burst_active = self._burst_t > 0.0
+        # Advance burst timer
+        if burst_active:
+            self._burst_t = max(0.0, self._burst_t - dt)
         if self._next_effect is None:
-            # No transition — render current effect; optionally apply invert pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999:
+            # No transition — render current effect; optionally apply invert/burst pass.
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1418,6 +1513,8 @@ void main() {
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                 elif self._invert_colors:
                     self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
+                elif burst_active:
+                    self._present_burst_from_tex(self._fbo_a.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
             else:
