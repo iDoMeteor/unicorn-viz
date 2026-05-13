@@ -7,11 +7,13 @@
 - `[done]` completed
 - `[decision]` needs product/architecture decision
 
-## Current Focus (May 12, 2026)
+## Current Focus (May 13, 2026)
 
-- `[doing]` Effect review pass is in progress (systematic quality/perf pass across existing effects).
-- `[doing]` RTMP streaming subsystem drop-in is being implemented for personal live workflows.
+- `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
+- `[done]` RTMP streaming subsystem drop-in.
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
+- `[todo]` Design vignette/post-process system (see Phase 4).
+- `[todo]` Design external plugin loading for paid effect packs.
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
@@ -122,23 +124,30 @@
   - consistency pass (parameters, naming, audio reactivity behavior)
   - visual polish pass (startup variance, transitions, readability)
   - documentation pass (effect-level options and expected behavior)
-- `[todo]` Design a global vignette/post-process system with per-effect overrides.
+- `[todo]` Add global vignette / post-process pass system.
   Notes:
   - default global vignette strength/shape settings
   - per-effect opt-out/override for effects that already do their own edge darkening
   - decide whether vignette is a post-FBO pass or shader uniform convention
   - document which effects intentionally ignore the global setting
-- `[decision]` Design frequency-response tuning system with genre profiles.
-  Context:
-  - Audio reactivity may currently be tuned toward general pop/mainstream frequencies
-  - Testing with house/trance/edm reveals potentially suboptimal frequency targeting
-  - Different genres (hip-hop, drill, etc.) may need distinct frequency emphasis
-  Open questions:
-  - profiles: house/trance/edm, hip-hop/drill, rock, classical/ambient, others?
-  - where stored: config presets, hardcoded profiles, user-customizable bands?
-  - which analysis parameters affected: FFT bands, smoothing, bass/mid/treble splits, reactivity curves?
-  - UI: genre selector in hotkeys, or CLI flag, or audio auto-detect?
-  - fallback: should there be a "flat" auto-learn profile from current audio?
+- `[done]` Add Ctrl+U screen burst effect (DJ-trigger: full 360° spin + 4× zoom, elastic recovery).
+  Notes:
+  - system-level post-process shader applied over the effect layer (0.60s animation)
+  - works in all display modes: single, span_all, mirror_all
+  - restartable mid-animation; does not interrupt the active effect
+  - triggered by Ctrl+U; listed in `H` help overlay
+- `[done]` Design frequency-response tuning system with genre profiles.
+  Notes:
+  - implemented `unicornviz/audio/profiles.py` with 12 genre-tuned profiles:
+    house (default), trance, electronic, rap, hyphy, r&b, rock, generic,
+    classical, ambient, pop, metal
+  - each profile tunes bass/mid/treble frequency ranges, per-band weights,
+    beat detection threshold, and FFT smoothing
+  - Analyzer uses profile frequency splits instead of hardcoded Hz constants;
+    `set_profile()` recalculates band slices at runtime
+  - AudioManager loads profile from config (`audio.profile`)
+  - `O` / `Shift+O` hotkeys cycle profiles at runtime; HUD shows active profile
+  - config.toml default: `profile = "house"`
 - `[decision]` Design external plugin loading for paid effect packs.
   Open questions:
   - local drop-in plugin directory vs hosted/cloud delivery
