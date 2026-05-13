@@ -41,6 +41,19 @@ level = "INFO"
 # directory for per-run log files
 directory = "logs"
 
+[hotkeys]
+# F6 randomizes effect speed within this range (when effect exposes `speed`)
+random_speed_min = 0.25
+random_speed_max = 2.50
+# F7 randomizes audio reactivity within this range
+random_reactivity_min = 0.40
+random_reactivity_max = 2.00
+# Alt+[/] adjusts zoom; Shift+Z randomizes within this range
+zoom_min = 0.1
+zoom_max = 3.0
+random_zoom_min = 0.30
+random_zoom_max = 1.80
+
 [streaming]
 enabled = false
 auto_start = false

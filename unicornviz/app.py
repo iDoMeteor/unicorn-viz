@@ -175,6 +175,7 @@ class App:
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
         self._reactivity_randomized: bool = False
+        self._zoom_randomized: bool = False
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
             self.cfg.get('demo', 'effect_duration', default=20)
@@ -1265,6 +1266,7 @@ void main() {
                 'advance_time': advance_time,
                 'reactivity': f"{audio_manager.get_reactivity():.1f}x{'*' if self._reactivity_randomized else ''}" if audio_manager is not None else 'n/a',
                 'speed': effect_speed + ('*' if self._speed_randomized else ''),
+                'zoom': (f"{self._current_effect.parameters.get('zoom', 1.0):.2f}x{'*' if self._zoom_randomized else ''}" if self._current_effect is not None and 'zoom' in self._current_effect.parameters else '-'),
                 'audio_source': audio_src,
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
@@ -1790,12 +1792,39 @@ void main() {
         self._audio_manager.set_reactivity(round(value, 2))
         self._reactivity_randomized = True
 
+    def _apply_zoom_delta(self, delta: float) -> float:
+        """Adjust zoom of current effect by delta. Returns new zoom or 0 if unavailable."""
+        if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
+            self._zoom_randomized = False
+            return 0.0
+        lo = float(self.cfg.get('hotkeys', 'zoom_min', default=0.1))
+        hi = float(self.cfg.get('hotkeys', 'zoom_max', default=3.0))
+        current = self._current_effect.parameters['zoom']
+        new_val = max(lo, min(hi, current + delta))
+        self._current_effect.parameters['zoom'] = new_val
+        return new_val
+
+    def _apply_random_zoom(self) -> None:
+        """Apply random zoom to current effect and flag for re-apply on scene change."""
+        if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
+            self._zoom_randomized = False
+            return
+        lo = float(self.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
+        hi = float(self.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
+        if lo > hi:
+            lo, hi = hi, lo
+        value = float(self._rng.uniform(lo, hi))
+        self._current_effect.parameters['zoom'] = value
+        self._zoom_randomized = True
+
     def _re_randomize_on_scene_change(self) -> None:
         """Re-apply random values when scene transitions complete."""
         if self._speed_randomized:
             self._apply_random_speed()
         if self._reactivity_randomized:
             self._apply_random_reactivity()
+        if self._zoom_randomized:
+            self._apply_random_zoom()
 
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""

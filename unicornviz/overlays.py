@@ -344,6 +344,7 @@ class Overlays:
                 ('+ / -', 'Speed up / down'),
                 ('Ctrl+=/-', 'Speed MAX / MIN'),
                 ('G', 'Reset speed'),
+                ('F6', 'Random speed (cfg range)'),
             ],
         ),
         (
@@ -351,7 +352,11 @@ class Overlays:
             [
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
+                ('Alt+[ / Alt+]', 'Zoom -/+ (if available)'),
                 ('g', 'Reset reactivity'),
+                ('F6', 'Random speed (cfg range)'),
+                ('F7', 'Random reactivity (cfg range)'),
+                ('Shift+Z', 'Random zoom (cfg range)'),
                 ('E', 'EQ / spectrum'),
                 ('A', 'Audio source'),
                 ('M', 'MIDI device'),

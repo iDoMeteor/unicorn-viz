@@ -294,7 +294,18 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_LEFTBRACKET:
             am = self._audio
-            if mod & sdl2.KMOD_SHIFT:
+            if mod & sdl2.KMOD_ALT:
+                # Alt+[ — zoom down
+                val = a.scale_pip(-0.05) if a._webcam_system else 0  # noqa: SLF001
+                if val > 0:
+                    o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
+                else:
+                    val = a._apply_zoom_delta(-0.10)  # noqa: SLF001
+                    if val > 0:
+                        o.flash_message(f'Zoom: {val:.2f}x', 1.0)
+                    else:
+                        o.flash_message('Zoom control not available', 1.0)
+            elif mod & sdl2.KMOD_SHIFT:
                 # { — reactivity min
                 val = am.set_reactivity(0.1)
                 o.flash_message("Reactivity: MIN (0.1x)", 1.5)
@@ -305,7 +316,18 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_RIGHTBRACKET:
             am = self._audio
-            if mod & sdl2.KMOD_SHIFT:
+            if mod & sdl2.KMOD_ALT:
+                # Alt+] — zoom up
+                val = a.scale_pip(0.05) if a._webcam_system else 0  # noqa: SLF001
+                if val > 0:
+                    o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
+                else:
+                    val = a._apply_zoom_delta(0.10)  # noqa: SLF001
+                    if val > 0:
+                        o.flash_message(f'Zoom: {val:.2f}x', 1.0)
+                    else:
+                        o.flash_message('Zoom control not available', 1.0)
+            elif mod & sdl2.KMOD_SHIFT:
                 # } — reactivity max
                 val = am.set_reactivity(5.0)
                 o.flash_message("Reactivity: MAX (5.0x)", 1.5)
@@ -391,6 +413,18 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_v:
             _active, msg = a.toggle_recording()
             o.flash_message(msg, 2.0)
+
+        elif sym == sdl2.SDLK_z:
+            if mod & sdl2.KMOD_SHIFT:
+                # Shift+Z — random zoom
+                a._apply_random_zoom()  # noqa: SLF001
+                if a._current_effect and 'zoom' in a._current_effect.parameters:  # noqa: SLF001
+                    zoom_val = a._current_effect.parameters['zoom']  # noqa: SLF001
+                    lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
+                    hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
+                    o.flash_message(f'Zoom random: {zoom_val:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+                else:
+                    o.flash_message('Zoom control not available', 1.2)
 
         elif sym == sdl2.SDLK_u:
             if mod & sdl2.KMOD_SHIFT:
