@@ -226,6 +226,7 @@ class App:
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))
         self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
+        self._show_cursor_default = bool(self.cfg.get('window', 'show_cursor', default=False))
         self._audio = AudioData()
 
     # ------------------------------------------------------------------ #
@@ -463,7 +464,7 @@ class App:
                 f"SDL_GL_CreateContext failed: {sdl2.SDL_GetError().decode()}"
             )
         sdl2.SDL_GL_SetSwapInterval(1)  # vsync
-        self._set_cursor_visible(False)
+        self._set_cursor_visible(self._show_cursor_default)
 
         # After fullscreen is applied the OS may give us a different size.
         # Query the actual drawable size and update width/height.
@@ -826,16 +827,20 @@ void main() {
         self._render_height = max(1, int(round(self._height * self._render_scale)))
 
     def _set_cursor_visible(self, visible: bool) -> None:
-        """Show cursor only when Ctrl is held; otherwise keep it hidden."""
+        """Set cursor visibility state in SDL."""
         try:
             sdl2.SDL_ShowCursor(sdl2.SDL_ENABLE if visible else sdl2.SDL_DISABLE)
         except Exception:
             pass
 
+    def _cursor_should_be_visible(self) -> bool:
+        """Return effective cursor visibility from default setting and Ctrl hold."""
+        return self._show_cursor_default or self._ctrl_held
+
     def _update_ctrl_state(self, sym: int, is_keydown: bool) -> None:
         if sym in (sdl2.SDLK_LCTRL, sdl2.SDLK_RCTRL):
             self._ctrl_held = is_keydown
-            self._set_cursor_visible(self._ctrl_held)
+            self._set_cursor_visible(self._cursor_should_be_visible())
 
     # ------------------------------------------------------------------ #
     # Effect management                                                    #
@@ -1149,7 +1154,7 @@ void main() {
                         self._ctrl_held = False
                         self._set_cursor_visible(False)
                     elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_GAINED:
-                        self._set_cursor_visible(self._ctrl_held)
+                        self._set_cursor_visible(self._cursor_should_be_visible())
                 elif event.type == sdl2.SDL_DISPLAYEVENT:
                     if event.display.event in (
                         sdl2.SDL_DISPLAYEVENT_CONNECTED,
@@ -1783,26 +1788,19 @@ void main() {
         return self._streamer.set_provider(provider, restart=True)
 
     def _apply_random_speed(self) -> None:
-        """Apply random speed to current effect if it supports it; flag always persists."""
+        """Apply random speed using effect-local overrides when available."""
         if self._current_effect is None or 'speed' not in self._current_effect.parameters:
             return  # flag stays as-is; will apply when a supporting effect becomes active
-        lo = float(self.cfg.get('hotkeys', 'random_speed_min', default=0.25))
-        hi = float(self.cfg.get('hotkeys', 'random_speed_max', default=2.50))
-        if lo > hi:
-            lo, hi = hi, lo
+        lo, hi = self._random_range_for('speed', 0.25, 2.50)
         value = float(self._rng.uniform(lo, hi))
         self._current_effect.parameters['speed'] = value
         self._speed_randomized = True
 
     def _apply_random_reactivity(self) -> None:
-        """Apply random reactivity and flag for re-apply on scene change."""
+        """Apply random reactivity using effect-local overrides when available."""
         if self._audio_manager is None:
-            self._reactivity_randomized = False
             return
-        lo = float(self.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
-        hi = float(self.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
-        if lo > hi:
-            lo, hi = hi, lo
+        lo, hi = self._random_range_for('reactivity', 0.40, 2.00)
         value = float(self._rng.uniform(lo, hi))
         self._audio_manager.set_reactivity(round(value, 2))
         self._reactivity_randomized = True
@@ -1810,7 +1808,7 @@ void main() {
     def _apply_zoom_delta(self, delta: float) -> float:
         """Adjust zoom of current effect by delta. Returns new zoom or 0 if unavailable."""
         if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
-            return 0.0  # never touch the random flag here
+            return 0.0
         lo = float(self.cfg.get('hotkeys', 'zoom_min', default=0.1))
         hi = float(self.cfg.get('hotkeys', 'zoom_max', default=3.0))
         current = self._current_effect.parameters['zoom']
@@ -1828,16 +1826,29 @@ void main() {
         return default
 
     def _apply_random_zoom(self) -> None:
-        """Apply random zoom to current effect if it supports it; flag always persists."""
+        """Apply random zoom using effect-local overrides when available."""
         if self._current_effect is None or 'zoom' not in self._current_effect.parameters:
             return  # flag stays as-is; will apply when a supporting effect becomes active
-        lo = float(self.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
-        hi = float(self.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
-        if lo > hi:
-            lo, hi = hi, lo
+        lo, hi = self._random_range_for('zoom', 0.30, 1.80)
         value = float(self._rng.uniform(lo, hi))
         self._current_effect.parameters['zoom'] = value
         self._zoom_randomized = True
+
+    def _random_range_for(self, name: str, default_min: float, default_max: float) -> tuple[float, float]:
+        """Resolve the active randomization range from effect config, then global hotkeys."""
+        lo = float(self.cfg.get('hotkeys', f'random_{name}_min', default=default_min))
+        hi = float(self.cfg.get('hotkeys', f'random_{name}_max', default=default_max))
+        effect_cfg = getattr(self._current_effect, 'config', None)
+        if isinstance(effect_cfg, dict):
+            effect_lo = effect_cfg.get(f'random_{name}_min')
+            effect_hi = effect_cfg.get(f'random_{name}_max')
+            if effect_lo is not None:
+                lo = float(effect_lo)
+            if effect_hi is not None:
+                hi = float(effect_hi)
+        if lo > hi:
+            lo, hi = hi, lo
+        return lo, hi
 
     def _re_randomize_on_scene_change(self) -> None:
         """Re-apply random values when scene transitions complete."""
@@ -1858,49 +1869,12 @@ void main() {
         if self._fbo_b:
             self._fbo_b.release()
         self._fbo_a = self._make_fbo()
-        self._fbo_b = self._make_fbo()
-
-    def _apply_render_scale_delta(self, delta: float) -> float:
-        """Adjust internal render scale by delta. Returns new (clamped) value."""
-        self._render_scale = _clamp_render_scale(self._render_scale + delta)
+        """Apply random render scale using effect-local overrides when available."""
+        lo, hi = self._random_range_for('scale', 0.5, 1.0)
+        lo = _clamp_render_scale(lo)
+        hi = _clamp_render_scale(hi)
         self._rebuild_fbos()
         return self._render_scale
-
-    def _reset_render_scale(self) -> float:
-        """Reset render scale to config default."""
-        self._render_scale = self._render_scale_default
-        self._scale_randomized = False
-        self._rebuild_fbos()
-        return self._render_scale
-
-    def _apply_random_render_scale(self) -> None:
-        """Apply random render scale and flag for re-apply on scene change."""
-        lo = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_min', default=0.5)))
-        hi = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_max', default=1.0)))
-        if lo > hi:
-            lo, hi = hi, lo
-        self._render_scale = _clamp_render_scale(float(self._rng.uniform(lo, hi)))
-        self._scale_randomized = True
-        self._rebuild_fbos()
-        if self._scale_randomized:
-            self._apply_random_render_scale()
-
-    def _rebuild_fbos(self) -> None:
-        """Recompute render dimensions and recreate FBOs after a scale change."""
-        self._update_render_target_size()
-        if self._fbo_a:
-            self._fbo_a.release()
-        if self._fbo_b:
-            self._fbo_b.release()
-        self._fbo_a = self._make_fbo()
-        self._fbo_b = self._make_fbo()
-
-    def _apply_render_scale_delta(self, delta: float) -> float:
-        """Adjust internal render scale by delta. Returns new value."""
-        new_val = _clamp_render_scale(self._render_scale + delta)
-        self._render_scale = new_val
-        self._rebuild_fbos()
-        return new_val
 
     def _reset_render_scale(self) -> float:
         """Reset render scale to config default."""

@@ -11,6 +11,7 @@ import numpy as np
 from unicornviz.effects.base import AudioData
 from unicornviz.audio.capture import AudioCapture
 from unicornviz.audio.analyzer import Analyzer
+from unicornviz.audio.profiles import AudioProfile, get_profile, list_profiles
 from unicornviz.config import Config
 
 log = logging.getLogger(__name__)
@@ -30,13 +31,18 @@ class AudioManager:
         )
         self._reactivity = max(0.1, min(5.0, self._reactivity))
         self._reactivity_default = self._reactivity
+        
+        # Audio profile selection
+        profile_name = str(cfg.get("audio", "profile", default="house"))
+        self._profile = get_profile(profile_name)
+        
         self._capture = AudioCapture(
             device_hint=device_hint,
             buffer_seconds=buffer_seconds,
             latency=latency,
             try_alsa_loopback=try_alsa_loopback,
         )
-        self._analyzer = Analyzer(fft_bands=fft_bands)
+        self._analyzer = Analyzer(fft_bands=fft_bands, profile=self._profile)
         self._last_data = AudioData()
 
     def start(self) -> None:
@@ -64,6 +70,22 @@ class AudioManager:
     def get_source_label(self) -> str:
         """Return a user-facing label for the active audio input source."""
         return self._capture.current_source_label()
+    
+    def get_profile(self) -> AudioProfile:
+        """Return the current audio profile."""
+        return self._profile
+    
+    def set_profile(self, name: str) -> AudioProfile:
+        """Switch to a named audio profile and update analyzer."""
+        profile = get_profile(name)
+        self._profile = profile
+        self._analyzer.set_profile(profile)
+        log.info('Audio profile changed to: %s', profile.name)
+        return profile
+    
+    def list_profiles(self) -> list[str]:
+        """Return list of available profile names."""
+        return list_profiles()
 
     def get_audio_data(self) -> AudioData:
         """Called every frame from the main loop."""

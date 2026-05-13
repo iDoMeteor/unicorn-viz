@@ -1,0 +1,54 @@
+# Documentation Update Summary — May 13, 2026
+
+## Changes Made
+
+### README.md — Major Reorganization
+- Expanded Features section into 6 categories:
+  * Visual Effects (built-in + drop-ins with "tested and working; currently private" note)
+  * Audio & Visualization
+  * Interactive Controls & Automation (randomization toggles with armed state)
+  * Display & Streaming
+  * Customization & Performance (including cursor control, render scale)
+  * Developer & Artisan Features (effect randomization, drop-in architecture)
+- Drop-in Effects table now includes all 14 effects with descriptions and hotkeys
+- System drop-ins section added (multi-head, streaming)
+
+### docs/user-guide.md — Hotkeys & Randomization Documentation
+- Added F6, F7, Alt+Z, Ctrl+Z, Alt+K, Shift+K, Ctrl+K hotkeys to main table
+- New "Global Randomization Modes (Armed State)" section explaining:
+  * How armed state persists across effect transitions
+  * `N/A *` indicator when mode is armed but unsupported
+  * Per-effect config overrides for randomization ranges
+- New "Effect Startup Randomization" section
+- Per-effect config override example
+
+### docs/developer-guide.md — Effect Randomization Requirements
+- New "Effect Randomization Requirements" section covering:
+  * What BaseEffect provides (self.rng, self.time)
+  * What effects must randomize (palette, angle, mode, intensity, media indices)
+  * Exceptions (audio_spectrum, system_monitor)
+  * Rule of thumb for detecting missing randomization
+
+### docs/configuration.md — Randomization Bounds & Cursor
+- Already updated (per-effect randomization bounds, show_cursor flag)
+- No additional changes needed
+
+### docs/effect-settings.md — Drop-in Documentation  
+- Already updated (per-effect randomization bounds, drop-in list)
+- Added note that drop-ins use same override keys as built-ins
+
+### config.toml & config.full.example.toml — Full Examples
+- Both include show_cursor = false with explanation
+- config.full.example.toml has comprehensive per-effect randomization examples
+
+## Features Now Documented
+
+✓ Cursor visibility control (window.show_cursor flag)
+✓ Global randomization with armed state (F6/F7/Alt+Z/Alt+K)
+✓ Per-effect randomization range overrides
+✓ Effect startup randomization requirements
+✓ All drop-ins with "tested and working but currently private" note
+✓ Categorized feature list in README
+✓ Zoom controls (Z/Shift+Z/Ctrl+Z/Alt+Z)
+✓ Render scale controls (K/Shift+K/Ctrl+K/Alt+K)
+

@@ -11,6 +11,7 @@ All settings live in `config.toml` in the project root.
 | `width`      | int     | `1920`         | Initial window width in pixels             |
 | `height`     | int     | `1080`         | Initial window height in pixels            |
 | `fullscreen` | bool    | `false`        | Start in fullscreen mode                   |
+| `show_cursor`| bool    | `false`        | Keep mouse pointer visible by default      |
 | `title`      | str     | `"Unicorn Viz"`| Window title bar text                      |
 | `display_index` | int  | `0`            | SDL display / monitor index to target at startup and when entering fullscreen. |
 | `display_mode` | str   | `"single"`   | Display layout mode: `"single"`, `"span_all"`, or `"mirror_all"`. |
@@ -21,6 +22,7 @@ Notes:
 - `mirror_all`: render on the targeted display and mirror the final live output to every other detected display.
 - `span_all` and `mirror_all` are most reliable on X11. On Wayland compositors,
   explicit window positioning may be ignored by design.
+- When `show_cursor = false`, holding Ctrl temporarily reveals the cursor.
 - when `display_mode` is not `single`, Unicorn Viz attempts an automatic X11
     fallback at startup for more reliable placement; if fallback fails it
     continues on Wayland with limitations.
@@ -50,7 +52,7 @@ Aliases:
 | `device`         | str    | `""`    | Device name substring (empty = auto-detect PipeWire monitor) |
 | `fft_bands`      | int    | `512`   | Number of FFT frequency bins                                 |
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
-| `reactivity`     | float  | `1.0`   | Master visual response multiplier                            |
+| `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal` |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
 | `try_alsa_loopback` | bool | `false` | Try ALSA loopback devices before app/default sources        |
 
@@ -148,6 +150,15 @@ Per-effect reactivity override:
 - If set, this is the absolute reactivity used by that effect
 - If omitted, the effect uses global `audio.reactivity`
 
+Per-effect randomization overrides:
+- Optional keys: `random_speed_min` / `random_speed_max`,
+    `random_zoom_min` / `random_zoom_max`, `random_scale_min` / `random_scale_max`,
+    `random_reactivity_min` / `random_reactivity_max`
+- If set under `[effects.<ClassName>]`, these values override the global
+    `[hotkeys]` ranges only while that effect is active
+- If omitted, the app falls back to the global randomization bounds
+- The same keys work for drop-in effects loaded from `drop-ins/`
+
 For a complete list of every effect's tweakable settings and defaults, see:
 
 - [Effect Settings Reference](effect-settings.md)
@@ -155,6 +166,14 @@ For a complete list of every effect's tweakable settings and defaults, see:
 ```toml
 [effects.Plasma]
 speed = 2.0
+
+[effects.Kaleidoscope]
+speed = 1.0
+zoom = 0.62
+# random_speed_min = 0.7
+# random_speed_max = 1.4
+# random_zoom_min = 0.45
+# random_zoom_max = 0.90
 
 [effects.ANSIViewer]
 slide_time = 30.0
@@ -174,6 +193,10 @@ Available parameters per effect:
 |-------------------|-------------|------------|---------------------------------|
 | All               | `speed`     | 0.05–10.0  | Animation rate multiplier       |
 | All               | `reactivity`| 0.1–5.0    | Absolute per-effect audio reactivity override |
+| All               | `random_speed_min/max` | hotkey defaults | Optional per-effect bounds for random speed |
+| All               | `random_zoom_min/max` | hotkey defaults | Optional per-effect bounds for random zoom |
+| All               | `random_scale_min/max` | hotkey defaults | Optional per-effect bounds for random render scale |
+| All               | `random_reactivity_min/max` | hotkey defaults | Optional per-effect bounds for random reactivity |
 | ANSIViewer        | `glow`      | 0.0–1.0    | Phosphor glow intensity         |
 | ANSIViewer        | `crt`       | 0.0–1.0    | CRT barrel distortion strength  |
 | ANSIViewer        | `slide_time`| 5.0–300.0  | Seconds per art piece           |

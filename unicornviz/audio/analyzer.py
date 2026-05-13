@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 
 from unicornviz.effects.base import AudioData
+from unicornviz.audio.profiles import AudioProfile, get_profile
 
 _FFT_BANDS = 512
 _SMOOTHING = 0.75       # exponential smoothing coefficient
@@ -26,7 +27,10 @@ class Analyzer:
     Returns an AudioData snapshot.
     """
 
-    def __init__(self, fft_bands: int = _FFT_BANDS) -> None:
+    def __init__(self, fft_bands: int = _FFT_BANDS, profile: object = None) -> None:
+        if profile is None:
+            profile = get_profile("house")
+        self._profile = profile
         self._bands = fft_bands
         self._smoothed = np.zeros(fft_bands, dtype=np.float32)
         self._window_cache: dict[int, np.ndarray] = {}
@@ -40,26 +44,35 @@ class Analyzer:
 
         self._n_fft = self._bands * 2
         self._bin_hz = _ASSUMED_SAMPLE_RATE / max(1, self._n_fft)
+        
+        self._setup_frequency_bands()
 
+    def _setup_frequency_bands(self) -> None:
+        """Set up frequency band slices based on current profile."""
         def hz_to_bin(hz: float) -> int:
             return int(np.clip(round(hz / self._bin_hz), 1, self._bands - 1))
-
-        b0, b1 = hz_to_bin(_BASS_HZ[0]), hz_to_bin(_BASS_HZ[1])
-        lm0, lm1 = hz_to_bin(_LOW_MID_HZ[0]), hz_to_bin(_LOW_MID_HZ[1])
-        m0, m1 = hz_to_bin(_MID_HZ[0]), hz_to_bin(_MID_HZ[1])
-        t0, t1 = hz_to_bin(_TREBLE_HZ[0]), hz_to_bin(_TREBLE_HZ[1])
-        a0, a1 = hz_to_bin(_AIR_HZ[0]), hz_to_bin(_AIR_HZ[1])
-
+        
+        # Use profile frequency ranges
+        b0 = hz_to_bin(self._profile.bass_min)
+        b1 = hz_to_bin(self._profile.bass_max)
+        m0 = hz_to_bin(self._profile.mid_min)
+        m1 = hz_to_bin(self._profile.mid_max)
+        t0 = hz_to_bin(self._profile.treble_min)
+        t1 = hz_to_bin(self._profile.treble_max)
+        
         self._bass_slice = slice(min(b0, b1), max(b0 + 1, b1))
-        self._low_mid_slice = slice(min(lm0, lm1), max(lm0 + 1, lm1))
         self._mid_slice = slice(min(m0, m1), max(m0 + 1, m1))
         self._treble_slice = slice(min(t0, t1), max(t0 + 1, t1))
-        self._air_slice = slice(min(a0, a1), max(a0 + 1, a1))
-
-        # Beat detection weighting: emphasize bass + low-mid flux.
+        
+        # Beat detection weighting: emphasize bass + mid flux based on profile.
         self._flux_weights = np.linspace(1.0, 0.22, self._bands, dtype=np.float32)
         self._flux_weights[self._bass_slice] *= 1.8
-        self._flux_weights[self._low_mid_slice] *= 1.3
+        self._flux_weights[self._mid_slice] *= 1.2
+    
+    def set_profile(self, profile: AudioProfile) -> None:
+        """Switch to a new profile and recalculate frequency bands."""
+        self._profile = profile
+        self._setup_frequency_bands()
 
     def _shape(self, x: float, gain: float) -> float:
         """Map linear band energy to a smooth [0,1] response curve."""
@@ -123,15 +136,18 @@ class Analyzer:
 
         # Band energy (modern splits).
         bass_raw = self._safe_mean(self._smoothed, self._bass_slice)
-        low_mid_raw = self._safe_mean(self._smoothed, self._low_mid_slice)
         mid_raw = self._safe_mean(self._smoothed, self._mid_slice)
         treble_raw = self._safe_mean(self._smoothed, self._treble_slice)
-        air_raw = self._safe_mean(self._smoothed, self._air_slice)
 
-        # Weighted perceptual channels exposed to effects.
-        data.bass = self._shape(0.85 * bass_raw + 0.15 * low_mid_raw, gain=6.6)
-        data.mid = self._shape(0.35 * low_mid_raw + 0.65 * mid_raw, gain=5.8)
-        data.treble = self._shape(0.78 * treble_raw + 0.22 * air_raw, gain=7.2)
+        # Apply profile weights to normalize across genres
+        bass_weighted = bass_raw * self._profile.bass_weight
+        mid_weighted = mid_raw * self._profile.mid_weight
+        treble_weighted = treble_raw * self._profile.treble_weight
+        
+        # Weighted perceptual channels exposed to effects with profile-specific gains
+        data.bass = self._shape(bass_weighted, gain=6.6)
+        data.mid = self._shape(mid_weighted, gain=5.8)
+        data.treble = self._shape(treble_weighted, gain=7.2)
 
         # Spectral flux onset detection
         np.subtract(spectrum, self._prev_spectrum, out=self._flux_delta)

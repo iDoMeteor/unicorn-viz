@@ -7,6 +7,7 @@
 width = 1920
 height = 1080
 fullscreen = false
+show_cursor = false   # true keeps pointer visible by default; Ctrl still reveals when false
 title = "Unicorn Viz"
 
 [demo]
@@ -33,6 +34,9 @@ try_alsa_loopback = false
 [midi]
 # empty string disables MIDI
 # set a substring to match/open a specific input device
+# Audio frequency response profile: house (default), trance, electronic, rap,
+# hyphy, r&b, rock, generic, classical, ambient, pop, metal
+profile = "house"
 device = ""
 
 [logging]
@@ -95,6 +99,9 @@ sequence = []
 # ------------------------------------------------------------
 [effects.AlienBiome]
 speed = 1.0
+# Optional: constrain the global random-speed hotkey while this effect is active.
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.ANSIViewer]
 speed = 1.0
@@ -112,17 +119,25 @@ speed = 1.0
 
 [effects.Cosmos]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Cube3D]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Dali]
 speed = 1.0
 rotation_interval = 15.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Escher]
 speed = 1.0
 vignette = 0.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Curtains]
 intensity = 0.82
@@ -132,33 +147,56 @@ zoom = 1.0
 [effects.Fire]
 intensity = 0.90
 speed = 1.0
+# zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.35
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+# random_scale_min = 0.80
+# random_scale_max = 1.00
 
 [effects.FractalZoom]
 speed = 1.0
 max_iter = 180
+# random_speed_min = 0.70
+# random_speed_max = 1.20
 
 [effects.Metaballs]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.ParticleStorm]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Plasma]
 speed = 1.0
 palette = 0.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Raymarcher]
 speed = 1.0
+# random_speed_min = 0.70
+# random_speed_max = 1.30
 
 [effects.SineScroller]
 speed = 1.5
 amplitude = 0.18
 font_scale = 4.0
+# random_speed_min = 1.10
+# random_speed_max = 1.90
 
 [effects.SimShowcase]
 speed = 1.0
 mix_time = 14.0
 camera_energy = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_reactivity_min = 0.80
+# random_reactivity_max = 1.10
 # Single override directory (legacy):
 # scene_dir = "drop-ins/sims-01/scenes"
 # Multi-source directories (comma-separated). Useful for public robotics
@@ -174,6 +212,8 @@ start_clean = false
 beat_sensitivity = 1.0
 fps_hint = 60
 projectm_library = ""
+# random_speed_min = 0.80
+# random_speed_max = 1.20
 # Single override directory:
 # preset_dir = "drop-ins/projectm-01/presets"
 # Multiple preset packs (comma-separated):
@@ -187,20 +227,34 @@ projectm_library = ""
 speed    = 1.0
 segments = 12.0    # mirror-image sectors: 6=wide triangles, 12=hex star, 18=tight circle
 zoom     = 0.62    # zoom into source material (0.3 fine detail – 2.0 broad forms)
+# random_speed_min = 0.70
+# random_speed_max = 1.40
+# random_zoom_min = 0.45
+# random_zoom_max = 0.90
 
 [effects.Starfield]
 speed = 0.5
 warp = 0.0
+# random_speed_min = 0.35
+# random_speed_max = 0.75
 
 [effects.Tunnel]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.VanGogh]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Vector]
 speed = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
 
 [effects.Water]
 amplitude = 1.0
 speed = 1.0
+# random_speed_min = 0.85
+# random_speed_max = 1.15

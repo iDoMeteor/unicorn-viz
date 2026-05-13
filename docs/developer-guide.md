@@ -342,6 +342,21 @@ automatically controlled by that CC knob.
 Recommended tag values: `"classic"`, `"futuristic"`, `"audio"`, `"ansi"`,
 `"3d"`, `"psychedelic"`, `"particles"`, `"visualizer"`.
 
+### Effect Randomization Requirements
+
+**Every visual effect must produce a visually distinct appearance each activation.**
+
+**BaseEffect provides for free:**
+- `self.rng` — per-instance seeded RNG
+- `self.time` — starts in [0, 10000) so time-driven shaders vary automatically
+
+**Effects must randomize in `_init()`:**
+- Colour/palette offset, starting angle/rotation, discrete mode, intensity/density, media indices
+
+**Exceptions:** `audio_spectrum.py`, `system_monitor.py` (diagnostic).
+
+**Rule of thumb:** If two back-to-back runs look identical for 3 seconds, add `self.rng` calls to `_init()`.
+
 ---
 
 ## GLSL Conventions

@@ -201,6 +201,34 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
 
+        elif sym == sdl2.SDLK_o:
+            # Next audio profile (wraps around)
+            profiles = self._audio.list_profiles()
+            current_profile = self._audio.get_profile()
+            current_name = current_profile.name
+            try:
+                current_idx = profiles.index(current_profile.name)
+            except ValueError:
+                current_idx = 0
+            next_idx = (current_idx + 1) % len(profiles)
+            next_profile = self._audio.set_profile(profiles[next_idx])
+            o.flash_message(f'Audio Profile: {next_profile.name}', 1.2)
+            log.info('Audio profile changed: %s → %s', current_name, next_profile.name)
+
+        elif (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_o:
+            # Previous audio profile (wraps around)
+            profiles = self._audio.list_profiles()
+            current_profile = self._audio.get_profile()
+            current_name = current_profile.name
+            try:
+                current_idx = profiles.index(current_profile.name)
+            except ValueError:
+                current_idx = 0
+            prev_idx = (current_idx - 1) % len(profiles)
+            prev_profile = self._audio.set_profile(profiles[prev_idx])
+            o.flash_message(f'Audio Profile: {prev_profile.name}', 1.2)
+            log.info('Audio profile changed: %s → %s', current_name, prev_profile.name)
+
         elif sym == sdl2.SDLK_F8:
             live, message = a.toggle_streaming()
             o.flash_message(message, 1.8 if live else 1.2)
@@ -217,8 +245,7 @@ class HotkeyHandler:
             else:
                 a._apply_random_speed()  # noqa: SLF001  (sets flag + applies if supported)
                 a._speed_randomized = True  # noqa: SLF001  ensure flag set even if not applied
-                lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
-                hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
+                lo, hi = a._random_range_for('speed', 0.25, 2.50)  # noqa: SLF001
                 if effect is not None and 'speed' in effect.parameters:
                     o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                 else:
@@ -237,8 +264,7 @@ class HotkeyHandler:
                     o.flash_message(f'Reactivity random OFF  {current:.2f}', 1.2)
                 else:
                     a._apply_random_reactivity()  # noqa: SLF001
-                    lo = float(a.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
-                    hi = float(a.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
+                    lo, hi = a._random_range_for('reactivity', 0.40, 2.00)  # noqa: SLF001
                     current = am.get_reactivity()
                     o.flash_message(f'Reactivity random ON  {current:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
 
@@ -446,8 +472,7 @@ class HotkeyHandler:
                 else:
                     a._apply_random_zoom()  # noqa: SLF001  (sets flag + applies if supported)
                     a._zoom_randomized = True  # noqa: SLF001  ensure flag set even if not applied
-                    lo = float(a.cfg.get('hotkeys', 'random_zoom_min', default=0.30))
-                    hi = float(a.cfg.get('hotkeys', 'random_zoom_max', default=1.80))
+                    lo, hi = a._random_range_for('zoom', 0.30, 1.80)  # noqa: SLF001
                     if has_zoom:
                         o.flash_message(f'Zoom random ON  {effect.parameters["zoom"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                     else:
@@ -483,8 +508,7 @@ class HotkeyHandler:
                     o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
                 else:
                     a._apply_random_render_scale()  # noqa: SLF001
-                    lo = float(a.cfg.get('hotkeys', 'random_scale_min', default=0.5))
-                    hi = float(a.cfg.get('hotkeys', 'random_scale_max', default=1.0))
+                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
                     o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
             elif mod & sdl2.KMOD_CTRL:
                 # Ctrl+K — reset render scale to config default

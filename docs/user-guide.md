@@ -144,8 +144,14 @@ python -m unicornviz --help
 | `+` / `=`         | Speed up current effect (×1.25)                               |
 | `-`               | Slow down current effect (×0.8)                               |
 | `Ctrl++`          | Speed to MAX                                                  |
-| `Ctrl+-`          | Speed to MIN                                                  |
-| `E`               | Jump directly to Audio Spectrum / EQ                          |
+| `Ctrl+-`          | Speed to MIN                                                  || `F6`              | Toggle randomize speed (armed state persists across effects) |
+| `F7`              | Toggle randomize reactivity (armed state persists)           |
+| `Z` / `Shift+Z`   | Zoom in / out (affects supported effects)                   |
+| `Ctrl+Z`          | Reset zoom to default                                        |
+| `Alt+Z`           | Toggle randomize zoom (armed state persists)                |
+| `K` / `Shift+K`   | Internal render scale up / down (performance tuning)         |
+| `Ctrl+K`          | Reset internal render scale to default                       |
+| `Alt+K`           | Toggle randomize render scale (armed state persists)         || `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
@@ -154,7 +160,81 @@ python -m unicornviz --help
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
 
-### Camera / Webcam Controls (Numpad)
+---
+
+## Global Randomization Modes (Armed State)
+
+F6/F7/Alt+Z/Alt+K work differently than most effect controls: they toggle a **global armed state** that persists across effect transitions. Here's how it works:
+
+**When a randomization mode is ON:**
+- If the current effect supports that parameter (speed, reactivity, zoom, or render scale), it randomizes within the configured range
+- If the current effect doesn't support it, the HUD displays `N/A *` (not just `N/A`), indicating the mode is globally armed but unavailable for this effect
+- When you switch to an effect that does support it, the parameter randomizes automatically using the armed randomization range
+
+**Armed state persists until you toggle it OFF** — you don't have to enable it for each effect. This is different from manual adjustments (Z/Shift+Z for zoom, K/Shift+K for render scale), which never affect the armed state.
+
+**Per-effect customization:**
+Each effect can define its own randomization ranges in `config.toml` to override the global defaults:
+
+```toml
+[effects.Fire]
+# Narrow the global F6 speed randomization range for this effect only
+random_speed_min = 0.80
+random_speed_max = 1.35
+# Narrow the global Alt+Z zoom randomization range
+random_zoom_min = 0.85
+random_zoom_max = 1.15
+```
+
+When these are omitted, the effect falls back to the global `[hotkeys]` randomization ranges.
+
+## Effect Startup Randomization
+
+Every visual effect produces a **visually distinct appearance** each time it becomes active. The app achieves this by:
+
+- Randomizing visible startup parameters (palette offset, starting angle, intensity, etc.) in the effect's `_init()` method
+- Initializing `self.time` to a random value so time-driven shaders don't always start at frame 0
+- Using the effect's per-instance RNG (`self.rng`)
+
+This ensures that viewing the same effect twice never produces identical motion or visual styling from the start.
+
+**Exceptions:** `Audio Spectrum` and `System Monitor` are diagnostic/informational and do not randomize.
+
+---
+
+## Audio Profiles (Frequency-Response Tuning)
+
+Different music genres have distinct frequency characteristics. Unicorn Viz includes **12 audio profiles** that optimize bass/mid/treble detection for each style:
+
+| Profile      | Description                                                 |
+|--------------|-------------------------------------------------------------|
+| `house`      | Deep bass emphasis, steady mid kick, treble for hi-hats     |
+| `trance`     | Elevated mids, strong highs for synth leads                 |
+| `electronic` | Balanced across frequencies with detail emphasis            |
+| `rap`        | Heavy sub-bass (kick), focused low-mids (punch)             |
+| `hyphy`      | Aggressive sub-bass, bright mids, punchy treble             |
+| `r&b`        | Warm low-mids, vocal-focused mids, smooth treble            |
+| `rock`       | Full-range emphasis, strong mid-bass, treble cymbals        |
+| `generic`    | Flat profile for unknown or mixed content (default fallback)|
+| `classical`  | Wide dynamic range, mid and treble detail emphasis          |
+| `ambient`    | Smooth, subtle reactivity with slight bass boost            |
+| `pop`        | Radio-friendly balance with treble emphasis                 |
+| `metal`      | Aggressive full-range, emphasized mids and treble           |
+
+**Switch profiles with `O` (next) / `Shift+O` (previous)** — profiles cycle with wraparound.
+
+**Set default profile in config:** `[audio] profile = "house"`
+
+Each profile independently tunes:
+- FFT frequency band analysis (bass/mid/treble split points)
+- Beat detection sensitivity thresholds
+- Per-band emphasis weights for normalized cross-genre reactivity
+
+This ensures audio reactivity remains accurate and visually responsive regardless of source material.
+
+---
+
+## Camera / Webcam Controls (Numpad)
 
 These controls only take effect while the **Webcam Overlay** drop-in effect is active.
 
@@ -300,6 +380,13 @@ sequence = []           # empty = all effects; e.g. ["Plasma", "Fire", "Tunnel"]
 # Per-effect overrides, keyed by Python class name:
 # [effects.Plasma]
 # speed = 2.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
+#
+# Any effect may also provide optional random_*_min/max bounds to override the
+# global hotkey ranges while that effect is active:
+# random_speed_min/max, random_zoom_min/max, random_scale_min/max,
+# random_reactivity_min/max
 ```
 
 ---

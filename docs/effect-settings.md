@@ -9,6 +9,14 @@ Notes:
 - Every effect can optionally define `reactivity` under `[effects.<ClassName>]`.
 	This is an absolute override for that effect's reactivity.
 	If omitted, the effect uses global `audio.reactivity`.
+- Any effect may also define optional randomization bounds under its own
+	section.  These keys override the global hotkey defaults only while that
+	effect is active:
+	- `random_speed_min` / `random_speed_max`
+	- `random_zoom_min` / `random_zoom_max`
+	- `random_scale_min` / `random_scale_max`
+	- `random_reactivity_min` / `random_reactivity_max`
+	If omitted, the effect falls back to the global `[hotkeys]` range values.
 
 ## Usage Pattern
 
@@ -26,6 +34,12 @@ Example:
 speed = 1.2
 intensity = 0.9
 zoom = 1.8
+
+# Optional per-effect randomization overrides:
+# random_speed_min = 0.8
+# random_speed_max = 1.4
+# random_zoom_min = 0.9
+# random_zoom_max = 1.2
 ```
 
 ## Built-in Effects
@@ -230,7 +244,9 @@ speed = 1.0
 ## Drop-in Effects
 
 These effects are loaded from `drop-ins/` at startup.  Config keys follow
-the same pattern: `[effects.<ClassName>]`.
+the same pattern: `[effects.<ClassName>]`.  The same optional randomization
+override keys apply here too, so you can narrow the active hotkey ranges on a
+per-effect basis without touching the global defaults.
 
 ### `AlienInvasion` (`Alien Invasion`)
 
@@ -268,6 +284,8 @@ speed = 1.0
 speed        = 1.0
 slide_time   = 8.0            # seconds per image
 texture_dirs = "assets/textures"  # comma-separated image directories
+# random_speed_min = 0.85
+# random_speed_max = 1.15
 ```
 
 ### `ImageShowcase` (`Image Showcase`)
@@ -307,6 +325,10 @@ start_preset = ""       # optional exact startup preset file/path
 ProjectM Presets embeds libprojectM into Unicorn Viz as a drop-in effect.
 If libprojectM cannot be loaded, or no preset pack is present, the effect
 falls back to an internal shader so the playlist remains stable.
+
+The same randomization overrides are supported here as well.  For example,
+you can constrain `speed` with `random_speed_min/max` if you want F6 to stay
+subtle while ProjectM is active.
 
 Dedicated hotkeys while this effect is active:
 

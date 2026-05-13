@@ -141,13 +141,43 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 
 ## Features
 
-- **Audio-reactive effects** — 20+ GPU-accelerated shaders responding to bass/mid/treble
-- **Live capture** — PipeWire/ALSA monitor input, FFT analysis, beat detection
-- **ANSI art viewer** — CP437 BBS art + downloaded ACiD pack
-- **MIDI control** — CC parameters, note-to-action mapping
+### Visual Effects
+- **20+ built-in GPU-accelerated shaders** — classic (plasma, fire, tunnel, starfield), surreal (dali, escher), 3D (raymarcher, cube, metaballs), particle-based (particle storm), text (sine scroller 2.0), and more
+- **14 drop-in effects** (tested and working; currently private repositories) — alien invasion, cyber war, disco ball, hacker terminal, texture showcase, tron grid, unicorn tears, webcam overlay, and more
+- **Audio reactivity** — all effects respond to bass/mid/treble/beat in real time via FFT analysis
+- **Effect startup randomization** — every effect produces a visually distinct appearance each activation; parameters like palette, speed, intensity, zoom vary automatically to prevent repetition
+
+### Audio & Visualization
+- **Live audio capture** — PipeWire/ALSA monitor input with automatic source priority (Spotify > Firefox > system)
+- **Real-time FFT + beat detection** — FFT bars, oscilloscope modes, frequency-mapped visualizations
+- **Per-effect audio reactivity override** — constrain or amplify responsiveness per effect via config
+
+### Interactive Controls & Automation
+- **Keyboard shortcuts** — effect navigation, pause/resume, fullscreen, recording, and 40+ more commands
+- **MIDI support** (optional) — CC parameter mapping, note-to-action binding, dynamic CC→parameter routing
+- **Randomization toggles** with armed state — F6/F7/Alt+Z/Alt+K globally randomize speed/reactivity/zoom/render-scale; armed modes persist across effects even when unsupported, with per-effect override ranges
+- **Effect-local parameter overrides** — define custom min/max bounds for randomization, speed, zoom, and reactivity per effect in config
 - **Splash screen** — music-reactive animated splash with integrity check
-- **Fullscreen + multi-monitor** — Wayland-native, X11 fallback
-- **OBS integration** — designed for live streaming
+
+### Display & Streaming
+- **ANSI art viewer** — CP437 BBS art rendering with CRT phosphor shader; cycle between personal & downloaded ACiD pack
+- **Fullscreen + multi-monitor** — Wayland-native, X11 fallback; single/span/mirror display modes
+- **OBS streaming integration** — designed for live capture (24/7 recording, RTMP streaming, scene recording)
+- **Webcam overlay** — system-wide camera PiP with 5+ visual treatments, switchable via hotkeys or MIDI
+- **Screenshot & screen recording** — direct PNG capture and per-session video recording with codec options
+
+### Customization & Performance
+- **Window cursor control** — hide by default (show with Ctrl) or keep visible via config flag
+- **Internal render scale** — reduce from 1.0x for performance headroom on heavy shaders; randomize with Alt+K
+- **Per-effect config overrides** — speed, intensity, amplitude, zoom, parameters tuned per effect or globally
+- **Fullscreen mode selection** — standard, borderless, or exclusive fullscreen via config
+
+### Developer & Artisan Features
+- **Auto-discovered effects** — drop `.py` files in `unicornviz/effects/` or `drop-ins/*/`; they load at startup
+- **Drop-in architecture** — submodule-based private drop-ins with independent repositories; core remains decoupled
+- **Effect randomization requirements** — built-in per-instance RNG with automatic startup randomization for all visual parameters
+- **GLSL 3.3+ shaders** — moderngl 5.x bindings, SDF helpers, palette functions, transform feedback for procedural geometry
+- **Configuration-driven workflow** — exhaustive `config.full.example.toml` template documents all effect parameters, hotkey ranges, audio settings
 
 ---
 
@@ -331,26 +361,31 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 | Water | simulation, audio | Procedural ripple surface |
 | Wavey Gravy | psychedelic, audio | Psychedelic waving sine-noise field |
 
-**Drop-in effects (`drop-ins/`):**
+**Drop-in Effects (tested and working; currently private repositories):**
 
-| Effect | Key | Description |
-|--------|-----|-------------|
-| Alien Invasion | — | UFO fleets + atmospheric probing beams |
-| Cyber War | — | Digital battle-map with hex-grid node attacks |
-| Disco Ball | — | Raymarched mirror-tile ball with spot beams |
-| Hacker Terminal | — | Animated shell/log streams with glitch transitions |
-| Texture Showcase | — | Ken Burns image montage with audio colour grade |
-| Tron Grid | — | First-person laser-grid corridor with shockwaves |
-| Unicorn Tears | `U` | Prismatic teardrops through a star-field |
-| Webcam System | KP controls | System-wide camera PiP with switchable treatments |
-| Image Showcase | — | Audio-reactive still-image slideshow |
-| Webcam Overlay | — | Live camera feed with animated background |
+| Effect | Hotkey | Description |
+|--------|--------|-------------||
+| Alien Invasion (`alien-invasion-01`) | — | UFO fleets descend with probing beams; audio-reactive formation density and radar sweep |
+| Cyber War (`cyber-war-01`) | — | Hex-grid digital battlefield with AI node attacks and pulsing defense networks |
+| Disco Ball (`disco-ball-01`) | — | Raymarched mirror-tile ball with 3 rotating coloured spot beams and reflective floor |
+| Hacker Terminal (`hacker-terminal-01`) | — | Animated shell/log streams with glitch transitions and text-scroll reactivity |
+| Texture Showcase (`textures-01`) | — | Ken Burns image pan/zoom with audio-reactive colour grade and beat-triggered fade |
+| Prism Storm (`textures-01`) | — | Spinning crystal core with refractive laser beams and electric haze (same drop-in as Texture Showcase) |
+| Tron Grid (`tron-grid-01`) | — | First-person laser-grid corridor; bass scales grid size, beats trigger shockwaves |
+| Unicorn Tears (`unicorn-tears-01`) | `U` | Prismatic teardrops falling through a star-field with audio-reactive burst |
+| Image Showcase (`images-01`) | — | Configurable image directory with Ken Burns motion, 10 presentation styles, audio colour shift |
+| Video Showcase (`videos-01`) | — | Video clip sequencer with smooth crossfade, configurable clip directories |
+| Webcam Overlay (`webcam-01`) | `KP 0`, `KP .`, `KP -/+` | System-wide camera PiP with 5+ visual treatments (threshold, edge detect, emboss, etc.) |
+| WebcamOverlay (playlist effect) (`webcam-01`) | — | Full-playlist camera effect with animated multi-colour background |
+| ProjectM Presets (`projectm-01`) | `Ctrl+N/P/R` | libprojectM Milkdrop preset sequencer with 1000+ community presets and smooth transitions |
+| SimShowcase (`sims-01`) | — | USD scene carousel with camera orbits; load robotics training datasets or galaxy fallback |
 
-**Subsystem drop-ins:**
+**Multi-head & System Drop-ins:**
 
 | Drop-in | Purpose |
-|---------|---------|
-| multi-head-01 | Multi-monitor display controller (single / span / mirror) |
+|---------|----------|
+| `multi-head-01` | Multi-monitor display controller (single / span / mirror modes) |
+| `streaming-01` | RTMP streaming controller (when available) |
 
 ---
 
