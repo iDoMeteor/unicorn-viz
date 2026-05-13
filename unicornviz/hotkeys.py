@@ -205,6 +205,25 @@ class HotkeyHandler:
             live, message = a.toggle_streaming()
             o.flash_message(message, 1.8 if live else 1.2)
 
+        elif sym == sdl2.SDLK_F6:
+            a._apply_random_speed()  # noqa: SLF001
+            effect = a._current_effect  # noqa: SLF001
+            if effect is None or 'speed' not in effect.parameters:
+                o.flash_message('Speed control not available', 1.2)
+            else:
+                speed = effect.parameters['speed']
+                lo = float(a.cfg.get('hotkeys', 'random_speed_min', default=0.25))
+                hi = float(a.cfg.get('hotkeys', 'random_speed_max', default=2.50))
+                o.flash_message(f'Speed random: {speed:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+
+        elif sym == sdl2.SDLK_F7:
+            a._apply_random_reactivity()  # noqa: SLF001
+            am = self._audio
+            current = am.get_reactivity()
+            lo = float(a.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
+            hi = float(a.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
+            o.flash_message(f'Reactivity random: {current:.2f}x [{lo:.2f}-{hi:.2f}]', 1.6)
+
         elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9:
             provider = a.set_stream_provider('rumble')
             o.flash_message(f'Stream provider: {provider}', 1.2)

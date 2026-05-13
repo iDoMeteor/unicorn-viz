@@ -173,6 +173,8 @@ class App:
         self._webcam_system = None
         self._streamer = None
         self._rng = np.random.default_rng()
+        self._speed_randomized: bool = False
+        self._reactivity_randomized: bool = False
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
             self.cfg.get('demo', 'effect_duration', default=20)
@@ -1261,8 +1263,8 @@ void main() {
                 'fullscreen': 'YES' if self._fullscreen else 'NO',
                 'auto_advance': 'ON' if self._auto_advance else 'OFF',
                 'advance_time': advance_time,
-                'reactivity': f"{audio_manager.get_reactivity():.1f}x" if audio_manager is not None else 'n/a',
-                'speed': effect_speed,
+                'reactivity': f"{audio_manager.get_reactivity():.1f}x{'*' if self._reactivity_randomized else ''}" if audio_manager is not None else 'n/a',
+                'speed': effect_speed + ('*' if self._speed_randomized else ''),
                 'audio_source': audio_src,
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
@@ -1423,6 +1425,7 @@ void main() {
                     self._current_effect.destroy()
                 self._current_effect = self._next_effect
                 self._next_effect = None
+                self._re_randomize_on_scene_change()
                 if mirror_mode or self._render_scale < 0.999:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
@@ -1760,6 +1763,39 @@ void main() {
         if self._streamer is None:
             return 'unavailable'
         return self._streamer.set_provider(provider, restart=True)
+
+    def _apply_random_speed(self) -> None:
+        """Apply random speed to current effect and flag for re-apply on scene change."""
+        if self._current_effect is None or 'speed' not in self._current_effect.parameters:
+            self._speed_randomized = False
+            return
+        lo = float(self.cfg.get('hotkeys', 'random_speed_min', default=0.25))
+        hi = float(self.cfg.get('hotkeys', 'random_speed_max', default=2.50))
+        if lo > hi:
+            lo, hi = hi, lo
+        value = float(self._rng.uniform(lo, hi))
+        self._current_effect.parameters['speed'] = value
+        self._speed_randomized = True
+
+    def _apply_random_reactivity(self) -> None:
+        """Apply random reactivity and flag for re-apply on scene change."""
+        if self._audio_manager is None:
+            self._reactivity_randomized = False
+            return
+        lo = float(self.cfg.get('hotkeys', 'random_reactivity_min', default=0.40))
+        hi = float(self.cfg.get('hotkeys', 'random_reactivity_max', default=2.00))
+        if lo > hi:
+            lo, hi = hi, lo
+        value = float(self._rng.uniform(lo, hi))
+        self._audio_manager.set_reactivity(round(value, 2))
+        self._reactivity_randomized = True
+
+    def _re_randomize_on_scene_change(self) -> None:
+        """Re-apply random values when scene transitions complete."""
+        if self._speed_randomized:
+            self._apply_random_speed()
+        if self._reactivity_randomized:
+            self._apply_random_reactivity()
 
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""
