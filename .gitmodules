@@ -31,3 +31,6 @@
 [submodule "drop-ins/videos-01"]
 	path = drop-ins/videos-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-videos-01.git
+[submodule "drop-ins/sims-01"]
+	path = drop-ins/sims-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-sims-01.git
