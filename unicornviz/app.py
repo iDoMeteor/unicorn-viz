@@ -1999,12 +1999,7 @@ void main() {
         if self._fbo_b:
             self._fbo_b.release()
         self._fbo_a = self._make_fbo()
-        """Apply random render scale using effect-local overrides when available."""
-        lo, hi = self._random_range_for('scale', 0.5, 1.0)
-        lo = _clamp_render_scale(lo)
-        hi = _clamp_render_scale(hi)
-        self._rebuild_fbos()
-        return self._render_scale
+        self._fbo_b = self._make_fbo()
 
     def _reset_render_scale(self) -> float:
         """Reset render scale to config default."""
