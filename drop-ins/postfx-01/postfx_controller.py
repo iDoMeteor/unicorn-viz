@@ -27,14 +27,14 @@ log = logging.getLogger(__name__)
 
 
 HELP_ENTRIES = [
-    ('Post FX', 'Ctrl+Alt+1', 'Temporal Feedback Trail (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+3', 'Film Grain + Dither (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+4', 'Lens Distortion + Vignette (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+5', 'Radial Zoom Blur (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+6', 'Glitch Slices (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+7', 'Multi-pass Bloom (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+8', 'Heat Haze Refraction (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+1', 'Temporal Feedback Trail'),
+    ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration'),
+    ('Post FX', 'Ctrl+Alt+3', 'Film Grain + Dither'),
+    ('Post FX', 'Ctrl+Alt+4', 'Lens Distortion + Vignette'),
+    ('Post FX', 'Ctrl+Alt+5', 'Radial Zoom Blur'),
+    ('Post FX', 'Ctrl+Alt+6', 'Glitch Slices'),
+    ('Post FX', 'Ctrl+Alt+7', 'Multi-pass Bloom'),
+    ('Post FX', 'Ctrl+Alt+8', 'Heat Haze Refraction'),
 ]
 
 
