@@ -20,6 +20,7 @@ from film_grain_dither import FilmGrainDither
 from lens_distortion_vignette import LensDistortionVignette
 from radial_zoom_blur import RadialZoomBlur
 from glitch_slices import GlitchSlices
+from multi_pass_bloom import MultiPassBloom
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ HELP_ENTRIES = [
     ('Post FX', 'Ctrl+Alt+4', 'Lens Distortion + Vignette (quick hit)'),
     ('Post FX', 'Ctrl+Alt+5', 'Radial Zoom Blur (quick hit)'),
     ('Post FX', 'Ctrl+Alt+6', 'Glitch Slices (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+7-8', 'Reserved quick-hit slots (coming soon)'),
+    ('Post FX', 'Ctrl+Alt+7', 'Multi-pass Bloom (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+8', 'Reserved quick-hit slot (coming soon)'),
 ]
 
 
@@ -45,7 +47,7 @@ class PostFxController:
         (4, 'Lens Distortion + Vignette', True),
         (5, 'Radial Zoom Blur', True),
         (6, 'Glitch Slices', True),
-        (7, 'Multi-pass Bloom', False),
+        (7, 'Multi-pass Bloom', True),
         (8, 'Heat Haze Refraction', False),
     )
 
@@ -63,6 +65,7 @@ class PostFxController:
             4: LensDistortionVignette(ctx, width, height),
             5: RadialZoomBlur(ctx, width, height),
             6: GlitchSlices(ctx, width, height),
+            7: MultiPassBloom(ctx, width, height),
         }
         self._hit_duration = float(self._cfg.get('hit_duration', 0.9) or 0.9)
         self._slot_hit_duration: dict[int, float] = {
@@ -72,6 +75,7 @@ class PostFxController:
             4: float(self._cfg.get('slot4_duration', 1.05) or 1.05),
             5: float(self._cfg.get('slot5_duration', 0.95) or 0.95),
             6: float(self._cfg.get('slot6_duration', 0.90) or 0.90),
+            7: float(self._cfg.get('slot7_duration', 1.20) or 1.20),
         }
         self._active_slot: int = 0
         self._active_effect = None

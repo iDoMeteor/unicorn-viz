@@ -18,7 +18,8 @@ architecture decisions, common pitfalls, and a checklist for adding new effects.
 - `Ctrl+Alt+4` -> Post FX slot 4
 - `Ctrl+Alt+5` -> Post FX slot 5
 - `Ctrl+Alt+6` -> Post FX slot 6
-- `Ctrl+Alt+7..8` -> Reserved slots
+- `Ctrl+Alt+7` -> Post FX slot 7
+- `Ctrl+Alt+8` -> Reserved slot
 
 All post FX in this drop-in are one-shot quick hitters (burst-style), not
 latched toggles.
@@ -31,7 +32,7 @@ latched toggles.
 - [x] 4. Lens Distortion + Vignette
 - [x] 5. Radial Zoom Blur
 - [x] 6. Glitch Slices
-- [ ] 7. Multi-pass Bloom
+- [x] 7. Multi-pass Bloom
 - [ ] 8. Heat Haze Refraction
 
 ## Layout
