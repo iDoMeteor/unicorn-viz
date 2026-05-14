@@ -1,5 +1,6 @@
 # Unicorn Viz Effect Review Worksheet
 
+
 ## TOMORROW: FULL FEATURE REVIEW & TEST SESSION
 - Every built-in effect: visual quality, audio response, performance, startup variance
 - Every drop-in effect: same criteria
