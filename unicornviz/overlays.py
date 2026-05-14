@@ -332,6 +332,7 @@ class Overlays:
                 ('Alt+1-0', 'Jump #31-40'),
                 ('u', 'Replay splash'),
                 ('U', 'Unicorn Tears'),
+                ('Ctrl+U', 'Dancing unicorn overlay'),
                 ('Ctrl+Alt+U', 'Screen burst'),
             ],
         ),

@@ -184,6 +184,22 @@ def _load_screen_burst_controller_class() -> type:
     )
 
 
+def _load_dancing_unicorn_class() -> type:
+    """Load DancingUnicornOverlay from the unicorn-tears drop-in."""
+    return load_dropin_symbol(
+        'unicorn-tears-01/dancing_unicorn_overlay.py',
+        'DancingUnicornOverlay',
+    )
+
+
+def _load_dancing_unicorn_class() -> type:
+    """Load DancingUnicornOverlay from the unicorn-tears drop-in."""
+    return load_dropin_symbol(
+        'unicorn-tears-01/dancing_unicorn_overlay.py',
+        'DancingUnicornOverlay',
+    )
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -206,6 +222,7 @@ class App:
         self._webcam_cycle_interval: float = 0.0
         self._webcam_system = None
         self._postfx_controller = None
+        self._dancing_unicorn = None
         self._streamer = None
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
@@ -548,6 +565,19 @@ class App:
         self._build_blend_pipeline()
         self._build_invert_pipeline()
         self._build_burst_pipeline()
+        # Dancing unicorn overlay (optional, from unicorn-tears drop-in).
+        try:
+            dancing_cls = _load_dancing_unicorn_class()
+            dancing_cfg = self.cfg.get('dancing_unicorn', default={}) or {}
+            if not isinstance(dancing_cfg, dict):
+                dancing_cfg = {}
+            self._dancing_unicorn = dancing_cls(
+                self._ctx, self._width, self._height, dancing_cfg,
+            )
+            log.info('DancingUnicornOverlay loaded from unicorn-tears drop-in')
+        except Exception as exc:
+            log.warning('DancingUnicornOverlay not available: %s', exc)
+            self._dancing_unicorn = None
         # System-level webcam overlay (always-on PiP above effects, below HUD).
         try:
             webcam_cls = _load_webcam_system_class()
@@ -670,6 +700,16 @@ void main() {
     def trigger_burst(self) -> None:
         """Trigger the Ctrl+Alt+U screen-burst animation."""
         self._burst_controller.trigger()
+
+    def trigger_dancing_unicorn(self) -> None:
+        """Trigger the Ctrl+U dancing unicorn overlay."""
+        if self._dancing_unicorn is not None:
+            self._dancing_unicorn.trigger()
+
+    def trigger_dancing_unicorn(self) -> None:
+        """Trigger the Ctrl+U dancing unicorn overlay."""
+        if self._dancing_unicorn is not None:
+            self._dancing_unicorn.trigger()
 
     def _burst_transform(self) -> tuple[float, float]:
         """Return (scale, angle_radians) for current burst frame."""
@@ -1450,6 +1490,14 @@ void main() {
             if self._webcam_system is not None:
                 audio = self._audio or AudioData()
                 self._webcam_system.render(dt, audio.bass, audio.treble)
+            if self._dancing_unicorn is not None:
+                audio = self._audio or AudioData()
+                self._dancing_unicorn.update(
+                    dt,
+                    float(audio.bass), float(audio.mid),
+                    float(audio.treble), float(audio.beat),
+                )
+                self._dancing_unicorn.render(self._ctx, self._width, self._height)
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None

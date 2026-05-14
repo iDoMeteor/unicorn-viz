@@ -600,6 +600,9 @@ class HotkeyHandler:
             if mod & sdl2.KMOD_CTRL and mod & sdl2.KMOD_ALT:
                 a.trigger_burst()
                 o.flash_message('\U0001f300  BURST', 0.6)
+            elif mod & sdl2.KMOD_CTRL:
+                a.trigger_dancing_unicorn()
+                o.flash_message('\U0001f984  UNICORN INCOMING', 0.8)
             elif mod & sdl2.KMOD_SHIFT:
                 a.show_splash()
                 o.flash_message("Splash replay", 1.5)
