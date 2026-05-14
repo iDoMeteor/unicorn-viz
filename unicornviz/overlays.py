@@ -332,7 +332,7 @@ class Overlays:
                 ('Alt+1-0', 'Jump #31-40'),
                 ('u', 'Replay splash'),
                 ('U', 'Unicorn Tears'),
-                ('Ctrl+U', 'Screen burst'),
+                ('Ctrl+Alt+U', 'Screen burst'),
             ],
         ),
         (
@@ -371,7 +371,7 @@ class Overlays:
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
                 ('M', 'MIDI device'),
                 ('I', 'Invert colors'),
-                ('Ctrl+U', 'Screen burst'),
+                ('Ctrl+Alt+U', 'Screen burst'),
             ],
         ),
         (

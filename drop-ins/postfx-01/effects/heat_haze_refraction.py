@@ -53,16 +53,12 @@ float noise(vec2 p) {
 void main() {
     float t = uTime * uSpeed;
 
-    // Heat rises: stronger warp near bottom of screen.
-    float heatBias = 1.0 - v_uv.y;
-    heatBias = heatBias * heatBias;
-
-    // Two-layer turbulence with different frequencies and drift speeds.
+    // Two-layer turbulence covering the full screen uniformly.
     vec2 coord = v_uv * vec2(6.0, 3.5);
     float n1 = noise(coord + vec2(t * 0.7, t * 1.1));
     float n2 = noise(coord * 2.2 + vec2(-t * 1.3, t * 0.8));
 
-    vec2 warp = vec2(n1 + n2 * 0.5, n2 + n1 * 0.4) * uAmount * heatBias;
+    vec2 warp = vec2(n1 + n2 * 0.5, n2 + n1 * 0.4) * uAmount;
     vec2 uv = clamp(v_uv + warp, 0.001, 0.999);
 
     // Subtle chromatic split along the warp direction for heat-lens feel.
