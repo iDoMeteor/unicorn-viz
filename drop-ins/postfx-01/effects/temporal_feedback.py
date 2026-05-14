@@ -1,6 +1,8 @@
 """Temporal feedback trail post-process effect."""
 from __future__ import annotations
 
+import math
+
 import moderngl
 
 from base import FullscreenPass
@@ -36,20 +38,22 @@ uniform sampler2D tex_current;
 uniform sampler2D tex_history;
 uniform float uDecay;
 uniform float uBeatBoost;
+uniform vec2 uHistoryOffset;
 in vec2 v_uv;
 out vec4 fragColor;
 void main() {
     vec3 cur = texture(tex_current, v_uv).rgb;
-    vec3 hist = texture(tex_history, v_uv).rgb;
+    vec3 hist = texture(tex_history, clamp(v_uv - uHistoryOffset, 0.0, 1.0)).rgb;
     float decay = clamp(uDecay - uBeatBoost, 0.45, 0.95);
     vec3 outc = mix(cur, hist, decay);
     // Mild highlight push to keep trails vibrant.
-    outc += max(vec3(0.0), hist - cur) * 0.10;
+    outc += max(vec3(0.0), hist - cur) * 0.22;
     fragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
 }
 """,
         )
         self._history_valid = False
+        self._phase = 0.0
         self._ensure_feedback_fbo(width, height)
 
     def _ensure_feedback_fbo(self, width: int, height: int) -> None:
@@ -75,9 +79,11 @@ void main() {
         mid: float,
         treble: float,
         beat: float,
+        strength: float,
     ) -> None:
         width, height = dst_fbo.size
         self._ensure_feedback_fbo(width, height)
+        self._phase += dt
 
         # Prime history from the first frame after reset/resize to avoid
         # flashing stale texture content from a previous scene/effect.
@@ -106,8 +112,14 @@ void main() {
         self._feedback_fbo.color_attachments[0].use(location=1)
         self._blend_pass.prog['tex_current'].value = 0
         self._blend_pass.prog['tex_history'].value = 1
-        self._blend_pass.prog['uDecay'].value = 0.82 - min(0.18, (bass * 0.10 + mid * 0.08))
-        self._blend_pass.prog['uBeatBoost'].value = min(0.22, beat * 0.28)
+        s = max(0.0, min(1.0, float(strength)))
+        decay = 0.70 + 0.23 * s + min(0.08, bass * 0.06 + mid * 0.04)
+        self._blend_pass.prog['uDecay'].value = max(0.45, min(0.96, decay))
+        self._blend_pass.prog['uBeatBoost'].value = min(0.30, beat * (0.22 + 0.20 * s))
+        self._blend_pass.prog['uHistoryOffset'].value = (
+            0.004 * s * (0.6 + 0.4 * abs(math.sin(self._phase * 2.2))),
+            0.003 * s * (0.6 + 0.4 * abs(math.cos(self._phase * 1.7))),
+        )
         self._blend_pass.vao.render(moderngl.TRIANGLE_STRIP)
 
         # Copy output to feedback buffer for next frame.

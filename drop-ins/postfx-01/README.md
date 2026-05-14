@@ -10,7 +10,9 @@ added without modifying core app render code.
 - `Ctrl+Alt+1` -> Post FX slot 1
 - `Ctrl+Alt+2` -> Post FX slot 2
 - `Ctrl+Alt+3..8` -> Reserved slots
-- `Ctrl+Alt+0` -> Disable Post FX
+
+All post FX in this drop-in are one-shot quick hitters (burst-style), not
+latched toggles.
 
 ## Effect checklist (8-slot roadmap)
 

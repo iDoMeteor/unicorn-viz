@@ -22,6 +22,7 @@ class PostFxEffect(Protocol):
         mid: float,
         treble: float,
         beat: float,
+        strength: float,
     ) -> None:
         ...
 

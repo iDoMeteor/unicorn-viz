@@ -27,7 +27,7 @@ void main() {
     vec2 center = v_uv - 0.5;
     float r = length(center);
     vec2 dir = normalize(center + vec2(1e-6, 0.0));
-    float edge = smoothstep(0.10, 0.70, r);
+    float edge = 0.35 + 0.65 * smoothstep(0.02, 0.85, r);
     vec2 shift = dir * uAmount * edge;
 
     float rr = texture(tex, v_uv + shift).r;
@@ -47,13 +47,15 @@ void main() {
         mid: float,
         treble: float,
         beat: float,
+        strength: float,
     ) -> None:
         dst_fbo.use()
         self._ctx.viewport = (0, 0, dst_fbo.size[0], dst_fbo.size[1])
         self._ctx.clear(0.0, 0.0, 0.0, 1.0)
         src_tex.use(location=0)
         self._pass.prog['tex'].value = 0
-        self._pass.prog['uAmount'].value = 0.0045 + min(0.014, (treble * 0.008 + beat * 0.006))
+        s = max(0.0, min(1.0, float(strength)))
+        self._pass.prog['uAmount'].value = (0.006 + min(0.018, (treble * 0.010 + beat * 0.009))) * (0.25 + 0.75 * s)
         self._pass.vao.render(moderngl.TRIANGLE_STRIP)
 
     def resize(self, width: int, height: int) -> None:

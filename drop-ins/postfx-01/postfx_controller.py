@@ -21,10 +21,9 @@ log = logging.getLogger(__name__)
 
 
 HELP_ENTRIES = [
-    ('Post FX', 'Ctrl+Alt+1', 'Temporal Feedback Trail'),
-    ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration'),
-    ('Post FX', 'Ctrl+Alt+3-8', 'Reserved (coming soon)'),
-    ('Post FX', 'Ctrl+Alt+0', 'Disable post-process effect'),
+    ('Post FX', 'Ctrl+Alt+1', 'Temporal Feedback Trail (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+3-8', 'Reserved quick-hit slots (coming soon)'),
 ]
 
 
@@ -53,13 +52,17 @@ class PostFxController:
             1: TemporalFeedbackTrail(ctx, width, height),
             2: ChromaticAberration(ctx, width, height),
         }
-        default_slot = int(self._cfg.get('active_slot', 0) or 0)
+        self._hit_duration = float(self._cfg.get('hit_duration', 0.9) or 0.9)
         self._active_slot: int = 0
         self._active_effect = None
-        self.select_slot(default_slot)
+        self._active_t: float = 0.0
+
+        default_slot = int(self._cfg.get('active_slot', 0) or 0)
+        if default_slot > 0:
+            self.trigger_slot(default_slot)
 
     def is_active(self) -> bool:
-        return self.enabled and self._active_effect is not None
+        return self.enabled and self._active_effect is not None and self._active_t > 0.0
 
     @property
     def active_name(self) -> str:
@@ -70,15 +73,10 @@ class PostFxController:
                 return slot_name
         return 'OFF'
 
-    def select_slot(self, slot: int) -> str:
-        """Select active post-process slot.
-
-        slot=0 disables post-process stack.
-        """
+    def trigger_slot(self, slot: int) -> str:
+        """Trigger a one-shot post-process quick-hit by slot number."""
         if slot <= 0:
-            self._active_slot = 0
-            self._active_effect = None
-            return 'Post FX: OFF'
+            return 'Post FX: use Ctrl+Alt+1..8'
 
         if slot < 0 or slot > 8:
             return f'Post FX: invalid slot {slot}'
@@ -90,19 +88,23 @@ class PostFxController:
         _slot_key, slot_name, implemented = info
 
         if not implemented or slot not in self._effects:
-            self._active_slot = 0
-            self._active_effect = None
             return f'Post FX {slot}: {slot_name} (coming soon)'
 
         self._active_slot = slot
         self._active_effect = self._effects[slot]
+        self._active_t = self._hit_duration
         reset = getattr(self._active_effect, 'reset', None)
         if callable(reset):
             try:
                 reset()
             except Exception as exc:
                 log.warning('Post FX reset failed for %s: %s', slot_name, exc)
+        log.info('Post FX fired: slot=%d name=%s duration=%.2fs', slot, slot_name, self._hit_duration)
         return f'Post FX {slot}: {slot_name}'
+
+    # Backward compatibility with earlier API name.
+    def select_slot(self, slot: int) -> str:
+        return self.trigger_slot(slot)
 
     def apply(
         self,
@@ -116,7 +118,13 @@ class PostFxController:
     ) -> bool:
         if not self.is_active():
             return False
-        self._active_effect.apply(src_tex, dst_fbo, dt, bass, mid, treble, beat)
+        strength = max(0.0, min(1.0, self._active_t / max(1e-6, self._hit_duration)))
+        self._active_effect.apply(src_tex, dst_fbo, dt, bass, mid, treble, beat, strength)
+        self._active_t = max(0.0, self._active_t - dt)
+        if self._active_t <= 0.0:
+            log.info('Post FX completed: slot=%d name=%s', self._active_slot, self.active_name)
+            self._active_slot = 0
+            self._active_effect = None
         return True
 
     def resize(self, width: int, height: int) -> None:
