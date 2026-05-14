@@ -56,11 +56,13 @@ void main() {
     vec3 c = texture(tex, v_uv).rgb;
     vec2 px = v_uv * uResolution;
 
+    // Apply grain with strong amplification (3x) so it's perceptible.
     float n = hash12(px + vec2(uTime * 91.7, uTime * 37.1)) - 0.5;
-    c += n * uGrain;
+    c += n * uGrain * 3.5;
 
+    // Apply dither with strong amplification (2x).
     float d = bayer4(px);
-    c += d * uDither;
+    c += d * uDither * 2.2;
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
