@@ -93,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
     logging_group = parser.add_argument_group('logging')
-    logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL'], help='Console/file log level.')
+    logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NONE'], help='Console/file log level; NONE disables all logging.')
 
     return parser
 
@@ -150,6 +150,14 @@ def _setup_logging(cfg: Config) -> None:
     level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
     if level_name == 'WARNING':
         level_name = 'WARN'
+    
+    # Silence all logging if NONE is selected.
+    if level_name == 'NONE':
+        root = logging.getLogger()
+        root.handlers.clear()
+        root.setLevel(logging.CRITICAL + 1)
+        return
+    
     if level_name in ('ERROR', 'CRITICAL'):
         # Keep explicit high-severity modes meaningful.
         level = getattr(logging, level_name, logging.ERROR)
