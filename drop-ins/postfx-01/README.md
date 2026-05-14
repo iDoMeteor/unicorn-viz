@@ -5,6 +5,11 @@ System-level post-process drop-in stack for Unicorn Viz.
 This drop-in hosts post-process effects in `effects/` so new effects can be
 added without modifying core app render code.
 
+## Developer Guide
+
+See [DEVELOPER_NOTES.md](DEVELOPER_NOTES.md) for lessons learned building the first four effects,
+architecture decisions, common pitfalls, and a checklist for adding new effects.
+
 ## Hotkeys
 
 - `Ctrl+Alt+1` -> Post FX slot 1
