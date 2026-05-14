@@ -15,6 +15,8 @@ class LensDistortionVignette:
         self._ctx = ctx
         self._width = width
         self._height = height
+        import logging
+        self._log = logging.getLogger(__name__)
         self._pass = FullscreenPass.build(
             ctx,
             """
@@ -33,7 +35,8 @@ void main() {
 
     vec3 c = texture(tex, clamp(suv, 0.0, 1.0)).rgb;
 
-    float vig = smoothstep(1.06, 0.18, dot(uv, uv));
+    // Vignette: strong at edges (high r2), fade to center (low r2).
+    float vig = smoothstep(0.12, 0.95, dot(uv, uv));
     c *= mix(1.0, vig, uVignette);
 
     // slight edge contrast lift for punch
@@ -61,13 +64,18 @@ void main() {
         src_tex.use(location=0)
         self._pass.prog['tex'].value = 0
         s = max(0.0, min(1.0, float(strength)))
-        self._pass.prog['uDistort'].value = 0.22 * (0.30 + 0.70 * s) + beat * 0.08
-        self._pass.prog['uVignette'].value = 0.55 * (0.35 + 0.65 * s) + bass * 0.10
+        self._pass.prog['uDistort'].value = 0.38 * (0.40 + 0.60 * s) + beat * 0.12
+        self._pass.prog['uVignette'].value = 0.75 * (0.45 + 0.55 * s) + bass * 0.15
         self._pass.vao.render(moderngl.TRIANGLE_STRIP)
+        self._log.info('LensDistortionVignette applied: distort=%.4f vignette=%.4f', self._pass.prog['uDistort'].value, self._pass.prog['uVignette'].value)
 
     def resize(self, width: int, height: int) -> None:
         self._width = width
         self._height = height
+
+    def reset(self) -> None:
+        """Reset state on effect trigger."""
+        pass
 
     def destroy(self) -> None:
         self._pass.release()

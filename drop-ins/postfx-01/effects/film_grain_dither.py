@@ -16,6 +16,8 @@ class FilmGrainDither:
         self._width = width
         self._height = height
         self._t = 0.0
+        import logging
+        self._log = logging.getLogger(__name__)
         self._pass = FullscreenPass.build(
             ctx,
             """
@@ -84,13 +86,18 @@ void main() {
         self._pass.prog['uResolution'].value = (float(w), float(h))
         self._pass.prog['uTime'].value = self._t
         s = max(0.0, min(1.0, float(strength)))
-        self._pass.prog['uGrain'].value = (0.010 + beat * 0.008 + treble * 0.006) * (0.35 + 0.65 * s)
-        self._pass.prog['uDither'].value = (0.004 + treble * 0.003) * (0.35 + 0.65 * s)
+        self._pass.prog['uGrain'].value = (0.035 + beat * 0.020 + treble * 0.015) * (0.45 + 0.55 * s)
+        self._pass.prog['uDither'].value = (0.016 + treble * 0.008) * (0.45 + 0.55 * s)
         self._pass.vao.render(moderngl.TRIANGLE_STRIP)
+        self._log.info('FilmGrainDither applied: grain=%.4f dither=%.4f', self._pass.prog['uGrain'].value, self._pass.prog['uDither'].value)
 
     def resize(self, width: int, height: int) -> None:
         self._width = width
         self._height = height
+
+    def reset(self) -> None:
+        """Reset grain animation on effect trigger."""
+        self._t = 0.0
 
     def destroy(self) -> None:
         self._pass.release()
