@@ -18,6 +18,8 @@ from temporal_feedback import TemporalFeedbackTrail
 from chromatic_aberration import ChromaticAberration
 from film_grain_dither import FilmGrainDither
 from lens_distortion_vignette import LensDistortionVignette
+from radial_zoom_blur import RadialZoomBlur
+from glitch_slices import GlitchSlices
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +29,9 @@ HELP_ENTRIES = [
     ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration (quick hit)'),
     ('Post FX', 'Ctrl+Alt+3', 'Film Grain + Dither (quick hit)'),
     ('Post FX', 'Ctrl+Alt+4', 'Lens Distortion + Vignette (quick hit)'),
-    ('Post FX', 'Ctrl+Alt+5-8', 'Reserved quick-hit slots (coming soon)'),
+    ('Post FX', 'Ctrl+Alt+5', 'Radial Zoom Blur (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+6', 'Glitch Slices (quick hit)'),
+    ('Post FX', 'Ctrl+Alt+7-8', 'Reserved quick-hit slots (coming soon)'),
 ]
 
 
@@ -39,8 +43,8 @@ class PostFxController:
         (2, 'Chromatic Aberration', True),
         (3, 'Film Grain + Dither', True),
         (4, 'Lens Distortion + Vignette', True),
-        (5, 'Radial Zoom Blur', False),
-        (6, 'Glitch Slices', False),
+        (5, 'Radial Zoom Blur', True),
+        (6, 'Glitch Slices', True),
         (7, 'Multi-pass Bloom', False),
         (8, 'Heat Haze Refraction', False),
     )
@@ -57,6 +61,8 @@ class PostFxController:
             2: ChromaticAberration(ctx, width, height),
             3: FilmGrainDither(ctx, width, height),
             4: LensDistortionVignette(ctx, width, height),
+            5: RadialZoomBlur(ctx, width, height),
+            6: GlitchSlices(ctx, width, height),
         }
         self._hit_duration = float(self._cfg.get('hit_duration', 0.9) or 0.9)
         self._slot_hit_duration: dict[int, float] = {
@@ -64,6 +70,8 @@ class PostFxController:
             2: float(self._cfg.get('slot2_duration', 1.15) or 1.15),
             3: float(self._cfg.get('slot3_duration', 0.95) or 0.95),
             4: float(self._cfg.get('slot4_duration', 1.05) or 1.05),
+            5: float(self._cfg.get('slot5_duration', 0.95) or 0.95),
+            6: float(self._cfg.get('slot6_duration', 0.90) or 0.90),
         }
         self._active_slot: int = 0
         self._active_effect = None

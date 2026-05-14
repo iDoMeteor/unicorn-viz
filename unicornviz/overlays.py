@@ -1290,7 +1290,7 @@ void main() {
             len(self._ctrl_shortcuts),
             len(self._alt_shortcuts),
         )
-        sec_scale = 1.82
+        sec_scale = item_scale
         min_bottom_margin = 26.0
 
         def _shortcut_block_height(scale: float) -> float:
@@ -1299,7 +1299,7 @@ void main() {
 
         top = right_y + 42.0
         row_count = float(min(rows, 12))
-        while sec_scale > 1.18:
+        while sec_scale > item_scale:
             sec_lh = 8 * sec_scale + 2.0
             top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
             bottom_y = top + top_block_h + 28.0
@@ -1335,10 +1335,10 @@ void main() {
                     f'{key:<16} {desc}',
                     right_x + 10.0,
                     py,
-                    scale=1.45,
+                    scale=item_scale,
                     color=(0.96, 0.88, 0.76, 0.96),
                 )
-                py += 8 * 1.45 + 2.0
+                py += 8 * item_scale + 2.0
 
         if self._unmapped_effects:
             self._draw_text(
