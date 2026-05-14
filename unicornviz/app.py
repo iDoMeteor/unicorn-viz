@@ -127,6 +127,26 @@ class _NullMultiHeadController:
         return False
 
 
+class _NullScreenBurstController:
+    """Safe fallback when burst controller drop-in is unavailable."""
+
+    def __init__(self, cfg: dict | None = None) -> None:
+        self._cfg = cfg or {}
+
+    @property
+    def active(self) -> bool:
+        return False
+
+    def trigger(self) -> None:
+        return
+
+    def step(self, dt: float) -> None:
+        return
+
+    def transform(self) -> tuple[float, float]:
+        return 1.0, 0.0
+
+
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
@@ -154,6 +174,14 @@ def _load_rtmp_streamer_class() -> type:
 def _load_postfx_controller_class() -> type:
     """Load PostFxController directly from the postfx-01 drop-in."""
     return load_dropin_symbol('postfx-01/postfx_controller.py', 'PostFxController')
+
+
+def _load_screen_burst_controller_class() -> type:
+    """Load ScreenBurstController from the unicorn-tears drop-in."""
+    return load_dropin_symbol(
+        'unicorn-tears-01/screen_burst_controller.py',
+        'ScreenBurstController',
+    )
 
 
 class App:
@@ -212,8 +240,7 @@ class App:
         self._burst_prog: moderngl.Program | None = None
         self._burst_vao: moderngl.VertexArray | None = None
         self._burst_vbo: moderngl.Buffer | None = None
-        self._burst_t: float = 0.0          # remaining burst seconds; 0 = inactive
-        self._burst_duration: float = 0.60  # total burst animation length in seconds
+        self._burst_controller = _NullScreenBurstController()
         self._invert_colors = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
@@ -554,6 +581,18 @@ class App:
             log.warning('PostFxController not available: %s', exc)
             self._postfx_controller = None
 
+        # System-level screen burst timing/transform controller (optional).
+        try:
+            burst_cls = _load_screen_burst_controller_class()
+            burst_cfg = self.cfg.get('screen_burst', default={}) or {}
+            if not isinstance(burst_cfg, dict):
+                burst_cfg = {}
+            self._burst_controller = burst_cls(burst_cfg)
+            log.info('ScreenBurstController loaded from unicorn-tears drop-in')
+        except Exception as exc:
+            log.warning('ScreenBurstController not available: %s', exc)
+            self._burst_controller = _NullScreenBurstController()
+
     def _build_present_pipeline(self) -> None:
         """Build fullscreen pass that copies a texture to screen."""
         vert = """
@@ -629,38 +668,12 @@ void main() {
         )
 
     def trigger_burst(self) -> None:
-        """Trigger the Ctrl+U screen-burst animation (restart if already playing)."""
-        self._burst_t = self._burst_duration
+        """Trigger the Ctrl+Alt+U screen-burst animation."""
+        self._burst_controller.trigger()
 
     def _burst_transform(self) -> tuple[float, float]:
-        """Return (scale, angle_radians) for the current burst animation frame.
-        
-        Attack phase: spin full 360°, zoom to 4x.
-        Recovery phase: elastic rebound spin + zoom out with wobble.
-        """
-        if self._burst_t <= 0.0:
-            return 1.0, 0.0
-        phase = 1.0 - (self._burst_t / self._burst_duration)  # 0=just started, 1=done
-        attack_duration = 0.25  # 25% of burst is aggressive attack
-        
-        if phase < attack_duration:
-            # Attack: full 360 rotation + aggressive zoom
-            k = phase / attack_duration  # 0→1
-            angle = math.radians(360.0 * k)  # Complete rotation
-            scale = 1.0 + 3.0 * k  # Zoom to 4x
-        else:
-            # Recovery: elastic spin-back + zoom-out with wobble
-            k = (phase - attack_duration) / (1.0 - attack_duration)  # 0→1
-            # Spin back with elastic rebound (overshoot then settle)
-            spin_decay = (1.0 - k) ** 1.6
-            spin_bounce = math.cos(k * math.pi * 2.8)  # Oscillate around zero
-            angle = math.radians(360.0) + math.radians(120.0) * spin_decay * spin_bounce
-            # Zoom back to 1.0 with wobble
-            zoom_base = 1.0 + 3.0 * spin_decay  # Exponential return
-            wobble = 0.12 * math.sin(k * math.pi * 4.2)  # High-frequency wobble
-            scale = zoom_base + wobble
-        
-        return scale, angle
+        """Return (scale, angle_radians) for current burst frame."""
+        return self._burst_controller.transform()
 
     def _present_burst_from_tex(self, tex: moderngl.Texture) -> None:
         """Render the burst-transformed frame to screen."""
@@ -1520,13 +1533,13 @@ void main() {
     def _render(self, dt: float) -> None:
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
-        burst_active = self._burst_t > 0.0
+        burst_active = self._burst_controller.active
         postfx_active = (
             self._postfx_controller is not None and self._postfx_controller.is_active()
         )
         # Advance burst timer
         if burst_active:
-            self._burst_t = max(0.0, self._burst_t - dt)
+            self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
             if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active:
