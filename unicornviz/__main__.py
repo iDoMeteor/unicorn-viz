@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -194,12 +195,28 @@ def _setup_logging(cfg: Config) -> None:
     logging.getLogger(__name__).info('Logging to %s', log_path)
 
 
+def _install_exception_logging() -> None:
+    """Log uncaught exceptions so crash tracebacks are persisted in log files."""
+
+    def _log_uncaught_exception(exc_type, exc_value, exc_traceback) -> None:
+        # Keep Ctrl+C behavior clean.
+        if issubclass(exc_type, KeyboardInterrupt):
+            return
+        logging.getLogger(__name__).critical(
+            'Uncaught exception',
+            exc_info=(exc_type, exc_value, exc_traceback),
+        )
+
+    sys.excepthook = _log_uncaught_exception
+
+
 def main() -> None:
     """Create and run the main application."""
     parser = _build_parser()
     args = parser.parse_args()
     cfg = Config(args.config, overrides=_build_overrides(args))
     _setup_logging(cfg)
+    _install_exception_logging()
     from unicornviz.app import App
     app = App(cfg)
     app.run()

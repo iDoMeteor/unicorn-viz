@@ -64,6 +64,11 @@ void main() {
     float n = hash12(grain_px + vec2(uTime * 91.7, uTime * 37.1)) - 0.5;
     c += n * uGrain * 4.8;
 
+    // Re-introduce blocky ordered dither so uDither remains active and
+    // contributes to the retro look.
+    float d = bayer4(grain_px);
+    c += d * uDither * 2.8;
+
     // Boost contrast for punchier, more vibrant grain.
     // Apply mild S-curve to enhance mid-tones while preserving blacks/whites.
     vec3 contracted = c * c * (3.0 - 2.0 * c);
