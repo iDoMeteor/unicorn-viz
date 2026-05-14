@@ -18,8 +18,8 @@ latched toggles.
 
 - [x] 1. Temporal Feedback Trail
 - [x] 2. Chromatic Aberration
-- [ ] 3. Film Grain + Dither
-- [ ] 4. Lens Distortion + Vignette
+- [x] 3. Film Grain + Dither
+- [x] 4. Lens Distortion + Vignette
 - [ ] 5. Radial Zoom Blur
 - [ ] 6. Glitch Slices
 - [ ] 7. Multi-pass Bloom

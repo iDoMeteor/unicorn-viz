@@ -478,6 +478,7 @@ class Overlays:
         self._hud_rect: tuple[float, float, float, float] | None = None
         self._dynamic_help_sections: dict[str, list[tuple[str, str]]] = {}
         self._dynamic_help_order: list[str] = []
+        self._postfx_help_entries: list[tuple[str, str]] = []
         self._help_collapsed: dict[str, bool] = {}
         self._help_focus_idx: int = 0
         self._help_pulse_t: float = 0.0
@@ -1324,6 +1325,21 @@ void main() {
         _draw_shortcut_block('CTRL',  self._ctrl_shortcuts,  right_x + 10.0, bottom_y, (0.84, 0.94, 1.0,  0.95))
         _draw_shortcut_block('ALT',   self._alt_shortcuts,   right_x + half, bottom_y, (1.0,  0.92, 0.82, 0.95))
 
+        # Dedicated Post FX block under number shortcuts, left aligned.
+        if self._postfx_help_entries:
+            postfx_y = bottom_y + _shortcut_block_height(sec_scale) + 18.0
+            self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=1.85, color=(0.98, 0.95, 0.72, 0.96))
+            py = postfx_y + 8 * 1.85 + 3.0
+            for key, desc in self._postfx_help_entries[:6]:
+                self._draw_text(
+                    f'{key:<16} {desc}',
+                    right_x + 10.0,
+                    py,
+                    scale=1.45,
+                    color=(0.96, 0.88, 0.76, 0.96),
+                )
+                py += 8 * 1.45 + 2.0
+
         if self._unmapped_effects:
             self._draw_text(
                 f"Extra effects (no direct key): {', '.join(self._unmapped_effects)}",
@@ -1362,6 +1378,7 @@ void main() {
         """
         self._dynamic_help_sections = {}
         self._dynamic_help_order = []
+        self._postfx_help_entries = []
 
         for item in entries:
             section = ''
@@ -1377,6 +1394,12 @@ void main() {
                 desc = str(item[2]).strip()
 
             if not (section and key and desc):
+                continue
+
+            if section.strip().lower() == 'post fx':
+                entry = (key, desc)
+                if entry not in self._postfx_help_entries:
+                    self._postfx_help_entries.append(entry)
                 continue
 
             bucket = self._dynamic_help_sections.setdefault(section, [])
