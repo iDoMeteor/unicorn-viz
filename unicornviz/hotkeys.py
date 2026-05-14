@@ -94,6 +94,19 @@ class HotkeyHandler:
                         o.flash_message(f'Variant: {result}', 1.5)
                     return
 
+        # System-level post-process slot controls (Ctrl+Alt+number).
+        # Handle before help-overlay numeric controls and effect jump shortcuts.
+        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
+            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_8:
+                slot = int(sym - sdl2.SDLK_0)
+                message = a.select_postfx_slot(slot)
+                o.flash_message(message, 1.5)
+                return
+            if sym == sdl2.SDLK_0:
+                message = a.select_postfx_slot(0)
+                o.flash_message(message, 1.5)
+                return
+
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
         if mod & sdl2.KMOD_CTRL and effect is not None:
             if sym == sdl2.SDLK_n:
@@ -108,19 +121,6 @@ class HotkeyHandler:
                         if result:
                             o.flash_message(f'{label}: {result}', 1.5)
                         return
-
-        # System-level post-process slot controls (Ctrl+Alt+number).
-        # Handle before help-overlay numeric controls and effect jump shortcuts.
-        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
-            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_8:
-                slot = int(sym - sdl2.SDLK_0)
-                message = a.select_postfx_slot(slot)
-                o.flash_message(message, 1.5)
-                return
-            if sym == sdl2.SDLK_0:
-                message = a.select_postfx_slot(0)
-                o.flash_message(message, 1.5)
-                return
             elif sym == sdl2.SDLK_p:
                 for method_name, label in (
                     ('prev_preset', 'Preset'),

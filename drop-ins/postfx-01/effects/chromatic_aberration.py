@@ -53,7 +53,7 @@ void main() {
         self._ctx.clear(0.0, 0.0, 0.0, 1.0)
         src_tex.use(location=0)
         self._pass.prog['tex'].value = 0
-        self._pass.prog['uAmount'].value = 0.0018 + min(0.004, (treble * 0.0025 + beat * 0.0018))
+        self._pass.prog['uAmount'].value = 0.0045 + min(0.014, (treble * 0.008 + beat * 0.006))
         self._pass.vao.render(moderngl.TRIANGLE_STRIP)
 
     def resize(self, width: int, height: int) -> None:

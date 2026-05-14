@@ -49,6 +49,7 @@ void main() {
 }
 """,
         )
+        self._history_valid = False
         self._ensure_feedback_fbo(width, height)
 
     def _ensure_feedback_fbo(self, width: int, height: int) -> None:
@@ -78,6 +79,25 @@ void main() {
         width, height = dst_fbo.size
         self._ensure_feedback_fbo(width, height)
 
+        # Prime history from the first frame after reset/resize to avoid
+        # flashing stale texture content from a previous scene/effect.
+        if not self._history_valid:
+            dst_fbo.use()
+            self._ctx.viewport = (0, 0, width, height)
+            self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+            src_tex.use(location=0)
+            self._copy_pass.prog['tex'].value = 0
+            self._copy_pass.vao.render(moderngl.TRIANGLE_STRIP)
+
+            self._feedback_fbo.use()
+            self._ctx.viewport = (0, 0, width, height)
+            self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+            dst_fbo.color_attachments[0].use(location=0)
+            self._copy_pass.prog['tex'].value = 0
+            self._copy_pass.vao.render(moderngl.TRIANGLE_STRIP)
+            self._history_valid = True
+            return
+
         # Blend current + history into dst
         dst_fbo.use()
         self._ctx.viewport = (0, 0, width, height)
@@ -102,6 +122,15 @@ void main() {
         self._width = width
         self._height = height
         self._ensure_feedback_fbo(width, height)
+        self._history_valid = False
+
+    def reset(self) -> None:
+        """Reset temporal history (used when switching slots/effects)."""
+        self._history_valid = False
+        if self._feedback_fbo is not None:
+            self._feedback_fbo.use()
+            self._ctx.viewport = (0, 0, self._width, self._height)
+            self._ctx.clear(0.0, 0.0, 0.0, 1.0)
 
     def destroy(self) -> None:
         if self._feedback_fbo is not None:

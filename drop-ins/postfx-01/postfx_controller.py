@@ -96,6 +96,12 @@ class PostFxController:
 
         self._active_slot = slot
         self._active_effect = self._effects[slot]
+        reset = getattr(self._active_effect, 'reset', None)
+        if callable(reset):
+            try:
+                reset()
+            except Exception as exc:
+                log.warning('Post FX reset failed for %s: %s', slot_name, exc)
         return f'Post FX {slot}: {slot_name}'
 
     def apply(
