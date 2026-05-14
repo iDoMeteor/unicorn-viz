@@ -228,7 +228,6 @@ class App:
         self._speed_randomized: bool = False
         self._reactivity_randomized: bool = False
         self._zoom_randomized: bool = False
-        self._scale_randomized: bool = False
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
             self.cfg.get('demo', 'effect_duration', default=20)
@@ -1409,7 +1408,7 @@ void main() {
                 zoom_str = f"{_zv:.2f}{' *' if self._zoom_randomized else ''}"
             else:
                 zoom_str = f"N/A{' *' if self._zoom_randomized else ''}"
-            scale_str = f"{self._render_scale:.2f}{' *' if self._scale_randomized else ''}"
+            scale_str = f'{self._render_scale:.2f}'
             rec_state = 'OFF'
             if self._recorder is not None and self._recorder.is_recording:
                 rec_state = 'ON'
@@ -2167,8 +2166,6 @@ void main() {
             self._apply_random_reactivity()
         if self._zoom_randomized:
             self._apply_random_zoom()
-        if self._scale_randomized:
-            self._apply_random_render_scale()
 
     def _rebuild_fbos(self) -> None:
         """Recompute render dimensions and recreate FBOs after a scale change."""
@@ -2185,7 +2182,6 @@ void main() {
     def _reset_render_scale(self) -> float:
         """Reset render scale to config default."""
         self._render_scale = self._render_scale_default
-        self._scale_randomized = False
         self._rebuild_fbos()
         return self._render_scale
 
@@ -2198,20 +2194,8 @@ void main() {
     def _apply_render_scale_delta(self, delta: float) -> float:
         """Nudge render scale by delta and rebuild FBOs."""
         self._render_scale = _clamp_render_scale(self._render_scale + float(delta))
-        self._scale_randomized = False
         self._rebuild_fbos()
         return self._render_scale
-
-    def _apply_random_render_scale(self) -> None:
-        """Apply random render scale and flag for re-apply on scene change."""
-        lo = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_min', default=0.5)))
-        hi = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_max', default=1.0)))
-        if lo > hi:
-            lo, hi = hi, lo
-        value = _clamp_render_scale(float(self._rng.uniform(lo, hi)))
-        self._render_scale = value
-        self._scale_randomized = True
-        self._rebuild_fbos()
 
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""

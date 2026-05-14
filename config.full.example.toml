@@ -152,8 +152,6 @@ speed = 1.0
 # random_speed_max = 1.35
 # random_zoom_min = 0.85
 # random_zoom_max = 1.15
-# random_scale_min = 0.80
-# random_scale_max = 1.00
 
 [effects.FractalZoom]
 speed = 1.0

@@ -473,25 +473,14 @@ class HotkeyHandler:
             o.flash_name(cls.NAME)
 
         elif sym == sdl2.SDLK_COMMA:
-            # , = scale down, Shift+, (<) = scale MIN, Ctrl+, = scale reset, Alt+, = scale random
-            if mod & sdl2.KMOD_ALT:
-                # Alt+, — toggle random render scale
-                if a._scale_randomized:  # noqa: SLF001
-                    val = a._reset_render_scale()  # noqa: SLF001
-                    a._scale_randomized = False  # noqa: SLF001
-                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
-                else:
-                    a._apply_random_render_scale()  # noqa: SLF001
-                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
-                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
-            elif mod & sdl2.KMOD_CTRL:
+            # , = scale down, Shift+, (<) = scale MIN, Ctrl+, = scale reset
+            if mod & sdl2.KMOD_CTRL:
                 # Ctrl+, — scale reset
                 val = a._reset_render_scale()  # noqa: SLF001
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+, (<) — scale MIN
-                lo, _hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
-                val = a._set_render_scale(lo)  # noqa: SLF001
+                val = a._set_render_scale(0.5)  # noqa: SLF001
                 o.flash_message(f'Res scale  MIN  {val:.2f}', 1.2)
             else:
                 # , — scale down
@@ -499,25 +488,14 @@ class HotkeyHandler:
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_PERIOD:
-            # . = scale up, Shift+. (>) = scale MAX, Ctrl+. = scale reset, Alt+. = scale random
-            if mod & sdl2.KMOD_ALT:
-                # Alt+. — toggle random render scale
-                if a._scale_randomized:  # noqa: SLF001
-                    val = a._reset_render_scale()  # noqa: SLF001
-                    a._scale_randomized = False  # noqa: SLF001
-                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
-                else:
-                    a._apply_random_render_scale()  # noqa: SLF001
-                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
-                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
-            elif mod & sdl2.KMOD_CTRL:
+            # . = scale up, Shift+. (>) = scale MAX, Ctrl+. = scale reset
+            if mod & sdl2.KMOD_CTRL:
                 # Ctrl+. — scale reset
                 val = a._reset_render_scale()  # noqa: SLF001
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+. (>) — scale MAX
-                _lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
-                val = a._set_render_scale(hi)  # noqa: SLF001
+                val = a._set_render_scale(1.0)  # noqa: SLF001
                 o.flash_message(f'Res scale  MAX  {val:.2f}', 1.2)
             else:
                 # . — scale up
@@ -573,17 +551,7 @@ class HotkeyHandler:
                     o.flash_message('Zoom not available for this effect', 1.0)
 
         elif sym == sdl2.SDLK_k:
-            if mod & sdl2.KMOD_ALT:
-                # Alt+K — toggle random render scale
-                if a._scale_randomized:  # noqa: SLF001
-                    val = a._reset_render_scale()  # noqa: SLF001  (turns off random, restores default)
-                    a._scale_randomized = False  # noqa: SLF001
-                    o.flash_message(f'Res scale random OFF  {val:.2f}', 1.2)
-                else:
-                    a._apply_random_render_scale()  # noqa: SLF001
-                    lo, hi = a._random_range_for('scale', 0.5, 1.0)  # noqa: SLF001
-                    o.flash_message(f'Res scale random ON  {a._render_scale:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)  # noqa: SLF001
-            elif mod & sdl2.KMOD_CTRL:
+            if mod & sdl2.KMOD_CTRL:
                 # Ctrl+K — reset render scale to config default
                 val = a._reset_render_scale()  # noqa: SLF001
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)

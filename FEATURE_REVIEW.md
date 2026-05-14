@@ -430,7 +430,6 @@ All activated via `Ctrl+Alt+1..8`. Duration ~0.9–1.3s each. Confirm trigger, a
 - [ ] `,` / `.`: res scale down/up — PASS / FAIL
 - [ ] `Shift+,` / `Shift+.`: res scale MIN/MAX — PASS / FAIL
 - [ ] `Ctrl+,` / `Ctrl+.`: res scale reset — PASS / FAIL
-- [ ] `Alt+,` / `Alt+.`: random res scale — PASS / FAIL
 - [ ] `K`: scale up (alternate) — PASS / FAIL
 - [ ] `Shift+K`: scale down (alternate) — PASS / FAIL
 - [ ] `X`: single display mode — PASS / FAIL
