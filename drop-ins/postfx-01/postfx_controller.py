@@ -53,6 +53,10 @@ class PostFxController:
             2: ChromaticAberration(ctx, width, height),
         }
         self._hit_duration = float(self._cfg.get('hit_duration', 0.9) or 0.9)
+        self._slot_hit_duration: dict[int, float] = {
+            1: float(self._cfg.get('slot1_duration', self._hit_duration) or self._hit_duration),
+            2: float(self._cfg.get('slot2_duration', 1.15) or 1.15),
+        }
         self._active_slot: int = 0
         self._active_effect = None
         self._active_t: float = 0.0
@@ -92,14 +96,15 @@ class PostFxController:
 
         self._active_slot = slot
         self._active_effect = self._effects[slot]
-        self._active_t = self._hit_duration
+        duration = self._slot_hit_duration.get(slot, self._hit_duration)
+        self._active_t = max(0.05, duration)
         reset = getattr(self._active_effect, 'reset', None)
         if callable(reset):
             try:
                 reset()
             except Exception as exc:
                 log.warning('Post FX reset failed for %s: %s', slot_name, exc)
-        log.info('Post FX fired: slot=%d name=%s duration=%.2fs', slot, slot_name, self._hit_duration)
+        log.info('Post FX fired: slot=%d name=%s duration=%.2fs', slot, slot_name, self._active_t)
         return f'Post FX {slot}: {slot_name}'
 
     # Backward compatibility with earlier API name.
@@ -118,7 +123,8 @@ class PostFxController:
     ) -> bool:
         if not self.is_active():
             return False
-        strength = max(0.0, min(1.0, self._active_t / max(1e-6, self._hit_duration)))
+        duration = self._slot_hit_duration.get(self._active_slot, self._hit_duration)
+        strength = max(0.0, min(1.0, self._active_t / max(1e-6, duration)))
         self._active_effect.apply(src_tex, dst_fbo, dt, bass, mid, treble, beat, strength)
         self._active_t = max(0.0, self._active_t - dt)
         if self._active_t <= 0.0:

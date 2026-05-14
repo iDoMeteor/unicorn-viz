@@ -21,16 +21,17 @@ class ChromaticAberration:
 #version 330
 uniform sampler2D tex;
 uniform float uAmount;
+uniform float uMix;
 in vec2 v_uv;
 out vec4 fragColor;
 void main() {
-    // Full-frame chroma displacement (not edge-only): each channel uses a
-    // slightly different scale and offset around screen center.
+    // Full-frame chroma displacement so the effect reads even in low-sat scenes.
+    vec3 src = texture(tex, v_uv).rgb;
     vec2 uv = v_uv - 0.5;
-    vec2 bias = vec2(uAmount * 0.75, -uAmount * 0.35);
-    vec2 uv_r = uv * (1.0 + uAmount * 0.75) + bias;
-    vec2 uv_g = uv * (1.0 + uAmount * 0.18);
-    vec2 uv_b = uv * (1.0 - uAmount * 0.75) - bias;
+    vec2 bias = vec2(uAmount * 1.10, -uAmount * 0.65);
+    vec2 uv_r = uv * (1.0 + uAmount * 1.05) + bias;
+    vec2 uv_g = uv * (1.0 + uAmount * 0.30) + vec2(-bias.y * 0.35, bias.x * 0.25);
+    vec2 uv_b = uv * (1.0 - uAmount * 1.05) - bias;
 
     uv_r += 0.5;
     uv_g += 0.5;
@@ -39,7 +40,9 @@ void main() {
     float rr = texture(tex, clamp(uv_r, 0.0, 1.0)).r;
     float gg = texture(tex, clamp(uv_g, 0.0, 1.0)).g;
     float bb = texture(tex, clamp(uv_b, 0.0, 1.0)).b;
-    fragColor = vec4(rr, gg, bb, 1.0);
+    vec3 ab = vec3(rr, gg, bb);
+    vec3 outc = mix(src, ab, clamp(uMix, 0.0, 1.0));
+    fragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
 }
 """,
         )
@@ -61,8 +64,9 @@ void main() {
         src_tex.use(location=0)
         self._pass.prog['tex'].value = 0
         s = max(0.0, min(1.0, float(strength)))
-        base = 0.010 + min(0.024, (treble * 0.012 + beat * 0.010 + bass * 0.006))
-        self._pass.prog['uAmount'].value = base * (0.30 + 0.70 * s)
+        base = 0.018 + min(0.030, (treble * 0.013 + beat * 0.012 + bass * 0.008))
+        self._pass.prog['uAmount'].value = base * (0.55 + 0.45 * s)
+        self._pass.prog['uMix'].value = 0.45 + 0.45 * s
         self._pass.vao.render(moderngl.TRIANGLE_STRIP)
 
     def resize(self, width: int, height: int) -> None:
