@@ -2134,6 +2134,13 @@ void main() {
         self._rebuild_fbos()
         return self._render_scale
 
+    def _apply_render_scale_delta(self, delta: float) -> float:
+        """Nudge render scale by delta and rebuild FBOs."""
+        self._render_scale = _clamp_render_scale(self._render_scale + float(delta))
+        self._scale_randomized = False
+        self._rebuild_fbos()
+        return self._render_scale
+
     def _apply_random_render_scale(self) -> None:
         """Apply random render scale and flag for re-apply on scene change."""
         lo = _clamp_render_scale(float(self.cfg.get('hotkeys', 'random_scale_min', default=0.5)))
