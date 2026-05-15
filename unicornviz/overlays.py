@@ -371,12 +371,12 @@ class Overlays:
                 (', / .', 'Res scale down / up'),
                 ('Shift+, / .', 'Res scale MIN / MAX'),
                 ('Ctrl+, / .', 'Reset res scale'),
+                ('Ctrl+G', 'Speed reset'),
                 ('Ctrl+K', 'Res scale reset (alt key)'),
                 ('k / K', 'Res scale up / down (alt keys)'),
-                ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
-                ('Alt+= / Alt+-', 'Speed random ON / OFF'),
-                ('Ctrl+G', 'Speed reset'),
+                ('= / -', 'Speed MAX / MIN'),
                 ('+ / -', 'Speed up / down'),
+                ('= / -', 'Speed random ON / OFF'),
                 ('z / Z', 'Zoom in / out'),
                 ('Alt+Z', 'Zoom random ON / OFF'),
                 ('Ctrl+Z', 'Zoom reset'),
@@ -745,9 +745,9 @@ void main() {
             tweak_lines.append(f"POST FX     {postfx_val}")
         tweak_lines += [
             f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
-            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
             f"SPEED       {self._hud_state.get('speed', 'N/A')}",
             f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
+            f"VIZ QUAL    {self._hud_state.get('render_scale', '1.00')}",
         ]
 
         left_lines = [
