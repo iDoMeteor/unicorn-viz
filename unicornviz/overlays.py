@@ -453,6 +453,7 @@ class Overlays:
         self._show_audio = False
         self._show_midi = False
         self._help_timer: float = 0.0
+        self._hud_timer: float = 0.0
         self._flash_text: str = ""
         self._flash_timer: float = 0.0
         self._name_text: str = ""
@@ -483,7 +484,7 @@ class Overlays:
             'recording': 'OFF',
             'streaming': 'OFF',
             'streaming_provider': '-',
-            'postfx': 'OFF',
+            'postfx': 'N/A',
             'bass': '0.00',
             'mid': '0.00',
             'treble': '0.00',
@@ -736,34 +737,42 @@ void main() {
         bass = min(_fv('bass'), 1.0)
         mid  = min(_fv('mid'),  1.0)
 
+        postfx_val = str(self._hud_state.get('postfx', 'N/A'))
+        tweak_lines = [
+            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
+            f"SPEED       {self._hud_state.get('speed', 'N/A')}",
+            f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
+            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
+        ]
+        if postfx_val not in {'N/A', '-', ''}:
+            tweak_lines.append(f"POST FX     {postfx_val}")
+
         left_lines = [
             f"FPS         {self._hud_state.get('fps', '0.0')}",
             f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
             f"RES         {self._hud_state.get('resolution', '-')}",
-            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
-            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
-            f"SPEED       {self._hud_state.get('speed', 'N/A')}",
-            f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
-            f"POST FX     {self._hud_state.get('postfx', 'OFF')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
             f"AUDIO PROF  {self._hud_state.get('audio_profile', 'house')}",
+            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
+            '[ TWEAKABLES ]',
+            *tweak_lines,
         ]
         right_lines = [
             f"PAUSED      {self._hud_state.get('paused', 'NO')}",
             f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
+            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
+            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
             f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
             f"ADV TIMER   {self._hud_state.get('advance_time', '0.0/20.0s')}",
             f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
             f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
+            f"TRANSITION  {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})",
+            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
+            f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
             f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
             f"STREAMING   {self._hud_state.get('streaming', 'OFF')}",
             f"STREAM SRV  {self._hud_state.get('streaming_provider', '-')}",
-            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
-            f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
-            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
-            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
-            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
         ]
 
         rows = max(len(left_lines), len(right_lines))
@@ -1042,6 +1051,11 @@ void main() {
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         self._hud_t += dt
+        if self._show_name:
+            self._hud_timer -= dt
+            if self._hud_timer <= 0.0:
+                self._show_name = False
+                self._hud_timer = 0.0
         if self._show_help:
             self._help_timer -= dt
             if self._help_timer <= 0.0:
@@ -1552,6 +1566,7 @@ void main() {
 
     def toggle_name_overlay(self) -> None:
         self._show_name = not self._show_name
+        self._hud_timer = 60.0 if self._show_name else 0.0
 
     def set_hud_state(self, state: dict[str, str]) -> None:
         """Update the live HUD payload rendered by TAB overlay."""

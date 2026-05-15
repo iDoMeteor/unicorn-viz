@@ -1472,7 +1472,7 @@ void main() {
                 'recording': rec_state,
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
-                'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'OFF',
+                'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
                 'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
                 'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',
                 'treble': f"{self._audio.treble:.2f}" if self._audio is not None else '0.00',
