@@ -33,6 +33,7 @@ from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
 from unicornviz.dropins import load_dropin_symbol, discover_dropin_help_entries
+from unicornviz.vj_api import VJApi
 
 log = logging.getLogger(__name__)
 
@@ -278,6 +279,12 @@ class App:
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
         )
+        self._playlist_mode: str = 'unknown'
+        self._playlist_index: int = -1
+        self._playlist_size: int = 0
+        self._user_action_deadline: float = 0.0
+        self._vj_status_pill: str = ''
+        self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))
@@ -1215,6 +1222,9 @@ void main() {
                 break
 
         playlist = Playlist(effects, self.cfg)
+        self._playlist_mode = playlist.mode
+        self._playlist_index = playlist.index
+        self._playlist_size = len(playlist.effects)
 
         overlays = Overlays(
             self._ctx,
@@ -1489,6 +1499,9 @@ void main() {
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',
             })
+            self._playlist_mode = playlist.mode
+            self._playlist_index = playlist.index
+            self._playlist_size = len(playlist.effects)
 
             # Render
             self._render(dt)
@@ -2269,6 +2282,12 @@ void main() {
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)
+
+    def _mark_user_action(self, kind: str = 'generic') -> None:
+        """Mark recent user input so automation can temporarily yield control."""
+        _ = kind
+        grace = float(self.cfg.get('auto_vj', 'manual_grace_s', default=8.0))
+        self._user_action_deadline = time.monotonic() + max(0.0, grace)
 
     def goto_ansi(self, ansi_dir: str) -> None:
         """Launch ANSIViewer with an explicit art directory."""

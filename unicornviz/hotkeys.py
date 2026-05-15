@@ -68,6 +68,16 @@ class HotkeyHandler:
             sym_name = sym_name.decode("utf-8", errors="replace")
         log.debug("Key: %s (mod=0x%04x)", sym_name, mod)
 
+        # Phase 1 Auto VJ guard: user input should pause automation briefly.
+        # Passive keys intentionally excluded: TAB, h, and ?.
+        is_plain_h = sym == sdl2.SDLK_h and not (mod & sdl2.KMOD_SHIFT)
+        is_question = sym == sdl2.SDLK_QUESTION or (
+            sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)
+        )
+        is_passive = sym == sdl2.SDLK_TAB or is_plain_h or is_question
+        if not is_passive:
+            a.vj_api.mark_user_action('key')
+
         effect = a._current_effect  # noqa: SLF001
 
         # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.

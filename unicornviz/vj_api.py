@@ -1,0 +1,209 @@
+"""Public VJ automation API for unicorn-viz.
+
+This module defines the stable automation surface exposed as ``App.vj_api``.
+Phase 1 implementation is intentionally conservative: wrappers are added without
+changing runtime behavior unless explicitly called by a controller.
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from unicornviz.effects.registry import get_effects
+
+if TYPE_CHECKING:
+    from unicornviz.app import App
+
+
+@dataclass(slots=True)
+class VJState:
+    """Serializable snapshot of app state for automation logic."""
+
+    effect_name: str
+    playlist_mode: str
+    playlist_index: int
+    playlist_size: int
+    auto_advance: bool
+    advance_interval: float
+    advance_time_remaining: float
+    reactivity: float
+    speed: float | None
+    zoom: float | None
+    invert: bool
+    is_postfx_active: bool
+    postfx_slot: int
+    is_dancing_active: bool
+    is_nova_active: bool
+    is_burst_active: bool
+    user_busy: bool
+    manual_grace_remaining_s: float
+    status_pill: str
+
+
+class VJApi:
+    """Stable, public automation surface for system-driven control."""
+
+    def __init__(self, app: App) -> None:
+        self._app = app
+
+    def state(self) -> VJState:
+        app = self._app
+        effect_name = '-'
+        speed = None
+        zoom = None
+        if app._current_effect is not None:  # noqa: SLF001
+            effect_name = app._current_effect.NAME  # noqa: SLF001
+            if 'speed' in app._current_effect.parameters:  # noqa: SLF001
+                speed = float(app._current_effect.parameters['speed'])  # noqa: SLF001
+            if 'zoom' in app._current_effect.parameters:  # noqa: SLF001
+                zoom = float(app._current_effect.parameters['zoom'])  # noqa: SLF001
+
+        reactivity = 1.0
+        if app._audio_manager is not None:  # noqa: SLF001
+            reactivity = float(app._audio_manager.get_reactivity())  # noqa: SLF001
+
+        postfx_slot = 0
+        postfx_active = False
+        if app._postfx_controller is not None:  # noqa: SLF001
+            postfx_active = bool(app._postfx_controller.is_active())  # noqa: SLF001
+            postfx_slot = int(getattr(app._postfx_controller, '_active_slot', 0))  # noqa: SLF001
+
+        dancing_active = False
+        if app._dancing_unicorn is not None:  # noqa: SLF001
+            dancing_active = bool(getattr(app._dancing_unicorn, '_active', False))  # noqa: SLF001
+
+        nova_active = False
+        if app._rainbow_nova is not None:  # noqa: SLF001
+            nova_active = bool(app._rainbow_nova.is_active)  # noqa: SLF001
+
+        burst_active = bool(app._burst_controller.active)  # noqa: SLF001
+
+        return VJState(
+            effect_name=effect_name,
+            playlist_mode=str(getattr(app, '_playlist_mode', 'unknown')),  # noqa: SLF001
+            playlist_index=int(getattr(app, '_playlist_index', -1)),  # noqa: SLF001
+            playlist_size=int(getattr(app, '_playlist_size', 0)),  # noqa: SLF001
+            auto_advance=bool(app._auto_advance),  # noqa: SLF001
+            advance_interval=float(app._effect_duration),  # noqa: SLF001
+            advance_time_remaining=max(0.0, float(app._effect_duration - app._demo_timer)),  # noqa: SLF001
+            reactivity=reactivity,
+            speed=speed,
+            zoom=zoom,
+            invert=bool(app._invert_colors),  # noqa: SLF001
+            is_postfx_active=postfx_active,
+            postfx_slot=postfx_slot,
+            is_dancing_active=dancing_active,
+            is_nova_active=nova_active,
+            is_burst_active=burst_active,
+            user_busy=self.is_user_busy(),
+            manual_grace_remaining_s=max(0.0, float(app._user_action_deadline - time.monotonic())),  # noqa: SLF001
+            status_pill=str(getattr(app, '_vj_status_pill', '')),  # noqa: SLF001
+        )
+
+    def goto_effect(self, name: str) -> bool:
+        target = name.strip().lower()
+        if not target:
+            return False
+        for cls in get_effects():
+            if cls.NAME.lower() == target or cls.__name__.lower() == target:
+                self._app.goto_effect(cls)
+                return True
+        return False
+
+    def goto_random_effect(self, tags: list[str] | None = None, exclude_current: bool = True) -> str | None:
+        effects = list(get_effects())
+        if exclude_current and self._app._current_effect is not None:  # noqa: SLF001
+            cur_name = self._app._current_effect.__class__.__name__  # noqa: SLF001
+            effects = [cls for cls in effects if cls.__name__ != cur_name]
+        if tags:
+            tag_set = {t.lower() for t in tags}
+            filtered: list[type] = []
+            for cls in effects:
+                cls_tags = {str(t).lower() for t in getattr(cls, 'TAGS', [])}
+                if cls_tags & tag_set:
+                    filtered.append(cls)
+            effects = filtered
+        if not effects:
+            return None
+        cls = self._app._rng.choice(effects)  # noqa: SLF001
+        self._app.goto_effect(cls)
+        return cls.NAME
+
+    def list_effects(self) -> list[tuple[str, list[str]]]:
+        return [(cls.NAME, list(getattr(cls, 'TAGS', []))) for cls in get_effects()]
+
+    def set_auto_advance(self, enabled: bool) -> None:
+        self._app._auto_advance = bool(enabled)  # noqa: SLF001
+
+    def set_advance_interval(self, seconds: float) -> float:
+        self._app._effect_duration = max(10.0, float(seconds))  # noqa: SLF001
+        return float(self._app._effect_duration)  # noqa: SLF001
+
+    def reset_advance_interval(self) -> float:
+        return float(self._app.reset_advance_interval())
+
+    def set_reactivity(self, value: float) -> float:
+        if self._app._audio_manager is None:  # noqa: SLF001
+            return 1.0
+        return float(self._app._audio_manager.set_reactivity(value))  # noqa: SLF001
+
+    def set_speed(self, value: float) -> float | None:
+        effect = self._app._current_effect  # noqa: SLF001
+        if effect is None or 'speed' not in effect.parameters:
+            return None
+        effect.parameters['speed'] = max(0.05, min(10.0, float(value)))
+        return float(effect.parameters['speed'])
+
+    def set_zoom(self, value: float) -> float | None:
+        effect = self._app._current_effect  # noqa: SLF001
+        if effect is None or 'zoom' not in effect.parameters:
+            return None
+        lo = float(self._app.cfg.get('hotkeys', 'zoom_min', default=0.1))  # noqa: SLF001
+        hi = float(self._app.cfg.get('hotkeys', 'zoom_max', default=3.0))  # noqa: SLF001
+        effect.parameters['zoom'] = max(lo, min(hi, float(value)))
+        return float(effect.parameters['zoom'])
+
+    def set_invert(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        if bool(self._app._invert_colors) != enabled:  # noqa: SLF001
+            self._app.toggle_invert()
+        return bool(self._app._invert_colors)  # noqa: SLF001
+
+    def trigger_rainbow_nova(self) -> bool:
+        if self._app._rainbow_nova is None:  # noqa: SLF001
+            return False
+        self._app.trigger_rainbow_nova()
+        return True
+
+    def trigger_screen_burst(self) -> bool:
+        self._app.trigger_burst()
+        return True
+
+    def trigger_dancing_unicorn(self) -> bool:
+        if self._app._dancing_unicorn is None:  # noqa: SLF001
+            return False
+        self._app.trigger_dancing_unicorn()
+        return True
+
+    def set_postfx_slot(self, slot: int) -> bool:
+        msg = self._app.select_postfx_slot(int(slot))
+        return not msg.lower().endswith('unavailable')
+
+    def hold_postfx_slot(self, slot: int, duration_s: float) -> bool:
+        # Phase 1: trigger slot immediately; timed holds land in later phases.
+        _ = duration_s
+        return self.set_postfx_slot(slot)
+
+    def clear_postfx(self) -> bool:
+        self._app.select_postfx_slot(0)
+        return True
+
+    def is_user_busy(self) -> bool:
+        return bool(time.monotonic() < self._app._user_action_deadline)  # noqa: SLF001
+
+    def mark_user_action(self, kind: str = 'generic') -> None:
+        self._app._mark_user_action(kind)  # noqa: SLF001
+
+    def set_status_pill(self, text: str | None) -> None:
+        self._app._vj_status_pill = '' if text is None else str(text)  # noqa: SLF001
