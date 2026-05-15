@@ -306,7 +306,9 @@ class Overlays:
 
     HELP_SECTION_THEMES: dict[str, tuple[float, float, float]] = {
         'Navigation': (0.18, 0.96, 0.86),
+        'Unicorn Tears': (0.98, 0.78, 1.00),
         'Playback': (1.00, 0.68, 0.28),
+        'Tweakables': (0.66, 0.92, 1.00),
         'Audio + Visual': (0.64, 0.86, 1.00),
         'Display + Capture': (0.96, 0.72, 1.00),
         'Display Modes': (0.98, 0.94, 0.55),
@@ -328,8 +330,13 @@ class Overlays:
                 ('P / Left', 'Prev effect'),
                 ('1-9', 'Jump #1-9'),
                 ('Shift+1-0', 'Jump #11-20'),
-                ('Ctrl+1-0', 'Jump #21-30'),
+                ('C+1-0', 'Jump #21-30'),
                 ('Alt+1-0', 'Jump #31-40'),
+            ],
+        ),
+        (
+            'Unicorn Tears',
+            [
                 ('u', 'Replay splash'),
                 ('U', 'Unicorn Tears'),
                 ('Ctrl+U', 'Dancing unicorn overlay'),
@@ -344,26 +351,32 @@ class Overlays:
                 ('T', 'Auto-advance on/off'),
                 ('; / \'', 'Advance interval -/+ 10s'),
                 ('\\', 'Reset advance interval'),
+            ],
+        ),
+        (
+            'Tweakables',
+            [
                 ('+ / -', 'Speed up / down'),
                 ('Alt+= / Alt+-', 'Random speed ON / OFF'),
                 ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
                 ('Ctrl+G', 'Reset speed'),
-            ],
-        ),
-        (
-            'Audio + Visual',
-            [
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
+                ('G', 'Reset reactivity'),
+                ('F7', 'Random reactivity'),
                 ('Z / Shift+Z', 'Zoom in / out'),
                 ('Ctrl+Z', 'Reset zoom'),
                 ('Alt+Z', 'Toggle random zoom'),
                 (', / .', 'Res scale down / up'),
                 ('Shift+, / .', 'Res scale MIN / MAX'),
                 ('Ctrl+, / .', 'Reset res scale'),
-                ('Alt+, / .', 'Random res scale'),
-                ('G', 'Reset reactivity'),
-                ('F7', 'Random reactivity'),
+                ('K / Shift+K', 'Res scale up / down (alt keys)'),
+                ('Ctrl+K', 'Reset res scale (alt key)'),
+            ],
+        ),
+        (
+            'Audio + Visual',
+            [
                 ('E', 'EQ / spectrum'),
                 ('a', 'ACiD art'),
                 ('Shift+A', 'Own ANSI art'),
@@ -372,7 +385,6 @@ class Overlays:
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
                 ('M', 'MIDI device'),
                 ('I', 'Invert colors'),
-                ('Ctrl+Alt+U', 'Screen burst'),
             ],
         ),
         (
@@ -409,7 +421,7 @@ class Overlays:
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     SHIFT_KEYS = ["S+1", "S+2", "S+3", "S+4", "S+5", "S+6", "S+7", "S+8", "S+9", "S+0"]
-    CTRL_KEYS = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6", "Ctrl+7", "Ctrl+8", "Ctrl+9", "Ctrl+0"]
+    CTRL_KEYS = ["C+1", "C+2", "C+3", "C+4", "C+5", "C+6", "C+7", "C+8", "C+9", "C+0"]
     ALT_KEYS = ["A+1", "A+2", "A+3", "A+4", "A+5", "A+6", "A+7", "A+8", "A+9", "A+0"]
 
     def __init__(
