@@ -739,14 +739,16 @@ void main() {
         mid  = min(_fv('mid'),  1.0)
 
         postfx_val = str(self._hud_state.get('postfx', 'N/A'))
-        tweak_lines = [
-            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
-            f"SPEED       {self._hud_state.get('speed', 'N/A')}",
-            f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
-            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
-        ]
+        # Tweakables sorted alphabetically; POST FX only shown when drop-in is loaded.
+        tweak_lines = []
         if postfx_val not in {'N/A', '-', ''}:
             tweak_lines.append(f"POST FX     {postfx_val}")
+        tweak_lines += [
+            f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
+            f"RES SCALE   {self._hud_state.get('render_scale', '1.00')}",
+            f"SPEED       {self._hud_state.get('speed', 'N/A')}",
+            f"ZOOM        {self._hud_state.get('zoom', 'N/A')}",
+        ]
 
         left_lines = [
             f"B / M / T   {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
@@ -756,24 +758,25 @@ void main() {
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
             f"AUDIO PROF  {self._hud_state.get('audio_profile', 'house')}",
+            '',
             '[ TWEAKABLES ]',
             *tweak_lines,
         ]
         right_lines = [
-            f"PAUSED      {self._hud_state.get('paused', 'NO')}",
-            f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
-            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
-            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
-            f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
             f"ADV TIMER   {self._hud_state.get('advance_time', '0.0/20.0s')}",
-            f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
-            f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
-            f"TRANSITION  {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})",
-            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
+            f"AUTO ADV    {self._hud_state.get('auto_advance', 'ON')}",
+            f"DISPLAY     {self._hud_state.get('display_mode', 'single')} #{self._hud_state.get('display_index', '0')}",
+            f"FULLSCREEN  {self._hud_state.get('fullscreen', 'NO')}",
+            f"INVERT      {self._hud_state.get('invert', 'OFF')}",
             f"NEXT FX     {self._hud_state.get('next_effect', '-')}",
+            f"PAUSED      {self._hud_state.get('paused', 'NO')}",
+            f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
+            f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
             f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
-            f"STREAMING   {self._hud_state.get('streaming', 'OFF')}",
             f"STREAM SRV  {self._hud_state.get('streaming_provider', '-')}",
+            f"STREAMING   {self._hud_state.get('streaming', 'OFF')}",
+            f"TRANSITION  {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})",
+            f"{self._hud_state.get('variant_slot_label', 'VARIANT'):<11} {self._hud_state.get('variant_slot', '-/-')}",
         ]
 
         rows = max(len(left_lines), len(right_lines))
