@@ -240,10 +240,9 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_QUESTION or (
             sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)
         ):
-            # ? — open help (intuitive, no label needed in help screen).
+            # ? — toggle help (same behavior as lowercase h).
             # Some layouts emit Shift+/ (SDLK_SLASH + KMOD_SHIFT) instead of SDLK_QUESTION.
-            if not o.help_visible:
-                o.toggle_help()
+            o.toggle_help()
 
         elif sym == sdl2.SDLK_a:
             if (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT):
