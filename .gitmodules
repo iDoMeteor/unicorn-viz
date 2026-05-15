@@ -34,3 +34,7 @@
 [submodule "drop-ins/sims-01"]
 	path = drop-ins/sims-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-sims-01.git
+[submodule "drop-ins/auto-vj-01"]
+	path = drop-ins/auto-vj-01
+	url = git@github.com:iDoMeteor/unicorn-viz-auto-vj-01.git
+	branch = main
