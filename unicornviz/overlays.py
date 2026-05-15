@@ -329,7 +329,7 @@ class Overlays:
                 ('Shift+-', 'Collapse all sections'),
                 ('Shift+=', 'Expand all sections'),
                 ('Arrow keys', 'Move section focus'),
-                ('H', 'Toggle help overlay'),
+                ('H', 'Notifications on/off'),
                 ('Enter', 'Toggle focused section'),
                 ('0 - 9', 'Toggle section 1-10'),
             ],
@@ -337,28 +337,27 @@ class Overlays:
         (
             'Basics',
             [
-                ('F', 'Fullscreen'),
+                ('f', 'Fullscreen'),
                 ('Number', 'Jump #1-9'),
                 ('Shift+Number', 'Jump #11-20'),
                 ('Ctrl+Number', 'Jump #21-30'),
                 ('Alt+Number', 'Jump #31-40'),
-                ('N / Right', 'Next effect'),
-                ('P / Left', 'Prev effect'),
+                ('n / Right', 'Next effect'),
+                ('p / Left', 'Prev effect'),
                 ('ESC', 'Quit'),
                 ('u', 'Replay splash'),
-                ('S', 'Screenshot'),
+                ('s', 'Screenshot'),
                 ('TAB', 'Toggle HUD'),
-                ('H', 'Toggle help'),
-                ('V', 'Toggle recording'),
+                ('v', 'Toggle recording'),
             ],
         ),
         (
             'Playback',
             [
                 ('; / \'', 'Advance interval -/+ 10s'),
-                ('T', 'Auto-advance on/off'),
+                ('t', 'Auto-advance on/off'),
                 ('Space', 'Pause / resume'),
-                ('R', 'Random effects mode'),
+                ('r', 'Random effects mode'),
                 ('\\', 'Reset advance interval'),
             ],
         ),
@@ -368,17 +367,17 @@ class Overlays:
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
                 ('F7', 'Reactivity random ON / OFF'),
-                ('G', 'Reactivity reset'),
+                ('g', 'Reactivity reset'),
                 (', / .', 'Res scale down / up'),
                 ('Shift+, / .', 'Res scale MIN / MAX'),
                 ('Ctrl+, / .', 'Reset res scale'),
                 ('Ctrl+K', 'Res scale reset (alt key)'),
-                ('K / Shift+K', 'Res scale up / down (alt keys)'),
+                ('k / K', 'Res scale up / down (alt keys)'),
                 ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
                 ('Alt+= / Alt+-', 'Speed random ON / OFF'),
                 ('Ctrl+G', 'Speed reset'),
                 ('+ / -', 'Speed up / down'),
-                ('Z / Shift+Z', 'Zoom in / out'),
+                ('z / Z', 'Zoom in / out'),
                 ('Alt+Z', 'Zoom random ON / OFF'),
                 ('Ctrl+Z', 'Zoom reset'),
             ],
@@ -386,21 +385,21 @@ class Overlays:
         (
             'Audio + Visual',
             [
-                ('E', 'EQ / spectrum'),
+                ('e', 'EQ / spectrum'),
                 ('a', 'ACiD art'),
-                ('Shift+A', 'Own ANSI art'),
+                ('A', 'Own ANSI art'),
                 ('Ctrl+A', 'Audio source'),
                 ('Alt+A / Alt+Shift+A', 'Profile next / prev'),
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
-                ('M', 'MIDI device'),
-                ('I', 'Invert colors'),
+                ('m', 'MIDI device'),
+                ('i', 'Invert colors'),
             ],
         ),
         (
             'Display Modes',
             [
-                ('X', 'Single display'),
-                ('Shift+X', 'Span all'),
+                ('x', 'Single display'),
+                ('X', 'Span all'),
                 ('Ctrl+X', 'Mirror all'),
                 ('Alt+X', 'Config default'),
             ],
@@ -1208,11 +1207,11 @@ void main() {
         title_a = 0.86 + (1.0 - pulse_med) * 0.14
         title_str = 'UNICORN VIZ - HELP'
         self._draw_text(title_str, x + (w - len(title_str) * 8.0 * 2.95) * 0.5, y + 10.0, scale=2.95, color=(0.12, 0.98, 1.0, title_a))
-        # Intentionally leave the subtitle row empty for visual breathing room.
-        slot_label = self._hud_state.get('preset_slot_label', 'PRESET IDX')
-        self._draw_text(f"ACTIVE {slot_label}: {self._hud_state.get('preset_slot', '-/-')}", x + 18.0, y + 60.0, scale=1.5, color=(0.90, 1.0, 0.72, 0.94))
-        v_label = self._hud_state.get('variant_slot_label', 'VARIANT')
-        self._draw_text(f"ACTIVE {v_label}: {self._hud_state.get('variant_slot', '-/-')}", x + 520.0, y + 60.0, scale=1.5, color=(0.82, 0.95, 1.0, 0.94))
+        # Centered live date/time replacing former ProjectM preset labels.
+        _now = datetime.datetime.now()
+        dt_str = _now.strftime('<<  %a  %d %b %Y  //  %H:%M:%S  >>')
+        dt_a = 0.78 + pulse_slow * 0.18
+        self._draw_text(dt_str, x + (w - len(dt_str) * 8.0 * 1.72) * 0.5, y + 56.0, scale=1.72, color=(0.90, 1.0, 0.82, dt_a))
 
         # ── left/right content panes ──────────────────────────────────────
         left_x = x + 14.0
@@ -1459,7 +1458,7 @@ void main() {
     def note_help_activity(self) -> None:
         """Reset help auto-hide timer after keyboard interaction."""
         if self._show_help:
-            self._help_timer = 30.0
+            self._help_timer = 60.0
 
     @property
     def help_visible(self) -> bool:
@@ -1560,7 +1559,12 @@ void main() {
 
     def toggle_help(self) -> None:
         self._show_help = not self._show_help
-        self._help_timer = 30.0 if self._show_help else 0.0
+        self._help_timer = 60.0 if self._show_help else 0.0
+
+    def toggle_flash_messages(self) -> bool:
+        """Toggle flash-message notifications on/off; returns new state."""
+        self._flash_enabled = not self._flash_enabled
+        return self._flash_enabled
 
     def toggle_audio_selector(self) -> None:
         self._show_audio = not self._show_audio

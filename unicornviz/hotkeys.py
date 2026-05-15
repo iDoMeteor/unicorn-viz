@@ -225,7 +225,22 @@ class HotkeyHandler:
             o.toggle_name_overlay()
 
         elif sym == sdl2.SDLK_h:
-            o.toggle_help()
+            if mod & sdl2.KMOD_SHIFT:
+                # H (Shift+h) — toggle flash message notifications
+                enabled = o.toggle_flash_messages()
+                # Force-render the status even if flash was just turned on.
+                o._flash_enabled = True  # noqa: SLF001
+                o.flash_message('Notifications ON' if enabled else 'Notifications OFF', 1.5)
+                if not enabled:
+                    o._flash_enabled = False  # noqa: SLF001
+            else:
+                # h — toggle help overlay
+                o.toggle_help()
+
+        elif sym == sdl2.SDLK_QUESTION:
+            # ? — open help (intuitive, no label needed in help screen)
+            if not o.help_visible:
+                o.toggle_help()
 
         elif sym == sdl2.SDLK_a:
             if (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT):
