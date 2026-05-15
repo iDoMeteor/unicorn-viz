@@ -201,6 +201,14 @@ def _load_rainbow_nova_class() -> type:
     )
 
 
+def _load_auto_vj_controller_class() -> type:
+    """Load AutoVJController from the auto-vj drop-in."""
+    return load_dropin_symbol(
+        'auto-vj-01/auto_vj.py',
+        'AutoVJController',
+    )
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -225,6 +233,7 @@ class App:
         self._postfx_controller = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
+        self._auto_vj = None
         self._streamer = None
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
@@ -1277,6 +1286,20 @@ void main() {
         )
         hotkeys.attach_midi(midi_manager)
 
+        # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
+        try:
+            auto_vj_cls = _load_auto_vj_controller_class()
+            auto_vj_cfg = self.cfg.get('auto_vj', default={}) or {}
+            if not isinstance(auto_vj_cfg, dict):
+                auto_vj_cfg = {}
+            self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
+            self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
+            log.info('AutoVJController loaded from drop-in')
+        except Exception as exc:
+            self._auto_vj = None
+            self.vj_api.set_status_pill(None)
+            log.warning('AutoVJController not available: %s', exc)
+
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
@@ -1376,6 +1399,14 @@ void main() {
 
             # Update audio
             self._audio = audio_manager.get_audio_data()
+
+            if self._auto_vj is not None:
+                try:
+                    self._auto_vj.update(dt, self._audio)
+                    self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
+                except Exception as exc:
+                    log.warning('AutoVJController update failed: %s', exc)
+                    self.vj_api.set_status_pill('AUTO VJ  ERROR')
 
             # Update effects
             if not self._paused:
@@ -1498,6 +1529,7 @@ void main() {
                 'display_mode': self._display_mode,
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',
+                'vj_status': self._vj_status_pill,
             })
             self._playlist_mode = playlist.mode
             self._playlist_index = playlist.index
@@ -1589,6 +1621,12 @@ void main() {
         if self._streamer is not None:
             self._streamer.stop()
             self._streamer = None
+        if self._auto_vj is not None:
+            try:
+                self._auto_vj.shutdown()
+            except Exception as exc:
+                log.warning('AutoVJController shutdown failed: %s', exc)
+            self._auto_vj = None
         audio_manager.stop()
         midi_manager.stop()
         if self._webcam_system is not None:

@@ -492,6 +492,7 @@ class Overlays:
             'display_mode': 'single',
             'display_index': '0',
             'invert': 'OFF',
+            'vj_status': '',
         }
         self._num_shortcuts: list[str] = []
         self._shift_shortcuts: list[str] = []
@@ -954,6 +955,10 @@ void main() {
         dt_line = f"{now.strftime('%Y-%m-%d')}  {now.strftime('%H:%M:%S')}"
         dx = x + (panel_w - len(dt_line) * 8.0 * 2.2) * 0.5
         self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
+        vj_status = str(self._hud_state.get('vj_status', '')).strip()
+        if vj_status:
+            sx = x + panel_w - (len(vj_status) * 8.0 * 1.65) - 22.0
+            self._draw_text(vj_status, max(x + 22.0, sx), y + 70.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner
