@@ -326,23 +326,22 @@ class Overlays:
         (
             'Help Usage',
             [
-                ('Shift+- / KP-', 'Collapse all sections'),
-                ('Shift+= / KP+', 'Expand all sections'),
-                ('Up / Down', 'Move section focus'),
-                ('Left / Right', 'Move section focus (alias)'),
+                ('Shift+-', 'Collapse all sections'),
+                ('Shift+=', 'Expand all sections'),
+                ('Arrow keys', 'Move section focus'),
                 ('H', 'Toggle help overlay'),
                 ('Enter', 'Toggle focused section'),
-                ('1-9 / 0', 'Toggle section 1-10'),
+                ('0 - 9', 'Toggle section 1-10'),
             ],
         ),
         (
             'Basics',
             [
                 ('F', 'Fullscreen'),
-                ('num', 'Jump #1-9'),
-                ('S+num', 'Jump #11-20'),
-                ('Ctrl+num', 'Jump #21-30'),
-                ('A+num', 'Jump #31-40'),
+                ('Number', 'Jump #1-9'),
+                ('S+Number', 'Jump #11-20'),
+                ('Ctrl+Number', 'Jump #21-30'),
+                ('A+Number', 'Jump #31-40'),
                 ('N / Right', 'Next effect'),
                 ('P / Left', 'Prev effect'),
                 ('ESC', 'Quit'),
@@ -1373,7 +1372,7 @@ void main() {
         sections: list[tuple[str, list[tuple[str, str]]]] = []
         for section, entries in self.CORE_HELP_SECTIONS:
             sections.append((section, list(entries)))
-        for section in self._dynamic_help_order:
+        for section in sorted(self._dynamic_help_order, key=lambda s: s.lower()):
             entries = self._dynamic_help_sections.get(section, [])
             if entries:
                 sections.append((section, list(entries)))
