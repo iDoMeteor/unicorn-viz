@@ -305,12 +305,11 @@ class Overlays:
     """Manages all HUD/overlay rendering."""
 
     HELP_SECTION_THEMES: dict[str, tuple[float, float, float]] = {
-        'Navigation': (0.18, 0.96, 0.86),
+        'Basics': (0.18, 0.96, 0.86),
         'Unicorn Tears': (0.98, 0.78, 1.00),
         'Playback': (1.00, 0.68, 0.28),
         'Tweakables': (0.66, 0.92, 1.00),
         'Audio + Visual': (0.64, 0.86, 1.00),
-        'Display + Capture': (0.96, 0.72, 1.00),
         'Display Modes': (0.98, 0.94, 0.55),
         'Camera Overlay': (0.72, 1.00, 0.66),
     }
@@ -324,7 +323,7 @@ class Overlays:
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
-            'Navigation',
+            'Basics',
             [
                 ('N / Right', 'Next effect'),
                 ('P / Left', 'Prev effect'),
@@ -332,12 +331,18 @@ class Overlays:
                 ('Shift+1-0', 'Jump #11-20'),
                 ('C+1-0', 'Jump #21-30'),
                 ('Alt+1-0', 'Jump #31-40'),
+                ('u', 'Replay splash'),
+                ('TAB', 'Toggle HUD'),
+                ('S', 'Screenshot'),
+                ('V', 'Toggle recording'),
+                ('H', 'Toggle help'),
+                ('ESC', 'Quit'),
+                ('F', 'Fullscreen'),
             ],
         ),
         (
             'Unicorn Tears',
             [
-                ('u', 'Replay splash'),
                 ('U', 'Unicorn Tears'),
                 ('Ctrl+U', 'Dancing unicorn overlay'),
                 ('Ctrl+Alt+U', 'Screen burst'),
@@ -385,17 +390,6 @@ class Overlays:
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
                 ('M', 'MIDI device'),
                 ('I', 'Invert colors'),
-            ],
-        ),
-        (
-            'Display + Capture',
-            [
-                ('TAB', 'Toggle HUD'),
-                ('S', 'Screenshot'),
-                ('V', 'Toggle recording'),
-                ('H', 'Toggle help'),
-                ('ESC', 'Quit'),
-                ('F', 'Fullscreen'),
             ],
         ),
         (
