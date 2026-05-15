@@ -305,6 +305,7 @@ class Overlays:
     """Manages all HUD/overlay rendering."""
 
     HELP_SECTION_THEMES: dict[str, tuple[float, float, float]] = {
+        'Help Usage': (0.98, 0.90, 0.62),
         'Basics': (0.18, 0.96, 0.86),
         'Unicorn Tears': (0.98, 0.78, 1.00),
         'Playback': (1.00, 0.68, 0.28),
@@ -322,6 +323,18 @@ class Overlays:
     ]
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
+        (
+            'Help Usage',
+            [
+                ('1-9 / 0', 'Toggle section 1-10'),
+                ('Up / Down', 'Move section focus'),
+                ('Left / Right', 'Move section focus (alias)'),
+                ('Enter', 'Toggle focused section'),
+                ('Shift+= / KP+', 'Expand all sections'),
+                ('Shift+- / KP-', 'Collapse all sections'),
+                ('H', 'Toggle help overlay'),
+            ],
+        ),
         (
             'Basics',
             [
@@ -1193,8 +1206,7 @@ void main() {
         title_a = 0.86 + (1.0 - pulse_med) * 0.14
         title_str = 'UNICORN VIZ - HELP'
         self._draw_text(title_str, x + (w - len(title_str) * 8.0 * 2.95) * 0.5, y + 10.0, scale=2.95, color=(0.12, 0.98, 1.0, title_a))
-        self._draw_text('Core controls, drop-ins, and live shortcuts', x + 18.0, y + 40.0, scale=1.95, color=(0.78, 0.9, 1.0, 0.92))
-        self._draw_text('1-9/0 toggle sections  ↑↓+Enter focus/toggle  Shift+= expand all  Shift+- collapse all', x + 420.0, y + 40.0, scale=1.34, color=(0.84, 0.92, 1.0, 0.86))
+        # Intentionally leave the subtitle row empty for visual breathing room.
         slot_label = self._hud_state.get('preset_slot_label', 'PRESET IDX')
         self._draw_text(f"ACTIVE {slot_label}: {self._hud_state.get('preset_slot', '-/-')}", x + 18.0, y + 60.0, scale=1.5, color=(0.90, 1.0, 0.72, 0.94))
         v_label = self._hud_state.get('variant_slot_label', 'VARIANT')
@@ -1418,11 +1430,19 @@ void main() {
 
         # Keep collapse state for known sections, default to expanded.
         valid = [name for name, _entries in self._iter_help_sections()]
+        core_names = {name for name, _entries in self.CORE_HELP_SECTIONS}
         self._help_collapsed = {k: v for k, v in self._help_collapsed.items() if k in valid}
         for name in valid:
-            self._help_collapsed.setdefault(name, False)
+            if name not in self._help_collapsed:
+                # Dynamic/drop-in sections start collapsed; core sections expanded.
+                self._help_collapsed[name] = name not in core_names
         if valid:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(valid) - 1))
+
+    def note_help_activity(self) -> None:
+        """Reset help auto-hide timer after keyboard interaction."""
+        if self._show_help:
+            self._help_timer = 30.0
 
     @property
     def help_visible(self) -> bool:

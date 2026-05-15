@@ -144,6 +144,7 @@ class HotkeyHandler:
 
         # Help overlay interaction mode: section expand/collapse and focus nav.
         if getattr(o, 'help_visible', False):
+            o.note_help_activity()
             # Toggle by section number: supports top-row, shifted symbols, and keypad.
             shift_digit_syms = [
                 sdl2.SDLK_EXCLAIM, sdl2.SDLK_AT, sdl2.SDLK_HASH,
