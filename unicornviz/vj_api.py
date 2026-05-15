@@ -25,6 +25,8 @@ class VJState:
     playlist_index: int
     playlist_size: int
     auto_advance: bool
+    paused: bool
+    is_transitioning: bool
     advance_interval: float
     advance_time_remaining: float
     reactivity: float
@@ -85,6 +87,8 @@ class VJApi:
             playlist_index=int(getattr(app, '_playlist_index', -1)),  # noqa: SLF001
             playlist_size=int(getattr(app, '_playlist_size', 0)),  # noqa: SLF001
             auto_advance=bool(app._auto_advance),  # noqa: SLF001
+            paused=bool(app._paused),  # noqa: SLF001
+            is_transitioning=bool(app._next_effect is not None),  # noqa: SLF001
             advance_interval=float(app._effect_duration),  # noqa: SLF001
             advance_time_remaining=max(0.0, float(app._effect_duration - app._demo_timer)),  # noqa: SLF001
             reactivity=reactivity,
