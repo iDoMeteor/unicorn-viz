@@ -15,6 +15,9 @@
 - `[todo]` Design vignette/post-process system (see Phase 4).
 - `[todo]` Design external plugin loading for paid effect packs.
 - `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
+- `[todo]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with a config kill-switch for Auto VJ training datasets.
+- `[todo]` Plan multi-display overlay policy so help/HUD/flash render only on primary display in `span_all` / `mirror_all` when enabled.
+- `[todo]` Design a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
@@ -64,6 +67,11 @@
   Notes:
   - implemented: initial manifests under `packaging/flatpak` and `packaging/snap`
   - documented beta recommendation and current posture in developer docs
+- `[todo]` Add config-gated overlay display scoping.
+  Notes:
+  - new global config flag to constrain help/HUD/flash overlays to primary display only
+  - behavior applies in `span_all` and `mirror_all`; keep current behavior as fallback
+  - land as opt-in first to avoid breaking current live workflows
 
 ## Phase 3 — Assets and Media Expansion
 
@@ -168,6 +176,11 @@
   - licensing/entitlement enforcement model
   - security/trust boundary for executable plugin code
 - `[todo]` Propose and prototype additional built-in effects and scene ideas.
+- `[todo]` Design and prototype "Grand Finale" system effect.
+  Notes:
+  - intent: end-of-set cinematic closer with deterministic progression
+  - should blend system overlays, post-fx hits, and one dedicated finale visual
+  - must include safe abort/exit path and configurable duration/intensity
 
 ## Feature Ideas to Explore
 
@@ -188,6 +201,12 @@
 - `[todo]` BBS! effect suite (dial-up rituals, ANSI login scenes, retro board status walls).
 - `[todo]` Black Hole Cathedral effect (gothic mega-structure orbiting an accretion lens with choir-like pulse reactivity).
 - `[todo]` Reactor Breach effect (industrial core meltdown with plasma vents, warning strobes, and containment-wave transitions).
+- `[todo]` Grand Finale effect suite (staged crescendo, hard drop, cooldown outro).
+- `[todo]` Optional keystroke telemetry log for training Auto VJ behavior models.
+  Notes:
+  - append-only log under `logs/` with timestamp, key/modifier, and action label
+  - controlled by a global config flag; default OFF
+  - redact/omit sensitive text entry paths (if any future text input is added)
 
 ## Delivery Strategy
 
