@@ -326,70 +326,70 @@ class Overlays:
         (
             'Help Usage',
             [
-                ('1-9 / 0', 'Toggle section 1-10'),
+                ('Shift+- / KP-', 'Collapse all sections'),
+                ('Shift+= / KP+', 'Expand all sections'),
                 ('Up / Down', 'Move section focus'),
                 ('Left / Right', 'Move section focus (alias)'),
-                ('Enter', 'Toggle focused section'),
-                ('Shift+= / KP+', 'Expand all sections'),
-                ('Shift+- / KP-', 'Collapse all sections'),
                 ('H', 'Toggle help overlay'),
+                ('Enter', 'Toggle focused section'),
+                ('1-9 / 0', 'Toggle section 1-10'),
             ],
         ),
         (
             'Basics',
             [
+                ('F', 'Fullscreen'),
+                ('num', 'Jump #1-9'),
+                ('S+num', 'Jump #11-20'),
+                ('Ctrl+num', 'Jump #21-30'),
+                ('A+num', 'Jump #31-40'),
                 ('N / Right', 'Next effect'),
                 ('P / Left', 'Prev effect'),
-                ('1-9', 'Jump #1-9'),
-                ('Shift+1-0', 'Jump #11-20'),
-                ('C+1-0', 'Jump #21-30'),
-                ('Alt+1-0', 'Jump #31-40'),
-                ('u', 'Replay splash'),
-                ('TAB', 'Toggle HUD'),
-                ('S', 'Screenshot'),
-                ('V', 'Toggle recording'),
-                ('H', 'Toggle help'),
                 ('ESC', 'Quit'),
-                ('F', 'Fullscreen'),
-            ],
-        ),
-        (
-            'Unicorn Tears',
-            [
-                ('U', 'Unicorn Tears'),
-                ('Ctrl+U', 'Dancing unicorn overlay'),
-                ('Ctrl+Alt+U', 'Screen burst'),
+                ('u', 'Replay splash'),
+                ('S', 'Screenshot'),
+                ('TAB', 'Toggle HUD'),
+                ('H', 'Toggle help'),
+                ('V', 'Toggle recording'),
             ],
         ),
         (
             'Playback',
             [
-                ('Space', 'Pause / resume'),
-                ('R', 'Random mode'),
-                ('T', 'Auto-advance on/off'),
                 ('; / \'', 'Advance interval -/+ 10s'),
+                ('T', 'Auto-advance on/off'),
+                ('Space', 'Pause / resume'),
+                ('R', 'Random effects mode'),
                 ('\\', 'Reset advance interval'),
+            ],
+        ),
+        (
+            'Unicorn Tears',
+            [
+                ('Ctrl+U', 'Dancing unicorn overlay'),
+                ('Ctrl+Alt+U', 'Screen burst'),
+                ('U', 'Unicorn Tears'),
             ],
         ),
         (
             'Tweakables',
             [
-                ('+ / -', 'Speed up / down'),
-                ('Alt+= / Alt+-', 'Random speed ON / OFF'),
-                ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
-                ('Ctrl+G', 'Reset speed'),
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
-                ('G', 'Reset reactivity'),
-                ('F7', 'Random reactivity'),
-                ('Z / Shift+Z', 'Zoom in / out'),
-                ('Ctrl+Z', 'Reset zoom'),
-                ('Alt+Z', 'Toggle random zoom'),
+                ('F7', 'Reactivity random ON / OFF'),
+                ('G', 'Reactivity reset'),
                 (', / .', 'Res scale down / up'),
                 ('Shift+, / .', 'Res scale MIN / MAX'),
                 ('Ctrl+, / .', 'Reset res scale'),
+                ('Ctrl+K', 'Res scale reset (alt key)'),
                 ('K / Shift+K', 'Res scale up / down (alt keys)'),
-                ('Ctrl+K', 'Reset res scale (alt key)'),
+                ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
+                ('Alt+= / Alt+-', 'Speed random ON / OFF'),
+                ('Ctrl+G', 'Speed reset'),
+                ('+ / -', 'Speed up / down'),
+                ('Z / Shift+Z', 'Zoom in / out'),
+                ('Alt+Z', 'Zoom random ON / OFF'),
+                ('Ctrl+Z', 'Zoom reset'),
             ],
         ),
         (
@@ -1430,12 +1430,12 @@ void main() {
 
         # Keep collapse state for known sections, default to expanded.
         valid = [name for name, _entries in self._iter_help_sections()]
-        core_names = {name for name, _entries in self.CORE_HELP_SECTIONS}
+        default_expanded = {'Help Usage', 'Basics', 'Playback'}
         self._help_collapsed = {k: v for k, v in self._help_collapsed.items() if k in valid}
         for name in valid:
             if name not in self._help_collapsed:
-                # Dynamic/drop-in sections start collapsed; core sections expanded.
-                self._help_collapsed[name] = name not in core_names
+                # Start with only the top three core sections expanded.
+                self._help_collapsed[name] = name not in default_expanded
         if valid:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(valid) - 1))
 
