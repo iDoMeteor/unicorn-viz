@@ -14,7 +14,6 @@ Notes:
 	effect is active:
 	- `random_speed_min` / `random_speed_max`
 	- `random_zoom_min` / `random_zoom_max`
-	- `random_scale_min` / `random_scale_max`
 	- `random_reactivity_min` / `random_reactivity_max`
 	If omitted, the effect falls back to the global `[hotkeys]` range values.
 

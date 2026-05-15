@@ -152,7 +152,6 @@ python -m unicornviz --help
 | `Shift+,`         | Res scale MIN                                                 |
 | `Shift+.`         | Res scale MAX                                                 |
 | `Ctrl+,` / `Ctrl+.` | Reset internal render scale                                  |
-| `Alt+,` / `Alt+.` | Toggle randomize render scale                                 |
 | `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle Legacy HUD panel                                       |
@@ -172,7 +171,7 @@ python -m unicornviz --help
 The randomization controls work as a **global armed state** that persists across effect transitions. Here’s how it works:
 
 **When a randomization mode is ON:**
-- If the current effect supports that parameter (speed, reactivity, zoom, or render scale), it randomizes within the configured range
+- If the current effect supports that parameter (speed, reactivity, or zoom), it randomizes within the configured range
 - If the current effect doesn't support it, the HUD displays `N/A *` (not just `N/A`), indicating the mode is globally armed but unavailable for this effect
 - When you switch to an effect that does support it, the parameter randomizes automatically using the armed randomization range
 
@@ -191,7 +190,7 @@ random_zoom_min = 0.85
 random_zoom_max = 1.15
 ```
 
-When these are omitted, the effect falls back to the global `[hotkeys]` randomization ranges. The primary mnemonic bindings are `Alt+=/Alt+-` for speed randomization, `Ctrl+=/Ctrl+-` for speed reset, `Alt+,/Alt+.` for render-scale randomization, and `Ctrl+,/Ctrl+.` for render-scale reset.
+When these are omitted, the effect falls back to the global `[hotkeys]` randomization ranges. The primary mnemonic bindings are `Alt+=/Alt+-` for speed randomization, `Alt+Z` for zoom randomization, and `Ctrl+,/Ctrl+.` for render-scale reset.
 
 ## Effect Startup Randomization
 
@@ -390,7 +389,7 @@ sequence = []           # empty = all effects; e.g. ["Plasma", "Fire", "Tunnel"]
 #
 # Any effect may also provide optional random_*_min/max bounds to override the
 # global hotkey ranges while that effect is active:
-# random_speed_min/max, random_zoom_min/max, random_scale_min/max,
+# random_speed_min/max, random_zoom_min/max,
 # random_reactivity_min/max
 ```
 

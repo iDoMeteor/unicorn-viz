@@ -45,6 +45,14 @@ level = "INFO"
 # directory for per-run log files
 directory = "logs"
 
+[dropins]
+# Global drop-in exclusion list for dependency testing / support triage.
+# Values:
+# - "none" (default): enable all drop-ins
+# - "all": disable all drop-ins
+# - comma-separated drop-in names, e.g. "webcam-01,postfx-01"
+exclude = "none"
+
 [hotkeys]
 # F6 randomizes effect speed within this range (when effect exposes `speed`)
 random_speed_min = 0.25

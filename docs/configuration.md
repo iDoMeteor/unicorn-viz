@@ -152,7 +152,7 @@ Per-effect reactivity override:
 
 Per-effect randomization overrides:
 - Optional keys: `random_speed_min` / `random_speed_max`,
-    `random_zoom_min` / `random_zoom_max`, `random_scale_min` / `random_scale_max`,
+    `random_zoom_min` / `random_zoom_max`,
     `random_reactivity_min` / `random_reactivity_max`
 - If set under `[effects.<ClassName>]`, these values override the global
     `[hotkeys]` ranges only while that effect is active
@@ -195,7 +195,6 @@ Available parameters per effect:
 | All               | `reactivity`| 0.1–5.0    | Absolute per-effect audio reactivity override |
 | All               | `random_speed_min/max` | hotkey defaults | Optional per-effect bounds for random speed |
 | All               | `random_zoom_min/max` | hotkey defaults | Optional per-effect bounds for random zoom |
-| All               | `random_scale_min/max` | hotkey defaults | Optional per-effect bounds for random render scale |
 | All               | `random_reactivity_min/max` | hotkey defaults | Optional per-effect bounds for random reactivity |
 | ANSIViewer        | `glow`      | 0.0–1.0    | Phosphor glow intensity         |
 | ANSIViewer        | `crt`       | 0.0–1.0    | CRT barrel distortion strength  |

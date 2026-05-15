@@ -155,7 +155,7 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 ### Interactive Controls & Automation
 - **Keyboard shortcuts** — effect navigation, pause/resume, fullscreen, recording, and 40+ more commands
 - **MIDI support** (optional) — CC parameter mapping, note-to-action binding, dynamic CC→parameter routing
-- **Randomization toggles** with armed state — F6/F7/Alt+Z/Alt+K globally randomize speed/reactivity/zoom/render-scale; armed modes persist across effects even when unsupported, with per-effect override ranges
+- **Randomization toggles** with armed state — F6/F7/Alt+Z globally randomize speed/reactivity/zoom; armed modes persist across effects even when unsupported, with per-effect override ranges
 - **Effect-local parameter overrides** — define custom min/max bounds for randomization, speed, zoom, and reactivity per effect in config
 - **Splash screen** — music-reactive animated splash with integrity check
 
@@ -168,7 +168,7 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 
 ### Customization & Performance
 - **Window cursor control** — hide by default (show with Ctrl) or keep visible via config flag
-- **Internal render scale** — reduce from 1.0x for performance headroom on heavy shaders; randomize with Alt+K
+- **Internal render scale** — reduce from 1.0x for performance headroom on heavy shaders; adjust manually with comma/period
 - **Per-effect config overrides** — speed, intensity, amplitude, zoom, parameters tuned per effect or globally
 - **Fullscreen mode selection** — standard, borderless, or exclusive fullscreen via config
 
@@ -192,7 +192,6 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 | `a` / `Shift+A` / `Ctrl+A` | ACiD art / ANSI art / audio source |
 | `,` / `.` / `<` / `>` | Res scale down / up / MIN / MAX |
 | `Ctrl+,` / `Ctrl+.` | Res scale reset |
-| `Alt+,` / `Alt+.` | Res scale random |
 | `Space` | Pause / resume |
 | `F` | Fullscreen |
 | `T` | Toggle auto-advance |

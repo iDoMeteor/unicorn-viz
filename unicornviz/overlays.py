@@ -339,9 +339,9 @@ class Overlays:
             [
                 ('F', 'Fullscreen'),
                 ('Number', 'Jump #1-9'),
-                ('S+Number', 'Jump #11-20'),
+                ('Shift+Number', 'Jump #11-20'),
                 ('Ctrl+Number', 'Jump #21-30'),
-                ('A+Number', 'Jump #31-40'),
+                ('Alt+Number', 'Jump #31-40'),
                 ('N / Right', 'Next effect'),
                 ('P / Left', 'Prev effect'),
                 ('ESC', 'Quit'),
