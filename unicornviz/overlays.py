@@ -363,14 +363,6 @@ class Overlays:
             ],
         ),
         (
-            'Unicorn Tears',
-            [
-                ('Ctrl+U', 'Dancing unicorn overlay'),
-                ('Ctrl+Alt+U', 'Screen burst'),
-                ('U', 'Unicorn Tears'),
-            ],
-        ),
-        (
             'Tweakables',
             [
                 ('[ / ]', 'Reactivity -/+'),
@@ -421,6 +413,17 @@ class Overlays:
                 ('KP / *', 'Treatment prev / next'),
                 ('KP - +', 'PiP size'),
                 ('KP Enter', 'Treatment auto-cycle'),
+            ],
+        ),
+    ]
+
+    DROPIN_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
+        (
+            'Unicorn Tears',
+            [
+                ('Ctrl+U', 'Dancing unicorn overlay'),
+                ('Ctrl+Alt+U', 'Screen burst'),
+                ('U', 'Unicorn Tears'),
             ],
         ),
     ]
@@ -1372,8 +1375,23 @@ void main() {
         sections: list[tuple[str, list[tuple[str, str]]]] = []
         for section, entries in self.CORE_HELP_SECTIONS:
             sections.append((section, list(entries)))
-        for section in sorted(self._dynamic_help_order, key=lambda s: s.lower()):
+
+        # All drop-in sections render after system sections, alphabetized.
+        dropin_sections: dict[str, list[tuple[str, str]]] = {
+            section: list(entries)
+            for section, entries in self.DROPIN_HELP_SECTIONS
+        }
+        for section in self._dynamic_help_order:
             entries = self._dynamic_help_sections.get(section, [])
+            if not entries:
+                continue
+            bucket = dropin_sections.setdefault(section, [])
+            for entry in entries:
+                if entry not in bucket:
+                    bucket.append(entry)
+
+        for section in sorted(dropin_sections, key=lambda s: s.lower()):
+            entries = dropin_sections.get(section, [])
             if entries:
                 sections.append((section, list(entries)))
         return sections
