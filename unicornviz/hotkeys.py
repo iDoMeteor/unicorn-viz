@@ -612,9 +612,6 @@ class HotkeyHandler:
                 a.trigger_dancing_unicorn()
                 o.flash_message('\U0001f984  UNICORN INCOMING', 0.8)
             elif mod & sdl2.KMOD_SHIFT:
-                a.show_splash()
-                o.flash_message("Splash replay", 1.5)
-            else:
                 unicorn_cls = None
                 for cls in p.effects:
                     if cls.__name__ == "UnicornTears" or cls.NAME == "Unicorn Tears":
@@ -625,6 +622,9 @@ class HotkeyHandler:
                     o.flash_name(unicorn_cls.NAME)
                 else:
                     o.flash_message("Unicorn Tears not found", 1.5)
+            else:
+                a.show_splash()
+                o.flash_message("Splash replay", 1.5)
 
         elif sym == sdl2.SDLK_x:
             # Display mode controls: X=single, Shift+X=span, Ctrl+X=mirror, Alt+X=config
