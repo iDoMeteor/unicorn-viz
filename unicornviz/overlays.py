@@ -421,8 +421,9 @@ class Overlays:
             'Unicorn Tears',
             [
                 ('Ctrl+U', 'Dancing unicorn overlay'),
+                ('Alt+U', 'Rainbow Nova celebration'),
                 ('Ctrl+Alt+U', 'Screen burst'),
-                ('U', 'Unicorn Tears'),
+                ('U', 'Unicorn Tears effect'),
             ],
         ),
     ]
@@ -748,13 +749,13 @@ void main() {
             tweak_lines.append(f"POST FX     {postfx_val}")
 
         left_lines = [
+            f"B / M / T   {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
             f"FPS         {self._hud_state.get('fps', '0.0')}",
             f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",
             f"RES         {self._hud_state.get('resolution', '-')}",
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
             f"AUDIO PROF  {self._hud_state.get('audio_profile', 'house')}",
-            f"BASS/MID/TREB {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
             '[ TWEAKABLES ]',
             *tweak_lines,
         ]

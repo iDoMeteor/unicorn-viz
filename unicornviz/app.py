@@ -192,11 +192,11 @@ def _load_dancing_unicorn_class() -> type:
     )
 
 
-def _load_dancing_unicorn_class() -> type:
-    """Load DancingUnicornOverlay from the unicorn-tears drop-in."""
+def _load_rainbow_nova_class() -> type:
+    """Load RainbowNova from the unicorn-tears drop-in."""
     return load_dropin_symbol(
-        'unicorn-tears-01/dancing_unicorn_overlay.py',
-        'DancingUnicornOverlay',
+        'unicorn-tears-01/rainbow_nova.py',
+        'RainbowNova',
     )
 
 
@@ -223,6 +223,7 @@ class App:
         self._webcam_system = None
         self._postfx_controller = None
         self._dancing_unicorn = None
+        self._rainbow_nova = None
         self._streamer = None
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
@@ -577,6 +578,14 @@ class App:
         except Exception as exc:
             log.warning('DancingUnicornOverlay not available: %s', exc)
             self._dancing_unicorn = None
+        # Rainbow Nova celebration overlay (optional, from unicorn-tears drop-in).
+        try:
+            nova_cls = _load_rainbow_nova_class()
+            self._rainbow_nova = nova_cls(self._ctx, self._width, self._height)
+            log.info('RainbowNova loaded from unicorn-tears drop-in')
+        except Exception as exc:
+            log.warning('RainbowNova not available: %s', exc)
+            self._rainbow_nova = None
         # System-level webcam overlay (always-on PiP above effects, below HUD).
         try:
             webcam_cls = _load_webcam_system_class()
@@ -705,10 +714,10 @@ void main() {
         if self._dancing_unicorn is not None:
             self._dancing_unicorn.trigger()
 
-    def trigger_dancing_unicorn(self) -> None:
-        """Trigger the Ctrl+U dancing unicorn overlay."""
-        if self._dancing_unicorn is not None:
-            self._dancing_unicorn.trigger()
+    def trigger_rainbow_nova(self) -> None:
+        """Trigger the Alt+U Rainbow Nova celebration overlay."""
+        if self._rainbow_nova is not None:
+            self._rainbow_nova.trigger()
 
     def _burst_transform(self) -> tuple[float, float]:
         """Return (scale, angle_radians) for current burst frame."""
@@ -1497,6 +1506,12 @@ void main() {
                     float(audio.treble), float(audio.beat),
                 )
                 self._dancing_unicorn.render(self._ctx, self._width, self._height)
+            if self._rainbow_nova is not None:
+                self._rainbow_nova.update(dt)
+                if self._rainbow_nova.is_active:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._rainbow_nova.render(self._fbo_a.color_attachments[0])
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None

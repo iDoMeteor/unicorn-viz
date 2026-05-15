@@ -608,6 +608,9 @@ class HotkeyHandler:
             if mod & sdl2.KMOD_CTRL and mod & sdl2.KMOD_ALT:
                 a.trigger_burst()
                 o.flash_message('\U0001f300  BURST', 0.6)
+            elif mod & sdl2.KMOD_ALT:
+                a.trigger_rainbow_nova()
+                o.flash_message('\U0001f308  RAINBOW NOVA', 0.9)
             elif mod & sdl2.KMOD_CTRL:
                 a.trigger_dancing_unicorn()
                 o.flash_message('\U0001f984  UNICORN INCOMING', 0.8)
