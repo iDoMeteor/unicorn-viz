@@ -80,6 +80,30 @@ stream_key = ""
 # audio_bitrate = "160k"
 
 # ---------------------------------------------------------------------------
+# Auto VJ  (drop-ins/auto-vj-01)
+# Intelligent automation layer that drives the system like a human VJ:
+# beat-aware effect swaps, drop hits, post-fx modulation, ping-pong, etc.
+# Currently a SCAFFOLD ONLY — see drop-ins/auto-vj-01/PLAN.md.
+# Keep this disabled until the controller is feature-complete and tested.
+# ---------------------------------------------------------------------------
+[auto_vj]
+enabled = false
+# mode                  = "cruise"     # cruise | build | pingpong | auto
+# manual_grace_s        = 8.0          # ignore audio while user is driving
+# min_effect_dwell_s    = 12.0         # never swap effect faster than this
+# max_effect_dwell_s    = 90.0         # cruise upper bound
+# drop_energy_threshold = 0.78
+# drop_cooldown_s       = 30.0
+# allow_effect_swap     = true
+# allow_postfx          = true
+# allow_overlays        = true         # rainbow nova / screen burst / dancing unicorn
+# allow_tweakables      = true         # reactivity / speed / zoom
+# pingpong_a            = "Cube 3D"
+# pingpong_b            = "Plasma"
+# pingpong_beats        = 4
+# log_decisions         = false        # write JSONL decision log per session
+
+# ---------------------------------------------------------------------------
 # Webcam system overlay  (drop-ins/webcam-01)
 # Always-on camera PiP above every effect. Requires opencv-python-headless.
 # ---------------------------------------------------------------------------
