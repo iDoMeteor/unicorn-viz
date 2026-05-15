@@ -1596,6 +1596,7 @@ void main() {
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
         burst_active = self._burst_controller.active
+        nova_active = self._rainbow_nova is not None and self._rainbow_nova.is_active
         postfx_active = (
             self._postfx_controller is not None and self._postfx_controller.is_active()
         )
@@ -1604,7 +1605,7 @@ void main() {
             self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1714,7 +1715,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999 or postfx_active:
+                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
