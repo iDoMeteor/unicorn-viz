@@ -33,8 +33,8 @@ class AudioManager:
         self._reactivity_default = self._reactivity
         
         # Audio profile selection
-        profile_name = str(cfg.get("audio", "profile", default="house"))
-        self._profile = get_profile(profile_name)
+        self._profile_key = str(cfg.get("audio", "profile", default="house"))
+        self._profile = get_profile(self._profile_key)
         
         self._capture = AudioCapture(
             device_hint=device_hint,
@@ -75,9 +75,14 @@ class AudioManager:
         """Return the current audio profile."""
         return self._profile
     
+    def get_profile_key(self) -> str:
+        """Return the short key/name of the current profile (e.g. 'house', 'trance')."""
+        return self._profile_key
+    
     def set_profile(self, name: str) -> AudioProfile:
         """Switch to a named audio profile and update analyzer."""
         profile = get_profile(name)
+        self._profile_key = name
         self._profile = profile
         self._analyzer.set_profile(profile)
         log.info('Audio profile changed to: %s', profile.name)

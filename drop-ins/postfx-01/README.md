@@ -12,14 +12,15 @@ architecture decisions, common pitfalls, and a checklist for adding new effects.
 
 ## Hotkeys
 
-- `Ctrl+Alt+1` -> Post FX slot 1
-- `Ctrl+Alt+2` -> Post FX slot 2
-- `Ctrl+Alt+3` -> Post FX slot 3
-- `Ctrl+Alt+4` -> Post FX slot 4
-- `Ctrl+Alt+5` -> Post FX slot 5
-- `Ctrl+Alt+6` -> Post FX slot 6
-- `Ctrl+Alt+7` -> Post FX slot 7
-- `Ctrl+Alt+8` -> Post FX slot 8
+Slots are ordered alphabetically by effect name:
+- `Ctrl+Alt+1` -> Chromatic Aberration
+- `Ctrl+Alt+2` -> Film Grain + Dither
+- `Ctrl+Alt+3` -> Glitch Slices
+- `Ctrl+Alt+4` -> Heat Haze Refraction
+- `Ctrl+Alt+5` -> Lens Distortion + Vignette
+- `Ctrl+Alt+6` -> Multi-pass Bloom
+- `Ctrl+Alt+7` -> Radial Zoom Blur
+- `Ctrl+Alt+8` -> Temporal Feedback Trail
 
 All post FX in this drop-in are one-shot quick hitters (burst-style), not
 latched toggles.
