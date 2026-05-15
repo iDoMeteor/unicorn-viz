@@ -237,8 +237,11 @@ class HotkeyHandler:
                 # h — toggle help overlay
                 o.toggle_help()
 
-        elif sym == sdl2.SDLK_QUESTION:
-            # ? — open help (intuitive, no label needed in help screen)
+        elif sym == sdl2.SDLK_QUESTION or (
+            sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)
+        ):
+            # ? — open help (intuitive, no label needed in help screen).
+            # Some layouts emit Shift+/ (SDLK_SLASH + KMOD_SHIFT) instead of SDLK_QUESTION.
             if not o.help_visible:
                 o.toggle_help()
 
