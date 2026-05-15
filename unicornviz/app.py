@@ -1505,13 +1505,34 @@ void main() {
                     float(audio.bass), float(audio.mid),
                     float(audio.treble), float(audio.beat),
                 )
-                self._dancing_unicorn.render(self._ctx, self._width, self._height)
+                if mirror_mode_active:
+                    self._fbo_a.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._dancing_unicorn.render(
+                        self._ctx, self._render_width, self._render_height,
+                    )
+                else:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._dancing_unicorn.render(self._ctx, self._width, self._height)
             if self._rainbow_nova is not None:
                 self._rainbow_nova.update(dt)
                 if self._rainbow_nova.is_active:
-                    self._ctx.screen.use()
-                    self._ctx.viewport = (0, 0, self._width, self._height)
-                    self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                    if mirror_mode_active:
+                        # Composite nova from fbo_a into fbo_b, then copy back
+                        # so final mirror tile-blit includes the effect.
+                        self._fbo_b.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                        self._fbo_a.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
