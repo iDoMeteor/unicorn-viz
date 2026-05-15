@@ -144,10 +144,26 @@ class HotkeyHandler:
 
         # Help overlay interaction mode: section expand/collapse and focus nav.
         if getattr(o, 'help_visible', False):
+            # Toggle by section number: supports top-row, shifted symbols, and keypad.
+            shift_digit_syms = [
+                sdl2.SDLK_EXCLAIM, sdl2.SDLK_AT, sdl2.SDLK_HASH,
+                sdl2.SDLK_DOLLAR, sdl2.SDLK_PERCENT, sdl2.SDLK_CARET,
+                sdl2.SDLK_AMPERSAND, sdl2.SDLK_ASTERISK,
+                sdl2.SDLK_LEFTPAREN, sdl2.SDLK_RIGHTPAREN,
+            ]
             if sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
                 if o.toggle_help_section(sym - sdl2.SDLK_1):
                     return
             elif sym == sdl2.SDLK_0:
+                if o.toggle_help_section(9):
+                    return
+            elif sym in shift_digit_syms:
+                if o.toggle_help_section(shift_digit_syms.index(sym)):
+                    return
+            elif sdl2.SDLK_KP_1 <= sym <= sdl2.SDLK_KP_9:
+                if o.toggle_help_section(sym - sdl2.SDLK_KP_1):
+                    return
+            elif sym == sdl2.SDLK_KP_0:
                 if o.toggle_help_section(9):
                     return
             elif sym == sdl2.SDLK_UP:
@@ -156,14 +172,20 @@ class HotkeyHandler:
             elif sym == sdl2.SDLK_DOWN:
                 if o.move_help_focus(1):
                     return
+            elif sym == sdl2.SDLK_LEFT:
+                if o.move_help_focus(-1):
+                    return
+            elif sym == sdl2.SDLK_RIGHT:
+                if o.move_help_focus(1):
+                    return
             elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
                 if o.toggle_help_focus_section():
                     return
-            elif (mod & sdl2.KMOD_SHIFT) and sym in (sdl2.SDLK_EQUALS, sdl2.SDLK_PLUS):
+            elif ((mod & sdl2.KMOD_SHIFT) and sym in (sdl2.SDLK_EQUALS, sdl2.SDLK_PLUS)) or sym == sdl2.SDLK_KP_PLUS:
                 o.set_all_help_sections_collapsed(False)
                 o.flash_message('Help: expanded all sections', 1.2)
                 return
-            elif (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_MINUS:
+            elif ((mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_MINUS) or sym == sdl2.SDLK_KP_MINUS:
                 o.set_all_help_sections_collapsed(True)
                 o.flash_message('Help: collapsed all sections', 1.2)
                 return
