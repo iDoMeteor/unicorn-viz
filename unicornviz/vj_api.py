@@ -178,7 +178,7 @@ class VJApi:
 
     def trigger_screen_burst(self) -> bool:
         self._app.trigger_burst()
-        return True
+        return bool(self._app._burst_controller.active)  # noqa: SLF001
 
     def trigger_dancing_unicorn(self) -> bool:
         if self._app._dancing_unicorn is None:  # noqa: SLF001
@@ -188,7 +188,16 @@ class VJApi:
 
     def set_postfx_slot(self, slot: int) -> bool:
         msg = self._app.select_postfx_slot(int(slot))
-        return not msg.lower().endswith('unavailable')
+        lower = msg.lower()
+        if 'unavailable' in lower:
+            return False
+        if 'invalid slot' in lower:
+            return False
+        if 'use ctrl+alt+1..8' in lower:
+            return False
+        if 'coming soon' in lower:
+            return False
+        return True
 
     def hold_postfx_slot(self, slot: int, duration_s: float) -> bool:
         # Phase 1: trigger slot immediately; timed holds land in later phases.
@@ -196,7 +205,12 @@ class VJApi:
         return self.set_postfx_slot(slot)
 
     def clear_postfx(self) -> bool:
-        self._app.select_postfx_slot(0)
+        if self._app._postfx_controller is None:  # noqa: SLF001
+            return False
+        # Controller has no public clear API yet in Phase 1.
+        self._app._postfx_controller._active_slot = 0  # noqa: SLF001
+        self._app._postfx_controller._active_effect = None  # noqa: SLF001
+        self._app._postfx_controller._active_t = 0.0  # noqa: SLF001
         return True
 
     def is_user_busy(self) -> bool:
