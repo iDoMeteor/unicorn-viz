@@ -339,60 +339,60 @@ Goal: comprehensive pass for visual quality, audio reactivity, performance, star
 
 All activated via `Ctrl+Alt+1..8`. Duration ~0.9–1.3s each. Confirm trigger, appearance, and audio coupling.
 
-### Slot 1: Temporal Feedback Trail
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling (bass/beat): PASS / FAIL
-- [ ] Duration (0.9s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 2: Chromatic Aberration
+### Slot 1: Chromatic Aberration
 - [ ] Loads cleanly: PASS / FAIL
 - [ ] Visual quality: ___/5
 - [ ] Audio coupling: PASS / FAIL
 - [ ] Duration (1.15s) feels right: PASS / FAIL
 - [ ] No shader errors: PASS / FAIL
 
-### Slot 3: Film Grain + Dither
+### Slot 2: Film Grain + Dither
 - [ ] Loads cleanly: PASS / FAIL
 - [ ] Visual quality: ___/5
 - [ ] Audio coupling: PASS / FAIL
 - [ ] Duration (0.95s) feels right: PASS / FAIL
 - [ ] No shader errors: PASS / FAIL
 
-### Slot 4: Lens Distortion + Vignette
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (1.05s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 5: Radial Zoom Blur
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (0.95s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 6: Glitch Slices
+### Slot 3: Glitch Slices
 - [ ] Loads cleanly: PASS / FAIL
 - [ ] Visual quality: ___/5
 - [ ] Audio coupling: PASS / FAIL
 - [ ] Duration (0.90s) feels right: PASS / FAIL
 - [ ] No shader errors: PASS / FAIL
 
-### Slot 7: Multi-pass Bloom
+### Slot 4: Heat Haze Refraction
+- [ ] Loads cleanly: PASS / FAIL
+- [ ] Visual quality (full-screen shimmer): ___/5
+- [ ] Audio coupling (bass/beat): PASS / FAIL
+- [ ] Duration (1.30s) feels right: PASS / FAIL
+- [ ] No shader errors: PASS / FAIL
+
+### Slot 5: Lens Distortion + Vignette
+- [ ] Loads cleanly: PASS / FAIL
+- [ ] Visual quality: ___/5
+- [ ] Audio coupling: PASS / FAIL
+- [ ] Duration (1.05s) feels right: PASS / FAIL
+- [ ] No shader errors: PASS / FAIL
+
+### Slot 6: Multi-pass Bloom
 - [ ] Loads cleanly: PASS / FAIL
 - [ ] Visual quality: ___/5
 - [ ] Audio coupling (bass blooms): PASS / FAIL
 - [ ] Duration (1.20s) feels right: PASS / FAIL
 - [ ] No shader errors: PASS / FAIL
 
-### Slot 8: Heat Haze Refraction
+### Slot 7: Radial Zoom Blur
 - [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality (full-screen shimmer): ___/5
+- [ ] Visual quality: ___/5
+- [ ] Audio coupling: PASS / FAIL
+- [ ] Duration (0.95s) feels right: PASS / FAIL
+- [ ] No shader errors: PASS / FAIL
+
+### Slot 8: Temporal Feedback Trail
+- [ ] Loads cleanly: PASS / FAIL
+- [ ] Visual quality: ___/5
 - [ ] Audio coupling (bass/beat): PASS / FAIL
-- [ ] Duration (1.30s) feels right: PASS / FAIL
+- [ ] Duration (0.9s) feels right: PASS / FAIL
 - [ ] No shader errors: PASS / FAIL
 
 ---

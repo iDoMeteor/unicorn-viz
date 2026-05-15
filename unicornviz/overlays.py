@@ -1368,7 +1368,7 @@ void main() {
             postfx_y = bottom_y + _shortcut_block_height(sec_scale) + 18.0
             self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=1.85, color=(0.98, 0.95, 0.72, 0.96))
             py = postfx_y + 8 * 1.85 + 3.0
-            for key, desc in self._postfx_help_entries[:6]:
+            for key, desc in self._postfx_help_entries:
                 self._draw_text(
                     f'{key:<16} {desc}',
                     right_x + 10.0,

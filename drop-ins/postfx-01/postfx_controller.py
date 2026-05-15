@@ -14,27 +14,27 @@ _EFFECTS_DIR = Path(__file__).resolve().parent / 'effects'
 if str(_EFFECTS_DIR) not in sys.path:
     sys.path.insert(0, str(_EFFECTS_DIR))
 
-from temporal_feedback import TemporalFeedbackTrail
 from chromatic_aberration import ChromaticAberration
 from film_grain_dither import FilmGrainDither
-from lens_distortion_vignette import LensDistortionVignette
-from radial_zoom_blur import RadialZoomBlur
 from glitch_slices import GlitchSlices
-from multi_pass_bloom import MultiPassBloom
 from heat_haze_refraction import HeatHazeRefraction
+from lens_distortion_vignette import LensDistortionVignette
+from multi_pass_bloom import MultiPassBloom
+from radial_zoom_blur import RadialZoomBlur
+from temporal_feedback import TemporalFeedbackTrail
 
 log = logging.getLogger(__name__)
 
 
 HELP_ENTRIES = [
-    ('Post FX', 'Ctrl+Alt+1', 'Temporal Feedback Trail'),
-    ('Post FX', 'Ctrl+Alt+2', 'Chromatic Aberration'),
-    ('Post FX', 'Ctrl+Alt+3', 'Film Grain + Dither'),
-    ('Post FX', 'Ctrl+Alt+4', 'Lens Distortion + Vignette'),
-    ('Post FX', 'Ctrl+Alt+5', 'Radial Zoom Blur'),
-    ('Post FX', 'Ctrl+Alt+6', 'Glitch Slices'),
-    ('Post FX', 'Ctrl+Alt+7', 'Multi-pass Bloom'),
-    ('Post FX', 'Ctrl+Alt+8', 'Heat Haze Refraction'),
+    ('Post FX', 'Ctrl+Alt+1', 'Chromatic Aberration'),
+    ('Post FX', 'Ctrl+Alt+2', 'Film Grain + Dither'),
+    ('Post FX', 'Ctrl+Alt+3', 'Glitch Slices'),
+    ('Post FX', 'Ctrl+Alt+4', 'Heat Haze Refraction'),
+    ('Post FX', 'Ctrl+Alt+5', 'Lens Distortion + Vignette'),
+    ('Post FX', 'Ctrl+Alt+6', 'Multi-pass Bloom'),
+    ('Post FX', 'Ctrl+Alt+7', 'Radial Zoom Blur'),
+    ('Post FX', 'Ctrl+Alt+8', 'Temporal Feedback Trail'),
 ]
 
 
@@ -42,14 +42,14 @@ class PostFxController:
     """Runtime controller for global post-process effects."""
 
     SLOT_MAP: tuple[tuple[int, str, bool], ...] = (
-        (1, 'Temporal Feedback Trail', True),
-        (2, 'Chromatic Aberration', True),
-        (3, 'Film Grain + Dither', True),
-        (4, 'Lens Distortion + Vignette', True),
-        (5, 'Radial Zoom Blur', True),
-        (6, 'Glitch Slices', True),
-        (7, 'Multi-pass Bloom', True),
-        (8, 'Heat Haze Refraction', True),
+        (1, 'Chromatic Aberration', True),
+        (2, 'Film Grain + Dither', True),
+        (3, 'Glitch Slices', True),
+        (4, 'Heat Haze Refraction', True),
+        (5, 'Lens Distortion + Vignette', True),
+        (6, 'Multi-pass Bloom', True),
+        (7, 'Radial Zoom Blur', True),
+        (8, 'Temporal Feedback Trail', True),
     )
 
     def __init__(self, ctx: moderngl.Context, width: int, height: int, cfg: dict | None = None) -> None:
@@ -60,25 +60,25 @@ class PostFxController:
         self.enabled = bool(self._cfg.get('enabled', True))
 
         self._effects: dict[int, object] = {
-            1: TemporalFeedbackTrail(ctx, width, height),
-            2: ChromaticAberration(ctx, width, height),
-            3: FilmGrainDither(ctx, width, height),
-            4: LensDistortionVignette(ctx, width, height),
-            5: RadialZoomBlur(ctx, width, height),
-            6: GlitchSlices(ctx, width, height),
-            7: MultiPassBloom(ctx, width, height),
-            8: HeatHazeRefraction(ctx, width, height),
+            1: ChromaticAberration(ctx, width, height),
+            2: FilmGrainDither(ctx, width, height),
+            3: GlitchSlices(ctx, width, height),
+            4: HeatHazeRefraction(ctx, width, height),
+            5: LensDistortionVignette(ctx, width, height),
+            6: MultiPassBloom(ctx, width, height),
+            7: RadialZoomBlur(ctx, width, height),
+            8: TemporalFeedbackTrail(ctx, width, height),
         }
         self._hit_duration = float(self._cfg.get('hit_duration', 0.9) or 0.9)
         self._slot_hit_duration: dict[int, float] = {
-            1: float(self._cfg.get('slot1_duration', self._hit_duration) or self._hit_duration),
-            2: float(self._cfg.get('slot2_duration', 1.15) or 1.15),
-            3: float(self._cfg.get('slot3_duration', 0.95) or 0.95),
-            4: float(self._cfg.get('slot4_duration', 1.05) or 1.05),
-            5: float(self._cfg.get('slot5_duration', 0.95) or 0.95),
-            6: float(self._cfg.get('slot6_duration', 0.90) or 0.90),
-            7: float(self._cfg.get('slot7_duration', 1.20) or 1.20),
-            8: float(self._cfg.get('slot8_duration', 1.30) or 1.30),
+            1: float(self._cfg.get('slot1_duration', 1.15) or 1.15),
+            2: float(self._cfg.get('slot2_duration', 0.95) or 0.95),
+            3: float(self._cfg.get('slot3_duration', 0.90) or 0.90),
+            4: float(self._cfg.get('slot4_duration', 1.30) or 1.30),
+            5: float(self._cfg.get('slot5_duration', 1.05) or 1.05),
+            6: float(self._cfg.get('slot6_duration', 1.20) or 1.20),
+            7: float(self._cfg.get('slot7_duration', 0.95) or 0.95),
+            8: float(self._cfg.get('slot8_duration', self._hit_duration) or self._hit_duration),
         }
         self._active_slot: int = 0
         self._active_effect = None
