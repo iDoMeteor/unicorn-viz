@@ -735,6 +735,14 @@ void main() {
         if self._rainbow_nova is not None:
             self._rainbow_nova.trigger()
 
+    def toggle_auto_vj(self) -> str:
+        """Toggle Auto VJ controller on/off; returns a flash-message string."""
+        if self._auto_vj is None:
+            return 'Auto VJ not loaded'
+        enabled = self._auto_vj.toggle()
+        self.vj_api.set_status_pill(self._auto_vj.status_text)
+        return 'Auto VJ  ON' if enabled else 'Auto VJ  OFF'
+
     def _burst_transform(self) -> tuple[float, float]:
         """Return (scale, angle_radians) for current burst frame."""
         return self._burst_controller.transform()

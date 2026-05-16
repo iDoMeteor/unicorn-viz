@@ -112,6 +112,10 @@ class HotkeyHandler:
                 message = a.select_postfx_slot(slot)
                 o.flash_message(message, 1.5)
                 return
+            if sym == sdl2.SDLK_j:
+                msg = a.toggle_auto_vj()
+                o.flash_message(msg, 2.0)
+                return
 
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
         if mod & sdl2.KMOD_CTRL and effect is not None:

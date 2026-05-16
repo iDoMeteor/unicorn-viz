@@ -426,6 +426,12 @@ class Overlays:
                 ('U', 'Unicorn Tears effect'),
             ],
         ),
+        (
+            'Auto VJ',
+            [
+                ('Ctrl+Alt+J', 'Toggle Auto VJ on/off'),
+            ],
+        ),
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
