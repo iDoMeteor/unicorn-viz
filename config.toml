@@ -88,10 +88,22 @@ stream_key = ""
 # ---------------------------------------------------------------------------
 [auto_vj]
 enabled = false
-# mode                  = "cruise"     # cruise | build | pingpong | auto
-# manual_grace_s        = 8.0          # ignore audio while user is driving
-# min_effect_dwell_s    = 12.0         # never swap effect faster than this
-# max_effect_dwell_s    = 90.0         # cruise upper bound
+#
+# Phase 3 starter profile (conservative):
+# - leave enabled=false until ready to test
+# - cruise-only feel: slow swaps + gentle reactivity drift
+# mode                  = "auto"       # Phase 3 treats auto as cruise behavior
+# manual_grace_s        = 8.0          # ignore auto actions while user is driving
+# min_effect_dwell_s    = 35.0         # conservative: slower effect changes
+# max_effect_dwell_s    = 75.0
+# reactivity_min        = 0.90         # gentle drift bounds
+# reactivity_max        = 1.35
+# reactivity_target_interval_s = 4.0
+# reactivity_slew_per_s = 0.20
+# cruise_effect_tags    = ["psychedelic", "audio", "futuristic"]
+# beat_threshold        = 0.55
+# bpm_min               = 70
+# bpm_max               = 180
 # drop_energy_threshold = 0.78
 # drop_cooldown_s       = 30.0
 # allow_effect_swap     = true
