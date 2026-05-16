@@ -18,6 +18,9 @@
 - `[done]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with beat-context snapshot (bpm, beat_phase, energy, vj_mode) per keypress; gated by `[keystrokes] enabled = false`.
 - `[todo]` Plan multi-display overlay policy so help/HUD/flash render only on primary display in `span_all` / `mirror_all` when enabled.
 - `[todo]` Design a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
+- `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
+- `[todo]` Add effect metadata concept `ping_pong_friends` for preferred pairings when randomizing ping-pong slots.
+- `[todo]` Design scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ only when hue-shift inactive).
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
@@ -176,6 +179,22 @@
   - licensing/entitlement enforcement model
   - security/trust boundary for executable plugin code
 - `[todo]` Propose and prototype additional built-in effects and scene ideas.
+- `[todo]` Add global scroll-wheel hue-shift post-fx interaction.
+  Notes:
+  - wheel up/down shifts global hue in opposite directions
+  - effect stays active for X seconds after last scroll event (new scroll resets timer)
+  - middle-click clears hue-shift immediately
+  - when hue-shift is inactive, middle-click toggles Auto VJ if loaded
+- `[todo]` Extend effect metadata with optional `ping_pong_friends` list.
+  Notes:
+  - used by ping-pong randomization to bias compatible pairings
+  - fallback remains generic random when friend data is absent
+  - keep backwards compatibility for effects that only define `TAGS`
+- `[todo]` Rebalance Auto VJ Drop emphasis toward post-fx profiles.
+  Notes:
+  - prioritize selecting post-fx behavior families for Drop impact
+  - treat effect-tag targeting as secondary/assistive signal
+  - ensure cooldown/anti-storm logic still prevents visual spam
 - `[todo]` Design and prototype "Grand Finale" system effect.
   Notes:
   - intent: end-of-set cinematic closer with deterministic progression
@@ -202,11 +221,11 @@
 - `[todo]` Black Hole Cathedral effect (gothic mega-structure orbiting an accretion lens with choir-like pulse reactivity).
 - `[todo]` Reactor Breach effect (industrial core meltdown with plasma vents, warning strobes, and containment-wave transitions).
 - `[todo]` Grand Finale effect suite (staged crescendo, hard drop, cooldown outro).
-- `[todo]` Optional keystroke telemetry log for training Auto VJ behavior models.
+- `[done]` Optional keystroke telemetry log for training Auto VJ behavior models.
   Notes:
-  - append-only log under `logs/` with timestamp, key/modifier, and action label
-  - controlled by a global config flag; default OFF
-  - redact/omit sensitive text entry paths (if any future text input is added)
+  - implemented append-only log under `logs/` with key + beat-context snapshot
+  - controlled by global `[keystrokes] enabled` flag; default OFF
+  - future follow-up: redact/omit any sensitive text-input paths if added later
 
 ## Delivery Strategy
 
