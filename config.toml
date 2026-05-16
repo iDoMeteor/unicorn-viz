@@ -89,46 +89,41 @@ stream_key = ""
 [auto_vj]
 enabled = true
 #
-# Phase 4 starter profile (less conservative; Ctrl+Alt+J to toggle at runtime):
-# mode                  = "auto"       # auto/cruise: director picks Cruise→Build→Drop
-# manual_grace_s        = 8.0          # pause auto actions after any manual input
-# min_effect_dwell_s    = 20.0         # minimum seconds before an effect swap
-# max_effect_dwell_s    = 60.0         # maximum seconds before a cruise effect swap
-# reactivity_min        = 0.85         # cruise drift lower bound
-# reactivity_max        = 1.65         # cruise/build/drop drift upper bound
-# reactivity_target_interval_s = 4.0   # seconds between reactivity retarget
-# reactivity_slew_per_s = 0.30         # reactivity slew speed per second
-# cruise_effect_tags    = []           # restrict cruise swaps to tagged effects (empty=all)
-# drop_effect_tags      = ["psychedelic", "intense", "drop"]
+# Phase 4 starter profile (conservative):
+# - leave enabled=false until ready to test
+# - cruise-only feel: slow swaps + gentle reactivity drift
+# mode                  = "auto"       # Phase 3 treats auto as cruise behavior
+# manual_grace_s        = 8.0          # ignore auto actions while user is driving
+# min_effect_dwell_s    = 35.0         # conservative: slower effect changes
+# max_effect_dwell_s    = 75.0
+# reactivity_min        = 0.90         # gentle drift bounds
+# reactivity_max        = 1.35
+# reactivity_target_interval_s = 4.0
+# reactivity_slew_per_s = 0.20
+# cruise_effect_tags    = ["psychedelic", "audio", "futuristic"]
 # beat_threshold        = 0.55
 # bpm_min               = 70
 # bpm_max               = 180
-#
-# Build / Drop detection:
-# build_energy_threshold = 0.45        # energy slope to enter Build mode
-# build_sustain_s        = 3.0         # seconds of sustained energy before Build
-# build_max_s            = 20.0        # force Drop after this long in Build
-# drop_energy_threshold  = 0.78        # drop_score to trigger a Drop
-# drop_cooldown_s        = 30.0        # minimum seconds between Drops
-#
-# Action gates (set false to restrict VJ category):
+# drop_energy_threshold = 0.78
+# drop_cooldown_s       = 30.0
 # allow_effect_swap     = true
 # allow_postfx          = true
 # allow_overlays        = true         # rainbow nova / screen burst / dancing unicorn
-# allow_tweakables      = true         # reactivity drift
-#
-# Post FX behavior:
-# postfx_cruise_interval_s = 60.0     # seconds between cruise postfx touches
-# postfx_cruise_slots      = [1,2,3]  # which postfx slots the VJ can touch
-# postfx_drop_duration_s   = 4.0      # how long a Drop postfx hold lasts
-#
-# Ping-pong (Phase 5):
-# pingpong_a            = "Cube 3D"
-# pingpong_b            = "Plasma"
+# allow_tweakables      = true         # reactivity / speed / zoom
+# pingpong_a            = "Tron Grid"
+# pingpong_b            = "Hacker Terminal"
 # pingpong_beats        = 4
-#
-# Decision logging:
 # log_decisions         = false        # write JSONL decision log per session
+
+# ---------------------------------------------------------------------------
+# Keystroke logging  (unicornviz/keystroke_log.py)
+# Appends one JSON line per keypress to logs/keystrokes-<date>.log.
+# Each line includes: timestamp, key label, current effect, and beat context
+# (bpm, beat_phase, energy, vj_mode) when Auto VJ is running.
+# Useful for training Auto VJ behaviour models; default is OFF.
+# ---------------------------------------------------------------------------
+[keystrokes]
+enabled = false
 
 # ---------------------------------------------------------------------------
 # Webcam system overlay  (drop-ins/webcam-01)

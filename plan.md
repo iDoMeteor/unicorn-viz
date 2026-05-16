@@ -15,7 +15,7 @@
 - `[todo]` Design vignette/post-process system (see Phase 4).
 - `[todo]` Design external plugin loading for paid effect packs.
 - `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
-- `[todo]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with a config kill-switch for Auto VJ training datasets.
+- `[done]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with beat-context snapshot (bpm, beat_phase, energy, vj_mode) per keypress; gated by `[keystrokes] enabled = false`.
 - `[todo]` Plan multi-display overlay policy so help/HUD/flash render only on primary display in `span_all` / `mirror_all` when enabled.
 - `[todo]` Design a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
 

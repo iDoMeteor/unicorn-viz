@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from unicornviz.overlays import Overlays
     from unicornviz.audio.manager import AudioManager
     from unicornviz.midi import MidiManager, MidiEvent
+    from unicornviz.keystroke_log import KeystrokeLogger
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +68,20 @@ class HotkeyHandler:
         if isinstance(sym_name, bytes):
             sym_name = sym_name.decode("utf-8", errors="replace")
         log.debug("Key: %s (mod=0x%04x)", sym_name, mod)
+
+        # Keystroke logger — capture key + beat context if enabled.
+        ks_log = getattr(a, '_keystroke_logger', None)
+        if ks_log is not None:
+            _vj = getattr(a, '_auto_vj', None)
+            _grid = getattr(_vj, '_grid', None) if _vj is not None else None
+            ks_log.log_key(
+                sym_name,
+                effect_name=getattr(getattr(a, '_current_effect', None), 'NAME', ''),
+                bpm=float(getattr(_grid, 'bpm', 0.0) or 0.0),
+                beat_phase=float(getattr(_grid, 'beat_phase', 0.0) or 0.0),
+                energy=float(getattr(_grid, 'energy', 0.0) or 0.0),
+                vj_mode=str(getattr(_vj, '_mode', '')),
+            )
 
         # Phase 1 Auto VJ guard: user input should pause automation briefly.
         # Passive keys intentionally excluded: TAB, h, and ?.

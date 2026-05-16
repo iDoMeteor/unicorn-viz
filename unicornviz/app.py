@@ -34,6 +34,7 @@ from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
 from unicornviz.dropins import load_dropin_symbol, discover_dropin_help_entries
 from unicornviz.vj_api import VJApi
+from unicornviz.keystroke_log import KeystrokeLogger
 
 log = logging.getLogger(__name__)
 
@@ -1286,6 +1287,10 @@ void main() {
                 "Effects without direct shortcuts (beyond 30): %s",
                 ", ".join(overlays.unmapped_effects),
             )
+        ks_cfg = self.cfg.get('keystrokes', default={}) or {}
+        keystroke_log_enabled = bool(ks_cfg.get('enabled', False)) if isinstance(ks_cfg, dict) else False
+        self._keystroke_logger = KeystrokeLogger(keystroke_log_enabled)
+
         hotkeys = HotkeyHandler(
             app=self,
             playlist=playlist,
@@ -1635,6 +1640,9 @@ void main() {
             except Exception as exc:
                 log.warning('AutoVJController shutdown failed: %s', exc)
             self._auto_vj = None
+        if self._keystroke_logger is not None:
+            self._keystroke_logger.close()
+            self._keystroke_logger = None
         audio_manager.stop()
         midi_manager.stop()
         if self._webcam_system is not None:
