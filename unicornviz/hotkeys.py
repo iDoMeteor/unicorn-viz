@@ -94,7 +94,12 @@ class HotkeyHandler:
             sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)
         )
         is_passive = sym == sdl2.SDLK_TAB or is_plain_h or is_question
-        if not is_passive:
+        is_auto_vj_control = (
+            ((mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j)
+            or ((mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_j)
+            or self._ctrlj_armed
+        )
+        if not is_passive and not is_auto_vj_control:
             a.vj_api.mark_user_action('key')
 
         effect = a._current_effect  # noqa: SLF001
