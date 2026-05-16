@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import sdl2
@@ -30,6 +31,9 @@ class HotkeyHandler:
         self._shortcut_effects = playlist.shortcut_effects
         self._overlays = overlays
         self._audio = audio_manager
+        self._ctrlj_armed: bool = False
+        self._ctrlj_arm_t: float = 0.0
+        self._CTRLJ_WINDOW: float = 2.0  # seconds the leader key stays armed
 
     def attach_midi(self, midi: "MidiManager") -> None:
         """Register MIDI event listener after construction."""
@@ -133,6 +137,34 @@ class HotkeyHandler:
                 return
 
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
+            # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
+            # These keys must NOT call mark_user_action(); they ARE the VJ directing.
+            if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j:
+                self._ctrlj_armed = True
+                self._ctrlj_arm_t = time.monotonic()
+                o.flash_message('AUTO VJ \u2192', 1.0)
+                return
+
+            if self._ctrlj_armed:
+                if time.monotonic() - self._ctrlj_arm_t <= self._CTRLJ_WINDOW:
+                    vj = getattr(a, '_auto_vj', None)
+                    self._ctrlj_armed = False
+                    msg: str | None = None
+                    if sym == sdl2.SDLK_a:
+                        msg = vj.pin_slot('A') if vj is not None else 'Auto VJ not loaded'
+                    elif sym == sdl2.SDLK_b:
+                        msg = vj.pin_slot('B') if vj is not None else 'Auto VJ not loaded'
+                    elif sym == sdl2.SDLK_p:
+                        msg = vj.toggle_pingpong() if vj is not None else 'Auto VJ not loaded'
+                    elif sym == sdl2.SDLK_c:
+                        msg = vj.clear_pingpong() if vj is not None else 'Auto VJ not loaded'
+                    elif sym == sdl2.SDLK_m:
+                        msg = vj.cycle_director_mode() if vj is not None else 'Auto VJ not loaded'
+                    if msg is not None:
+                        o.flash_message(msg, 2.0)
+                        return
+                else:
+                    self._ctrlj_armed = False
         if mod & sdl2.KMOD_CTRL and effect is not None:
             if sym == sdl2.SDLK_n:
                 for method_name, label in (

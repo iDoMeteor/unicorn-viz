@@ -432,6 +432,16 @@ class Overlays:
                 ('Ctrl+Alt+J', 'Toggle Auto VJ on/off'),
             ],
         ),
+        (
+            'Auto VJ Ping-Pong',
+            [
+                ('Ctrl+J  then  A', 'Pin current effect → slot A'),
+                ('Ctrl+J  then  B', 'Pin current effect → slot B'),
+                ('Ctrl+J  then  P', 'Toggle ping-pong mode (needs A+B)'),
+                ('Ctrl+J  then  C', 'Clear ping-pong slots'),
+                ('Ctrl+J  then  M', 'Cycle Director mode manually'),
+            ],
+        ),
     ]
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]

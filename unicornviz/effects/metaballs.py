@@ -35,6 +35,7 @@ uniform float iBass;
 uniform float iMid;
 uniform float iTreble;
 uniform int iBallCount;
+uniform float iZoom;
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -47,6 +48,7 @@ vec3 palette(float t) {{
 }}
 
 void main() {{
+    vec2 uv = v_uv / max(iZoom, 0.05);
     float field = 0.0;
     for (int i = 0; i < N; i++) {{
         if (i >= iBallCount) {{
@@ -55,7 +57,7 @@ void main() {{
         float bx = balls[i * 3];
         float by = balls[i * 3 + 1];
         float br = balls[i * 3 + 2];
-        vec2 d = v_uv - vec2(bx, by);
+        vec2 d = uv - vec2(bx, by);
         field += br * br / max(dot(d, d), 0.0001);
     }}
 
@@ -83,7 +85,10 @@ class Metaballs(BaseEffect):
     TAGS = ["classic", "audio"]
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {
+            "speed": 1.0,
+            "zoom": float(self.rng.uniform(0.75, 1.35)),
+        }
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
         self._ball_count = int(self.rng.integers(_MIN_BALLS, _MAX_BALLS + 1))
@@ -157,6 +162,7 @@ class Metaballs(BaseEffect):
         self._prog["iMid"].value = self._mid
         self._prog["iTreble"].value = self._treble
         self._prog["iBallCount"].value = int(self._ball_count)
+        self._prog["iZoom"].value = float(self.parameters["zoom"])
         # Set entire float array in one call (moderngl exposes 'balls' not 'balls[0]')
         self._prog["balls"].value = tuple(self._ball_data)
 
