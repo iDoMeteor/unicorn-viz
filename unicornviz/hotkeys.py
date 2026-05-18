@@ -292,6 +292,16 @@ class HotkeyHandler:
                 return
 
         if sym == sdl2.SDLK_ESCAPE:
+            # ESC closes the currently-open menu first; only exits when no menu is open.
+            if getattr(o, 'help_visible', False):
+                o.toggle_help()
+                return
+            if getattr(o, '_audio_selector_visible', False):  # noqa: SLF001
+                o.toggle_audio_selector()
+                return
+            if getattr(o, '_midi_selector_visible', False):  # noqa: SLF001
+                o.toggle_midi_selector()
+                return
             a._running = False  # noqa: SLF001
 
         elif sym in (sdl2.SDLK_n, sdl2.SDLK_RIGHT):
