@@ -1385,6 +1385,19 @@ void main() {
                         self._set_cursor_visible(False)
                     elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_GAINED:
                         self._set_cursor_visible(self._cursor_should_be_visible())
+                elif event.type == sdl2.SDL_MOUSEWHEEL:
+                    dy = int(event.wheel.y)
+                    if dy != 0 and self._postfx_controller is not None:
+                        self._postfx_controller.on_scroll(dy)
+                elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
+                    if event.button.button == sdl2.SDL_BUTTON_MIDDLE:
+                        if (self._postfx_controller is not None
+                                and self._postfx_controller.is_hue_active):
+                            self._postfx_controller.clear_hue_shift()
+                            self._overlays.flash_message('Hue shift off', 1.0)
+                        else:
+                            msg = self.toggle_auto_vj()
+                            self._overlays.flash_message(msg, 2.0)
                 elif event.type == sdl2.SDL_DISPLAYEVENT:
                     if event.display.event in (
                         sdl2.SDL_DISPLAYEVENT_CONNECTED,

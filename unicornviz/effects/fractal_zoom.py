@@ -129,6 +129,7 @@ class FractalZoom(BaseEffect):
     NAME = 'Fractal Zoom'
     AUTHOR = 'unicorn-viz'
     TAGS = ['futuristic', 'audio', 'psychedelic']
+    PING_PONG_FRIENDS = ['Kaleidoscope', 'Psychedelic', 'Unicorn Tears']
 
     def _init(self) -> None:
         self.parameters = {'speed': 1.0, 'max_iter': 220}

@@ -62,6 +62,7 @@ class Plasma(BaseEffect):
     NAME = "Plasma"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "audio"]
+    PING_PONG_FRIENDS = ['Fire', 'Kaleidoscope']
 
     def _init(self) -> None:
         self.parameters = {

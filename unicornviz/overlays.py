@@ -391,6 +391,8 @@ class Overlays:
                 ('Ctrl+A', 'Audio source'),
                 ('Alt+A / Alt+Shift+A', 'Profile next / prev'),
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
+                ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
+                ('Middle Click', 'Clear hue-shift / Toggle Auto VJ'),
                 ('m', 'MIDI device'),
                 ('i', 'Invert colors'),
             ],

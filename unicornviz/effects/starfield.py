@@ -237,6 +237,7 @@ class Starfield(BaseEffect):
     NAME   = "Starfield"
     AUTHOR = "unicorn-viz"
     TAGS   = ["classic", "audio", "futuristic"]
+    PING_PONG_FRIENDS = ['Cosmos', 'Alien Invasion']
 
     def _init(self) -> None:
         self.parameters = {"speed": 0.5, "warp": 0.0}

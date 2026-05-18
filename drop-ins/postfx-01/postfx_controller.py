@@ -18,6 +18,7 @@ from chromatic_aberration import ChromaticAberration
 from film_grain_dither import FilmGrainDither
 from glitch_slices import GlitchSlices
 from heat_haze_refraction import HeatHazeRefraction
+from hue_shift import HueShift
 from lens_distortion_vignette import LensDistortionVignette
 from multi_pass_bloom import MultiPassBloom
 from radial_zoom_blur import RadialZoomBlur
@@ -84,12 +85,51 @@ class PostFxController:
         self._active_effect = None
         self._active_t: float = 0.0
 
+        # ── Hue-shift continuous pass (scroll-wheel driven) ──────────────
+        self._hue_shift = HueShift(ctx, width, height)
+        self._hue_offset: float = 0.0
+        self._hue_active: bool = False
+        self._hue_idle_t: float = 0.0
+        self._hue_idle_timeout: float = float(self._cfg.get('hue_shift_timeout_s', 3.0) or 3.0)
+        self._hue_step: float = float(self._cfg.get('hue_shift_step', 1.0 / 36.0) or 1.0 / 36.0)
+        # Internal FBO used when slot and hue passes both need to chain.
+        self._hue_fbo: moderngl.Framebuffer = ctx.framebuffer(
+            color_attachments=[ctx.texture((width, height), 4)]
+        )
+
         default_slot = int(self._cfg.get('active_slot', 0) or 0)
         if default_slot > 0:
             self.trigger_slot(default_slot)
 
     def is_active(self) -> bool:
-        return self.enabled and self._active_effect is not None and self._active_t > 0.0
+        return self.enabled and (
+            (self._active_effect is not None and self._active_t > 0.0)
+            or self._hue_active
+        )
+
+    @property
+    def is_hue_active(self) -> bool:
+        """True while the scroll-wheel hue-shift pass is running."""
+        return self._hue_active
+
+    def on_scroll(self, dy: int) -> None:
+        """Accumulate hue offset from a mouse-wheel event and (re)arm the idle timer.
+
+        dy is positive for scroll-up and negative for scroll-down.
+        """
+        if not self.enabled:
+            return
+        self._hue_offset = (self._hue_offset + int(dy) * self._hue_step) % 1.0
+        self._hue_idle_t = self._hue_idle_timeout
+        self._hue_active = True
+        log.debug('Hue shift: offset=%.3f dy=%d', self._hue_offset, dy)
+
+    def clear_hue_shift(self) -> None:
+        """Immediately deactivate the hue-shift pass and reset the offset."""
+        self._hue_active = False
+        self._hue_idle_t = 0.0
+        self._hue_offset = 0.0
+        log.info('Hue shift cleared')
 
     @property
     def active_name(self) -> str:
@@ -144,21 +184,55 @@ class PostFxController:
         treble: float,
         beat: float,
     ) -> bool:
+        """Apply active post-fx passes into dst_fbo.
+
+        Execution order when both passes are active:
+          1. Slot one-shot → internal _hue_fbo
+          2. Hue shift from _hue_fbo → dst_fbo
+        When only one pass is active it writes directly to dst_fbo.
+        """
         if not self.is_active():
             return False
-        duration = self._slot_hit_duration.get(self._active_slot, self._hit_duration)
-        strength = max(0.0, min(1.0, self._active_t / max(1e-6, duration)))
-        self._active_effect.apply(src_tex, dst_fbo, dt, bass, mid, treble, beat, strength)
-        self._active_t = max(0.0, self._active_t - dt)
-        if self._active_t <= 0.0:
-            log.info('Post FX completed: slot=%d name=%s', self._active_slot, self.active_name)
-            self._active_slot = 0
-            self._active_effect = None
+
+        slot_running = self._active_effect is not None and self._active_t > 0.0
+        hue_running = self._hue_active
+
+        if slot_running:
+            duration = self._slot_hit_duration.get(self._active_slot, self._hit_duration)
+            strength = max(0.0, min(1.0, self._active_t / max(1e-6, duration)))
+            slot_dst = self._hue_fbo if hue_running else dst_fbo
+            self._active_effect.apply(src_tex, slot_dst, dt, bass, mid, treble, beat, strength)
+            self._active_t = max(0.0, self._active_t - dt)
+            if self._active_t <= 0.0:
+                log.info('Post FX completed: slot=%d name=%s', self._active_slot, self.active_name)
+                self._active_slot = 0
+                self._active_effect = None
+
+        if hue_running:
+            hue_src = self._hue_fbo.color_attachments[0] if slot_running else src_tex
+            hue_strength = max(0.0, min(1.0, self._hue_idle_t / max(1e-6, self._hue_idle_timeout)))
+            self._hue_shift.hue_offset = self._hue_offset
+            self._hue_shift.apply(hue_src, dst_fbo, dt, bass, mid, treble, beat, hue_strength)
+            self._hue_idle_t = max(0.0, self._hue_idle_t - dt)
+            if self._hue_idle_t <= 0.0:
+                self._hue_active = False
+                log.info('Hue shift expired (idle timeout)')
+
         return True
 
     def resize(self, width: int, height: int) -> None:
         self._width = width
         self._height = height
+        # Rebuild internal hue-chain FBO at new resolution.
+        try:
+            self._hue_fbo.color_attachments[0].release()
+            self._hue_fbo.release()
+            self._hue_fbo = self._ctx.framebuffer(
+                color_attachments=[self._ctx.texture((width, height), 4)]
+            )
+        except Exception as exc:
+            log.warning('Post FX hue FBO resize failed: %s', exc)
+        self._hue_shift.resize(width, height)
         for effect in self._effects.values():
             try:
                 effect.resize(width, height)
@@ -166,6 +240,12 @@ class PostFxController:
                 log.warning('Post FX resize failed for %s: %s', getattr(effect, 'NAME', type(effect).__name__), exc)
 
     def destroy(self) -> None:
+        try:
+            self._hue_shift.destroy()
+            self._hue_fbo.color_attachments[0].release()
+            self._hue_fbo.release()
+        except Exception as exc:
+            log.warning('Post FX hue resources destroy failed: %s', exc)
         for effect in self._effects.values():
             try:
                 effect.destroy()
