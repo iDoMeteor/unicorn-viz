@@ -140,6 +140,16 @@ class HotkeyHandler:
                 msg = a.toggle_auto_vj()
                 o.flash_message(msg, 2.0)
                 return
+            if sym == sdl2.SDLK_f:
+                if mod & sdl2.KMOD_SHIFT:
+                    # Ctrl+Alt+Shift+F — abort grand finale
+                    msg = a.abort_grand_finale()
+                    o.flash_message(msg, 2.0)
+                else:
+                    # Ctrl+Alt+F — trigger grand finale
+                    msg = a.trigger_grand_finale()
+                    o.flash_message(msg, 2.5)
+                return
 
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
             # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.

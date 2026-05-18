@@ -393,6 +393,8 @@ class Overlays:
                 ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
                 ('Middle Click', 'Clear hue-shift / Toggle Auto VJ'),
+                ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
+                ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
                 ('m', 'MIDI device'),
                 ('i', 'Invert colors'),
             ],

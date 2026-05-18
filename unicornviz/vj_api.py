@@ -225,3 +225,30 @@ class VJApi:
 
     def set_status_pill(self, text: str | None) -> None:
         self._app._vj_status_pill = '' if text is None else str(text)  # noqa: SLF001
+
+    # ── Overlay helpers ────────────────────────────────────────────────────
+
+    def flash_message(self, text: str, duration: float = 2.0) -> None:
+        """Push a timed flash message to the HUD overlay."""
+        try:
+            self._app._overlays.flash_message(str(text), float(duration))  # noqa: SLF001
+        except Exception:
+            pass
+
+    def hue_scroll(self, dy: int) -> None:
+        """Accumulate scroll-wheel hue shift by dy steps (+up / -down)."""
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                pc.on_scroll(int(dy))
+        except Exception:
+            pass
+
+    def clear_hue_shift(self) -> None:
+        """Immediately clear the scroll-wheel hue-shift pass."""
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                pc.clear_hue_shift()
+        except Exception:
+            pass

@@ -38,3 +38,6 @@
 	path = drop-ins/auto-vj-01
 	url = git@github.com:iDoMeteor/unicorn-viz-auto-vj-01.git
 	branch = main
+[submodule "drop-ins/grand-finale-01"]
+	path = drop-ins/grand-finale-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-grand-finale-01.git

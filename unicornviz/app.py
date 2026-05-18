@@ -210,6 +210,14 @@ def _load_auto_vj_controller_class() -> type:
     )
 
 
+def _load_grand_finale_class() -> type:
+    """Load GrandFinaleController from the grand-finale-01 drop-in."""
+    return load_dropin_symbol(
+        'grand-finale-01/grand_finale.py',
+        'GrandFinaleController',
+    )
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -235,6 +243,7 @@ class App:
         self._dancing_unicorn = None
         self._rainbow_nova = None
         self._auto_vj = None
+        self._grand_finale = None
         self._streamer = None
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
@@ -735,6 +744,24 @@ void main() {
         """Trigger the Alt+U Rainbow Nova celebration overlay."""
         if self._rainbow_nova is not None:
             self._rainbow_nova.trigger()
+
+    def trigger_grand_finale(self) -> str:
+        """Trigger the grand finale sequence; returns a flash-message string."""
+        if self._grand_finale is None:
+            return 'Grand Finale drop-in not loaded'
+        msg = self._grand_finale.trigger()
+        if self._overlays is not None:
+            self._overlays.flash_message(msg, 2.5)
+        return msg
+
+    def abort_grand_finale(self) -> str:
+        """Abort the grand finale and restore pre-finale state."""
+        if self._grand_finale is None:
+            return 'Grand Finale drop-in not loaded'
+        msg = self._grand_finale.abort()
+        if self._overlays is not None:
+            self._overlays.flash_message(msg, 2.0)
+        return msg
 
     def toggle_auto_vj(self) -> str:
         """Toggle Auto VJ controller on/off; returns a flash-message string."""
@@ -1313,6 +1340,18 @@ void main() {
             self.vj_api.set_status_pill(None)
             log.warning('AutoVJController not available: %s', exc)
 
+        # Grand Finale controller (optional drop-in).
+        try:
+            gf_cls = _load_grand_finale_class()
+            gf_cfg = self.cfg.get('grand_finale', default={}) or {}
+            if not isinstance(gf_cfg, dict):
+                gf_cfg = {}
+            self._grand_finale = gf_cls(self, gf_cfg)
+            log.info('GrandFinaleController loaded from drop-in')
+        except Exception as exc:
+            self._grand_finale = None
+            log.warning('GrandFinaleController not available: %s', exc)
+
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
@@ -1433,6 +1472,12 @@ void main() {
                 except Exception as exc:
                     log.warning('AutoVJController update failed: %s', exc)
                     self.vj_api.set_status_pill('AUTO VJ  ERROR')
+
+            if self._grand_finale is not None:
+                try:
+                    self._grand_finale.update(dt, self._audio)
+                except Exception as exc:
+                    log.warning('GrandFinaleController update failed: %s', exc)
 
             # Update effects
             if not self._paused:
@@ -1604,6 +1649,28 @@ void main() {
                         self._ctx.screen.use()
                         self._ctx.viewport = (0, 0, self._width, self._height)
                         self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+            if self._grand_finale is not None and self._grand_finale.overlay_active:
+                if mirror_mode_active:
+                    self._fbo_b.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._grand_finale.render_overlay(
+                        self._fbo_a.color_attachments[0],
+                        self._fbo_b,
+                        self._render_width, self._render_height,
+                    )
+                    self._fbo_a.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._fbo_b.color_attachments[0].use(location=0)
+                    self._present_prog['tex'].value = 0
+                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                else:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._grand_finale.render_overlay(
+                        self._fbo_a.color_attachments[0],
+                        None,
+                        self._width, self._height,
+                    )
             self._sync_recording_overlay()
             overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
@@ -1653,6 +1720,12 @@ void main() {
             except Exception as exc:
                 log.warning('AutoVJController shutdown failed: %s', exc)
             self._auto_vj = None
+        if self._grand_finale is not None:
+            try:
+                self._grand_finale.shutdown()
+            except Exception as exc:
+                log.warning('GrandFinaleController shutdown failed: %s', exc)
+            self._grand_finale = None
         if self._keystroke_logger is not None:
             self._keystroke_logger.close()
             self._keystroke_logger = None
@@ -1698,6 +1771,9 @@ void main() {
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
         burst_active = self._burst_controller.active
         nova_active = self._rainbow_nova is not None and self._rainbow_nova.is_active
+        finale_overlay_active = (
+            self._grand_finale is not None and self._grand_finale.overlay_active
+        )
         postfx_active = (
             self._postfx_controller is not None and self._postfx_controller.is_active()
         )
@@ -1706,7 +1782,7 @@ void main() {
             self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active or finale_overlay_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1816,7 +1892,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active:
+                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active or finale_overlay_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1966,6 +2042,8 @@ void main() {
             self._next_effect.resize(w, h)
         if self._postfx_controller is not None:
             self._postfx_controller.resize(self._render_width, self._render_height)
+        if self._grand_finale is not None:
+            self._grand_finale.resize(w, h)
         if self._overlays is not None:
             self._overlays.resize(w, h)
         self._resize_mirror_textures()
