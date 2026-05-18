@@ -481,6 +481,7 @@ python -m unicornviz --log-level DEBUG
 | Dali              | `Dali`              | art, surreal, audio            | Melting-clock surrealist scene                       |
 | Escher            | `Escher`            | art, optical, audio            | Impossible architecture tile shader                  |
 | Fire              | `Fire`              | classic, audio                 | Cellular-automaton lifelike flame                    |
+| Fireworks         | `Fireworks`         | classic, audio, particles      | Shell launches, glitter bursts, and spark trails     |
 | Fractal Zoom      | `FractalZoom`       | futuristic, audio              | Deep Mandelbrot zoom with beat-burst                 |
 | Metaballs         | `Metaballs`         | futuristic, audio              | GLSL SDF metaball field                              |
 | Particle Storm    | `ParticleStorm`     | futuristic, particles, audio   | 100k GPU particles, curl noise, transform feedback   |

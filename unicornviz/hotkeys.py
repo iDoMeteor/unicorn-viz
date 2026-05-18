@@ -296,10 +296,13 @@ class HotkeyHandler:
             if getattr(o, 'help_visible', False):
                 o.toggle_help()
                 return
-            if getattr(o, '_audio_selector_visible', False):  # noqa: SLF001
+            if getattr(o, '_show_name', False):  # noqa: SLF001
+                o.toggle_name_overlay()
+                return
+            if getattr(o, '_show_audio', False):  # noqa: SLF001
                 o.toggle_audio_selector()
                 return
-            if getattr(o, '_midi_selector_visible', False):  # noqa: SLF001
+            if getattr(o, '_show_midi', False):  # noqa: SLF001
                 o.toggle_midi_selector()
                 return
             a._running = False  # noqa: SLF001
