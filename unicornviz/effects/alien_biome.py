@@ -95,6 +95,7 @@ class AlienBiome(BaseEffect):
     NAME = "Wavey Gravy"
     AUTHOR = "unicorn-viz"
     TAGS = ["sci-fi", "audio", "shader"]
+    PING_PONG_FRIENDS = ['Tunnel', 'Water', 'Psychedelic']
 
     def _init(self) -> None:
         self.parameters = {"speed": 1.0}

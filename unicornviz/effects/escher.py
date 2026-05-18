@@ -98,6 +98,7 @@ class Escher(BaseEffect):
     NAME = "Escher"
     AUTHOR = "unicorn-viz"
     TAGS = ["art", "optical", "audio"]
+    PING_PONG_FRIENDS = ['Dali', 'Van Gogh', 'Vector']
 
     def _init(self) -> None:
         self.parameters = {

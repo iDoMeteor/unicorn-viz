@@ -442,8 +442,8 @@ class Overlays:
                 ('Ctrl+J  then  A', 'Pin current effect → slot A'),
                 ('Ctrl+J  then  B', 'Pin current effect → slot B'),
                 ('Ctrl+J  then  P', 'Toggle ping-pong mode (needs A+B)'),
+                ('Ctrl+J  then  R', 'Auto-pick friend pair for A/B'),
                 ('Ctrl+J  then  C', 'Clear ping-pong slots'),
-                ('Ctrl+J  then  M', 'Cycle Director mode manually'),
             ],
         ),
     ]

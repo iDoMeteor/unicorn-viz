@@ -83,6 +83,7 @@ class Metaballs(BaseEffect):
     NAME = "Metaballs"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "audio"]
+    PING_PONG_FRIENDS = ['Plasma', 'Kaleidoscope', 'Fractal Zoom']
 
     def _init(self) -> None:
         self.parameters = {

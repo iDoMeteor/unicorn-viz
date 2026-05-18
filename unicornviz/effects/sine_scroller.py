@@ -130,6 +130,7 @@ class SineScroller(BaseEffect):
     NAME = "Sine Scroller 2.0"
     AUTHOR = "Autopilot Revamp"
     TAGS = ["classic", "demoscene", "audio", "futuristic"]
+    PING_PONG_FRIENDS = ['Copper Bars', 'Vector', 'ANSI Viewer']
 
     def _init(self) -> None:
         self.parameters = {

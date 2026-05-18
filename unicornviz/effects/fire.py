@@ -157,6 +157,7 @@ class Curtains(BaseEffect):
     NAME = "Curtains"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "audio", "gpu"]
+    PING_PONG_FRIENDS = ['Fire', 'Water', 'Plasma']
 
     def _init(self) -> None:
         self.parameters = {"intensity": 0.82, "speed": 1.0, "zoom": 1.0}

@@ -151,35 +151,59 @@ class HotkeyHandler:
                     o.flash_message(msg, 2.5)
                 return
 
-        # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
-            # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
-            # These keys must NOT call mark_user_action(); they ARE the VJ directing.
-            if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j:
-                self._ctrlj_armed = True
-                self._ctrlj_arm_t = time.monotonic()
-                o.flash_message('AUTO VJ \u2192', 1.0)
-                return
+        # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
+        # Streamlined map: A/B/P/R/C only.
+        if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j:
+            self._ctrlj_armed = True
+            self._ctrlj_arm_t = time.monotonic()
+            o.flash_message('AUTO VJ \u2192 A/B/P/R/C', 1.2)
+            return
 
-            if self._ctrlj_armed:
-                if time.monotonic() - self._ctrlj_arm_t <= self._CTRLJ_WINDOW:
-                    vj = getattr(a, '_auto_vj', None)
-                    self._ctrlj_armed = False
-                    msg: str | None = None
-                    if sym == sdl2.SDLK_a:
-                        msg = vj.pin_slot('A') if vj is not None else 'Auto VJ not loaded'
-                    elif sym == sdl2.SDLK_b:
-                        msg = vj.pin_slot('B') if vj is not None else 'Auto VJ not loaded'
-                    elif sym == sdl2.SDLK_p:
-                        msg = vj.toggle_pingpong() if vj is not None else 'Auto VJ not loaded'
-                    elif sym == sdl2.SDLK_c:
-                        msg = vj.clear_pingpong() if vj is not None else 'Auto VJ not loaded'
-                    elif sym == sdl2.SDLK_m:
-                        msg = vj.cycle_director_mode() if vj is not None else 'Auto VJ not loaded'
-                    if msg is not None:
-                        o.flash_message(msg, 2.0)
-                        return
-                else:
-                    self._ctrlj_armed = False
+        if self._ctrlj_armed:
+            if time.monotonic() - self._ctrlj_arm_t <= self._CTRLJ_WINDOW:
+                vj = getattr(a, '_auto_vj', None)
+                self._ctrlj_armed = False
+                msg: str | None = None
+
+                if vj is None:
+                    msg = 'Auto VJ not loaded'
+                elif sym == sdl2.SDLK_a:
+                    cur = getattr(getattr(a, '_current_effect', None), 'NAME', '')
+                    if cur:
+                        vj.pin_slot('A', cur)
+                        msg = f'Ping-pong A = {cur}'
+                    else:
+                        msg = 'No active effect to pin'
+                elif sym == sdl2.SDLK_b:
+                    cur = getattr(getattr(a, '_current_effect', None), 'NAME', '')
+                    if cur:
+                        vj.pin_slot('B', cur)
+                        msg = f'Ping-pong B = {cur}'
+                    else:
+                        msg = 'No active effect to pin'
+                elif sym == sdl2.SDLK_p:
+                    active = bool(vj.toggle_pingpong())
+                    msg = 'Ping-pong ON' if active else 'Ping-pong OFF'
+                elif sym == sdl2.SDLK_c:
+                    vj.clear_pingpong()
+                    msg = 'Ping-pong slots cleared'
+                elif sym == sdl2.SDLK_r:
+                    pair = vj.random_pingpong_pair()
+                    if pair is None:
+                        msg = 'No ping-pong friend pairs available'
+                    else:
+                        a_name, b_name = pair
+                        vj.pin_slot('A', a_name)
+                        vj.pin_slot('B', b_name)
+                        msg = f'Ping-pong pair: {a_name} \u2194 {b_name}'
+
+                if msg is not None:
+                    o.flash_message(msg, 2.0)
+                    return
+            else:
+                self._ctrlj_armed = False
+
+        # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
         if mod & sdl2.KMOD_CTRL and effect is not None:
             if sym == sdl2.SDLK_n:
                 for method_name, label in (

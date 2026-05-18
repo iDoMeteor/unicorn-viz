@@ -116,6 +116,7 @@ class VanGogh(BaseEffect):
     NAME = "Van Gogh"
     AUTHOR = "unicorn-viz"
     TAGS = ["art", "audio", "shader"]
+    PING_PONG_FRIENDS = ['Dali', 'Escher', 'Psychedelic']
 
     def _init(self) -> None:
         self.parameters = {"speed": 1.0}

@@ -216,6 +216,7 @@ class CrystalPyramids(BaseEffect):
     NAME = "Crystal Pyramids"
     AUTHOR = "unicorn-viz"
     TAGS = ["futuristic", "audio", "mythic", "crystal"]
+    PING_PONG_FRIENDS = ['Raymarcher', 'Particle Storm', 'Prism Storm']
 
     def _init(self) -> None:
         self.parameters = {"speed": 1.0}

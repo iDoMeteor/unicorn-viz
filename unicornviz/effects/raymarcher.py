@@ -250,6 +250,7 @@ class Raymarcher(BaseEffect):
     NAME = "Raymarcher"
     AUTHOR = "unicorn-viz"
     TAGS = ["futuristic", "audio", "3d"]
+    PING_PONG_FRIENDS = ['Crystal Pyramids', 'Particle Storm', '3D Cube']
 
     def _init(self) -> None:
         self.parameters = {"speed": 1.0}

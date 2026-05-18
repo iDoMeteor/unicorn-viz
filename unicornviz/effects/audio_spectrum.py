@@ -271,6 +271,7 @@ class AudioSpectrum(BaseEffect):
     NAME = "Audio Spectrum"
     AUTHOR = "unicorn-viz"
     TAGS = ["audio", "visualizer"]
+    PING_PONG_FRIENDS = ['System Monitor', 'Particle Storm', 'Plasma']
 
     def _init(self) -> None:
         self.parameters = {"mode": 2, "glow": 1.0}

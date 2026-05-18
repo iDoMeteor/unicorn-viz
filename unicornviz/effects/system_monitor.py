@@ -236,6 +236,7 @@ class SystemMonitor(BaseEffect):
     NAME = "System Monitor"
     AUTHOR = "Autopilot"
     TAGS = ["diagnostic", "hud", "system", "demoscene"]
+    PING_PONG_FRIENDS = ['Audio Spectrum', 'Hacker Terminal', 'Cyber War']
 
     # Background visual modes — change every _MODE_DURATION seconds
     _MODE_DURATION: float = 12.0

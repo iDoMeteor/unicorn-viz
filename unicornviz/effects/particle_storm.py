@@ -182,6 +182,7 @@ class ParticleStorm(BaseEffect):
     NAME   = "Particle Storm"
     AUTHOR = "unicorn-viz"
     TAGS   = ["futuristic", "audio", "particles"]
+    PING_PONG_FRIENDS = ['Raymarcher', 'Crystal Pyramids', 'Tunnel']
 
     # 7 floats per particle: pos(2) vel(2) life(1) seed(1) hue(1)
     _STRIDE = 7 * 4

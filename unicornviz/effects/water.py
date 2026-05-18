@@ -172,6 +172,7 @@ class Water(BaseEffect):
     NAME = "Water"
     AUTHOR = "unicorn-viz"
     TAGS = ["simulation", "audio", "gpu"]
+    PING_PONG_FRIENDS = ['Fire', 'Wavey Gravy', 'Metaballs']
 
     def _init(self) -> None:
         self.parameters = {"amplitude": 1.0, "speed": 1.0}
