@@ -287,3 +287,23 @@ class VJApi:
                 pc.clear_hue_shift()
         except Exception:
             pass
+
+    def effect_param_range(self, name: str) -> tuple[float | None, float | None]:
+        """Return the active effect's config overrides for ``random_<name>_min/max``.
+
+        Returns ``(None, None)`` when the current effect has no config or has
+        not declared overrides for *name*.  Used by automation subsystems (e.g.
+        Auto VJ) to honour per-effect tweakable bounds when drifting parameters.
+
+        *name* should be one of ``"speed"``, ``"zoom"``, or ``"reactivity"``.
+        """
+        effect = self._app._current_effect  # noqa: SLF001
+        cfg = getattr(effect, 'config', None) if effect is not None else None
+        if not isinstance(cfg, dict):
+            return (None, None)
+        lo_raw = cfg.get(f'random_{name}_min')
+        hi_raw = cfg.get(f'random_{name}_max')
+        return (
+            float(lo_raw) if lo_raw is not None else None,
+            float(hi_raw) if hi_raw is not None else None,
+        )
