@@ -41,3 +41,12 @@
 [submodule "drop-ins/grand-finale-01"]
 	path = drop-ins/grand-finale-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-grand-finale-01.git
+[submodule "drop-ins/postfx-01"]
+	path = drop-ins/postfx-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-postfx-01.git
+[submodule "drop-ins/projectm-01"]
+	path = drop-ins/projectm-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-projectm-01.git
+[submodule "drop-ins/streaming-01"]
+	path = drop-ins/streaming-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-streaming-01.git
