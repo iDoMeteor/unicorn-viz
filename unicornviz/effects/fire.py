@@ -160,7 +160,7 @@ class Curtains(BaseEffect):
     PING_PONG_FRIENDS = ['Fire', 'Water', 'Plasma']
 
     def _init(self) -> None:
-        self.parameters = {"intensity": 0.82, "speed": 1.0, "zoom": 1.0}
+        self.parameters = {"intensity": 0.82, "speed": float(self.config.get("speed", 1.0)), "zoom": float(self.config.get("zoom", 1.0))}
 
         self._sim_prog  = self._make_program(_VERT, _SIM_FRAG)
         self._disp_prog = self._make_program(_VERT, _DISPLAY_FRAG)

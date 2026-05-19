@@ -222,7 +222,7 @@ class Fireworks(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            'speed':      1.0,
+            'speed':      float(self.config.get('speed', 1.0)),
             'burst_rate': float(self.rng.uniform(0.85, 1.35)),
             'trail_fade': 0.87,
         }

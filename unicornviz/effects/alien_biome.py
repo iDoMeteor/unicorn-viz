@@ -98,7 +98,7 @@ class AlienBiome(BaseEffect):
     PING_PONG_FRIENDS = ['Tunnel', 'Water', 'Psychedelic']
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {"speed": float(self.config.get("speed", 1.0))}
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
         self._bass = 0.0

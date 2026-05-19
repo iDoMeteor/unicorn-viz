@@ -87,8 +87,8 @@ class Metaballs(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "speed": 1.0,
-            "zoom": float(self.rng.uniform(0.75, 1.35)),
+            "speed": float(self.config.get("speed", 1.0)),
+            "zoom": float(self.config.get("zoom", self.rng.uniform(0.75, 1.35))),
         }
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()

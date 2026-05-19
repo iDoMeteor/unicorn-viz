@@ -244,7 +244,7 @@ class SystemMonitor(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "speed": 1.0,
+            "speed": float(self.config.get("speed", 1.0)),
             "bar_height": 0.028,
             "mode_lock": -1.0,   # -1 = auto-cycle, 0-3 = locked mode
         }

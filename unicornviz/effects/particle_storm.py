@@ -191,7 +191,7 @@ class ParticleStorm(BaseEffect):
     _VARY   = ["out_pos", "out_vel", "out_life", "out_seed", "out_hue"]
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {"speed": float(self.config.get("speed", 1.0))}
         self._bass   = 0.0
         self._mid    = 0.0
         self._treble = 0.0

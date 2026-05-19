@@ -134,7 +134,7 @@ class SineScroller(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "speed": 1.8,
+            "speed": float(self.config.get("speed", 1.8)),
             "font_scale": 4.0,
             "amplitude": 0.20,
             "bass_sensitivity": 1.3,

@@ -121,7 +121,7 @@ class CopperBars(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "speed": 1.0,
+            "speed": float(self.config.get("speed", 1.0)),
             "mode_interval": 15.0,
         }
         self._prog = self._make_program(_VERT, _FRAG)

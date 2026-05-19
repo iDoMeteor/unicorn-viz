@@ -117,7 +117,7 @@ class ANSIViewer(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {
-            "speed":     1.0,   # scroll speed multiplier
+            "speed":     float(self.config.get("speed", 1.0)),   # scroll speed multiplier
             "glow":      0.6,   # phosphor glow intensity
             "crt":       0.7,   # CRT barrel distortion
             "slide_time": 15.0, # seconds per file

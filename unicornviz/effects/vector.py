@@ -171,7 +171,7 @@ class Vector(BaseEffect):
     PING_PONG_FRIENDS = ['3D Cube', 'Sine Scroller 2.0', 'Raymarcher']
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {"speed": float(self.config.get("speed", 1.0))}
         self._prog = self._make_program(_VERT, _FRAG)
         self._bass = 0.0
         self._beat = 0.0

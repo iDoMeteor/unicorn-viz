@@ -150,7 +150,7 @@ class Cube3D(BaseEffect):
     PING_PONG_FRIENDS = ['Vector', 'Raymarcher', 'Crystal Pyramids']
 
     def _init(self) -> None:
-        self.parameters = {"speed": 1.0}
+        self.parameters = {"speed": float(self.config.get("speed", 1.0))}
         self._prog = self._make_program(_VERT, _FRAG)
 
         vbo = self.ctx.buffer(_CUBE_DATA.tobytes())
