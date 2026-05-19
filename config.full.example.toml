@@ -151,6 +151,10 @@ vignette = 0.0
 intensity = 0.82
 speed = 1.0
 zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 
 [effects.Fire]
 intensity = 0.90
@@ -169,8 +173,11 @@ max_iter = 180
 
 [effects.Metaballs]
 speed = 1.0
+# zoom = 1.0           # override rng startup zoom; unset = random each run
 # random_speed_min = 0.75
 # random_speed_max = 1.25
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
 
 [effects.ParticleStorm]
 speed = 1.0
@@ -264,3 +271,97 @@ amplitude = 1.0
 speed = 1.0
 # random_speed_min = 0.85
 # random_speed_max = 1.15
+
+[effects.CrystalPyramids]
+speed = 1.0
+# random_speed_min = 0.70
+# random_speed_max = 1.30
+
+[effects.Fireworks]
+speed = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+
+[effects.Psychedelic]
+speed = 1.0
+# random_speed_min = 0.70
+# random_speed_max = 1.30
+
+# ------------------------------------------------------------
+# Drop-in effect overrides
+# ------------------------------------------------------------
+
+[effects.AlienInvasion]
+fleet_speed = 1.2
+zoom = 1.0
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
+
+[effects.CyberWar]
+attack_speed = 2.0
+zoom = 1.0
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
+
+[effects.DiscoBall]
+speed = 1.0
+rotation_speed = 1.0
+num_tiles_u = 16
+num_tiles_v = 12
+laser_intensity = 1.0
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+
+[effects.HackerTerminal]
+text_speed = 80.0
+zoom = 1.0
+# random_zoom_min = 0.80
+# random_zoom_max = 1.20
+
+[effects.ImageShowcase]
+speed = 1.0
+mix_time = 10.0
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+
+[effects.TextureShowcase]
+speed = 1.0
+mix_time = 7.0
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+
+[effects.TronGrid]
+speed = 1.0
+grid_scale = 1.0
+num_beams = 6
+zoom = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
+# random_zoom_min = 0.80
+# random_zoom_max = 1.20
+
+[effects.UnicornTears]
+speed = 1.0
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+
+[effects.VideoShowcase]
+speed = 1.0
+mix_time = 10.0
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15

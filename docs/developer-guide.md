@@ -320,16 +320,44 @@ immediately.
 
 ### Parameters and MIDI mapping
 
-Declare runtime-tweakable values in `self.parameters`:
+Declare runtime-tweakable values in `self.parameters`, reading defaults from
+`self.config` so operators can tune each effect in `config.toml` without
+touching code:
 
 ```python
 def _init(self) -> None:
-    self.parameters = {"speed": 1.0, "glow": 0.6}
+    self.parameters = {
+        "speed": float(self.config.get("speed", 1.0)),
+        "zoom":  float(self.config.get("zoom",  1.0)),
+        "glow":  0.6,   # internal-only, no config override needed
+    }
 ```
 
-`+`/`-` keys scale `speed`; MIDI CC74 also maps to `speed` by default.  Any
-parameter name that matches a CC-map entry in `MidiManager._cc_map` is
-automatically controlled by that CC knob.
+**Canonical parameter names** — use these exact keys when the concept applies:
+
+| Key | Type | Hotkeys | MIDI default | Notes |
+|-----|------|---------|--------------|-------|
+| `speed` | float | `+` / `-` / `Ctrl+G` reset | CC74 | Scales animation rate |
+| `zoom` | float | `Alt+[` / `Alt+]` / `Alt+Z` random | CC75 | View scale multiplier |
+
+`+`/`-` keys scale `speed`; MIDI CC74 also maps to `speed` by default.
+
+**Per-effect random range overrides** — operators can constrain the F6/F7
+random-speed and Alt+Z random-zoom ranges on a per-effect basis in
+`config.toml`. These keys are read automatically by the app; no effect code
+is needed:
+
+```toml
+[effects.MyEffect]
+speed = 1.0
+zoom  = 1.0
+random_speed_min = 0.75   # F6 random-speed lower bound for this effect
+random_speed_max = 1.50   # F6 random-speed upper bound for this effect
+random_zoom_min  = 0.80   # Alt+Z random-zoom lower bound
+random_zoom_max  = 1.20   # Alt+Z random-zoom upper bound
+```
+
+If these keys are absent, the global `[hotkeys]` defaults apply.
 
 ### Effect metadata
 

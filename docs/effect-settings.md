@@ -43,10 +43,10 @@ zoom = 1.8
 
 ## Built-in Effects
 
-### `WaveyGravy` (`Wavey Gravy`)
+### `AlienBiome` (`Wavey Gravy`)
 
 ```toml
-[effects.WaveyGravy]
+[effects.AlienBiome]
 speed = 1.0
 ```
 
@@ -138,6 +138,12 @@ zoom = 1.0
 intensity = 0.90
 # global flame motion speed
 speed = 1.0
+# camera zoom multiplier (1.0 = default framing)
+zoom = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.35
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 ```
 
 ### `FractalZoom` (`Fractal Zoom`)
@@ -153,6 +159,11 @@ max_iter = 180
 ```toml
 [effects.Metaballs]
 speed = 1.0
+# zoom = 1.0   # unset = random startup zoom each run (recommended)
+# random_speed_min = 0.75
+# random_speed_max = 1.25
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
 ```
 
 ### `ParticleStorm` (`Particle Storm`)
@@ -228,6 +239,11 @@ speed = 1.0
 ```toml
 [effects.UnicornTears]
 speed = 1.0
+zoom  = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 ```
 
 ### `Water` (`Water`)
@@ -251,29 +267,46 @@ per-effect basis without touching the global defaults.
 
 ```toml
 [effects.AlienInvasion]
-speed = 1.0
+fleet_speed = 1.2
+zoom = 1.0
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
 ```
 
 ### `CyberWar` (`Cyber War`)
 
 ```toml
 [effects.CyberWar]
-speed = 1.0
+attack_speed = 2.0
+zoom = 1.0
+# random_zoom_min = 0.70
+# random_zoom_max = 1.30
 ```
 
 ### `DiscoBall` (`Disco Ball`)
 
 ```toml
 [effects.DiscoBall]
-speed     = 1.0
-num_tiles = 24    # tiles per row on the mirror grid
+speed          = 1.0
+rotation_speed = 1.0   # independent mirror ball rotation rate
+num_tiles_u    = 16    # tiles across the mirror ball U axis
+num_tiles_v    = 12    # tiles across the mirror ball V axis
+laser_intensity = 1.0  # brightness of disco laser beams
+zoom           = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 ```
 
 ### `HackerTerminal` (`Hacker Terminal`)
 
 ```toml
 [effects.HackerTerminal]
-speed = 1.0
+text_speed = 80.0   # characters-per-second scroll rate
+zoom = 1.0
+# random_zoom_min = 0.80
+# random_zoom_max = 1.20
 ```
 
 ### `TextureShowcase` (`Texture Showcase`)
@@ -281,10 +314,13 @@ speed = 1.0
 ```toml
 [effects.TextureShowcase]
 speed        = 1.0
-slide_time   = 8.0            # seconds per image
+mix_time     = 7.0            # seconds per texture before crossfade
+zoom         = 1.0
 texture_dirs = "assets/textures"  # comma-separated image directories
 # random_speed_min = 0.85
 # random_speed_max = 1.15
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 ```
 
 ### `ImageShowcase` (`Image Showcase`)
@@ -292,8 +328,13 @@ texture_dirs = "assets/textures"  # comma-separated image directories
 ```toml
 [effects.ImageShowcase]
 image_dir = ""    # override path; empty = bundled drop-in images folder
-speed = 1.0
-mix_time = 10.0
+speed     = 1.0
+mix_time  = 10.0  # seconds per image before crossfade
+zoom      = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
 ```
 
 Image Showcase shuffles its image order on load and rotates through ten
@@ -342,6 +383,11 @@ Dedicated hotkeys while this effect is active:
 speed      = 1.0
 num_beams  = 8     # sweeping laser beams (1–12)
 grid_scale = 1.0
+zoom       = 1.0
+# random_speed_min = 0.75
+# random_speed_max = 1.25
+# random_zoom_min = 0.80
+# random_zoom_max = 1.20
 ```
 
 ### `WebcamOverlay` (`Webcam Overlay`)
@@ -359,3 +405,50 @@ enabled        = true    # false disables camera worker for this effect
 
 > **Note:** This is the standalone playlist *effect*.  The always-on system camera
 > overlay is configured under `[webcam]` — see [configuration.md](configuration.md).
+
+### `VideoShowcase` (`Video Showcase`)
+
+```toml
+[effects.VideoShowcase]
+speed    = 1.0
+mix_time = 10.0   # seconds per video clip before crossfade
+zoom     = 1.0
+# video_dirs = "assets/videos"  # comma-separated video directories
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+```
+
+### `SimShowcase` (`Sim Showcase`)
+
+```toml
+[effects.SimShowcase]
+speed         = 1.0
+mix_time      = 14.0   # seconds per scene before cut
+camera_energy = 1.0    # camera motion intensity multiplier
+zoom          = 1.0
+# scene_dirs = "drop-ins/sims-01/scenes"  # comma-separated scene directories
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+# random_zoom_min = 0.85
+# random_zoom_max = 1.15
+```
+
+### `Fireworks` (`Fireworks`)
+
+```toml
+[effects.Fireworks]
+speed = 1.0
+# random_speed_min = 0.80
+# random_speed_max = 1.20
+```
+
+### `Psychedelic` (`Psychedelic`)
+
+```toml
+[effects.Psychedelic]
+speed = 1.0
+# random_speed_min = 0.70
+# random_speed_max = 1.30
+```
