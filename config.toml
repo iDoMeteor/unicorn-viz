@@ -88,6 +88,12 @@ stream_key = ""
 # ---------------------------------------------------------------------------
 [auto_vj]
 enabled = true
+profile = "raver"          # chill | normie | raver (unset => normie preset)
+#                              # explicit keys in [auto_vj] override profile defaults
+# show_duration_min    = 90    # optional full-set duration in minutes
+# show_duration_s      = 5400  # legacy fallback in seconds (used only if *_min is unset)
+# finale_auto_trigger  = true  # trigger grand finale automatically near show end
+# finale_lead_s        = 45.0  # trigger window before show end (seconds)
 #
 # Phase 4 starter profile (conservative):
 # - leave enabled=false until ready to test
@@ -95,25 +101,28 @@ enabled = true
 # mode                  = "auto"       # Phase 3 treats auto as cruise behavior
 # manual_grace_s        = 8.0          # ignore auto actions while user is driving
 # min_effect_dwell_s    = 35.0         # conservative: slower effect changes
-# max_effect_dwell_s    = 75.0
+#max_effect_dwell_s    = 120.0
 # reactivity_min        = 0.90         # gentle drift bounds
-# reactivity_max        = 1.35
+#reactivity_max        = 2.5
 # reactivity_target_interval_s = 4.0
 # reactivity_slew_per_s = 0.20
-# cruise_effect_tags    = ["psychedelic", "audio", "futuristic"]
+#cruise_effect_tags    = ["audio"]
 # beat_threshold        = 0.55
 # bpm_min               = 70
 # bpm_max               = 180
 # drop_energy_threshold = 0.78
-# drop_cooldown_s       = 30.0
+#drop_cooldown_s       = 15.0
 # allow_effect_swap     = true
 # allow_postfx          = true
 # allow_overlays        = true         # rainbow nova / screen burst / dancing unicorn
 # allow_tweakables      = true         # reactivity / speed / zoom
 # pingpong_a            = "Tron Grid"
-# pingpong_b            = "Hacker Terminal"
+pingpong_b            = "Crystal Pyramids"
 # pingpong_beats        = 4
-# log_decisions         = false        # write JSONL decision log per session
+ log_decisions         = true        # write JSONL decision log per session
+#postfx_cruise_interval_s = 25
+#postfx_cruise_slots = [1,2,3,4,5,6,7,8]
+#postfx_drop_duration_s = 5
 
 # ---------------------------------------------------------------------------
 # Keystroke logging  (unicornviz/keystroke_log.py)
@@ -123,7 +132,7 @@ enabled = true
 # Useful for training Auto VJ behaviour models; default is OFF.
 # ---------------------------------------------------------------------------
 [keystrokes]
-enabled = false
+enabled = true
 
 # ---------------------------------------------------------------------------
 # Webcam system overlay  (drop-ins/webcam-01)
