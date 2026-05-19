@@ -33,7 +33,7 @@ class HotkeyHandler:
         self._audio = audio_manager
         self._ctrlj_armed: bool = False
         self._ctrlj_arm_t: float = 0.0
-        self._CTRLJ_WINDOW: float = 2.0  # seconds the leader key stays armed
+        self._CTRLJ_WINDOW: float = 3.0  # seconds the leader key stays armed
 
     def attach_midi(self, midi: "MidiManager") -> None:
         """Register MIDI event listener after construction."""
@@ -152,11 +152,11 @@ class HotkeyHandler:
                 return
 
         # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
-        # Streamlined map: A/B/P/R/C only.
+        # Streamlined map: A/B/P/R/C/M.
         if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j:
             self._ctrlj_armed = True
             self._ctrlj_arm_t = time.monotonic()
-            o.flash_message('AUTO VJ \u2192 A/B/P/R/C', 1.2)
+            o.flash_message('AUTO VJ \u2192 A/B/P/R/C/M', 1.2)
             return
 
         if self._ctrlj_armed:
@@ -196,6 +196,13 @@ class HotkeyHandler:
                         vj.pin_slot('A', a_name)
                         vj.pin_slot('B', b_name)
                         msg = f'Ping-pong pair: {a_name} \u2194 {b_name}'
+                elif sym == sdl2.SDLK_m:
+                    method = getattr(vj, 'cycle_profile', None)
+                    if callable(method):
+                        profile = method()
+                        msg = f'Auto VJ profile: {profile}'
+                    else:
+                        msg = 'Auto VJ profile cycling unavailable'
 
                 if msg is not None:
                     o.flash_message(msg, 2.0)

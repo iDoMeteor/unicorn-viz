@@ -7,8 +7,10 @@
 - `[done]` completed
 - `[decision]` needs product/architecture decision
 
-## Current Focus (May 13, 2026)
+## Current Focus (May 18, 2026)
 
+- `[doing]` **Pre-release future-proofing pass** — see `plan-future-proofing.md` for the full audit
+  and remediation checklist (FP-01 through FP-13).  Must complete all 🔴 and 🟠 items before v1.0 tag.
 - `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
 - `[done]` RTMP streaming subsystem drop-in.
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
@@ -200,6 +202,43 @@
   - intent: end-of-set cinematic closer with deterministic progression
   - should blend system overlays, post-fx hits, and one dedicated finale visual
   - must include safe abort/exit path and configurable duration/intensity
+
+## Phase 5 — Pre-Release Future-Proofing
+
+> Full audit, findings, and remediation checklist in **`plan-future-proofing.md`**.
+> Complete all 🔴 Critical and 🟠 Pre-release items (FP-01 → FP-13) before tagging v1.0.
+
+- `[todo]` **FP-01/02/03** — Fix `grand-finale-01` private attr violations.
+  Notes:
+  - add `ctx`, `render_width`, `render_height`, `has_postfx()` to `VJApi`
+  - update `grand_finale.py` to use only `vj_api`; remove all `# noqa: SLF001` private accesses
+- `[todo]` **FP-04** — Standardize `_load_*_class()` loaders in `app.py`.
+  Notes:
+  - move try/except + null fallback inside each loader function (match multi-head pattern)
+  - removes reliance on all call sites individually remembering to guard
+- `[todo]` **FP-05/06** — Add `[postfx]` and `[grand_finale]` config skeleton sections.
+  Notes:
+  - add commented-out blocks to `config.toml` so users can see available knobs
+  - verify `config.full.example.toml` has both sections complete and accurate
+- `[done]` **FP-07** — Add show-duration API to `VJApi`.
+  Notes:
+  - implemented `set_show_duration()`, `get_elapsed_time()`, `get_time_remaining()`
+  - session timer state wired in app run loop
+  - consumed by Auto VJ timed-finale path via `VJState.session_remaining_s`
+- `[todo]` **FP-08** — Add `VJ_API_VERSION = (1, 0, 0)` constant.
+  Notes:
+  - exposes `VJApi.VERSION` for drop-in compatibility checks
+  - bump on any breaking change to the public surface
+- `[todo]` **FP-09/10** — Formalize `BaseEffect` / `AudioData` as stable public contracts.
+  Notes:
+  - add `__all__` to `unicornviz/effects/base.py`
+  - add "Stable Public Contracts" section to `docs/developer-guide.md`
+- `[todo]` **FP-11** — Document `HELP_ENTRIES` registration in developer guide.
+- `[done]` **FP-12/13** — Auto VJ P5: `Ctrl+J` leader hotkeys + HELP_TEXT additions.
+  Notes:
+  - leader + child bindings implemented in `hotkeys.py`
+  - `Ctrl+J` chain help entries now registered from the Auto VJ drop-in
+  - leader arming window currently set to 3.0s
 
 ## Feature Ideas to Explore
 

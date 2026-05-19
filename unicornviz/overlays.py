@@ -977,8 +977,11 @@ void main() {
         self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
         vj_status = str(self._hud_state.get('vj_status', '')).strip()
         if vj_status:
-            sx = x + panel_w - (len(vj_status) * 8.0 * 1.65) - 22.0
-            self._draw_text(vj_status, max(x + 22.0, sx), y + 70.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
+            # Keep the status line coherent and centered in the header.
+            max_chars = 72
+            status_line = vj_status if len(vj_status) <= max_chars else (vj_status[: max_chars - 3] + '...')
+            sx = x + (panel_w - len(status_line) * 8.0 * 1.65) * 0.5
+            self._draw_text(status_line, max(x + 22.0, sx), y + 70.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner

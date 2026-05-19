@@ -146,10 +146,16 @@ void main() {
     v_life = clamp(in_life, 0.0, 1.0);
     v_kind = in_kind;
 
-    // White-hot when young → saturated hue as it cools.
-    float sat  = clamp((1.0 - v_life) * 2.2, 0.0, 1.0);
-    vec3  hcol = hue2rgb(in_hue) * in_bright;
-    v_col = mix(vec3(in_bright * 1.10), hcol, sat) * (1.0 + iTreble * 0.18);
+    vec3 hcol = hue2rgb(in_hue) * in_bright;
+    if (in_kind < 0.5) {
+        // Rising shell only: brief warm glow at peak brightness, quickly colours.
+        float sat = clamp((1.0 - v_life) * 3.5, 0.0, 1.0);
+        v_col = mix(vec3(in_bright * 0.70), hcol, sat);
+    } else {
+        // Burst sparks: born at full hue, no white flare.
+        v_col = hcol;
+    }
+    v_col *= (1.0 + iTreble * 0.12);
 
     gl_Position  = vec4(in_pos, 0.0, 1.0);
     float sz     = in_size * (iResolution.y / 900.0) * (0.72 + iBass * 0.55);
@@ -278,9 +284,10 @@ class Fireworks(BaseEffect):
         self._bass    = 0.0
         self._treble  = 0.0
         self._beat    = 0.0
-        self._flash   = 0.0
-        self._pal_off = float(rng.uniform(0.0, 1.0))
-        self._salvo_t = float(rng.uniform(0.4, 1.6))
+        self._flash    = 0.0
+        self._flash_cd = 0.0   # seconds until next sky-flash is allowed
+        self._pal_off  = float(rng.uniform(0.0, 1.0))
+        self._salvo_t  = float(rng.uniform(0.4, 1.6))
 
     # ── GL helpers ────────────────────────────────────────────────────────────
 
@@ -318,7 +325,11 @@ class Fireworks(BaseEffect):
         self._sh_delay[i]  = float(
             self.rng.uniform(0.4, 2.2) / max(0.4, float(self.parameters['burst_rate']))
         )
-        self._flash = min(1.0, self._flash + 0.60 + power * 0.25)
+        # Flash fires only if the cooldown has expired and a rare rng roll passes
+        # (≈15% per detonation, minimum ~10 s gap) so flares are occasional, not constant.
+        if self._flash_cd <= 0.0 and float(self.rng.uniform()) < 0.15:
+            self._flash    = min(1.0, self._flash + 0.75)
+            self._flash_cd = float(self.rng.uniform(10.0, 20.0))
 
     # ── Burst factory ─────────────────────────────────────────────────────────
 
@@ -334,7 +345,7 @@ class Fireworks(BaseEffect):
             spd = (np.abs(rng.normal(1.6, 0.30, n)) * (0.75 + p * 0.55)).astype(np.float32)
             h   = np.full(n, hue, dtype=np.float32)
             sz  = rng.uniform(6.0, 13.0, n).astype(np.float32)
-            br  = rng.uniform(1.0, 1.5, n).astype(np.float32)
+            br  = rng.uniform(0.65, 0.95, n).astype(np.float32)
             vel = (np.column_stack((np.cos(ang), np.sin(ang))) * spd[:, None]).astype(np.float32)
 
         elif btype == 1:
@@ -344,7 +355,7 @@ class Fireworks(BaseEffect):
             spd = (np.abs(rng.normal(1.3, 0.35, n)) * (0.75 + p * 0.55)).astype(np.float32)
             h   = np.where(rng.uniform(size=n) < 0.25, 0.0, np.full(n, hue)).astype(np.float32)
             sz  = rng.uniform(6.0, 14.0, n).astype(np.float32)
-            br  = rng.uniform(1.1, 1.6, n).astype(np.float32)
+            br  = rng.uniform(0.70, 1.00, n).astype(np.float32)
             vel = (np.column_stack((np.cos(ang), np.sin(ang))) * spd[:, None]).astype(np.float32)
 
         elif btype == 2:
@@ -356,7 +367,7 @@ class Fireworks(BaseEffect):
             base[:, 1] += 0.65
             h   = ((np.full(n, hue) + rng.uniform(-0.04, 0.04, n)) % 1.0).astype(np.float32)
             sz  = rng.uniform(5.0, 11.0, n).astype(np.float32)
-            br  = rng.uniform(0.9, 1.3, n).astype(np.float32)
+            br  = rng.uniform(0.60, 0.90, n).astype(np.float32)
             self._emit(center, h, sz, br, (base * spd[:, None]).astype(np.float32))
             return
 
@@ -369,7 +380,7 @@ class Fireworks(BaseEffect):
             vel = (np.column_stack((np.cos(ra + sp), np.sin(ra + sp))) * spd[:, None]).astype(np.float32)
             h   = np.full(n, hue, dtype=np.float32)
             sz  = rng.uniform(5.0, 10.0, n).astype(np.float32)
-            br  = rng.uniform(1.0, 1.4, n).astype(np.float32)
+            br  = rng.uniform(0.65, 0.90, n).astype(np.float32)
             self._emit(center, h, sz, br, vel)
             return
 
@@ -382,7 +393,7 @@ class Fireworks(BaseEffect):
                 vel = (np.column_stack((np.cos(a), np.sin(a))) * spd[:, None]).astype(np.float32)
                 h   = np.full(sn, hue2, dtype=np.float32)
                 sz  = rng.uniform(4.5, 9.0, sn).astype(np.float32)
-                br  = rng.uniform(1.0, 1.4, sn).astype(np.float32)
+                br  = rng.uniform(0.65, 0.90, sn).astype(np.float32)
                 self._emit(center, h, sz, br, vel)
             return
 
@@ -394,7 +405,7 @@ class Fireworks(BaseEffect):
             h   = np.where(rng.uniform(size=n) < 0.5,
                            np.full(n, hue), np.full(n, hue2)).astype(np.float32)
             sz  = rng.uniform(10.0, 22.0, n).astype(np.float32)
-            br  = rng.uniform(1.3, 1.9, n).astype(np.float32)
+            br  = rng.uniform(0.80, 1.10, n).astype(np.float32)
             vel = (np.column_stack((np.cos(ang), np.sin(ang))) * spd[:, None]).astype(np.float32)
 
         self._emit(center, h, sz, br, vel)
@@ -424,7 +435,10 @@ class Fireworks(BaseEffect):
 
         if audio.beat > 0.5:
             self._beat  = 1.0
-            self._flash = min(1.0, self._flash + 0.70)
+            # Beat flash: 35% chance, same cooldown gate as detonation flashes.
+            if self._flash_cd <= 0.0 and float(self.rng.uniform()) < 0.35:
+                self._flash    = min(1.0, self._flash + 0.70)
+                self._flash_cd = float(self.rng.uniform(10.0, 20.0))
             choices = self.rng.choice(_N_SHELLS, size=min(4, _N_SHELLS), replace=False)
             for idx in np.atleast_1d(choices):
                 self._sh_delay[int(idx)] = 0.0
@@ -466,8 +480,9 @@ class Fireworks(BaseEffect):
             self._sp_life[active]   -= dt * spd * 0.34
             self._sp_active &= self._sp_life > 0.0
 
-        self._flash   = max(0.0, self._flash - dt * 2.0)
-        self._pal_off = (self._pal_off + dt * 0.04) % 1.0
+        self._flash    = max(0.0, self._flash - dt * 2.0)
+        self._flash_cd = max(0.0, self._flash_cd - dt)
+        self._pal_off  = (self._pal_off + dt * 0.04) % 1.0
         self._pack()
 
     def _pack(self) -> None:
@@ -478,7 +493,7 @@ class Fireworks(BaseEffect):
                 buf[i, 0:2] = self._sh_pos[i]
                 buf[i, 2]   = max(0.0, min(1.0, self._sh_life[i]))
                 buf[i, 3]   = self._sh_hue[i]
-                buf[i, 4]   = 1.4
+                buf[i, 4]   = 0.85
                 buf[i, 5]   = self._sh_size[i]
                 buf[i, 6]   = 0.0   # kind = shell
         base = _N_SHELLS

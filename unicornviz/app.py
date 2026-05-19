@@ -253,6 +253,9 @@ class App:
         self._effect_duration: float = float(
             self.cfg.get('demo', 'effect_duration', default=20)
         )
+        # Session/show timer surface for Auto VJ planning and VJ API.
+        self._session_started_at: float = 0.0
+        self._show_duration_s: float | None = None
         self._transition_duration: float = self.cfg.get(
             "demo", "transition_duration", default=1.0
         )
@@ -1383,6 +1386,7 @@ void main() {
         self._running = True
 
         prev_time = time.perf_counter()
+        self._session_started_at = time.monotonic()
         self._demo_timer = 0.0
         self._effect_duration = float(
             self.cfg.get('demo', 'effect_duration', default=20)

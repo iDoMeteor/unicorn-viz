@@ -41,6 +41,8 @@ class VJState:
     user_busy: bool
     manual_grace_remaining_s: float
     status_pill: str
+    session_elapsed_s: float
+    session_remaining_s: float | None
 
 
 class VJApi:
@@ -103,6 +105,8 @@ class VJApi:
             user_busy=self.is_user_busy(),
             manual_grace_remaining_s=max(0.0, float(app._user_action_deadline - time.monotonic())),  # noqa: SLF001
             status_pill=str(getattr(app, '_vj_status_pill', '')),  # noqa: SLF001
+            session_elapsed_s=float(self.get_elapsed_time()),
+            session_remaining_s=self.get_time_remaining(),
         )
 
     def goto_effect(self, name: str) -> bool:
@@ -147,6 +151,31 @@ class VJApi:
     def reset_advance_interval(self) -> float:
         return float(self._app.reset_advance_interval())
 
+    def set_show_duration(self, seconds: float | None) -> None:
+        """Set optional session/show duration in seconds.
+
+        ``None`` (or non-positive value) disables countdown mode.
+        """
+        if seconds is None:
+            self._app._show_duration_s = None  # noqa: SLF001
+            return
+        val = float(seconds)
+        self._app._show_duration_s = val if val > 0.0 else None  # noqa: SLF001
+
+    def get_elapsed_time(self) -> float:
+        """Return session elapsed seconds since app run-loop start."""
+        started = float(getattr(self._app, '_session_started_at', 0.0))  # noqa: SLF001
+        if started <= 0.0:
+            return 0.0
+        return max(0.0, float(time.monotonic() - started))
+
+    def get_time_remaining(self) -> float | None:
+        """Return remaining seconds to configured show end, or ``None`` if unlimited."""
+        duration = getattr(self._app, '_show_duration_s', None)  # noqa: SLF001
+        if duration is None:
+            return None
+        return max(0.0, float(duration) - self.get_elapsed_time())
+
     def set_reactivity(self, value: float) -> float:
         if self._app._audio_manager is None:  # noqa: SLF001
             return 1.0
@@ -188,6 +217,12 @@ class VJApi:
         if self._app._dancing_unicorn is None:  # noqa: SLF001
             return False
         self._app.trigger_dancing_unicorn()
+        return True
+
+    def trigger_grand_finale(self) -> bool:
+        if self._app._grand_finale is None:  # noqa: SLF001
+            return False
+        self._app.trigger_grand_finale()
         return True
 
     def set_postfx_slot(self, slot: int) -> bool:
