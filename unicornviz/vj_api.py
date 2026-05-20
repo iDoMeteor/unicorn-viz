@@ -51,6 +51,25 @@ class VJApi:
     def __init__(self, app: App) -> None:
         self._app = app
 
+    @property
+    def ctx(self):
+        """Return the active moderngl context, or ``None`` before init."""
+        return self._app._ctx  # noqa: SLF001
+
+    @property
+    def render_width(self) -> int:
+        """Return the app's logical render width."""
+        return int(self._app._width)  # noqa: SLF001
+
+    @property
+    def render_height(self) -> int:
+        """Return the app's logical render height."""
+        return int(self._app._height)  # noqa: SLF001
+
+    def has_postfx(self) -> bool:
+        """Return True when the post-FX controller is available."""
+        return self._app._postfx_controller is not None  # noqa: SLF001
+
     def state(self) -> VJState:
         app = self._app
         effect_name = '-'

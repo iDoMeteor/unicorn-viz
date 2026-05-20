@@ -208,10 +208,10 @@
 > Full audit, findings, and remediation checklist in **`plan-future-proofing.md`**.
 > Complete all 🔴 Critical and 🟠 Pre-release items (FP-01 → FP-13) before tagging v1.0.
 
-- `[todo]` **FP-01/02/03** — Fix `grand-finale-01` private attr violations.
+- `[done]` **FP-01/02/03** — Fix `grand-finale-01` private attr violations.
   Notes:
-  - add `ctx`, `render_width`, `render_height`, `has_postfx()` to `VJApi`
-  - update `grand_finale.py` to use only `vj_api`; remove all `# noqa: SLF001` private accesses
+  - added `ctx`, `render_width`, `render_height`, `has_postfx()` to `VJApi`
+  - updated `grand_finale.py` to use only `vj_api`; live drop-in code no longer uses direct private app access
 - `[todo]` **FP-04** — Standardize `_load_*_class()` loaders in `app.py`.
   Notes:
   - move try/except + null fallback inside each loader function (match multi-head pattern)
