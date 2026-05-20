@@ -1804,6 +1804,13 @@ void main() {
             self._playlist_index = playlist.index
             self._playlist_size = len(playlist.effects)
 
+            # Defensive: re-bind the main audience window's GL context every
+            # frame so any implicit drawable migration caused by subsystems
+            # creating/destroying secondary SDL windows can't silently strand
+            # GL rendering on the wrong window.
+            if self._gl_context is not None and self._control_room is not None:
+                sdl2.SDL_GL_MakeCurrent(self._window, self._gl_context)
+
             # Render
             self._render(dt)
             mirror_mode_active = (

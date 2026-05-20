@@ -17,26 +17,50 @@ The intended runtime behavior is:
 ## Current Status
 
 The control-room drop-in loads through the shared drop-in loader and its help
-entries are now discoverable, but the runtime behavior is still unstable on the
-owner's Linux/X11 machine.
+entries are discoverable.  Multiple successful opens have been observed in
+recent runs.  The segfault on ESC and the "one frame then black" symptoms have
+both been fixed.
 
-Observed symptoms across recent runs:
+The remaining unstable behavior is **audience-output starvation** when the
+operator window is open, and an aftershock that leaves the audience GL output
+"locked up" for a while after the operator window is closed.
 
-- control-room window opens but is black
-- audience-facing window can become visually corrupted
-  Example reported by owner: effect visible only in a diagonal/top-left region
-- after closing the black control-room window, later hotkey/display-mode actions
-  can leave the app in a bad GL state
-- one captured crash path ends in `_moderngl.Error: cannot create texture`
+Observed symptoms across recent runs (post format/lifecycle fixes):
+
+- enabling `[control_room].enabled = true` at startup often produces an opaque
+  black operator window
+- toggling the operator window on later with `Ctrl+Alt+O` works intermittently;
+  sometimes the first toggle in a session succeeds, later toggles do not
+- while the operator window is open in **any** display mode (single, mirror,
+  span), the audience-facing GL effects appear to freeze
+- in mirror mode specifically, the next auto-VJ scene appears to render onto
+  the operator display instead of the audience output (most likely the
+  borderless operator window z-stacks above an audience mirror tile)
+- after the operator window is closed, the audience GL output stays "locked
+  up" for several seconds before recovering
+- no SDL/GL errors are logged during the freeze; the audio capture thread
+  keeps producing audio frames in the log, but the main render loop does not
+  advance
+
+Earlier symptoms that are now fixed:
+
+- segfault on ESC inside the operator window
+- single-frame paint followed by a permanently black operator window
+- `_moderngl.Error: cannot create texture` after closing the operator window
 
 ## Environment Snapshot
 
-- OS: Linux
+- OS: Linux (Fedora 37 / GNOME / Mutter on X11)
+- Future targets: Fedora 44, Windows 10/11
 - SDL video driver in logs: `x11`
 - Main renderer: fullscreen OpenGL 4.6 core profile via `moderngl`
-- Control room: secondary SDL window in the same process
+- Control room: secondary SDL window in the same process, window-surface based
+  (no GL context)
+- Multi-display setup with mirror mode active in some runs
+  (logs show `Mirror (GL-native) reconfigured: window=3840x2160 ...`)
 - Webcam subsystem may be retrying V4L2 devices in the background, but current
   evidence does not point to webcam as the primary cause
+
 
 ## Key Logs / Evidence
 
@@ -146,6 +170,12 @@ while debugging runtime instability.
 - `cc3c5a9` — added control-room follow-ups to drop-in planning
 - `3276548` — deferred startup and stopped `Ctrl+Alt+0` collisions
 - `27ee1f8` — delayed config-enabled startup further by several frames
+- `edcf0a8` — clamped FBO size to `GL_MAX_TEXTURE_SIZE`
+- `1597673` — `App.rebind_main_gl_context()` and `VJApi` cleanup surface
+- `e6dfa44` — control-room submodule bump (fullscreen default + config docs)
+- `589ca65` — control-room submodule bump (no fullscreen-desktop, throttle, cursor)
+- *latest* — per-frame `SDL_GL_MakeCurrent` on the audience window while the
+  operator window is alive + bump to background-thread submodule
 
 ### Control-room submodule commits
 
@@ -153,6 +183,12 @@ while debugging runtime instability.
 - `4d2db89` — made control room discoverable and safer to place
 - `d822a90` — preferred isolated software renderer and logged backend
 - `23e0586` — clarified toggle aliases in help text
+- `54c7e0a` — switched presentation to `SDL_GetWindowSurface` + blit-scaled
+- `1c9e75f` — deferred shutdown, pixel-format conversion, GL rebind on teardown
+- `92c2a95` — borderless fullscreen by default + surface-refresh on window events
+- `defea91` — dropped `FULLSCREEN_DESKTOP`, throttled render, always-on cursor
+- *latest* — background-thread PIL render, ~8 fps default, lock-protected
+  hotspot publish
 
 ## Detailed Attempt Log
 
@@ -224,7 +260,7 @@ Result:
 
 ### Attempt F — remove SDL renderer/texture path entirely
 
-Current attempt in workspace:
+Changes:
 
 - removed the control room’s SDL renderer/texture usage
 - switched presentation to plain SDL window-surface blitting via
@@ -232,77 +268,170 @@ Current attempt in workspace:
 - added a clamp for app render-target size based on `GL_MAX_TEXTURE_SIZE`
   to reduce the chance of immediate `_moderngl.Error: cannot create texture`
 
+Result:
+
+- solved the `_moderngl.Error: cannot create texture` aftershock
+- did not by itself solve the black-after-first-frame symptom
+
+### Attempt G — deferred shutdown, pixel-format conversion, GL rebind
+
+Changes:
+
+- `shutdown()` now sets `_pending_shutdown = True` instead of calling
+  `SDL_DestroyWindow` from inside an event handler.  The actual destroy
+  happens from the next `update()` call, outside event polling.  Fixed
+  the segfault on ESC inside the operator window.
+- `close_now()` for safe immediate teardown from main-app contexts (e.g. the
+  toggle-off hotkey path, which is outside the operator window's own handler).
+- Converted the PIL BGRA source surface to the actual window pixel format
+  via `SDL_ConvertSurface()` before blitting.  Fixed the
+  "one frame then permanently black" symptom on X11/Mutter where BGRA-into
+  -XRGB blits were unreliable past the first frame.
+- Kept the raw pixel buffer alive for the full lifetime of the source
+  surface; `SDL_CreateRGBSurfaceFrom` does not copy.
+- On teardown, unregister from `App._subsystems` and call
+  `App.rebind_main_gl_context()` (new public surface) so secondary-window
+  destruction doesn't strand the audience window's GL binding.
+
+Result:
+
+- segfault on ESC: FIXED
+- one-frame-then-black: FIXED
+- audience-output starvation while operator window is open: NOT solved
+- aftershock lockup after operator window close: NOT solved
+
+### Attempt H — borderless-sized window, throttled PIL render, always-on cursor
+
+Changes:
+
+- Dropped `SDL_WINDOW_FULLSCREEN_DESKTOP`.  Operator window is now a plain
+  borderless window sized to the chosen display's bounds.  Looks fullscreen
+  but Mutter no longer restacks it above other fullscreen windows on the
+  same X desktop.  This was meant to address the "effects appear on the
+  operator display" symptom in mirror mode.
+- Throttled PIL re-rendering to ~15 fps with a single-frame cache.
+- Forced `SDL_ShowCursor(SDL_ENABLE)` at the top of every present().
+
+Result:
+
+- cursor is now visible: FIXED
+- mirror-mode "effects on operator display" symptom: mitigated, but the
+  audience-output starvation is reported in all display modes, including
+  single mode.  The starvation persists after the operator window is
+  closed.
+- so the borderless-window theory is insufficient: there is a real
+  starvation/GL-binding issue beyond simple window stacking.
+
+### Attempt I — background-thread PIL render and per-frame GL rebind
+
+Changes:
+
+- Moved PIL rasterization to a daemon thread (`ControlRoomRender`).  The
+  main thread's `present()` only does a fast SDL blit of the latest
+  thread-rendered buffer; it never calls `Image.tobytes()` itself.  The
+  hotspot list is also published under a lock so mouse click handling on
+  the main thread reads a consistent snapshot.
+- Default render interval lowered to ~8 fps for the operator UI; still
+  responsive for VJ work, much lighter on CPU.
+- `App` now defensively calls `SDL_GL_MakeCurrent(self._window,
+  self._gl_context)` every frame just before `self._render(dt)` whenever
+  the control room is alive, so any implicit GL drawable migration caused
+  by the secondary SDL window can't silently strand audience GL
+  rendering on the wrong drawable.
+
 Validation completed so far:
 
-- `control_room.py` imports cleanly
-- dummy-driver smoke test can construct and present one frame through the new
-  surface path
-- `app.py` imports cleanly after the patch
+- module imports cleanly
+- dummy-driver smoke test: render thread spawns, produces a frame, the
+  main thread blits it, `close_now()` joins the thread, no leak
+- `app.py` imports cleanly after the per-frame rebind
 
 This attempt is the latest unverified-on-owner-machine runtime change.
 
 ## Current Best Hypothesis
 
-The control room is still perturbing the main SDL/GL runtime because a second
-SDL window is being created inside the same process and same SDL video setup as
-the fullscreen OpenGL audience window.
+The post-Attempt-G symptoms point at **main render loop starvation** combined
+with **implicit GL drawable state migration**:
 
-The strongest remaining hypotheses are:
+1. PIL rasterization of a 1920×1080 RGBA UI on the main thread blocks the
+   audience GL loop for tens of milliseconds per render.  Attempt I moves
+   that work off the main thread entirely.
+2. Creating a second SDL window in the same process appears to be enough
+   on this X11/Mesa stack to migrate the GL drawable/context state.  When
+   the audience window keeps `SDL_GL_SwapWindow()`ing afterward, swaps can
+   silently target the wrong drawable until the context is rebound.
+   Attempt I now rebinds every frame while the control room is alive.
+3. The "after-close lockup" likely shares root cause 2: a stale GL binding
+   that the existing one-shot rebind on destroy doesn't always recover.
+   The per-frame rebind in Attempt I should also cover this window.
 
-1. Creating any second SDL-managed presentation surface in this runtime is
-   destabilizing the main fullscreen GL window on this X11/Mesa stack.
-2. Closing the control-room window leaves the main app in a subtly corrupted
-   SDL window/display state, which only explodes later when the app rebuilds
-   FBOs during display-mode switching or resize.
-3. The black-window symptom suggests the control-room presentation path itself
-   may not be making it to the display reliably even when the window exists.
+If Attempt I still doesn't fully solve the starvation/lockup on the owner
+machine, the hypothesis pool shrinks to driver-level (Mesa / Mutter) issues
+with two-window in-process GL apps, and Path 4 below becomes the most likely
+real fix.
 
 ## Recommended Next Steps
 
-### Path 1 — verify the new window-surface approach on the owner machine
+### Path 1 — verify Attempt I on the owner machine
 
 Retest with the latest code and answer these questions first:
 
-- does the control room still open black?
-- does the audience window still corrupt when the control room is opened?
-- after closing the control room, does pressing arbitrary keys still destabilize
-  the main app?
-- what does the newest log say about control-room creation timing and backend?
+- does enabling `[control_room].enabled = true` at startup still produce an
+  opaque black window?
+- does toggling the operator window with `Ctrl+Alt+O` while audience effects
+  are running still freeze the audience output?
+- does the audience output recover promptly after the operator window is
+  closed (no multi-second post-close lockup)?
+- does the operator UI still feel responsive at the new ~8 fps default, or
+  does it need `[control_room].render_interval = 0.066` (15 fps)?
 
-If this path works, keep iterating in-process.
+Capture a fresh log of any failure case.  The most valuable new signals are:
+
+- presence/absence of `Control room surface blit failed` warnings
+- presence of `SDL_GL_MakeCurrent failed` warnings (now logged by
+  `rebind_main_gl_context`)
+- whether audio frames continue logging during the freeze (they did before;
+  if they now stop too, the diagnosis flips back to true main-thread blocking)
+
+If Path 1 holds up, the in-process two-window architecture is viable and the
+remaining work is UI polish.
 
 ### Path 2 — instrument the main window state around control-room open/close
 
-If issues remain, add temporary logs for:
+If audience starvation persists with Attempt I:
 
-- `SDL_GetWindowSize(self._window, ...)` before and after control-room open
-- `SDL_GL_GetDrawableSize(self._window, ...)` before and after control-room open
-- `_width`, `_height`, `_render_width`, `_render_height` before any `_make_fbo()`
-- `GL_MAX_TEXTURE_SIZE` and the requested FBO size when `_make_fbo()` runs
-- main-window `SDL_WINDOWEVENT_*` values around control-room close/focus changes
+- log `SDL_GL_GetCurrentWindow()` and `SDL_GL_GetCurrentContext()` once per
+  second while the operator window is alive
+- log `glGetError()` after the audience `SDL_GL_SwapWindow()` while the
+  operator window is alive
+- log GLX/Mesa driver strings at startup so the owner machine's stack is
+  captured alongside the trace
 
-The goal is to prove whether the main window is being resized/invalidated behind
-the app’s back.
+The goal is to prove or rule out an implicit GL drawable migration that
+`SDL_GL_MakeCurrent` doesn't actually fix on this stack.
 
-### Path 3 — temporarily disable display-mode hotkeys after control-room close
+### Path 3 — make the operator window non-borderless
 
-If the post-close crash remains tied to resize/display-mode operations, a useful
-triage step is to temporarily ignore `X`-family display-mode hotkeys for a short
-cooldown after control-room close. That would not be a final fix, but it would
-help isolate whether close/focus teardown is the immediate trigger.
+If borderless still triggers compositor restacking issues, try a regular
+decorated window (no `SDL_WINDOW_BORDERLESS` at all).  Less pretty but
+maximally compositor-friendly.  Useful as a triage signal even if not the
+final shape.
 
 ### Path 4 — escalate architecture if in-process remains unstable
 
-If the window-surface approach still fails on the owner machine, strongly
-consider abandoning the in-process SDL second window and pivoting to one of:
+If Attempts G–I still don't yield a stable audience output on the owner
+machine, abandon the in-process SDL second window and pivot to one of:
 
-- a separate helper process for the control room using WebSocket/local IPC
-- an embedded HTTP/WebSocket control surface opened in an external browser/app
+- a separate helper process for the control room using a local IPC channel
+  (UNIX socket, WebSocket on localhost) and any UI toolkit
+- an embedded HTTP/WebSocket control surface opened in an external browser
 - an in-process control room that does not own a second SDL window at all
-  (for example, a toggleable overlay on the main window during development)
+  (for example, a togglable HUD-style overlay rendered on the audience window
+  in a corner, controllable via mouse/MIDI)
 
 At that point, the evidence would suggest the main blocker is not the control
-room UI code, but the multi-window SDL/GL architecture choice itself.
+room UI code, but the multi-window SDL/GL architecture choice itself on
+X11/Mesa.
 
 ## Files Added For Planning / Follow-Up
 
@@ -318,14 +447,22 @@ What is definitely fixed:
 - shared drop-in loading for dataclass-based modules
 - control-room help discovery
 - explicit control-room hotkey routing for `Ctrl+Alt+O` and `Ctrl+Alt+0`
+- segfault on ESC inside the operator window (deferred-shutdown lifecycle)
+- one-frame-then-black operator window (explicit pixel-format conversion)
+- mouse cursor invisible inside the operator window
+- `_moderngl.Error: cannot create texture` aftershock after operator close
 
-What is not yet solved:
+What is not yet confirmed solved on the owner machine:
 
-- stable operator-window rendering on the owner’s Linux/X11 machine
-- preventing the main OpenGL audience window from being destabilized after the
-  control room opens/closes
+- audience-output starvation while the operator window is open
+- audience-output "lockup" for several seconds after the operator window is
+  closed
 
 Most valuable next experiment:
 
-- test the latest window-surface-based control-room build on the owner machine
-  before spending more time on startup timing heuristics
+- test Attempt I (background-thread PIL rendering + per-frame `MakeCurrent`)
+  end-to-end on the owner machine in single, mirror, and span modes, and
+  capture a log for each
+- if it still misbehaves, instrument with `glGetError()` + drawable/context
+  IDs as described in Path 2 to determine whether the audience GL drawable
+  is actually being migrated by SDL/Mutter on this stack
