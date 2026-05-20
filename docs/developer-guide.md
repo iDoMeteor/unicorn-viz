@@ -384,6 +384,10 @@ not a general extension surface.
 **Rule of thumb:** if you need the same underscore-field access pattern in more
 than one caller, promote it to a public shim immediately instead of copying it.
 
+`VJApi` compatibility is versioned.  Runtime consumers can check either
+`unicornviz.vj_api.VJ_API_VERSION` or `app.vj_api.VERSION` before using newer
+capabilities.
+
 Examples:
 
 - good: `app.vj_api.flash_message(...)`

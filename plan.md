@@ -225,8 +225,9 @@
   - implemented `set_show_duration()`, `get_elapsed_time()`, `get_time_remaining()`
   - session timer state wired in app run loop
   - consumed by Auto VJ timed-finale path via `VJState.session_remaining_s`
-- `[todo]` **FP-08** — Add `VJ_API_VERSION = (1, 0, 0)` constant.
+- `[done]` **FP-08** — Add `VJ_API_VERSION = (1, 0, 0)` constant.
   Notes:
+  - implemented module constant `VJ_API_VERSION = (1, 0, 0)` in `unicornviz/vj_api.py`
   - exposes `VJApi.VERSION` for drop-in compatibility checks
   - bump on any breaking change to the public surface
 - `[todo]` **FP-09/10** — Formalize `BaseEffect` / `AudioData` as stable public contracts.
@@ -314,8 +315,9 @@
      delivers bytes each frame. The readback already happens when mirror outputs are active;
      sharing the result with the control room is low cost.
 
-  4. **No `VJApi.VERSION` constant.** (Already tracked as FP-08.) Needed before any
-     drop-in can safely do compatibility-gated feature detection.
+  4. **`VJApi.VERSION` now exists.** Compatibility-gated feature detection is available;
+     the remaining missing surfaces are subsystem registration, window-event claims,
+     and live frame access.
 
   **Window + rendering approach:**
 

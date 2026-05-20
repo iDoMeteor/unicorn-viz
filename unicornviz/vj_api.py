@@ -13,7 +13,14 @@ from typing import TYPE_CHECKING
 from unicornviz.effects.registry import get_effects
 
 if TYPE_CHECKING:
+    import moderngl
+
     from unicornviz.app import App
+
+
+VJ_API_VERSION = (1, 0, 0)
+
+__all__ = ['VJ_API_VERSION', 'VJState', 'VJApi']
 
 
 @dataclass(slots=True)
@@ -48,11 +55,13 @@ class VJState:
 class VJApi:
     """Stable, public automation surface for system-driven control."""
 
+    VERSION = VJ_API_VERSION
+
     def __init__(self, app: App) -> None:
         self._app = app
 
     @property
-    def ctx(self):
+    def ctx(self) -> moderngl.Context | None:
         """Return the active moderngl context, or ``None`` before init."""
         return self._app._ctx  # noqa: SLF001
 
@@ -90,7 +99,7 @@ class VJApi:
         postfx_active = False
         if app._postfx_controller is not None:  # noqa: SLF001
             postfx_active = bool(app._postfx_controller.is_active())  # noqa: SLF001
-            postfx_slot = int(getattr(app._postfx_controller, '_active_slot', 0))  # noqa: SLF001
+            postfx_slot = int(app._postfx_controller.active_slot)  # noqa: SLF001
 
         dancing_active = False
         if app._dancing_unicorn is not None:  # noqa: SLF001
@@ -245,6 +254,8 @@ class VJApi:
         return True
 
     def set_postfx_slot(self, slot: int) -> bool:
+        if int(slot) == 0:
+            return self.clear_postfx()
         msg = self._app.select_postfx_slot(int(slot))
         lower = msg.lower()
         if 'unavailable' in lower:
@@ -265,10 +276,7 @@ class VJApi:
     def clear_postfx(self) -> bool:
         if self._app._postfx_controller is None:  # noqa: SLF001
             return False
-        # Controller has no public clear API yet in Phase 1.
-        self._app._postfx_controller._active_slot = 0  # noqa: SLF001
-        self._app._postfx_controller._active_effect = None  # noqa: SLF001
-        self._app._postfx_controller._active_t = 0.0  # noqa: SLF001
+        self._app._postfx_controller.clear_active_slot()  # noqa: SLF001
         return True
 
     def is_user_busy(self) -> bool:
