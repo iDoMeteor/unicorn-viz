@@ -3,6 +3,7 @@ fullscreen = true
 show_cursor = false
 display_mode  = "single"   # single | span_all | mirror_all
 display_index  = 0
+# exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
 [demo]
 mode = "sequential"
@@ -89,11 +90,11 @@ stream_key = ""
 [auto_vj]
 enabled = true
 profile = "raver"          # chill | normie | raver | user (unset => normie preset)
-# auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
-# auto_profile_chill_max_bpm = 110.0
-# auto_profile_raver_min_bpm = 136.0
-# auto_profile_min_confidence = 0.45
-# auto_profile_switch_cooldown_s = 20.0
+auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
+auto_profile_chill_max_bpm = 110.0
+auto_profile_raver_min_bpm = 136.0
+auto_profile_min_confidence = 0.45
+auto_profile_switch_cooldown_s = 20.0
 # With auto_profile_enabled = false, explicit tuning keys below create manual
 # USER mode layered over the selected base preset.
 # show_duration_min    = 90    # optional full-set duration in minutes
