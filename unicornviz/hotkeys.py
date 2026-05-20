@@ -44,7 +44,7 @@ class HotkeyHandler:
         p = self._playlist
         o = self._overlays
         if event.type == "note_on":
-            action = a._midi_manager.note_to_action(event.number)  # noqa: SLF001
+            action = a.midi_action_for_note(event.number)
             if action == "next":
                 self.handle(sdl2.SDLK_n, 0)
             elif action == "prev":
@@ -56,9 +56,9 @@ class HotkeyHandler:
             elif action == "fullscreen":
                 self.handle(sdl2.SDLK_f, 0)
         elif event.type == "cc":
-            effect = a._current_effect  # noqa: SLF001
+            effect = a.current_effect
             if effect is not None:
-                param = a._midi_manager.cc_to_param(event.number)  # noqa: SLF001
+                param = a.midi_param_for_cc(event.number)
                 if param and param in effect.parameters:
                     lo, hi = 0.1, 4.0
                     effect.parameters[param] = lo + event.value * (hi - lo)
@@ -76,11 +76,11 @@ class HotkeyHandler:
         # Keystroke logger — capture key + beat context if enabled.
         ks_log = getattr(a, '_keystroke_logger', None)
         if ks_log is not None:
-            _vj = getattr(a, '_auto_vj', None)
+            _vj = a.auto_vj_controller
             _grid = getattr(_vj, '_grid', None) if _vj is not None else None
             ks_log.log_key(
                 sym_name,
-                effect_name=getattr(getattr(a, '_current_effect', None), 'NAME', ''),
+                effect_name=a.current_effect_name,
                 bpm=float(getattr(_grid, 'bpm', 0.0) or 0.0),
                 beat_phase=float(getattr(_grid, 'beat_phase', 0.0) or 0.0),
                 energy=float(getattr(_grid, 'energy', 0.0) or 0.0),
@@ -102,7 +102,7 @@ class HotkeyHandler:
         if not is_passive and not is_auto_vj_control:
             a.vj_api.mark_user_action('key')
 
-        effect = a._current_effect  # noqa: SLF001
+        effect = a.current_effect
 
         # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and effect is not None:
@@ -161,21 +161,21 @@ class HotkeyHandler:
 
         if self._ctrlj_armed:
             if time.monotonic() - self._ctrlj_arm_t <= self._CTRLJ_WINDOW:
-                vj = getattr(a, '_auto_vj', None)
+                vj = a.auto_vj_controller
                 self._ctrlj_armed = False
                 msg: str | None = None
 
                 if vj is None:
                     msg = 'Auto VJ not loaded'
                 elif sym == sdl2.SDLK_a:
-                    cur = getattr(getattr(a, '_current_effect', None), 'NAME', '')
+                    cur = a.current_effect_name
                     if cur:
                         vj.pin_slot('A', cur)
                         msg = f'Ping-pong A = {cur}'
                     else:
                         msg = 'No active effect to pin'
                 elif sym == sdl2.SDLK_b:
-                    cur = getattr(getattr(a, '_current_effect', None), 'NAME', '')
+                    cur = a.current_effect_name
                     if cur:
                         vj.pin_slot('B', cur)
                         msg = f'Ping-pong B = {cur}'
@@ -303,16 +303,16 @@ class HotkeyHandler:
             if getattr(o, 'help_visible', False):
                 o.toggle_help()
                 return
-            if getattr(o, '_show_name', False):  # noqa: SLF001
+            if o.name_overlay_visible:
                 o.toggle_name_overlay()
                 return
-            if getattr(o, '_show_audio', False):  # noqa: SLF001
+            if o.audio_selector_visible:
                 o.toggle_audio_selector()
                 return
-            if getattr(o, '_show_midi', False):  # noqa: SLF001
+            if o.midi_selector_visible:
                 o.toggle_midi_selector()
                 return
-            a._running = False  # noqa: SLF001
+            a.request_exit()
 
         elif sym in (sdl2.SDLK_n, sdl2.SDLK_RIGHT):
             if p.mode == "random":
@@ -349,10 +349,10 @@ class HotkeyHandler:
                 # H (Shift+h) — toggle flash message notifications
                 enabled = o.toggle_flash_messages()
                 # Force-render the status even if flash was just turned on.
-                o._flash_enabled = True  # noqa: SLF001
+                o.set_flash_messages_enabled(True)
                 o.flash_message('Notifications ON' if enabled else 'Notifications OFF', 1.5)
                 if not enabled:
-                    o._flash_enabled = False  # noqa: SLF001
+                    o.set_flash_messages_enabled(False)
             else:
                 # h — toggle help overlay
                 o.toggle_help()
@@ -409,18 +409,18 @@ class HotkeyHandler:
             o.flash_message(message, 1.8 if live else 1.2)
 
         elif sym == sdl2.SDLK_F6:
-            effect = a._current_effect  # noqa: SLF001
+            effect = a.current_effect
             # Toggle is global — persists even when current effect lacks 'speed'.
-            if a._speed_randomized:  # noqa: SLF001
-                a._speed_randomized = False  # noqa: SLF001
+            if a.speed_randomized:
+                a.set_speed_randomized(False)
                 if effect is not None and 'speed' in effect.parameters:
                     o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
                 else:
                     o.flash_message('Speed random OFF', 1.2)
             else:
-                a._apply_random_speed()  # noqa: SLF001  (sets flag + applies if supported)
-                a._speed_randomized = True  # noqa: SLF001  ensure flag set even if not applied
-                lo, hi = a._random_range_for('speed', 0.25, 2.50)  # noqa: SLF001
+                a.apply_random_speed()
+                a.set_speed_randomized(True)
+                lo, hi = a.random_range_for('speed', 0.25, 2.50)
                 if effect is not None and 'speed' in effect.parameters:
                     o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                 else:
@@ -430,16 +430,16 @@ class HotkeyHandler:
             am = self._audio
             if am is None:
                 o.flash_message('Reactivity control not available', 1.2)
-                a._reactivity_randomized = False  # noqa: SLF001
+                a.set_reactivity_randomized(False)
             else:
                 # Toggle randomization on/off
-                if a._reactivity_randomized:  # noqa: SLF001
-                    a._reactivity_randomized = False  # noqa: SLF001
+                if a.reactivity_randomized:
+                    a.set_reactivity_randomized(False)
                     current = am.get_reactivity()
                     o.flash_message(f'Reactivity random OFF  {current:.2f}', 1.2)
                 else:
-                    a._apply_random_reactivity()  # noqa: SLF001
-                    lo, hi = a._random_range_for('reactivity', 0.40, 2.00)  # noqa: SLF001
+                    a.apply_random_reactivity()
+                    lo, hi = a.random_range_for('reactivity', 0.40, 2.00)
                     current = am.get_reactivity()
                     o.flash_message(f'Reactivity random ON  {current:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
 
@@ -474,13 +474,13 @@ class HotkeyHandler:
             o.flash_message(f"Playlist: {mode}", 1.5)
 
         elif sym == sdl2.SDLK_PLUS or sym == sdl2.SDLK_EQUALS:
-            effect = a._current_effect  # noqa: SLF001
+            effect = a.current_effect
             if effect and "speed" in effect.parameters:
                 if mod & sdl2.KMOD_ALT:
                     # Alt+= — toggle random speed on
-                    a._apply_random_speed()  # noqa: SLF001
-                    a._speed_randomized = True  # noqa: SLF001
-                    lo, hi = a._random_range_for('speed', 0.25, 2.50)  # noqa: SLF001
+                    a.apply_random_speed()
+                    a.set_speed_randomized(True)
+                    lo, hi = a.random_range_for('speed', 0.25, 2.50)
                     o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+= — speed MAX
@@ -496,11 +496,11 @@ class HotkeyHandler:
                 o.flash_message('Speed not available for this effect', 1.0)
 
         elif sym == sdl2.SDLK_MINUS:
-            effect = a._current_effect  # noqa: SLF001
+            effect = a.current_effect
             if effect and "speed" in effect.parameters:
                 if mod & sdl2.KMOD_ALT:
                     # Alt+- — toggle random speed off
-                    a._speed_randomized = False  # noqa: SLF001
+                    a.set_speed_randomized(False)
                     o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+- — speed MIN
@@ -519,25 +519,22 @@ class HotkeyHandler:
             am = self._audio
             if mod & sdl2.KMOD_CTRL:
                 # Ctrl+G — reset speed to initial default
-                effect = a._current_effect  # noqa: SLF001
-                if effect and "speed" in effect.parameters:
-                    default = effect._initial_parameters.get("speed", 1.0)  # noqa: SLF001
-                    effect.parameters["speed"] = default
-                    a._speed_randomized = False  # noqa: SLF001
+                default = a.reset_speed()
+                if default is not None:
                     o.flash_message(f"Speed reset  {default:.2f}", 1.5)
                 else:
                     o.flash_message('Speed control not available', 1.2)
             else:
                 # G — reset reactivity to config default
                 val = am.reset_reactivity()
-                a._reactivity_randomized = False  # noqa: SLF001
+                a.set_reactivity_randomized(False)
                 o.flash_message(f"Reactivity reset  {val:.2f}", 1.5)
 
         elif sym == sdl2.SDLK_LEFTBRACKET:
             am = self._audio
             if mod & sdl2.KMOD_ALT:
                 # Alt+[ — PiP size down (webcam)
-                if a._webcam_system:  # noqa: SLF001
+                if a.has_webcam_system:
                     val = a.scale_pip(-0.05)
                     o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
                 else:
@@ -555,7 +552,7 @@ class HotkeyHandler:
             am = self._audio
             if mod & sdl2.KMOD_ALT:
                 # Alt+] — PiP size up (webcam)
-                if a._webcam_system:  # noqa: SLF001
+                if a.has_webcam_system:
                     val = a.scale_pip(0.05)
                     o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
                 else:
@@ -630,30 +627,30 @@ class HotkeyHandler:
             # , = scale down, Shift+, (<) = scale MIN, Ctrl+, = scale reset
             if mod & sdl2.KMOD_CTRL:
                 # Ctrl+, — scale reset
-                val = a._reset_render_scale()  # noqa: SLF001
+                val = a.reset_render_scale()
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+, (<) — scale MIN
-                val = a._set_render_scale(0.5)  # noqa: SLF001
+                val = a.set_render_scale(0.5)
                 o.flash_message(f'Res scale  MIN  {val:.2f}', 1.2)
             else:
                 # , — scale down
-                val = a._apply_render_scale_delta(-0.05)  # noqa: SLF001
+                val = a.apply_render_scale_delta(-0.05)
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_PERIOD:
             # . = scale up, Shift+. (>) = scale MAX, Ctrl+. = scale reset
             if mod & sdl2.KMOD_CTRL:
                 # Ctrl+. — scale reset
-                val = a._reset_render_scale()  # noqa: SLF001
+                val = a.reset_render_scale()
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+. (>) — scale MAX
-                val = a._set_render_scale(1.0)  # noqa: SLF001
+                val = a.set_render_scale(1.0)
                 o.flash_message(f'Res scale  MAX  {val:.2f}', 1.2)
             else:
                 # . — scale up
-                val = a._apply_render_scale_delta(0.05)  # noqa: SLF001
+                val = a.apply_render_scale_delta(0.05)
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_s:
@@ -664,41 +661,41 @@ class HotkeyHandler:
             o.flash_message(msg, 2.0)
 
         elif sym == sdl2.SDLK_z:
-            effect = a._current_effect  # noqa: SLF001
-            has_zoom = effect is not None and 'zoom' in effect.parameters  # noqa: SLF001
+            effect = a.current_effect
+            has_zoom = effect is not None and 'zoom' in effect.parameters
             if mod & sdl2.KMOD_ALT:
                 # Alt+Z — toggle random zoom (global flag, applies when supported)
-                if a._zoom_randomized:  # noqa: SLF001
-                    a._zoom_randomized = False  # noqa: SLF001
+                if a.zoom_randomized:
+                    a.set_zoom_randomized(False)
                     if has_zoom:
                         o.flash_message(f'Zoom random OFF  {effect.parameters["zoom"]:.2f}', 1.2)
                     else:
                         o.flash_message('Zoom random OFF', 1.2)
                 else:
-                    a._apply_random_zoom()  # noqa: SLF001  (sets flag + applies if supported)
-                    a._zoom_randomized = True  # noqa: SLF001  ensure flag set even if not applied
-                    lo, hi = a._random_range_for('zoom', 0.30, 1.80)  # noqa: SLF001
+                    a.apply_random_zoom()
+                    a.set_zoom_randomized(True)
+                    lo, hi = a.random_range_for('zoom', 0.30, 1.80)
                     if has_zoom:
                         o.flash_message(f'Zoom random ON  {effect.parameters["zoom"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                     else:
                         o.flash_message(f'Zoom random ON  (armed)  [{lo:.2f}-{hi:.2f}]', 1.6)
             elif mod & sdl2.KMOD_CTRL:
                 # Ctrl+Z — reset zoom to default
-                val = a._reset_zoom()  # noqa: SLF001
+                val = a.reset_zoom()
                 if val is not None:
                     o.flash_message(f'Zoom reset  {val:.2f}', 1.2)
                 else:
                     o.flash_message('Zoom not available for this effect', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+Z — zoom out
-                val = a._apply_zoom_delta(-0.10)  # noqa: SLF001
+                val = a.apply_zoom_delta(-0.10)
                 if val > 0:
                     o.flash_message(f'Zoom  {val:.2f}', 1.0)
                 else:
                     o.flash_message('Zoom not available for this effect', 1.0)
             else:
                 # Z — zoom in
-                val = a._apply_zoom_delta(0.10)  # noqa: SLF001
+                val = a.apply_zoom_delta(0.10)
                 if val > 0:
                     o.flash_message(f'Zoom  {val:.2f}', 1.0)
                 else:
@@ -707,15 +704,15 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_k:
             if mod & sdl2.KMOD_CTRL:
                 # Ctrl+K — reset render scale to config default
-                val = a._reset_render_scale()  # noqa: SLF001
+                val = a.reset_render_scale()
                 o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+K — scale down
-                val = a._apply_render_scale_delta(-0.05)  # noqa: SLF001
+                val = a.apply_render_scale_delta(-0.05)
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
             else:
                 # K — scale up
-                val = a._apply_render_scale_delta(0.05)  # noqa: SLF001
+                val = a.apply_render_scale_delta(0.05)
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_u:
@@ -853,10 +850,11 @@ class HotkeyHandler:
         from pathlib import Path
         from PIL import Image
 
-        ctx = self._app._ctx  # noqa: SLF001
+        ctx = self._app.vj_api.ctx
         if ctx is None:
             return
-        w, h = self._app._width, self._app._height  # noqa: SLF001
+        w = self._app.vj_api.render_width
+        h = self._app.vj_api.render_height
         data = ctx.screen.read(components=3)
         img = Image.frombytes("RGB", (w, h), data)
         img = img.transpose(Image.FLIP_TOP_BOTTOM)

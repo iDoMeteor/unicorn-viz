@@ -2213,6 +2213,56 @@ void main() {
     def toggle_pause(self) -> None:
         self._paused = not self._paused
 
+    @property
+    def current_effect(self) -> BaseEffect | None:
+        return self._current_effect
+
+    @property
+    def current_effect_name(self) -> str:
+        return self._current_effect.NAME if self._current_effect is not None else ''
+
+    @property
+    def auto_vj_controller(self):
+        return self._auto_vj
+
+    @property
+    def has_webcam_system(self) -> bool:
+        return self._webcam_system is not None
+
+    @property
+    def speed_randomized(self) -> bool:
+        return self._speed_randomized
+
+    @property
+    def reactivity_randomized(self) -> bool:
+        return self._reactivity_randomized
+
+    @property
+    def zoom_randomized(self) -> bool:
+        return self._zoom_randomized
+
+    def set_speed_randomized(self, enabled: bool) -> None:
+        self._speed_randomized = bool(enabled)
+
+    def set_reactivity_randomized(self, enabled: bool) -> None:
+        self._reactivity_randomized = bool(enabled)
+
+    def set_zoom_randomized(self, enabled: bool) -> None:
+        self._zoom_randomized = bool(enabled)
+
+    def request_exit(self) -> None:
+        self._running = False
+
+    def midi_action_for_note(self, number: int) -> str | None:
+        if self._midi_manager is None:
+            return None
+        return self._midi_manager.note_to_action(number)
+
+    def midi_param_for_cc(self, number: int) -> str | None:
+        if self._midi_manager is None:
+            return None
+        return self._midi_manager.cc_to_param(number)
+
     def select_postfx_slot(self, slot: int) -> str:
         """Select active post-process slot (0 disables)."""
         if self._postfx_controller is None:
@@ -2395,6 +2445,36 @@ void main() {
         self._render_scale = _clamp_render_scale(self._render_scale + float(delta))
         self._rebuild_fbos()
         return self._render_scale
+
+    def apply_random_speed(self) -> None:
+        self._apply_random_speed()
+
+    def reset_speed(self) -> float | None:
+        return self._reset_speed()
+
+    def apply_random_reactivity(self) -> None:
+        self._apply_random_reactivity()
+
+    def apply_zoom_delta(self, delta: float) -> float:
+        return self._apply_zoom_delta(delta)
+
+    def reset_zoom(self) -> float | None:
+        return self._reset_zoom()
+
+    def apply_random_zoom(self) -> None:
+        self._apply_random_zoom()
+
+    def random_range_for(self, name: str, default_min: float, default_max: float) -> tuple[float, float]:
+        return self._random_range_for(name, default_min, default_max)
+
+    def reset_render_scale(self) -> float:
+        return self._reset_render_scale()
+
+    def set_render_scale(self, value: float) -> float:
+        return self._set_render_scale(value)
+
+    def apply_render_scale_delta(self, delta: float) -> float:
+        return self._apply_render_scale_delta(delta)
 
     def _capture_recording_frame(self) -> None:
         """Capture the final on-screen frame for recording."""

@@ -1510,6 +1510,22 @@ void main() {
     def help_visible(self) -> bool:
         return self._show_help
 
+    @property
+    def name_overlay_visible(self) -> bool:
+        return self._show_name
+
+    @property
+    def audio_selector_visible(self) -> bool:
+        return self._show_audio
+
+    @property
+    def midi_selector_visible(self) -> bool:
+        return self._show_midi
+
+    @property
+    def flash_messages_enabled(self) -> bool:
+        return self._flash_enabled
+
     def help_section_count(self) -> int:
         return len(self._iter_help_sections())
 
@@ -1612,6 +1628,10 @@ void main() {
         """Toggle flash-message notifications on/off; returns new state."""
         self._flash_enabled = not self._flash_enabled
         return self._flash_enabled
+
+    def set_flash_messages_enabled(self, enabled: bool) -> None:
+        """Set flash-message notification state explicitly."""
+        self._flash_enabled = bool(enabled)
 
     def toggle_audio_selector(self) -> None:
         self._show_audio = not self._show_audio
