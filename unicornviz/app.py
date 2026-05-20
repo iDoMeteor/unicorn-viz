@@ -253,6 +253,7 @@ class App:
         self._auto_vj = None
         self._grand_finale = None
         self._control_room = None
+        self._control_room_startup_cfg: dict[str, Any] | None = None
         self._streamer = None
         self._playlist: Playlist | None = None
         self._subsystems: dict[str, Any] = {}
@@ -1492,7 +1493,8 @@ void main() {
         if not isinstance(control_room_cfg, dict):
             control_room_cfg = {}
         if bool(control_room_cfg.get('enabled', False)):
-            _active, _msg = self._create_control_room(control_room_cfg)
+            self._control_room_startup_cfg = dict(control_room_cfg)
+            log.info('ControlRoomController scheduled for startup after first audience frame')
 
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
@@ -1866,6 +1868,11 @@ void main() {
                 self._present_mirror_outputs(shared_frame)
 
             sdl2.SDL_GL_SwapWindow(self._window)
+
+            if self._control_room_startup_cfg is not None:
+                _cfg = self._control_room_startup_cfg
+                self._control_room_startup_cfg = None
+                _active, _msg = self._create_control_room(_cfg)
 
             for name, subsystem in list(self._subsystems.items()):
                 presenter = getattr(subsystem, 'present', None)
