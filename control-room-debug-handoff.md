@@ -61,7 +61,6 @@ Earlier symptoms that are now fixed:
 - Webcam subsystem may be retrying V4L2 devices in the background, but current
   evidence does not point to webcam as the primary cause
 
-
 ## Key Logs / Evidence
 
 Recent logs reviewed during debugging:
@@ -174,8 +173,9 @@ while debugging runtime instability.
 - `1597673` — `App.rebind_main_gl_context()` and `VJApi` cleanup surface
 - `e6dfa44` — control-room submodule bump (fullscreen default + config docs)
 - `589ca65` — control-room submodule bump (no fullscreen-desktop, throttle, cursor)
-- *latest* — per-frame `SDL_GL_MakeCurrent` on the audience window while the
-  operator window is alive + bump to background-thread submodule
+- `43f1067` — per-frame `SDL_GL_MakeCurrent` experiment + debug-doc refresh
+- `c599ce3` — reverted per-frame `SDL_GL_MakeCurrent` after owner logs proved it
+  harmful; picked up preview-toggle submodule bump
 
 ### Control-room submodule commits
 
@@ -187,8 +187,9 @@ while debugging runtime instability.
 - `1c9e75f` — deferred shutdown, pixel-format conversion, GL rebind on teardown
 - `92c2a95` — borderless fullscreen by default + surface-refresh on window events
 - `defea91` — dropped `FULLSCREEN_DESKTOP`, throttled render, always-on cursor
-- *latest* — background-thread PIL render, ~8 fps default, lock-protected
+- `4eacf8c` — background-thread PIL render, ~8 fps default, lock-protected
   hotspot publish
+- `31a25ed` — in-UI preview on/off toggle in the PROGRAM PREVIEW panel
 
 ## Detailed Attempt Log
 
@@ -346,33 +347,67 @@ Validation completed so far:
   main thread blits it, `close_now()` joins the thread, no leak
 - `app.py` imports cleanly after the per-frame rebind
 
-This attempt is the latest unverified-on-owner-machine runtime change.
+Owner-machine result:
+
+- preview/control-room behavior improved
+- audience output became worse: black on startup with control room enabled,
+  and "jenky" / black when toggled at runtime
+- logs showed no `SDL_GL_MakeCurrent failed` warnings, which means the
+  per-frame rebind was succeeding technically but still disrupting moderngl's
+  bound GL state badly enough to drop/garble draws
+
+Conclusion:
+
+- the background-thread PIL render was a good change and should stay
+- the per-frame `SDL_GL_MakeCurrent` was harmful and was reverted
+
+### Attempt J — keep threaded render, revert per-frame GL rebind, add preview toggle
+
+Changes:
+
+- kept the background-thread PIL render from Attempt I
+- reverted the per-frame `SDL_GL_MakeCurrent` in `unicornviz/app.py`
+- left the one-shot rebind on create/destroy only
+- added an in-UI `PREVIEW ON / PREVIEW OFF` toggle button in the PROGRAM
+  PREVIEW panel header
+- preview toggle honors `[control_room].show_preview` as initial state and
+  skips preview-frame fetches while OFF
+
+Result:
+
+- preview toggle landed successfully
+- the harmful per-frame GL rebind is gone
+- latest owner-machine behavior after this revert still needs verification
 
 ## Current Best Hypothesis
 
-The post-Attempt-G symptoms point at **main render loop starvation** combined
-with **implicit GL drawable state migration**:
+The current evidence points at two separate issues, not one:
 
-1. PIL rasterization of a 1920×1080 RGBA UI on the main thread blocks the
-   audience GL loop for tens of milliseconds per render.  Attempt I moves
-   that work off the main thread entirely.
-2. Creating a second SDL window in the same process appears to be enough
-   on this X11/Mesa stack to migrate the GL drawable/context state.  When
-   the audience window keeps `SDL_GL_SwapWindow()`ing afterward, swaps can
-   silently target the wrong drawable until the context is rebound.
-   Attempt I now rebinds every frame while the control room is alive.
-3. The "after-close lockup" likely shares root cause 2: a stale GL binding
-   that the existing one-shot rebind on destroy doesn't always recover.
-   The per-frame rebind in Attempt I should also cover this window.
+1. **Main-loop starvation from PIL rasterization** was real.
+  Moving the operator UI rasterization to the background render thread was the
+  right fix and should remain.
+2. **Per-frame GL rebind was the wrong medicine.**
+  Owner logs showed no `SDL_GL_MakeCurrent failed` warnings, but the audience
+  output got worse immediately after adding the per-frame rebind. That means
+  the call was not failing at the SDL level; it was disrupting moderngl's
+  bound state or framebuffer assumptions often enough to black/garble the
+  audience output.
 
-If Attempt I still doesn't fully solve the starvation/lockup on the owner
-machine, the hypothesis pool shrinks to driver-level (Mesa / Mutter) issues
-with two-window in-process GL apps, and Path 4 below becomes the most likely
-real fix.
+The most likely live state now is:
+
+- threaded operator rendering is good
+- one-shot GL rebind on control-room create/destroy is acceptable
+- any future GL-context investigation should use instrumentation first
+  (`SDL_GL_GetCurrentWindow`, `SDL_GL_GetCurrentContext`, `glGetError`) before
+  reintroducing per-frame state changes
+
+If behavior after Attempt J is still unstable on the owner machine, the most
+likely remaining blocker is driver/compositor interaction from the in-process
+two-window architecture itself, not the operator UI code.
 
 ## Recommended Next Steps
 
-### Path 1 — verify Attempt I on the owner machine
+### Path 1 — verify Attempt J on the owner machine
 
 Retest with the latest code and answer these questions first:
 
@@ -384,12 +419,14 @@ Retest with the latest code and answer these questions first:
   closed (no multi-second post-close lockup)?
 - does the operator UI still feel responsive at the new ~8 fps default, or
   does it need `[control_room].render_interval = 0.066` (15 fps)?
+- does the new `PREVIEW ON / PREVIEW OFF` button work and materially reduce
+  load when preview is disabled?
 
-Capture a fresh log of any failure case.  The most valuable new signals are:
+Capture a fresh log of any failure case. The most valuable new signals are:
 
 - presence/absence of `Control room surface blit failed` warnings
-- presence of `SDL_GL_MakeCurrent failed` warnings (now logged by
-  `rebind_main_gl_context`)
+- presence/absence of any one-shot `SDL_GL_MakeCurrent failed` warnings from
+  the create/destroy rebind path
 - whether audio frames continue logging during the freeze (they did before;
   if they now stop too, the diagnosis flips back to true main-thread blocking)
 
@@ -398,7 +435,7 @@ remaining work is UI polish.
 
 ### Path 2 — instrument the main window state around control-room open/close
 
-If audience starvation persists with Attempt I:
+If audience starvation persists with Attempt J:
 
 - log `SDL_GL_GetCurrentWindow()` and `SDL_GL_GetCurrentContext()` once per
   second while the operator window is alive
@@ -407,8 +444,9 @@ If audience starvation persists with Attempt I:
 - log GLX/Mesa driver strings at startup so the owner machine's stack is
   captured alongside the trace
 
-The goal is to prove or rule out an implicit GL drawable migration that
-`SDL_GL_MakeCurrent` doesn't actually fix on this stack.
+The goal is to prove or rule out an implicit GL drawable migration or
+framebuffer/state mismatch without reintroducing any speculative per-frame GL
+rebinding.
 
 ### Path 3 — make the operator window non-borderless
 
@@ -419,7 +457,7 @@ final shape.
 
 ### Path 4 — escalate architecture if in-process remains unstable
 
-If Attempts G–I still don't yield a stable audience output on the owner
+If Attempts G–J still don't yield a stable audience output on the owner
 machine, abandon the in-process SDL second window and pivot to one of:
 
 - a separate helper process for the control room using a local IPC channel
@@ -451,6 +489,7 @@ What is definitely fixed:
 - one-frame-then-black operator window (explicit pixel-format conversion)
 - mouse cursor invisible inside the operator window
 - `_moderngl.Error: cannot create texture` aftershock after operator close
+- in-UI preview toggle landed and honors `[control_room].show_preview`
 
 What is not yet confirmed solved on the owner machine:
 
@@ -460,9 +499,8 @@ What is not yet confirmed solved on the owner machine:
 
 Most valuable next experiment:
 
-- test Attempt I (background-thread PIL rendering + per-frame `MakeCurrent`)
-  end-to-end on the owner machine in single, mirror, and span modes, and
-  capture a log for each
+- test Attempt J (background-thread PIL rendering retained, per-frame
+  `MakeCurrent` reverted, preview toggle added) end-to-end on the owner
+  machine in single, mirror, and span modes, and capture a log for each
 - if it still misbehaves, instrument with `glGetError()` + drawable/context
-  IDs as described in Path 2 to determine whether the audience GL drawable
-  is actually being migrated by SDL/Mutter on this stack
+  IDs as described in Path 2 before changing any more GL binding behavior
