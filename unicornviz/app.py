@@ -1195,8 +1195,14 @@ void main() {
 
     def _update_render_target_size(self) -> None:
         """Recompute scaled internal render target dimensions."""
-        self._render_width = max(1, int(round(self._width * self._render_scale)))
-        self._render_height = max(1, int(round(self._height * self._render_scale)))
+        max_edge = 16384
+        if self._ctx is not None:
+            try:
+                max_edge = int(self._ctx.info.get('GL_MAX_TEXTURE_SIZE', max_edge))
+            except Exception:
+                max_edge = 16384
+        self._render_width = max(1, min(max_edge, int(round(self._width * self._render_scale))))
+        self._render_height = max(1, min(max_edge, int(round(self._height * self._render_scale))))
 
     def _set_cursor_visible(self, visible: bool) -> None:
         """Set cursor visibility state in SDL."""
