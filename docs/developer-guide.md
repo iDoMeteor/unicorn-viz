@@ -366,9 +366,17 @@ If these keys are absent, the global `[hotkeys]` defaults apply.
 | `NAME`    | `str`         | Yes      | Display name in overlays and playlist        |
 | `AUTHOR`  | `str`         | No       | Credit shown in help overlay                 |
 | `TAGS`    | `list[str]`   | No       | Used for future filtering; no current effect |
+| `PING_PONG_FRIENDS` | `list[str]` | No | Preferred partner effect `NAME`s for Auto VJ/manual ping-pong pairing |
 
 Recommended tag values: `"classic"`, `"futuristic"`, `"audio"`, `"ansi"`,
 `"3d"`, `"psychedelic"`, `"particles"`, `"visualizer"`.
+
+`PING_PONG_FRIENDS` should contain effect display names (`NAME` values), not
+class names. Example:
+
+```python
+PING_PONG_FRIENDS = ['Kaleidoscope', 'Psychedelic', 'Unicorn Tears']
+```
 
 ### Effect Randomization Requirements
 

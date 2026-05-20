@@ -119,6 +119,11 @@ profile = "raver"          # chill | normie | raver (unset => normie preset)
 # pingpong_a            = "Tron Grid"
 pingpong_b            = "Crystal Pyramids"
 # pingpong_beats        = 4
+# pingpong_auto_enabled = true         # auto-enter ping-pong only makes sense in raver mode
+# pingpong_auto_bpm_min = 138.0        # require a fast locked groove before triggering
+# pingpong_auto_trigger_chance = 0.35  # chance at each eligible cruise swap point
+# pingpong_auto_min_swaps = 4          # auto ping-pong exits after a random swap budget
+# pingpong_auto_max_swaps = 10
  log_decisions         = true        # write JSONL decision log per session
 #postfx_cruise_interval_s = 25
 #postfx_cruise_slots = [1,2,3,4,5,6,7,8]

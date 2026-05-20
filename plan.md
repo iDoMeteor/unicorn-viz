@@ -21,7 +21,7 @@
 - `[todo]` Plan multi-display overlay policy so help/HUD/flash render only on primary display in `span_all` / `mirror_all` when enabled.
 - `[todo]` Design a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
-- `[todo]` Add effect metadata concept `ping_pong_friends` for preferred pairings when randomizing ping-pong slots.
+- `[done]` Add effect metadata concept `PING_PONG_FRIENDS` for preferred pairings when randomizing ping-pong slots.
 - `[todo]` Design scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ only when hue-shift inactive).
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations

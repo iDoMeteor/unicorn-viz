@@ -88,6 +88,25 @@ audio_input_device = ""
 audio_codec = "aac"
 audio_bitrate = "160k"
 
+[auto_vj]
+enabled = false
+profile = "normie"   # chill | normie | raver
+log_decisions = false
+# Optional timed-finale support:
+# show_duration_min = 90
+# finale_auto_trigger = true
+# finale_lead_s = 45.0
+#
+# Ping-pong controls:
+# pingpong_a = "Tron Grid"     # manual hotkey slot A default
+# pingpong_b = "Hacker Terminal"  # manual hotkey slot B default
+# pingpong_beats = 4            # beats between ping-pong swaps
+# pingpong_auto_enabled = false # auto mode is intended for raver only
+# pingpong_auto_bpm_min = 138.0
+# pingpong_auto_trigger_chance = 0.35
+# pingpong_auto_min_swaps = 4
+# pingpong_auto_max_swaps = 10
+
 [ansi]
 # default ANSI art directory
 ansi_dir_auto = "assets/ansi"
