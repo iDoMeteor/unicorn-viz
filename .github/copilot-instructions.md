@@ -322,6 +322,38 @@ Every reference to drop-in code must follow this SOP:
 
 ---
 
+## Public Runtime Surface Rules
+
+Runtime-facing code must use the project's public control surfaces instead of
+reaching into unrelated modules' private fields.
+
+1. **Drop-ins and system controllers must prefer `app.vj_api` first.**
+  If a controller needs app/runtime functionality, add a small capability to
+  `VJApi` before touching `app._private` state directly.
+2. **Core cross-module callers should prefer public `App` / `Overlays` methods
+  and properties over direct underscore access.**
+  Example: `HotkeyHandler` should call an `App` wrapper such as
+  `apply_random_zoom()` or `request_exit()` instead of mutating
+  `app._zoom_randomized` or `app._running` itself.
+3. **`# noqa: SLF001` is owner-module-only.**
+  It is acceptable inside the modules that intentionally own the runtime state
+  (`unicornviz/app.py`, `unicornviz/vj_api.py`, and equivalent low-level
+  owner modules), but should not appear in live drop-in code or in unrelated
+  runtime callers when a public surface can reasonably be added.
+4. **When a new runtime behavior needs private state in more than one place,
+  stop and promote that behavior to a public shim.**
+  Prefer a thin method/property on `App`, `VJApi`, or `Overlays` over copying
+  underscore-field access to multiple call sites.
+5. **Pre-release policy:** live runtime code under `drop-ins/` and
+  cross-module callers under `unicornviz/` should be kept free of direct
+  `app._...` / `_app._...` access except in the owner modules that define the
+  canonical state.
+
+This rule exists to keep drop-ins independently testable, reduce coupling, and
+let the runtime surface stabilize before v1.0.
+
+---
+
 ## Effect Randomization Requirements
 
 Every visual effect must produce a **visually distinct appearance each time it

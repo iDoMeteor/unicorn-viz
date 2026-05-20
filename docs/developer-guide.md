@@ -359,6 +359,40 @@ random_zoom_max  = 1.20   # Alt+Z random-zoom upper bound
 
 If these keys are absent, the global `[hotkeys]` defaults apply.
 
+### Runtime Surface Rules
+
+For live runtime code, private fields are owner-module implementation details,
+not a general extension surface.
+
+**Preferred call order:**
+
+- `app.vj_api` for drop-ins and system controllers
+- public `App` methods/properties for core cross-module callers
+- public `Overlays` methods/properties for HUD/selector state
+
+**Policy:**
+
+- Drop-ins should not read or mutate `app._...` state directly when the same
+  behavior can be expressed through `VJApi`.
+- Cross-module core callers (for example `hotkeys.py`) should not reach into
+  unrelated modules' underscore fields when a thin public wrapper on `App` or
+  `Overlays` would do.
+- `# noqa: SLF001` should be limited to the owner modules that intentionally
+  define and centralize runtime state, chiefly `unicornviz/app.py` and
+  `unicornviz/vj_api.py`.
+
+**Rule of thumb:** if you need the same underscore-field access pattern in more
+than one caller, promote it to a public shim immediately instead of copying it.
+
+Examples:
+
+- good: `app.vj_api.flash_message(...)`
+- good: `app.reset_render_scale()`
+- good: `overlays.name_overlay_visible`
+- avoid in new code: `app._overlays.flash_message(...)`
+- avoid in new code: `app._running = False`
+- avoid in new code: `app._current_effect.parameters['zoom'] = ...`
+
 ### Effect metadata
 
 | Attribute | Type          | Required | Purpose                                      |
