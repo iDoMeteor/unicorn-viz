@@ -90,8 +90,15 @@ audio_bitrate = "160k"
 
 [auto_vj]
 enabled = false
-profile = "normie"   # chill | normie | raver
+profile = "normie"   # chill | normie | raver | user
+auto_profile_enabled = false
 log_decisions = false
+# When auto_profile_enabled = false, explicit tuning keys below become manual
+# USER mode layered over the chosen base preset.
+# auto_profile_chill_max_bpm = 110.0
+# auto_profile_raver_min_bpm = 136.0
+# auto_profile_min_confidence = 0.45
+# auto_profile_switch_cooldown_s = 20.0
 # Optional timed-finale support:
 # show_duration_min = 90
 # finale_auto_trigger = true

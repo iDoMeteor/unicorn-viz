@@ -88,8 +88,14 @@ stream_key = ""
 # ---------------------------------------------------------------------------
 [auto_vj]
 enabled = true
-profile = "raver"          # chill | normie | raver (unset => normie preset)
-#                              # explicit keys in [auto_vj] override profile defaults
+profile = "raver"          # chill | normie | raver | user (unset => normie preset)
+# auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
+# auto_profile_chill_max_bpm = 110.0
+# auto_profile_raver_min_bpm = 136.0
+# auto_profile_min_confidence = 0.45
+# auto_profile_switch_cooldown_s = 20.0
+# With auto_profile_enabled = false, explicit tuning keys below create manual
+# USER mode layered over the selected base preset.
 # show_duration_min    = 90    # optional full-set duration in minutes
 # show_duration_s      = 5400  # legacy fallback in seconds (used only if *_min is unset)
 # finale_auto_trigger  = true  # trigger grand finale automatically near show end
