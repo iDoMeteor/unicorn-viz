@@ -23,6 +23,9 @@
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
 - `[done]` Add effect metadata concept `PING_PONG_FRIENDS` for preferred pairings when randomizing ping-pong slots.
 - `[todo]` Design scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ only when hue-shift inactive).
+- `[todo]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
+- `[todo]` Design `serato-01` drop-in for DJ deck / transport / cue integration with Control Room and Auto VJ.
+- `[todo]` Design `mixxx-01` / `xwax-01` / `giada-01` integration drop-ins for open DJ/live-loop hosts.
 
 ## Phase 1 — Runtime, CLI, and Operational Foundations
 
@@ -266,8 +269,13 @@
   - implemented append-only log under `logs/` with key + beat-context snapshot
   - controlled by global `[keystrokes] enabled` flag; default OFF
   - future follow-up: redact/omit any sensitive text-input paths if added later
-- `[todo]` **Control Room drop-in** (`drop-ins/control-room-01`) — dedicated VJ operator monitor.
+- `[doing]` **Control Room drop-in** (`drop-ins/control-room-01`) — dedicated VJ operator monitor.
   Notes:
+
+  MVP is now implemented as an in-process SDL operator window with live preview,
+  transport controls, post-FX bank, effect browser, and tweakable controls.
+  Remaining follow-up work is focused on ergonomics, hardware-inspired layouts,
+  richer panels, and long-horizon remote-control options.
 
   **Concept:** A secondary SDL2 window pinned to a designated "operator" display, showing a
   persistent full HUD and sub-menus so the VJ can control the system without touching the

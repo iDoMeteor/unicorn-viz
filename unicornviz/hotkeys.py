@@ -140,6 +140,10 @@ class HotkeyHandler:
                 msg = a.toggle_auto_vj()
                 o.flash_message(msg, 2.0)
                 return
+            if sym == sdl2.SDLK_o:
+                _active, msg = a.vj_api.toggle_control_room()
+                o.flash_message(msg, 2.0)
+                return
             if sym == sdl2.SDLK_f:
                 if mod & sdl2.KMOD_SHIFT:
                     # Ctrl+Alt+Shift+F — abort grand finale

@@ -356,6 +356,10 @@ class App:
         self._subsystems[subsystem_name] = subsystem
         return True
 
+    def unregister_subsystem(self, name: str) -> None:
+        """Unregister a runtime subsystem from the app loop."""
+        self._subsystems.pop(str(name).strip(), None)
+
     def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
         """Route SDL events for a claimed window to a subsystem handler."""
         if int(window_id) <= 0 or handler is None:
@@ -422,6 +426,42 @@ class App:
             self._frame_capture_height,
             self._frame_capture_components,
         )
+
+    def _create_control_room(self, cfg_override: dict[str, Any] | None = None) -> tuple[bool, str]:
+        """Create and register the optional control-room subsystem."""
+        if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
+            return True, 'Control Room already open'
+        control_room_cfg = cfg_override or self.cfg.get('control_room', default={}) or {}
+        if not isinstance(control_room_cfg, dict):
+            control_room_cfg = {}
+        try:
+            control_room_cls = _load_control_room_controller_class()
+            self._control_room = control_room_cls(self, control_room_cfg)
+            self.vj_api.register_subsystem('control_room', self._control_room)
+            log.info('ControlRoomController loaded from drop-in')
+            return True, f'Control Room open on display {getattr(self._control_room, "_display_index", "?")}'
+        except Exception as exc:
+            self._control_room = None
+            log.warning('ControlRoomController not available: %s', exc)
+            return False, f'Control Room unavailable: {exc}'
+
+    def _destroy_control_room(self) -> tuple[bool, str]:
+        """Shutdown and unregister the optional control-room subsystem."""
+        if self._control_room is None:
+            return False, 'Control Room already off'
+        try:
+            self._control_room.shutdown()
+        except Exception as exc:
+            log.warning('ControlRoomController shutdown failed: %s', exc)
+        self.unregister_subsystem('control_room')
+        self._control_room = None
+        return False, 'Control Room closed'
+
+    def toggle_control_room(self) -> tuple[bool, str]:
+        """Toggle the operator control-room window on or off."""
+        if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
+            return self._destroy_control_room()
+        return self._create_control_room()
 
     def _multihead_layouts(self) -> list[tuple[int, int, int, int]]:
         """Return display layouts from the multi-head drop-in.
@@ -1448,20 +1488,11 @@ void main() {
             log.warning('GrandFinaleController not available: %s', exc)
 
         # Control Room controller (optional drop-in subsystem).
-        try:
-            control_room_cfg = self.cfg.get('control_room', default={}) or {}
-            if not isinstance(control_room_cfg, dict):
-                control_room_cfg = {}
-            if bool(control_room_cfg.get('enabled', False)):
-                control_room_cls = _load_control_room_controller_class()
-                self._control_room = control_room_cls(self, control_room_cfg)
-                self.vj_api.register_subsystem('control_room', self._control_room)
-                log.info('ControlRoomController loaded from drop-in')
-            else:
-                self._control_room = None
-        except Exception as exc:
-            self._control_room = None
-            log.warning('ControlRoomController not available: %s', exc)
+        control_room_cfg = self.cfg.get('control_room', default={}) or {}
+        if not isinstance(control_room_cfg, dict):
+            control_room_cfg = {}
+        if bool(control_room_cfg.get('enabled', False)):
+            _active, _msg = self._create_control_room(control_room_cfg)
 
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())

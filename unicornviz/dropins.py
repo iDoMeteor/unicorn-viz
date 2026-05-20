@@ -8,6 +8,7 @@ from __future__ import annotations
 import inspect
 import logging
 import re
+import sys
 import tomllib
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -161,7 +162,12 @@ def _load_module_from_file(file_path: Path, module_name: str):
     if spec is None or spec.loader is None:
         raise ImportError(f'Failed to load module spec from {file_path}')
     module = module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 

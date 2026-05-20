@@ -224,6 +224,10 @@ class VJApi:
         """Toggle RTMP streaming on or off."""
         return self._app.toggle_streaming()
 
+    def toggle_control_room(self) -> tuple[bool, str]:
+        """Toggle the operator control-room window."""
+        return self._app.toggle_control_room()
+
     def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
         """Set the main audience display mode."""
         return self._app.set_display_mode(mode, reset_to_config=reset_to_config)
