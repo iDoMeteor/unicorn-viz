@@ -30,6 +30,7 @@ _DEFAULTS: dict[str, Any] = {
         "title": "Unicorn Viz",
         "display_index": 0,
         "display_mode": "single",
+        "exclude_display_indices": [],
     },
     "demo": {
         "mode": "sequential",
@@ -93,6 +94,15 @@ _DEFAULTS: dict[str, Any] = {
     },
     "overlays": {
         "flash_messages": True,
+    },
+    "control_room": {
+        "enabled": False,
+        "display_index": 1,
+        "width": 1440,
+        "height": 900,
+        "show_preview": True,
+        "preview_scale": 0.52,
+        "theme": "dark",
     },
 }
 

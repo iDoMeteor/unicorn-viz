@@ -10,7 +10,7 @@ import time
 import ctypes
 import sys
 from pathlib import Path
-from typing import Type
+from typing import Any, Callable, Type
 
 import moderngl
 import numpy as np
@@ -218,6 +218,14 @@ def _load_grand_finale_class() -> type:
     )
 
 
+def _load_control_room_controller_class() -> type:
+    """Load ControlRoomController from the control-room drop-in."""
+    return load_dropin_symbol(
+        'control-room-01/control_room.py',
+        'ControlRoomController',
+    )
+
+
 class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
@@ -244,7 +252,15 @@ class App:
         self._rainbow_nova = None
         self._auto_vj = None
         self._grand_finale = None
+        self._control_room = None
         self._streamer = None
+        self._playlist: Playlist | None = None
+        self._subsystems: dict[str, Any] = {}
+        self._claimed_window_handlers: dict[int, Callable[[Any], None]] = {}
+        self._frame_capture_bytes: bytes | None = None
+        self._frame_capture_width: int = 0
+        self._frame_capture_height: int = 0
+        self._frame_capture_components: int = 0
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
         self._reactivity_randomized: bool = False
@@ -331,6 +347,81 @@ class App:
             setattr(self._multihead, '_display_mode_requested', mode)
         if hasattr(self._multihead, '_display_mode'):
             setattr(self._multihead, '_display_mode', mode)
+
+    def register_subsystem(self, name: str, subsystem: Any) -> bool:
+        """Register a runtime subsystem for per-frame update/present callbacks."""
+        subsystem_name = str(name).strip()
+        if not subsystem_name or subsystem is None:
+            return False
+        self._subsystems[subsystem_name] = subsystem
+        return True
+
+    def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
+        """Route SDL events for a claimed window to a subsystem handler."""
+        if int(window_id) <= 0 or handler is None:
+            return False
+        self._claimed_window_handlers[int(window_id)] = handler
+        return True
+
+    def release_window_events(self, window_id: int) -> None:
+        """Release event ownership for a previously-claimed SDL window."""
+        self._claimed_window_handlers.pop(int(window_id), None)
+
+    def _event_window_id(self, event: Any) -> int | None:
+        """Return the SDL window id associated with an event, when present."""
+        if event.type in (sdl2.SDL_KEYDOWN, sdl2.SDL_KEYUP):
+            return int(event.key.windowID)
+        if event.type == sdl2.SDL_TEXTINPUT:
+            return int(event.text.windowID)
+        if event.type in (sdl2.SDL_MOUSEMOTION,):
+            return int(event.motion.windowID)
+        if event.type in (sdl2.SDL_MOUSEBUTTONDOWN, sdl2.SDL_MOUSEBUTTONUP):
+            return int(event.button.windowID)
+        if event.type == sdl2.SDL_MOUSEWHEEL:
+            return int(event.wheel.windowID)
+        if event.type == sdl2.SDL_WINDOWEVENT:
+            return int(event.window.windowID)
+        return None
+
+    def _dispatch_claimed_window_event(self, event: Any) -> bool:
+        """Dispatch events for subsystem-owned windows before main handling."""
+        window_id = self._event_window_id(event)
+        if window_id is None:
+            return False
+        handler = self._claimed_window_handlers.get(window_id)
+        if handler is None:
+            return False
+        try:
+            handler(event)
+        except Exception as exc:
+            log.warning('Claimed window event handler failed for window %d: %s', window_id, exc)
+        return True
+
+    def _subsystems_need_frame_capture(self) -> bool:
+        """Return True when any registered subsystem wants preview-frame bytes."""
+        return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
+
+    def _update_frame_capture_snapshot(self, frame: bytes | None) -> None:
+        """Cache the latest audience-output frame for subsystem preview use."""
+        if frame is None:
+            self._frame_capture_bytes = None
+            self._frame_capture_width = 0
+            self._frame_capture_height = 0
+            self._frame_capture_components = 0
+            return
+        self._frame_capture_bytes = bytes(frame)
+        self._frame_capture_width = int(self._width)
+        self._frame_capture_height = int(self._height)
+        self._frame_capture_components = 3
+
+    def get_frame_capture(self) -> tuple[bytes | None, int, int, int]:
+        """Return the last cached audience-output frame snapshot."""
+        return (
+            self._frame_capture_bytes,
+            self._frame_capture_width,
+            self._frame_capture_height,
+            self._frame_capture_components,
+        )
 
     def _multihead_layouts(self) -> list[tuple[int, int, int, int]]:
         """Return display layouts from the multi-head drop-in.
@@ -1270,6 +1361,7 @@ void main() {
                 break
 
         playlist = Playlist(effects, self.cfg)
+        self._playlist = playlist
         self._playlist_mode = playlist.mode
         self._playlist_index = playlist.index
         self._playlist_size = len(playlist.effects)
@@ -1355,6 +1447,22 @@ void main() {
             self._grand_finale = None
             log.warning('GrandFinaleController not available: %s', exc)
 
+        # Control Room controller (optional drop-in subsystem).
+        try:
+            control_room_cfg = self.cfg.get('control_room', default={}) or {}
+            if not isinstance(control_room_cfg, dict):
+                control_room_cfg = {}
+            if bool(control_room_cfg.get('enabled', False)):
+                control_room_cls = _load_control_room_controller_class()
+                self._control_room = control_room_cls(self, control_room_cfg)
+                self.vj_api.register_subsystem('control_room', self._control_room)
+                log.info('ControlRoomController loaded from drop-in')
+            else:
+                self._control_room = None
+        except Exception as exc:
+            self._control_room = None
+            log.warning('ControlRoomController not available: %s', exc)
+
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
@@ -1404,6 +1512,8 @@ void main() {
             # Poll events
             event = sdl2.SDL_Event()
             while sdl2.SDL_PollEvent(event):
+                if self._dispatch_claimed_window_event(event):
+                    continue
                 if event.type == sdl2.SDL_QUIT:
                     self._running = False
                 elif event.type == sdl2.SDL_KEYDOWN:
@@ -1482,6 +1592,15 @@ void main() {
                     self._grand_finale.update(dt, self._audio)
                 except Exception as exc:
                     log.warning('GrandFinaleController update failed: %s', exc)
+
+            for name, subsystem in list(self._subsystems.items()):
+                updater = getattr(subsystem, 'update', None)
+                if not callable(updater):
+                    continue
+                try:
+                    updater(dt, self._audio)
+                except Exception as exc:
+                    log.warning('%s subsystem update failed: %s', name, exc)
 
             # Update effects
             if not self._paused:
@@ -1681,12 +1800,17 @@ void main() {
             need_frame_for_streaming = (
                 self._streamer is not None and self._streamer.is_streaming
             )
-            if need_frame_for_streaming:
+            need_frame_for_subsystems = self._subsystems_need_frame_capture()
+            if need_frame_for_streaming or need_frame_for_subsystems:
                 try:
                     stream_frame = self._read_streaming_frame()
                 except Exception as exc:
                     log.error('Streaming frame readback failed: %s', exc)
                     stream_frame = None
+            if need_frame_for_subsystems:
+                self._update_frame_capture_snapshot(stream_frame)
+            else:
+                self._update_frame_capture_snapshot(None)
             if mirror_mode_active:
                 # Compose stage finished into _fbo_a; now tile-blit to spanned window.
                 self._present_mirror_tiled(self._fbo_a.color_attachments[0])
@@ -1712,6 +1836,15 @@ void main() {
 
             sdl2.SDL_GL_SwapWindow(self._window)
 
+            for name, subsystem in list(self._subsystems.items()):
+                presenter = getattr(subsystem, 'present', None)
+                if not callable(presenter):
+                    continue
+                try:
+                    presenter()
+                except Exception as exc:
+                    log.warning('%s subsystem present failed: %s', name, exc)
+
         # Cleanup
         if self._recorder:
             self._recorder.stop()
@@ -1730,6 +1863,17 @@ void main() {
             except Exception as exc:
                 log.warning('GrandFinaleController shutdown failed: %s', exc)
             self._grand_finale = None
+        for name, subsystem in list(self._subsystems.items()):
+            shutdown = getattr(subsystem, 'shutdown', None)
+            if not callable(shutdown):
+                continue
+            try:
+                shutdown()
+            except Exception as exc:
+                log.warning('%s subsystem shutdown failed: %s', name, exc)
+        self._subsystems.clear()
+        self._claimed_window_handlers.clear()
+        self._control_room = None
         if self._keystroke_logger is not None:
             self._keystroke_logger.close()
             self._keystroke_logger = None

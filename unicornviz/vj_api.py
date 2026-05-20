@@ -33,6 +33,7 @@ class VJState:
     playlist_size: int
     auto_advance: bool
     paused: bool
+    fullscreen: bool
     is_transitioning: bool
     advance_interval: float
     advance_time_remaining: float
@@ -45,6 +46,11 @@ class VJState:
     is_dancing_active: bool
     is_nova_active: bool
     is_burst_active: bool
+    recording_active: bool
+    streaming_active: bool
+    streaming_provider: str
+    display_mode: str
+    display_index: int
     user_busy: bool
     manual_grace_remaining_s: float
     status_pill: str
@@ -79,6 +85,28 @@ class VJApi:
         """Return True when the post-FX controller is available."""
         return self._app._postfx_controller is not None  # noqa: SLF001
 
+    def register_subsystem(self, name: str, subsystem: object) -> bool:
+        """Register a runtime subsystem with the main app loop."""
+        return self._app.register_subsystem(name, subsystem)
+
+    def claim_window_events(self, window_id: int, handler) -> bool:
+        """Claim SDL events for a subsystem-owned window id."""
+        return self._app.claim_window_events(window_id, handler)
+
+    def release_window_events(self, window_id: int) -> None:
+        """Release SDL event ownership for a subsystem window."""
+        self._app.release_window_events(window_id)
+
+    def get_frame_bytes(self) -> bytes | None:
+        """Return the latest cached audience-output frame bytes, if available."""
+        frame, _width, _height, _components = self._app.get_frame_capture()
+        return frame
+
+    def get_frame_size(self) -> tuple[int, int, int]:
+        """Return (width, height, components) for the cached frame snapshot."""
+        _frame, width, height, components = self._app.get_frame_capture()
+        return width, height, components
+
     def state(self) -> VJState:
         app = self._app
         effect_name = '-'
@@ -110,6 +138,11 @@ class VJApi:
             nova_active = bool(app._rainbow_nova.is_active)  # noqa: SLF001
 
         burst_active = bool(app._burst_controller.active)  # noqa: SLF001
+        recording_active = bool(app._recorder is not None and app._recorder.is_recording)  # noqa: SLF001
+        streaming_active = bool(app._streamer is not None and app._streamer.is_streaming)  # noqa: SLF001
+        streaming_provider = '-'
+        if app._streamer is not None:  # noqa: SLF001
+            streaming_provider = str(getattr(app._streamer, 'provider', '-'))  # noqa: SLF001
 
         return VJState(
             effect_name=effect_name,
@@ -118,6 +151,7 @@ class VJApi:
             playlist_size=int(getattr(app, '_playlist_size', 0)),  # noqa: SLF001
             auto_advance=bool(app._auto_advance),  # noqa: SLF001
             paused=bool(app._paused),  # noqa: SLF001
+            fullscreen=bool(app._fullscreen),  # noqa: SLF001
             is_transitioning=bool(app._next_effect is not None),  # noqa: SLF001
             advance_interval=float(app._effect_duration),  # noqa: SLF001
             advance_time_remaining=max(0.0, float(app._effect_duration - app._demo_timer)),  # noqa: SLF001
@@ -130,6 +164,11 @@ class VJApi:
             is_dancing_active=dancing_active,
             is_nova_active=nova_active,
             is_burst_active=burst_active,
+            recording_active=recording_active,
+            streaming_active=streaming_active,
+            streaming_provider=streaming_provider,
+            display_mode=str(getattr(app, '_display_mode', 'single')),  # noqa: SLF001
+            display_index=int(getattr(app, '_display_index', 0)),  # noqa: SLF001
             user_busy=self.is_user_busy(),
             manual_grace_remaining_s=max(0.0, float(app._user_action_deadline - time.monotonic())),  # noqa: SLF001
             status_pill=str(getattr(app, '_vj_status_pill', '')),  # noqa: SLF001
@@ -171,6 +210,23 @@ class VJApi:
 
     def set_auto_advance(self, enabled: bool) -> None:
         self._app._auto_advance = bool(enabled)  # noqa: SLF001
+
+    def toggle_pause(self) -> bool:
+        """Toggle playback pause and return the new paused state."""
+        self._app.toggle_pause()
+        return bool(self._app.paused)
+
+    def toggle_recording(self) -> tuple[bool, str]:
+        """Toggle recording on or off."""
+        return self._app.toggle_recording()
+
+    def toggle_streaming(self) -> tuple[bool, str]:
+        """Toggle RTMP streaming on or off."""
+        return self._app.toggle_streaming()
+
+    def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
+        """Set the main audience display mode."""
+        return self._app.set_display_mode(mode, reset_to_config=reset_to_config)
 
     def set_advance_interval(self, seconds: float) -> float:
         self._app._effect_duration = max(10.0, float(seconds))  # noqa: SLF001

@@ -597,6 +597,7 @@ Conventions for a drop-in:
 | Directory     | Class                 | Purpose                              |
 |---------------|-----------------------|--------------------------------------|
 | `multi-head-01`| `MultiHeadController`| Multi-monitor display topology & mirroring |
+| `control-room-01`| `ControlRoomController`| Secondary operator window with preview, transport, FX, and effect-browser controls |
 
 ## Packaging Evaluation
 

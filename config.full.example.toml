@@ -117,6 +117,15 @@ log_decisions = false
 # pingpong_auto_min_swaps = 4
 # pingpong_auto_max_swaps = 10
 
+[control_room]
+enabled = false
+display_index = 1
+width = 1440
+height = 900
+show_preview = true
+preview_scale = 0.52
+theme = "dark"   # dark | high_contrast
+
 [ansi]
 # default ANSI art directory
 ansi_dir_auto = "assets/ansi"
