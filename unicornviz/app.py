@@ -373,6 +373,20 @@ class App:
         """Release event ownership for a previously-claimed SDL window."""
         self._claimed_window_handlers.pop(int(window_id), None)
 
+    def rebind_main_gl_context(self) -> bool:
+        """Re-bind the main audience window's GL context as current.
+
+        Called after subsystem-owned windows are created/destroyed so any GL
+        binding implicitly migrated by SDL/X11 is restored.  Returns True on
+        success or when there is nothing to rebind.
+        """
+        if self._window is None or self._gl_context is None:
+            return True
+        if sdl2.SDL_GL_MakeCurrent(self._window, self._gl_context) != 0:
+            log.warning('SDL_GL_MakeCurrent failed: %s', sdl2.SDL_GetError().decode())
+            return False
+        return True
+
     def _event_window_id(self, event: Any) -> int | None:
         """Return the SDL window id associated with an event, when present."""
         if event.type in (sdl2.SDL_KEYDOWN, sdl2.SDL_KEYUP):
@@ -433,6 +447,17 @@ class App:
         """Create and register the optional control-room subsystem."""
         if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
             return True, 'Control Room already open'
+        # Garbage-collect any orphaned controller that's pending shutdown but
+        # whose update() hasn't run yet (e.g. rapid toggle while ESC-close is
+        # still queued).  Otherwise we'd leak the old SDL window.
+        if self._control_room is not None and getattr(self._control_room, '_pending_shutdown', False):
+            try:
+                close_fn = getattr(self._control_room, 'close_now', None)
+                if callable(close_fn):
+                    close_fn()
+            except Exception as exc:
+                log.warning('Stale ControlRoomController cleanup failed: %s', exc)
+            self._control_room = None
         control_room_cfg = cfg_override or self.cfg.get('control_room', default={}) or {}
         if not isinstance(control_room_cfg, dict):
             control_room_cfg = {}
@@ -440,6 +465,7 @@ class App:
             control_room_cls = _load_control_room_controller_class()
             self._control_room = control_room_cls(self, control_room_cfg)
             self.vj_api.register_subsystem('control_room', self._control_room)
+            self.rebind_main_gl_context()
             log.info('ControlRoomController loaded from drop-in')
             return True, f'Control Room open on display {getattr(self._control_room, "_display_index", "?")}'
         except Exception as exc:
@@ -451,12 +477,20 @@ class App:
         """Shutdown and unregister the optional control-room subsystem."""
         if self._control_room is None:
             return False, 'Control Room already off'
+        closer = getattr(self._control_room, 'close_now', None)
         try:
-            self._control_room.shutdown()
+            if callable(closer):
+                closer()
+            else:
+                self._control_room.shutdown()
         except Exception as exc:
             log.warning('ControlRoomController shutdown failed: %s', exc)
+        # close_now() / _destroy_window() already unregisters and rebinds GL.
+        # The explicit calls below are defensive against older drop-ins that
+        # don't implement close_now().
         self.unregister_subsystem('control_room')
         self._control_room = None
+        self.rebind_main_gl_context()
         return False, 'Control Room closed'
 
     def toggle_control_room(self) -> tuple[bool, str]:

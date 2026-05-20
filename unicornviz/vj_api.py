@@ -89,6 +89,10 @@ class VJApi:
         """Register a runtime subsystem with the main app loop."""
         return self._app.register_subsystem(name, subsystem)
 
+    def unregister_subsystem(self, name: str) -> None:
+        """Unregister a runtime subsystem previously added via ``register_subsystem``."""
+        self._app.unregister_subsystem(name)
+
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)
@@ -96,6 +100,15 @@ class VJApi:
     def release_window_events(self, window_id: int) -> None:
         """Release SDL event ownership for a subsystem window."""
         self._app.release_window_events(window_id)
+
+    def rebind_main_gl_context(self) -> bool:
+        """Re-bind the main audience window's GL context as current.
+
+        Subsystems that create or destroy secondary SDL windows should call this
+        afterwards so any GL state implicitly migrated by the windowing system is
+        restored to the audience window.  Returns True on success.
+        """
+        return self._app.rebind_main_gl_context()
 
     def get_frame_bytes(self) -> bytes | None:
         """Return the latest cached audience-output frame bytes, if available."""
