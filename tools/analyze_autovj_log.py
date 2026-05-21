@@ -76,6 +76,13 @@ def main(argv: list[str]) -> int:
         print(f'Transition bursts (>=3 transitions within 2s windows): {bursts}')
 
     if detector_ticks:
+        def p90(vals: list[float]) -> float:
+            if not vals:
+                return 0.0
+            if len(vals) < 2:
+                return float(vals[0])
+            return float(statistics.quantiles(vals, n=10)[8])
+
         by_mode = defaultdict(list)
         for e in detector_ticks:
             by_mode[str(e.get('mode', '?'))].append(e)
@@ -88,7 +95,7 @@ def main(argv: list[str]) -> int:
             bpms = [float(r.get('bpm', 0.0) or 0.0) for r in rows if float(r.get('bpm', 0.0) or 0.0) > 0.0]
             print(
                 f"  {mode}: n={len(rows)} "
-                f"drop_score p50={statistics.median(drop_scores):.3f} p90={statistics.quantiles(drop_scores, n=10)[8]:.3f} "
+                f"drop_score p50={statistics.median(drop_scores):.3f} p90={p90(drop_scores):.3f} "
                 f"energy p50={statistics.median(energies):.3f} slope p50={statistics.median(slopes):.3f} "
                 f"bpm_med={(statistics.median(bpms) if bpms else 0.0):.1f}"
             )
@@ -97,9 +104,9 @@ def main(argv: list[str]) -> int:
         mid = [float(r.get('mid', 0.0) or 0.0) for r in detector_ticks]
         treble = [float(r.get('treble', 0.0) or 0.0) for r in detector_ticks]
         if bass and mid and treble:
-            q90_b = statistics.quantiles(bass, n=10)[8]
-            q90_m = statistics.quantiles(mid, n=10)[8]
-            q90_t = statistics.quantiles(treble, n=10)[8]
+            q90_b = p90(bass)
+            q90_m = p90(mid)
+            q90_t = p90(treble)
             print('Band distribution (all detector ticks):')
             print(
                 f"  bass p50={statistics.median(bass):.3f} p90={q90_b:.3f} | "
