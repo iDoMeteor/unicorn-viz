@@ -1,0 +1,72 @@
+{
+  "090bpm_click": {
+    "bpm_truth": 90.0,
+    "bpm_median": 146.3,
+    "bpm_error_abs": 56.3,
+    "bpm_error_pct": 62.55,
+    "harmonic_error_rate": 0.3853,
+    "time_to_lock_s": -1.0,
+    "confidence_at_lock": 0.0,
+    "conf_median": 0.5394,
+    "locked_ticks": 1290,
+    "lane_fast_pct": 68.4,
+    "eval_wall_s": 0.324,
+    "engine": "legacy"
+  },
+  "096bpm_click": {
+    "bpm_truth": 96.0,
+    "bpm_median": 157.73,
+    "bpm_error_abs": 61.73,
+    "bpm_error_pct": 64.3,
+    "harmonic_error_rate": 0.0,
+    "time_to_lock_s": -1.0,
+    "confidence_at_lock": 0.0,
+    "conf_median": 0.5622,
+    "locked_ticks": 1290,
+    "lane_fast_pct": 100.0,
+    "eval_wall_s": 0.304,
+    "engine": "legacy"
+  },
+  "120bpm_click": {
+    "bpm_truth": 120.0,
+    "bpm_median": 139.66,
+    "bpm_error_abs": 19.66,
+    "bpm_error_pct": 16.39,
+    "harmonic_error_rate": 0.0,
+    "time_to_lock_s": -1.0,
+    "confidence_at_lock": 0.0,
+    "conf_median": 0.5403,
+    "locked_ticks": 1181,
+    "lane_fast_pct": 49.5,
+    "eval_wall_s": 0.299,
+    "engine": "legacy"
+  },
+  "140bpm_click": {
+    "bpm_truth": 140.0,
+    "bpm_median": 143.0,
+    "bpm_error_abs": 3.0,
+    "bpm_error_pct": 2.14,
+    "harmonic_error_rate": 0.0,
+    "time_to_lock_s": 2.13,
+    "confidence_at_lock": 0.6667,
+    "conf_median": 0.5012,
+    "locked_ticks": 1305,
+    "lane_fast_pct": 100.0,
+    "eval_wall_s": 0.334,
+    "engine": "legacy"
+  },
+  "155bpm_click": {
+    "bpm_truth": 155.0,
+    "bpm_median": 159.61,
+    "bpm_error_abs": 4.61,
+    "bpm_error_pct": 2.97,
+    "harmonic_error_rate": 0.0,
+    "time_to_lock_s": 17.41,
+    "confidence_at_lock": 0.4981,
+    "conf_median": 0.5063,
+    "locked_ticks": 1296,
+    "lane_fast_pct": 100.0,
+    "eval_wall_s": 0.36,
+    "engine": "legacy"
+  }
+}

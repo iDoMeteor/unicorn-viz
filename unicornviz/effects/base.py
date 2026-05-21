@@ -70,7 +70,8 @@ if TYPE_CHECKING:
 class AudioData:
     """Snapshot of audio state passed to effects each frame."""
 
-    __slots__ = ("fft", "waveform", "bass", "mid", "treble", "beat", "bpm")
+    __slots__ = ("fft", "waveform", "bass", "mid", "treble", "beat", "bpm",
+                 "bass_flux", "mid_flux")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -80,6 +81,8 @@ class AudioData:
         self.treble: float = 0.0
         self.beat: float = 0.0
         self.bpm: float = 120.0
+        self.bass_flux: float = 0.0
+        self.mid_flux: float = 0.0
 
 
 class BaseEffect(ABC):

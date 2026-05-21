@@ -170,3 +170,114 @@ mis-lock remains the top unresolved issue for musical correctness.
 For full external handoff package, see:
 
 - `docs/debug/auto-vj-handoff-2026-05-21.md`
+
+---
+
+## Implementation Progress — Full Rebuild (started 2026-05-21, session 2)
+
+Plan document: `docs/debug/auto-vj-beat-detection-rebuild-plan-2026-05-21.md`
+
+### Phase Status
+
+| Phase | Title                              | Status      | Commit |
+|-------|------------------------------------|-------------|--------|
+| P0    | Offline ground-truth harness       | ✅ Done      | TBD    |
+| P1    | Event-based onset stream           | 🔧 In progress | —   |
+| P2    | Time-based envelope + MAD threshold| 🔧 In progress | —   |
+| P3    | Tempo-aware adaptive refractory    | 🔧 In progress | —   |
+| P4    | Autocorrelation tempo estimator    | 🔧 In progress | —   |
+| P5    | Phase-locked oscillator + downbeat | 🔧 In progress | —   |
+| P6    | Downbeat detection bass/snare      | ⏳ Planned   | —   |
+| P7    | Confidence calibration + telemetry | ⏳ Planned   | —   |
+
+### P0 — Harness & Seed Corpus
+
+Files created:
+- `tools/gen_bpm_eval_corpus.py` — generates 5 synthetic click-track WAVs
+- `tools/bpm_eval.py` — offline harness, per-file metrics, MD + JSON reports
+- `tools/run_bpm_eval.sh` — shell entry point
+- `assets/audio/bpm_eval/seed/` — 5 WAV+JSON pairs: 90, 96, 120, 140, 155 BPM
+
+Baseline run result (legacy engine, before any changes):
+
+```
+090bpm_click.wav  truth= 90.0  pred=  0.0  err=90.0  lock=-1.0s
+096bpm_click.wav  truth= 96.0  pred=  0.0  err=96.0  lock=-1.0s
+120bpm_click.wav  truth=120.0  pred=  0.0  err=120.0 lock=-1.0s
+140bpm_click.wav  truth=140.0  pred=  0.0  err=140.0 lock=-1.0s
+155bpm_click.wav  truth=155.0  pred=  0.0  err=155.0 lock=-1.0s
+```
+
+**Interpretation**: BPM = 0.0 on all tracks = zero lock. This is expected and reveals
+a previously undocumented root cause (H9 below).
+
+### H9 — Wall-clock time in Analyzer and BeatGridTracker breaks offline evaluation
+
+Both `unicornviz/audio/analyzer.py` (beat cooldown) and
+`drop-ins/auto-vj-01/beat_grid.py` (IOI timestamps, energy history) call
+`time.monotonic()` internally. When the harness processes a 30-second clip
+offline in milliseconds, wall-clock time barely advances. The beat cooldown
+(`beat_cooldown_until_t`) is set to `now + cooldown_s` in real time, but the
+next simulated block arrives with `now` only microseconds later → the cooldown
+never expires → zero onsets → zero BPM.
+
+**In production** this is masked because audio blocks arrive at real-time rate.
+But it is still wrong: if the render loop runs fast (> 60fps) or slow (< 30fps),
+the cooldown duration in audio-time varies, introducing FPS-coupling into beat
+detection.
+
+**Fix (part of P1)**: Add optional `t: float | None = None` parameter to both
+`Analyzer.process()` and `BeatGridTracker.update()`. Default to
+`time.monotonic()` when not provided (backward-compat). Harness passes
+`t = file_t` (audio position in seconds). This also fixes FPS-coupling in
+production if callers pass audio-time-aligned `t`.
+
+Baseline JSON saved as `tools/bpm_eval_baseline.json` (all zeros — the
+zero-lock baseline is itself a regression gate: any future run that also
+produces all zeros is a hard failure).
+
+### P1 + P2 + P3 implementation notes
+
+Analyzer changes in `unicornviz/audio/analyzer.py`:
+- `OnsetEvent` dataclass (t, strength) — importable
+- `_onset_queue: deque[OnsetEvent]` — bounded 256
+- `drain_onsets() -> list[OnsetEvent]`
+- `set_expected_bpm(bpm, confidence)` — sets adaptive refractory (P3)
+- `process(pcm, t=None)` — optional t for offline harness (H9 fix)
+- Replace `_flux_history` fixed ring → time-based `_env_buf` at 100 Hz (P2)
+- Replace `mean + std` threshold → `median + MAD` with absolute floor (P2)
+- Compute `bass_flux` / `mid_flux` per frame (P6 prep)
+
+`AudioData` changes in `unicornviz/effects/base.py`:
+- Add `bass_flux: float = 0.0` and `mid_flux: float = 0.0` to `__slots__`
+
+`AudioManager` changes in `unicornviz/audio/manager.py`:
+- `drain_onsets() -> list[OnsetEvent]` — forwards to analyzer
+- `set_expected_bpm(bpm, confidence) -> None` — forwards to analyzer
+- `_clone_audio()` updated for `bass_flux`, `mid_flux`
+
+`BeatGridTracker` changes in `drop-ins/auto-vj-01/beat_grid.py`:
+- `update(dt, audio, onsets=None, t=None)` — new signature (P1 + H9 fix)
+- All `time.monotonic()` calls replaced with `t or time.monotonic()`
+- `_ingest_onset(ev)` method to separate onset ingestion
+
+`AutoVJController` changes in `drop-ins/auto-vj-01/auto_vj.py`:
+- Store `self._audio_manager = audio` in `__init__`
+- In `update()`: `self._grid.update(dt, audio, onsets=self._audio_manager.drain_onsets())`
+- After update: `self._audio_manager.set_expected_bpm(self._grid.bpm, self._grid.confidence)`
+- `_load_beat_grid_cls()` reads `cfg.get('beat_tracker_engine', 'legacy')` to
+  select between `BeatGridTracker` (legacy) and `BeatTracker` (v2)
+
+### P4 + P5 implementation notes
+
+New `BeatTracker` class in `drop-ins/auto-vj-01/beat_grid.py`:
+- Maintains own onset envelope at 100 Hz internal rate
+- ACF tempo estimator with perceptual prior (mu=120, sigma=28)
+- Octave-down preference when slower fold scores ≥ 85% of best
+- Phase-locked oscillator with ±18% tolerance window
+- Phase coherence as confidence metric
+- Same public interface as `BeatGridTracker` — drop-in swap
+
+Feature flag: `beat_tracker_engine = "v2"` in `[auto_vj]` section of
+`config.toml`. Default stays `"legacy"` until harness confirms v2 wins.
+

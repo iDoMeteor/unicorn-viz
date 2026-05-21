@@ -10,7 +10,7 @@ import numpy as np
 
 from unicornviz.effects.base import AudioData
 from unicornviz.audio.capture import AudioCapture
-from unicornviz.audio.analyzer import Analyzer
+from unicornviz.audio.analyzer import Analyzer, OnsetEvent  # noqa: F401 (OnsetEvent re-exported)
 from unicornviz.audio.profiles import AudioProfile, get_profile, list_profiles
 from unicornviz.config import Config
 
@@ -54,6 +54,8 @@ class AudioManager:
         clone.treble = float(data.treble)
         clone.beat = float(data.beat)
         clone.bpm = float(data.bpm)
+        clone.bass_flux = float(data.bass_flux)
+        clone.mid_flux = float(data.mid_flux)
         clone.fft[:] = data.fft
         clone.waveform[:] = data.waveform
         return clone
@@ -127,3 +129,25 @@ class AudioManager:
     def get_audio_data_raw(self) -> AudioData:
         """Return latest unscaled analyzer snapshot for detection/telemetry."""
         return self._last_data_raw
+
+    # ------------------------------------------------------------------
+    # P1 / P3 — onset stream forwarding
+    # ------------------------------------------------------------------
+
+    def drain_onsets(self) -> list[OnsetEvent]:
+        """Return and clear all onset events queued in the analyzer.
+
+        The BeatTracker in the auto-vj drop-in calls this each frame instead
+        of reading ``audio.beat``, so no onset is missed on fast frames and
+        none is double-counted on slow ones.
+        """
+        return self._analyzer.drain_onsets()
+
+    def set_expected_bpm(self, bpm: float, confidence: float) -> None:
+        """Forward a BPM estimate to the analyzer to tune its refractory gate.
+
+        Called by the auto-vj director after each BeatTracker update.  When
+        confidence is sufficient (>= 0.5) the analyzer will reject onsets
+        faster than ~70 % of the estimated beat period.
+        """
+        self._analyzer.set_expected_bpm(bpm, confidence)

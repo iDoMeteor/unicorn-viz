@@ -243,3 +243,18 @@ mix_time       = 20.0        # seconds per clip
 # preset_dirs = "drop-ins/projectm-01/presets,/opt/projectm/presets"
 # texture_dirs = "assets/projectm-textures"
 # start_preset = ""
+
+# ---------------------------------------------------------------------------
+# Beat tracker engine selection (inside [auto_vj] section)
+#
+# beat_tracker_engine = "legacy"   — IOI-median estimator (default, stable)
+# beat_tracker_engine = "v2"       — ACF + phase-locked oscillator (new)
+#
+# Switch to "v2" only after the harness confirms it wins on your corpus:
+#   python tools/bpm_eval.py --engine v2
+#
+# To enable, add the key inside your [auto_vj] block, e.g.:
+#   [auto_vj]
+#   beat_tracker_engine = "v2"
+# ---------------------------------------------------------------------------
+# beat_tracker_engine = "legacy"
