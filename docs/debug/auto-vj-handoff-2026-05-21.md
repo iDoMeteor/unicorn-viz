@@ -382,3 +382,13 @@ Checkpoint update after the startup-confidence gate: the seed corpus remains
 strong on v2 (median absolute BPM error 1.15 BPM; 96 BPM seed locks at 96.0
 BPM; 155 BPM seed at 153.8 BPM). The live oscillation still needs a fresh log
 after restart, but the offline regression surface is currently under control.
+
+Checkpoint update after re-lock/pause controls:
+
+- v2 now includes a tempo-hold window and silence-reset lock clearing so BPM
+  does not churn multiple times per second and does not carry stale state
+  across pause/song switches.
+- Seed corpus quality remains high (90=89.5, 96=95.9, 120=120.0, 140=139.5,
+  155=153.8).
+- Remaining open item: one synthetic 96 variant settles low, so low-tempo
+  calibration still needs additional tuning against fresh live logs.

@@ -872,6 +872,21 @@ The 90 BPM track improved to 91.6 BPM. The next thing to verify is the live
 124/96 song pair after restart, because that live log has not yet been refreshed
 with the latest patch.
 
+Current stabilization delta:
+
+- Added tempo-hold gating to reduce high-frequency re-lock churn on steady
+  material.
+- Added silence-reset lock clearing so each post-pause song can re-lock from
+  a clean state.
+- Reduced ACF decision cadence to further damp meter chatter.
+
+Post-delta benchmark:
+
+- Seed corpus still strong: 90=89.5, 96=95.9, 120=120.0, 140=139.5, 155=153.8.
+- Synthetic 124/128/164 stable with no >10 BPM frame jumps.
+- Synthetic 96 has one low-lock variant; low-BPM calibration remains an open
+  tuning task before declaring v2 production-ready.
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

@@ -380,3 +380,20 @@ healthy on v2 (`tools/bpm_eval.py --engine v2`) with median absolute BPM error
 seed also improved back to 91.6 BPM. The live 124/96 swing still needs a fresh
 post-patch live log to confirm, but the offline guardrails are now holding.
 
+Latest stabilization pass (re-lock control + pause reset):
+
+- Added a tempo-hold window to avoid re-deciding BPM multiple times per second
+   on steady tracks.
+- Added silence-reset lock clearing so a new song after pause does not inherit
+   stale BPM state from the previous track.
+- Slowed ACF decision cadence (`_V2_ACF_INTERVAL` 8) to reduce chattery
+   candidate replacement.
+
+Offline results after this pass:
+
+- Seed corpus remains strong (`tools/bpm_eval.py --engine v2`):
+   90=89.5, 96=95.9, 120=120.0, 140=139.5, 155=153.8
+- Synthetic 124/128/164 checks are stable with zero >10 BPM frame jumps.
+- One synthetic 96 variant currently settles low (~86–90), so low-tempo
+   calibration still needs live + synthetic follow-up.
+
