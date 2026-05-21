@@ -288,10 +288,19 @@ class VJApi:
             return None
         prev_speed = float(effect.parameters['speed'])
         new_speed = max(0.05, min(10.0, float(value)))
+        # Intentional exception: when Auto VJ is actively running in the
+        # raver profile, preserve the old discontinuous slew look on purpose.
+        # Everywhere else we keep continuity-correct time.
+        auto_vj = getattr(self._app, '_auto_vj', None)  # noqa: SLF001
+        raver_scramble = bool(
+            auto_vj is not None
+            and bool(getattr(auto_vj, 'enabled', False))
+            and str(getattr(auto_vj, '_profile', '')).lower() == 'raver'
+        )
         # Keep shader phase continuous for effects that use
         # t = iTime * (bias + scale * iSpeed).
         # Defaults match the common t = iTime * iSpeed case.
-        if abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
+        if (not raver_scramble) and abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
             try:
                 t = float(getattr(effect, 'time'))
                 bias = float(getattr(effect, 'SPEED_TIME_BIAS', 0.0))
