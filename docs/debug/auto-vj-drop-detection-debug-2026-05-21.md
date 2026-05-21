@@ -149,3 +149,24 @@ while musically important transitions are subtle in mid/treble dynamics.
 - `drop-ins/auto-vj-01/beat_grid.py`
 - `unicornviz/audio/manager.py`
 - `unicornviz/app.py`
+
+## Addendum (Latest Run: 2026-05-21, 15:38 Session)
+
+Latest analyzed file: `logs/autovj-20260521T153837.jsonl`
+
+Summary deltas vs earlier state:
+
+- Mode chains remain healthy (`BUILD -> DROP -> IMPACT -> CLIMAX` present).
+- Transition burst metric remains stable (`>=3 transitions in 2s`: 0).
+- Persistent issue: BPM still locks high on some slower material.
+   - This session median BPM tracked around `~156` during suspected slower song.
+- Detector bands in this session:
+   - bass p50=0.970, mid p50=0.605, treble p50=0.445
+- Potential missed drop windows (`BUILD score>=0.75`, no `DROP` <=1.5s): 1
+
+This indicates transition pacing is substantially improved, but BPM harmonic
+mis-lock remains the top unresolved issue for musical correctness.
+
+For full external handoff package, see:
+
+- `docs/debug/auto-vj-handoff-2026-05-21.md`
