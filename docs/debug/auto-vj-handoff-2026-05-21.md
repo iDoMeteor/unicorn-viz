@@ -342,3 +342,32 @@ This handoff follows iterative live tuning with telemetry-heavy runs on
 Fedora / Linux. Auto VJ is currently stable in transition pacing but
 inaccurate on tempo estimation, with measurable bias toward the ~150–160 BPM
 lane across varied musical material.
+
+## Post-handoff v2 regression note
+
+While validating the rebuild plan, the new v2 engine solved the old 155-lane
+problem on the synthetic seed corpus, but a steadier 124 BPM live track later
+exposed two transient regressions:
+
+- phantom 200 BPM spikes when the ACF score is effectively zero across all
+  lags
+- 96 BPM dips when a single bad frame pulls the EMA away from the correct
+  tempo
+
+The next guardrails to land are:
+
+1. a higher ACF score floor
+2. a per-update BPM step cap
+3. a confidence floor before applying updates
+
+Keep this note attached to the v2 workstream; it is the current highest-value
+debug target.
+
+Implementation status: these guardrails are now being added to the v2 engine.
+The next validation step is a fresh run of `tools/bpm_eval.py --engine v2`
+against the same seed corpus, then a live 124 BPM check to ensure the 96 BPM
+dips and 200 BPM spikes are gone without reintroducing the old 155-lane bias.
+
+Verification note: a 124 BPM synthetic sanity check now shows neither the
+phantom 200 BPM spike nor the 96 BPM dip. The estimator is conservative on
+that test (steady at ~120 BPM), but it is now stable and no longer thrashes.

@@ -336,3 +336,35 @@ initial BPM lock reduces the false-positive rate.
 
 Results saved: `tools/bpm_eval_v2_results.json`
 
+## Addendum (2026-05-21, live 124 BPM session)
+
+Current v2 regression mode observed on a steady 124 BPM track (8-bar loop):
+
+- BPM mostly hovers correctly in the 120–125 range.
+- Two transient failure modes still appear:
+   - **phantom 200 BPM spikes** when the ACF score is effectively zero across
+      all lags (brief silence / dense noise burst / low-information frames)
+   - **96 BPM dips** when a transient sub-beat peak pulls the EMA down despite
+      the beat remaining unchanged
+
+Planned fix set for v2:
+
+1. raise the score floor so near-zero ACF cannot ever select lag_min as the
+    default 200 BPM ceiling
+2. add a per-update BPM step cap so a single bad frame cannot move the EMA by
+    ~15 BPM
+3. require a confidence floor before applying any BPM update
+
+This addendum is the current debugging priority for the v2 engine.
+
+Implementation note (in progress): the v2 tracker now has explicit guardrails
+for all three items above. If this session is interrupted, resume by checking
+the v2 harness against the 90/96/120/140/155 BPM seed corpus and compare the
+new report to `tools/bpm_eval_v2_results.json`.
+
+Follow-up sanity check: a steady 124 BPM synthetic click-track (30 s) now
+stays stable with **no 200 BPM spikes** and **no 96 BPM dips** under the
+hardening pass. The median BPM on that synthetic run sat at 120.0, which is
+slightly conservative but musically stable; that is acceptable for the current
+step because the failure mode was instability, not exact calibration.
+

@@ -812,5 +812,54 @@ following are true:
 
 ---
 
+## 15. v2 Regression Watchlist
+
+The v2 engine already proved it can eliminate the old ~155 BPM harmonic lock
+on the seed corpus, but a later live 124 BPM run exposed two transient
+regressions that need guarding before v2 can become the default:
+
+1. **phantom 200 BPM spikes** when the ACF score is near-zero across all lags
+2. **96 BPM dips** when a single bad frame moves the EMA too far
+
+Planned hardening steps:
+
+- raise the minimum score floor before `np.argmax(score)` is trusted
+- cap BPM movement per update so one frame cannot swing the estimate by
+  double digits
+- require a confidence floor before applying any BPM update
+
+Treat these as mandatory stabilization work for P5/P7 before flipping the
+feature flag in production.
+
+### Current v2 hardening (2026-05-21 live follow-up)
+
+The v2 tracker is currently being hardened against two live regressions on a
+steady 124 BPM track:
+
+- phantom 200 BPM spikes when the ACF is effectively flat
+- transient dips to 96 BPM when one bad frame pulls the EMA off target
+
+The precise fixes being applied now are:
+
+- raise the minimum ACF score floor so `np.argmax(score)` never defaults to
+  the lag_min / 200 BPM ceiling on near-zero frames
+- cap per-update BPM movement so a single bad frame cannot swing the estimate
+  by double digits
+- require a confidence floor before any BPM update is applied
+
+If v2 is promoted later, these guardrails must be part of the final merged
+state; they are not optional polish.
+
+Observed result after applying the hardening pass:
+
+- seed corpus remains strong (v2 still beats legacy decisively)
+- a 124 BPM synthetic click track is now stable with no 200-spike / 96-dip
+  regression, though it is slightly conservative in the 120 BPM vicinity
+
+This is the right trade-off for the current phase: eliminate instability
+first, then tune exact calibration in the next pass if needed.
+
+---
+
 End of plan. Build it phase by phase, measure every change, keep effects
 working, and the 155-lane bias will be a historical footnote.

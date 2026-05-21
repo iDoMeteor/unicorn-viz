@@ -92,6 +92,7 @@ stream_key = ""
 # ---------------------------------------------------------------------------
 [auto_vj]
 enabled = true
+beat_tracker_engine = "v2"
 profile = "raver"          # chill | normie | raver | user (unset => normie preset)
 auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
 auto_profile_chill_max_bpm = 110.0
