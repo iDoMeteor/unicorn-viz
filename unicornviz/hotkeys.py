@@ -131,7 +131,7 @@ class HotkeyHandler:
         # System-level post-process slot controls (Ctrl+Alt+number).
         # Handle before help-overlay numeric controls and effect jump shortcuts.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
-            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_8:
+            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
                 slot = int(sym - sdl2.SDLK_0)
                 message = a.select_postfx_slot(slot)
                 o.flash_message(message, 1.5)

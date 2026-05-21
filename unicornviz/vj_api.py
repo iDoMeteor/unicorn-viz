@@ -286,7 +286,20 @@ class VJApi:
         effect = self._app._current_effect  # noqa: SLF001
         if effect is None or 'speed' not in effect.parameters:
             return None
-        effect.parameters['speed'] = max(0.05, min(10.0, float(value)))
+        prev_speed = float(effect.parameters['speed'])
+        new_speed = max(0.05, min(10.0, float(value)))
+        # Keep shader phase continuous for effects that use iTime * iSpeed.
+        # Without this, tiny speed slews can produce huge visual jumps when
+        # self.time has a large runtime offset.
+        if abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
+            try:
+                t = float(getattr(effect, 'time'))
+                if prev_speed > 1e-9:
+                    setattr(effect, 'time', (t * prev_speed) / new_speed)
+            except Exception:
+                # Never fail speed changes due to continuity bookkeeping.
+                pass
+        effect.parameters['speed'] = new_speed
         return float(effect.parameters['speed'])
 
     def set_zoom(self, value: float) -> float | None:
@@ -335,7 +348,7 @@ class VJApi:
             return False
         if 'invalid slot' in lower:
             return False
-        if 'use ctrl+alt+1..8' in lower:
+        if 'use ctrl+alt+1..9' in lower:
             return False
         if 'coming soon' in lower:
             return False

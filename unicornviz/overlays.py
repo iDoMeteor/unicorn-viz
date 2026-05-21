@@ -390,7 +390,7 @@ class Overlays:
                 ('A', 'Own ANSI art'),
                 ('Ctrl+A', 'Audio source'),
                 ('Alt+A / Alt+Shift+A', 'Profile next / prev'),
-                ('Ctrl+Alt+1..8', 'Post FX quick-hit trigger'),
+                ('Ctrl+Alt+1..9', 'Post FX quick-hit trigger'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
                 ('Middle Click', 'Clear hue-shift / Toggle Auto VJ'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
