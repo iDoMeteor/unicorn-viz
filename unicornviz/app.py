@@ -1454,6 +1454,8 @@ void main() {
             self._height,
             flash_messages=bool(self.cfg.get('overlays', 'flash_messages', default=True)),
             show_recording_indicator=bool(self.cfg.get('recording', 'show_indicator', default=True)),
+            hud_auto_hide=bool(self.cfg.get('overlays', 'hud_auto_hide', default=True)),
+            hud_timeout_s=float(self.cfg.get('overlays', 'hud_timeout_s', default=60.0)),
         )
         self._overlays = overlays
         overlays.set_effect_shortcuts(playlist.shortcut_effects)

@@ -95,6 +95,8 @@ _DEFAULTS: dict[str, Any] = {
     },
     "overlays": {
         "flash_messages": True,
+        "hud_auto_hide": True,
+        "hud_timeout_s": 60.0,
     },
     "control_room": {
         "enabled": False,

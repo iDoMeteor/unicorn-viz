@@ -2,10 +2,11 @@
 fullscreen = true
 show_cursor = false
 display_mode  = "single"   # single | span_all | mirror_all
-display_index  = 0
-# exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
+#display_index  = 0
+#exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
 [demo]
+auto_advance = false
 mode = "sequential"
 effect_duration = 30
 transition = "shuffle"
@@ -25,7 +26,7 @@ ansi_acid_dir = "assets/ansi/acid"
 start_effect = "Audio Spectrum"
 
 [logging]
-level = "INFO"
+level = "error"
 
 [dropins]
 exclude = "none"
@@ -40,6 +41,8 @@ internal_scale = 1
 
 [overlays]
 flash_messages = false
+hud_auto_hide = false
+#hud_timeout_s = 60.0
 
 [hotkeys]
 # F6 randomizes effect speed within this range (when effect exposes `speed`)
@@ -133,8 +136,23 @@ pingpong_b            = "Crystal Pyramids"
 # pingpong_auto_max_swaps = 10
  log_decisions         = true        # write JSONL decision log per session
 #postfx_cruise_interval_s = 25
-#postfx_cruise_slots = [1,2,3,4,5,6,7,8]
+postfx_cruise_slots = [1,2,3,7,9]
 #postfx_drop_duration_s = 5
+
+# ---------------------------------------------------------------------------
+# Control Room operator window  (drop-ins/control-room-01)
+# Dedicated VJ/operator monitor with program preview, transport, FX banks,
+# tweakable controls, and an effect browser.
+# ---------------------------------------------------------------------------
+[control_room]
+enabled = false
+#fullscreen = true       # borderless fullscreen on the chosen display (default true)
+#display_index = 1
+#width = 1920
+#height = 1080
+show_preview = false
+preview_scale = 0.25
+theme = "dark"
 
 # ---------------------------------------------------------------------------
 # Keystroke logging  (unicornviz/keystroke_log.py)

@@ -460,12 +460,16 @@ class Overlays:
         height: int,
         flash_messages: bool = True,
         show_recording_indicator: bool = True,
+        hud_auto_hide: bool = True,
+        hud_timeout_s: float = 60.0,
     ) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
         self._flash_enabled = flash_messages
         self._show_recording_indicator = show_recording_indicator
+        self._hud_auto_hide = bool(hud_auto_hide)
+        self._hud_timeout_s = max(0.0, float(hud_timeout_s))
         self._recording_active = False
         self._recording_elapsed_seconds = 0.0
 
@@ -1083,7 +1087,7 @@ void main() {
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         self._hud_t += dt
-        if self._show_name:
+        if self._show_name and self._hud_auto_hide:
             self._hud_timer -= dt
             if self._hud_timer <= 0.0:
                 self._show_name = False
@@ -1614,7 +1618,7 @@ void main() {
 
     def toggle_name_overlay(self) -> None:
         self._show_name = not self._show_name
-        self._hud_timer = 60.0 if self._show_name else 0.0
+        self._hud_timer = self._hud_timeout_s if (self._show_name and self._hud_auto_hide) else 0.0
 
     def set_hud_state(self, state: dict[str, str]) -> None:
         """Update the live HUD payload rendered by TAB overlay."""
