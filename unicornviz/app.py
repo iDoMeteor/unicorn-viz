@@ -278,6 +278,7 @@ class App:
             "demo", "transition_duration", default=1.0
         )
         self._audio: AudioData | None = None
+        self._audio_raw: AudioData | None = None
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
         self._overlays: Overlays | None = None
@@ -331,6 +332,7 @@ class App:
         self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
         self._show_cursor_default = bool(self.cfg.get('window', 'show_cursor', default=False))
         self._audio = AudioData()
+        self._audio_raw = AudioData()
 
     # ------------------------------------------------------------------ #
     # SDL2 + moderngl init                                                 #
@@ -1655,10 +1657,11 @@ void main() {
 
             # Update audio
             self._audio = audio_manager.get_audio_data()
+            self._audio_raw = audio_manager.get_audio_data_raw()
 
             if self._auto_vj is not None:
                 try:
-                    self._auto_vj.update(dt, self._audio)
+                    self._auto_vj.update(dt, self._audio_raw or self._audio)
                     self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
                 except Exception as exc:
                     log.warning('AutoVJController update failed: %s', exc)
@@ -1794,9 +1797,9 @@ void main() {
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
-                'bass': f"{self._audio.bass:.2f}" if self._audio is not None else '0.00',
-                'mid': f"{self._audio.mid:.2f}" if self._audio is not None else '0.00',
-                'treble': f"{self._audio.treble:.2f}" if self._audio is not None else '0.00',
+                    'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
+                    'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
+                    'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
                 'display_mode': self._display_mode,
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',

@@ -44,6 +44,19 @@ class AudioManager:
         )
         self._analyzer = Analyzer(fft_bands=fft_bands, profile=self._profile)
         self._last_data = AudioData()
+        self._last_data_raw = AudioData()
+
+    @staticmethod
+    def _clone_audio(data: AudioData) -> AudioData:
+        clone = AudioData()
+        clone.bass = float(data.bass)
+        clone.mid = float(data.mid)
+        clone.treble = float(data.treble)
+        clone.beat = float(data.beat)
+        clone.bpm = float(data.bpm)
+        clone.fft[:] = data.fft
+        clone.waveform[:] = data.waveform
+        return clone
 
     def start(self) -> None:
         log.debug("AudioManager: starting capture")
@@ -99,7 +112,9 @@ class AudioManager:
         if block is not None and len(block) > 0:
             rms = float(np.sqrt(np.mean(block * block)))
             log.debug("Audio frame: rms=%.4f bass=%.3f mid=%.3f treble=%.3f", rms, self._last_data.bass, self._last_data.mid, self._last_data.treble)
-        data = self._analyzer.process(block)
+        raw = self._analyzer.process(block)
+        self._last_data_raw = raw
+        data = self._clone_audio(raw)
         if self._reactivity != 1.0:
             data.bass   = min(1.0, data.bass   * self._reactivity)
             data.mid    = min(1.0, data.mid    * self._reactivity)
@@ -108,3 +123,7 @@ class AudioManager:
                 data.fft = np.clip(data.fft * self._reactivity, 0.0, 1.0)
         self._last_data = data
         return self._last_data
+
+    def get_audio_data_raw(self) -> AudioData:
+        """Return latest unscaled analyzer snapshot for detection/telemetry."""
+        return self._last_data_raw
