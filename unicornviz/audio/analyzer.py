@@ -4,6 +4,8 @@ Consumes PCM blocks from AudioCapture and produces AudioData snapshots.
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 
 from unicornviz.effects.base import AudioData
@@ -39,7 +41,7 @@ class Analyzer:
         self._flux_count = 0
         self._prev_spectrum = np.zeros(fft_bands, dtype=np.float32)
         self._flux_delta = np.zeros(fft_bands, dtype=np.float32)
-        self._beat_cooldown = 0.0   # frames remaining before next beat
+        self._beat_cooldown_until_t = -1e9
         self._prev_rms = 0.0
 
         self._n_fft = self._bands * 2
@@ -96,6 +98,7 @@ class Analyzer:
 
     def process(self, pcm: np.ndarray | None) -> AudioData:
         data = AudioData()
+        now = time.monotonic()
 
         if pcm is None or len(pcm) == 0:
             return data
@@ -161,8 +164,7 @@ class Analyzer:
         self._flux_index = (self._flux_index + 1) % _ONSET_WINDOW
         self._flux_count = min(self._flux_count + 1, _ONSET_WINDOW)
 
-        if self._beat_cooldown > 0:
-            self._beat_cooldown -= 1
+        if now < self._beat_cooldown_until_t:
             data.beat = 0.0
         else:
             arr = self._flux_history if self._flux_count == _ONSET_WINDOW else self._flux_history[:self._flux_count]
@@ -170,9 +172,10 @@ class Analyzer:
             std = arr.std()
             if std > 1e-6 and flux > mean + _BEAT_THRESHOLD * std:
                 data.beat = 1.0
-                # Dynamic cooldown: strong onsets can retrigger slightly sooner.
+                # Dynamic cooldown in seconds: strong onsets retrigger sooner.
                 strength = (flux - mean) / max(std, 1e-6)
-                self._beat_cooldown = float(np.clip(12.0 - strength * 1.5, 6.0, 12.0))
+                cooldown_frames = float(np.clip(12.0 - strength * 1.5, 6.0, 12.0))
+                self._beat_cooldown_until_t = now + cooldown_frames / 60.0
             else:
                 data.beat = 0.0
 
