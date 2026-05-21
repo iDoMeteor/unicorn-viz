@@ -540,6 +540,28 @@ beat_tracker_engine = "v1"
 (`"v1"` and `"legacy"` are both accepted and map to the original
 `BeatGridTracker` IOI-median estimator.)
 
+### Director defaults reverted to pre-v2 v1 calibration
+
+During v2 work the BPM-coupled director thresholds were rescaled to v2's
+accurate-BPM space, which broke profile/mode behavior on v1 (v1 reads
+systematically high, so the lowered thresholds kept profile pinned). All
+four have been reverted to their pre-v2 v1-calibrated defaults:
+
+| Setting | v1 default (restored) |
+|---|---|
+| `auto_profile_chill_max_bpm` | 110 |
+| `auto_profile_raver_min_bpm` | 136 |
+| `pingpong_auto_bpm_min` (×3 profiles) | 138 |
+| `_timing_scale_from_bpm` centre | 128 |
+| `auto_profile_hold_s` | 0 (immediate switching) |
+
+If you later run v2 in a long session and want to recalibrate the BPM-
+coupled thresholds for v2's accurate-BPM space, override the four values
+in `config.toml` to roughly: `chill_max=100`, `raver_min=128`,
+`pingpong_auto_bpm_min=128`, and optionally set `auto_profile_hold_s=8.0`
+for hysteresis. The hysteresis code is retained but only active when
+`hold_s > 0`.
+
 ### Next steps for whoever picks this up
 
 The v2 design itself is sound (comb-filter ACF + log2 prior + tactus
