@@ -64,6 +64,17 @@ def main(argv: list[str]) -> int:
         for mode, n in to_mode.most_common():
             print(f'  {mode}: {n}')
 
+        sorted_mt = sorted(mode_transitions, key=lambda e: float(e.get('t', 0.0) or 0.0))
+        bursts = 0
+        for i, row in enumerate(sorted_mt):
+            t0 = float(row.get('t', 0.0) or 0.0)
+            j = i + 1
+            while j < len(sorted_mt) and float(sorted_mt[j].get('t', 0.0) or 0.0) - t0 <= 2.0:
+                j += 1
+            if j - i >= 3:
+                bursts += 1
+        print(f'Transition bursts (>=3 transitions within 2s windows): {bursts}')
+
     if detector_ticks:
         by_mode = defaultdict(list)
         for e in detector_ticks:
@@ -80,6 +91,20 @@ def main(argv: list[str]) -> int:
                 f"drop_score p50={statistics.median(drop_scores):.3f} p90={statistics.quantiles(drop_scores, n=10)[8]:.3f} "
                 f"energy p50={statistics.median(energies):.3f} slope p50={statistics.median(slopes):.3f} "
                 f"bpm_med={(statistics.median(bpms) if bpms else 0.0):.1f}"
+            )
+
+        bass = [float(r.get('bass', 0.0) or 0.0) for r in detector_ticks]
+        mid = [float(r.get('mid', 0.0) or 0.0) for r in detector_ticks]
+        treble = [float(r.get('treble', 0.0) or 0.0) for r in detector_ticks]
+        if bass and mid and treble:
+            q90_b = statistics.quantiles(bass, n=10)[8]
+            q90_m = statistics.quantiles(mid, n=10)[8]
+            q90_t = statistics.quantiles(treble, n=10)[8]
+            print('Band distribution (all detector ticks):')
+            print(
+                f"  bass p50={statistics.median(bass):.3f} p90={q90_b:.3f} | "
+                f"mid p50={statistics.median(mid):.3f} p90={q90_m:.3f} | "
+                f"treble p50={statistics.median(treble):.3f} p90={q90_t:.3f}"
             )
 
     # Quick misses: high drop score in BUILD without DROP transition soon after.
