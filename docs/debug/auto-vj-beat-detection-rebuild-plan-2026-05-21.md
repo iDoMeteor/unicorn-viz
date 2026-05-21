@@ -902,6 +902,23 @@ Current readiness status:
 - 96-class low-tempo calibration still needs final tuning against fresh live
   logs before v2 can be declared fully production-ready.
 
+Latest pass-to-team note:
+
+- Recent live validation improved steady 96/124-class behavior, but a steady
+  164 BPM track still under-locked near ~111 BPM.
+- Auto profile did not switch to raver because the detector lane remained low.
+
+Recommended handoff track:
+
+1. keep current v2 as a guarded baseline (reduced chatter, pause reset)
+2. prototype a sequence-decoder branch using reference methodology:
+   - `CPJKU/madmom` DBN beat/downbeat tracking
+   - `MTG/essentia` RhythmExtractor2013 confidence + histogram cues
+   - `aubio/aubio` comb-filter tracking for lightweight fallback
+3. compare all candidates on the current seed corpus plus live logs
+   (`autovj-20260521T183829.jsonl`, `autovj-20260521T182407.jsonl`)
+4. promote only if fast-song under-lock (164 -> ~111) is resolved
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

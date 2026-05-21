@@ -420,3 +420,29 @@ Post-hardening checks:
 - 96 synthetic edge case can still lock low, so low-tempo calibration remains
    the top open issue for next iteration.
 
+Latest user validation (post 182407 run):
+
+- Song 1 (steady 96 BPM): materially better than earlier runs.
+- Song 2 (steady 124/128 class): materially better than earlier runs.
+- Song 3 (steady 164 BPM): detector converged near ~111 BPM and stayed there.
+- Auto profile did not switch as expected; since BPM stayed in the low lane,
+   profile logic never saw sustained high-BPM evidence.
+
+Interpretation:
+
+- This is still a detector-quality problem, not source timing or song drift.
+- Current guardrails reduced chatter, but fast-song under-lock remains a hard
+   failure mode.
+
+External reference methodology candidates (for handoff team):
+
+- `CPJKU/madmom`: `RNNDownBeatProcessor` + `DBNDownBeatTrackingProcessor`
+   (state-space sequence decoding over beat/downbeat activations)
+- `MTG/essentia`: `RhythmExtractor2013` + BPM histogram descriptors and
+   confidence outputs
+- `aubio/aubio`: comb-filter beat tracking in `tempo/beattracking.c`
+   with tempo priors and onset-driven period estimation
+
+No method is truly perfect on all content, but these are battle-tested,
+public implementations with stronger sequence modeling than the current v2.
+

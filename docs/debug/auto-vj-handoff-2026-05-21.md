@@ -403,3 +403,19 @@ Latest follow-up:
   force profile changes.
 - Seed corpus remains acceptable after these changes, but low-tempo edge
   calibration (96-class underlock variants) is still open work.
+
+Newest field report after additional user test pass:
+
+- First two steady songs improved noticeably versus earlier runs.
+- Third steady fast song (164 BPM) mis-locked around ~111 BPM.
+- Auto-profile remained in non-raver because detector never produced stable
+  high-BPM evidence with sufficient confidence.
+
+Conclusion for handoff:
+
+- The unresolved blocker is fast-tempo under-lock with incorrect stable lane
+  selection, not timing jitter from the source tracks.
+- Next team should evaluate replacing or augmenting v2 with a sequence model
+  approach (RNN activations + DBN decoding) as implemented in open references
+  such as `CPJKU/madmom`, or multi-candidate histogram confidence approaches
+  like `MTG/essentia`.
