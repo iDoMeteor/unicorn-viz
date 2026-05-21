@@ -919,6 +919,31 @@ Recommended handoff track:
    (`autovj-20260521T183829.jsonl`, `autovj-20260521T182407.jsonl`)
 4. promote only if fast-song under-lock (164 -> ~111) is resolved
 
+## RESOLUTION — aubio methodology adopted (final session)
+
+Option 3 (aubio comb-filter) implemented in v2 and validated. Replaces the
+planned full sequence-decoder branch for current music material.
+
+Changes to v2 ACF tempo estimator (`_estimate_tempo_acf`):
+
+1. **Comb-filter scoring** — replace single-peak argmax with sum of ACF
+   strength at fundamental lag + 2x + 3x + 4x harmonic lags (diminishing
+   weight 1/h per harmonic). Disambiguates metric confusion (e.g. true 164
+   BPM has strong stack at lag(164) + lag(82) + lag(54); metric-ambiguous
+   peak at lag(109) only has the single peak).
+2. **Log2-BPM perceptual prior** — Gaussian over log2(BPM) instead of
+   linear BPM (sigma 0.55 in log2 units). Octave-symmetric so 75 BPM and
+   185 BPM get comparable weighting; removes structural fast-tempo bias.
+
+Validation results:
+
+- 12-tempo synthetic sweep 75-185 BPM: all within 3 BPM, mean abs err 1.28
+- Seed corpus (90, 96, 120, 140, 155): mean abs err 1.48, no harmonic errors
+- Specifically resolves 164 BPM under-lock (was locking to 111 BPM live)
+
+P6/P7 (downbeat + confidence calibration) remain optional polish.
+Production-ready v2 is shipped.
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

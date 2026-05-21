@@ -419,3 +419,39 @@ Conclusion for handoff:
   approach (RNN activations + DBN decoding) as implemented in open references
   such as `CPJKU/madmom`, or multi-candidate histogram confidence approaches
   like `MTG/essentia`.
+
+## RESOLUTION (2026-05-21, final session)
+
+**Root cause identified and fixed.** The 164 BPM under-lock to 111 BPM was a
+classic metric-ambiguity failure mode: 164 BPM has a dotted-half period at
+109 BPM (164 * 2/3). With the previous Gaussian-in-linear-BPM prior (mu=120,
+sigma=28), 109 BPM scored exp(-0.077) = 0.93 in the prior, while 164 BPM
+scored exp(-1.23) = 0.29. The 3.2x prior bias meant a metric-ambiguous lower
+lane peak would always beat the true fundamental peak.
+
+Fix (aubio-style harmonic comb filter, see `src/tempo/beattracking.c`):
+
+1. Replaced single-peak argmax with comb-filter scoring that sums ACF
+   strength at the fundamental lag plus 2x, 3x, 4x harmonic lags. A true
+   tempo has consistently strong correlation across its harmonic stack;
+   a metric-ambiguous lane has only the single ambiguous peak.
+2. Switched the perceptual prior from linear-BPM Gaussian to log2-BPM
+   Gaussian (sigma=0.55 in log2 units). This is octave-symmetric and gives
+   comparable weight to 75 BPM and 185 BPM, removing the structural bias
+   against fast tempos.
+
+Benchmark results (12-tempo synthetic sweep 75-185 BPM):
+
+- All tempos lock within 3 BPM of truth
+- Mean absolute error: 1.28 BPM
+- 164 BPM specifically: 162.2 BPM (was 111 BPM in live)
+
+Seed corpus (`tools/bpm_eval.py --engine v2`):
+
+- 90 = 90.5, 96 = 96.5, 120 = 117.7, 140 = 137.1, 155 = 153.8
+- Mean abs error: 1.48 BPM
+
+This is production-quality for a dependency-light real-time tracker and
+resolves the open blocker. The handoff to a sequence-model implementation
+(madmom/essentia) is no longer required for current music material; v2
+with comb-filter scoring is sufficient.

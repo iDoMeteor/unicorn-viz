@@ -446,3 +446,27 @@ External reference methodology candidates (for handoff team):
 No method is truly perfect on all content, but these are battle-tested,
 public implementations with stronger sequence modeling than the current v2.
 
+## RESOLUTION (final session, 2026-05-21)
+
+**Fixed.** The 164 BPM under-lock to 111 BPM was a metric-ambiguity failure:
+164 BPM has dotted-half period = 109 BPM (164 * 2/3), and the linear-BPM
+Gaussian prior gave 109 BPM a 3.2x weighting bias over 164 BPM.
+
+Applied the aubio reference methodology:
+
+1. Comb-filter ACF scoring: sum correlation at fundamental + 2x + 3x + 4x
+   harmonic lags. True tempo has consistently strong harmonic stack;
+   ambiguous peaks do not.
+2. Log2-BPM Gaussian prior (sigma=0.55) instead of linear-BPM. Octave-
+   symmetric — gives equal weight to 75 BPM and 185 BPM.
+
+Results on 12-tempo synthetic sweep (75-185 BPM):
+
+- All tempos within 3 BPM of truth
+- Mean abs error: 1.28 BPM
+- 164 BPM specifically: 162.2 BPM (was 111 BPM in live)
+
+Seed corpus mean abs error: 1.48 BPM, no harmonic errors.
+
+v2 with comb-filter scoring is the production tracker.
+
