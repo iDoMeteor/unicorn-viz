@@ -887,6 +887,21 @@ Post-delta benchmark:
 - Synthetic 96 has one low-lock variant; low-BPM calibration remains an open
   tuning task before declaring v2 production-ready.
 
+Additional live-driven hardening (latest):
+
+- Added stronger large-jump ACF confidence gating in v2 to block low-confidence
+  lane creep toward ~150 on steady slower songs.
+- Added auto-profile switch hysteresis so raver/chill transitions require
+  sustained evidence over time, preventing profile thrash from transient BPM
+  spikes.
+
+Current readiness status:
+
+- Stability/chatter is improved versus earlier runs.
+- 124/128/164-class behavior is stable in synthetic checks.
+- 96-class low-tempo calibration still needs final tuning against fresh live
+  logs before v2 can be declared fully production-ready.
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

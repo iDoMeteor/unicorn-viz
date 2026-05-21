@@ -392,3 +392,14 @@ Checkpoint update after re-lock/pause controls:
   155=153.8).
 - Remaining open item: one synthetic 96 variant settles low, so low-tempo
   calibration still needs additional tuning against fresh live logs.
+
+Latest follow-up:
+
+- Live log `autovj-20260521T182407.jsonl` confirms over-relocking (not
+  oversampling): repeated lane cycling with low-to-mid confidence produced the
+  observed meter creep/reset behavior and raver-mode drift on slow songs.
+- Added a stronger large-jump ACF confidence gate plus auto-profile switch
+  hysteresis (`auto_profile_hold_s`) so transient BPM spikes cannot immediately
+  force profile changes.
+- Seed corpus remains acceptable after these changes, but low-tempo edge
+  calibration (96-class underlock variants) is still open work.

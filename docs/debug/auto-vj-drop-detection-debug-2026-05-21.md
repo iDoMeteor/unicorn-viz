@@ -397,3 +397,26 @@ Offline results after this pass:
 - One synthetic 96 variant currently settles low (~86–90), so low-tempo
    calibration still needs live + synthetic follow-up.
 
+Newest live-log diagnosis (logs/autovj-20260521T182407.jsonl):
+
+- The issue is confirmed as **over-relocking**, not oversampling.
+- Tail behavior shows repeated lane cycling (roughly 150 -> 100 -> 125 ->
+   150 -> 111) with confidence mostly in the 0.31–0.50 range.
+- Aggregate instability in that run:
+   - p10/p50/p90 BPM = 102.7 / 117.7 / 149.9
+   - jumps >10 BPM between detector ticks = 55
+
+Hardening added in response:
+
+1. stronger large-jump ACF confidence gate in v2 (`large_jump_confidence`)
+2. auto-profile switch hysteresis (`auto_profile_hold_s`) so raver/chill mode
+    requires sustained evidence, not a transient lane drift
+
+Post-hardening checks:
+
+- Seed corpus still acceptable:
+   90=89.5, 96=98.0, 120=120.0, 140=139.5, 155=153.8
+- 124/128/164 synthetic checks stable (no >10 BPM frame jumps)
+- 96 synthetic edge case can still lock low, so low-tempo calibration remains
+   the top open issue for next iteration.
+
