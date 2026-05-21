@@ -944,6 +944,29 @@ Validation results:
 P6/P7 (downbeat + confidence calibration) remain optional polish.
 Production-ready v2 is shipped.
 
+### Follow-up: tactus preference for dense electronic music
+
+Live validation revealed that on dense electronic material with strong
+hi-hat/percussion patterns, the raw onset envelope has its strongest
+periodicity at sub-beat rates rather than at the musical pulse. The comb
+filter correctly identified that fastest period, but the result locked at
+150 BPM on a 96 BPM track.
+
+Added tactus (octave-down) preference matching aubio/madmom design:
+
+- After comb-filter argmax picks a peak above `tactus_check_bpm` (130),
+  evaluate 0.5x, 2/3, and 3/4 candidate periods.
+- If any candidate's comb-filter score ≥ `tactus_preference_ratio` (0.70)
+  of the picked score, prefer the slower musical tactus.
+- True fast tempos with strong fundamental ACF are unaffected.
+
+Validated on 15-tempo synthetic sweep 75-185 BPM: all locks within 5 BPM
+of truth, max error 4.0 BPM.
+
+These knobs are configurable via `[beat_tracker]` config:
+- `tactus_check_bpm` (default 130)
+- `tactus_preference_ratio` (default 0.70)
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

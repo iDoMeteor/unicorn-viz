@@ -455,3 +455,23 @@ This is production-quality for a dependency-light real-time tracker and
 resolves the open blocker. The handoff to a sequence-model implementation
 (madmom/essentia) is no longer required for current music material; v2
 with comb-filter scoring is sufficient.
+
+### Follow-up: live 96 BPM → 150 lock and tactus preference
+
+First live test of the comb-filter v2 showed a 96 BPM track locking at
+150.00 BPM immediately and staying pinned by tempo-hold. Synthetic click
+tracks (clean impulses at the beat) and real dense electronic music (with
+hi-hat / percussion sub-beat onsets) produce very different onset envelopes.
+The comb filter correctly found the strongest periodicity in the live onset
+stream — but in dense music that strongest period is often the sub-beat
+rate (8th/16th note hats), not the musical pulse.
+
+Fix: tactus (octave-down) preference, matching aubio/madmom. After the
+comb filter picks a peak, if the peak is above `tactus_check_bpm` (default
+130), also evaluate 0.5x, 2/3, and 3/4 candidates. If any has comb-filter
+score ≥ `tactus_preference_ratio` (default 0.70) of the picked score, the
+slower candidate is preferred as the musical tactus.
+
+Validated on 15-tempo synthetic sweep 75-185 BPM (all within 5 BPM, max
+error 4.0). True fast tempos with strong fundamental ACF are not pulled
+down; only metric-ambiguous lanes are corrected.
