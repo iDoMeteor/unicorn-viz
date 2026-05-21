@@ -967,6 +967,24 @@ These knobs are configurable via `[beat_tracker]` config:
 - `tactus_check_bpm` (default 130)
 - `tactus_preference_ratio` (default 0.70)
 
+### Final status
+
+Iterative tactus descent (multi-step descent through 0.5x / 2/3 / 3/4
+candidates) added to handle multi-step metric traps. Tactus defaults
+tightened to `check_bpm=115`, `ratio=0.55`.
+
+Validation:
+- Synthetic 75-185 BPM sweep: all within 5 BPM (max err 4.0)
+- Live: still fails on dense electronic material with strong sub-beat
+  percussion (locks at 150 BPM on a 96 BPM track)
+
+Root cause of the remaining live failure is the analyzer's onset detector,
+not the BeatTracker itself. See handoff doc "Next steps" for the
+kick-biased-onset and multi-band-onset proposals.
+
+`beat_tracker_engine = "v1"` in `config.toml` restores the legacy detector
+for production use until the upstream fix lands.
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

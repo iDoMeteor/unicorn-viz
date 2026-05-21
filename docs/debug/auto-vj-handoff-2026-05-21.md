@@ -501,3 +501,60 @@ Tactus preference was also tightened from the initial conservative defaults:
 | `tactus_preference_ratio` | 0.70 | 0.55 |
 
 All values remain overridable via `config.toml`.
+
+## Final status (session close)
+
+Live testing showed v2 still locked at 150 BPM on at least one dense
+electronic track even with iterative tactus descent. Synthetic clean-click
+benchmarks pass cleanly across 75-185 BPM (max err 4.0). The gap between
+synthetic and live is the analyzer onset detector: on dense material the
+spectral-flux + MAD-threshold pipeline admits enough sub-beat onsets
+(hi-hats, percussion) that the comb-filter ACF finds a genuine, strong
+periodicity at the sub-beat rate — not the musical pulse.
+
+What v2 currently provides:
+
+- Correct lock on clean / kick-driven material across the full 75-185 BPM
+  range (validated by synthetic harness).
+- Resolves the original 164 BPM under-lock blocker for material with a
+  clear fundamental.
+- Tactus preference (iterative descent) catches multi-step metric traps in
+  synthetic data and on live tracks with clearly separated bass content.
+
+What v2 does NOT yet solve:
+
+- Dense electronic material with strong hi-hat / 16th-note percussion can
+  still lock at the sub-beat rate (~150 BPM) when that periodicity in the
+  onset envelope is stronger than the kick rate. The root cause is upstream
+  in `unicornviz/audio/analyzer.py`: spectral-flux onset detection is not
+  kick-biased enough on this material.
+
+### V1 fallback (recommended for production for now)
+
+Set in `config.toml`:
+
+```toml
+beat_tracker_engine = "v1"
+```
+
+(`"v1"` and `"legacy"` are both accepted and map to the original
+`BeatGridTracker` IOI-median estimator.)
+
+### Next steps for whoever picks this up
+
+The v2 design itself is sound (comb-filter ACF + log2 prior + tactus
+preference matches aubio/madmom). The remaining work is in the upstream
+onset detector — the BeatTracker can only be as good as its onset stream.
+Options in priority order:
+
+1. **Kick-biased onset detector** in `unicornviz/audio/analyzer.py`.
+   Compute a separate bass-band spectral flux (e.g. low quarter of
+   `_bass_slice`) and emit onset events only when bass-band flux passes
+   threshold. This is the single most impactful change and is well-scoped.
+2. **Multi-band onset detection** (madmom-style): separate detectors for
+   bass / mid / treble that vote, with bass weighted heavily for beat
+   tracking and treble used only for downbeat features.
+3. **Increase MAD threshold k** from 1.80 toward 2.4-2.8 for v2 only.
+   Would require splitting the analyzer threshold so v1 stays calibrated.
+4. **Sequence-model branch** (madmom RNN + DBN). Heaviest lift; only
+   justified if (1)-(3) prove insufficient.

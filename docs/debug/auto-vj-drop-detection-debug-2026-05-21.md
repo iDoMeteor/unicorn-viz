@@ -470,3 +470,18 @@ Seed corpus mean abs error: 1.48 BPM, no harmonic errors.
 
 v2 with comb-filter scoring is the production tracker.
 
+## Final status (session close)
+
+Live testing on dense electronic material exposed a residual failure mode:
+v2 can still lock at the sub-beat rate (~150 BPM) on a 96 BPM track when
+the onset envelope has strong sub-beat periodicity from hi-hats / 16th
+notes. Synthetic clean-click benchmarks pass across 75-185 BPM.
+
+Production fallback: set `beat_tracker_engine = "v1"` in `config.toml` to
+use the legacy `BeatGridTracker`.
+
+Root cause for the remaining live failure is upstream of v2: the
+`unicornviz/audio/analyzer.py` spectral-flux detector is not kick-biased
+enough on dense material. Next-step proposals in
+`auto-vj-handoff-2026-05-21.md` under "Next steps for whoever picks this up".
+
