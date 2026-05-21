@@ -231,7 +231,7 @@ class App:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
         self._running = False
         self._paused = False
-        self._auto_advance = True  # Toggle with hotkey T
+        self._auto_advance = bool(self.cfg.get('demo', 'auto_advance', default=True))  # Toggle with hotkey T
         self._ctrl_held = False
         self._ctx: moderngl.Context | None = None
         self._window = None

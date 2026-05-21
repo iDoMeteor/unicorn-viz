@@ -37,6 +37,7 @@ _DEFAULTS: dict[str, Any] = {
         "effect_duration": 20,
         "transition": "crossfade",
         "transition_duration": 1.0,
+        "auto_advance": True,
     },
     "audio": {
         "device": "",
