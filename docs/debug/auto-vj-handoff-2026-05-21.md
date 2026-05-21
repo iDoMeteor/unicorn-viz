@@ -475,3 +475,29 @@ slower candidate is preferred as the musical tactus.
 Validated on 15-tempo synthetic sweep 75-185 BPM (all within 5 BPM, max
 error 4.0). True fast tempos with strong fundamental ACF are not pulled
 down; only metric-ambiguous lanes are corrected.
+
+### Director threshold rescale (one-shot, no re-tuning required)
+
+After v2 detector accuracy fix, BPM-coupled director thresholds were
+rescaled in one pass to canonical musical values. Important finding:
+**CRUISE/DROP/IMPACT/CLIMAX state-machine thresholds are NOT BPM-coupled**
+— they are driven by `drop_score`, `energy`, and `energy_slope`, which are
+audio features independent of tempo. That tuning work is preserved.
+
+Only four defaults needed rescaling (typed values shown are new defaults):
+
+| Setting | Old | New | Rationale |
+|---|---|---|---|
+| `auto_profile_chill_max_bpm` | 110 | 100 | canonical chill upper |
+| `auto_profile_raver_min_bpm` | 136 | 128 | canonical raver lower |
+| `pingpong_auto_bpm_min` (×3 profiles) | 138 | 128 | canonical raver threshold |
+| `_timing_scale_from_bpm` centre | 128 | 115 | matches new typical median |
+
+Tactus preference was also tightened from the initial conservative defaults:
+
+| Setting | Old | New |
+|---|---|---|
+| `tactus_check_bpm` | 130 | 115 |
+| `tactus_preference_ratio` | 0.70 | 0.55 |
+
+All values remain overridable via `config.toml`.
