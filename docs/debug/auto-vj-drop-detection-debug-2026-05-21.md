@@ -181,12 +181,12 @@ Plan document: `docs/debug/auto-vj-beat-detection-rebuild-plan-2026-05-21.md`
 
 | Phase | Title                              | Status      | Commit |
 |-------|------------------------------------|-------------|--------|
-| P0    | Offline ground-truth harness       | ✅ Done      | TBD    |
-| P1    | Event-based onset stream           | 🔧 In progress | —   |
-| P2    | Time-based envelope + MAD threshold| 🔧 In progress | —   |
-| P3    | Tempo-aware adaptive refractory    | 🔧 In progress | —   |
-| P4    | Autocorrelation tempo estimator    | 🔧 In progress | —   |
-| P5    | Phase-locked oscillator + downbeat | 🔧 In progress | —   |
+| P0    | Offline ground-truth harness       | ✅ Done      | a7b2eba |
+| P1    | Event-based onset stream           | ✅ Done      | a7b2eba |
+| P2    | Time-based envelope + MAD threshold| ✅ Done      | a7b2eba |
+| P3    | Tempo-aware adaptive refractory    | ✅ Done      | a7b2eba |
+| P4    | Autocorrelation tempo estimator    | ✅ Done      | TBD    |
+| P5    | Phase-locked oscillator + downbeat | ✅ Done      | TBD    |
 | P6    | Downbeat detection bass/snare      | ⏳ Planned   | —   |
 | P7    | Confidence calibration + telemetry | ⏳ Planned   | —   |
 
@@ -273,11 +273,66 @@ Analyzer changes in `unicornviz/audio/analyzer.py`:
 New `BeatTracker` class in `drop-ins/auto-vj-01/beat_grid.py`:
 - Maintains own onset envelope at 100 Hz internal rate
 - ACF tempo estimator with perceptual prior (mu=120, sigma=28)
-- Octave-down preference when slower fold scores ≥ 85% of best
+- Octave-down preference intentionally omitted (see below)
 - Phase-locked oscillator with ±18% tolerance window
 - Phase coherence as confidence metric
 - Same public interface as `BeatGridTracker` — drop-in swap
 
 Feature flag: `beat_tracker_engine = "v2"` in `[auto_vj]` section of
 `config.toml`. Default stays `"legacy"` until harness confirms v2 wins.
+
+### Bugs found and fixed during P4+P5 implementation
+
+**Bug: _pulse_envelope overwrites itself** — `_pulse_envelope()` wrote the
+onset strength at `_env_write_idx` but did not advance the write index. The
+next `_advance_envelope()` call immediately overwrote the pulse with zero
+fill. Fixed: `_pulse_envelope()` now advances the write index after writing
+and decrements `_env_t_acc` by one step to maintain time-sync.
+
+**Bug: octave-down fold fires on all click tracks** — For a sparse click
+envelope, the ACF at lag 2N (half-tempo fold) equals the ACF at lag N (for a
+periodic signal). The fold test `raw_fold >= 0.85 * raw_best` therefore fired
+on EVERY track, consistently halving the BPM. The fold preference was removed;
+the perceptual prior provides sufficient bias toward musical tempos without
+causing systematic halving.
+
+**Bug: cold-start EMA oscillation** — With < 8 onset pulses in the envelope,
+the ACF produces wildly noisy estimates that seed the EMA in the wrong
+direction. The BPM then oscillates (87→122→77→...) before eventually
+converging. Fixed: ACF is gated to require ≥ 8 onset pulses before updating
+the BPM estimate. Cold-start EMA alpha is capped at 0.10 (before ring fills)
+to dampen the oscillations.
+
+### P4+P5 harness results (v2 engine)
+
+```
+090bpm_click.wav   truth= 90.0  pred= 94.2  err=4.2   lock=8.5s
+096bpm_click.wav   truth= 96.0  pred= 96.8  err=0.8   lock=9.6s
+120bpm_click.wav   truth=120.0  pred=120.0  err=0.0   lock=8.7s
+140bpm_click.wav   truth=140.0  pred=138.7  err=1.3   lock=6.2s
+155bpm_click.wav   truth=155.0  pred=153.8  err=1.1   lock=5.4s
+```
+
+**vs legacy baseline:**
+
+| Track   | Legacy err | v2 err | Improvement |
+|---------|-----------|--------|-------------|
+| 90 BPM  | 56.3      | 4.2    | 13×         |
+| 96 BPM  | 61.7      | 0.8    | 77×         |
+| 120 BPM | 19.7      | 0.0    | ∞           |
+| 140 BPM | 3.0       | 1.3    | 2.3×        |
+| 155 BPM | 4.6       | 1.1    | 4.2×        |
+
+The 155-lane bias is completely eliminated. All 5 tracks now lock within
+the 30-second window. Legacy locked only on 140 and 155 BPM tracks.
+
+**Remaining known limitation**: 90 BPM settles at ~94 BPM because at 100 Hz
+envelope rate, adjacent ACF lags differ by ~2-3 BPM in the 90 BPM range.
+The false-positive onset rate (~3.1/s vs expected ~1.5/s) also contributes
+by pulling the average onset spacing slightly faster than the true beat.
+Both issues will improve with P7 (confidence calibration + tighter MAD
+threshold tuning per profile) and when P3 refractory fully engages after
+initial BPM lock reduces the false-positive rate.
+
+Results saved: `tools/bpm_eval_v2_results.json`
 
