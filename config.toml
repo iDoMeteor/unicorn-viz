@@ -98,6 +98,8 @@ auto_profile_chill_max_bpm = 110.0
 auto_profile_raver_min_bpm = 136.0
 auto_profile_min_confidence = 0.45
 auto_profile_switch_cooldown_s = 20.0
+log_decisions = true
+detector_log_interval_s = 1.0
 # With auto_profile_enabled = false, explicit tuning keys below create manual
 # USER mode layered over the selected base preset.
 # show_duration_min    = 90    # optional full-set duration in minutes
@@ -134,7 +136,7 @@ pingpong_b            = "Crystal Pyramids"
 # pingpong_auto_trigger_chance = 0.35  # chance at each eligible cruise swap point
 # pingpong_auto_min_swaps = 4          # auto ping-pong exits after a random swap budget
 # pingpong_auto_max_swaps = 10
- log_decisions         = true        # write JSONL decision log per session
+# log_decisions         = true        # write JSONL decision log per session
 #postfx_cruise_interval_s = 25
 postfx_cruise_slots = [1,2,3,7,9]
 #postfx_drop_duration_s = 5
