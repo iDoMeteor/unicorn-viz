@@ -859,6 +859,19 @@ Observed result after applying the hardening pass:
 This is the right trade-off for the current phase: eliminate instability
 first, then tune exact calibration in the next pass if needed.
 
+Live follow-up: on a steady 124 BPM song and then a steady 96 BPM song, the
+live meter still oscillates between roughly 111 and 158 BPM within seconds.
+That means the next stabilization step is **candidate hysteresis**: require a
+new ACF peak to persist across multiple consecutive updates before it can
+replace the current BPM lock.
+
+Seed-corpus checkpoint after the startup-confidence gate: v2 still reports
+median absolute BPM error 1.15 BPM on the five-track seed corpus, with the
+96 BPM track locking cleanly at 96.0 BPM and the 155 BPM track at 153.8 BPM.
+The 90 BPM track improved to 91.6 BPM. The next thing to verify is the live
+124/96 song pair after restart, because that live log has not yet been refreshed
+with the latest patch.
+
 ---
 
 End of plan. Build it phase by phase, measure every change, keep effects

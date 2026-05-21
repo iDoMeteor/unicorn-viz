@@ -371,3 +371,14 @@ dips and 200 BPM spikes are gone without reintroducing the old 155-lane bias.
 Verification note: a 124 BPM synthetic sanity check now shows neither the
 phantom 200 BPM spike nor the 96 BPM dip. The estimator is conservative on
 that test (steady at ~120 BPM), but it is now stable and no longer thrashes.
+
+Live note after that hardening: a real steady 124 BPM song and a steady 96 BPM
+song still oscillate in the live meter between roughly 111 and 158 BPM within
+seconds. The remaining problem is not zero-score spikes anymore; it is too-
+eager candidate replacement. Add hysteresis / candidate persistence before
+changing the BPM lock.
+
+Checkpoint update after the startup-confidence gate: the seed corpus remains
+strong on v2 (median absolute BPM error 1.15 BPM; 96 BPM seed locks at 96.0
+BPM; 155 BPM seed at 153.8 BPM). The live oscillation still needs a fresh log
+after restart, but the offline regression surface is currently under control.

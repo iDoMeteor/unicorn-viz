@@ -368,3 +368,15 @@ hardening pass. The median BPM on that synthetic run sat at 120.0, which is
 slightly conservative but musically stable; that is acceptable for the current
 step because the failure mode was instability, not exact calibration.
 
+Live regression note (same day): a steady real 124 BPM track and a steady
+96 BPM track still show frequent re-selection swings in the live meter
+(roughly 111–158 BPM within seconds). The next fix should add hysteresis so a
+new ACF candidate must repeat across consecutive updates before it can replace
+the current BPM lock.
+
+Checkpoint update after startup-gate hardening: the seed corpus remains
+healthy on v2 (`tools/bpm_eval.py --engine v2`) with median absolute BPM error
+1.15 BPM and the 96 BPM seed track locking cleanly at 96.0 BPM. The 90 BPM
+seed also improved back to 91.6 BPM. The live 124/96 swing still needs a fresh
+post-patch live log to confirm, but the offline guardrails are now holding.
+
