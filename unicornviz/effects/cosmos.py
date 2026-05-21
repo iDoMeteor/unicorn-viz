@@ -111,6 +111,8 @@ class Cosmos(BaseEffect):
     NAME = "Cosmos"
     AUTHOR = "unicorn-viz"
     TAGS = ["space", "audio", "shader"]
+    SPEED_TIME_BIAS = 0.2
+    SPEED_TIME_SCALE = 0.8
     PING_PONG_FRIENDS = ['Starfield', 'Alien Invasion']
 
     def _init(self) -> None:

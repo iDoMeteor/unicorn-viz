@@ -288,14 +288,18 @@ class VJApi:
             return None
         prev_speed = float(effect.parameters['speed'])
         new_speed = max(0.05, min(10.0, float(value)))
-        # Keep shader phase continuous for effects that use iTime * iSpeed.
-        # Without this, tiny speed slews can produce huge visual jumps when
-        # self.time has a large runtime offset.
+        # Keep shader phase continuous for effects that use
+        # t = iTime * (bias + scale * iSpeed).
+        # Defaults match the common t = iTime * iSpeed case.
         if abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
             try:
                 t = float(getattr(effect, 'time'))
-                if prev_speed > 1e-9:
-                    setattr(effect, 'time', (t * prev_speed) / new_speed)
+                bias = float(getattr(effect, 'SPEED_TIME_BIAS', 0.0))
+                scale = float(getattr(effect, 'SPEED_TIME_SCALE', 1.0))
+                prev_factor = bias + scale * prev_speed
+                next_factor = bias + scale * new_speed
+                if abs(prev_factor) > 1e-9 and abs(next_factor) > 1e-9:
+                    setattr(effect, 'time', (t * prev_factor) / next_factor)
             except Exception:
                 # Never fail speed changes due to continuity bookkeeping.
                 pass

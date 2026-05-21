@@ -139,6 +139,8 @@ class Fire(BaseEffect):
     NAME = "Fire"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "audio", "shader"]
+    SPEED_TIME_BIAS = 0.65
+    SPEED_TIME_SCALE = 0.75
     PING_PONG_FRIENDS = ['Plasma', 'Water']
 
     def _init(self) -> None:

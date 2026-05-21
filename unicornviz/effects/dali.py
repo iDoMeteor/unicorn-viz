@@ -118,6 +118,8 @@ class Dali(BaseEffect):
     NAME = "Dali"
     AUTHOR = "unicorn-viz"
     TAGS = ["art", "surreal", "audio"]
+    SPEED_TIME_BIAS = 0.35
+    SPEED_TIME_SCALE = 0.75
     PING_PONG_FRIENDS = ['Escher', 'Van Gogh', 'Psychedelic']
 
     def _init(self) -> None:
