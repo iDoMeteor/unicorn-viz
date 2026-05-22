@@ -325,6 +325,8 @@ class App:
         self._playlist_size: int = 0
         self._user_action_deadline: float = 0.0
         self._vj_status_pill: str = ''
+        self._last_auto_vj_error_key: str = ''
+        self._last_auto_vj_error_t: float = -1e9
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -1696,7 +1698,34 @@ void main() {
                     self._auto_vj.update(dt, self._audio_raw or self._audio)
                     self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
                 except Exception as exc:
-                    log.warning('AutoVJController update failed: %s', exc)
+                    now = time.monotonic()
+                    err_key = f'{type(exc).__name__}:{exc}'
+                    repeat = (
+                        err_key == self._last_auto_vj_error_key
+                        and (now - self._last_auto_vj_error_t) < 2.0
+                    )
+                    if repeat:
+                        log.debug('AutoVJController update failed (repeat): %s', exc)
+                    else:
+                        mode = getattr(self._auto_vj, '_mode', '?')
+                        profile = getattr(self._auto_vj, '_profile', '?')
+                        effect_name = '?'
+                        try:
+                            effect_name = str(self.vj_api.state().effect_name)
+                        except Exception:
+                            pass
+                        log.exception(
+                            'AutoVJController update failed: %s [mode=%s profile=%s effect=%s]',
+                            exc, mode, profile, effect_name,
+                        )
+                    self._last_auto_vj_error_key = err_key
+                    self._last_auto_vj_error_t = now
+                    try:
+                        rec = getattr(self._auto_vj, 'record_runtime_error', None)
+                        if callable(rec):
+                            rec(exc)
+                    except Exception:
+                        pass
                     self.vj_api.set_status_pill('AUTO VJ  ERROR')
 
             if self._grand_finale is not None:

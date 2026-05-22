@@ -405,6 +405,31 @@ class VJApi:
         except Exception:
             pass
 
+    def rotate_scroll(self, dy: int) -> None:
+        """Accumulate Ctrl+scroll rotation by dy steps (+up / -down)."""
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                pc.on_ctrl_scroll(int(dy))
+        except Exception:
+            pass
+
+    def trigger_scroll_fx(self, dy: int, *, rotate: bool = False) -> bool:
+        """Trigger postfx scroll behavior through the active controller.
+
+        ``rotate=False`` routes to hue-shift (wheel).
+        ``rotate=True`` routes to rotation (Ctrl+wheel).
+        Returns True when a controller is present and the event was sent.
+        """
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return False
+        if rotate:
+            pc.on_ctrl_scroll(int(dy))
+        else:
+            pc.on_scroll(int(dy))
+        return True
+
     def clear_hue_shift(self) -> None:
         """Immediately clear the scroll-wheel hue-shift pass."""
         try:
