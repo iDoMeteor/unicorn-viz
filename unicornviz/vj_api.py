@@ -414,6 +414,24 @@ class VJApi:
         except Exception:
             pass
 
+    def rotate_scroll(self, dy: int) -> None:
+        """Accumulate ctrl+scroll scene rotation by dy steps (+up / -down)."""
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                pc.on_ctrl_scroll(int(dy))
+        except Exception:
+            pass
+
+    def clear_scroll_fx(self) -> None:
+        """Clear both scroll-driven post-fx states (hue + rotation)."""
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                pc.clear_scroll_fx()
+        except Exception:
+            pass
+
     def effect_param_range(self, name: str) -> tuple[float | None, float | None]:
         """Return the active effect's config overrides for ``random_<name>_min/max``.
 
