@@ -45,7 +45,8 @@ _DEFAULTS: dict[str, Any] = {
         "buffer_seconds": 10.0,  # Large buffer for GPU rendering stalls and resolution flexibility
         "reactivity": 1.0,
         "latency": "high",
-        "try_alsa_loopback": False,
+        "silence_rms_floor": 0.0060,
+        "silence_rms_span": 0.045,
     },
     "midi": {
         "device": "",

@@ -54,7 +54,8 @@ Aliases:
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
 | `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal` |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
-| `try_alsa_loopback` | bool | `false` | Try ALSA loopback devices before app/default sources        |
+| `silence_rms_floor` | float | `0.0060` | RMS floor below which input is treated as silent (raise if b/m/t moves with no music) |
+| `silence_rms_span`  | float | `0.045`  | RMS range above the floor over which the spectrum scales 0→1 |
 
 ---
 
