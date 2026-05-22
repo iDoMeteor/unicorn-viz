@@ -6,8 +6,14 @@ set -euo pipefail
 #   ./tools/install_linux.sh
 #   ./tools/install_linux.sh --python python3.11
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/install/lib.sh"
+
 PYTHON_BIN="python3"
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+NO_DEPS=0
+UV_DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -15,75 +21,32 @@ while [[ $# -gt 0 ]]; do
       PYTHON_BIN="$2"
       shift 2
       ;;
+    --no-deps)
+      NO_DEPS=1
+      shift
+      ;;
+    --dry-run)
+      UV_DRY_RUN=1
+      shift
+      ;;
     *)
-      echo "Unknown argument: $1"
-      exit 1
+      uv_die "Unknown argument: $1"
       ;;
   esac
 done
 
 if [[ ! -f "$PROJECT_ROOT/requirements.txt" ]]; then
-  echo "requirements.txt not found at $PROJECT_ROOT"
-  exit 1
+  uv_die "requirements.txt not found at $PROJECT_ROOT"
 fi
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Python executable not found: $PYTHON_BIN"
-  exit 1
-fi
+uv_require_cmd "$PYTHON_BIN"
 
-if [[ -f /etc/os-release ]]; then
-  # shellcheck disable=SC1091
-  source /etc/os-release
+if [[ "$NO_DEPS" -eq 0 ]]; then
+  uv_install_system_deps "$PYTHON_BIN"
 else
-  echo "Cannot detect Linux distribution (missing /etc/os-release)."
-  exit 1
+  uv_log "Skipping system dependency installation"
 fi
 
-install_apt() {
-  sudo apt-get update
-  sudo apt-get install -y \
-    "$PYTHON_BIN" "${PYTHON_BIN}-venv" "${PYTHON_BIN}-dev" \
-    libsdl2-dev libgl1-mesa-dev libffi-dev \
-    libpipewire-0.3-dev libasound2-dev ffmpeg git
-}
+uv_create_venv_and_install "$PYTHON_BIN" "$PROJECT_ROOT/.venv" "$PROJECT_ROOT"
 
-install_dnf() {
-  sudo dnf install -y \
-    "$PYTHON_BIN" "${PYTHON_BIN}-devel" gcc-c++ make \
-    SDL2-devel mesa-libGL-devel libffi-devel \
-    pipewire-devel alsa-lib-devel git
-  if ! sudo dnf install -y ffmpeg; then
-    echo "Warning: ffmpeg not available in default Fedora repos."
-    echo "         Enable RPM Fusion if recording support is required."
-  fi
-}
-
-install_pacman() {
-  sudo pacman -Sy --noconfirm \
-    python python-pip sdl2 mesa libffi pipewire alsa-lib ffmpeg git
-}
-
-case "${ID:-}" in
-  ubuntu|debian)
-    install_apt
-    ;;
-  fedora)
-    install_dnf
-    ;;
-  arch)
-    install_pacman
-    ;;
-  *)
-    echo "Unsupported distribution: ${ID:-unknown}"
-    echo "Please install deps manually (SDL2/OpenGL/FFI/PipeWire/ALSA/ffmpeg) and rerun."
-    exit 1
-    ;;
-esac
-
-cd "$PROJECT_ROOT"
-"$PYTHON_BIN" -m venv .venv
-.venv/bin/pip install --upgrade pip wheel
-.venv/bin/pip install -r requirements.txt
-
-echo "Install complete. Run: ./run.sh"
+uv_log "Install complete. Run: ./run.sh"

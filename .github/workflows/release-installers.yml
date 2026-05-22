@@ -1,0 +1,144 @@
+name: Release Installers
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-installer:
+    name: Build Linux Installer Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate installer scripts
+        run: |
+          bash -n install.sh tools/install/lib.sh tools/install/uninstall_linux.sh tools/install_linux.sh
+
+      - name: Download source tarball
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p dist
+          curl -fsSL --retry 3 --retry-delay 2 \
+            -o "dist/unicorn-viz-${VERSION}.tar.gz" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+
+      - name: Stage release artifacts
+        run: |
+          cp install.sh dist/install.sh
+          chmod +x dist/install.sh
+          sha256sum dist/install.sh dist/*.tar.gz > dist/SHA256SUMS
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-assets
+          path: dist/*
+
+  native-deb:
+    name: Build Debian Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 python3-venv python3-dev \
+            libsdl2-dev libgl1-mesa-dev libffi-dev \
+            libpipewire-0.3-dev libasound2-dev ffmpeg \
+            ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Build .deb
+        run: |
+          mkdir -p dist
+          chmod +x tools/packaging/build_native.sh
+          tools/packaging/build_native.sh \
+            --format deb \
+            --version "${{ steps.version.outputs.value }}" \
+            --output-dir dist
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-deb
+          path: dist/*.deb
+
+  native-rpm:
+    name: Build RPM Package
+    runs-on: ubuntu-latest
+    container: fedora:40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install packaging dependencies
+        run: |
+          dnf install -y \
+            python3 python3-devel gcc-c++ make \
+            SDL2-devel mesa-libGL-devel libffi-devel \
+            pipewire-devel alsa-lib-devel ffmpeg \
+            ruby ruby-devel rubygems rpm-build
+          gem install --no-document fpm
+
+      - name: Build .rpm
+        run: |
+          mkdir -p dist
+          chmod +x tools/packaging/build_native.sh
+          tools/packaging/build_native.sh \
+            --format rpm \
+            --version "${{ steps.version.outputs.value }}" \
+            --output-dir dist
+
+      - name: Upload .rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-rpm
+          path: dist/*.rpm
+
+  publish:
+    name: Publish Release Assets
+    needs: [linux-installer, native-deb, native-rpm]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Rebuild checksums
+        run: |
+          rm -f dist/SHA256SUMS
+          sha256sum dist/* > dist/SHA256SUMS
+
+      - name: Attach assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
