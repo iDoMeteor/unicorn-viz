@@ -584,3 +584,29 @@ Operational state remains unchanged:
 - Use `beat_tracker_engine = "v1"` for current production sessions.
 - v2 work can resume from this profile-aware baseline.
 
+## Addendum (2026-05-22): Auto VJ scroll-fx automation
+
+Feature request follow-up implemented:
+
+- Existing manual mapping retained:
+   - wheel = hue shift
+   - ctrl+wheel = scene rotation
+   - middle click = reset hue + rotation
+- Auto VJ can now optionally drive these scroll-based post-fx modes via
+   config/profile knobs, and it is enabled by default in profile presets.
+
+New Auto VJ knobs:
+
+- `allow_scroll_fx` (bool, default true)
+- `scrollfx_cruise_interval_s`
+- `scrollfx_climax_interval_s`
+- `scrollfx_rotation_chance` (0..1; mix between hue and rotation)
+- `scrollfx_dy_min`, `scrollfx_dy_max` (wheel-step magnitude range)
+
+Implementation notes:
+
+- Added `scroll_fx` action cooldown to ActionEngine to avoid spam.
+- Cruise and climax loops now periodically trigger either `vj_api.hue_scroll()`
+   or `vj_api.rotate_scroll()` with randomized signed wheel deltas.
+- README and full example config updated to document the new controls.
+

@@ -114,6 +114,13 @@ log_decisions = false
 # auto_profile_raver_min_bpm = 136.0
 # auto_profile_min_confidence = 0.45
 # auto_profile_switch_cooldown_s = 20.0
+# Optional override knobs (otherwise inherited from profile preset):
+# allow_scroll_fx = true
+# scrollfx_cruise_interval_s = 22.0
+# scrollfx_climax_interval_s = 9.0
+# scrollfx_rotation_chance = 0.50
+# scrollfx_dy_min = 1
+# scrollfx_dy_max = 3
 # Optional timed-finale support:
 # show_duration_min = 90
 # finale_auto_trigger = true
