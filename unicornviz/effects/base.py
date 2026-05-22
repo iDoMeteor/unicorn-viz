@@ -53,6 +53,9 @@ AudioData slots
 ``bass``      float            Averaged low-band energy  (0–1, may exceed 1)
 ``mid``       float            Averaged mid-band energy
 ``treble``    float            Averaged high-band energy
+``bass_n``    float            Bass  energy, independently z-score normalised to 0–1
+``mid_n``     float            Mid   energy, independently z-score normalised to 0–1
+``treble_n``  float            Treble energy, independently z-score normalised to 0–1
 ``beat``      float            1.0 when a beat onset is detected, else 0.0
 ``bpm``       float            Estimated BPM (not yet implemented: fixed 120)
 """
@@ -70,8 +73,9 @@ if TYPE_CHECKING:
 class AudioData:
     """Snapshot of audio state passed to effects each frame."""
 
-    __slots__ = ("fft", "waveform", "bass", "mid", "treble", "beat", "bpm",
-                 "bass_flux", "mid_flux")
+    __slots__ = ("fft", "waveform", "bass", "mid", "treble",
+                 "bass_n", "mid_n", "treble_n",
+                 "beat", "bpm", "bass_flux", "mid_flux")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -79,6 +83,13 @@ class AudioData:
         self.bass: float = 0.0
         self.mid: float = 0.0
         self.treble: float = 0.0
+        # Per-band running z-score normalised values.  Each band is normalised
+        # independently against its own recent mean/variance so the signal
+        # always spans 0–1 regardless of absolute loudness.  Useful for effects
+        # and beat detection that want "is this band MORE active than usual".
+        self.bass_n: float = 0.5
+        self.mid_n: float = 0.5
+        self.treble_n: float = 0.5
         self.beat: float = 0.0
         self.bpm: float = 120.0
         self.bass_flux: float = 0.0

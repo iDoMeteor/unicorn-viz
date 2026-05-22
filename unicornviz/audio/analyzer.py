@@ -121,6 +121,18 @@ class Analyzer:
         self._refractory_s: float | None = None
         self._beat_cooldown_until_t: float = -1e9
 
+        # Per-band running z-score normalisation state.
+        # Updated every frame so bass_n/mid_n/treble_n track relative change
+        # rather than absolute level — useful when a genre keeps one band
+        # near saturation the whole session.
+        self._band_mean_bass: float = 0.0
+        self._band_var_bass: float = 1e-4
+        self._band_mean_mid: float = 0.0
+        self._band_var_mid: float = 1e-4
+        self._band_mean_treble: float = 0.0
+        self._band_var_treble: float = 1e-4
+        self._band_alpha: float = 0.08  # EMA coefficient for running stats
+
         self._n_fft = self._bands * 2
         self._bin_hz = _ASSUMED_SAMPLE_RATE / max(1, self._n_fft)
 
@@ -167,6 +179,23 @@ class Analyzer:
         """Update the silence gate thresholds at runtime."""
         self._silence_rms_floor = max(0.0, float(floor))
         self._silence_rms_span = max(1e-4, float(span))
+
+    def _norm_band(
+        self, x: float, mean: float, var: float
+    ) -> tuple[float, float, float]:
+        """Running z-score normalise one band value to [0, 1].
+
+        Uses a soft-sigmoid of the z-score so sustained levels stay in a
+        meaningful range rather than collapsing to 0 or 1 indefinitely.
+        Returns (normalised_value, updated_mean, updated_var).
+        """
+        a = self._band_alpha
+        mean = mean + a * (x - mean)
+        d = x - mean
+        var = max(1e-6, var + a * (d * d - var))
+        z = (x - mean) / (var ** 0.5 + 1e-6)
+        v = 0.5 + 0.5 * (z / (1.0 + abs(z)))
+        return float(np.clip(v, 0.0, 1.0)), mean, var
 
     @property
     def last_raw_rms(self) -> float:
@@ -278,10 +307,36 @@ class Analyzer:
 
         self._last_raw_rms = rms
 
-        # Silence/noise gate + per-frame normalization.
-        # The previous implementation normalized every frame to 1.0, which made
-        # low-level noise look like strong audio and masked actual signal loss.
+        # Silence/noise gate scalar (0 = silent, 1 = full signal).
         energy = np.clip((rms - self._silence_rms_floor) / self._silence_rms_span, 0.0, 1.0)
+
+        # --- Spectral flux (raw spectrum, BEFORE per-frame normalization) ---
+        # Computing flux from the normalised spectrum was the root cause of the
+        # flat onset envelope: dividing by max_val each frame erases the kick
+        # transient because the spectrum *shape* barely changes even on a loud
+        # kick — only its absolute magnitude does.  Using the raw FFT magnitudes
+        # means a kick drum produces a large positive delta in the bass bins,
+        # giving the ACF a clear periodic signal to lock onto.
+        np.subtract(spectrum, self._prev_spectrum, out=self._flux_delta)
+        np.maximum(self._flux_delta, 0.0, out=self._flux_delta)
+        flux = float(np.sum(self._flux_delta * self._flux_weights))
+        rms_rise = max(0.0, rms - self._prev_rms)
+        self._prev_rms = rms
+        flux += rms_rise * (0.25 * self._bands)
+        # Gate: don't push noise-floor flux into the onset envelope during silence.
+        if energy <= 1e-5:
+            flux = 0.0
+        np.copyto(self._prev_spectrum, spectrum)   # save raw for next frame
+
+        # Per-band raw sub-fluxes for downbeat detection
+        data.bass_flux = float(np.sum(
+            self._flux_delta[self._bass_slice] * self._flux_weights[self._bass_slice]
+        ))
+        data.mid_flux = float(np.sum(
+            self._flux_delta[self._mid_slice] * self._flux_weights[self._mid_slice]
+        ))
+
+        # --- Normalise spectrum for display / band-level computation ---
         max_val = spectrum.max()
         if max_val > 1e-6 and energy > 1e-5:
             spectrum /= max_val
@@ -304,7 +359,7 @@ class Analyzer:
         else:
             data.waveform.fill(0.0)
 
-        # Band energy (modern splits).
+        # Band energy from normalised smoothed spectrum.
         bass_raw = self._safe_mean(self._smoothed, self._bass_slice)
         mid_raw = self._safe_mean(self._smoothed, self._mid_slice)
         treble_raw = self._safe_mean(self._smoothed, self._treble_slice)
@@ -319,22 +374,19 @@ class Analyzer:
         data.mid = self._shape(mid_weighted, gain=5.8)
         data.treble = self._shape(treble_weighted, gain=7.2)
 
-        # Spectral flux onset detection
-        np.subtract(spectrum, self._prev_spectrum, out=self._flux_delta)
-        np.maximum(self._flux_delta, 0.0, out=self._flux_delta)
-        flux = float(np.sum(self._flux_delta * self._flux_weights))
-        rms_rise = max(0.0, rms - self._prev_rms)
-        self._prev_rms = rms
-        flux += rms_rise * (0.25 * self._bands)
-        np.copyto(self._prev_spectrum, spectrum)
-
-        # P6-prep: per-band sub-fluxes for downbeat detection
-        data.bass_flux = float(np.sum(
-            self._flux_delta[self._bass_slice] * self._flux_weights[self._bass_slice]
-        ))
-        data.mid_flux = float(np.sum(
-            self._flux_delta[self._mid_slice] * self._flux_weights[self._mid_slice]
-        ))
+        # Per-band independently z-score normalised values (0–1).
+        # These track *relative change* within each band so an effect or
+        # beat detector can tell "bass is MORE active than its recent baseline"
+        # even when the absolute level is near-saturated the whole session.
+        data.bass_n, self._band_mean_bass, self._band_var_bass = self._norm_band(
+            data.bass, self._band_mean_bass, self._band_var_bass
+        )
+        data.mid_n, self._band_mean_mid, self._band_var_mid = self._norm_band(
+            data.mid, self._band_mean_mid, self._band_var_mid
+        )
+        data.treble_n, self._band_mean_treble, self._band_var_treble = self._norm_band(
+            data.treble, self._band_mean_treble, self._band_var_treble
+        )
 
         # P2: push flux into the time-based envelope ring
         dt = len(pcm) / _ASSUMED_SAMPLE_RATE
@@ -342,7 +394,7 @@ class Analyzer:
 
         # P1+P2+P3: onset detection with MAD threshold and adaptive refractory
         data.beat = 0.0
-        if now >= self._beat_cooldown_until_t:
+        if energy > 1e-5 and now >= self._beat_cooldown_until_t:
             threshold, mad = self._onset_threshold()
             # Require local maximum (rising edge) to avoid double-triggers
             is_local_max = flux >= self._env_prev_flux

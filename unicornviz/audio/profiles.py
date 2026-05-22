@@ -76,11 +76,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.15,
         smoothing=0.12,
         curve="bass_boost",
-        # House: kick-driven 4/4 at 118-130 BPM. Heavy bass bias keeps
-        # hi-hats out of the onset stream.
-        onset_bass_emphasis=2.2,
+        # House: kick-driven 4/4 at 118-130 BPM.  Raw-spectrum flux already
+        # amplifies kick transients strongly; moderate the bass weight so
+        # hi-hat flux (which carries beat subdivisions) still contributes.
+        onset_bass_emphasis=1.4,
         onset_mid_emphasis=1.0,
-        onset_treble_emphasis=0.6,
+        onset_treble_emphasis=0.75,
         bpm_prior_mu=124.0,
         bpm_prior_sigma=0.20,
     ),
@@ -144,10 +145,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.0,
         smoothing=0.14,
         curve="extreme_bass_boost",
-        # Rap/Hip-Hop: very kick-driven at 70-100 BPM. Strong bass bias.
-        onset_bass_emphasis=2.5,
+        # Rap/Hip-Hop: very kick-driven at 70-100 BPM.  With raw-spectrum
+        # flux the kick already dominates; restore some treble so hi-hats
+        # can contribute to ACF periodicity and subdivisions are visible.
+        onset_bass_emphasis=1.4,
         onset_mid_emphasis=1.0,
-        onset_treble_emphasis=0.5,
+        onset_treble_emphasis=0.80,
         bpm_prior_mu=88.0,
         bpm_prior_sigma=0.30,
     ),
@@ -166,10 +169,11 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=0.95,
         smoothing=0.15,
         curve="extreme_bass_boost",
-        # Hyphy: aggressive sub-bass at 90-110 BPM.
-        onset_bass_emphasis=2.6,
-        onset_mid_emphasis=1.2,
-        onset_treble_emphasis=0.6,
+        # Hyphy: aggressive sub-bass at 90-110 BPM.  Same reasoning as
+        # rap — raw flux gives kicks plenty of signal; keep treble for hype.
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.80,
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.25,
     ),
