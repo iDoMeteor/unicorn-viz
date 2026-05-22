@@ -215,6 +215,13 @@ def evaluate_file(
     analyzer = Analyzer(fft_bands=512, profile=profile)
     TrackerCls = _load_tracker_cls(engine)
     tracker = TrackerCls({})
+    # Mirror runtime: push the audio profile into the tracker so its BPM
+    # prior matches the genre being evaluated.
+    if hasattr(tracker, 'set_profile'):
+        try:
+            tracker.set_profile(profile)
+        except Exception:
+            pass
 
     dt = block_size / _TARGET_SR
     bpm_track: list[tuple[float, float, float]] = []

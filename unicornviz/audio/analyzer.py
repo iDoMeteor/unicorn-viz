@@ -125,9 +125,19 @@ class Analyzer:
         self._treble_slice = slice(min(t0, t1), max(t0 + 1, t1))
         
         # Beat detection weighting: emphasize bass + mid flux based on profile.
+        # Per-band emphasis comes from the profile so kick-driven genres
+        # (house/rap/techno) suppress hi-hat onsets, while broader genres
+        # (rock/metal) keep mid/treble contribution for snare/cymbal hits.
         self._flux_weights = np.linspace(1.0, 0.22, self._bands, dtype=np.float32)
-        self._flux_weights[self._bass_slice] *= 1.8
-        self._flux_weights[self._mid_slice] *= 1.2
+        self._flux_weights[self._bass_slice] *= float(
+            getattr(self._profile, 'onset_bass_emphasis', 1.8)
+        )
+        self._flux_weights[self._mid_slice] *= float(
+            getattr(self._profile, 'onset_mid_emphasis', 1.2)
+        )
+        self._flux_weights[self._treble_slice] *= float(
+            getattr(self._profile, 'onset_treble_emphasis', 1.0)
+        )
     
     def set_profile(self, profile: AudioProfile) -> None:
         """Switch to a new profile and recalculate frequency bands."""

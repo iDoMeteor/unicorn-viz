@@ -37,6 +37,27 @@ class AudioProfile:
     # Frequency response curve name for FFT shaping
     curve: str = "flat"
 
+    # ------------------------------------------------------------------
+    # Beat-detection shaping (used by Analyzer + BeatTracker).
+    # Profiles inform "what does a beat look like in this genre?" so the
+    # onset detector and tempo prior have realistic expectations.
+    # ------------------------------------------------------------------
+
+    # Per-band emphasis applied to spectral flux during onset detection.
+    # Kick-driven genres (house/rap/techno) should weight bass high so
+    # hi-hats and percussion do not pollute the onset stream. Defaults
+    # match the prior hardcoded analyzer weights for backward compat.
+    onset_bass_emphasis: float = 1.8
+    onset_mid_emphasis: float = 1.2
+    onset_treble_emphasis: float = 1.0
+
+    # Perceptual tempo prior centre (BPM) and width (in log2(BPM) units).
+    # Used by the BeatTracker to bias the ACF score toward genre-typical
+    # tempos. A wider sigma means weaker bias; a narrower sigma means the
+    # detector strongly prefers the genre's canonical tempo range.
+    bpm_prior_mu: float = 120.0
+    bpm_prior_sigma: float = 0.55
+
 
 # Profile definitions tuned for different genres and styles
 PROFILES: Dict[str, AudioProfile] = {
@@ -55,6 +76,13 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.15,
         smoothing=0.12,
         curve="bass_boost",
+        # House: kick-driven 4/4 at 118-130 BPM. Heavy bass bias keeps
+        # hi-hats out of the onset stream.
+        onset_bass_emphasis=2.2,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.6,
+        bpm_prior_mu=124.0,
+        bpm_prior_sigma=0.20,
     ),
     "trance": AudioProfile(
         name="Trance",
@@ -71,6 +99,13 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.1,
         smoothing=0.08,
         curve="mid_treble_boost",
+        # Trance: kick + offbeat at 130-145 BPM. Mid synths can fire flux
+        # so keep mid emphasis moderate.
+        onset_bass_emphasis=1.8,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.9,
+        bpm_prior_mu=138.0,
+        bpm_prior_sigma=0.20,
     ),
     "electronic": AudioProfile(
         name="Electronic",
@@ -87,6 +122,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.2,
         smoothing=0.1,
         curve="flat",
+        # Electronic: broad genre, moderate kick bias, wider prior.
+        onset_bass_emphasis=1.9,
+        onset_mid_emphasis=1.2,
+        onset_treble_emphasis=0.9,
+        bpm_prior_mu=125.0,
+        bpm_prior_sigma=0.35,
     ),
     "rap": AudioProfile(
         name="Rap / Hip-Hop",
@@ -103,6 +144,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.0,
         smoothing=0.14,
         curve="extreme_bass_boost",
+        # Rap/Hip-Hop: very kick-driven at 70-100 BPM. Strong bass bias.
+        onset_bass_emphasis=2.5,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.5,
+        bpm_prior_mu=88.0,
+        bpm_prior_sigma=0.30,
     ),
     "hyphy": AudioProfile(
         name="Hyphy",
@@ -119,6 +166,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=0.95,
         smoothing=0.15,
         curve="extreme_bass_boost",
+        # Hyphy: aggressive sub-bass at 90-110 BPM.
+        onset_bass_emphasis=2.6,
+        onset_mid_emphasis=1.2,
+        onset_treble_emphasis=0.6,
+        bpm_prior_mu=95.0,
+        bpm_prior_sigma=0.25,
     ),
     "r&b": AudioProfile(
         name="R&B / Soul",
@@ -135,6 +188,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.25,
         smoothing=0.13,
         curve="warm",
+        # R&B/Soul: vocal-driven at 75-100 BPM, kick + snare backbeat.
+        onset_bass_emphasis=1.8,
+        onset_mid_emphasis=1.2,
+        onset_treble_emphasis=0.7,
+        bpm_prior_mu=85.0,
+        bpm_prior_sigma=0.30,
     ),
     "rock": AudioProfile(
         name="Rock",
@@ -151,6 +210,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.15,
         smoothing=0.09,
         curve="midrange_presence",
+        # Rock: kick + snare + cymbals, wide tempo range 80-160 BPM.
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.4,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=120.0,
+        bpm_prior_sigma=0.40,
     ),
     "generic": AudioProfile(
         name="Generic",
@@ -167,6 +232,13 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.2,
         smoothing=0.1,
         curve="flat",
+        # Generic: balanced (matches legacy hardcoded behaviour for
+        # backward compatibility with prior v1 tuning).
+        onset_bass_emphasis=1.8,
+        onset_mid_emphasis=1.2,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=120.0,
+        bpm_prior_sigma=0.55,
     ),
     "classical": AudioProfile(
         name="Classical / Orchestral",
@@ -183,6 +255,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.3,
         smoothing=0.08,
         curve="bright",
+        # Classical: no consistent kick, wide dynamic range.
+        onset_bass_emphasis=1.0,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=110.0,
+        bpm_prior_sigma=0.50,
     ),
     "ambient": AudioProfile(
         name="Ambient / Chillout",
@@ -199,6 +277,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.4,
         smoothing=0.2,
         curve="warm",
+        # Ambient: often weak or no beats, very wide prior.
+        onset_bass_emphasis=1.2,
+        onset_mid_emphasis=1.2,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=100.0,
+        bpm_prior_sigma=0.60,
     ),
     "pop": AudioProfile(
         name="Pop",
@@ -215,6 +299,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.2,
         smoothing=0.11,
         curve="slight_presence",
+        # Pop: kick + snare at 95-125 BPM.
+        onset_bass_emphasis=1.7,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.8,
+        bpm_prior_mu=110.0,
+        bpm_prior_sigma=0.30,
     ),
     "metal": AudioProfile(
         name="Metal / Extreme",
@@ -231,6 +321,12 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.0,
         smoothing=0.09,
         curve="aggressive",
+        # Metal: kick (often double-bass) + snare + cymbals, 100-180 BPM.
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.4,
+        onset_treble_emphasis=1.1,
+        bpm_prior_mu=140.0,
+        bpm_prior_sigma=0.40,
     ),
 }
 
