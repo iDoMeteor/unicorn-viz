@@ -31,8 +31,11 @@ buffer_seconds = 10.0
 reactivity = 1.0
 # low, medium, high
 latency = "high"
-# if true, include ALSA loopback devices in auto-fallback candidates
-try_alsa_loopback = false
+# Silence gate (RMS).  Inputs below silence_rms_floor are treated as
+# silent; the spectrum scales 0 → 1 over the next silence_rms_span of RMS.
+# Raise these if quiet background noise registers as signal.
+silence_rms_floor = 0.0060
+silence_rms_span  = 0.045
 
 [midi]
 # empty string disables MIDI

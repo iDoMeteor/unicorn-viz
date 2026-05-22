@@ -23,7 +23,12 @@ class AudioManager:
         fft_bands = cfg.get("audio", "fft_bands", default=512)
         buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
         latency = cfg.get("audio", "latency", default="high")
-        try_alsa_loopback = cfg.get("audio", "try_alsa_loopback", default=True)
+        # Silence gate thresholds (RMS).  Anything below ``silence_rms_floor``
+        # is treated as no input; ``silence_rms_span`` is the RMS range above
+        # the floor over which the spectrum scales 0 → 1.  Defaults are tuned
+        # for PipeWire so monitor noise / ambient hum stays gated out.
+        silence_floor = float(cfg.get("audio", "silence_rms_floor", default=0.0060))
+        silence_span = float(cfg.get("audio", "silence_rms_span", default=0.045))
         # "reactivity" controls how strongly visuals respond to audio features.
         # Keep legacy "gain" as fallback for backward compatibility.
         self._reactivity = float(
@@ -40,9 +45,13 @@ class AudioManager:
             device_hint=device_hint,
             buffer_seconds=buffer_seconds,
             latency=latency,
-            try_alsa_loopback=try_alsa_loopback,
         )
-        self._analyzer = Analyzer(fft_bands=fft_bands, profile=self._profile)
+        self._analyzer = Analyzer(
+            fft_bands=fft_bands,
+            profile=self._profile,
+            silence_rms_floor=silence_floor,
+            silence_rms_span=silence_span,
+        )
         self._last_data = AudioData()
         self._last_data_raw = AudioData()
 
@@ -85,6 +94,14 @@ class AudioManager:
     def get_source_label(self) -> str:
         """Return a user-facing label for the active audio input source."""
         return self._capture.current_source_label()
+
+    def get_raw_input_rms(self) -> float:
+        """Return the last raw input RMS measured by the analyzer.
+
+        Useful for HUD diagnostics: distinguishes true silence (value ~ 0)
+        from a quiet-but-live source (small but non-zero value).
+        """
+        return self._analyzer.last_raw_rms
     
     def get_profile(self) -> AudioProfile:
         """Return the current audio profile."""

@@ -1,5 +1,10 @@
 """
-Audio capture via sounddevice (PipeWire/PulseAudio loopback monitor).
+Audio capture via sounddevice (PipeWire / PulseAudio monitor).
+
+Linux: raw ALSA hostapi devices are intentionally skipped — PortAudio's
+ALSA backend aborts at the C level when a device disappears mid-stream
+(e.g. mic toggled off), and on modern Fedora/Arch the PipeWire shim
+through PulseAudio is the right path anyway.
 Feeds a ring buffer consumed by the analyzer on the main thread.
 """
 from __future__ import annotations
@@ -28,8 +33,15 @@ _WARMUP_DURATION = 0.3  # seconds: time to let buffer stabilize after stream ope
 _STATUS_LOG_INTERVAL = 2.0
 
 
-def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | None]:
-    """Return ordered candidate input devices for auto-fallback probing."""
+def _candidate_monitor_devices(hint: str) -> list[int | None]:
+    """Return ordered candidate input devices for auto-fallback probing.
+
+    On Linux the ALSA hostapi is deliberately skipped in favour of
+    PulseAudio / PipeWire / JACK.  PortAudio's ALSA backend is unstable
+    when devices appear/disappear at runtime (e.g. mic toggled off mid-
+    stream causes a C-level assertion).  PulseAudio's PipeWire shim is
+    the modern path on Fedora/Arch and handles device loss gracefully.
+    """
     if not _SD_AVAILABLE:
         return [None]
     try:
@@ -37,11 +49,32 @@ def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | N
     except Exception:
         return [None]
 
+    is_linux = sys.platform.startswith('linux')
+    is_windows = sys.platform.startswith('win')
+
+    hostapi_names: dict[int, str] = {}
+    try:
+        hostapis = sd.query_hostapis()
+        for idx, info in enumerate(hostapis):
+            hostapi_names[idx] = str(info.get('name', '')).lower()
+    except Exception:
+        hostapi_names = {}
+
+    def _hostapi_for(d: dict) -> str:
+        return hostapi_names.get(int(d.get('hostapi', -1)), '')
+
+    def _is_alsa(d: dict) -> bool:
+        # Match the ALSA hostapi only; the PulseAudio / PipeWire shim
+        # hostapis often have 'alsa' nowhere in their name.
+        return _hostapi_for(d).strip() == 'alsa'
+
     hint_lower = hint.lower()
     if hint_lower:
         matches = [
             i for i, d in enumerate(devices)
-            if d.get('max_input_channels', 0) >= 1 and hint_lower in d['name'].lower()
+            if d.get('max_input_channels', 0) >= 1
+            and hint_lower in d['name'].lower()
+            and not (is_linux and _is_alsa(d))
         ]
         return matches or [None]
 
@@ -56,38 +89,29 @@ def _candidate_monitor_devices(hint: str, try_alsa: bool = True) -> list[int | N
         if 'obs' in name:
             log.info("Audio: OBS detected: device %d (%s)", i, d['name'])
 
-    is_windows = sys.platform.startswith('win')
-    hostapi_names: dict[int, str] = {}
-    try:
-        hostapis = sd.query_hostapis()
-        for idx, info in enumerate(hostapis):
-            hostapi_names[idx] = str(info.get('name', '')).lower()
-    except Exception:
-        hostapi_names = {}
-
     # Rank candidates:
-    # 0 = ALSA loopback (optional)
     # 0 = WASAPI loopback (Windows)
     # 1 = stereo mix / what-u-hear (Windows)
     # 1 = preferred app sources (Spotify/VLC/MPV)
     # 2 = browser app sources (often silent unless tab is active)
     # 3 = pipewire/default input
     # 4 = generic non-OBS monitor
-    # 99 = OBS and unknown/undesired inputs
+    # 99 = OBS, raw ALSA on Linux, and unknown/undesired inputs
     for i, d in enumerate(devices):
         if d.get('max_input_channels', 0) < 1:
             continue
         name = d['name'].lower()
-        hostapi_name = hostapi_names.get(int(d.get('hostapi', -1)), '')
+        hostapi_name = _hostapi_for(d)
         rank = 99
+
+        if is_linux and _is_alsa(d):
+            # Skip raw ALSA: portaudio's ALSA hostapi crashes on device loss.
+            continue
 
         if is_windows and 'wasapi' in hostapi_name and 'loopback' in name:
             rank = 0
         elif is_windows and any(key in name for key in ('stereo mix', 'what u hear')):
             rank = 1
-        elif try_alsa and 'loopback' in name:
-            rank = 0
-            log.info("Audio: ALSA loopback device available: %d (%s)", i, d['name'])
         elif any(key in name for key in ('spotify', 'vlc', 'mpv')):
             rank = 1
         elif any(key in name for key in ('firefox', 'chrome', 'chromium', 'brave')):
@@ -178,12 +202,10 @@ class AudioCapture:
         device_hint: str = "",
         buffer_seconds: float = 2.0,
         latency: str = "high",
-        try_alsa_loopback: bool = True,
     ) -> None:
         self._device_hint = device_hint
         self._buffer_seconds = buffer_seconds
         self._latency = latency
-        self._try_alsa_loopback = try_alsa_loopback
         self._sample_rate = _SAMPLE_RATE
         self._channels = _CHANNELS
         self._buf: deque[np.ndarray] = deque(
@@ -241,11 +263,18 @@ class AudioCapture:
             self._buf.clear()
         log.debug("Audio: stream opened, buffer cleared, warmup period %.1fs", _WARMUP_DURATION)
         if device is not None:
-            dev_name = sd.query_devices(device)['name']
-            if 'loopback' in dev_name.lower():
-                log.info("Audio capture: using ALSA loopback device %d (%s) at %d Hz", device, dev_name, native_rate)
-            else:
-                log.info('Audio capture: device %d (%s) at %d Hz (native rate)', device, dev_name, native_rate)
+            dev_info = sd.query_devices(device)
+            dev_name = dev_info['name']
+            hostapi_label = ''
+            try:
+                hostapis = sd.query_hostapis()
+                hostapi_label = str(hostapis[int(dev_info.get('hostapi', -1))].get('name', '')).strip()
+            except Exception:
+                pass
+            log.info(
+                'Audio capture: device %d (%s) [hostapi=%s] at %d Hz (native rate)',
+                device, dev_name, hostapi_label or 'unknown', native_rate,
+            )
         else:
             log.info('Audio capture: using default input device at %d Hz', native_rate)
         log.info('Audio capture started: %d Hz, %d ch, latency=%s', native_rate, native_channels, self._latency)
@@ -256,9 +285,7 @@ class AudioCapture:
             return
 
         try:
-            self._candidate_devices = _candidate_monitor_devices(
-                self._device_hint, try_alsa=self._try_alsa_loopback
-            )
+            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
             self._candidate_index = 0
             log.debug("Audio: candidate devices = %s", self._candidate_devices)
             self._open_stream(self._candidate_devices[self._candidate_index])
@@ -289,7 +316,7 @@ class AudioCapture:
                 self._suppressed_status_count += 1
         mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
         rms = float(np.sqrt(np.mean(mono * mono)))
-        if rms < 0.002:
+        if rms < 0.005:
             self._silent_blocks += 1
         else:
             self._silent_blocks = 0
@@ -326,10 +353,10 @@ class AudioCapture:
                 self._stream = None
             current_name = sd.query_devices(current)['name'] if current is not None else 'None'
             next_name = sd.query_devices(nxt)['name'] if nxt is not None else 'default'
-            if nxt is not None and 'loopback' in next_name.lower():
-                log.info('Audio capture: fallback from %r to ALSA loopback %d (%s)', current_name, nxt, next_name)
-            else:
-                log.info('Audio capture: source %r silent, trying fallback %d (%s)', current_name, nxt if nxt is not None else -1, next_name)
+            log.info(
+                'Audio capture: source %r silent, trying fallback %d (%s)',
+                current_name, nxt if nxt is not None else -1, next_name,
+            )
             self._open_stream(nxt)
         except Exception as exc:
             log.warning('Audio fallback failed: %s', exc)

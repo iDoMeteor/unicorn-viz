@@ -77,7 +77,13 @@ class Analyzer:
         Defaults to time.monotonic() when None.
     """
 
-    def __init__(self, fft_bands: int = _FFT_BANDS, profile: object = None) -> None:
+    def __init__(
+        self,
+        fft_bands: int = _FFT_BANDS,
+        profile: object = None,
+        silence_rms_floor: float = 0.0060,
+        silence_rms_span: float = 0.045,
+    ) -> None:
         if profile is None:
             profile = get_profile("house")
         self._profile = profile
@@ -87,6 +93,18 @@ class Analyzer:
         self._prev_spectrum = np.zeros(fft_bands, dtype=np.float32)
         self._flux_delta = np.zeros(fft_bands, dtype=np.float32)
         self._prev_rms = 0.0
+        # Silence gate parameters. ``silence_rms_floor`` is the RMS level below
+        # which the analyzer treats the input as silent (no spectrum, no
+        # onsets). ``silence_rms_span`` is the additional RMS range over which
+        # the spectrum scales from 0 → 1.  Defaults raised from 0.0015 / 0.05
+        # so PipeWire monitor noise / ambient room hum does not register as
+        # signal when no music is playing.  Tunable via [audio] in config.toml.
+        self._silence_rms_floor: float = max(0.0, float(silence_rms_floor))
+        self._silence_rms_span: float = max(1e-4, float(silence_rms_span))
+        # Last raw input RMS (pre-gate). Exposed for HUD diagnostics so the
+        # user can tell at a glance whether the input is actually silent or
+        # just quiet.
+        self._last_raw_rms: float = 0.0
 
         # P2 — time-based onset envelope (replaces fixed-count _flux_history)
         self._env_buf: np.ndarray = np.zeros(_ENV_LEN, dtype=np.float32)
@@ -143,6 +161,16 @@ class Analyzer:
         """Switch to a new profile and recalculate frequency bands."""
         self._profile = profile
         self._setup_frequency_bands()
+
+    def set_silence_gate(self, floor: float, span: float) -> None:
+        """Update the silence gate thresholds at runtime."""
+        self._silence_rms_floor = max(0.0, float(floor))
+        self._silence_rms_span = max(1e-4, float(span))
+
+    @property
+    def last_raw_rms(self) -> float:
+        """Return the last unprocessed input RMS (pre-gate). 0.0 when silent."""
+        return float(self._last_raw_rms)
 
     # ------------------------------------------------------------------
     # P1 — onset event queue
@@ -241,10 +269,12 @@ class Analyzer:
         spectrum = np.abs(np.fft.rfft(windowed, n=self._bands * 2))
         spectrum = spectrum[: self._bands].astype(np.float32)
 
+        self._last_raw_rms = rms
+
         # Silence/noise gate + per-frame normalization.
         # The previous implementation normalized every frame to 1.0, which made
         # low-level noise look like strong audio and masked actual signal loss.
-        energy = np.clip((rms - 0.0015) / 0.05, 0.0, 1.0)
+        energy = np.clip((rms - self._silence_rms_floor) / self._silence_rms_span, 0.0, 1.0)
         max_val = spectrum.max()
         if max_val > 1e-6 and energy > 1e-5:
             spectrum /= max_val

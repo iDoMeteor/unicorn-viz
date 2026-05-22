@@ -1224,9 +1224,34 @@ void main() {
         self._blend_vbo = vbo  # keep ref so it's not GC'd
 
     def _make_fbo(self) -> moderngl.Framebuffer:
-        tex = self._ctx.texture((self._render_width, self._render_height), 4)
+        # Clamp to GL_MAX_TEXTURE_SIZE just in case the render scale or
+        # display size produces an out-of-range dimension during transitions
+        # (e.g. mirror_all → single while SDL is still reporting transient
+        # geometry).  Without this clamp moderngl raises
+        # "_moderngl.Error: cannot create texture" which previously crashed
+        # the whole app.
+        max_edge = 16384
+        try:
+            max_edge = int(self._ctx.info.get('GL_MAX_TEXTURE_SIZE', max_edge))
+        except Exception:
+            pass
+        width = max(1, min(int(max_edge), int(self._render_width)))
+        height = max(1, min(int(max_edge), int(self._render_height)))
+        try:
+            tex = self._ctx.texture((width, height), 4)
+        except Exception as exc:
+            log.warning(
+                'FBO texture allocation failed at %dx%d (%s); retrying at 1280x720',
+                width, height, exc,
+            )
+            # Fall back to a known-safe size so the app does not crash.
+            # The next resize/mode change will reallocate at the right size.
+            width, height = 1280, 720
+            self._render_width = width
+            self._render_height = height
+            tex = self._ctx.texture((width, height), 4)
         tex.filter = moderngl.LINEAR, moderngl.LINEAR
-        depth = self._ctx.depth_renderbuffer((self._render_width, self._render_height))
+        depth = self._ctx.depth_renderbuffer((width, height))
         return self._ctx.framebuffer(color_attachments=[tex], depth_attachment=depth)
 
     def _update_render_target_size(self) -> None:
@@ -1800,6 +1825,10 @@ void main() {
                     'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
                     'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
                     'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
+                'audio_rms': (
+                    f"{self._audio_manager.get_raw_input_rms():.4f}"
+                    if self._audio_manager is not None else '0.0000'
+                ),
                 'display_mode': self._display_mode,
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',
@@ -2283,6 +2312,23 @@ void main() {
         if self._overlays is not None:
             self._overlays.resize(w, h)
         self._resize_mirror_textures()
+        # When leaving mirror mode the composite FBO is no longer needed.
+        # Release it before recreating fbo_a / fbo_b so its texture/depth
+        # buffer don't linger in GL state during the texture re-allocations
+        # below (which previously surfaced as a "cannot create texture" abort
+        # when toggling mirror_all → single).
+        if self._display_mode != 'mirror_all':
+            composite = getattr(self, '_mirror_composite_fbo', None)
+            if composite is not None:
+                try:
+                    composite.color_attachments[0].release()
+                except Exception:
+                    pass
+                try:
+                    composite.release()
+                except Exception:
+                    pass
+                self._mirror_composite_fbo = None
         # Rebuild FBOs at new size
         if self._fbo_a:
             self._fbo_a.release()
