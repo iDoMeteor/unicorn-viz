@@ -263,9 +263,9 @@ class Raymarcher(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
-        self._mid = audio.mid
-        self._treble = audio.treble
+        self._bass = audio.bass_n
+        self._mid = audio.mid_n
+        self._treble = audio.treble_n
         if audio.beat > 0.5:
             self._beat = 1.0
         self._beat = max(0.0, self._beat - dt * 4.0)

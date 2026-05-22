@@ -168,14 +168,14 @@ class Cube3D(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
+        self._bass = audio.bass_n
         if audio.beat > 0.5:
             self._beat = 1.0
             self._hue += 0.15
         self._beat = max(0.0, self._beat - dt * 4.0)
 
         spd = self.parameters["speed"] * (1.0 + self._bass * 0.5)
-        self._rx += dt * spd * 0.45 + dt * audio.mid * 0.18
+        self._rx += dt * spd * 0.45 + dt * audio.mid_n * 0.18
         self._ry += dt * spd * 0.70
 
     def render(self) -> None:

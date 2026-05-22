@@ -778,6 +778,7 @@ void main() {
 
         left_lines = [
             f"B / M / T   {self._hud_state.get('bass', '0.00')} / {self._hud_state.get('mid', '0.00')} / {self._hud_state.get('treble', '0.00')}",
+            f"Bn/Mn/Tn    {self._hud_state.get('bass_n', '0.50')} / {self._hud_state.get('mid_n', '0.50')} / {self._hud_state.get('treble_n', '0.50')}",
             f"INPUT RMS   {self._hud_state.get('audio_rms', '0.0000')}",
             f"FPS         {self._hud_state.get('fps', '0.0')}",
             f"FRAME MS    {self._hud_state.get('frame_ms', '0.0')}",

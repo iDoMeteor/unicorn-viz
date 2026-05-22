@@ -115,7 +115,7 @@ class Escher(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
+        self._bass = audio.bass_n
         self._mid = audio.mid
         if audio.beat > 0.5:
             self._beat = 1.0

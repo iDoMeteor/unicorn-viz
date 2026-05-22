@@ -150,8 +150,8 @@ class Dali(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
-        self._mid = audio.mid
+        self._bass = audio.bass_n
+        self._mid = audio.mid_n
         if audio.beat > 0.5:
             self._beat = 1.0
             # Beat occasionally triggers a rotation event (not every beat, just some)

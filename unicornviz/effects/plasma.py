@@ -83,8 +83,8 @@ class Plasma(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass
-        self._treble = audio.treble
+        self._bass = audio.bass_n
+        self._treble = audio.treble_n
         # Slowly drift palette
         self.parameters["palette"] = (
             self.parameters["palette"] + dt * 0.05 * self.parameters["speed"]

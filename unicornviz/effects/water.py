@@ -208,9 +208,9 @@ class Water(BaseEffect):
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         amp = float(self.parameters["amplitude"])
-        self._bass   = audio.bass   * amp
+        self._bass   = audio.bass_n   * amp
         self._mid    = audio.mid    * amp
-        self._treble = audio.treble * amp
+        self._treble = audio.treble_n * amp
         self._energy = min(1.0, 0.55 * self._bass + 0.35 * self._mid + 0.20 * self._treble)
 
         if audio.beat > 0.5:

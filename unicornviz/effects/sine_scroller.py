@@ -160,7 +160,7 @@ class SineScroller(BaseEffect):
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
-        self._bass = audio.bass * self.parameters["bass_sensitivity"]
+        self._bass = audio.bass_n * self.parameters["bass_sensitivity"]
         self._mid = audio.mid
         self._treble = audio.treble
         

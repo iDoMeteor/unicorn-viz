@@ -1829,9 +1829,12 @@ void main() {
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
-                    'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
-                    'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
-                    'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
+                'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
+                'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
+                'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
+                'bass_n': f"{self._audio_raw.bass_n:.2f}" if self._audio_raw is not None else '0.50',
+                'mid_n': f"{self._audio_raw.mid_n:.2f}" if self._audio_raw is not None else '0.50',
+                'treble_n': f"{self._audio_raw.treble_n:.2f}" if self._audio_raw is not None else '0.50',
                 'audio_rms': (
                     f"{self._audio_manager.get_raw_input_rms():.4f}"
                     if self._audio_manager is not None else '0.0000'

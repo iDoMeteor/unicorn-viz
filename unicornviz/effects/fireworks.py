@@ -430,8 +430,8 @@ class Fireworks(BaseEffect):
         super().update(dt, audio)
         spd  = float(self.parameters['speed'])
         rate = max(0.3, float(self.parameters['burst_rate']))
-        self._bass   = float(audio.bass)
-        self._treble = float(audio.treble)
+        self._bass   = float(audio.bass_n)
+        self._treble = float(audio.treble_n)
 
         if audio.beat > 0.5:
             self._beat  = 1.0

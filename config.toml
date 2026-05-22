@@ -1,7 +1,7 @@
 [window]
 fullscreen = true
 show_cursor = false
-display_mode  = "single"   # single | span_all | mirror_all
+display_mode  = "mirror_all"   # single | span_all | mirror_all
 #display_index  = 0
 #exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
@@ -14,7 +14,6 @@ transition = "shuffle"
 [audio]
 reactivity = 1.3
 latency = "low"
-try_alsa_loopback = false
 profile = "house"
 
 [ansi]
@@ -26,7 +25,7 @@ ansi_acid_dir = "assets/ansi/acid"
 start_effect = "Audio Spectrum"
 
 [logging]
-level = "error"
+level = "debug"
 
 [dropins]
 exclude = "none"
@@ -93,12 +92,12 @@ stream_key = ""
 [auto_vj]
 enabled = true
 beat_tracker_engine = "v2"
-profile = "raver"          # chill | normie | raver | user (unset => normie preset)
+#profile = "raver"          # chill | normie | raver | user (unset => normie preset)
 auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
-auto_profile_chill_max_bpm = 110.0
-auto_profile_raver_min_bpm = 136.0
-auto_profile_min_confidence = 0.45
-auto_profile_switch_cooldown_s = 20.0
+#auto_profile_chill_max_bpm = 115.0
+#auto_profile_raver_min_bpm = 135.0
+#auto_profile_min_confidence = 0.45
+#auto_profile_switch_cooldown_s = 20.0
 log_decisions = true
 detector_log_interval_s = 1.0
 # With auto_profile_enabled = false, explicit tuning keys below create manual
@@ -130,7 +129,7 @@ detector_log_interval_s = 1.0
 # allow_overlays        = true         # rainbow nova / screen burst / dancing unicorn
 # allow_tweakables      = true         # reactivity / speed / zoom
 # pingpong_a            = "Tron Grid"
-pingpong_b            = "Crystal Pyramids"
+#pingpong_b            = "Crystal Pyramids"
 # pingpong_beats        = 4
 # pingpong_auto_enabled = true         # auto-enter ping-pong only makes sense in raver mode
 # pingpong_auto_bpm_min = 138.0        # require a fast locked groove before triggering
@@ -248,14 +247,19 @@ mix_time       = 20.0        # seconds per clip
 # ---------------------------------------------------------------------------
 # Beat tracker engine selection (inside [auto_vj] section)
 #
-# beat_tracker_engine = "legacy"   — IOI-median estimator (default, stable)
-# beat_tracker_engine = "v2"       — ACF + phase-locked oscillator (new)
+# beat_tracker_engine = "v2"       — ACF + phase-locked oscillator (default)
+# beat_tracker_engine = "legacy"   — IOI-median estimator (fallback)
 #
-# Switch to "v2" only after the harness confirms it wins on your corpus:
-#   python tools/bpm_eval.py --engine v2
+# Optional v2 analysis-mode guardrails (disabled by default):
+# analysis_mode_enabled = true
+# analysis_map_beats = 64
+# analysis_region_min_beats = 8
+# analysis_region_tol = 0.20
+# analysis_region_confidence_min = 0.58
+# analysis_downbeat_confidence_min = 0.55
 #
 # To enable, add the key inside your [auto_vj] block, e.g.:
 #   [auto_vj]
 #   beat_tracker_engine = "v2"
 # ---------------------------------------------------------------------------
-# beat_tracker_engine = "legacy"
+# beat_tracker_engine = "v2"
