@@ -580,3 +580,40 @@ Options in priority order:
    Would require splitting the analyzer threshold so v1 stays calibrated.
 4. **Sequence-model branch** (madmom RNN + DBN). Heaviest lift; only
    justified if (1)-(3) prove insufficient.
+
+## Checkpoint (2026-05-22): Profile-aware beat detection wiring
+
+The interrupted profile-aware implementation has now been completed end-to-end.
+
+What is wired:
+
+- `AudioProfile` now carries beat-detection shaping fields:
+  - `onset_bass_emphasis`, `onset_mid_emphasis`, `onset_treble_emphasis`
+  - `bpm_prior_mu`, `bpm_prior_sigma`
+- `Analyzer` onset flux weighting now uses profile-driven onset emphasis
+  instead of hardcoded fixed weights.
+- `BeatGridTracker` (v1) and `BeatTracker` (v2) both expose `set_profile()`
+  and consume profile BPM priors.
+- `AutoVJController` now syncs the current audio profile into the tracker at
+  startup and on runtime profile changes via `_sync_grid_audio_profile()`.
+
+Stability guard added:
+
+- Profile priors were initially too sharp for some genres (notably `house`),
+  causing over-biased lane selection on low-BPM material.
+- Added minimum sigma floor in tracker prior handling:
+  - `_MIN_PROFILE_PRIOR_SIGMA = 0.45`
+  - Prevents profile priors from overpowering observed onset evidence.
+
+Validation snapshot:
+
+- v2 + `house` profile no longer hard-mislocks 90 BPM into ~146 BPM (fixed by
+  sigma floor).
+- v2 still shows known dense-material residuals on some low-BPM tracks (96
+  can settle a few BPM low and lock slowly), but catastrophic profile-induced
+  lane forcing has been removed.
+
+Operational recommendation remains unchanged:
+
+- Keep `beat_tracker_engine = "v1"` for production sessions.
+- Resume v2 iteration from this profile-aware baseline when ready.

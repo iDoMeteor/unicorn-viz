@@ -105,6 +105,7 @@ class Analyzer:
         # user can tell at a glance whether the input is actually silent or
         # just quiet.
         self._last_raw_rms: float = 0.0
+        self._last_audio_time: float = 0.0
 
         # P2 — time-based onset envelope (replaces fixed-count _flux_history)
         self._env_buf: np.ndarray = np.zeros(_ENV_LEN, dtype=np.float32)
@@ -171,6 +172,11 @@ class Analyzer:
     def last_raw_rms(self) -> float:
         """Return the last unprocessed input RMS (pre-gate). 0.0 when silent."""
         return float(self._last_raw_rms)
+
+    @property
+    def last_audio_time(self) -> float:
+        """Return the timestamp used for the most recent process() call."""
+        return float(self._last_audio_time)
 
     # ------------------------------------------------------------------
     # P1 — onset event queue
@@ -257,6 +263,7 @@ class Analyzer:
         """
         data = AudioData()
         now: float = t if t is not None else time.monotonic()
+        self._last_audio_time = now
 
         if pcm is None or len(pcm) == 0:
             return data

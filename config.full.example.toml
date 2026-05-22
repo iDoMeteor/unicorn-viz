@@ -96,9 +96,18 @@ audio_bitrate = "160k"
 
 [auto_vj]
 enabled = false
+beat_tracker_engine = "v2"   # v2 (default) | legacy
 profile = "normie"   # chill | normie | raver | user
 auto_profile_enabled = false
 log_decisions = false
+# Optional v2 analysis mode: short rolling beat-position map used for
+# downbeat confidence gating and large tempo-lane shift validation.
+# analysis_mode_enabled = true
+# analysis_map_beats = 64
+# analysis_region_min_beats = 8
+# analysis_region_tol = 0.20
+# analysis_region_confidence_min = 0.58
+# analysis_downbeat_confidence_min = 0.55
 # When auto_profile_enabled = false, explicit tuning keys below become manual
 # USER mode layered over the chosen base preset.
 # auto_profile_chill_max_bpm = 110.0

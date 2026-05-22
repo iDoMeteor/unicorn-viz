@@ -989,3 +989,31 @@ for production use until the upstream fix lands.
 
 End of plan. Build it phase by phase, measure every change, keep effects
 working, and the 155-lane bias will be a historical footnote.
+
+---
+
+## 16. Profile-aware follow-through (2026-05-22)
+
+Interrupted work to make audio profiles influence beat detection is complete.
+
+Completed wiring:
+
+1. Added beat-detection shaping parameters to `AudioProfile`:
+  - onset band emphasis triplet (bass/mid/treble)
+  - BPM prior `(mu, sigma)`
+2. Analyzer onset flux weighting now consumes profile onset emphasis.
+3. Both trackers (`BeatGridTracker` and `BeatTracker`) accept profile updates
+  via `set_profile(profile)` and apply profile BPM priors.
+4. Auto VJ sync path added: current runtime audio profile is pushed into the
+  active tracker at init and on profile changes.
+
+Safety fix included:
+
+- Added minimum profile-prior width floor (`sigma >= 0.45`) in tracker prior
+  handling to prevent overconfident profile bias from forcing wrong tempo lanes.
+
+Status:
+
+- Profile-aware architecture is now in place and ready for iterative tuning.
+- Production guidance remains `beat_tracker_engine = "v1"` until v2 live
+  behavior on dense sub-beat material is consistently reliable.

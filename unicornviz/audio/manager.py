@@ -106,6 +106,10 @@ class AudioManager:
     def get_profile(self) -> AudioProfile:
         """Return the current audio profile."""
         return self._profile
+
+    def get_audio_time(self) -> float:
+        """Return analyzer audio-time timestamp of the latest processed block."""
+        return float(self._analyzer.last_audio_time)
     
     def get_profile_key(self) -> str:
         """Return the short key/name of the current profile (e.g. 'house', 'trance')."""

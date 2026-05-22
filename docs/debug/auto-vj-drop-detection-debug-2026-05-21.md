@@ -418,7 +418,77 @@ Post-hardening checks:
    90=89.5, 96=98.0, 120=120.0, 140=139.5, 155=153.8
 - 124/128/164 synthetic checks stable (no >10 BPM frame jumps)
 - 96 synthetic edge case can still lock low, so low-tempo calibration remains
-   the top open issue for next iteration.
+
+## Addendum (2026-05-22, Mixxx-comparison follow-up)
+
+Implemented items from the clock-domain and consistency audit:
+
+1. Audio-clock phase progression (v2)
+    - `AutoVJController.update()` now passes explicit tracker time (`t`) from
+       `AudioManager.get_audio_time()` when available, else falls back to latest
+       onset timestamp.
+    - `BeatTracker.update()` now advances phase by audio-time delta when present,
+       not only render `dt`.
+    - This removes frame-hitch coupling where phase could drift during render
+       stalls and only recover on later onset snaps.
+
+2. Optional analysis mode beat-position map + downbeat confidence gating
+    - Added optional `analysis_mode_enabled` path in v2 tracker.
+    - Maintains a short rolling beat-position map (`analysis_map_beats`).
+    - Computes downbeat confidence from region consistency + phase coherence and
+       gates `is_downbeat` callback firing using
+       `analysis_downbeat_confidence_min`.
+
+3. v2 promoted to default, legacy retained as fallback
+    - Loader default switched to `beat_tracker_engine = "v2"`.
+    - `legacy` remains available and untouched as fallback behavior.
+
+4. Post-lock region consistency guard for tempo-lane shifts
+    - Before accepting large candidate jumps, v2 now checks recent beat-position
+       consistency for the new lane (Mixxx-style "constant-region" spirit).
+    - Guard key: `analysis_region_confidence_min`.
+
+5. New config keys (all optional)
+    - `analysis_mode_enabled`
+    - `analysis_map_beats`
+    - `analysis_region_min_beats`
+    - `analysis_region_tol`
+    - `analysis_region_confidence_min`
+    - `analysis_downbeat_confidence_min`
+
+Code touchpoints for this addendum:
+
+- `drop-ins/auto-vj-01/beat_grid.py`
+- `drop-ins/auto-vj-01/auto_vj.py`
+- `unicornviz/audio/analyzer.py`
+- `unicornviz/audio/manager.py`
+- `config.toml`
+- `config.full.example.toml`
+
+Follow-up calibration pass (2026-05-22, low-BPM rescue):
+
+- Added v2 raw-evidence override so prior-weighted selection cannot ignore a
+   clearly stronger raw comb peak on sparse/slow material.
+- Added onset-density tactus rescue: when selected tempo is much faster than
+   observed onset density, fold checks (3/4, 2/3, 1/2) can reclaim the slower
+   lane if score remains competitive.
+- Added detector snapshot telemetry fields for tuning:
+   - `onset_count` (onsets drained this frame)
+   - `downbeat_confidence` (v2 analysis-mode downbeat confidence)
+
+Seed harness after rescue (`tools/bpm_eval.py --engine v2 --profile house`):
+
+- 90 BPM: 88.2 (err 1.8)
+- 96 BPM: 92.3 (err 3.7)
+- 120 BPM: 117.7 (err 2.4)
+- 140 BPM: 136.4 (err 3.6)
+- 155 BPM: 153.8 (err 1.1)
+
+Interpretation:
+
+- The 90 BPM fast-lane lock regression is resolved.
+- Mid-tempo tracks still show mild low bias (~2-4 BPM) and should be tuned in
+   a dedicated confidence-calibration pass (P7 scope).
 
 Latest user validation (post 182407 run):
 
@@ -484,4 +554,33 @@ Root cause for the remaining live failure is upstream of v2: the
 `unicornviz/audio/analyzer.py` spectral-flux detector is not kick-biased
 enough on dense material. Next-step proposals in
 `auto-vj-handoff-2026-05-21.md` under "Next steps for whoever picks this up".
+
+## Checkpoint (2026-05-22): profile-aware detector wiring complete
+
+The interrupted profile-aware implementation is now complete.
+
+Changes landed in code (tracked in this session):
+
+- `unicornviz/audio/profiles.py`
+   - added onset emphasis fields and BPM prior fields per profile
+- `unicornviz/audio/analyzer.py`
+   - onset flux weighting now uses profile-defined emphasis
+- `drop-ins/auto-vj-01/beat_grid.py`
+   - both v1/v2 trackers consume profile BPM prior via `set_profile()`
+   - added minimum profile prior sigma floor (`>= 0.45`) to prevent over-bias
+- `drop-ins/auto-vj-01/auto_vj.py`
+   - added runtime profile sync (`_sync_grid_audio_profile`) into active tracker
+- `unicornviz/audio/manager.py`
+   - exposes `get_audio_time()` used by tracker timing path
+
+Quick benchmark note:
+
+- v2 + `house` profile previously over-biased low-BPM material into high lanes.
+- sigma-floor guard removed catastrophic over-bias (90 BPM no longer forced to
+   ~146 BPM), though dense-material residual under/slow lock behavior remains.
+
+Operational state remains unchanged:
+
+- Use `beat_tracker_engine = "v1"` for current production sessions.
+- v2 work can resume from this profile-aware baseline.
 
