@@ -1854,6 +1854,11 @@ void main() {
                     if self._audio_manager is not None
                     else '-'
                 ),
+                'audio_profile_reco': (
+                    getattr(self._auto_vj, 'profile_recommendation_hud', '-')
+                    if self._auto_vj is not None
+                    else '-'
+                ),
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
                 'variant_slot_label': variant_label,

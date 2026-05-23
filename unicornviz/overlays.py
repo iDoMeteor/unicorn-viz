@@ -786,6 +786,7 @@ void main() {
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
             f"BPM PROF    {self._hud_state.get('audio_profile', 'house')}",
+            f"REC PROF    {self._hud_state.get('audio_profile_reco', '-')}",
             '',
             '[ TWEAKABLES ]',
             *tweak_lines,
