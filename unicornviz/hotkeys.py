@@ -382,7 +382,7 @@ class HotkeyHandler:
                 current_idx = profiles.index(current_key) if current_key in profiles else 0
                 prev_idx = (current_idx - 1) % len(profiles)
                 prev_profile = self._audio.set_profile(profiles[prev_idx])
-                o.flash_message(f'Audio Profile: {prev_profile.name}', 1.2)
+                o.flash_message(f'BPM Profile: {prev_profile.name}', 1.2)
                 log.info('Audio profile changed: %s → %s', current_profile.name, prev_profile.name)
             elif mod & sdl2.KMOD_ALT:
                 # Alt+A — next audio profile (wraps around)
@@ -392,7 +392,7 @@ class HotkeyHandler:
                 current_idx = profiles.index(current_key) if current_key in profiles else 0
                 next_idx = (current_idx + 1) % len(profiles)
                 next_profile = self._audio.set_profile(profiles[next_idx])
-                o.flash_message(f'Audio Profile: {next_profile.name}', 1.2)
+                o.flash_message(f'BPM Profile: {next_profile.name}', 1.2)
                 log.info('Audio profile changed: %s → %s', current_profile.name, next_profile.name)
             elif mod & sdl2.KMOD_CTRL:
                 # Ctrl+A — audio source selector
