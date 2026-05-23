@@ -281,10 +281,13 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.4,
         smoothing=0.2,
         curve="warm",
-        # Ambient: often weak or no beats, very wide prior.
-        onset_bass_emphasis=1.2,
-        onset_mid_emphasis=1.2,
-        onset_treble_emphasis=1.0,
+        # Ambient: often weak or no beats, very wide prior. 2026-05-23 audit
+        # showed lock rate ~15-25% on chill content vs ~32-42% on club mixes.
+        # Bumped onset emphasis modestly (especially mid/treble) so soft
+        # transients like brushed kicks and pad hits feed the ACF better.
+        onset_bass_emphasis=1.4,
+        onset_mid_emphasis=1.5,
+        onset_treble_emphasis=1.2,
         bpm_prior_mu=100.0,
         bpm_prior_sigma=0.60,
     ),
