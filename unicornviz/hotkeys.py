@@ -93,7 +93,31 @@ class HotkeyHandler:
         is_question = sym == sdl2.SDLK_QUESTION or (
             sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)
         )
-        is_passive = sym == sdl2.SDLK_TAB or is_plain_h or is_question
+        is_modifier_key = sym in {
+            sdl2.SDLK_LSHIFT, sdl2.SDLK_RSHIFT,
+            sdl2.SDLK_LCTRL, sdl2.SDLK_RCTRL,
+            sdl2.SDLK_LALT, sdl2.SDLK_RALT,
+            sdl2.SDLK_LGUI, sdl2.SDLK_RGUI,
+        }
+        is_system_combo = (
+            ((mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_TAB)
+            or ((mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_F4)
+            or bool(mod & sdl2.KMOD_GUI)
+        )
+        # Non-visual controls should not force Auto VJ into USER hold.
+        is_non_visual = sym in {
+            sdl2.SDLK_v,        # recording toggle
+            sdl2.SDLK_h,        # help overlay
+            sdl2.SDLK_TAB,      # HUD toggle
+        }
+        is_passive = (
+            sym == sdl2.SDLK_TAB
+            or is_plain_h
+            or is_question
+            or is_modifier_key
+            or is_system_combo
+            or is_non_visual
+        )
         is_auto_vj_control = (
             ((mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j)
             or ((mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_j)

@@ -743,7 +743,7 @@ void main() {
 
     def _render_hud(self) -> None:
         """Render animated LCARS-style status HUD with pulsing glows, scan lines and decorations."""
-        panel_w = min(1000.0, self._width * 0.88)
+        panel_w = min(1050.0, self._width * 0.93)
         lh = 28.0
         row0_offset = 188.0
         row_text_h = 8.0 * 2.05 + 4.0

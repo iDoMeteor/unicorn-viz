@@ -1,538 +1,453 @@
-# Unicorn Viz — Full Feature Review & Test Session (2026-05-14)
+# Unicorn Viz - Pre-Release Feature Review and Version Tracker
 
-Date: May 14, 2026  
-Goal: comprehensive pass for visual quality, audio reactivity, performance, startup variance, and control sanity across all effects, drop-ins, post-FX, hotkeys, and system features.
-
----
-
-## Scoring System
-
-### Per-Effect Evaluation
-
-**Visual Quality:** 1–5 (1=poor/broken, 5=excellent/polished)  
-**Audio Response:** 1–5 (1=none, 5=perfectly reactive to bass/mid/treble/beat)  
-**Performance:** 1–5 (1=stuttering/glitchy, 5=smooth 60fps stable)  
-**Startup Variance:** PASS/FAIL (does it look different each time it loads?)  
-**Control Clarity:** PASS/FAIL (parameters make sense? hotkeys work? no crashes?)
+Date baseline: 2026-05-23  
+Process: multi-day full-system review  
+Primary goal: one canonical checklist for everything (effects, drop-ins, help menu, startup/runtime modes, and system behaviors) so no context switching between documents is required.
 
 ---
 
-## BUILT-IN EFFECTS (23 total)
+## How To Use This Tracker
 
-### cube_3d
-- [ ] Visual quality: ___/5
-- [ ] Audio response (bass/mid/treble/beat): ___/5
-- [ ] Performance (1080p, all modes): ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, rotation, scale): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
+1. Review sections in the execution order below.
+2. For each line item, mark PASS or FAIL and add short notes.
+3. For each failure, add severity:
+   - P0 = release blocker
+   - P1 = high-priority pre-release fix
+   - P2 = polish/backlog
+4. Keep findings in this file only.
 
-### alien_biome
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### ansi_viewer
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (scroll speed, scale): PASS / FAIL
-- [ ] Hotkey behavior (`,` and `.` work): PASS / FAIL
-- [ ] Notes:
-
-### audio_spectrum
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: EXEMPT
-- [ ] Parameter sanity (bar count, scale): PASS / FAIL
-- [ ] Hotkey behavior (`E` for EQ): PASS / FAIL
-- [ ] Notes:
-
-### copper_bars
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### cosmos
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (zoom, speed): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### crystal_pyramids
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### dali
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### escher
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### fire
-- [ ] Visual quality: ___/5
-- [ ] Audio response (bass drives intensity): ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, turbulence): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### fire_lifelike
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### fractal_zoom
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (zoom speed, depth): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### kaleidoscope
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (rotation, mirror count): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### metaballs
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (count, speed, size): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### particle_storm
-- [ ] Visual quality: ___/5
-- [ ] Audio response (beat triggers bursts): ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### plasma
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, density): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### psychedelic
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### raymarcher
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (FOV, march distance): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### sine_scroller
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (amplitude, frequency): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### starfield
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, depth): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### system_monitor
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: EXEMPT
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### tunnel
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, rotation): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### van_gogh
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### vector
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity: PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
-
-### water
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Parameter sanity (speed, turbulence): PASS / FAIL
-- [ ] Hotkey behavior: PASS / FAIL
-- [ ] Notes:
+Session log template:
+- Date:
+- Reviewer:
+- Scope covered today:
+- New P0/P1/P2:
+- Notes:
 
 ---
 
-## DROP-IN EFFECTS (12 total)
+## Canonical Runtime Review Order
 
-### alien-invasion-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
+This order follows the in-app help flow first, then all non-help surfaces.
 
-### cyber-war-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### disco-ball-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### hacker-terminal-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### images-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### projectm-01 (if present)
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### sims-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### textures-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### tron-grid-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### unicorn-tears-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response (beat-driven teardrops + dancing unicorn): ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Dancing unicorn overlay (Ctrl+U): PASS / FAIL
-- [ ] Notes:
-
-### videos-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
-
-### webcam-01
-- [ ] Visual quality: ___/5
-- [ ] Audio response: ___/5
-- [ ] Performance: ___/5
-- [ ] Startup variance: PASS / FAIL
-- [ ] Notes:
+1. Help Usage
+2. Basics
+3. Playback
+4. Tweakables
+5. Audio + Visual
+6. Display Modes
+7. Camera Overlay
+8. Drop-in Help Sections (runtime alphabetical)
+9. Startup and Boot Modes (non-help)
+10. Drop-in Enable/Disable Matrix (non-help)
+11. Built-in Effects One-Shot Review
+12. Drop-in Visual Effects One-Shot Review
+13. Subsystem Drop-ins (control/streaming/director/finale)
+14. Config Edge Cases and Failure Behavior
+15. Performance and Stability Sweep
+16. Summary Counts
 
 ---
 
-## POST-FX QUICK-HIT SLOTS (8 total)
+## 1) Help Usage
 
-All activated via `Ctrl+Alt+1..8`. Duration ~0.9–1.3s each. Confirm trigger, appearance, and audio coupling.
+- [ ] Shift+- collapses all sections
+- [ ] Shift+= expands all sections
+- [ ] Arrow keys move section focus
+- [ ] Enter toggles focused section
+- [ ] 0-9 toggles section 1-10
+- [ ] H toggles notifications/help behavior as documented
+- [ ] 60s auto-hide behavior feels correct
+- [ ] No overlap/clipping/format issues
 
-### Slot 1: Chromatic Aberration
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (1.15s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 2: Film Grain + Dither
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (0.95s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 3: Glitch Slices
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (0.90s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 4: Heat Haze Refraction
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality (full-screen shimmer): ___/5
-- [ ] Audio coupling (bass/beat): PASS / FAIL
-- [ ] Duration (1.30s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 5: Lens Distortion + Vignette
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (1.05s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 6: Multi-pass Bloom
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling (bass blooms): PASS / FAIL
-- [ ] Duration (1.20s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 7: Radial Zoom Blur
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling: PASS / FAIL
-- [ ] Duration (0.95s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
-
-### Slot 8: Temporal Feedback Trail
-- [ ] Loads cleanly: PASS / FAIL
-- [ ] Visual quality: ___/5
-- [ ] Audio coupling (bass/beat): PASS / FAIL
-- [ ] Duration (0.9s) feels right: PASS / FAIL
-- [ ] No shader errors: PASS / FAIL
+Notes:
 
 ---
 
-## HOTKEYS & CONTROL SYSTEM
+## 2) Basics
 
-### Main Navigation
-- [ ] `Space`: pause/resume — PASS / FAIL
-- [ ] `R`: random mode toggle — PASS / FAIL
-- [ ] `T`: auto-advance toggle — PASS / FAIL
-- [ ] `N` / `P`: next/prev effect — PASS / FAIL
-- [ ] `1..0` / `Shift+1..0` / `Ctrl+1..0` / `Alt+1..0`: effect shortcuts (40 total) — PASS / FAIL
+- [ ] f fullscreen
+- [ ] Number jumps 1-9
+- [ ] Shift+Number jumps 11-20
+- [ ] Ctrl+Number jumps 21-30
+- [ ] Alt+Number jumps 31-40
+- [ ] n / Right next effect
+- [ ] p / Left previous effect
+- [ ] ESC quit
+- [ ] u replay splash
+- [ ] s screenshot
+- [ ] TAB HUD toggle
+- [ ] v recording toggle
 
-### Audio & Reactivity
-- [ ] `[` / `]`: reactivity -/+ — PASS / FAIL
-- [ ] `{` / `}`: reactivity MIN/MAX — PASS / FAIL
-- [ ] `G`: reactivity reset — PASS / FAIL
-- [ ] `F7`: random reactivity toggle — PASS / FAIL
-- [ ] `Alt+A`: next audio profile — PASS / FAIL
-- [ ] `Alt+Shift+A`: prev audio profile — PASS / FAIL
-- [ ] `Ctrl+A`: audio source selector — PASS / FAIL
-- [ ] `E`: jump to Audio Spectrum (EQ) — PASS / FAIL
-
-### Speed & Zoom
-- [ ] `+` / `-`: speed up/down — PASS / FAIL
-- [ ] `Ctrl+=` / `Ctrl+-`: speed MAX/MIN — PASS / FAIL
-- [ ] `Alt+=`: random speed ON — PASS / FAIL
-- [ ] `F6`: random speed toggle — PASS / FAIL
-- [ ] `Ctrl+G`: speed reset — PASS / FAIL
-- [ ] `Z` / `Shift+Z`: zoom in/out — PASS / FAIL
-- [ ] `Ctrl+Z`: zoom reset — PASS / FAIL
-- [ ] `Alt+Z`: random zoom toggle — PASS / FAIL
-
-### Resolution & Display
-- [ ] `,` / `.`: res scale down/up — PASS / FAIL
-- [ ] `Shift+,` / `Shift+.`: res scale MIN/MAX — PASS / FAIL
-- [ ] `Ctrl+,` / `Ctrl+.`: res scale reset — PASS / FAIL
-- [ ] `K`: scale up (alternate) — PASS / FAIL
-- [ ] `Shift+K`: scale down (alternate) — PASS / FAIL
-- [ ] `X`: single display mode — PASS / FAIL
-- [ ] `Shift+X`: span display mode — PASS / FAIL
-- [ ] `Ctrl+X`: mirror display mode — PASS / FAIL
-- [ ] `Alt+X`: display config menu — PASS / FAIL
-
-### Effects & Overlays
-- [ ] `U`: jump to Unicorn Tears — PASS / FAIL
-- [ ] `Shift+U`: splash replay — PASS / FAIL
-- [ ] `Ctrl+U`: dancing unicorn overlay — PASS / FAIL
-- [ ] `Ctrl+Alt+U`: screen burst — PASS / FAIL
-- [ ] `a`: jump to ACiD art — PASS / FAIL
-- [ ] `Shift+A`: jump to own ANSI art — PASS / FAIL
-- [ ] `M`: MIDI device selector — PASS / FAIL
-- [ ] `I`: invert colors toggle — PASS / FAIL
-
-### Post-FX Quick-Hits
-- [ ] `Ctrl+Alt+1..8`: trigger postfx slots 1–8 — PASS / FAIL
-- [ ] Help menu shows all 8 slots correctly — PASS / FAIL
-
-### Recording & Streaming
-- [ ] `V`: recording start/stop — PASS / FAIL
-- [ ] `F8`: streaming toggle — PASS / FAIL
-- [ ] `Ctrl+F9`: set stream provider Rumble — PASS / FAIL
-- [ ] `Ctrl+F10`: set stream provider YouTube — PASS / FAIL
-- [ ] `Ctrl+F11`: set stream provider Custom — PASS / FAIL
-
-### HUD & Display
-- [ ] `Tab`: HUD toggle — PASS / FAIL
-- [ ] `H`: help overlay toggle — PASS / FAIL
-- [ ] `S`: screenshot — PASS / FAIL
-- [ ] `F`: fullscreen toggle — PASS / FAIL
-
-### Crash Checks
-- [ ] No crashes on any single keypress — PASS / FAIL
-- [ ] No crashes on rapid key sequences — PASS / FAIL
-- [ ] No crashes with Alt+Tab while effect running — PASS / FAIL
+Notes:
 
 ---
 
-## SYSTEM FEATURES
+## 3) Playback
 
-### Help Overlay
-- [ ] All hotkey entries visible: PASS / FAIL
-- [ ] Help menu sections properly formatted: PASS / FAIL
-- [ ] Core hotkeys section readable: PASS / FAIL
-- [ ] Post-FX section shows all 8 slots: PASS / FAIL
-- [ ] Drop-in hotkeys (if any) are listed: PASS / FAIL
-- [ ] Toggle with `H` works: PASS / FAIL
+- [ ] ; / ' advance interval -/+ 10s
+- [ ] t auto-advance toggle
+- [ ] Space pause/resume
+- [ ] r random effects mode
+- [ ] \\ reset advance interval
 
-### Display Modes
-- [ ] Single display mode: PASS / FAIL
-- [ ] Span display mode (multi-monitor): PASS / FAIL
-- [ ] Mirror display mode (mirrors across monitors): PASS / FAIL
-- [ ] Mode switching with `X` / `Shift+X` / `Ctrl+X`: PASS / FAIL
-- [ ] Config menu with `Alt+X`: PASS / FAIL
-
-### Recording
-- [ ] Recording start/stop toggles with `V`: PASS / FAIL
-- [ ] Recording indicator appears on screen: PASS / FAIL
-- [ ] Elapsed time updates: PASS / FAIL
-- [ ] Output file created in expected location: PASS / FAIL
-- [ ] No performance hit during recording: PASS / FAIL
-
-### Audio Profiles
-- [ ] List profiles with `Alt+A`: PASS / FAIL
-- [ ] Cycle forward/backward: PASS / FAIL
-- [ ] Profile name updates in overlay: PASS / FAIL
-- [ ] Reactivity scales apply per-profile: PASS / FAIL
-
-### Config Edge Cases
-- [ ] Startup with missing config.toml file: PASS / FAIL
-- [ ] Startup with malformed TOML: PASS / FAIL
-- [ ] Missing effects directory: PASS / FAIL
-- [ ] Missing drop-in submodule: app starts, feature disabled: PASS / FAIL
-- [ ] Corrupt audio device config: fallback to default: PASS / FAIL
+Notes:
 
 ---
 
-## SUMMARY
+## 4) Tweakables
 
-**Built-in effects tested:** 0 / 23  
-**Drop-in effects tested:** 0 / 12  
-**PostFX slots tested:** 0 / 8  
-**Hotkeys verified:** 0 / 40+  
-**System features checked:** 0 / 10  
+- [ ] [ / ] reactivity down/up
+- [ ] { / } reactivity min/max
+- [ ] F7 reactivity random toggle
+- [ ] g reactivity reset
+- [ ] , / . resolution scale down/up
+- [ ] Shift+, / Shift+. resolution scale min/max
+- [ ] Ctrl+, / Ctrl+. resolution scale reset
+- [ ] k / K alternate resolution scale up/down
+- [ ] + / - speed up/down
+- [ ] = / - speed max/min and random behavior matches current implementation
+- [ ] Ctrl+G speed reset
+- [ ] z / Z zoom in/out
+- [ ] Alt+Z zoom random toggle
+- [ ] Ctrl+Z zoom reset
 
-**Issues found (P0 blocker):**  
-(none yet)
-
-**Issues found (P1 important):**  
-(none yet)
-
-**Issues found (P2 minor/cosmetic):**  
-(none yet)
+Notes:
 
 ---
 
-## Next Steps (after feature review)
+## 5) Audio + Visual
 
-- [ ] Run full-session smoke test (20+ min with music)
-- [ ] Profile CPU/GPU during heavy effects + postfx
-- [ ] Test MIDI device integration (if available)
-- [ ] Verify config hot-reload (if implemented)
-- [ ] Performance baseline at 1080p, 1440p, 4K
+- [ ] e jump to EQ/Audio Spectrum
+- [ ] a jump to ACiD art
+- [ ] A jump to own ANSI art
+- [ ] Ctrl+A audio source selector
+- [ ] Alt+A / Alt+Shift+A BPM profile next/prev
+- [ ] Ctrl+Alt+1..9 / 0 Post FX quick-hit trigger
+- [ ] Mouse wheel hue-shift frame works and expires on idle timer
+- [ ] Ctrl+Mouse wheel scene rotation frame works and expires on idle timer
+- [ ] Middle click reset and Auto VJ toggle behavior matches implementation
+- [ ] Ctrl+Alt+F trigger grand finale
+- [ ] Ctrl+Alt+Shift+F abort grand finale
+- [ ] m MIDI device selector
+- [ ] i invert colors
+
+Notes:
+
+---
+
+## 6) Display Modes
+
+- [ ] x single display
+- [ ] X span all
+- [ ] Ctrl+X mirror all
+- [ ] Alt+X config default mode
+- [ ] Switching modes repeatedly does not leak/crash
+
+Notes:
+
+---
+
+## 7) Camera Overlay
+
+- [ ] KP 1-9 PiP position
+- [ ] KP 0 / . PiP fullscreen/hide
+- [ ] KP / * treatment prev/next
+- [ ] KP - / + PiP size
+- [ ] KP Enter treatment auto-cycle
+- [ ] Webcam unavailable path degrades gracefully
+
+Notes:
+
+---
+
+## 8) Drop-in Help Sections (Runtime Alphabetical)
+
+### Auto VJ
+- [ ] Ctrl+Alt+J toggle Auto VJ
+- [ ] Ctrl+J then M cycle profile chill/normie/raver/user behavior
+- [ ] Status text in HUD header is readable and accurate
+- [ ] USER busy-hold only triggers on visual/VJ-affecting input (effect/postfx/tweakables), not modifier-only keys or system combos (Alt+Tab/Ctrl/Shift/record/help)
+
+### Auto VJ Ping-Pong
+- [ ] Ctrl+J then A pin slot A
+- [ ] Ctrl+J then B pin slot B
+- [ ] Ctrl+J then P toggle ping-pong mode
+- [ ] Ctrl+J then R auto-pick pair
+- [ ] Ctrl+J then C clear slots
+- [ ] Leader key timeout/UX feels reliable in live use
+
+### Control Room
+- [ ] Ctrl+Alt+O toggles operator window
+- [ ] Esc closes control room when focused
+- [ ] Main render loop remains smooth while control room open
+
+### Grand Finale
+- [ ] Ctrl+Alt+F triggers sequence
+- [ ] Ctrl+Alt+Shift+F abort restores state cleanly
+- [ ] No stuck state after abort or completion
+
+### Post FX
+- [ ] Ctrl+Alt+1 Chromatic Aberration
+- [ ] Ctrl+Alt+2 Film Grain + Dither
+- [ ] Ctrl+Alt+3 Glitch Slices
+- [ ] Ctrl+Alt+4 Heat Haze Refraction
+- [ ] Ctrl+Alt+5 Lens Distortion + Vignette
+- [ ] Ctrl+Alt+6 Multi-pass Bloom
+- [ ] Ctrl+Alt+7 Radial Zoom Blur
+- [ ] Ctrl+Alt+8 Temporal Feedback Trail
+- [ ] Ctrl+Alt+9 Time Scramble Warp
+- [ ] Ctrl+Alt+0 Smoke and Bubbles
+
+### ProjectM Presets
+- [ ] Ctrl+N next preset
+- [ ] Ctrl+P previous preset
+- [ ] Ctrl+R random preset
+- [ ] Fallback mode behaves correctly when projectM unavailable
+
+### Sim Showcase
+- [ ] Ctrl+N next scene
+- [ ] Ctrl+P previous scene
+- [ ] Ctrl+R random scene
+- [ ] USD missing fallback visual path is acceptable
+
+### Streaming
+- [ ] F8 toggle RTMP streaming
+- [ ] Ctrl+F9 provider Rumble
+- [ ] Ctrl+F10 provider YouTube
+- [ ] Ctrl+F11 provider Custom
+- [ ] Stream key redaction in logs/HUD works
+
+### Unicorn Tears
+- [ ] Ctrl+U dancing unicorn overlay
+- [ ] Alt+U rainbow nova celebration
+- [ ] Ctrl+Alt+U screen burst
+- [ ] U jump to Unicorn Tears effect
+
+Notes:
+
+---
+
+## 9) Startup and Boot Modes (Non-Help)
+
+### Baseline Boot
+- [ ] Clean startup with default config
+- [ ] Startup with Auto VJ enabled
+- [ ] Startup with Auto VJ disabled
+- [ ] Startup with streaming enabled/disabled
+- [ ] Startup with control room enabled/disabled
+
+### Display Startup
+- [ ] Startup in single mode
+- [ ] Startup in span_all mode
+- [ ] Startup in mirror_all mode
+- [ ] Excluded display indices config behaves as expected
+
+### Optional Submodule Independence
+- [ ] Missing auto-vj-01 degrades gracefully
+- [ ] Missing multi-head-01 degrades gracefully
+- [ ] Missing webcam-01 degrades gracefully
+- [ ] Missing streaming-01 degrades gracefully
+- [ ] Missing postfx-01 degrades gracefully
+- [ ] Missing control-room-01 degrades gracefully
+- [ ] Missing grand-finale-01 degrades gracefully
+
+Notes:
+
+---
+
+## 10) Drop-in Enable/Disable Matrix (Non-Help)
+
+Track both enabled and disabled behavior for each drop-in.
+
+| Drop-in | Enabled PASS/FAIL | Disabled PASS/FAIL | Notes |
+|---|---|---|---|
+| alien-invasion-01 | [ ] | [ ] | |
+| auto-vj-01 | [ ] | [ ] | |
+| control-room-01 | [ ] | [ ] | |
+| cyber-war-01 | [ ] | [ ] | |
+| disco-ball-01 | [ ] | [ ] | |
+| grand-finale-01 | [ ] | [ ] | |
+| hacker-terminal-01 | [ ] | [ ] | |
+| images-01 | [ ] | [ ] | |
+| multi-head-01 | [ ] | [ ] | |
+| postfx-01 | [ ] | [ ] | |
+| projectm-01 | [ ] | [ ] | |
+| sims-01 | [ ] | [ ] | |
+| streaming-01 | [ ] | [ ] | |
+| textures-01 | [ ] | [ ] | |
+| tron-grid-01 | [ ] | [ ] | |
+| unicorn-tears-01 | [ ] | [ ] | |
+| videos-01 | [ ] | [ ] | |
+| webcam-01 | [ ] | [ ] | |
+
+---
+
+## 11) Built-in Effects One-Shot Review
+
+Use this for each built-in effect in one pass so all criteria are captured together.
+
+Per-effect one-shot checklist:
+- [ ] Visual quality: ___/5
+- [ ] Audio response: ___/5
+- [ ] Performance single display: ___/5
+- [ ] Performance span mode: ___/5
+- [ ] Performance mirror mode: ___/5
+- [ ] Startup variance: PASS/FAIL (EXEMPT where noted)
+- [ ] Parameter sanity (speed/zoom/reactivity/intensity): PASS/FAIL
+- [ ] Hotkey behavior sanity while active: PASS/FAIL
+- [ ] Notes
+- [ ] Fixes needed (P0/P1/P2)
+
+### Built-in roster
+
+- [ ] 3D Cube (cube_3d)
+- [ ] Wavey Gravy (alien_biome)
+- [ ] ANSI Viewer (ansi_viewer)
+- [ ] Audio Spectrum (audio_spectrum) - startup variance EXEMPT
+- [ ] Copper Bars (copper_bars)
+- [ ] Cosmos (cosmos)
+- [ ] Crystal Pyramids (crystal_pyramids)
+- [ ] Dali (dali)
+- [ ] Escher (escher)
+- [ ] Curtains (fire)
+- [ ] Fire (fire_lifelike)
+- [ ] Fireworks (fireworks)
+- [ ] Fractal Zoom (fractal_zoom)
+- [ ] Kaleidoscope (kaleidoscope)
+- [ ] Metaballs (metaballs)
+- [ ] Particle Storm (particle_storm)
+- [ ] Plasma (plasma)
+- [ ] Psychedelic (psychedelic)
+- [ ] Raymarcher (raymarcher)
+- [ ] Sine Scroller 2.0 (sine_scroller)
+- [ ] Starfield (starfield)
+- [ ] System Monitor (system_monitor) - startup variance EXEMPT
+- [ ] Tunnel (tunnel)
+- [ ] Van Gogh (van_gogh)
+- [ ] Vector (vector)
+- [ ] Water (water)
+
+---
+
+## 12) Drop-in Visual Effects One-Shot Review
+
+Use the same per-effect one-shot checklist as built-ins.
+
+### Drop-in visual roster
+
+- [ ] Alien Invasion (alien-invasion-01)
+- [ ] Cyber War (cyber-war-01)
+- [ ] Disco Ball (disco-ball-01)
+- [ ] Hacker Terminal (hacker-terminal-01)
+- [ ] Image Showcase (images-01)
+- [ ] ProjectM Presets (projectm-01)
+- [ ] Sim Showcase (sims-01)
+- [ ] Texture Showcase (textures-01)
+- [ ] Prism Storm (textures-01)
+- [ ] Tron Grid (tron-grid-01)
+- [ ] Unicorn Tears (unicorn-tears-01)
+- [ ] Video Showcase (videos-01)
+
+---
+
+## 13) Subsystem Drop-ins (Control/Runtime)
+
+### Multi-Head Controller
+- [ ] Detects displays correctly
+- [ ] Span/mirror policies correct
+- [ ] Mirror outputs stable over long session
+- [ ] No readback or sync regressions
+
+### Webcam Overlay
+- [ ] Overlay always-on behavior correct
+- [ ] Treatment switching stable
+- [ ] Camera reconnect/failure path safe
+
+### Streaming
+- [ ] ffmpeg launch/stop robust
+- [ ] Audio capture path stable
+- [ ] Provider switching while active behaves correctly
+
+### Auto VJ Director
+- [ ] Profile presets feel distinct
+- [ ] Manual override keys supersede profile defaults correctly
+- [ ] Speed/zoom/reactivity drift all active when supported
+- [ ] Timed finale behavior correct with and without show duration
+- [ ] Post FX usage policy respects config and runtime toggles
+
+### Grand Finale Controller
+- [ ] Sequence phase progression clean
+- [ ] Abort path restores pre-finale state
+- [ ] No persistent blackout or postfx stuck state
+
+### Control Room Window
+- [ ] Opens on configured display/index
+- [ ] Input events isolated to operator window
+- [ ] Preview and controls update without starving main render
+
+---
+
+## 14) Config Edge Cases and Failure Behavior
+
+- [ ] Missing config file fallback startup
+- [ ] Malformed TOML startup handling
+- [ ] Missing effects directory handling
+- [ ] Missing asset directories handling
+- [ ] Invalid audio input settings fallback
+- [ ] Invalid MIDI device handling
+- [ ] Invalid streaming provider/endpoint handling
+- [ ] Invalid display mode/index handling
+
+---
+
+## 15) Performance and Stability Sweep
+
+- [ ] No crash on any single keypress
+- [ ] No crash on rapid key sequences
+- [ ] No crash during Alt+Tab/focus changes
+- [ ] Stable at 60fps budget on normal scenes
+- [ ] No severe hitch on effect transitions
+- [ ] No memory growth regression in long run
+- [ ] Recording and streaming do not cause unacceptable frame drops
+
+Long-run checks:
+- [ ] 30-minute soak PASS/FAIL
+- [ ] 60-minute soak PASS/FAIL
+
+---
+
+## 16) Summary Counts
+
+- Built-in effects tested: ___ / 26
+- Drop-in visual effects tested: ___ / 12
+- Drop-ins enable/disable matrix completed: ___ / 18
+- Help sections fully validated: ___ / 8+dynamic
+- Post FX slots validated: ___ / 10
+- Startup mode scenarios validated: ___ / 12
+- P0 open: ___
+- P1 open: ___
+- P2 open: ___
+
+Release decision:
+- [ ] GO
+- [ ] NO-GO
+
+---
+
+## Consolidated Notes (Merged from notes.md)
+
+### Confirmed implementation context to verify during review
+
+- Drop-in zoom support was added across drop-in visual effects; verify zoom range feel and behavior consistency during effect passes.
+- Fireworks was significantly retuned (brightness and flare controls); run explicit regression check for runaway white-hot flashes.
+- Auto VJ profile system is active (chill/normie/raver plus user-override behavior); verify parity and audible/visual distinctions.
+- Auto VJ session-time and timed finale behaviors are implemented; verify enabled/disabled-duration behavior explicitly.
+- Leader key timeout for Ctrl+J chains was extended; validate reliability under live pacing.
+
+### Planning carry-overs to validate while reviewing
+
+- Evaluate mapping between effect tags and postfx quick-hit triggers for stronger impact pairings.
+- Validate ping-pong friend pairing behavior and friend-map quality.
+- Validate scroll-wheel hue-shift/postfx interaction behavior and timer reset semantics.
+- Validate middle-click dual behavior (reset vs Auto VJ toggle) for predictability.
+
