@@ -1831,6 +1831,7 @@ void main() {
                     variant_slot = vslot_text.strip()
             overlays.set_hud_state({
                 'title': 'Unicorn Viz HUD',
+                'session_time': self.vj_api._format_session_clock(),
                 'effect': overlays._name_text,
                 'previous_effect': self._previous_effect_name,
                 'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
