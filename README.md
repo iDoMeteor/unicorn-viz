@@ -154,8 +154,13 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 
 ### Audio & Visualization
 - **Live audio capture** — PipeWire/ALSA monitor input with automatic source priority (Spotify > Firefox > system)
-- **Real-time FFT + beat detection** — FFT bars, oscilloscope modes, frequency-mapped visualizations
+- **Real-time FFT + beat intelligence** — profile-aware onset weighting, adaptive MAD thresholding, ACF tempo lane scoring with BPM priors, phase-lock confidence tracking, and drop/build energy slope analysis for musically coherent automation
 - **Per-effect audio reactivity override** — constrain or amplify responsiveness per effect via config
+
+### Auto VJ Intelligence
+- **Sophisticated beat reasoning** — not just onset triggers; Auto VJ continuously fuses BPM lock confidence, phase/downbeat coherence, energy slope, and drop scoring to decide when to build, impact, and climax
+- **Context-aware automation** — profile-specific behavior (Chill/Normie/Raver), cooldown governance, and tag-aware effect selection keep transitions intentional instead of random thrash
+- **Continuous control surfaces** — post-FX hue shift and rotation are handled like knobs with incremental slew behavior for smoother, performance-friendly motion
 
 ### Interactive Controls & Automation
 - **Keyboard shortcuts** — effect navigation, pause/resume, fullscreen, recording, and 40+ more commands
