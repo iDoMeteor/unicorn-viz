@@ -80,6 +80,31 @@ if [[ ! -f "${SOURCE_DIR}/pyproject.toml" ]]; then
   exit 1
 fi
 
+if [[ ! -d "${SOURCE_DIR}/unicornviz" ]]; then
+  echo "unicornviz package directory not found in ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -d "${SOURCE_DIR}/assets" ]]; then
+  echo "assets directory not found in ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${SOURCE_DIR}/assets/icons/unicorn-viz.png" ]]; then
+  echo "assets/icons/unicorn-viz.png not found in ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${SOURCE_DIR}/README.md" ]]; then
+  echo "README.md not found in ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${SOURCE_DIR}/config.full.example.toml" ]]; then
+  echo "config.full.example.toml not found in ${SOURCE_DIR}" >&2
+  exit 1
+fi
+
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
   echo "Python executable not found: ${PYTHON_BIN}" >&2
   exit 1
@@ -105,7 +130,11 @@ mkdir -p "$APP_ROOT" "$BIN_DIR" "$APP_DIR" "$ICON_DIR" "$DOC_DIR" "$OUTPUT_DIR"
 
 cp -a "${SOURCE_DIR}/unicornviz" "$APP_ROOT/"
 cp -a "${SOURCE_DIR}/assets" "$APP_ROOT/"
-cp -a "${SOURCE_DIR}/drop-ins" "$APP_ROOT/"
+if [[ -d "${SOURCE_DIR}/drop-ins" ]]; then
+  cp -a "${SOURCE_DIR}/drop-ins" "$APP_ROOT/"
+else
+  echo "[build-native] drop-ins directory missing in source tree; packaging core-only bundle" >&2
+fi
 cp "${SOURCE_DIR}/requirements.txt" "$APP_ROOT/"
 cp "${SOURCE_DIR}/pyproject.toml" "$APP_ROOT/"
 cp "${SOURCE_DIR}/README.md" "$DOC_DIR/README.md"

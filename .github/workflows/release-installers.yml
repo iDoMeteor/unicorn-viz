@@ -68,6 +68,21 @@ jobs:
             ruby ruby-dev build-essential
           sudo gem install --no-document fpm
 
+      - name: Download and extract tagged source
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p dist src
+          curl -fsSL --retry 3 --retry-delay 2 \
+            -o "dist/unicorn-viz-${VERSION}.tar.gz" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C src
+          SOURCE_DIR="$(find src -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          if [[ -z "${SOURCE_DIR}" ]]; then
+            echo "Failed to locate extracted source directory" >&2
+            exit 1
+          fi
+          echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
+
       - name: Build .deb
         run: |
           mkdir -p dist
@@ -75,6 +90,7 @@ jobs:
           tools/packaging/build_native.sh \
             --format deb \
             --version "${{ steps.version.outputs.value }}" \
+            --source-dir "${SOURCE_DIR}" \
             --output-dir dist
 
       - name: Upload .deb artifact
@@ -105,6 +121,21 @@ jobs:
             ruby ruby-devel rubygems rpm-build
           gem install --no-document fpm
 
+      - name: Download and extract tagged source
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p dist src
+          curl -fsSL --retry 3 --retry-delay 2 \
+            -o "dist/unicorn-viz-${VERSION}.tar.gz" \
+            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C src
+          SOURCE_DIR="$(find src -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          if [[ -z "${SOURCE_DIR}" ]]; then
+            echo "Failed to locate extracted source directory" >&2
+            exit 1
+          fi
+          echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
+
       - name: Build .rpm
         run: |
           mkdir -p dist
@@ -112,6 +143,7 @@ jobs:
           tools/packaging/build_native.sh \
             --format rpm \
             --version "${{ steps.version.outputs.value }}" \
+            --source-dir "${SOURCE_DIR}" \
             --output-dir dist
 
       - name: Upload .rpm artifact
