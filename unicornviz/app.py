@@ -1849,7 +1849,11 @@ void main() {
                 'speed': speed_str,
                 'zoom': zoom_str,
                 'audio_source': audio_src,
-                'audio_profile': self._audio_manager.get_profile().name if self._audio_manager is not None else '-',
+                'audio_profile': (
+                    self._audio_manager.get_profile_hud_label()
+                    if self._audio_manager is not None
+                    else '-'
+                ),
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
                 'variant_slot_label': variant_label,

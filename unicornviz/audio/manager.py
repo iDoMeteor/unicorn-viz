@@ -107,6 +107,14 @@ class AudioManager:
         """Return the current audio profile."""
         return self._profile
 
+    def get_profile_bpm_range(self) -> tuple[int, int]:
+        """Return the preferred BPM range for the active analyzer profile."""
+        return self._profile.preferred_bpm_range()
+
+    def get_profile_hud_label(self) -> str:
+        """Return a compact user-facing profile label for HUD display."""
+        return f'{self._profile.name} ({self._profile.hud_bpm_range_label()})'
+
     def get_audio_time(self) -> float:
         """Return analyzer audio-time timestamp of the latest processed block."""
         return float(self._analyzer.last_audio_time)
@@ -121,7 +129,15 @@ class AudioManager:
         self._profile_key = name
         self._profile = profile
         self._analyzer.set_profile(profile)
-        log.info('Audio profile changed to: %s', profile.name)
+        lo, hi = profile.preferred_bpm_range()
+        log.info(
+            'Audio profile changed to: %s [%d-%d BPM, prior mu=%.0f sigma=%.2f]',
+            profile.name,
+            lo,
+            hi,
+            float(profile.bpm_prior_mu),
+            float(profile.bpm_prior_sigma),
+        )
         return profile
     
     def list_profiles(self) -> list[str]:
