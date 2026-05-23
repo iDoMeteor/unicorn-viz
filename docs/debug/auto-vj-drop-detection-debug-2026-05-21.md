@@ -601,6 +601,7 @@ New Auto VJ knobs:
 - `scrollfx_cruise_interval_s`
 - `scrollfx_climax_interval_s`
 - `scrollfx_rotation_chance` (0..1; mix between hue and rotation)
+- `scrollfx_rotation_deg_min`, `scrollfx_rotation_deg_max`
 - `scrollfx_dy_min`, `scrollfx_dy_max` (wheel-step magnitude range)
 
 Implementation notes:
@@ -609,4 +610,14 @@ Implementation notes:
 - Cruise and climax loops now periodically trigger either `vj_api.hue_scroll()`
    or `vj_api.rotate_scroll()` with randomized signed wheel deltas.
 - README and full example config updated to document the new controls.
+
+Amount tuning follow-up (same day):
+
+- Rotation trigger amount is now independently configurable in **degrees** via
+   `scrollfx_rotation_deg_min/max`.
+- Requested raver behavior applied:
+   - `scrollfx_rotation_deg_min = 270.0`
+   - `scrollfx_rotation_deg_max = 900.0`
+- Cadence/duration behavior is unchanged; only per-trigger rotation amount was
+   increased for raver profile.
 

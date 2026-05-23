@@ -405,14 +405,13 @@ class VJApi:
         except Exception:
             pass
 
-    def rotate_scroll(self, dy: int) -> None:
+    def rotate_scroll(self, dy: int) -> bool:
         """Accumulate Ctrl+scroll rotation by dy steps (+up / -down)."""
-        try:
-            pc = self._app._postfx_controller  # noqa: SLF001
-            if pc is not None:
-                pc.on_ctrl_scroll(int(dy))
-        except Exception:
-            pass
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return False
+        pc.on_ctrl_scroll(int(dy))
+        return True
 
     def trigger_scroll_fx(self, dy: int, *, rotate: bool = False) -> bool:
         """Trigger postfx scroll behavior through the active controller.
@@ -439,14 +438,23 @@ class VJApi:
         except Exception:
             pass
 
-    def rotate_scroll(self, dy: int) -> None:
-        """Accumulate ctrl+scroll scene rotation by dy steps (+up / -down)."""
-        try:
-            pc = self._app._postfx_controller  # noqa: SLF001
-            if pc is not None:
-                pc.on_ctrl_scroll(int(dy))
-        except Exception:
-            pass
+    def rotate_scroll_degrees(self, degrees: float) -> bool:
+        """Accumulate ctrl+scroll scene rotation by explicit degrees.
+
+        Returns True when a postfx controller is present.
+        """
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return False
+        if hasattr(pc, 'on_ctrl_scroll_degrees'):
+            pc.on_ctrl_scroll_degrees(float(degrees))
+        else:
+            # Backward-compatible fallback for older postfx controllers.
+            step = float(getattr(pc, '_rot_step_rad', 0.07) or 0.07)
+            dy = int(round((float(degrees) * 0.017453292519943295) / max(1e-6, step)))
+            if dy != 0:
+                pc.on_ctrl_scroll(dy)
+        return True
 
     def clear_scroll_fx(self) -> None:
         """Clear both scroll-driven post-fx states (hue + rotation)."""

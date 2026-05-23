@@ -119,8 +119,13 @@ log_decisions = false
 # scrollfx_cruise_interval_s = 22.0
 # scrollfx_climax_interval_s = 9.0
 # scrollfx_rotation_chance = 0.50
+# scrollfx_rotation_deg_min = 60.0
+# scrollfx_rotation_deg_max = 120.0
 # scrollfx_dy_min = 1
 # scrollfx_dy_max = 3
+# scrollfx_slew_steps_min = 4
+# scrollfx_slew_steps_max = 8
+# scrollfx_followup_s = 0.22
 # Optional timed-finale support:
 # show_duration_min = 90
 # finale_auto_trigger = true
