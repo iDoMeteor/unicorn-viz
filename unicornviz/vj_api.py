@@ -277,6 +277,19 @@ class VJApi:
             return None
         return max(0.0, float(duration) - self.get_elapsed_time())
 
+    def format_session_clock(self) -> str:
+        """Return elapsed session time as ``MM:SS`` or ``HH:MM:SS``.
+
+        This is a public helper for UI surfaces (HUD/overlays/log views)
+        that need a stable, human-readable runtime clock.
+        """
+        elapsed = max(0, int(self.get_elapsed_time()))
+        minutes, seconds = divmod(elapsed, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours > 0:
+            return f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+        return f'{minutes:02d}:{seconds:02d}'
+
     def set_reactivity(self, value: float) -> float:
         if self._app._audio_manager is None:  # noqa: SLF001
             return 1.0
