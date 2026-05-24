@@ -24,6 +24,9 @@ ansi_acid_dir = "assets/ansi/acid"
 [playlist]
 start_effect = "Audio Spectrum"
 
+[effects.AudioSpectrum]
+scale_when_framed = true
+
 [logging]
 level = "info"
 
@@ -104,6 +107,19 @@ stream_key = ""
 # hue_shift_step = 0.0277777778
 # rotation_timeout_s = 3.0
 # rotation_step_rad = 0.07
+
+# ---------------------------------------------------------------------------
+# Candy Frame overlay  (drop-ins/candy-frame-01)
+# ---------------------------------------------------------------------------
+[candy_frame]
+enabled = true
+start_enabled = false
+inset_px = 77.0              # ~20% smaller frame than 96px default
+corner_radius_px = 50.0
+intensity = 1.0
+pattern_interval_s = 120.0
+reverse_on_cycle = true
+seed = 0
 
 # ---------------------------------------------------------------------------
 # Grand Finale controller  (drop-ins/grand-finale-01)
@@ -228,6 +244,7 @@ pip_position   = "hidden"  # top_left | top_center | top_right |
 preload_images = true        # true = warm image cache at startup
 # speed = 1.0
 mix_time = 15.0              # seconds per image
+scale_when_framed = true
 
 # ---------------------------------------------------------------------------
 # Video Showcase drop-in  (drop-ins/videos-01)
@@ -240,6 +257,7 @@ mix_time = 15.0              # seconds per image
 preload_videos = false        # true = open/prime clips at startup
 # speed          = 1.0
 mix_time       = 20.0        # seconds per clip
+scale_when_framed = true
 
 # ---------------------------------------------------------------------------
 # Sim Showcase drop-in  (drop-ins/sims-01)

@@ -275,6 +275,7 @@ class AudioSpectrum(BaseEffect):
 
     def _init(self) -> None:
         self.parameters = {"mode": 2, "glow": 1.0}
+        self.scale_when_framed = bool(self.config.get('scale_when_framed', True))
 
         self._nebula_prog = self._make_program(_VERT_FULL, _FRAG_NEBULA)
         self._nebula_vao, self._nebula_vbo = self._fullscreen_quad(self._nebula_prog)

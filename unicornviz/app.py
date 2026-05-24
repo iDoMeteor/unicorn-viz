@@ -2363,6 +2363,56 @@ void main() {
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
 
+    def _effect_viewport_for_target(
+        self,
+        target_width: int,
+        target_height: int,
+        effect: BaseEffect | None,
+    ) -> tuple[int, int, int, int]:
+        """Return viewport for rendering an effect into a target.
+
+        When Candy Frame is active and the effect opts in via
+        ``scale_when_framed = true``, render inside the frame content area.
+        """
+        if target_width <= 0 or target_height <= 0:
+            return (0, 0, max(1, target_width), max(1, target_height))
+
+        if self._candy_frame is None or not bool(self._candy_frame.active):
+            return (0, 0, target_width, target_height)
+        if effect is None or not bool(getattr(effect, 'scale_when_framed', False)):
+            return (0, 0, target_width, target_height)
+
+        method = getattr(self._candy_frame, 'content_viewport', None)
+        if not callable(method):
+            return (0, 0, target_width, target_height)
+
+        try:
+            x, y, w, h = method(target_width, target_height)
+            x = int(max(0, x))
+            y = int(max(0, y))
+            w = int(max(1, min(target_width - x, w)))
+            h = int(max(1, min(target_height - y, h)))
+            return (x, y, w, h)
+        except Exception as exc:
+            log.debug('Candy Frame viewport fallback: %s', exc)
+            return (0, 0, target_width, target_height)
+
+    def _render_effect_to_current_target(
+        self,
+        effect: BaseEffect | None,
+        target_width: int,
+        target_height: int,
+    ) -> None:
+        """Render one effect to the currently bound framebuffer target."""
+        if effect is None:
+            return
+        self._ctx.viewport = self._effect_viewport_for_target(
+            target_width,
+            target_height,
+            effect,
+        )
+        effect.render()
+
     def _render(self, dt: float) -> None:
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
@@ -2384,8 +2434,11 @@ void main() {
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
-                if self._current_effect:
-                    self._current_effect.render()
+                self._render_effect_to_current_target(
+                    self._current_effect,
+                    self._render_width,
+                    self._render_height,
+                )
                 if mirror_mode:
                     if self._invert_colors:
                         # Invert into fbo_b, copy back into fbo_a so webcam/HUD
@@ -2465,8 +2518,11 @@ void main() {
                 ctx.screen.use()
                 ctx.viewport = (0, 0, self._width, self._height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
-                if self._current_effect:
-                    self._current_effect.render()
+                self._render_effect_to_current_target(
+                    self._current_effect,
+                    self._width,
+                    self._height,
+                )
         else:
             # Transition in progress
             audio_impact = 0.0
@@ -2494,8 +2550,11 @@ void main() {
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
-                    if self._current_effect:
-                        self._current_effect.render()
+                    self._render_effect_to_current_target(
+                        self._current_effect,
+                        self._render_width,
+                        self._render_height,
+                    )
                     if mirror_mode:
                         # Leave fbo_a bound; tile-blit at end of frame.
                         self._fbo_a.use()
@@ -2518,20 +2577,31 @@ void main() {
                     ctx.screen.use()
                     ctx.viewport = (0, 0, self._width, self._height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
-                    if self._current_effect:
-                        self._current_effect.render()
+                    self._render_effect_to_current_target(
+                        self._current_effect,
+                        self._width,
+                        self._height,
+                    )
             else:
                 # Render A into FBO a
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
-                self._current_effect.render()
+                self._render_effect_to_current_target(
+                    self._current_effect,
+                    self._render_width,
+                    self._render_height,
+                )
 
                 # Render B into FBO b
                 self._fbo_b.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
-                self._next_effect.render()
+                self._render_effect_to_current_target(
+                    self._next_effect,
+                    self._render_width,
+                    self._render_height,
+                )
 
                 # Transition composite — to mirror compose FBO if mirror,
                 # fbo_a when postfx is active, else directly to screen.
