@@ -2169,6 +2169,13 @@ void main() {
                     self._ctx.viewport = (0, 0, self._width, self._height)
                     self._dancing_unicorn.render(self._ctx, self._width, self._height)
             if self._candy_frame is not None:
+                fill_needed = (
+                    self._effect_requests_frame_scaling(self._current_effect)
+                    or self._effect_requests_frame_scaling(self._next_effect)
+                )
+                set_needed = getattr(self._candy_frame, 'set_outer_fill_needed', None)
+                if callable(set_needed):
+                    set_needed(fill_needed)
                 audio = self._audio or AudioData()
                 self._candy_frame.update(
                     dt,
@@ -2395,9 +2402,7 @@ void main() {
 
         if self._candy_frame is None or not bool(self._candy_frame.active):
             return (0, 0, target_width, target_height)
-        if bool(getattr(effect, 'candy_frame_disallow', False)):
-            return (0, 0, target_width, target_height)
-        if effect is None or not bool(getattr(effect, 'scale_when_framed', False)):
+        if not self._effect_requests_frame_scaling(effect):
             return (0, 0, target_width, target_height)
 
         method = getattr(self._candy_frame, 'content_viewport', None)
@@ -2414,6 +2419,14 @@ void main() {
         except Exception as exc:
             log.debug('Candy Frame viewport fallback: %s', exc)
             return (0, 0, target_width, target_height)
+
+    def _effect_requests_frame_scaling(self, effect: BaseEffect | None) -> bool:
+        """Return True when effect requests inner-frame scaling."""
+        if effect is None:
+            return False
+        if bool(getattr(effect, 'candy_frame_disallow', False)):
+            return False
+        return bool(getattr(effect, 'scale_when_framed', False))
 
     def _render_effect_to_current_target(
         self,

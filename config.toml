@@ -120,6 +120,9 @@ corner_radius_px = 50.0
 intensity = 1.0
 pattern_interval_s = 120.0
 reverse_on_cycle = true
+outer_fill_mode = "auto"     # auto | mirror_blur | reactive_gradient | off
+outer_fill_rotate_s = 24.0
+outer_fill_mix = 0.84
 seed = 0
 
 # ---------------------------------------------------------------------------
@@ -261,6 +264,15 @@ preload_videos = false        # true = open/prime clips at startup
 mix_time       = 20.0        # seconds per clip
 scale_when_framed = true
 # candy_frame_disallow = true
+
+# ---------------------------------------------------------------------------
+# Hacker Terminal (drop-ins/hacker-terminal-01)
+# Disable framed scaling because internal zoom/warp styles can expose static
+# outer-clear regions that read as a fixed black matte.
+# ---------------------------------------------------------------------------
+[effects.HackerTerminal]
+scale_when_framed = false
+candy_frame_disallow = true
 
 # ---------------------------------------------------------------------------
 # Sim Showcase drop-in  (drop-ins/sims-01)

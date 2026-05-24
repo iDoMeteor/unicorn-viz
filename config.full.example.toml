@@ -125,6 +125,9 @@ corner_radius_px = 50.0
 intensity = 1.0
 pattern_interval_s = 120.0
 reverse_on_cycle = true
+outer_fill_mode = "auto"     # auto | mirror_blur | reactive_gradient | off
+outer_fill_rotate_s = 24.0
+outer_fill_mix = 0.84
 seed = 0
 
 [auto_vj]
