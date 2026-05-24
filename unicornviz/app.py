@@ -1171,8 +1171,9 @@ void main() {
         if self._auto_vj is None:
             return 'Auto VJ not loaded'
         enabled = self._auto_vj.toggle()
-        self.vj_api.set_status_pill(self._auto_vj.status_text)
-        return 'Auto VJ  ON' if enabled else 'Auto VJ  OFF'
+        pill = 'AUTO VJ  ON' if enabled else 'AUTO VJ  OFF'
+        self.vj_api.set_status_pill(pill)
+        return pill
 
     def _burst_transform(self) -> tuple[float, float]:
         """Return (scale, angle_radians) for current burst frame."""
