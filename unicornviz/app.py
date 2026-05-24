@@ -2169,36 +2169,6 @@ void main() {
                     self._ctx.screen.use()
                     self._ctx.viewport = (0, 0, self._width, self._height)
                     self._dancing_unicorn.render(self._ctx, self._width, self._height)
-            if self._candy_frame is not None:
-                fill_needed = (
-                    self._effect_requests_frame_scaling(self._current_effect)
-                    or self._effect_requests_frame_scaling(self._next_effect)
-                )
-                set_needed = getattr(self._candy_frame, 'set_outer_fill_needed', None)
-                if callable(set_needed):
-                    set_needed(fill_needed)
-                audio = self._audio or AudioData()
-                self._candy_frame.update(
-                    dt,
-                    float(audio.bass),
-                    float(audio.mid),
-                    float(audio.treble),
-                    float(audio.beat),
-                )
-                if self._candy_frame.active:
-                    if mirror_mode_active:
-                        self._fbo_b.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._candy_frame.render(self._fbo_a.color_attachments[0])
-                        self._fbo_a.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
-                    else:
-                        self._ctx.screen.use()
-                        self._ctx.viewport = (0, 0, self._width, self._height)
-                        self._candy_frame.render(self._fbo_a.color_attachments[0])
             if self._rainbow_nova is not None:
                 self._rainbow_nova.update(dt)
                 if self._rainbow_nova.is_active:
@@ -2239,6 +2209,36 @@ void main() {
                         None,
                         self._width, self._height,
                     )
+            if self._candy_frame is not None:
+                fill_needed = (
+                    self._effect_requests_frame_scaling(self._current_effect)
+                    or self._effect_requests_frame_scaling(self._next_effect)
+                )
+                set_needed = getattr(self._candy_frame, 'set_outer_fill_needed', None)
+                if callable(set_needed):
+                    set_needed(fill_needed)
+                audio = self._audio or AudioData()
+                self._candy_frame.update(
+                    dt,
+                    float(audio.bass),
+                    float(audio.mid),
+                    float(audio.treble),
+                    float(audio.beat),
+                )
+                if self._candy_frame.active:
+                    if mirror_mode_active:
+                        self._fbo_b.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._candy_frame.render(self._fbo_a.color_attachments[0])
+                        self._fbo_a.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._candy_frame.render(self._fbo_a.color_attachments[0])
             self._sync_recording_overlay()
             primary_overlay_view = self._primary_display_viewport()
             if mirror_mode_active:
@@ -2554,6 +2554,12 @@ void main() {
                         float(audio.treble),
                         float(audio.beat),
                     )
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    self._fbo_b.color_attachments[0].use(location=0)
+                    self._present_prog['tex'].value = 0
+                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     self._present_from_tex(self._fbo_b.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
@@ -2613,6 +2619,12 @@ void main() {
                             float(audio.treble),
                             float(audio.beat),
                         )
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
                         self._present_from_tex(self._fbo_b.color_attachments[0])
                     else:
                         self._present_from_tex(self._fbo_a.color_attachments[0])
@@ -2693,6 +2705,12 @@ void main() {
                         float(audio.treble),
                         float(audio.beat),
                     )
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    self._fbo_b.color_attachments[0].use(location=0)
+                    self._present_prog['tex'].value = 0
+                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     self._present_from_tex(self._fbo_b.color_attachments[0])
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
