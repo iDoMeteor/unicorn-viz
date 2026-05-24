@@ -543,6 +543,21 @@ class App:
     def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
         return self._multihead.window_position_for_display(display_index, self._width, self._height)
 
+    def _primary_display_viewport(self) -> tuple[int, int, int, int] | None:
+        """Return window-local viewport for the primary display in multi-display modes."""
+        if self._display_mode not in {'mirror_all', 'span_all'}:
+            return None
+        layouts = self._multihead_layouts()
+        if not layouts:
+            return None
+        px, py, pw, ph = layouts[0]
+        if self._display_mode == 'mirror_all':
+            origin_x = self._window_origin_x
+            origin_y = self._window_origin_y
+        else:
+            origin_x, origin_y, _w, _h = self._all_display_bounds()
+        return (px - origin_x, py - origin_y, pw, ph)
+
     def _move_window_to_display(self) -> None:
         self._multihead.move_window_to_display(self._window, self._width, self._height)
 
@@ -1978,7 +1993,17 @@ void main() {
                         self._width, self._height,
                     )
             self._sync_recording_overlay()
-            overlays.render(dt, include_recording_indicator=False)
+            primary_overlay_view = self._primary_display_viewport()
+            if mirror_mode_active:
+                # Compose stage finished into _fbo_a; tile-blit first.
+                self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+            if primary_overlay_view is not None:
+                vx, vy, vw, vh = primary_overlay_view
+                self._ctx.screen.use()
+                self._ctx.viewport = (vx, vy, vw, vh)
+                overlays.render(dt, include_recording_indicator=False)
+            else:
+                overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
             need_frame_for_streaming = (
                 self._streamer is not None and self._streamer.is_streaming
@@ -1994,9 +2019,6 @@ void main() {
                 self._update_frame_capture_snapshot(stream_frame)
             else:
                 self._update_frame_capture_snapshot(None)
-            if mirror_mode_active:
-                # Compose stage finished into _fbo_a; now tile-blit to spanned window.
-                self._present_mirror_tiled(self._fbo_a.color_attachments[0])
             need_frame_for_recording = (
                 self._recorder is not None and self._recorder.is_recording
             )
@@ -2013,7 +2035,13 @@ void main() {
             if need_frame_for_streaming and stream_frame is not None:
                 if not self._streamer.write_frame(stream_frame):
                     log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
-            overlays.render_live_recording_indicator()
+            if primary_overlay_view is not None:
+                vx, vy, vw, vh = primary_overlay_view
+                self._ctx.screen.use()
+                self._ctx.viewport = (vx, vy, vw, vh)
+                overlays.render_live_recording_indicator()
+            else:
+                overlays.render_live_recording_indicator()
             if need_frame_for_mirror and shared_frame is not None:
                 self._present_mirror_outputs(shared_frame)
 
