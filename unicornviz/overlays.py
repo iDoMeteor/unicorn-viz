@@ -301,6 +301,18 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
     return tex, 8, 8, N_CHARS * 8, 8
 
 
+# ---------------------------------------------------------------------------
+# Call-to-action (CTA) hype overlay — three cycling social messages.
+# Triggered by F8; each press advances to the next slot.
+# ---------------------------------------------------------------------------
+_CTA_SHOW_DURATION: float = 4.5
+_CTA_SLOTS: list[tuple[str, str]] = [
+    ('Push the buttons!',  '\U0001f44d'),              # 👍
+    ('Do the thangs!',     '\U0001f514'),              # 🔔
+    ('Share the love!',    '\u2764\ufe0f\u2009\U0001f4e4'),  # ❤️ 📤
+]
+
+
 class Overlays:
     """Manages all HUD/overlay rendering."""
 
@@ -396,6 +408,7 @@ class Overlays:
                 ('Middle Click', 'Reset hue+rotation / Toggle Auto VJ'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
                 ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
+                ('F9', 'CTA hype overlay — cycle Push / Thangs / Share'),
                 ('m', 'MIDI device'),
                 ('i', 'Invert colors'),
             ],
@@ -532,6 +545,17 @@ class Overlays:
         self._help_focus_idx: int = 0
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
+
+        # CTA hype overlay state
+        self._cta_timer: float = 0.0
+        self._cta_slot: int = -1
+        self._cta_t: float = 0.0
+        self._cta_textures: list[moderngl.Texture] | None = None
+        self._cta_tex_w: int = 1600
+        self._cta_tex_h: int = 340
+        self._cta_blit_prog: moderngl.Program | None = None
+        self._cta_quad_vbo: moderngl.Buffer | None = None
+        self._cta_quad_vao: moderngl.VertexArray | None = None
 
         self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h = _build_font_texture(ctx)
         # Keep historical scale semantics (scale=1 roughly equals an 8 px cell).
@@ -809,7 +833,8 @@ void main() {
         ]
 
         rows = max(len(left_lines), len(right_lines))
-        content_bottom = row0_offset + max(0, rows - 1) * lh + row_text_h
+        bottom_status_h = 64.0
+        content_bottom = row0_offset + max(0, rows - 1) * lh + row_text_h + bottom_status_h
         panel_h_needed = content_bottom + 34.0
         panel_h = min(max(520.0, panel_h_needed), self._height * 0.88)
         x = (self._width - panel_w) * 0.5
@@ -984,15 +1009,8 @@ void main() {
         dx = x + (panel_w - len(dt_line) * 8.0 * 2.2) * 0.5
         self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
         session_line = f"SESSION   {self._hud_state.get('session_time', '00:00')}"
-        sx_session = x + (panel_w - len(session_line) * 8.0 * 1.7) * 0.5
-        self._draw_text(session_line, sx_session, y + 62.0, scale=1.7, color=(0.90, 0.98, 1.0, 0.92))
-        vj_status = str(self._hud_state.get('vj_status', '')).strip()
-        if vj_status:
-            # Keep the status line coherent and centered in the header.
-            max_chars = 72
-            status_line = vj_status if len(vj_status) <= max_chars else (vj_status[: max_chars - 3] + '...')
-            sx = x + (panel_w - len(status_line) * 8.0 * 1.65) * 0.5
-            self._draw_text(status_line, max(x + 22.0, sx), y + 78.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
+        sx_session = x + (panel_w - len(session_line) * 8.0 * 2.2) * 0.5
+        self._draw_text(session_line, sx_session, y + 70.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner
@@ -1056,6 +1074,29 @@ void main() {
             if i % 2 == 1:
                 self._draw_rect(right_x - 8.0, row_y - 2.0, col_half, lh + 2.0, (0.16, 0.08, 0.04, 0.35))
             self._draw_text(ln, right_x, row_y, scale=2.05, color=(0.98, 0.68, 0.22, 0.96))
+
+        # ── layer 9.5: fixed bottom Auto VJ status section ─────────────
+        status_box_w = min(780.0, panel_w * 0.78)
+        status_box_h = 50.0
+        status_box_x = x + (panel_w - status_box_w) * 0.5
+        status_box_y = y + panel_h - 72.0
+        self._draw_rect(status_box_x, status_box_y, status_box_w, status_box_h, (0.03, 0.08, 0.14, 0.82))
+        self._draw_rect(status_box_x, status_box_y, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.40 + pulse_med * 0.14))
+        self._draw_rect(status_box_x, status_box_y + status_box_h - 2.0, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.28 + pulse_slow * 0.12))
+
+        mood = str(self._hud_state.get('auto_vj_mood', '-')).upper()
+        scene = str(self._hud_state.get('auto_vj_scene', '-')).upper()
+        genre = str(self._hud_state.get('audio_profile_name', '-'))
+        if len(genre) > 26:
+            genre = genre[:23] + '...'
+        bpm = str(self._hud_state.get('auto_vj_bpm', '--'))
+        action_in = str(self._hud_state.get('auto_vj_action_in', '--'))
+
+        line1 = f'MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre}'
+        line2 = f'BPM: {bpm:<4} | ACTION IN: {action_in}'
+        text_x = status_box_x + 18.0
+        self._draw_text(line1, text_x, status_box_y + 7.0, scale=1.9, color=(0.86, 1.0, 0.86, 0.96))
+        self._draw_text(line2, text_x, status_box_y + 28.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
         # Three evenly spaced horizontal tick marks on the right border
@@ -1121,6 +1162,9 @@ void main() {
 
         if include_recording_indicator:
             self._render_recording_indicator()
+
+        if self._cta_timer > 0.0:
+            self._render_cta(dt)
 
         if self._show_help:
             # dark underlay behind help
@@ -1617,6 +1661,13 @@ void main() {
         self._flash_text = f">> {name}"
         self._flash_timer = duration
 
+    def trigger_cta(self) -> None:
+        """Advance to the next CTA slot and start the hype animation."""
+        self._cta_slot = (self._cta_slot + 1) % len(_CTA_SLOTS)
+        self._cta_timer = _CTA_SHOW_DURATION
+        self._cta_t = 0.0
+        self._ensure_cta_resources()
+
     def flash_message(self, msg: str, duration: float = 2.0) -> None:
         if not self._flash_enabled:
             return
@@ -1662,6 +1713,238 @@ void main() {
         self._width = w
         self._height = h
 
+    # ------------------------------------------------------------------
+    # CTA hype overlay — internal helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_cta_resources(self) -> None:
+        """Lazily build the neon blit shader and PIL textures for all CTA slots."""
+        if self._cta_blit_prog is None:
+            vert = """
+#version 330
+in vec2 in_pos;
+in vec2 in_uv;
+out vec2 v_uv;
+void main() {
+    v_uv = in_uv;
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+}
+"""
+            frag = """
+#version 330
+uniform sampler2D iChannel0;
+uniform float     iTime;
+uniform float     iPhase;
+uniform float     iAlpha;
+in  vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    // Chromatic aberration: strong on entry, subtle on hold
+    float ca  = mix(0.018, 0.004, clamp(iPhase * 2.5, 0.0, 1.0));
+    float r   = texture(iChannel0, v_uv + vec2(-ca, 0.0)).r;
+    float g   = texture(iChannel0, v_uv).g;
+    float b   = texture(iChannel0, v_uv + vec2( ca, 0.0)).b;
+    float a   = texture(iChannel0, v_uv).a;
+    // Neon hue cycle: hot-pink <-> electric cyan
+    float cyc  = 0.5 + 0.5 * sin(iTime * 2.8);
+    vec3  nA   = vec3(1.0,  0.12, 0.88);
+    vec3  nB   = vec3(0.05, 0.95, 1.0);
+    vec3  neon = mix(nA, nB, cyc);
+    vec3  col  = vec3(r, g, b);
+    float lum  = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, col * neon * 1.5, 0.45 * lum);
+    // Scanline shimmer
+    col *= 0.92 + 0.08 * sin(v_uv.y * 160.0 + iTime * 18.0);
+    // Beat-sync pulse
+    col *= 0.90 + 0.10 * sin(iTime * 9.2);
+    fragColor = vec4(col, a * iAlpha);
+}
+"""
+            self._cta_blit_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+            self._cta_quad_vbo = self._ctx.buffer(reserve=6 * 4 * 4)
+            self._cta_quad_vao = self._ctx.vertex_array(
+                self._cta_blit_prog,
+                [(self._cta_quad_vbo, '2f 2f', 'in_pos', 'in_uv')],
+            )
+
+        if self._cta_textures is not None:
+            return
+
+        self._cta_textures = []
+        if not _PIL_AVAILABLE:
+            return
+
+        _text_candidates = [
+            Path('/usr/share/fonts/julietaula-montserrat-fonts/Montserrat-ExtraBold.otf'),
+            Path('/usr/share/fonts/julietaula-montserrat-fonts/Montserrat-Bold.otf'),
+            Path('assets/fonts/ui-font.ttf'),
+            Path('/usr/share/fonts/abattis-cantarell-vf-fonts/Cantarell-VF.otf'),
+            Path('/usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf'),
+            Path('/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf'),
+            Path('/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf'),
+        ]
+        _emoji_candidates = [
+            Path('/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf'),
+            Path('/usr/share/fonts/google-noto-emoji-fonts/NotoColorEmoji.ttf'),
+            Path('/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf'),
+        ]
+        text_font_path = next((p for p in _text_candidates if p.exists()), None)
+        emoji_font_path = next((p for p in _emoji_candidates if p.exists()), None)
+
+        text_font = None
+        emoji_font = None
+        try:
+            if text_font_path:
+                text_font = ImageFont.truetype(str(text_font_path), size=130)
+        except Exception:
+            pass
+        try:
+            if emoji_font_path:
+                emoji_font = ImageFont.truetype(str(emoji_font_path), size=140)
+        except Exception:
+            pass
+
+        TEX_W, TEX_H = self._cta_tex_w, self._cta_tex_h
+        for text, icon in _CTA_SLOTS:
+            try:
+                img = self._render_cta_image(text, icon, TEX_W, TEX_H, text_font, emoji_font)
+            except Exception:
+                log.debug('CTA image render failed for %r; using blank', text, exc_info=True)
+                img = Image.new('RGBA', (TEX_W, TEX_H), (0, 0, 0, 0))
+            data = np.array(img, dtype=np.uint8)
+            tex = self._ctx.texture((TEX_W, TEX_H), 4, data=data.tobytes())
+            tex.filter = moderngl.LINEAR, moderngl.LINEAR
+            self._cta_textures.append(tex)
+
+    def _render_cta_image(
+        self,
+        text: str,
+        icon: str,
+        width: int,
+        height: int,
+        text_font: 'ImageFont.FreeTypeFont | None',
+        emoji_font: 'ImageFont.FreeTypeFont | None',
+    ) -> 'Image.Image':
+        """Render one CTA message + icon to a transparent RGBA PIL image."""
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        font = text_font or ImageFont.load_default()
+        icon_font = emoji_font or font
+        # Strip variation selectors so fallback fonts render cleanly
+        icon_clean = icon.replace('\ufe0f', '').strip()
+
+        bbox_t = draw.textbbox((0, 0), text, font=font)
+        tw = bbox_t[2] - bbox_t[0]
+        th = bbox_t[3] - bbox_t[1]
+
+        iw, ih = 0, 0
+        bbox_i = (0, 0, 0, 0)
+        if icon_clean:
+            try:
+                bbox_i = draw.textbbox((0, 0), icon_clean, font=icon_font)
+                iw = bbox_i[2] - bbox_i[0]
+                ih = bbox_i[3] - bbox_i[1]
+            except Exception:
+                icon_clean = ''
+
+        gap = 36 if icon_clean else 0
+        total_w = tw + gap + iw
+        tx = max(0, (width - total_w) // 2)
+        ty = (height - th) // 2
+
+        # Pure white text — neon color tint applied by the GLSL shader
+        draw.text((tx - bbox_t[0], ty - bbox_t[1]), text, font=font, fill=(255, 255, 255, 255))
+
+        if icon_clean:
+            ix = tx + tw + gap
+            iy = ty + (th - ih) // 2
+            draw.text((ix - bbox_i[0], iy - bbox_i[1]), icon_clean, font=icon_font, fill=(255, 255, 255, 255))
+
+        return img
+
+    def _render_cta(self, dt: float) -> None:
+        """Tick and draw the active CTA overlay with spring-bounce entry and neon glow."""
+        if self._cta_blit_prog is None or self._cta_textures is None:
+            return
+        if not (0 <= self._cta_slot < len(self._cta_textures)):
+            return
+
+        self._cta_timer -= dt
+        self._cta_t += dt
+
+        elapsed = _CTA_SHOW_DURATION - self._cta_timer
+        _ENTRY = 0.45
+        _EXIT_START = _CTA_SHOW_DURATION - 0.65
+        _EXIT_DUR = 0.65
+
+        if elapsed < _ENTRY:
+            t_e = elapsed / _ENTRY
+            spring = 1.0 - math.exp(-t_e * 6.0) * math.cos(t_e * math.pi * 2.2)
+            scale_f = max(0.0, min(1.08, spring))
+            alpha = min(1.0, t_e * 4.0)
+        elif elapsed > _EXIT_START:
+            t_x = min(1.0, (elapsed - _EXIT_START) / _EXIT_DUR)
+            scale_f = 1.0 - t_x * 0.12
+            alpha = max(0.0, 1.0 - t_x * t_x)
+        else:
+            hold_t = elapsed - _ENTRY
+            scale_f = 1.0 + 0.012 * math.sin(hold_t * 3.1)
+            alpha = 1.0
+
+        if alpha <= 0.0:
+            return
+
+        tex = self._cta_textures[self._cta_slot]
+        tw = self._cta_tex_w * scale_f
+        th = self._cta_tex_h * scale_f
+        cx = self._width * 0.5
+        cy = self._height * 0.46
+        tx0 = cx - tw * 0.5
+        ty0 = cy - th * 0.5
+
+        # Neon glow color cycling (hot-pink <-> electric cyan)
+        t = self._cta_t
+        cyc = 0.5 + 0.5 * math.sin(t * 2.8)
+        gr = 0.9 + 0.1 * cyc
+        gg = 0.05 + 0.10 * cyc
+        gb = 0.85 - 0.4 * cyc
+
+        # Layered glow halos behind the text
+        for pad, glow_a in ((100, 0.04), (68, 0.08), (40, 0.13), (20, 0.19), (8, 0.27)):
+            self._draw_rect(
+                tx0 - pad, ty0 - pad, tw + pad * 2, th + pad * 2,
+                (gr, gg, gb, glow_a * alpha),
+            )
+
+        # Blit texture with chromatic-aberration + neon shader
+        phase = min(1.0, max(0.0, (elapsed - _ENTRY) / max(0.01, _EXIT_START - _ENTRY)))
+        w, h = float(self._width), float(self._height)
+
+        def to_ndc(px: float, py: float) -> tuple[float, float]:
+            return (px / w) * 2.0 - 1.0, 1.0 - (py / h) * 2.0
+
+        nx0, ny_top = to_ndc(tx0, ty0)
+        nx1, ny_bot = to_ndc(tx0 + tw, ty0 + th)
+
+        verts = np.array([
+            nx0, ny_top,  0.0, 0.0,
+            nx1, ny_top,  1.0, 0.0,
+            nx0, ny_bot,  0.0, 1.0,
+            nx1, ny_top,  1.0, 0.0,
+            nx1, ny_bot,  1.0, 1.0,
+            nx0, ny_bot,  0.0, 1.0,
+        ], dtype=np.float32)
+
+        self._cta_quad_vbo.write(verts)
+        self._cta_blit_prog['iTime'].value = t
+        self._cta_blit_prog['iPhase'].value = phase
+        self._cta_blit_prog['iAlpha'].value = alpha
+        tex.use(location=0)
+        self._cta_blit_prog['iChannel0'].value = 0
+        self._ctx.enable(moderngl.BLEND)
+        self._cta_quad_vao.render(moderngl.TRIANGLES, vertices=6)
+
     def destroy(self) -> None:
         self._font_tex.release()
         self._prog.release()
@@ -1669,3 +1952,12 @@ void main() {
         self._panel_prog.release()
         self._panel_vbo.release()
         self._panel_vao.release()
+        if self._cta_quad_vao is not None:
+            self._cta_quad_vao.release()
+        if self._cta_quad_vbo is not None:
+            self._cta_quad_vbo.release()
+        if self._cta_blit_prog is not None:
+            self._cta_blit_prog.release()
+        if self._cta_textures is not None:
+            for _t in self._cta_textures:
+                _t.release()

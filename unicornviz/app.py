@@ -1855,10 +1855,35 @@ void main() {
                     if self._audio_manager is not None
                     else '-'
                 ),
+                'audio_profile_name': (
+                    self._audio_manager.get_profile().name
+                    if self._audio_manager is not None
+                    else '-'
+                ),
                 'audio_profile_reco': (
                     getattr(self._auto_vj, 'profile_recommendation_hud', '-')
                     if self._auto_vj is not None
                     else '-'
+                ),
+                'auto_vj_mood': (
+                    getattr(self._auto_vj, 'hud_mood_label', '-')
+                    if self._auto_vj is not None
+                    else '-'
+                ),
+                'auto_vj_scene': (
+                    getattr(self._auto_vj, 'hud_scene_label', '-')
+                    if self._auto_vj is not None
+                    else '-'
+                ),
+                'auto_vj_bpm': (
+                    getattr(self._auto_vj, 'hud_bpm_label', '--')
+                    if self._auto_vj is not None
+                    else '--'
+                ),
+                'auto_vj_action_in': (
+                    getattr(self._auto_vj, 'hud_action_in_label', '--')
+                    if self._auto_vj is not None
+                    else '--'
                 ),
                 'preset_slot_label': slot_label,
                 'preset_slot': preset_slot,
