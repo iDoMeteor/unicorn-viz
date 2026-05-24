@@ -321,6 +321,34 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=142.0,
         bpm_hint_max=154.0,
     ),
+    "fire_dj": AudioProfile(
+        name="Fire DJ",
+        description=(
+            "High-energy electronic profile for fast, wide-tempo DJ sets with "
+            "heavy kick, active hats, and synth-mid drive"
+        ),
+        bass_min=24.0,
+        bass_max=240.0,
+        mid_min=240.0,
+        mid_max=4600.0,
+        treble_min=4600.0,
+        treble_max=20000.0,
+        bass_weight=1.18,
+        mid_weight=1.16,
+        treble_weight=1.12,
+        beat_threshold=1.00,
+        smoothing=0.085,
+        curve="aggressive",
+        # Electronic emphasis: strong kick + hats + synth mids. Less drum-kit
+        # bias than metal; more tolerant than narrow hard-techno/trance lanes.
+        onset_bass_emphasis=1.45,
+        onset_mid_emphasis=1.30,
+        onset_treble_emphasis=1.18,
+        bpm_prior_mu=148.0,
+        bpm_prior_sigma=0.32,
+        bpm_hint_min=132.0,
+        bpm_hint_max=170.0,
+    ),
     "drum_and_bass": AudioProfile(
         name="Drum & Bass",
         description="Fast break transients, subs, and bright hats at full sprint",
