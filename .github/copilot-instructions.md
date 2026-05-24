@@ -381,3 +381,24 @@ becomes active** (on first load and on every scene transition back to it).
 
 **Rule of thumb:** if two runs of the effect, viewed side-by-side from frame 0,
 are indistinguishable for the first several seconds, add startup randomisation.
+
+---
+
+## Session Review Logging (Required)
+
+When an agent reviews an Auto VJ session (for example by analyzing
+`logs/autovj-*.jsonl`), it must append one line to:
+
+- `drop-ins/auto-vj-01/SESSION_TRAINING_LOG.md`
+
+Required one-line format:
+
+- `YYYY-MM-DD | session=<log-file-or-id> | style=<genre/mix tag> | lock=<1-5> | director=<1-5> | notes=<optional short summary>`
+
+Rules:
+
+- Add exactly one new line per reviewed session.
+- Keep `notes` concise and optional; use it when a short summary adds value.
+- Do not replace prior entries; only append.
+- If no session log exists yet, use the best available session identifier in
+  the `session=` field.
