@@ -1010,7 +1010,7 @@ void main() {
         self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
         session_line = f"SESSION   {self._hud_state.get('session_time', '00:00')}"
         sx_session = x + (panel_w - len(session_line) * 8.0 * 2.2) * 0.5
-        self._draw_text(session_line, sx_session, y + 70.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
+        self._draw_text(session_line, sx_session, y + 76.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner
@@ -1028,7 +1028,12 @@ void main() {
         self._draw_rect(x + panel_w - 6.0, y + 104.0, 6.0, 80.0, (1.0, 0.62, 0.20, 0.56 + pulse_slow * 0.22))
         # Effect text — inverse pulse to banner glow (bright when glow is dim)
         effect_a = 0.88 + (1.0 - pulse_slow) * 0.12
-        self._draw_text(f"EFFECT: {self._hud_state.get('effect', '-')}", x + 20.0, y + 112.0, scale=3.0, color=(0.12, 1.0, 1.0, effect_a))
+        effect_raw = str(self._hud_state.get('effect', '-'))
+        banner_inner_w = panel_w - 42.0
+        max_effect_chars = max(8, int(banner_inner_w / (8.0 * 3.0)) - len('EFFECT: '))
+        if len(effect_raw) > max_effect_chars:
+            effect_raw = effect_raw[: max_effect_chars - 3] + '...'
+        self._draw_text(f"EFFECT: {effect_raw}", x + 20.0, y + 112.0, scale=3.0, color=(0.12, 1.0, 1.0, effect_a))
         self._draw_text(f"TRANSITION: {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})", x + 20.0, y + 148.0, scale=2.3, color=(1.0, 0.66 + pulse_fast * 0.12, 0.24, 0.94))
 
         # ── layer 7: data zone separator ─────────────────────────────────
@@ -1076,27 +1081,30 @@ void main() {
             self._draw_text(ln, right_x, row_y, scale=2.05, color=(0.98, 0.68, 0.22, 0.96))
 
         # ── layer 9.5: fixed bottom Auto VJ status section ─────────────
-        status_box_w = min(780.0, panel_w * 0.78)
-        status_box_h = 50.0
-        status_box_x = x + (panel_w - status_box_w) * 0.5
-        status_box_y = y + panel_h - 72.0
-        self._draw_rect(status_box_x, status_box_y, status_box_w, status_box_h, (0.03, 0.08, 0.14, 0.82))
+        status_box_x = x + 8.0
+        status_box_w = panel_w - 16.0
+        status_box_h = 54.0
+        status_box_y = y + panel_h - 76.0
+        self._draw_rect(status_box_x, status_box_y, status_box_w, status_box_h, (0.03, 0.08, 0.14, 0.84))
         self._draw_rect(status_box_x, status_box_y, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.40 + pulse_med * 0.14))
         self._draw_rect(status_box_x, status_box_y + status_box_h - 2.0, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.28 + pulse_slow * 0.12))
+        self._draw_rect(status_box_x, status_box_y, 2.0, status_box_h, (0.10, 0.94, 1.0, 0.20 + pulse_slow * 0.10))
+        self._draw_rect(status_box_x + status_box_w - 2.0, status_box_y, 2.0, status_box_h, (0.10, 0.94, 1.0, 0.20 + pulse_slow * 0.10))
 
         mood = str(self._hud_state.get('auto_vj_mood', '-')).upper()
         scene = str(self._hud_state.get('auto_vj_scene', '-')).upper()
         genre = str(self._hud_state.get('audio_profile_name', '-'))
-        if len(genre) > 26:
-            genre = genre[:23] + '...'
+        if len(genre) > 18:
+            genre = genre[:15] + '...'
         bpm = str(self._hud_state.get('auto_vj_bpm', '--'))
         action_in = str(self._hud_state.get('auto_vj_action_in', '--'))
 
-        line1 = f'MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre}'
-        line2 = f'BPM: {bpm:<4} | ACTION IN: {action_in}'
-        text_x = status_box_x + 18.0
-        self._draw_text(line1, text_x, status_box_y + 7.0, scale=1.9, color=(0.86, 1.0, 0.86, 0.96))
-        self._draw_text(line2, text_x, status_box_y + 28.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
+        line1 = f'MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre:<18}'
+        line2 = f'BPM: {bpm:>3} | ACTION IN: {action_in:<4}'
+        line1_x = status_box_x + (status_box_w - len(line1) * 8.0 * 1.9) * 0.5
+        line2_x = status_box_x + (status_box_w - len(line2) * 8.0 * 1.9) * 0.5
+        self._draw_text(line1, max(status_box_x + 12.0, line1_x), status_box_y + 7.0, scale=1.9, color=(0.86, 1.0, 0.86, 0.96))
+        self._draw_text(line2, max(status_box_x + 12.0, line2_x), status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
         # Three evenly spaced horizontal tick marks on the right border
