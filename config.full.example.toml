@@ -106,6 +106,14 @@ messages = [
 	"Share the love!|❤️ 📤",
 ]
 
+[spotify]
+enabled = false
+player = "spotify"
+poll_interval_s = 0.75
+command_timeout_s = 0.25
+# Optional path to local Spotify audio-features JSON map keyed by track id.
+# features_file = "assets/audio/spotify_features.json"
+
 [postfx]
 enabled = true
 active_slot = 0

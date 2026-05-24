@@ -93,6 +93,20 @@ class VJApi:
         """Unregister a runtime subsystem previously added via ``register_subsystem``."""
         self._app.unregister_subsystem(name)
 
+    def has_subsystem(self, name: str) -> bool:
+        """Return True when a named runtime subsystem is registered."""
+        key = str(name).strip()
+        if not key:
+            return False
+        return key in self._app._subsystems  # noqa: SLF001
+
+    def get_subsystem(self, name: str) -> object | None:
+        """Return a named runtime subsystem instance when registered."""
+        key = str(name).strip()
+        if not key:
+            return None
+        return self._app._subsystems.get(key)  # noqa: SLF001
+
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)

@@ -35,6 +35,7 @@ Complex drop-ins should also include:
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
 | sims-01 | Yes | Not required | Media/effect drop-in |
+| spotify-01 | Yes | Yes | Spotify metadata subsystem |
 | streaming-01 | Yes | Yes | Streaming subsystem |
 | textures-01 | Yes | Not required | Media effect drop-in |
 | tron-grid-01 | Yes | Not required | Simple effect drop-in |
@@ -69,6 +70,12 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/projectm-01/docs/configuration.md)
   - [Integration](../drop-ins/projectm-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/projectm-01/docs/troubleshooting.md)
+- spotify-01
+  - [Operations](../drop-ins/spotify-01/docs/operations.md)
+  - [Configuration](../drop-ins/spotify-01/docs/configuration.md)
+  - [Integration](../drop-ins/spotify-01/docs/integration.md)
+  - [Planning](../drop-ins/spotify-01/docs/planning.md)
+  - [Troubleshooting](../drop-ins/spotify-01/docs/troubleshooting.md)
 - streaming-01
   - [Operations](../drop-ins/streaming-01/docs/operations.md)
   - [Configuration](../drop-ins/streaming-01/docs/configuration.md)

@@ -294,6 +294,8 @@ Per-effect one-shot checklist:
 - [ ] Performance single display: ___/5
 - [ ] Performance span mode: ___/5
 - [ ] Performance mirror mode: ___/5
+- [ ] Ping-pong friends mapping: PASS/FAIL (friend list exists, pair quality verified)
+- [ ] Candy frame options tag: PASS/FAIL (tag/options present and behavior verified)
 - [ ] Startup variance: PASS/FAIL (EXEMPT where noted)
 - [ ] Parameter sanity (speed/zoom/reactivity/intensity): PASS/FAIL
 - [ ] Hotkey behavior sanity while active: PASS/FAIL

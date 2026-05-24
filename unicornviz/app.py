@@ -368,6 +368,14 @@ def _load_auto_vj_controller_class() -> type:
     )
 
 
+def _load_spotify_controller_class() -> type:
+    """Load SpotifyController from the spotify drop-in."""
+    return load_dropin_symbol(
+        'spotify-01/spotify_controller.py',
+        'SpotifyController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -410,6 +418,7 @@ class App:
         self._rainbow_nova = None
         self._candy_frame = None
         self._auto_vj = None
+        self._spotify = None
         self._grand_finale = None
         self._control_room = None
         self._control_room_startup_cfg: dict[str, Any] | None = None
@@ -1781,6 +1790,24 @@ void main() {
         )
         hotkeys.attach_midi(midi_manager)
 
+        # Spotify controller (optional drop-in subsystem).
+        spotify_cfg = self.cfg.get('spotify', default={}) or {}
+        if not isinstance(spotify_cfg, dict):
+            spotify_cfg = {}
+        if bool(spotify_cfg.get('enabled', False)):
+            try:
+                spotify_cls = _load_spotify_controller_class()
+                self._spotify = spotify_cls(self, spotify_cfg)
+                if bool(getattr(self._spotify, 'enabled', False)):
+                    self.vj_api.register_subsystem('spotify', self._spotify)
+                    log.info('SpotifyController loaded from drop-in')
+                else:
+                    self._spotify = None
+                    log.info('SpotifyController loaded but disabled by runtime checks')
+            except Exception as exc:
+                self._spotify = None
+                log.warning('SpotifyController not available: %s', exc)
+
         # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
         try:
             auto_vj_cls = _load_auto_vj_controller_class()
@@ -2055,6 +2082,50 @@ void main() {
             advance_elapsed = max(0.0, self._demo_timer)
             advance_total = max(0.1, self._effect_duration)
             advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
+            spotify_status = 'OFF'
+            spotify_track = '-'
+            spotify_artist = '-'
+            spotify_progress = '--:--/--:-- 0%'
+            if self._spotify is not None:
+                snap_fn = getattr(self._spotify, 'snapshot', None)
+                if callable(snap_fn):
+                    try:
+                        spotify = snap_fn()
+                    except Exception:
+                        spotify = None
+                    if isinstance(spotify, dict):
+                        available = bool(spotify.get('available', False))
+                        playing = bool(spotify.get('is_playing', False))
+                        raw_status = str(spotify.get('status', '') or '').strip().upper()
+                        if available and raw_status:
+                            spotify_status = raw_status
+                        elif available:
+                            spotify_status = 'PLAYING' if playing else 'PAUSED'
+
+                        def _clip(text: str, limit: int) -> str:
+                            txt = str(text).strip()
+                            if not txt:
+                                return '-'
+                            if len(txt) <= limit:
+                                return txt
+                            return txt[: max(1, limit - 3)].rstrip() + '...'
+
+                        spotify_track = _clip(str(spotify.get('title', '') or ''), 24)
+                        spotify_artist = _clip(str(spotify.get('artist', '') or ''), 24)
+
+                        pos = max(0.0, float(spotify.get('position_s', 0.0) or 0.0))
+                        dur = max(0.0, float(spotify.get('duration_s', 0.0) or 0.0))
+                        pct = int(round(min(100.0, (pos / dur) * 100.0))) if dur > 0.0 else 0
+
+                        def _fmt_secs(seconds: float) -> str:
+                            total = max(0, int(seconds))
+                            mm, ss = divmod(total, 60)
+                            hh, mm = divmod(mm, 60)
+                            if hh > 0:
+                                return f'{hh:02d}:{mm:02d}:{ss:02d}'
+                            return f'{mm:02d}:{ss:02d}'
+
+                        spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
             slot_label = 'PRESET IDX'
             preset_slot = '-/-'
             variant_label = 'VARIANT'
@@ -2141,6 +2212,10 @@ void main() {
                 'recording': rec_state,
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
+                'spotify_status': spotify_status,
+                'spotify_track': spotify_track,
+                'spotify_artist': spotify_artist,
+                'spotify_progress': spotify_progress,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
                 'postfx_debug': (
                     self._postfx_controller.debug_summary

@@ -27,6 +27,11 @@ See `docs/configuration.md`.
 - Registers as subsystem name `spotify` via `vj_api.register_subsystem`
 - Auto VJ can consume this subsystem when both are enabled
 
+## Planning
+
+See `docs/planning.md` for the current/future roadmap, including the planned
+authenticated Web API follow-up as a separate `spotify-pro-01` drop-in.
+
 ## Troubleshooting
 
 See `docs/troubleshooting.md`.
