@@ -2540,9 +2540,44 @@ void main() {
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                 elif self._invert_colors:
-                    self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
+                    if candy_active or nova_active or finale_overlay_active:
+                        # Keep invert result in fbo_a so late overlays/candy use it.
+                        self._fbo_b.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_a.color_attachments[0].use(location=0)
+                        self._invert_prog['tex'].value = 0
+                        self._invert_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._present_from_tex(self._fbo_a.color_attachments[0])
+                    else:
+                        self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
                 elif burst_active:
-                    self._present_burst_from_tex(self._fbo_a.color_attachments[0])
+                    if candy_active or nova_active or finale_overlay_active:
+                        # Keep burst result in fbo_a so late overlays/candy use it.
+                        scale, angle = self._burst_transform()
+                        self._fbo_b.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_a.color_attachments[0].use(location=0)
+                        self._burst_prog['tex'].value = 0
+                        self._burst_prog['uAngle'].value = angle
+                        self._burst_prog['uScale'].value = scale
+                        self._burst_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._fbo_a.use()
+                        ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        ctx.clear(0.0, 0.0, 0.0, 1.0)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._present_from_tex(self._fbo_a.color_attachments[0])
+                    else:
+                        self._present_burst_from_tex(self._fbo_a.color_attachments[0])
                 elif postfx_active:
                     audio = self._audio or AudioData()
                     self._postfx_controller.apply(
