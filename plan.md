@@ -9,7 +9,7 @@
 
 ## Current Focus (May 18, 2026)
 
-- `[doing]` **Pre-release future-proofing pass** — see `docs/planning/plan-future-proofing.md` for the full audit
+- `[doing]` **Pre-release future-proofing pass** — see `plan-future-proofing.md` for the full audit
   and remediation checklist (FP-01 through FP-13).  Must complete all 🔴 and 🟠 items before v1.0 tag.
 - `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
 - `[done]` RTMP streaming subsystem drop-in.
@@ -209,7 +209,7 @@
 
 ## Phase 5 — Pre-Release Future-Proofing
 
-> Full audit, findings, and remediation checklist in **`docs/planning/plan-future-proofing.md`**.
+> Full audit, findings, and remediation checklist in **`plan-future-proofing.md`**.
 > Complete all 🔴 Critical and 🟠 Pre-release items (FP-01 → FP-13) before tagging v1.0.
 
 - `[done]` **FP-01/02/03** — Fix `grand-finale-01` private attr violations.
@@ -244,18 +244,6 @@
   - leader + child bindings implemented in `hotkeys.py`
   - `Ctrl+J` chain help entries now registered from the Auto VJ drop-in
   - leader arming window currently set to 3.0s
-
-## Phase 6 - Delivery and Pipeline Hardening
-
-- `[todo]` Define explicit CI/CD pipeline blueprint for v1 release engineering.
-  Notes:
-  - document build/test/release stages and promotion gates (dev -> prerelease -> stable)
-  - include Linux package pipeline (.deb/.rpm/Flatpak/Snap), Windows installer, and macOS DMG lanes
-  - define ownership, branch protection requirements, and release rollback procedure
-- `[todo]` Add documentation pipeline requirements to release planning (tracking only, implementation separate).
-  Notes:
-  - broken-link, stale-doc, and metadata-header checks to run in CI on docs changes
-  - scope and tooling to be finalized in the release engineering plan before implementation
 
 ## Feature Ideas to Explore
 

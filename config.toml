@@ -125,8 +125,8 @@ enabled = true
 beat_tracker_engine = "v2"
 #profile = "raver"          # chill | normie | raver | user (unset => normie preset)
 auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
-auto_profile_chill_max_bpm = 110.0
-auto_profile_raver_min_bpm = 130.0
+auto_profile_chill_max_bpm = 105.0
+auto_profile_raver_min_bpm = 125.0
 #auto_profile_min_confidence = 0.45
 #auto_profile_switch_cooldown_s = 20.0
 log_decisions = true
