@@ -1110,12 +1110,12 @@ void main() {
         tears_b = 0.90 + 0.10 * math.sin(tears_phase + 4.15)
         self._draw_text(
             line1,
-            max(status_box_x + 12.0, line1_x),
+            line1_x,
             status_box_y + 7.0,
             scale=1.9,
             color=(tears_r, tears_g, tears_b, 0.96),
         )
-        self._draw_text(line2, max(status_box_x + 12.0, line2_x), status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
+        self._draw_text(line2, line2_x, status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
         # Three evenly spaced horizontal tick marks on the right border
