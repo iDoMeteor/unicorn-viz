@@ -303,7 +303,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
 
 # ---------------------------------------------------------------------------
 # Call-to-action (CTA) hype overlay — three cycling social messages.
-# Triggered by F8; each press advances to the next slot.
+# Triggered by streaming-owned CTA hotkey path (defaults to F9).
 # ---------------------------------------------------------------------------
 _CTA_SHOW_DURATION: float = 4.5
 _CTA_SLOTS: list[tuple[str, str]] = [
@@ -411,7 +411,6 @@ class Overlays:
                 ('Middle Click', 'Reset hue+rotation / Toggle Auto VJ'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
                 ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
-                ('F9', 'CTA hype overlay — cycle Push / Thangs / Share'),
                 ('m', 'MIDI device'),
                 ('i', 'Invert colors'),
             ],
@@ -550,6 +549,9 @@ class Overlays:
         self._hud_t: float = 0.0
 
         # CTA hype overlay state
+        self._cta_slots: list[tuple[str, str]] = list(_CTA_SLOTS)
+        self._cta_show_duration: float = _CTA_SHOW_DURATION
+        self._cta_slots_key: tuple[tuple[str, str], ...] | None = None
         self._cta_timer: float = 0.0
         self._cta_slot: int = -1
         self._cta_t: float = 0.0
@@ -1692,8 +1694,31 @@ void main() {
 
     def trigger_cta(self) -> None:
         """Advance to the next CTA slot and start the hype animation."""
-        self._cta_slot = (self._cta_slot + 1) % len(_CTA_SLOTS)
-        self._cta_timer = _CTA_SHOW_DURATION
+        if not self._cta_slots:
+            return
+        self._cta_slot = (self._cta_slot + 1) % len(self._cta_slots)
+        self._cta_timer = self._cta_show_duration
+        self._cta_t = 0.0
+        self._ensure_cta_resources()
+
+    def trigger_cta_custom(
+        self,
+        text: str,
+        icon: str = '',
+        duration: float | None = None,
+    ) -> None:
+        """Trigger a custom CTA message (used by streaming drop-in ownership)."""
+        msg = str(text).strip()
+        if not msg:
+            return
+        self._cta_slots = [(msg, str(icon or '').strip())]
+        self._cta_show_duration = (
+            max(0.2, float(duration)) if duration is not None else _CTA_SHOW_DURATION
+        )
+        self._cta_textures = None
+        self._cta_slots_key = None
+        self._cta_slot = 0
+        self._cta_timer = self._cta_show_duration
         self._cta_t = 0.0
         self._ensure_cta_resources()
 
@@ -1796,10 +1821,15 @@ void main() {
                 [(self._cta_quad_vbo, '2f 2f', 'in_pos', 'in_uv')],
             )
 
-        if self._cta_textures is not None:
+        slots_key = tuple(self._cta_slots)
+        if self._cta_textures is not None and self._cta_slots_key == slots_key:
             return
 
+        if self._cta_textures is not None:
+            for _t in self._cta_textures:
+                _t.release()
         self._cta_textures = []
+        self._cta_slots_key = slots_key
         if not _PIL_AVAILABLE:
             return
 
@@ -1827,7 +1857,7 @@ void main() {
             pass
 
         TEX_W, TEX_H = self._cta_tex_w, self._cta_tex_h
-        for text, icon in _CTA_SLOTS:
+        for text, icon in self._cta_slots:
             try:
                 img = self._render_cta_image(text, icon, TEX_W, TEX_H, text_font, emoji_font)
             except Exception:
@@ -1895,9 +1925,9 @@ void main() {
         self._cta_timer -= dt
         self._cta_t += dt
 
-        elapsed = _CTA_SHOW_DURATION - self._cta_timer
+        elapsed = self._cta_show_duration - self._cta_timer
         _ENTRY = 0.45
-        _EXIT_START = _CTA_SHOW_DURATION - 0.65
+        _EXIT_START = self._cta_show_duration - 0.65
         _EXIT_DUR = 0.65
 
         if elapsed < _ENTRY:

@@ -824,7 +824,7 @@ class HotkeyHandler:
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
 
         elif sym == sdl2.SDLK_F9:
-            o.trigger_cta()
+            a.trigger_streaming_cta()
 
         # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
         elif sym == sdl2.SDLK_KP_0:

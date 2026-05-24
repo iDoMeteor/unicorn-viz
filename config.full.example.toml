@@ -94,6 +94,18 @@ audio_input_device = ""
 audio_codec = "aac"
 audio_bitrate = "160k"
 
+[streaming.cta]
+enabled = true
+duration_s = 4.5
+cooldown_s = 0.0
+mode = "cycle"               # cycle | random
+seed = 0
+messages = [
+	"Push the buttons!|👍",
+	"Do the thangs!|🔔",
+	"Share the love!|❤️ 📤",
+]
+
 [postfx]
 enabled = true
 active_slot = 0

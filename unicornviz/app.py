@@ -3140,6 +3140,28 @@ void main() {
             return 'unavailable'
         return self._streamer.set_provider(provider, restart=True)
 
+    def trigger_streaming_cta(self) -> str:
+        """Trigger CTA overlay via streaming drop-in ownership with core fallback."""
+        if self._overlays is None:
+            return 'CTA unavailable'
+
+        payload = None
+        if self._streamer is not None:
+            method = getattr(self._streamer, 'trigger_cta', None)
+            if callable(method):
+                try:
+                    payload = method()
+                except Exception as exc:
+                    log.debug('Streaming CTA trigger failed: %s', exc)
+
+        if payload is None:
+            self._overlays.trigger_cta()
+            return 'CTA triggered (default)'
+
+        text, icon, duration = payload
+        self._overlays.trigger_cta_custom(str(text), str(icon), float(duration))
+        return 'CTA triggered'
+
     def _apply_random_speed(self) -> None:
         """Apply random speed using effect-local overrides when available."""
         if self._current_effect is None or 'speed' not in self._current_effect.parameters:

@@ -86,6 +86,20 @@ stream_key = ""
 # audio_codec = "aac"
 # audio_bitrate = "160k"
 
+# Optional CTA ownership (F9) moved to streaming drop-in.
+[streaming.cta]
+enabled = true
+duration_s = 4.5
+cooldown_s = 0.0
+mode = "cycle"               # cycle | random
+seed = 0
+# message format: "Text|Icon"
+messages = [
+	"Push the buttons!|👍",
+	"Do the thangs!|🔔",
+	"Share the love!|❤️ 📤",
+]
+
 # ---------------------------------------------------------------------------
 # Post FX subsystem  (drop-ins/postfx-01)
 # Global post-processing quick-hits + scroll-driven hue/rotation passes.
