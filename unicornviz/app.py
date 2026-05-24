@@ -2900,6 +2900,25 @@ void main() {
             return self._fbo_a.read(components=3, alignment=1)
         return self._ctx.screen.read(components=3, alignment=1)
 
+    def read_screenshot_frame(self) -> tuple[bytes, int, int] | None:
+        """Read an RGB24 screenshot frame from the current drawable surface.
+
+        Uses SDL's drawable size so image dimensions always match readback data
+        in single/span/mirror modes.
+        """
+        if self._ctx is None or self._window is None:
+            return None
+        draw_w = ctypes.c_int(0)
+        draw_h = ctypes.c_int(0)
+        sdl2.SDL_GL_GetDrawableSize(self._window, draw_w, draw_h)
+        w = int(draw_w.value or 0)
+        h = int(draw_h.value or 0)
+        if w <= 0 or h <= 0:
+            w = int(self._window_width or self._width)
+            h = int(self._window_height or self._height)
+        data = self._ctx.screen.read(viewport=(0, 0, w, h), components=3, alignment=1)
+        return data, w, h
+
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)
 
