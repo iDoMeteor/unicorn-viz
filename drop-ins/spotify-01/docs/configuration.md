@@ -21,6 +21,12 @@ command_timeout_s = 0.25
 - `command_timeout_s`: Per-command timeout guard in seconds.
 - `features_file`: Optional JSON map keyed by Spotify track id with feature payload.
 
+Accepted feature keys are canonicalized automatically. Use either:
+
+- `spotify:track:<id>`
+- `/com/spotify/track/<id>` from MPRIS/playerctl
+- `https://open.spotify.com/track/<id>`
+
 ## Optional Features File Format
 
 ```json

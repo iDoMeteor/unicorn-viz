@@ -25,4 +25,5 @@ Last updated: 2026-05-24
 ## Features File Ignored
 
 - Ensure path exists and JSON is valid.
-- Keys must match full track id (for example `spotify:track:<id>`).
+- Keys are canonicalized automatically, but the safest form is `spotify:track:<id>`.
+- The controller also accepts raw MPRIS ids such as `/com/spotify/track/<id>`.

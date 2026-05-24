@@ -94,7 +94,8 @@ class SpotifyController:
 
     def snapshot(self) -> dict[str, Any]:
         """Return the current Spotify metadata snapshot for integrations."""
-        features = self._feature_payload(self._track_id)
+        canonical_track_id = self._canonical_track_id(self._track_id)
+        features = self._feature_payload(canonical_track_id)
         duration = max(0.0, float(self._duration_s))
         position = max(0.0, float(self._position_s))
         progress = min(1.0, position / duration) if duration > 0.0 else 0.0
@@ -103,7 +104,8 @@ class SpotifyController:
             'available': self._available,
             'is_playing': self._is_playing,
             'status': self._status,
-            'track_id': self._track_id,
+            'track_id': canonical_track_id,
+            'raw_track_id': self._track_id,
             'title': self._title,
             'artist': self._artist,
             'album': self._album,
@@ -218,7 +220,7 @@ class SpotifyController:
         if self._features_path is None:
             return {}
         self._refresh_features_cache()
-        row = self._features_cache.get(track_id)
+        row = self._features_cache.get(track_id.lower())
         if isinstance(row, dict):
             return row
         return {}
@@ -248,7 +250,7 @@ class SpotifyController:
         for key, value in payload.items():
             if not isinstance(key, str) or not isinstance(value, dict):
                 continue
-            rows[key] = value
+            rows[self._canonical_track_id(key)] = value
         self._features_cache = rows
 
     @staticmethod
@@ -261,9 +263,25 @@ class SpotifyController:
     @staticmethod
     def _track_key(track_id: str, title: str, artist: str) -> str:
         if track_id:
-            return track_id.strip().lower()
+            return SpotifyController._canonical_track_id(track_id)
         combo = f'{artist.strip()}::{title.strip()}'.strip(':')
         return combo.lower()
+
+    @staticmethod
+    def _canonical_track_id(track_id: str) -> str:
+        raw = str(track_id or '').strip()
+        if not raw:
+            return ''
+        lowered = raw.lower()
+        if lowered.startswith('spotify:track:'):
+            return lowered
+        if lowered.startswith('/com/spotify/track/'):
+            suffix = lowered.rsplit('/', 1)[-1]
+            return f'spotify:track:{suffix}' if suffix else lowered
+        if lowered.startswith('https://open.spotify.com/track/'):
+            tail = lowered.split('/track/', 1)[-1].split('?', 1)[0].split('/', 1)[0]
+            return f'spotify:track:{tail}' if tail else lowered
+        return lowered
 
     @staticmethod
     def _normalize_tags(value: Any) -> list[str]:
