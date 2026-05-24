@@ -3072,7 +3072,9 @@ void main() {
         """Select active post-process slot (0 disables)."""
         if self._postfx_controller is None:
             return 'Post FX: unavailable'
-        return self._postfx_controller.select_slot(slot)
+        msg = self._postfx_controller.select_slot(slot)
+        log.debug('PostFX select_slot(%s) -> %s', slot, msg)
+        return msg
 
     def start_recording(self) -> tuple[bool, str]:
         """Start recording if recording support is enabled."""

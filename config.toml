@@ -29,7 +29,7 @@ scale_when_framed = true
 # candy_frame_disallow = true
 
 [logging]
-level = "info"
+level = "debug"
 
 [dropins]
 exclude = "none"
