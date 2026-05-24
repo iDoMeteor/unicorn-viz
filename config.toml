@@ -29,7 +29,7 @@ scale_when_framed = true
 # candy_frame_disallow = true
 
 [logging]
-level = "debug"
+level = "info"
 
 [dropins]
 exclude = "none"
@@ -85,6 +85,17 @@ stream_key = ""
 # audio_input_device = ""      # empty => default sink monitor (Pulse/PipeWire)
 # audio_codec = "aac"
 # audio_bitrate = "160k"
+
+# ---------------------------------------------------------------------------
+# Spotify metadata subsystem  (drop-ins/spotify-01)
+# Polls playerctl/MPRIS for now-playing context used by HUD and Auto VJ.
+# ---------------------------------------------------------------------------
+[spotify]
+enabled = true
+player = "spotify"
+poll_interval_s = 0.75
+command_timeout_s = 0.25
+features_file = "assets/audio/spotify_features.json"
 
 # Optional CTA ownership (F9) moved to streaming drop-in.
 [streaming.cta]
