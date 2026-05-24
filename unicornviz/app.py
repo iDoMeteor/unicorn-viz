@@ -2171,6 +2171,9 @@ void main() {
             mirror_mode_active = (
                 self._display_mode == 'mirror_all' and bool(self._mirror_rects)
             )
+            candy_mode_active = (
+                self._candy_frame is not None and bool(self._candy_frame.active)
+            )
             if self._webcam_system is not None:
                 audio = self._audio or AudioData()
                 self._webcam_system.render(dt, audio.bass, audio.treble)
@@ -2188,9 +2191,16 @@ void main() {
                         self._ctx, self._render_width, self._render_height,
                     )
                 else:
-                    self._ctx.screen.use()
-                    self._ctx.viewport = (0, 0, self._width, self._height)
-                    self._dancing_unicorn.render(self._ctx, self._width, self._height)
+                    if candy_mode_active:
+                        self._fbo_a.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._dancing_unicorn.render(
+                            self._ctx, self._render_width, self._render_height,
+                        )
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._dancing_unicorn.render(self._ctx, self._width, self._height)
             if self._rainbow_nova is not None:
                 self._rainbow_nova.update(dt)
                 if self._rainbow_nova.is_active:
@@ -2206,9 +2216,19 @@ void main() {
                         self._present_prog['tex'].value = 0
                         self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     else:
-                        self._ctx.screen.use()
-                        self._ctx.viewport = (0, 0, self._width, self._height)
-                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                        if candy_mode_active:
+                            self._fbo_b.use()
+                            self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                            self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                            self._fbo_a.use()
+                            self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                            self._fbo_b.color_attachments[0].use(location=0)
+                            self._present_prog['tex'].value = 0
+                            self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        else:
+                            self._ctx.screen.use()
+                            self._ctx.viewport = (0, 0, self._width, self._height)
+                            self._rainbow_nova.render(self._fbo_a.color_attachments[0])
             if self._grand_finale is not None and self._grand_finale.overlay_active:
                 if mirror_mode_active:
                     self._fbo_b.use()
@@ -2224,13 +2244,27 @@ void main() {
                     self._present_prog['tex'].value = 0
                     self._present_vao.render(moderngl.TRIANGLE_STRIP)
                 else:
-                    self._ctx.screen.use()
-                    self._ctx.viewport = (0, 0, self._width, self._height)
-                    self._grand_finale.render_overlay(
-                        self._fbo_a.color_attachments[0],
-                        None,
-                        self._width, self._height,
-                    )
+                    if candy_mode_active:
+                        self._fbo_b.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._grand_finale.render_overlay(
+                            self._fbo_a.color_attachments[0],
+                            self._fbo_b,
+                            self._render_width, self._render_height,
+                        )
+                        self._fbo_a.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._grand_finale.render_overlay(
+                            self._fbo_a.color_attachments[0],
+                            None,
+                            self._width, self._height,
+                        )
             if self._candy_frame is not None:
                 fill_needed = (
                     self._effect_requests_frame_scaling(self._current_effect)
