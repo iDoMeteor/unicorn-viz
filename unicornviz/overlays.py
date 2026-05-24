@@ -835,7 +835,9 @@ void main() {
         rows = max(len(left_lines), len(right_lines))
         content_bottom = row0_offset + max(0, rows - 1) * lh + row_text_h
         panel_h_needed = content_bottom + 34.0
-        panel_h = min(max(520.0, panel_h_needed), self._height * 0.88)
+        panel_h_base = min(max(520.0, panel_h_needed), self._height * 0.88)
+        panel_h_extra = max(50.0, panel_h_base * 0.05)
+        panel_h = min(panel_h_base + panel_h_extra, self._height * 0.93)
         x = (self._width - panel_w) * 0.5
         y = max(36.0, (self._height - panel_h) * 0.5)
         self._hud_rect = (x, y, panel_w, panel_h)
