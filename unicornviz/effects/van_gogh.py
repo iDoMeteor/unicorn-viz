@@ -121,6 +121,7 @@ class VanGogh(BaseEffect):
     PING_PONG_FRIENDS = ['Dali', 'Escher', 'Psychedelic']
 
     def _init(self) -> None:
+        self.scale_when_framed = bool(self.config.get('scale_when_framed', True))
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()

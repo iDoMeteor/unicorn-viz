@@ -2437,12 +2437,23 @@ void main() {
         """Render one effect to the currently bound framebuffer target."""
         if effect is None:
             return
-        self._ctx.viewport = self._effect_viewport_for_target(
+        viewport = self._effect_viewport_for_target(
             target_width,
             target_height,
             effect,
         )
-        effect.render()
+        self._ctx.viewport = viewport
+
+        # glClear ignores viewport; constrain legacy effect clears by scissor.
+        prev_scissor = self._ctx.scissor
+        use_scissor = viewport != (0, 0, target_width, target_height)
+        if use_scissor:
+            self._ctx.scissor = viewport
+        try:
+            effect.render()
+        finally:
+            if use_scissor:
+                self._ctx.scissor = prev_scissor
 
     def _render(self, dt: float) -> None:
         ctx = self._ctx

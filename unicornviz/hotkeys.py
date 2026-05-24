@@ -152,6 +152,12 @@ class HotkeyHandler:
                         o.flash_message(f'Variant: {result}', 1.5)
                     return
 
+        # Fallback Auto VJ toggle for environments where Ctrl+Alt+J is reserved.
+        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_j:
+            msg = a.toggle_auto_vj()
+            o.flash_message(msg, 2.0)
+            return
+
         # System-level post-process slot controls (Ctrl+Alt+number).
         # Handle before help-overlay numeric controls and effect jump shortcuts.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):

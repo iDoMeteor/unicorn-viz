@@ -221,6 +221,8 @@ class Fireworks(BaseEffect):
     PING_PONG_FRIENDS = ['Starfield', 'Cosmos', 'Plasma']
 
     def _init(self) -> None:
+        self.candy_frame_disallow = bool(self.config.get('candy_frame_disallow', True))
+        self.scale_when_framed = bool(self.config.get('scale_when_framed', False))
         self.parameters = {
             'speed':      float(self.config.get('speed', 1.0)),
             'burst_rate': float(self.rng.uniform(0.85, 1.35)),

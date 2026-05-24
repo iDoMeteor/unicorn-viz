@@ -285,6 +285,12 @@ scale_when_framed = true
 [effects.Vector]
 scale_when_framed = true
 
+[effects.Escher]
+scale_when_framed = true
+
+[effects.VanGogh]
+scale_when_framed = true
+
 # ---------------------------------------------------------------------------
 # Sim Showcase drop-in  (drop-ins/sims-01)
 # Supports public USD scene packs (robotics/simulation datasets).

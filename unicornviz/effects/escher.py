@@ -103,6 +103,7 @@ class Escher(BaseEffect):
     PING_PONG_FRIENDS = ['Dali', 'Van Gogh', 'Vector']
 
     def _init(self) -> None:
+        self.scale_when_framed = bool(self.config.get('scale_when_framed', True))
         self.parameters = {
             "speed": float(self.config.get("speed", 1.0)),
             "vignette": 0.0,
