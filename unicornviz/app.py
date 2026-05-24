@@ -556,11 +556,13 @@ class App:
             if not layouts:
                 return None
             px, py, pw, ph = layouts[0]
-        if self._display_mode == 'mirror_all':
-            origin_x = self._window_origin_x
-            origin_y = self._window_origin_y
-        else:
-            origin_x, origin_y, _w, _h = self._all_display_bounds()
+        # Use the actual SDL window origin rather than cached layout origins.
+        # This avoids drift when compositor/window-manager placement differs.
+        wx = ctypes.c_int(0)
+        wy = ctypes.c_int(0)
+        sdl2.SDL_GetWindowPosition(self._window, wx, wy)
+        origin_x = int(wx.value)
+        origin_y = int(wy.value)
         return (px - origin_x, py - origin_y, pw, ph)
 
     def _move_window_to_display(self) -> None:
@@ -2004,10 +2006,12 @@ void main() {
                 self._present_mirror_tiled(self._fbo_a.color_attachments[0])
             if primary_overlay_view is not None:
                 vx, vy, vw, vh = primary_overlay_view
+                overlays.resize(vw, vh)
                 self._ctx.screen.use()
                 self._ctx.viewport = (vx, vy, vw, vh)
                 overlays.render(dt, include_recording_indicator=False)
             else:
+                overlays.resize(self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
             need_frame_for_streaming = (
@@ -2042,10 +2046,12 @@ void main() {
                     log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
             if primary_overlay_view is not None:
                 vx, vy, vw, vh = primary_overlay_view
+                overlays.resize(vw, vh)
                 self._ctx.screen.use()
                 self._ctx.viewport = (vx, vy, vw, vh)
                 overlays.render_live_recording_indicator()
             else:
+                overlays.resize(self._width, self._height)
                 overlays.render_live_recording_indicator()
             if need_frame_for_mirror and shared_frame is not None:
                 self._present_mirror_outputs(shared_frame)
