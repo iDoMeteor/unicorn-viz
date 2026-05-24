@@ -715,6 +715,8 @@ class App:
         """Return window-local viewport for the primary display in multi-display modes."""
         if self._display_mode not in {'mirror_all', 'span_all'}:
             return None
+        if self._window is None:
+            return None
         bounds = self._display_bounds(self._display_index)
         if bounds is not None:
             px, py, pw, ph = int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h)
@@ -731,7 +733,25 @@ class App:
         sdl2.SDL_GetWindowPosition(self._window, wx, wy)
         origin_x = int(wx.value)
         origin_y = int(wy.value)
-        return (px - origin_x, py - origin_y, pw, ph)
+        vx = px - origin_x
+        vy = py - origin_y
+
+        # Guard against transient/invalid topology states while displays are
+        # connecting/disconnecting. Returning None falls back to full-canvas
+        # overlay rendering for that frame.
+        if pw <= 0 or ph <= 0:
+            return None
+
+        canvas_w = max(1, self._window_width if self._display_mode == 'mirror_all' else self._width)
+        canvas_h = max(1, self._window_height if self._display_mode == 'mirror_all' else self._height)
+
+        x0 = max(0, vx)
+        y0 = max(0, vy)
+        x1 = min(canvas_w, vx + pw)
+        y1 = min(canvas_h, vy + ph)
+        if x1 <= x0 or y1 <= y0:
+            return None
+        return (x0, y0, x1 - x0, y1 - y0)
 
     def _move_window_to_display(self) -> None:
         self._multihead.move_window_to_display(self._window, self._width, self._height)
@@ -791,6 +811,34 @@ class App:
             self._height,
             title,
         )
+        if self._window is None:
+            return
+
+        wx = ctypes.c_int(0)
+        wy = ctypes.c_int(0)
+        sdl2.SDL_GetWindowPosition(self._window, wx, wy)
+        self._window_origin_x = int(wx.value)
+        self._window_origin_y = int(wy.value)
+
+        ww = ctypes.c_int(0)
+        wh = ctypes.c_int(0)
+        sdl2.SDL_GetWindowSize(self._window, ww, wh)
+        if ww.value > 0:
+            self._window_width = int(ww.value)
+        if wh.value > 0:
+            self._window_height = int(wh.value)
+
+        if self._display_mode == 'mirror_all':
+            self._mirror_rects = self._multihead_mirror_layout(
+                self._window_origin_x,
+                self._window_origin_y,
+            )
+            log.info('Mirror topology rebuilt: origin=(%d,%d) window=%dx%d rects=%s',
+                     self._window_origin_x,
+                     self._window_origin_y,
+                     self._window_width,
+                     self._window_height,
+                     self._mirror_rects)
 
     def _release_readback_pbos(self) -> None:
         self._multihead.release_readback_pbos()
