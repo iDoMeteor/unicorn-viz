@@ -165,6 +165,10 @@ class HotkeyHandler:
                 message = a.select_postfx_slot(10)
                 o.flash_message(message, 1.5)
                 return
+            if sym == sdl2.SDLK_c:
+                msg = a.toggle_candy_frame()
+                o.flash_message(msg, 1.8)
+                return
             if sym == sdl2.SDLK_j:
                 msg = a.toggle_auto_vj()
                 o.flash_message(msg, 2.0)

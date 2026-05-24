@@ -117,6 +117,16 @@ rotation_step_rad = 0.07
 intensity = 1.0
 blackout_s = 15.0
 
+[candy_frame]
+enabled = true
+start_enabled = false
+inset_px = 96.0
+corner_radius_px = 50.0
+intensity = 1.0
+pattern_interval_s = 120.0
+reverse_on_cycle = true
+seed = 0
+
 [auto_vj]
 enabled = false
 beat_tracker_engine = "v2"   # v2 (default) | legacy

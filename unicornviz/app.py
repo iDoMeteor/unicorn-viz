@@ -352,6 +352,14 @@ def _load_rainbow_nova_class() -> type:
     )
 
 
+def _load_candy_frame_class() -> type:
+    """Load CandyFrameController from the candy-frame drop-in."""
+    return load_dropin_symbol(
+        'candy-frame-01/candy_frame_controller.py',
+        'CandyFrameController',
+    )
+
+
 def _load_auto_vj_controller_class() -> type:
     """Load AutoVJController from the auto-vj drop-in."""
     return load_dropin_symbol(
@@ -400,6 +408,7 @@ class App:
         self._postfx_controller = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
+        self._candy_frame = None
         self._auto_vj = None
         self._grand_finale = None
         self._control_room = None
@@ -958,6 +967,17 @@ class App:
         except Exception as exc:
             log.warning('RainbowNova not available: %s', exc)
             self._rainbow_nova = None
+        # Candy Frame neon border overlay (optional, from candy-frame drop-in).
+        try:
+            candy_cls = _load_candy_frame_class()
+            candy_cfg = self.cfg.get('candy_frame', default={}) or {}
+            if not isinstance(candy_cfg, dict):
+                candy_cfg = {}
+            self._candy_frame = candy_cls(self._ctx, self._width, self._height, candy_cfg)
+            log.info('CandyFrameController loaded from candy-frame drop-in')
+        except Exception as exc:
+            log.warning('CandyFrameController not available: %s', exc)
+            self._candy_frame = None
         # System-level webcam overlay (always-on PiP above effects, below HUD).
         webcam_cls = _load_webcam_system_class()
         cam_cfg = self.cfg.get('webcam', default={}) or {}
@@ -1101,6 +1121,16 @@ void main() {
         """Trigger the Alt+U Rainbow Nova celebration overlay."""
         if self._rainbow_nova is not None:
             self._rainbow_nova.trigger()
+
+    def toggle_candy_frame(self) -> str:
+        """Toggle Candy Frame overlay; returns a flash-message string."""
+        if self._candy_frame is None:
+            return 'Candy Frame drop-in not loaded'
+        active = bool(self._candy_frame.toggle())
+        if active:
+            pattern = str(getattr(self._candy_frame, 'current_pattern_name', 'Pattern'))
+            return f'Candy Frame ON  ({pattern})'
+        return 'Candy Frame OFF'
 
     def trigger_grand_finale(self) -> str:
         """Trigger the grand finale sequence; returns a flash-message string."""
@@ -2122,6 +2152,29 @@ void main() {
                     self._ctx.screen.use()
                     self._ctx.viewport = (0, 0, self._width, self._height)
                     self._dancing_unicorn.render(self._ctx, self._width, self._height)
+            if self._candy_frame is not None:
+                audio = self._audio or AudioData()
+                self._candy_frame.update(
+                    dt,
+                    float(audio.bass),
+                    float(audio.mid),
+                    float(audio.treble),
+                    float(audio.beat),
+                )
+                if self._candy_frame.active:
+                    if mirror_mode_active:
+                        self._fbo_b.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._candy_frame.render(self._fbo_a.color_attachments[0])
+                        self._fbo_a.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._fbo_b.color_attachments[0].use(location=0)
+                        self._present_prog['tex'].value = 0
+                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._candy_frame.render(self._fbo_a.color_attachments[0])
             if self._rainbow_nova is not None:
                 self._rainbow_nova.update(dt)
                 if self._rainbow_nova.is_active:
@@ -2275,6 +2328,9 @@ void main() {
         if self._webcam_system is not None:
             self._webcam_system.destroy()
             self._webcam_system = None
+        if self._candy_frame is not None:
+            self._candy_frame.destroy()
+            self._candy_frame = None
         if self._postfx_controller is not None:
             self._postfx_controller.destroy()
             self._postfx_controller = None
@@ -2312,6 +2368,7 @@ void main() {
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
         burst_active = self._burst_controller.active
         nova_active = self._rainbow_nova is not None and self._rainbow_nova.is_active
+        candy_active = self._candy_frame is not None and bool(self._candy_frame.active)
         finale_overlay_active = (
             self._grand_finale is not None and self._grand_finale.overlay_active
         )
@@ -2323,7 +2380,7 @@ void main() {
             self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active or finale_overlay_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active or candy_active or finale_overlay_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -2433,7 +2490,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active or finale_overlay_active:
+                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active or candy_active or finale_overlay_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -2547,6 +2604,8 @@ void main() {
             )
             if self._webcam_system is not None:
                 self._webcam_system.resize(self._width, self._height)
+            if self._candy_frame is not None:
+                self._candy_frame.resize(self._width, self._height)
             self._update_render_target_size()
             self._rebuild_fbos()
             self._release_readback_pbos()
@@ -2569,6 +2628,8 @@ void main() {
         self._window_height = h
         if self._webcam_system is not None:
             self._webcam_system.resize(w, h)
+        if self._candy_frame is not None:
+            self._candy_frame.resize(w, h)
         self._update_render_target_size()
         self._release_readback_pbos()
         if self._recorder and self._recorder.is_recording:
@@ -2743,6 +2804,8 @@ void main() {
                 self._next_effect.resize(self._width, self._height)
             if self._webcam_system is not None:
                 self._webcam_system.resize(self._width, self._height)
+            if self._candy_frame is not None:
+                self._candy_frame.resize(self._width, self._height)
             if self._postfx_controller is not None:
                 self._postfx_controller.resize(self._render_width, self._render_height)
             if self._overlays is not None:
