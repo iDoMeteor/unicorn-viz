@@ -1103,7 +1103,18 @@ void main() {
         line2 = f'BPM: {bpm:>3} | ACTION IN: {action_in:<4}'
         line1_x = status_box_x + (status_box_w - len(line1) * 8.0 * 1.9) * 0.5
         line2_x = status_box_x + (status_box_w - len(line2) * 8.0 * 1.9) * 0.5
-        self._draw_text(line1, max(status_box_x + 12.0, line1_x), status_box_y + 7.0, scale=1.9, color=(0.86, 1.0, 0.86, 0.96))
+        # Subtle Unicorn Tears-inspired color drift for the top status line.
+        tears_phase = t * 0.55
+        tears_r = 0.82 + 0.10 * math.sin(tears_phase + 0.10)
+        tears_g = 0.93 + 0.05 * math.sin(tears_phase + 2.05)
+        tears_b = 0.90 + 0.10 * math.sin(tears_phase + 4.15)
+        self._draw_text(
+            line1,
+            max(status_box_x + 12.0, line1_x),
+            status_box_y + 7.0,
+            scale=1.9,
+            color=(tears_r, tears_g, tears_b, 0.96),
+        )
         self._draw_text(line2, max(status_box_x + 12.0, line2_x), status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
