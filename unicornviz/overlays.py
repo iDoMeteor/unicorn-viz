@@ -1008,15 +1008,15 @@ void main() {
         dx = x + (panel_w - len(dt_line) * 8.0 * 2.2) * 0.5
         self._draw_text(dt_line, dx, y + 44.0, scale=2.2, color=(1.0, 0.64 + pulse_slow * 0.10, 0.22, 0.94))
         session_line = f"SESSION   {self._hud_state.get('session_time', '00:00')}"
-        sx_session = x + (panel_w - len(session_line) * 8.0 * 1.7) * 0.5
-        self._draw_text(session_line, sx_session, y + 62.0, scale=1.7, color=(0.90, 0.98, 1.0, 0.92))
+        sx_session = x + (panel_w - len(session_line) * 8.0 * 2.2) * 0.5
+        self._draw_text(session_line, sx_session, y + 76.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
         vj_status = str(self._hud_state.get('vj_status', '')).strip()
         if vj_status:
             # Keep the status line coherent and centered in the header.
             max_chars = 72
             status_line = vj_status if len(vj_status) <= max_chars else (vj_status[: max_chars - 3] + '...')
             sx = x + (panel_w - len(status_line) * 8.0 * 1.65) * 0.5
-            self._draw_text(status_line, max(x + 22.0, sx), y + 78.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
+            self._draw_text(status_line, max(x + 22.0, sx), y + 92.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner
@@ -1080,6 +1080,48 @@ void main() {
             if i % 2 == 1:
                 self._draw_rect(right_x - 8.0, row_y - 2.0, col_half, lh + 2.0, (0.16, 0.08, 0.04, 0.35))
             self._draw_text(ln, right_x, row_y, scale=2.05, color=(0.98, 0.68, 0.22, 0.96))
+
+        # ── layer 9.5: fixed bottom Auto VJ status section ─────────────
+        status_box_x = x + 8.0
+        status_box_w = panel_w - 16.0
+        status_box_h = 54.0
+        status_box_y = y + panel_h - 76.0
+        self._draw_rect(status_box_x, status_box_y, status_box_w, status_box_h, (0.03, 0.08, 0.14, 0.84))
+        self._draw_rect(status_box_x, status_box_y, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.40 + pulse_med * 0.14))
+        self._draw_rect(status_box_x, status_box_y + status_box_h - 2.0, status_box_w, 2.0, (0.10, 0.94, 1.0, 0.28 + pulse_slow * 0.12))
+        self._draw_rect(status_box_x, status_box_y, 2.0, status_box_h, (0.10, 0.94, 1.0, 0.20 + pulse_slow * 0.10))
+        self._draw_rect(status_box_x + status_box_w - 2.0, status_box_y, 2.0, status_box_h, (0.10, 0.94, 1.0, 0.20 + pulse_slow * 0.10))
+
+        mood = str(self._hud_state.get('auto_vj_mood', '-')).upper()
+        scene = str(self._hud_state.get('auto_vj_scene', '-')).upper()
+        genre = str(self._hud_state.get('audio_profile_name', '-'))
+        if len(genre) > 18:
+            genre = genre[:15] + '...'
+        bpm = str(self._hud_state.get('auto_vj_bpm', '--'))
+        action_in = str(self._hud_state.get('auto_vj_action_in', '--'))
+
+        line1 = f'MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre:<18}'
+        line2 = f'BPM: {bpm:>3} | ACTION IN: {action_in:<4}'
+        char_w = float(self._glyph_w) * self._font_scale_norm * 1.9
+        line1_w = len(line1) * char_w
+        line2_w = len(line2) * char_w
+        block_w = max(line1_w, line2_w)
+        block_x = status_box_x + (status_box_w - block_w) * 0.5
+        line1_x = block_x + (block_w - line1_w) * 0.5
+        line2_x = block_x + (block_w - line2_w) * 0.5
+        # Subtle Unicorn Tears-inspired color drift for the top status line.
+        tears_phase = t * 0.55
+        tears_r = 0.82 + 0.10 * math.sin(tears_phase + 0.10)
+        tears_g = 0.93 + 0.05 * math.sin(tears_phase + 2.05)
+        tears_b = 0.90 + 0.10 * math.sin(tears_phase + 4.15)
+        self._draw_text(
+            line1,
+            line1_x,
+            status_box_y + 7.0,
+            scale=1.9,
+            color=(tears_r, tears_g, tears_b, 0.96),
+        )
+        self._draw_text(line2, line2_x, status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
         # Three evenly spaced horizontal tick marks on the right border
