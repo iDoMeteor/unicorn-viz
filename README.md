@@ -266,6 +266,21 @@ unicorn-viz/
 | OpenGL          | 3.3     | GPU rendering                    |
 | PipeWire/ALSA   | any     | Audio loopback capture           |
 
+### Minimum Recommended (validated baseline)
+
+The following machine is the current baseline used for pre-release testing.
+For stable live use, target equivalent or better specs.
+
+| Component | Minimum Recommended |
+|---|---|
+| OS | Fedora Linux 37 (or equivalent modern Linux distro) |
+| Kernel | Linux 6.5.x |
+| CPU | Intel Core i7-8809G class CPU (4 cores / 8 threads) |
+| RAM | 32 GB system memory |
+| GPU | AMD Radeon RX Vega M GH class GPU |
+| VRAM | 4 GB dedicated video memory |
+| OpenGL | OpenGL 4.6 core profile (Mesa 23.x or newer) |
+
 Python packages:
 - `moderngl >= 5.11` — OpenGL wrapper
 - `pysdl2`, `pysdl2-dll` — SDL2 bindings

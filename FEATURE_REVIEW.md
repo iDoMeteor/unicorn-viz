@@ -187,16 +187,16 @@ Notes:
 - [ ] No stuck state after abort or completion
 
 ### Post FX
-- [ ] Ctrl+Alt+1 Chromatic Aberration
-- [ ] Ctrl+Alt+2 Film Grain + Dither
-- [ ] Ctrl+Alt+3 Glitch Slices
-- [ ] Ctrl+Alt+4 Heat Haze Refraction
-- [ ] Ctrl+Alt+5 Lens Distortion + Vignette
-- [ ] Ctrl+Alt+6 Multi-pass Bloom
-- [ ] Ctrl+Alt+7 Radial Zoom Blur
-- [ ] Ctrl+Alt+8 Temporal Feedback Trail
-- [ ] Ctrl+Alt+9 Time Scramble Warp
-- [ ] Ctrl+Alt+0 Smoke and Bubbles
+- [ ] Ctrl+Alt+1 Chromatic Aberration | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+2 Film Grain + Dither | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+3 Glitch Slices | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+4 Heat Haze Refraction | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+5 Lens Distortion + Vignette | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+6 Multi-pass Bloom | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+7 Radial Zoom Blur | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+8 Temporal Feedback Trail | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+9 Time Scramble Warp | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Ctrl+Alt+0 Smoke and Bubbles | Rating Before: ___/5 | Rating After: ___/5
 
 ### ProjectM Presets
 - [ ] Ctrl+N next preset
@@ -287,6 +287,8 @@ Track both enabled and disabled behavior for each drop-in.
 Use this for each built-in effect in one pass so all criteria are captured together.
 
 Per-effect one-shot checklist:
+- [ ] Rating Before (pre-tuning baseline): ___/5
+- [ ] Rating After (post-tuning result): ___/5
 - [ ] Visual quality: ___/5
 - [ ] Audio response: ___/5
 - [ ] Performance single display: ___/5
@@ -300,32 +302,32 @@ Per-effect one-shot checklist:
 
 ### Built-in roster
 
-- [ ] 3D Cube (cube_3d)
-- [ ] Wavey Gravy (alien_biome)
-- [ ] ANSI Viewer (ansi_viewer)
-- [ ] Audio Spectrum (audio_spectrum) - startup variance EXEMPT
-- [ ] Copper Bars (copper_bars)
-- [ ] Cosmos (cosmos)
-- [ ] Crystal Pyramids (crystal_pyramids)
-- [ ] Dali (dali)
-- [ ] Escher (escher)
-- [ ] Curtains (fire)
-- [ ] Fire (fire_lifelike)
-- [ ] Fireworks (fireworks)
-- [ ] Fractal Zoom (fractal_zoom)
-- [ ] Kaleidoscope (kaleidoscope)
-- [ ] Metaballs (metaballs)
-- [ ] Particle Storm (particle_storm)
-- [ ] Plasma (plasma)
-- [ ] Psychedelic (psychedelic)
-- [ ] Raymarcher (raymarcher)
-- [ ] Sine Scroller 2.0 (sine_scroller)
-- [ ] Starfield (starfield)
-- [ ] System Monitor (system_monitor) - startup variance EXEMPT
-- [ ] Tunnel (tunnel)
-- [ ] Van Gogh (van_gogh)
-- [ ] Vector (vector)
-- [ ] Water (water)
+- [ ] 3D Cube (cube_3d) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Wavey Gravy (alien_biome) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] ANSI Viewer (ansi_viewer) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Audio Spectrum (audio_spectrum) - startup variance EXEMPT | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Copper Bars (copper_bars) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Cosmos (cosmos) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Crystal Pyramids (crystal_pyramids) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Dali (dali) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Escher (escher) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Curtains (fire) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Fire (fire_lifelike) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Fireworks (fireworks) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Fractal Zoom (fractal_zoom) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Kaleidoscope (kaleidoscope) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Metaballs (metaballs) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Particle Storm (particle_storm) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Plasma (plasma) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Psychedelic (psychedelic) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Raymarcher (raymarcher) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Sine Scroller 2.0 (sine_scroller) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Starfield (starfield) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] System Monitor (system_monitor) - startup variance EXEMPT | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Tunnel (tunnel) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Van Gogh (van_gogh) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Vector (vector) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Water (water) | Rating Before: ___/5 | Rating After: ___/5
 
 ---
 
@@ -335,18 +337,37 @@ Use the same per-effect one-shot checklist as built-ins.
 
 ### Drop-in visual roster
 
-- [ ] Alien Invasion (alien-invasion-01)
-- [ ] Cyber War (cyber-war-01)
-- [ ] Disco Ball (disco-ball-01)
-- [ ] Hacker Terminal (hacker-terminal-01)
-- [ ] Image Showcase (images-01)
-- [ ] ProjectM Presets (projectm-01)
-- [ ] Sim Showcase (sims-01)
-- [ ] Texture Showcase (textures-01)
-- [ ] Prism Storm (textures-01)
-- [ ] Tron Grid (tron-grid-01)
-- [ ] Unicorn Tears (unicorn-tears-01)
-- [ ] Video Showcase (videos-01)
+- [ ] Alien Invasion (alien-invasion-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Cyber War (cyber-war-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Disco Ball (disco-ball-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Hacker Terminal (hacker-terminal-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Image Showcase (images-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] ProjectM Presets (projectm-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Sim Showcase (sims-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Texture Showcase (textures-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Prism Storm (textures-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Tron Grid (tron-grid-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Unicorn Tears (unicorn-tears-01) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Video Showcase (videos-01) | Rating Before: ___/5 | Rating After: ___/5
+
+---
+
+## 12b) Transition Styles One-Shot Review
+
+Use this section to score transition tuning impact directly.
+
+- [ ] crossfade | Rating Before: ___/5 | Rating After: ___/5
+- [ ] smoothfade | Rating Before: ___/5 | Rating After: ___/5
+- [ ] scanwipe_x | Rating Before: ___/5 | Rating After: ___/5
+- [ ] scanwipe_y | Rating Before: ___/5 | Rating After: ___/5
+- [ ] dissolve | Rating Before: ___/5 | Rating After: ___/5
+- [ ] zoomblend | Rating Before: ___/5 | Rating After: ___/5
+- [ ] radialwipe | Rating Before: ___/5 | Rating After: ___/5
+- [ ] lumawipe | Rating Before: ___/5 | Rating After: ___/5
+- [ ] stripewipe | Rating Before: ___/5 | Rating After: ___/5
+- [ ] anglesweep | Rating Before: ___/5 | Rating After: ___/5
+- [ ] glitchsoft | Rating Before: ___/5 | Rating After: ___/5
+- [ ] prismsplit | Rating Before: ___/5 | Rating After: ___/5
 
 ---
 
