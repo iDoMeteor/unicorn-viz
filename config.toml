@@ -274,6 +274,16 @@ scale_when_framed = true
 scale_when_framed = false
 candy_frame_disallow = true
 
+[effects.Fireworks]
+scale_when_framed = false
+candy_frame_disallow = true
+
+[effects.Cube3D]
+scale_when_framed = true
+
+[effects.Vector]
+scale_when_framed = true
+
 # ---------------------------------------------------------------------------
 # Sim Showcase drop-in  (drop-ins/sims-01)
 # Supports public USD scene packs (robotics/simulation datasets).
