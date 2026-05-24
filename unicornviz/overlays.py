@@ -1010,13 +1010,6 @@ void main() {
         session_line = f"SESSION   {self._hud_state.get('session_time', '00:00')}"
         sx_session = x + (panel_w - len(session_line) * 8.0 * 2.2) * 0.5
         self._draw_text(session_line, sx_session, y + 76.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
-        vj_status = str(self._hud_state.get('vj_status', '')).strip()
-        if vj_status:
-            # Keep the status line coherent and centered in the header.
-            max_chars = 72
-            status_line = vj_status if len(vj_status) <= max_chars else (vj_status[: max_chars - 3] + '...')
-            sx = x + (panel_w - len(status_line) * 8.0 * 1.65) * 0.5
-            self._draw_text(status_line, max(x + 22.0, sx), y + 92.0, scale=1.65, color=(0.86, 1.0, 0.86, 0.94))
 
         # ── layer 6: effect banner ───────────────────────────────────────
         # Bass-reactive glow behind the banner
