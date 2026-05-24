@@ -1101,8 +1101,13 @@ void main() {
 
         line1 = f'MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre:<18}'
         line2 = f'BPM: {bpm:>3} | ACTION IN: {action_in:<4}'
-        line1_x = status_box_x + (status_box_w - len(line1) * 8.0 * 1.9) * 0.5
-        line2_x = status_box_x + (status_box_w - len(line2) * 8.0 * 1.9) * 0.5
+        char_w = float(self._glyph_w) * self._font_scale_norm * 1.9
+        line1_w = len(line1) * char_w
+        line2_w = len(line2) * char_w
+        block_w = max(line1_w, line2_w)
+        block_x = status_box_x + (status_box_w - block_w) * 0.5
+        line1_x = block_x + (block_w - line1_w) * 0.5
+        line2_x = block_x + (block_w - line2_w) * 0.5
         # Subtle Unicorn Tears-inspired color drift for the top status line.
         tears_phase = t * 0.55
         tears_r = 0.82 + 0.10 * math.sin(tears_phase + 0.10)
