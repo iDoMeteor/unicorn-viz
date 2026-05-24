@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DJ Unicorn Tears | World Premiere</title>
+  <style>
+    :root {
+      --bg: #05060b;
+      --bg2: #0b1023;
+      --panel: rgba(12, 16, 34, 0.92);
+      --ink: #f1f5ff;
+      --muted: #bfd0f5;
+      --cyan: #57f7ff;
+      --pink: #ff69d4;
+      --violet: #be77ff;
+      --gold: #ffd66d;
+      --line: rgba(140, 168, 255, 0.24);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 760px at 90% 10%, rgba(255, 105, 212, 0.22), transparent 64%),
+        radial-gradient(900px 640px at 0% 100%, rgba(87, 247, 255, 0.16), transparent 64%),
+        linear-gradient(145deg, var(--bg), var(--bg2));
+    }
+
+    .sheet {
+      max-width: 1040px;
+      margin: 0 auto;
+      border-radius: 26px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(5, 7, 14, 0.94);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.55);
+    }
+
+    header {
+      padding: 36px 38px 26px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(120deg, rgba(12, 17, 34, 0.92), rgba(11, 15, 26, 0.78)),
+        radial-gradient(110% 130% at 100% 0%, rgba(255,105,212,0.2), transparent 66%);
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 56px;
+      line-height: 0.98;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .sub {
+      margin: 0;
+      font-size: 22px;
+      color: var(--muted);
+      max-width: 850px;
+    }
+
+    .hero-row {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+      padding: 22px 24px 24px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      background: var(--panel);
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    p, li { color: #dde8ff; line-height: 1.42; }
+    ul { margin: 0; padding-left: 18px; }
+    li { margin-bottom: 8px; }
+
+    .launch-tags {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-align: center;
+      background: rgba(87, 247, 255, 0.08);
+      font-size: 12px;
+    }
+
+    .callout {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 214, 109, 0.38);
+      background: rgba(255, 214, 109, 0.10);
+      color: #fff4d2;
+      font-weight: 600;
+    }
+
+    .image-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.03);
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+    }
+
+    figcaption {
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .single { grid-column: 1 / -1; }
+
+    .platforms {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .platform {
+      padding: 9px 10px;
+      text-align: center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,105,212,0.08);
+      font-size: 12px;
+    }
+
+    .rumble {
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: 0.04em;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 14px 24px 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: #a6bbe0;
+    }
+
+    @media print {
+      body { padding: 0; }
+      .sheet { border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <section class="sheet">
+    <header>
+      <div class="eyebrow">Public Launch / Premiere Campaign</div>
+      <h1>DJ Unicorn Tears</h1>
+      <p class="sub">A neon-soaked house, EDM, and techno world premiere built for the dancefloor, the timeline, and the live chat. The first public launch target is always <span class="rumble">Rumble</span>.</p>
+      <div class="launch-tags">
+        <div class="tag">Rumble-first premiere</div>
+        <div class="tag">Music + visuals + merch</div>
+        <div class="tag">Free downloads + premium drops</div>
+      </div>
+    </header>
+
+    <section class="hero-row">
+      <article class="card">
+        <h2>What Drops</h2>
+        <ul>
+          <li>World premiere livestream on <span class="rumble">Rumble</span>.</li>
+          <li>Free starter downloads and teaser cuts.</li>
+          <li>Premium drop-ins, show visuals, and exclusive product bundles.</li>
+          <li>Merch capsule: posters, hoodies, and full apparel drops.</li>
+          <li>Public video rollout across YouTube, X, Odysee, Brighteon, Twitch, and Kick.</li>
+        </ul>
+
+        <div class="callout">This is not a quiet release. This is a full-volume visual rave launch designed to hit hard, move fast, and keep the floor burning.</div>
+
+        <div class="platforms" style="margin-top:14px;">
+          <div class="platform">YouTube</div>
+          <div class="platform">Spotify</div>
+          <div class="platform">Rumble</div>
+          <div class="platform">X</div>
+          <div class="platform">Odysee</div>
+          <div class="platform">Brighteon</div>
+          <div class="platform">Twitch</div>
+          <div class="platform">Kick</div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Launch Visuals</h2>
+        <div class="image-grid">
+          <figure class="single">
+            <img src="../../screenshots/unicornviz_20260524_084955_marketing.png" alt="Fresh marketing screenshot" />
+            <figcaption>Fresh screenshot captured today for launch collateral.</figcaption>
+          </figure>
+          <figure>
+            <img src="../../images/unicorn-viz-01.png" alt="Unicorn Viz hero art" />
+            <figcaption>Primary visual identity.</figcaption>
+          </figure>
+          <figure>
+            <img src="../../images/unicorn-tears-dancing.png" alt="DJ Unicorn Tears artwork" />
+            <figcaption>Artist-side performance energy.</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Public Messaging</h2>
+        <ul>
+          <li>Future-club visuals with a high-voltage rave aesthetic.</li>
+          <li>Music drops are paired with cinematic motion, neon, and live performance culture.</li>
+          <li>Fans can grab free content, level up to premium packs, and buy merch straight from the launch ecosystem.</li>
+          <li>Every post should point people toward the <span class="rumble">Rumble premiere</span> first.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>Campaign Rhythm</h2>
+        <ul>
+          <li><strong>Pre-launch:</strong> teaser clips, countdowns, and short-form hype.</li>
+          <li><strong>Premiere week:</strong> live set, heavy social cadence, clip cuts, and direct calls to join the premiere.</li>
+          <li><strong>Post-launch:</strong> keep the energy high with repeat drops, merch waves, and follower conversion.</li>
+        </ul>
+      </article>
+    </section>
+
+    <footer>
+      <span>Public Launch Draft • Premiere Target: Rumble</span>
+      <span>House / EDM / Techno / Future Club Energy</span>
+    </footer>
+  </section>
+</body>
+</html>

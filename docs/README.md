@@ -13,6 +13,7 @@ This is the canonical map for project documentation.
 - [Effect Settings Reference](effect-settings.md)
 - [Developer Guide](developer-guide.md)
 - [Drop-in Documentation Registry](drop-ins.md)
+- [Marketing](marketing/README.md)
 
 ## Working Documentation
 
