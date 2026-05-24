@@ -547,10 +547,15 @@ class App:
         """Return window-local viewport for the primary display in multi-display modes."""
         if self._display_mode not in {'mirror_all', 'span_all'}:
             return None
-        layouts = self._multihead_layouts()
-        if not layouts:
-            return None
-        px, py, pw, ph = layouts[0]
+        bounds = self._display_bounds(self._display_index)
+        if bounds is not None:
+            px, py, pw, ph = int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h)
+        else:
+            # Fallback to first active layout if display index is unavailable.
+            layouts = self._multihead_layouts()
+            if not layouts:
+                return None
+            px, py, pw, ph = layouts[0]
         if self._display_mode == 'mirror_all':
             origin_x = self._window_origin_x
             origin_y = self._window_origin_y
