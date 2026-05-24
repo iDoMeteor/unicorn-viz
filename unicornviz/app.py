@@ -149,6 +149,144 @@ class _NullScreenBurstController:
         return 1.0, 0.0
 
 
+class _NullWebcamSystem:
+    """Safe fallback when webcam overlay drop-in is unavailable."""
+
+    def __init__(self, ctx: moderngl.Context, width: int, height: int, cfg: dict | None = None) -> None:
+        self._ctx = ctx
+        self._width = width
+        self._height = height
+        self._cfg = cfg or {}
+
+    def start(self) -> None:
+        return
+
+    def render(self, dt: float, bass: float, treble: float) -> None:
+        return
+
+    def destroy(self) -> None:
+        return
+
+    def resize(self, width: int, height: int) -> None:
+        self._width = width
+        self._height = height
+
+    def next_treatment(self) -> str | None:
+        return None
+
+    def prev_treatment(self) -> str | None:
+        return None
+
+    def toggle_auto_cycle(self) -> bool:
+        return False
+
+    def scale_pip(self, delta: float) -> float:
+        return 0.0
+
+    def set_layout(self, layout: str) -> None:
+        return
+
+
+class _NullRTMPStreamer:
+    """Safe fallback when streaming drop-in is unavailable."""
+
+    def __init__(self, cfg: dict, width: int, height: int) -> None:
+        self.enabled = False
+        self.auto_start = False
+        self._last_error = 'Streaming subsystem unavailable'
+
+    @property
+    def is_streaming(self) -> bool:
+        return False
+
+    @property
+    def last_error(self) -> str:
+        return self._last_error
+
+    @property
+    def destination_label(self) -> str:
+        return '-'
+
+    def start(self) -> bool:
+        return False
+
+    def write_frame(self, frame: bytes) -> bool:
+        return False
+
+    def stop(self) -> None:
+        return
+
+    def resize(self, width: int, height: int) -> None:
+        return
+
+    def set_provider(self, provider: str, restart: bool = True) -> str:
+        return 'unavailable'
+
+
+class _NullPostFxController:
+    """Safe fallback when post-fx drop-in is unavailable."""
+
+    enabled = False
+
+    def __init__(self, ctx: moderngl.Context, width: int, height: int, cfg: dict | None = None) -> None:
+        self._ctx = ctx
+        self._width = width
+        self._height = height
+        self._cfg = cfg or {}
+
+    @property
+    def is_hue_active(self) -> bool:
+        return False
+
+    @property
+    def is_rotation_active(self) -> bool:
+        return False
+
+    @property
+    def active_name(self) -> str:
+        return 'N/A'
+
+    def is_active(self) -> bool:
+        return False
+
+    def select_slot(self, slot: int) -> str:
+        return 'Post FX: unavailable'
+
+    def on_scroll(self, dy: int) -> None:
+        return
+
+    def on_ctrl_scroll(self, dy: int) -> None:
+        return
+
+    def on_ctrl_scroll_degrees(self, degrees: float) -> None:
+        return
+
+    def clear_hue_shift(self) -> None:
+        return
+
+    def clear_scroll_fx(self) -> None:
+        return
+
+    def apply(
+        self,
+        src_tex: moderngl.Texture,
+        dst_fbo: moderngl.Framebuffer,
+        dt: float,
+        bass: float,
+        mid: float,
+        treble: float,
+        beat: float,
+    ) -> bool:
+        return False
+
+    def resize(self, width: int, height: int) -> None:
+        self._width = width
+        self._height = height
+
+    def destroy(self) -> None:
+        return
+
+
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
@@ -165,17 +303,29 @@ def _load_multihead_controller_class() -> type:
 
 def _load_webcam_system_class() -> type:
     """Load WebcamSystem directly from the webcam-01 drop-in."""
-    return load_dropin_symbol('webcam-01/webcam_overlay.py', 'WebcamSystem')
+    try:
+        return load_dropin_symbol('webcam-01/webcam_overlay.py', 'WebcamSystem')
+    except Exception as exc:
+        log.warning('WebcamSystem not available: %s', exc)
+        return _NullWebcamSystem
 
 
 def _load_rtmp_streamer_class() -> type:
     """Load RTMPStreamer directly from the streaming-01 drop-in."""
-    return load_dropin_symbol('streaming-01/rtmp_streamer.py', 'RTMPStreamer')
+    try:
+        return load_dropin_symbol('streaming-01/rtmp_streamer.py', 'RTMPStreamer')
+    except Exception as exc:
+        log.warning('RTMP streamer unavailable: %s', exc)
+        return _NullRTMPStreamer
 
 
 def _load_postfx_controller_class() -> type:
     """Load PostFxController directly from the postfx-01 drop-in."""
-    return load_dropin_symbol('postfx-01/postfx_controller.py', 'PostFxController')
+    try:
+        return load_dropin_symbol('postfx-01/postfx_controller.py', 'PostFxController')
+    except Exception as exc:
+        log.warning('PostFxController not available: %s', exc)
+        return _NullPostFxController
 
 
 def _load_screen_burst_controller_class() -> type:
@@ -809,37 +959,48 @@ class App:
             log.warning('RainbowNova not available: %s', exc)
             self._rainbow_nova = None
         # System-level webcam overlay (always-on PiP above effects, below HUD).
+        webcam_cls = _load_webcam_system_class()
+        cam_cfg = self.cfg.get('webcam', default={}) or {}
+        if not isinstance(cam_cfg, dict):
+            cam_cfg = {}
         try:
-            webcam_cls = _load_webcam_system_class()
-            cam_cfg = self.cfg.get('webcam', default={}) or {}
-            if not isinstance(cam_cfg, dict):
-                cam_cfg = {}
             self._webcam_system = webcam_cls(self._ctx, self._width, self._height, cam_cfg)
-            self._webcam_system.start()
-            self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
-                self.cfg.get('demo', 'effect_duration', default=20)
-            )
-            log.info('WebcamSystem loaded from drop-in')
         except Exception as exc:
-            log.warning('WebcamSystem not available: %s', exc)
+            log.warning('WebcamSystem init failed: %s', exc)
+            self._webcam_system = _NullWebcamSystem(self._ctx, self._width, self._height, cam_cfg)
+        self._webcam_system.start()
+        self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
+            self.cfg.get('demo', 'effect_duration', default=20)
+        )
+        if isinstance(self._webcam_system, _NullWebcamSystem):
             self._webcam_system = None
+        else:
+            log.info('WebcamSystem loaded from drop-in')
 
         # System-level post-process stack (optional drop-in).
+        postfx_cls = _load_postfx_controller_class()
+        postfx_cfg = self.cfg.get('postfx', default={}) or {}
+        if not isinstance(postfx_cfg, dict):
+            postfx_cfg = {}
         try:
-            postfx_cls = _load_postfx_controller_class()
-            postfx_cfg = self.cfg.get('postfx', default={}) or {}
-            if not isinstance(postfx_cfg, dict):
-                postfx_cfg = {}
             self._postfx_controller = postfx_cls(
                 self._ctx,
                 self._render_width,
                 self._render_height,
                 postfx_cfg,
             )
-            log.info('PostFxController loaded from drop-in')
         except Exception as exc:
-            log.warning('PostFxController not available: %s', exc)
+            log.warning('PostFxController init failed: %s', exc)
+            self._postfx_controller = _NullPostFxController(
+                self._ctx,
+                self._render_width,
+                self._render_height,
+                postfx_cfg,
+            )
+        if isinstance(self._postfx_controller, _NullPostFxController):
             self._postfx_controller = None
+        else:
+            log.info('PostFxController loaded from drop-in')
 
         # System-level screen burst timing/transform controller (optional).
         try:
@@ -1594,26 +1755,28 @@ void main() {
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
+        stream_cls = _load_rtmp_streamer_class()
+        stream_cfg = self.cfg.get('streaming', default={}) or {}
+        if not isinstance(stream_cfg, dict):
+            stream_cfg = {}
         try:
-            stream_cls = _load_rtmp_streamer_class()
-            stream_cfg = self.cfg.get('streaming', default={}) or {}
-            if not isinstance(stream_cfg, dict):
-                stream_cfg = {}
             self._streamer = stream_cls(stream_cfg, self._width, self._height)
-            if self._streamer.enabled and self._streamer.auto_start:
-                if self._streamer.start():
-                    log.info('RTMP streamer auto-started: %s', self._streamer.destination_label)
-                else:
-                    log.warning('RTMP streamer auto-start failed: %s', self._streamer.last_error)
-            else:
-                log.info(
-                    'RTMP streamer loaded (enabled=%s auto_start=%s)',
-                    self._streamer.enabled,
-                    self._streamer.auto_start,
-                )
         except Exception as exc:
-            log.warning('RTMP streamer unavailable: %s', exc)
+            log.warning('RTMP streamer init failed: %s', exc)
+            self._streamer = _NullRTMPStreamer(stream_cfg, self._width, self._height)
+        if isinstance(self._streamer, _NullRTMPStreamer):
             self._streamer = None
+        elif self._streamer.enabled and self._streamer.auto_start:
+            if self._streamer.start():
+                log.info('RTMP streamer auto-started: %s', self._streamer.destination_label)
+            else:
+                log.warning('RTMP streamer auto-start failed: %s', self._streamer.last_error)
+        else:
+            log.info(
+                'RTMP streamer loaded (enabled=%s auto_start=%s)',
+                self._streamer.enabled,
+                self._streamer.auto_start,
+            )
         self._sync_recording_overlay()
         if self._recorder.enabled and self._recorder.auto_record:
             started, _ = self.start_recording()

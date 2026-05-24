@@ -473,7 +473,7 @@ X11/Mesa.
 
 ## Files Added For Planning / Follow-Up
 
-- `drop-in-planning.md`
+- `docs/planning/drop-in-planning.md`
   - Spotify drop-in planning
   - Mixxx/xwax/Giada drop-in planning
   - control-room layout + Decks/Cues/Timing follow-ups

@@ -9,7 +9,7 @@
 
 ## Current Focus (May 18, 2026)
 
-- `[doing]` **Pre-release future-proofing pass** — see `plan-future-proofing.md` for the full audit
+- `[doing]` **Pre-release future-proofing pass** — see `docs/planning/plan-future-proofing.md` for the full audit
   and remediation checklist (FP-01 through FP-13).  Must complete all 🔴 and 🟠 items before v1.0 tag.
 - `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
 - `[done]` RTMP streaming subsystem drop-in.
@@ -18,11 +18,11 @@
 - `[todo]` Design external plugin loading for paid effect packs.
 - `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
 - `[done]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with beat-context snapshot (bpm, beat_phase, energy, vj_mode) per keypress; gated by `[keystrokes] enabled = false`.
-- `[todo]` Plan multi-display overlay policy so help/HUD/flash render only on primary display in `span_all` / `mirror_all` when enabled.
-- `[todo]` Design a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
+- `[todo]` Add config gate for multi-display overlay scoping (base behavior is landed: help/HUD now render on primary display in `span_all` / `mirror_all`).
+- `[done]` Design and implement a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
 - `[done]` Add effect metadata concept `PING_PONG_FRIENDS` for preferred pairings when randomizing ping-pong slots.
-- `[todo]` Design scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ only when hue-shift inactive).
+- `[done]` Implement scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ when hue-shift is inactive).
 - `[todo]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
 - `[todo]` Design `serato-01` drop-in for DJ deck / transport / cue integration with Control Room and Auto VJ.
 - `[todo]` Design `mixxx-01` / `xwax-01` / `giada-01` integration drop-ins for open DJ/live-loop hosts.
@@ -122,11 +122,11 @@
   - camera treatments cycle with `KP/` and `KP*`; auto-cycle via `KP Enter`
   - the old webcam background visual was split into built-in effect `Psychedelic`
   - remaining: chroma-key/background replacement and cross-platform camera tuning
-- `[todo]` Add `assets/sims/` support for IsaacLab/OpenUSD-style 3D animations.
+- `[done]` Add `assets/sims/` support for IsaacLab/OpenUSD-style 3D animations.
   Notes:
-  - playback/runtime format choice
-  - audio sync hooks
-  - GPU/runtime cost constraints
+  - implemented as drop-in `sims-01` (`Sim Showcase`)
+  - OpenUSD scene loading and fallback visual path are in place
+  - remaining work is quality/performance review under the global pre-release review pass
 - `[todo]` Phase 3 review milestone: complete one full review pass across every existing built-in effect.
   Notes:
   - validate visual quality, audio reactivity, and parameter sanity effect-by-effect
@@ -184,12 +184,13 @@
   - licensing/entitlement enforcement model
   - security/trust boundary for executable plugin code
 - `[todo]` Propose and prototype additional built-in effects and scene ideas.
-- `[todo]` Add global scroll-wheel hue-shift post-fx interaction.
+- `[done]` Add global scroll-wheel hue-shift post-fx interaction.
   Notes:
   - wheel up/down shifts global hue in opposite directions
   - effect stays active for X seconds after last scroll event (new scroll resets timer)
   - middle-click clears hue-shift immediately
   - when hue-shift is inactive, middle-click toggles Auto VJ if loaded
+  - remaining follow-up: tune defaults and evaluate Auto VJ usage policy for scroll FX
 - `[todo]` Extend effect metadata with optional `ping_pong_friends` list.
   Notes:
   - used by ping-pong randomization to bias compatible pairings
@@ -200,29 +201,29 @@
   - prioritize selecting post-fx behavior families for Drop impact
   - treat effect-tag targeting as secondary/assistive signal
   - ensure cooldown/anti-storm logic still prevents visual spam
-- `[todo]` Design and prototype "Grand Finale" system effect.
+- `[done]` Design and prototype "Grand Finale" system effect.
   Notes:
-  - intent: end-of-set cinematic closer with deterministic progression
-  - should blend system overlays, post-fx hits, and one dedicated finale visual
-  - must include safe abort/exit path and configurable duration/intensity
+  - implemented in drop-in `grand-finale-01` with trigger/abort integration
+  - blends system overlays, post-fx hits, and dedicated sequence phases
+  - future work: polish, tuning, and final pre-release review signoff
 
 ## Phase 5 — Pre-Release Future-Proofing
 
-> Full audit, findings, and remediation checklist in **`plan-future-proofing.md`**.
+> Full audit, findings, and remediation checklist in **`docs/planning/plan-future-proofing.md`**.
 > Complete all 🔴 Critical and 🟠 Pre-release items (FP-01 → FP-13) before tagging v1.0.
 
 - `[done]` **FP-01/02/03** — Fix `grand-finale-01` private attr violations.
   Notes:
   - added `ctx`, `render_width`, `render_height`, `has_postfx()` to `VJApi`
   - updated `grand_finale.py` to use only `vj_api`; live drop-in code no longer uses direct private app access
-- `[todo]` **FP-04** — Standardize `_load_*_class()` loaders in `app.py`.
+- `[done]` **FP-04** — Standardize `_load_*_class()` loaders in `app.py`.
   Notes:
-  - move try/except + null fallback inside each loader function (match multi-head pattern)
-  - removes reliance on all call sites individually remembering to guard
-- `[todo]` **FP-05/06** — Add `[postfx]` and `[grand_finale]` config skeleton sections.
+  - `_load_webcam_system_class`, `_load_rtmp_streamer_class`, and `_load_postfx_controller_class` now guard load errors internally and return safe null fallbacks
+  - call sites no longer depend on repeated symbol-load try/except blocks
+- `[done]` **FP-05/06** — Add `[postfx]` and `[grand_finale]` config skeleton sections.
   Notes:
-  - add commented-out blocks to `config.toml` so users can see available knobs
-  - verify `config.full.example.toml` has both sections complete and accurate
+  - `config.toml` now includes user-facing skeleton sections
+  - `config.full.example.toml` now includes complete default sections
 - `[done]` **FP-07** — Add show-duration API to `VJApi`.
   Notes:
   - implemented `set_show_duration()`, `get_elapsed_time()`, `get_time_remaining()`
@@ -233,16 +234,28 @@
   - implemented module constant `VJ_API_VERSION = (1, 0, 0)` in `unicornviz/vj_api.py`
   - exposes `VJApi.VERSION` for drop-in compatibility checks
   - bump on any breaking change to the public surface
-- `[todo]` **FP-09/10** — Formalize `BaseEffect` / `AudioData` as stable public contracts.
+- `[done]` **FP-09/10** — Formalize `BaseEffect` / `AudioData` as stable public contracts.
   Notes:
-  - add `__all__` to `unicornviz/effects/base.py`
-  - add "Stable Public Contracts" section to `docs/developer-guide.md`
-- `[todo]` **FP-11** — Document `HELP_ENTRIES` registration in developer guide.
+  - `__all__ = ['BaseEffect', 'AudioData']` added to `unicornviz/effects/base.py`
+  - "Stable Public Contracts" section added to `docs/developer-guide.md`
+- `[done]` **FP-11** — Document `HELP_ENTRIES` registration in developer guide.
 - `[done]` **FP-12/13** — Auto VJ P5: `Ctrl+J` leader hotkeys + HELP_TEXT additions.
   Notes:
   - leader + child bindings implemented in `hotkeys.py`
   - `Ctrl+J` chain help entries now registered from the Auto VJ drop-in
   - leader arming window currently set to 3.0s
+
+## Phase 6 - Delivery and Pipeline Hardening
+
+- `[todo]` Define explicit CI/CD pipeline blueprint for v1 release engineering.
+  Notes:
+  - document build/test/release stages and promotion gates (dev -> prerelease -> stable)
+  - include Linux package pipeline (.deb/.rpm/Flatpak/Snap), Windows installer, and macOS DMG lanes
+  - define ownership, branch protection requirements, and release rollback procedure
+- `[todo]` Add documentation pipeline requirements to release planning (tracking only, implementation separate).
+  Notes:
+  - broken-link, stale-doc, and metadata-header checks to run in CI on docs changes
+  - scope and tooling to be finalized in the release engineering plan before implementation
 
 ## Feature Ideas to Explore
 

@@ -1,0 +1,122 @@
+# Unicorn Viz Beta-1 Cut Checklist (Primary + Drop-ins)
+
+Date: 2026-05-24
+Scope: Primary repo plus all drop-in submodule repos
+Purpose: Final top-10 execution list before first officially tagged pre-release beta
+
+## Release objective
+
+Cut a tagged pre-release beta where:
+- Core app is stable in live use
+- Auto VJ behavior is musically trustworthy
+- Drop-in ecosystem loads safely and degrades gracefully
+- Packaging/install flow is reproducible enough for external testers
+
+---
+
+## Top 10 priorities before beta tag
+
+1. Complete the full feature review matrix and close all P0/P1 findings
+- Why: This is now the release gate and still largely unchecked.
+- Source of truth: docs/audits/feature-review.md
+- Exit criteria:
+  - All sections executed at least once
+  - No open P0
+  - Any remaining P1 explicitly accepted with owner/date
+- Repos: primary + all effect/system drop-ins touched by resulting fixes
+
+2. Resolve control-room runtime starvation or ship control-room disabled by default
+- Why: Known risk of audience output freeze while control room window is open.
+- Source: docs/debug/control-room-debug-handoff.md
+- Exit criteria:
+  - Repro test no longer freezes in single/span/mirror
+  - If unresolved, explicit beta policy: control-room disabled + documented known issue
+- Repos: drop-ins/control-room-01 + primary
+
+3. Finish Auto VJ beat-tracker live hardening for remaining low-BPM under-lock edge cases
+- Why: Remaining music-correctness blocker despite major v2 progress.
+- Source: docs/debug/auto-vj-handoff-2026-05-21.md
+- Exit criteria:
+  - Live validation against known slow/medium tracks
+  - Harness metrics do not regress vs current baseline
+  - Documented acceptance thresholds for lock quality
+- Repos: drop-ins/auto-vj-01 + primary (audio/analyzer surfaces)
+
+4. Close remaining pre-release future-proofing items still open in code/docs
+- Why: Reduces breakage risk as drop-ins evolve.
+- Open set (verified):
+  - FP-04 loader standardization (still open)
+  - FP-05/06 postfx/grand_finale config skeletons (still open)
+  - FP-09/10/11 stable contract + HELP_ENTRIES docs (still open)
+- Repos: primary
+
+5. Add and validate user-visible postfx and grand_finale config sections
+- Why: Major systems are in runtime but not discoverable in config templates.
+- Exit criteria:
+  - Sections present in config.toml as commented skeletons
+  - Sections present and accurate in config.full.example.toml
+  - Docs reflect keys and defaults
+- Repos: primary
+
+6. Do planning truth-sync updates in canonical planning docs before tag
+- Why: Current plan files contain stale statuses that can mislead release work.
+- Exit criteria:
+  - plan.md and docs/planning/plan-future-proofing.md updated to reflect code reality
+  - Any unresolved uncertainty marked as unverified instead of done
+- Repos: primary
+
+7. Validate ProjectM on the primary target machine and finalize fallback posture
+- Why: Explicitly still called out as outstanding in plan.md.
+- Exit criteria:
+  - Confirm native projectM path works on primary box
+  - Confirm fallback behavior under missing lib/presets
+  - Mark supported/unsupported combinations in docs
+- Repos: drop-ins/projectm-01 + primary docs
+
+8. Lock installer/release artifact pipeline for pre-release tags
+- Why: Tagged beta needs repeatable outputs and clear distribution path.
+- Source: docs/planning/installers.md
+- Exit criteria:
+  - Tag push builds all intended beta artifacts
+  - Checksums + release manifest attached
+  - Pre-release channel behavior validated
+- Repos: primary
+
+9. Implement and/or enforce drop-in dependency contract for beta channels
+- Why: Cross-repo dependency drift is a likely beta pain point.
+- Source: docs/planning/installers.md section 6
+- Exit criteria:
+  - drop-in dependency strategy selected for beta (minimum manual policy or tooling)
+  - Clear tester instructions for optional/system deps
+- Repos: primary + drop-ins with extra deps
+
+10. Run long-session recording and streaming stability validation
+- Why: Recording is implemented but long-run audio degradation investigation remains open.
+- Source: docs/planning/recording-implementation-plan.md
+- Exit criteria:
+  - 30/60 min soak with recording on
+  - Streaming + recording combined smoke test
+  - Any known issues documented with workaround
+- Repos: primary + drop-ins/streaming-01
+
+---
+
+## Suggested repo/tag execution order
+
+1. Finish code and doc changes in each affected drop-in repo.
+2. Commit and push each drop-in repo first.
+3. Update submodule pointers in primary repo.
+4. Commit/push primary repo with release notes + final planning truth-sync.
+5. Create pre-release tag in primary repo.
+6. Verify artifact pipeline output and publish release notes.
+
+---
+
+## Beta go/no-go gate
+
+GO only if all are true:
+- No open P0 items
+- Control-room policy is explicit (fixed or disabled)
+- Auto VJ tempo lock acceptable on live test set
+- Planning docs match implementation state
+- Artifact pipeline produces expected pre-release outputs

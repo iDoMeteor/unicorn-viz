@@ -229,6 +229,29 @@ out vec2 out_pos;
 
 ---
 
+## Documentation SOP
+
+- Canonical user/developer documentation lives under `docs/`.
+- Root-level markdown files are reserved for top-level project entry docs only
+  (for example `README.md`); planning/debug/audit files belong under
+  `docs/planning/`, `docs/debug/`, `docs/audits/`, or `docs/archive/`.
+- Every new or moved documentation file must be linked from at least one
+  canonical index page (`docs/README.md`, `docs/drop-ins.md`, or a scoped
+  section index).
+- Complex drop-ins (for example controllers and automation subsystems) should
+  keep structured docs in `drop-ins/<name>/docs/` with at least:
+  `operations.md`, `configuration.md`, `integration.md`, and
+  `troubleshooting.md`.
+- Maintained docs should include a short metadata header block with:
+  `Owner`, `Status`, and `Last updated`.
+- Superseded docs must be marked clearly and moved to `docs/archive/` instead
+  of remaining in active locations.
+- When code or behavior changes, agents must update the relevant canonical
+  docs in the same task whenever practical; avoid creating duplicate docs that
+  restate existing guidance.
+
+---
+
 ## What the Agent Should NOT Do
 
 - Do not add error handling for situations that cannot occur (e.g., checking
@@ -241,8 +264,9 @@ out vec2 out_pos;
   confirming with the user first.
 - Do not generate or guess external URLs (16colo.rs pack names, etc.) — look
   them up via the fetch tools.
-- Do not create new `.md` files to document changes (use code comments /
-  docstrings instead), unless the user explicitly asks for documentation.
+- Do not create new `.md` files for routine code-only changes (use code
+  comments / docstrings instead), unless the user explicitly asks for
+  documentation or the task is explicitly documentation governance.
 
 ---
 

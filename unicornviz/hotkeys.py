@@ -882,13 +882,16 @@ class HotkeyHandler:
 
     def _screenshot(self) -> None:
         import datetime
+        import numpy as np
         from pathlib import Path
         from PIL import Image
 
-        frame = self._app.read_screenshot_frame()
-        if frame is None:
+        ctx = self._app.vj_api.ctx
+        if ctx is None:
             return
-        data, w, h = frame
+        w = self._app.vj_api.render_width
+        h = self._app.vj_api.render_height
+        data = ctx.screen.read(components=3)
         img = Image.frombytes("RGB", (w, h), data)
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

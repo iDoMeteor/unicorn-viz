@@ -70,6 +70,9 @@ if TYPE_CHECKING:
     import moderngl
 
 
+__all__ = ['BaseEffect', 'AudioData']
+
+
 class AudioData:
     """Snapshot of audio state passed to effects each frame."""
 

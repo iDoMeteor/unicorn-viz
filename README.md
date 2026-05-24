@@ -223,10 +223,12 @@ See [User Guide](docs/user-guide.md#keyboard-shortcuts) for full hotkey list.
 
 ## Documentation
 
+- **[Documentation Index](docs/README.md)** — Canonical map of all project docs, ownership, and maintenance workflow
 - **[User Guide](docs/user-guide.md)** — Installation, running, keyboard/MIDI controls, audio setup, effects reference, troubleshooting
 - **[Configuration Reference](docs/configuration.md)** — All `config.toml` settings
 - **[Effect Settings Reference](docs/effect-settings.md)** — Every effect's tweakable config variables
 - **[Developer Guide](docs/developer-guide.md)** — Architecture, effects API, GLSL conventions, contributing
+- **[Drop-in Documentation Registry](docs/drop-ins.md)** — Per-drop-in docs coverage and deep-dive links
 
 ---
 

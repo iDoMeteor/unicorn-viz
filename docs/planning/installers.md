@@ -6,6 +6,8 @@
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
+**Documentation pipeline planning:** `docs/planning/documentation-cicd-pipeline-plan.md`
+
 ---
 
 ## 0. Decisions Locked In (2026-05-22)

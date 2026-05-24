@@ -12,11 +12,13 @@
    - [MIDI](#midi)
    - [Config, Playlist, Overlays](#config-playlist-overlays)
 4. [Writing a New Effect](#writing-a-new-effect)
-5. [GLSL Conventions](#glsl-conventions)
-6. [Data Flow Diagram](#data-flow-diagram)
-7. [Test Strategy](#test-strategy)
-8. [Adding Platform Support](#adding-platform-support)
-9. [Release Checklist](#release-checklist)
+5. [Stable Public Contracts](#stable-public-contracts)
+6. [Registering Help Hotkeys via HELP_ENTRIES](#registering-help-hotkeys-via-help_entries)
+7. [GLSL Conventions](#glsl-conventions)
+8. [Data Flow Diagram](#data-flow-diagram)
+9. [Test Strategy](#test-strategy)
+10. [Adding Platform Support](#adding-platform-support)
+11. [Release Checklist](#release-checklist)
 
 ---
 
@@ -358,6 +360,60 @@ random_zoom_max  = 1.20   # Alt+Z random-zoom upper bound
 ```
 
 If these keys are absent, the global `[hotkeys]` defaults apply.
+
+---
+
+## Stable Public Contracts
+
+The following interfaces are treated as stable runtime contracts for drop-ins
+and effect modules. Changes should be backward compatible whenever possible.
+
+1. `unicornviz.effects.base.BaseEffect`
+2. `unicornviz.effects.base.AudioData`
+3. `unicornviz.vj_api.VJApi`
+4. `unicornviz.config.Config`
+
+Notes:
+
+1. Effect drop-ins should import `BaseEffect` and `AudioData` from
+    `unicornviz.effects.base` only.
+2. System drop-ins should interact with app runtime through `app.vj_api`
+    instead of private app attributes.
+3. `VJApi.VERSION` (backed by `VJ_API_VERSION`) is the compatibility signal
+    for drop-ins that need to enforce a minimum API surface.
+
+---
+
+## Registering Help Hotkeys via HELP_ENTRIES
+
+Drop-ins can publish hotkeys into the `H` help overlay by exposing a module- or
+class-level `HELP_ENTRIES` collection.
+
+Accepted entry format:
+
+1. Tuple form: `(section, key, description)`
+2. Dict form: `{"section": str, "key": str, "description": str}`
+
+Example:
+
+```python
+HELP_ENTRIES = [
+     ('Auto VJ', 'Ctrl+Alt+J', 'Toggle Auto VJ on/off'),
+     ('Auto VJ', 'Ctrl+J then P', 'Toggle ping-pong mode'),
+]
+```
+
+Guidelines:
+
+1. Keep section names human-readable; they are grouped/sorted in the help UI.
+2. Keep key labels concise and consistent with runtime hotkey notation.
+3. Do not mutate help entries at runtime unless the section truly changes.
+
+Discovery path:
+
+1. Startup calls `discover_dropin_help_entries()` from `unicornviz/dropins.py`.
+2. Entries are forwarded to `Overlays.register_help_entries()`.
+3. Malformed entries are skipped safely; they should still be fixed promptly.
 
 ### Runtime Surface Rules
 

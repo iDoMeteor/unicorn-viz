@@ -94,7 +94,7 @@ All 17 drop-ins have comprehensive README.md files:
 - ✅ Architecture and performance notes
 - ✅ Interaction matrix with other drop-ins
 
-See [DROPIN_AUDIT_REPORT.md](DROPIN_AUDIT_REPORT.md) for documentation audit details.
+See [dropin-audit-report-2026-05-19.md](dropin-audit-report-2026-05-19.md) for documentation audit details.
 
 ## Git Commands for Future Use
 

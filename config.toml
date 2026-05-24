@@ -83,6 +83,37 @@ stream_key = ""
 # audio_bitrate = "160k"
 
 # ---------------------------------------------------------------------------
+# Post FX subsystem  (drop-ins/postfx-01)
+# Global post-processing quick-hits + scroll-driven hue/rotation passes.
+# ---------------------------------------------------------------------------
+[postfx]
+# enabled = true
+# active_slot = 0
+# hit_duration = 0.9
+# slot1_duration = 1.15
+# slot2_duration = 0.95
+# slot3_duration = 0.90
+# slot4_duration = 1.30
+# slot5_duration = 1.05
+# slot6_duration = 1.20
+# slot7_duration = 0.95
+# slot8_duration = 0.90
+# slot9_duration = 0.85
+# slot10_duration = 2.40
+# hue_shift_timeout_s = 3.0
+# hue_shift_step = 0.0277777778
+# rotation_timeout_s = 3.0
+# rotation_step_rad = 0.07
+
+# ---------------------------------------------------------------------------
+# Grand Finale controller  (drop-ins/grand-finale-01)
+# End-of-set sequencer triggered by Ctrl+Alt+F or Auto VJ timed finale.
+# ---------------------------------------------------------------------------
+[grand_finale]
+# intensity = 1.0
+# blackout_s = 15.0
+
+# ---------------------------------------------------------------------------
 # Auto VJ  (drop-ins/auto-vj-01)
 # Intelligent automation layer that drives the system like a human VJ:
 # beat-aware effect swaps, drop hits, post-fx modulation, ping-pong, etc.
