@@ -1181,6 +1181,7 @@ void main() {
 
     def _present_burst_from_tex(self, tex: moderngl.Texture) -> None:
         """Render the burst-transformed frame to screen."""
+        self._compose_debug = f'burst:{self._tex_debug_name(tex)}->screen'
         scale, angle = self._burst_transform()
         self._ctx.screen.use()
         self._ctx.viewport = (0, 0, self._width, self._height)
@@ -1232,6 +1233,7 @@ void main() {
 
     def _render_inverted_from_tex(self, tex: moderngl.Texture) -> None:
         """Render a texture to screen through the invert post-process pass."""
+        self._compose_debug = f'invert:{self._tex_debug_name(tex)}->screen'
         self._ctx.screen.use()
         self._ctx.viewport = (0, 0, self._width, self._height)
         self._ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1241,6 +1243,7 @@ void main() {
 
     def _present_from_tex(self, tex: moderngl.Texture) -> None:
         """Render a texture to screen without post-processing."""
+        self._compose_debug = f'{self._tex_debug_name(tex)}->screen'
         self._ctx.screen.use()
         self._ctx.viewport = (0, 0, self._width, self._height)
         self._ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1253,6 +1256,7 @@ void main() {
 
         GL viewport y is bottom-up; SDL display rects are top-down.
         """
+        self._compose_debug = f'{self._tex_debug_name(tex)}->mirror_tiled'
         self._ctx.screen.use()
         self._ctx.viewport = (0, 0, self._window_width, self._window_height)
         self._ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -1264,6 +1268,19 @@ void main() {
             self._present_vao.render(moderngl.TRIANGLE_STRIP)
         # Restore default viewport for any subsequent overlay passes.
         self._ctx.viewport = (0, 0, self._window_width, self._window_height)
+
+    def _tex_debug_name(self, tex: moderngl.Texture | None) -> str:
+        """Return a stable short texture source label for HUD diagnostics."""
+        if tex is None:
+            return 'none'
+        try:
+            if self._fbo_a is not None and tex is self._fbo_a.color_attachments[0]:
+                return 'fbo_a'
+            if self._fbo_b is not None and tex is self._fbo_b.color_attachments[0]:
+                return 'fbo_b'
+        except Exception:
+            pass
+        return 'tex'
 
     def _effect_reactivity(self, effect: BaseEffect | None) -> float | None:
         """Return per-effect reactivity override, or None if not set."""
@@ -2125,6 +2142,11 @@ void main() {
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
+                'postfx_debug': (
+                    self._postfx_controller.debug_summary
+                    if self._postfx_controller is not None else 'N/A'
+                ),
+                'compose_debug': str(getattr(self, '_compose_debug', '-')),
                 'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
                 'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
                 'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',

@@ -796,6 +796,12 @@ void main() {
         tweak_lines = []
         if postfx_val not in {'N/A', '-', ''}:
             tweak_lines.append(f"POST FX     {postfx_val}")
+        postfx_dbg = str(self._hud_state.get('postfx_debug', ''))
+        if postfx_dbg not in {'', 'N/A', '-'}:
+            tweak_lines.append(f"POSTFX DBG  {postfx_dbg}")
+        compose_dbg = str(self._hud_state.get('compose_debug', ''))
+        if compose_dbg not in {'', 'N/A', '-'}:
+            tweak_lines.append(f"COMPOSE     {compose_dbg}")
         tweak_lines += [
             f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
             f"SPEED       {self._hud_state.get('speed', 'N/A')}",
