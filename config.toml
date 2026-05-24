@@ -26,6 +26,7 @@ start_effect = "Audio Spectrum"
 
 [effects.AudioSpectrum]
 scale_when_framed = true
+# candy_frame_disallow = true
 
 [logging]
 level = "info"
@@ -245,6 +246,7 @@ preload_images = true        # true = warm image cache at startup
 # speed = 1.0
 mix_time = 15.0              # seconds per image
 scale_when_framed = true
+# candy_frame_disallow = true
 
 # ---------------------------------------------------------------------------
 # Video Showcase drop-in  (drop-ins/videos-01)
@@ -258,6 +260,7 @@ preload_videos = false        # true = open/prime clips at startup
 # speed          = 1.0
 mix_time       = 20.0        # seconds per clip
 scale_when_framed = true
+# candy_frame_disallow = true
 
 # ---------------------------------------------------------------------------
 # Sim Showcase drop-in  (drop-ins/sims-01)

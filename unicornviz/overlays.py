@@ -404,6 +404,7 @@ class Overlays:
                 ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
                 ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
                 ('Ctrl+Alt+C', 'Toggle Candy Frame neon border overlay'),
+                ('Ctrl+Alt+K', 'Toggle Candy Frame scaling for current effect'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
                 ('Ctrl+Wheel Up/Down', 'Rotate scene frame (lasts 3 s idle)'),
                 ('Middle Click', 'Reset hue+rotation / Toggle Auto VJ'),

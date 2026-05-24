@@ -216,6 +216,8 @@ cycle_files = 0.0
 [effects.AudioSpectrum]
 mode = 2
 glow = 1.0
+# scale_when_framed = true
+# candy_frame_disallow = false
 
 [effects.CopperBars]
 speed = 1.0

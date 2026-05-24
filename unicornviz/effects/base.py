@@ -137,6 +137,11 @@ class BaseEffect(ABC):
         self.time: float = float(self.rng.uniform(0.0, 10_000.0))
         # Per-effect tweakable parameters (exposed to MIDI mapping)
         self.parameters: dict[str, float] = {}
+        # Candy Frame integration flags (read from per-effect config).
+        # scale_when_framed: when True, app renders effect within frame bounds.
+        # candy_frame_disallow: hard opt-out that always overrides scaling.
+        self.scale_when_framed: bool = bool(self.config.get('scale_when_framed', False))
+        self.candy_frame_disallow: bool = bool(self.config.get('candy_frame_disallow', False))
         self._init()
         # Snapshot defaults so G can reset speed (and others) to initial values.
         self._initial_parameters: dict[str, float] = dict(self.parameters)
