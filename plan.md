@@ -23,7 +23,14 @@
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
 - `[done]` Add effect metadata concept `PING_PONG_FRIENDS` for preferred pairings when randomizing ping-pong slots.
 - `[done]` Implement scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ when hue-shift is inactive).
-- `[todo]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
+- `[doing]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
+  Notes:
+  - base subsystem landed: optional `spotify-01` runtime controller via `playerctl` + snapshot API for controllers
+  - Auto VJ bridge landed for coexistence mode (pause-aware hold + track-change scene cue)
+  - HUD strip landed with Spotify status, track, artist, and progress fields
+  - Phase 1 supplemental intelligence landed: Auto VJ decision/training logs now carry Spotify track metadata/features when available, and recommender ranking can apply a weak Spotify BPM hint without depending on it
+  - follow-up handoff for VJ team: tune truncation/label style, decide final line ordering, and evaluate if Spotify strip should collapse when unavailable
+  - follow-up handoff for VJ team: define operator-facing policy for paused transport behavior during live sets (hard hold vs soft hold)
 - `[todo]` Design `serato-01` drop-in for DJ deck / transport / cue integration with Control Room and Auto VJ.
 - `[todo]` Design `mixxx-01` / `xwax-01` / `giada-01` integration drop-ins for open DJ/live-loop hosts.
 
