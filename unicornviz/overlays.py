@@ -226,7 +226,7 @@ _FONT_8X8 = [
 ]  # 96 chars × 8 bytes = 768 bytes
 
 
-def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, int, int, int]:
+def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, int, int, int, Path | None]:
     """
     Build overlay font atlas and return (texture, glyph_w, glyph_h, atlas_w, atlas_h).
 
@@ -266,7 +266,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
                 tex = ctx.texture((atlas_w, atlas_h), 1, data=data.tobytes())
                 # Linear sampling keeps strokes cleaner when scaled.
                 tex.filter = moderngl.LINEAR, moderngl.LINEAR
-                return tex, glyph_w, glyph_h, atlas_w, atlas_h
+                return tex, glyph_w, glyph_h, atlas_w, atlas_h, font_path
             except Exception:
                 pass
 
@@ -298,7 +298,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
 
     tex = ctx.texture((N_CHARS * 8, 8), 1, data=data.tobytes())
     tex.filter = moderngl.NEAREST, moderngl.NEAREST
-    return tex, 8, 8, N_CHARS * 8, 8
+    return tex, 8, 8, N_CHARS * 8, 8, None
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +557,7 @@ class Overlays:
         self._cta_quad_vbo: moderngl.Buffer | None = None
         self._cta_quad_vao: moderngl.VertexArray | None = None
 
-        self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h = _build_font_texture(ctx)
+        self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h, self._font_path = _build_font_texture(ctx)
         # Keep historical scale semantics (scale=1 roughly equals an 8 px cell).
         self._font_scale_norm = 8.0 / float(max(1, self._glyph_h))
         self._prog = self._build_program()
@@ -1757,33 +1757,26 @@ void main() {
         if not _PIL_AVAILABLE:
             return
 
-        _text_candidates = [
-            Path('/usr/share/fonts/julietaula-montserrat-fonts/Montserrat-ExtraBold.otf'),
-            Path('/usr/share/fonts/julietaula-montserrat-fonts/Montserrat-Bold.otf'),
-            Path('assets/fonts/ui-font.ttf'),
-            Path('/usr/share/fonts/abattis-cantarell-vf-fonts/Cantarell-VF.otf'),
-            Path('/usr/share/fonts/google-carlito-fonts/Carlito-Bold.ttf'),
-            Path('/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf'),
-            Path('/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf'),
-        ]
-        _emoji_candidates = [
-            Path('/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf'),
-            Path('/usr/share/fonts/google-noto-emoji-fonts/NotoColorEmoji.ttf'),
-            Path('/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf'),
-        ]
-        text_font_path = next((p for p in _text_candidates if p.exists()), None)
-        emoji_font_path = next((p for p in _emoji_candidates if p.exists()), None)
-
         text_font = None
         emoji_font = None
         try:
-            if text_font_path:
-                text_font = ImageFont.truetype(str(text_font_path), size=130)
+            if self._font_path is not None and self._font_path.exists():
+                text_font = ImageFont.truetype(str(self._font_path), size=132)
         except Exception:
             pass
         try:
-            if emoji_font_path:
-                emoji_font = ImageFont.truetype(str(emoji_font_path), size=140)
+            icon_font_path = next(
+                (p for p in [
+                    Path('/usr/share/fonts/gdouros-symbola/Symbola.ttf'),
+                    Path('/usr/share/fonts/gdouros-symbola/Symbola.otf'),
+                    Path('/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf'),
+                    Path('/usr/share/fonts/google-noto-emoji-fonts/NotoColorEmoji.ttf'),
+                    Path('/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf'),
+                ] if p.exists()),
+                None,
+            )
+            if icon_font_path is not None:
+                emoji_font = ImageFont.truetype(str(icon_font_path), size=140)
         except Exception:
             pass
 
@@ -1894,7 +1887,7 @@ void main() {
         gb = 0.85 - 0.4 * cyc
 
         # Layered glow halos behind the text
-        for pad, glow_a in ((100, 0.04), (68, 0.08), (40, 0.13), (20, 0.19), (8, 0.27)):
+        for pad, glow_a in ((100, 0.14), (68, 0.18), (40, 0.23), (20, 0.29), (8, 0.37)):
             self._draw_rect(
                 tx0 - pad, ty0 - pad, tw + pad * 2, th + pad * 2,
                 (gr, gg, gb, glow_a * alpha),
