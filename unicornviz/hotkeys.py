@@ -204,6 +204,17 @@ class HotkeyHandler:
                     msg = a.start_spotify_pro_auth()
                 o.flash_message(msg, 2.0)
                 return
+            # DEV/TEST: Ctrl+Alt+Shift+D — manually trigger FireDJCelebration.
+            # Temporary key; remove once satisfied with the effect.
+            if (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_d:
+                vj = a.auto_vj_controller
+                if vj is not None:
+                    vj._fire_dj_session_fired = False  # noqa: SLF001
+                    vj._trigger_fire_dj_celebration()  # noqa: SLF001
+                    o.flash_message('🔥 Fire DJ [TEST]', 1.5)
+                else:
+                    o.flash_message('Auto VJ not loaded', 1.5)
+                return
 
         # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
         # Streamlined map: A/B/P/R/C/M.
