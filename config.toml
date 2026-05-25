@@ -205,6 +205,10 @@ auto_profile_raver_min_bpm = 125.0
 # profile_auto_reco_decider_min_margin = 0.25
 # profile_auto_reco_decider_min_confidence = 0.35
 # profile_auto_reco_decider_cooldown_s = 20.0
+# Fast override path (strong candidate can replace weak current profile)
+# profile_auto_reco_decider_force_recommended_score = 2.25
+# profile_auto_reco_decider_force_current_score_cap = 1.80
+# profile_auto_reco_decider_force_cooldown_s = 6.0
 
 # Recommendation confirmation gates
 # profile_auto_reco_enabled = true
