@@ -1,0 +1,35 @@
+name: Installer Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-installer-smoke:
+    name: Smoke Test Linux Installer Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n install.sh tools/install/lib.sh tools/install/uninstall_linux.sh tools/install_linux.sh
+
+      - name: Smoke test dev installer dry-run
+        run: |
+          chmod +x tools/install_linux.sh
+          ./tools/install_linux.sh --dry-run --no-deps --python python3
+
+      - name: Smoke test release installer dry-run
+        run: |
+          chmod +x install.sh
+          ./install.sh --dry-run --version 0.1.0 --no-deps
+
+      - name: Smoke test uninstall helper dry-run
+        run: |
+          chmod +x tools/install/uninstall_linux.sh
+          ./tools/install/uninstall_linux.sh --dry-run --prefix /tmp/unicorn-viz-smoke

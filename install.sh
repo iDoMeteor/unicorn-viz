@@ -191,6 +191,13 @@ run_install() {
     return
   fi
 
+  if [[ "${UV_DRY_RUN:-0}" -eq 1 ]]; then
+    local dry_version="${VERSION:-latest ${CHANNEL}}"
+    uv_log "dry-run: would install ${dry_version} into ${PREFIX}"
+    uv_log "dry-run: would install system dependencies, download release assets, create the venv, and install desktop integration"
+    return
+  fi
+
   if [[ "$NO_DEPS" -eq 0 ]]; then
     uv_log "Installing system dependencies"
     uv_install_system_deps "$PYTHON_BIN"

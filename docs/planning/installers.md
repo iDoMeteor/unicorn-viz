@@ -2,7 +2,7 @@
 
 **Owner:** Installers team
 **Status:** Draft (final-beta hardening)
-**Last updated:** 2026-05-22
+**Last updated:** 2026-05-25
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -37,6 +37,74 @@
   (Homebrew convention: the GitHub repo must be named `homebrew-<tap>`, and
   users type `brew tap djunicorntears/unicornviz`). See §11.
 - **Mobile (Android/iOS):** **not** in v1 scope.
+
+## 1. Current Implementation Snapshot
+
+This section is the working inventory for the installer effort. Keep it
+current as the repo evolves so we always know which surfaces own install-time
+behavior and which dependencies belong to the core versus an individual drop-in.
+
+### 1.1 Installer and packaging entrypoints
+
+- `install.sh` - public one-line Linux bootstrapper for release artifacts.
+- `tools/install/lib.sh` - shared distro detection, dependency install, and
+  desktop integration helpers.
+- `tools/install_linux.sh` - clone-local Linux installer wrapper.
+- `tools/install/uninstall_linux.sh` - uninstall helper for the Linux flow.
+- `tools/packaging/build_native.sh` - native `.deb` / `.rpm` packager.
+- `packaging/windows/UnicornViz.iss` - Windows installer definition.
+- `packaging/flatpak/io.unicornviz.UnicornViz.yml` - Flatpak manifest.
+- `packaging/snap/snapcraft.yaml` - Snap manifest.
+- `.github/workflows/release-installers.yml` - release-time packaging fan-out.
+
+### 1.2 Core dependency inventory
+
+The authoritative Python runtime dependency list lives in
+`requirements.txt`. The current core set is:
+
+- `moderngl>=5.10`
+- `pysdl2>=0.9.16`
+- `pysdl2-dll>=2.28`
+- `numpy>=1.26`
+- `scipy>=1.12`
+- `sounddevice>=0.4.6`
+- `python-rtmidi>=1.5`
+- `Pillow>=10.0`
+- `psutil>=5.9`
+- `opencv-python-headless>=4.9`
+
+Current Linux installer and native package system dependencies are:
+
+| Family | Packages | Notes |
+|---|---|---|
+| APT / Debian | `python3`, `python3-venv`, `python3-dev`, `libsdl2-dev`, `libgl1-mesa-dev`, `libffi-dev`, `libpipewire-0.3-dev`, `libasound2-dev`, `ffmpeg`, `git`, `curl` | Used by the release installer and native package build path. |
+| DNF / Fedora | `python3`, `python3-devel`, `gcc-c++`, `make`, `SDL2-devel`, `mesa-libGL-devel`, `libffi-devel`, `pipewire-devel`, `alsa-lib-devel`, `git`, `curl`, `ffmpeg` | Fedora install helper prefers the distro package manager and falls back gracefully if `ffmpeg` is not available. |
+| Pacman / Arch | `python`, `python-pip`, `sdl2`, `mesa`, `libffi`, `pipewire`, `alsa-lib`, `ffmpeg`, `git`, `curl` | Current clone-local installer path. |
+
+### 1.3 Known drop-in dependency inventory
+
+Only a small subset of drop-ins currently declares extra install-time
+requirements beyond the core set:
+
+| Drop-in | Extra dependencies | Source of truth |
+|---|---|---|
+| `webcam-01` | `opencv-python-headless >= 4.9` | `drop-ins/webcam-01/README.md` |
+| `spotify-01` | `playerctl` available on `PATH` | `drop-ins/spotify-01/README.md` |
+
+All other drop-ins currently discovered in this repo appear to rely on the
+core dependency set only. Re-check this table whenever a drop-in README,
+manifest, or import surface changes.
+
+### 1.4 Current packaging risk to watch
+
+The current Fedora installer failure is caused by the project build backend
+declaration, not by a missing system package. `pip install .` is invoking a
+backend path that cannot be imported from the build environment, so the native
+package flow never reaches the actual project build.
+
+The fix is to use a valid setuptools backend and keep the build requirements in
+sync with the packaging toolchain so isolated builds can resolve the project
+metadata cleanly.
 
 ---
 
@@ -385,6 +453,11 @@ needs_network = false
 The manifest is the **single source of truth** for that drop-in's extra
 requirements. The core installer never hard-codes drop-in deps.
 
+Every drop-in also ships a platform-aware installer bundle. For complex
+drop-ins, the installer may add Python or system dependencies before staging
+files. For simple drop-ins, the installer is still required but may only copy
+the bundle into the correct drop-in location for the current OS.
+
 ### 6.2 `unicorn-viz dropins` CLI
 
 A new subcommand group on the core CLI handles enumeration, checking, and
@@ -417,6 +490,10 @@ Behavior:
 4. **Idempotent:** running twice does nothing the second time.
 5. **Offline-aware:** if no network, prints the list of missing deps and
    exits non-zero so CI / packaging scripts can detect the gap.
+
+6. **Installer required for every drop-in:** even when a drop-in has no extra
+  runtime dependencies, it still ships an installer that stages its files to
+  the proper drop-in directory for the host platform.
 
 ### 6.3 Boot-time gating
 
@@ -480,6 +557,44 @@ repos as submodules. We add:
   core install to verify the manifest matches reality.
 - A new `tools/lint_dropin.py` in the core repo validates manifests across
   all `drop-ins/*/dropin.toml` so PRs that break the contract fail fast.
+
+### 6.7 Current drop-in installer matrix
+
+Current policy: every shipped drop-in has an installer bundle. When no extra
+deps are needed, the installer is copy-only and places the drop-in into the
+appropriate `drop-ins/` target path for the OS/package format.
+
+| Drop-in | Installer mode | Extra dependencies | Notes |
+|---|---|---|---|
+| alien-invasion-01 | Copy-only bundle installer | None listed | Stages effect files into the drop-in location. |
+| auto-vj-01 | Copy-only bundle installer | None listed | Automation bundle remains self-contained. |
+| candy-frame-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| control-room-01 | Copy-only bundle installer | None listed | Control surface bundle. |
+| cyber-war-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| disco-ball-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| grand-finale-01 | Copy-only bundle installer | None listed | Sequenced effect bundle. |
+| hacker-terminal-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| images-01 | Copy-only bundle installer | None listed | Media bundle with bundled assets. |
+| multi-head-01 | Copy-only bundle installer | None listed | Display subsystem bundle. |
+| postfx-01 | Copy-only bundle installer | None listed | Post-processing bundle. |
+| projectm-01 | Copy-only bundle installer | None listed | Engine integration bundle. |
+| sims-01 | Copy-only bundle installer | None listed | Media/effect bundle. |
+| spotify-01 | Copy-only + dependency check installer | `playerctl` on PATH | Installer verifies host MPRIS support before enabling. |
+| spotify-pro-01 | Copy-only bundle installer | None listed | Auth prep is handled separately. |
+| streaming-01 | Copy-only bundle installer | None listed | Streaming subsystem bundle. |
+| textures-01 | Copy-only bundle installer | None listed | Media bundle. |
+| tron-grid-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| unicorn-tears-01 | Copy-only bundle installer | None listed | Simple effect bundle. |
+| videos-01 | Copy-only bundle installer | None listed | Media bundle. |
+| webcam-01 | Bundle installer + dependency check | `opencv-python-headless >= 4.9` | Installer verifies camera stack before enabling. |
+
+If a new drop-in appears in the workspace, it must be added to this matrix
+before release packaging is considered complete.
+
+Copy-only installer bundles now exist for the easy drop-ins, including the
+simple effects and subsystem bundles that only need file staging. `webcam-01`
+and `spotify-01` remain the dependency-aware follow-up installers that will be
+upgraded next.
 
 ---
 

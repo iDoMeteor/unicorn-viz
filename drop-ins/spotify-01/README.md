@@ -18,6 +18,18 @@ MPRIS (`playerctl`) and exposes now-playing context to automation controllers.
 - `playerctl` must be installed and available on `PATH`
 - Spotify desktop client (or compatible MPRIS player name)
 
+## Installer
+
+This drop-in ships a bundle installer script at `install.sh`.
+
+```bash
+bash install.sh --root ~/.local/share/unicorn-viz
+```
+
+The installer copies the bundle into `~/.local/share/unicorn-viz/drop-ins/spotify-01`
+and refuses to run if `playerctl` is missing. Use `--uninstall` to remove the
+bundle again.
+
 ## Configuration
 
 See `docs/configuration.md`.

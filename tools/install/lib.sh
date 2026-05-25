@@ -146,6 +146,13 @@ uv_create_venv_and_install() {
 
   uv_require_cmd "$python_bin"
 
+  if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
+    uv_log "dry-run: would create venv at ${venv_dir}"
+    uv_log "dry-run: would install requirements from ${source_dir}/requirements.txt"
+    uv_log "dry-run: would install the project from ${source_dir}"
+    return 0
+  fi
+
   uv_run "$python_bin" -m venv "$venv_dir"
   uv_run "$venv_dir/bin/pip" install --upgrade pip wheel
   uv_run "$venv_dir/bin/pip" install -r "$source_dir/requirements.txt"
