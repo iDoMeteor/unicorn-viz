@@ -2418,6 +2418,14 @@ void main() {
                         self._ctx.screen.use()
                         self._ctx.viewport = (0, 0, self._width, self._height)
                         self._candy_frame.render(self._fbo_a.color_attachments[0])
+            # Fire DJ celebration overlay — on top of all other overlays, below HUD.
+            _auto_vj = getattr(self, '_auto_vj', None)
+            if _auto_vj is not None:
+                _cel_render = getattr(_auto_vj, 'render_celebration_overlay', None)
+                if callable(_cel_render):
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    _cel_render(self._width, self._height)
             self._sync_recording_overlay()
             primary_overlay_view = self._primary_display_viewport()
             if mirror_mode_active:
