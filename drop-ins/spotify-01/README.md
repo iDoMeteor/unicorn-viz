@@ -32,6 +32,8 @@ See `docs/configuration.md`.
 See `docs/planning.md` for the current/future roadmap, including the planned
 authenticated Web API follow-up as a separate `spotify-pro-01` drop-in.
 
+For operator setup prerequisites, see `docs/spotify-pro-auth-prep.md`.
+
 ## Troubleshooting
 
 See `docs/troubleshooting.md`.

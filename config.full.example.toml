@@ -114,6 +114,22 @@ command_timeout_s = 0.25
 # Optional path to local Spotify audio-features JSON map keyed by track id.
 # features_file = "assets/audio/spotify_features.json"
 
+[spotify_pro]
+enabled = false
+client_id = ""
+redirect_uri = "http://127.0.0.1:43879/callback"
+scopes = [
+	"user-read-playback-state",
+	"user-read-currently-playing",
+	"playlist-read-private",
+	"playlist-read-collaborative",
+]
+token_store = "runtime/spotify-pro-token.json"
+poll_interval_s = 1.0
+resolve_queue = true
+resolve_playlist_context = true
+# PKCE local flow does not require a client secret in runtime config.
+
 [postfx]
 enabled = true
 active_slot = 0

@@ -405,6 +405,8 @@ class Overlays:
                 ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
                 ('Ctrl+Alt+C', 'Toggle Candy Frame neon border overlay'),
                 ('Ctrl+Alt+K', 'Toggle Candy Frame scaling for current effect'),
+                ('Ctrl+Alt+S', 'Start Spotify Pro auth flow'),
+                ('Ctrl+Alt+Shift+S', 'Logout Spotify Pro (clear local token)'),
                 ('Ctrl+Shift+J', 'Toggle Auto VJ (fallback shortcut)'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
                 ('Ctrl+Wheel Up/Down', 'Rotate scene frame (lasts 3 s idle)'),
@@ -525,6 +527,9 @@ class Overlays:
             'recording': 'OFF',
             'streaming': 'OFF',
             'streaming_provider': '-',
+            'spotify_visible': 'NO',
+            'spotify_pro_visible': 'NO',
+            'spotify_pro_status': 'OFF',
             'spotify_status': 'OFF',
             'spotify_track': '-',
             'spotify_artist': '-',
@@ -778,7 +783,8 @@ void main() {
         """Render animated LCARS-style status HUD with pulsing glows, scan lines and decorations."""
         panel_w = min(1050.0, self._width * 0.93)
         lh = 28.0
-        row0_offset = 248.0
+        spotify_visible = str(self._hud_state.get('spotify_visible', 'NO')).upper() == 'YES'
+        row0_offset = 248.0 if spotify_visible else 188.0
         row_text_h = 8.0 * 2.05 + 4.0
 
         # ── animation clocks ─────────────────────────────────────────────
@@ -838,6 +844,7 @@ void main() {
             f"{self._hud_state.get('preset_slot_label', 'PRESET IDX'):<11} {self._hud_state.get('preset_slot', '-/-')}",
             f"PREV FX     {self._hud_state.get('previous_effect', '-')}",
             f"RECORDING   {self._hud_state.get('recording', 'OFF')}",
+            f"SPOTIFY+    {self._hud_state.get('spotify_pro_status', 'OFF')}",
             f"STREAM SRV  {self._hud_state.get('streaming_provider', '-')}",
             f"STREAMING   {self._hud_state.get('streaming', 'OFF')}",
             f"TRANSITION  {self._hud_state.get('transition', '-')} ({self._hud_state.get('transition_t', '0%')})",
@@ -1029,10 +1036,10 @@ void main() {
         band_x = x + 8.0
         band_y = y + 104.0
         band_w = panel_w - 16.0
-        band_h = 140.0
+        band_h = 140.0 if spotify_visible else 80.0
 
         # Spotify sub-pane (between title/timer header and main data panes).
-        spotify_h = 56.0
+        spotify_h = 56.0 if spotify_visible else 0.0
         spotify_y = band_y
         spotify_status = str(self._hud_state.get('spotify_status', 'OFF'))
         spotify_track = str(self._hud_state.get('spotify_track', '-'))
@@ -1047,8 +1054,8 @@ void main() {
         else:
             accent = (0.46, 0.90, 0.98)
 
-        # Effect banner lives below Spotify in its own full-size band.
-        effect_y = spotify_y + spotify_h + 4.0
+        # Effect banner lives below Spotify when visible, otherwise occupies the top band.
+        effect_y = spotify_y + spotify_h + 4.0 if spotify_visible else band_y
         effect_h = 80.0
         banner_glow_a = 0.06 + bass * 0.26 + pulse_slow * 0.04
         self._draw_rect(band_x, effect_y, band_w, effect_h, (0.04, 0.60 + bass * 0.40, 0.80, banner_glow_a))
@@ -1075,59 +1082,60 @@ void main() {
             color=(1.0, 0.66 + pulse_fast * 0.12, 0.24, 0.94),
         )
 
-        # Spotify pane sits above the effect banner to avoid overlap.
-        self._draw_rect(band_x, spotify_y, band_w, spotify_h, (0.02, 0.14, 0.10, 0.84))
-        self._draw_rect(band_x, spotify_y, band_w, 2.0, (accent[0], accent[1], accent[2], 0.62 + pulse_med * 0.20))
-        self._draw_rect(band_x, spotify_y + spotify_h - 2.0, band_w, 2.0, (accent[0], accent[1], accent[2], 0.46 + pulse_slow * 0.16))
-        self._draw_rect(band_x, spotify_y, 4.0, spotify_h, (accent[0], accent[1], accent[2], 0.78))
+        if spotify_visible:
+            # Spotify pane sits above the effect banner to avoid overlap.
+            self._draw_rect(band_x, spotify_y, band_w, spotify_h, (0.02, 0.14, 0.10, 0.84))
+            self._draw_rect(band_x, spotify_y, band_w, 2.0, (accent[0], accent[1], accent[2], 0.62 + pulse_med * 0.20))
+            self._draw_rect(band_x, spotify_y + spotify_h - 2.0, band_w, 2.0, (accent[0], accent[1], accent[2], 0.46 + pulse_slow * 0.16))
+            self._draw_rect(band_x, spotify_y, 4.0, spotify_h, (accent[0], accent[1], accent[2], 0.78))
 
-        spotify_phase = t * 0.85
-        spotify_a = 0.88 + (1.0 - pulse_slow) * 0.12
-        if status_l == 'paused':
-            line_rgb = (
-                0.90 + 0.06 * math.sin(spotify_phase + 0.6),
-                0.72 + 0.08 * math.sin(spotify_phase + 2.0),
-                1.00,
-            )
-        elif status_l == 'playing':
-            line_rgb = (
-                0.86 + 0.08 * math.sin(spotify_phase + 0.15),
-                1.00,
-                0.90 + 0.06 * math.sin(spotify_phase + 2.7),
-            )
-        else:
-            line_rgb = (
-                0.84,
-                0.98,
-                1.00,
-            )
+            spotify_phase = t * 0.85
+            spotify_a = 0.88 + (1.0 - pulse_slow) * 0.12
+            if status_l == 'paused':
+                line_rgb = (
+                    0.90 + 0.06 * math.sin(spotify_phase + 0.6),
+                    0.72 + 0.08 * math.sin(spotify_phase + 2.0),
+                    1.00,
+                )
+            elif status_l == 'playing':
+                line_rgb = (
+                    0.86 + 0.08 * math.sin(spotify_phase + 0.15),
+                    1.00,
+                    0.90 + 0.06 * math.sin(spotify_phase + 2.7),
+                )
+            else:
+                line_rgb = (
+                    0.84,
+                    0.98,
+                    1.00,
+                )
 
-        left_line = f'SPOTIFY {spotify_status} | {spotify_artist} | {spotify_progress}'
-        track_line = spotify_track
-        char_w_spotify = float(self._glyph_w) * self._font_scale_norm * 2.2
-        max_track_chars = max(8, int((band_w * 0.36) / max(1.0, char_w_spotify)))
-        if len(track_line) > max_track_chars:
-            track_line = track_line[: max(1, max_track_chars - 3)].rstrip() + '...'
-        track_w = len(track_line) * char_w_spotify
-        track_x = band_x + band_w - 12.0 - track_w
-        self._draw_text(left_line, band_x + 10.0, spotify_y + 16.0, scale=2.2, color=(line_rgb[0], line_rgb[1], line_rgb[2], spotify_a))
-        self._draw_text(track_line, track_x, spotify_y + 16.0, scale=2.2, color=(0.86, 0.98, 0.92, spotify_a))
+            left_line = f'SPOTIFY {spotify_status} | {spotify_artist} | {spotify_progress}'
+            track_line = spotify_track
+            char_w_spotify = float(self._glyph_w) * self._font_scale_norm * 2.2
+            max_track_chars = max(8, int((band_w * 0.36) / max(1.0, char_w_spotify)))
+            if len(track_line) > max_track_chars:
+                track_line = track_line[: max(1, max_track_chars - 3)].rstrip() + '...'
+            track_w = len(track_line) * char_w_spotify
+            track_x = band_x + band_w - 12.0 - track_w
+            self._draw_text(left_line, band_x + 10.0, spotify_y + 16.0, scale=2.2, color=(line_rgb[0], line_rgb[1], line_rgb[2], spotify_a))
+            self._draw_text(track_line, track_x, spotify_y + 16.0, scale=2.2, color=(0.86, 0.98, 0.92, spotify_a))
 
-        rail_x = band_x + band_w * 0.64
-        rail_y = spotify_y + spotify_h - 8.0
-        rail_w = band_w * 0.33
-        rail_h = 4.0
-        pct = 0.0
-        if '%' in spotify_progress:
-            try:
-                pct = float(spotify_progress.rsplit(' ', 1)[-1].replace('%', '').strip())
-            except Exception:
-                pct = 0.0
-        pct = max(0.0, min(100.0, pct))
-        fill_w = rail_w * (pct / 100.0)
-        self._draw_rect(rail_x, rail_y, rail_w, rail_h, (0.12, 0.24, 0.22, 0.85))
-        self._draw_rect(rail_x, rail_y, fill_w, rail_h, (accent[0], accent[1], accent[2], 0.95))
-        self._draw_text(spotify_progress, rail_x, spotify_y + 36.0, scale=1.25, color=(0.86, 0.98, 0.92, 0.88))
+            rail_x = band_x + band_w * 0.64
+            rail_y = spotify_y + spotify_h - 8.0
+            rail_w = band_w * 0.33
+            rail_h = 4.0
+            pct = 0.0
+            if '%' in spotify_progress:
+                try:
+                    pct = float(spotify_progress.rsplit(' ', 1)[-1].replace('%', '').strip())
+                except Exception:
+                    pct = 0.0
+            pct = max(0.0, min(100.0, pct))
+            fill_w = rail_w * (pct / 100.0)
+            self._draw_rect(rail_x, rail_y, rail_w, rail_h, (0.12, 0.24, 0.22, 0.85))
+            self._draw_rect(rail_x, rail_y, fill_w, rail_h, (accent[0], accent[1], accent[2], 0.95))
+            self._draw_text(spotify_progress, rail_x, spotify_y + 36.0, scale=1.25, color=(0.86, 0.98, 0.92, 0.88))
 
         # ── layer 7: data zone separator ─────────────────────────────────
         self._draw_rect(x, data_zone_y - 4.0, panel_w, 1.0, (0.10, 0.94, 1.0, 0.24))

@@ -170,3 +170,5 @@ When ready, create `spotify-pro-01` as a dedicated drop-in repository with:
 - explicit auth/config flow
 - separate failure handling
 - a compatibility contract back to `spotify-01` / Auto VJ / Control Room
+
+See also: `spotify-pro-auth-prep.md` for the operator/developer readiness checklist.

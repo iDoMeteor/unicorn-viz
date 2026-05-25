@@ -203,6 +203,29 @@ out vec2 out_pos;
 - Do not log MIDI note data at INFO level or above (may contain sensitive
   controller identifiers).
 
+## Spotify Web API Rules
+
+- Refer to Spotify's OpenAPI spec for endpoint paths, parameters, and field
+  names; do not guess Spotify endpoint shapes.
+- Use Authorization Code with PKCE for local/user-specific Spotify data.
+  Do not use the deprecated Implicit Grant flow.
+- For local development, use loopback redirect URIs on `http://127.0.0.1`.
+  Do not use `http://localhost` or wildcard redirect URIs.
+- Request only the minimum scopes needed for the feature being implemented.
+- Never store or expose the Spotify Client Secret in client-side/runtime code.
+  The local Unicorn Viz runtime should prefer PKCE and operate on Client ID
+  only.
+- Store Spotify tokens securely in ignored local runtime files and implement
+  refresh logic so auth does not silently expire.
+- Respect Spotify rate limits: handle HTTP 429, honor `Retry-After`, and use
+  exponential backoff instead of tight retry loops.
+- Avoid deprecated Spotify endpoints; prefer current playlist/item/library
+  endpoints.
+- Handle documented Spotify HTTP errors and surface meaningful operator-facing
+  feedback.
+- Do not cache Spotify content beyond immediate runtime needs, and do not use
+  Spotify API data/content to train machine learning models.
+
 ---
 
 ## Performance Constraints

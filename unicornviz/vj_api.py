@@ -40,6 +40,7 @@ class VJState:
     reactivity: float
     speed: float | None
     zoom: float | None
+    audio_source: str
     invert: bool
     is_postfx_active: bool
     postfx_slot: int
@@ -147,8 +148,10 @@ class VJApi:
                 zoom = float(app._current_effect.parameters['zoom'])  # noqa: SLF001
 
         reactivity = 1.0
+        audio_source = '-'
         if app._audio_manager is not None:  # noqa: SLF001
             reactivity = float(app._audio_manager.get_reactivity())  # noqa: SLF001
+            audio_source = str(app._audio_manager.get_source_label())  # noqa: SLF001
 
         postfx_slot = 0
         postfx_active = False
@@ -185,6 +188,7 @@ class VJApi:
             reactivity=reactivity,
             speed=speed,
             zoom=zoom,
+            audio_source=audio_source,
             invert=bool(app._invert_colors),  # noqa: SLF001
             is_postfx_active=postfx_active,
             postfx_slot=postfx_slot,
@@ -254,6 +258,30 @@ class VJApi:
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()
+
+    def start_spotify_pro_auth(self) -> str:
+        """Start Spotify Pro PKCE auth bootstrap, if the subsystem is loaded."""
+        return str(self._app.start_spotify_pro_auth())
+
+    def logout_spotify_pro(self) -> str:
+        """Logout Spotify Pro and clear local persisted auth token."""
+        return str(self._app.logout_spotify_pro())
+
+    def spotify_pro_snapshot(self) -> dict[str, object]:
+        """Return Spotify Pro snapshot payload when available."""
+        subsystem = self.get_subsystem('spotify_pro')
+        if subsystem is None:
+            return {}
+        snap = getattr(subsystem, 'snapshot', None)
+        if not callable(snap):
+            return {}
+        try:
+            payload = snap()
+        except Exception:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return payload
 
     def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
         """Set the main audience display mode."""

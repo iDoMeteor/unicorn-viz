@@ -197,6 +197,13 @@ class HotkeyHandler:
                     msg = a.trigger_grand_finale()
                     o.flash_message(msg, 2.5)
                 return
+            if sym == sdl2.SDLK_s:
+                if mod & sdl2.KMOD_SHIFT:
+                    msg = a.logout_spotify_pro()
+                else:
+                    msg = a.start_spotify_pro_auth()
+                o.flash_message(msg, 2.0)
+                return
 
         # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
         # Streamlined map: A/B/P/R/C/M.

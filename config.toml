@@ -102,7 +102,7 @@ features_file = "assets/audio/spotify_features.json"
 # Depends on [spotify] and adds OAuth/Web API queue + playlist context.
 # ---------------------------------------------------------------------------
 [spotify_pro]
-enabled = false
+enabled = true
 client_id = "9c8acb4afb744638917beab3b89ab369"
 redirect_uri = "http://127.0.0.1:43879/callback"
 scopes = [

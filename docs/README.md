@@ -18,6 +18,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- Auto VJ training protocol: [docs/planning/auto-vj-training-pack-protocol.md](planning/auto-vj-training-pack-protocol.md)
 - Debug and handoff notes: [docs/debug](debug)
 - Audit reports and review snapshots: [docs/audits](audits)
 - Historical/superseded notes: [docs/archive](archive)
