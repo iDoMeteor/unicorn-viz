@@ -307,13 +307,10 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 
 ### P1 — Major features currently disabled
 
-3. **Push and initialize 9 missing drop-ins** — auto-vj-01, candy-frame-01,
-   control-room-01, grand-finale-01, postfx-01, projectm-01, sims-01,
-   spotify-pro-01, streaming-01. Content exists in f33 repo; needs a push
-   to each drop-in's private GitHub repo then submodule init.
-   **Note:** All 9 GitHub repos already exist and accept the f33 content
-   (verified by SHA match). The 9 drop-ins cloned and initialized successfully
-   in this worktree from those remotes.
+3. ✅ **Push and initialize 9 missing drop-ins** — All 9 drop-ins (auto-vj-01,
+   candy-frame-01, control-room-01, grand-finale-01, postfx-01, projectm-01,
+   sims-01, spotify-pro-01, streaming-01) are pushed to their private GitHub
+   repos and initialized in this worktree.
 
 4. ✅ **Install libprojectM 4** — Done this session. Built from source (4.1.0),
    installed to `/usr/local/lib64/`, ldconfig updated, ctypes verified.
@@ -330,8 +327,9 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 7. ✅ **Add `ui-font.ttf`** — Done this session. LiberationMono-Regular.ttf
    (SIL OFL) bundled; overlays.py Noto path mismatch also corrected.
 
-8. **F44-01 path resolution** — Implement app-root resolver so non-CWD launches
-   work (menu shortcuts, packaged installs). *Excluded from this session.*
+8. ✅ **F44-01 path resolution** — `unicornviz/paths.py` added with `APP_ROOT`
+   and `resolve_path()`; all hardcoded relative paths in core and all 4
+   affected drop-ins patched. Committed `b6ec783`.
 
 9. **Verify Wayland multi-head** on this machine's compositor against the
    matrix: GNOME Wayland single / span_all / mirror_all.
