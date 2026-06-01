@@ -239,7 +239,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
         font_candidates = [
             Path('assets/fonts/ui-font.ttf'),
             Path('/usr/share/fonts/adobe-source-code-pro-fonts/SourceCodePro-Medium.otf'),
-            Path('/usr/share/fonts/google-noto-vf/NotoSansMono-VF.ttf'),
+            Path('/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf'),
             Path('/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf'),
         ]
         font_path = next((p for p in font_candidates if p.exists()), None)

@@ -117,21 +117,28 @@ uv_install_system_deps() {
       uv_run sudo apt-get install -y \
         "${python_bin}" "${python_bin}-venv" "${python_bin}-dev" \
         libsdl2-dev libgl1-mesa-dev libffi-dev \
-        libpipewire-0.3-dev libasound2-dev ffmpeg git curl
+        libpipewire-0.3-dev libasound2-dev \
+        portaudio19-dev libsndfile1-dev \
+        ffmpeg git curl
       ;;
     dnf)
       uv_run sudo dnf install -y \
         "${python_bin}" "${python_bin}-devel" gcc-c++ make \
         SDL2-devel mesa-libGL-devel libffi-devel \
-        pipewire-devel alsa-lib-devel git curl
+        pipewire-devel alsa-lib-devel \
+        portaudio-devel libsndfile-devel \
+        git curl
+      # ffmpeg is available via RPM Fusion (rpmfusion-free) on Fedora 38+.
+      # Enable it with: dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
       if ! uv_run sudo dnf install -y ffmpeg; then
-        uv_warn "ffmpeg not available in default Fedora repos."
-        uv_warn "Enable RPM Fusion if recording support is required."
+        uv_warn "ffmpeg not found. Enable RPM Fusion for recording support:"
+        uv_warn "  dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm"
       fi
       ;;
     pacman)
       uv_run sudo pacman -Sy --noconfirm \
-        python python-pip sdl2 mesa libffi pipewire alsa-lib ffmpeg git curl
+        python python-pip sdl2 mesa libffi pipewire alsa-lib \
+        portaudio libsndfile ffmpeg git curl
       ;;
     *)
       uv_die "Unsupported distribution: ${UV_DISTRO_ID:-unknown}. Install deps manually and retry."
