@@ -42,28 +42,31 @@ Cut a tagged pre-release beta where:
   - Documented acceptance thresholds for lock quality
 - Repos: drop-ins/auto-vj-01 + primary (audio/analyzer surfaces)
 
-4. Close remaining pre-release future-proofing items still open in code/docs
-- Why: Reduces breakage risk as drop-ins evolve.
-- Open set (verified):
-  - FP-04 loader standardization (still open)
-  - FP-05/06 postfx/grand_finale config skeletons (still open)
-  - FP-09/10/11 stable contract + HELP_ENTRIES docs (still open)
-- Repos: primary
+4. ~~Close remaining pre-release future-proofing items still open in code/docs~~
+- **✅ Verified done (2026-06-01)** — all FP-04/05/06/09/10/11 items confirmed in code:
+  - `_load_webcam_system_class`, `_load_rtmp_streamer_class`, `_load_postfx_controller_class`
+    all have internal try/except + null fallbacks; remaining bare loaders are all wrapped at
+    call sites in `App`.
+  - `[postfx]` and `[grand_finale]` sections present in both `config.toml` and
+    `config.full.example.toml`.
+  - `__all__ = ['BaseEffect', 'AudioData']` in `unicornviz/effects/base.py`.
+  - "Stable Public Contracts" and "Registering Help Hotkeys via HELP_ENTRIES" sections
+    present in `docs/developer-guide.md`.
+  - `plan-future-proofing.md` retired; all FP items tracked as `[done]` in `plan.md`.
 
-5. Add and validate user-visible postfx and grand_finale config sections
-- Why: Major systems are in runtime but not discoverable in config templates.
-- Exit criteria:
-  - Sections present in config.toml as commented skeletons
-  - Sections present and accurate in config.full.example.toml
-  - Docs reflect keys and defaults
-- Repos: primary
+5. ~~Add and validate user-visible postfx and grand_finale config sections~~
+- **✅ Verified done (2026-06-01)** — both `[postfx]` and `[grand_finale]` sections present
+  with documented keys in `config.toml` (commented skeleton) and `config.full.example.toml`
+  (full defaults). No additional action required.
 
-6. Do planning truth-sync updates in canonical planning docs before tag
-- Why: Current plan files contain stale statuses that can mislead release work.
-- Exit criteria:
-  - plan.md and docs/planning/plan-future-proofing.md updated to reflect code reality
-  - Any unresolved uncertainty marked as unverified instead of done
-- Repos: primary
+6. ~~Do planning truth-sync updates in canonical planning docs before tag~~
+- **✅ Done (2026-06-01)** — comprehensive truth-sync pass completed:
+  - `plan.md` Current Focus updated: FP pass marked `[done]`, Control Room entry trimmed
+    to current state, spotify-01 marked `[done]` with open polish items noted, Delivery
+    Strategy items marked `[done]`.
+  - Beta checklist items 4 and 5 verified and marked done.
+  - `plan-future-proofing.md` retired (referenced in plan.md with note).
+  - `plan-truth-sync-2026-05-24.md` remaining actions confirmed applied.
 
 7. Validate ProjectM on the primary target machine and finalize fallback posture
 - Why: Explicitly still called out as outstanding in plan.md.

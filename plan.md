@@ -9,8 +9,10 @@
 
 ## Current Focus (May 18, 2026)
 
-- `[doing]` **Pre-release future-proofing pass** — see `plan-future-proofing.md` for the full audit
-  and remediation checklist (FP-01 through FP-13).  Must complete all 🔴 and 🟠 items before v1.0 tag.
+- `[done]` **Pre-release future-proofing pass** — all FP-01 through FP-13 items verified complete
+  (loaders guarded, config skeletons present, stable contracts declared, HELP_ENTRIES docs written,
+  VJApi versioned, grand-finale private-attr violations resolved).  `plan-future-proofing.md`
+  retired; individual FP items tracked in Phase 5 below.
 - `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
 - `[done]` RTMP streaming subsystem drop-in.
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
@@ -23,14 +25,14 @@
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).
 - `[done]` Add effect metadata concept `PING_PONG_FRIENDS` for preferred pairings when randomizing ping-pong slots.
 - `[done]` Implement scroll-wheel hue-shift post-fx control (wheel direction shifts hue, idle timeout clears, middle-click clears; middle-click toggles Auto VJ when hue-shift is inactive).
-- `[doing]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
+- `[done]` Design `spotify-01` drop-in for track metadata / transport / tempo-aware visual cues.
   Notes:
   - base subsystem landed: optional `spotify-01` runtime controller via `playerctl` + snapshot API for controllers
   - Auto VJ bridge landed for coexistence mode (pause-aware hold + track-change scene cue)
   - HUD strip landed with Spotify status, track, artist, and progress fields
   - Phase 1 supplemental intelligence landed: Auto VJ decision/training logs now carry Spotify track metadata/features when available, and recommender ranking can apply a weak Spotify BPM hint without depending on it
-  - follow-up handoff for VJ team: tune truncation/label style, decide final line ordering, and evaluate if Spotify strip should collapse when unavailable
-  - follow-up handoff for VJ team: define operator-facing policy for paused transport behavior during live sets (hard hold vs soft hold)
+  - open polish: tune HUD truncation/label style, decide final line ordering, evaluate if strip collapses when unavailable
+  - open decision: define operator-facing policy for paused transport behavior during live sets (hard hold vs soft hold)
 - `[todo]` Design `serato-01` drop-in for DJ deck / transport / cue integration with Control Room and Auto VJ.
 - `[todo]` Design `mixxx-01` / `xwax-01` / `giada-01` integration drop-ins for open DJ/live-loop hosts.
 
@@ -279,118 +281,24 @@
   - future follow-up: redact/omit any sensitive text-input paths if added later
 - `[doing]` **Control Room drop-in** (`drop-ins/control-room-01`) — dedicated VJ operator monitor.
   Notes:
-
-  MVP is now implemented as an in-process SDL operator window with live preview,
-  transport controls, post-FX bank, effect browser, and tweakable controls.
-  Remaining follow-up work is focused on ergonomics, hardware-inspired layouts,
-  richer panels, and long-horizon remote-control options.
-
-  **Concept:** A secondary SDL2 window pinned to a designated "operator" display, showing a
-  persistent full HUD and sub-menus so the VJ can control the system without touching the
-  audience-facing output. The audience sees effects single/span/mirror as normal; the VJ's
-  secondary monitor shows the control room at all times.
-
-  **API capability audit (as of May 2026):**
-
-  What `VJApi` already supports and the control room can use *today* without any core changes:
-  - `vj_api.state()` → full `VJState` snapshot (effect name, speed, zoom, reactivity, FPS,
-    transitions, recording state, streaming state, postfx slot, auto-advance timer, session
-    elapsed/remaining, all flags)
-  - `vj_api.goto_effect()`, `goto_random_effect()`, `list_effects()` → effect selection menus
-  - `vj_api.set_speed()`, `set_zoom()`, `set_reactivity()`, `set_invert()` → parameter sliders
-  - `vj_api.set_advance_interval()`, `set_auto_advance()`, `reset_advance_interval()` → playlist controls
-  - `vj_api.trigger_rainbow_nova()`, `trigger_screen_burst()`, `trigger_dancing_unicorn()`,
-    `trigger_grand_finale()` → one-shot triggers
-  - `vj_api.set_postfx_slot()`, `clear_postfx()`, `hold_postfx_slot()` → post-FX controls
-  - `vj_api.flash_message()`, `set_status_pill()` → overlay messaging
-  - `vj_api.is_user_busy()`, `mark_user_action()` → grace-period / busy-state awareness
-  - `app.start_recording()`, `stop_recording()`, `toggle_recording()` → record controls
-  - `app.start_streaming()`, `stop_streaming()`, `set_stream_provider()` → RTMP streaming
-  - `app.toggle_pause()`, `toggle_fullscreen()`, `set_display_mode()` → transport
-
-  **What is NOT yet in the public API (gaps that need to be filled before implementation):**
-
-  1. **No per-frame subsystem hook.** The control room window needs to repaint every frame
-     (like auto-vj.update but also drive its own SDL_RenderPresent). Currently there is no
-     general mechanism — the auto-vj, grand-finale, etc. are hardcoded in the main loop.
-     Needed: `vj_api.register_subsystem(name, subsystem)` where the app loop calls
-     `subsystem.update(dt, audio)` and `subsystem.present()` each frame. This replaces the
-     hardcoded per-subsystem calls with a generalizable registry.
-
-  2. **No secondary window event routing.** The event loop dispatches every `SDL_KEYDOWN` /
-     `SDL_MOUSEBUTTONDOWN` to `hotkeys.handle()` regardless of which window it came from.
-     If the operator types in the control room window, those keystrokes must NOT trigger
-     effects in the main window. Needed: `vj_api.claim_window_events(window_id, handler)`
-     — marks a window ID as "owned" by a subsystem; the event loop routes SDL events for
-     that window to `handler(event)` instead of `hotkeys.handle()`.
-
-  3. **No live preview frame access.** The control room should show a scaled-down thumbnail
-     of the current output. The GL readback path already exists (used by legacy mirror outputs
-     in `multi-head-01`), but it's not exposed via `VJApi`. Needed: `vj_api.get_frame_bytes()`
-     returning the last readback RGBA bytes, or a callback `vj_api.subscribe_frames(fn)` that
-     delivers bytes each frame. The readback already happens when mirror outputs are active;
-     sharing the result with the control room is low cost.
-
-  4. **`VJApi.VERSION` now exists.** Compatibility-gated feature detection is available;
-     the remaining missing surfaces are subsystem registration, window-event claims,
-     and live frame access.
-
-  **Window + rendering approach:**
-
-  Use the proven `multi-head-01` pattern:
-  - `SDL_CreateWindow()` on the designated operator display (configurable index)
-  - `SDL_CreateRenderer()` (accelerated, fallback to software) — no GL sharing needed
-  - Render the UI with SDL2's 2D renderer: `SDL_RenderFillRect`, `SDL_RenderCopy`
-    for the thumbnail, and a custom lightweight immediate-mode UI layer
-  - OR: embed Dear ImGui via `imgui-bundle` which has a first-class SDL2+SDL_Renderer
-    backend — gives proper text rendering, sliders, buttons, sub-menus without building
-    a widget system from scratch
-  - The control room window does NOT share the main GL context and does NOT affect
-    the main render path
-
-  **Core changes required (small, surgical):**
-  - `unicornviz/app.py`: Add `_subsystem_registry` list; loop calls `s.update(dt, audio)`
-    and (after present) `s.present()` for each registered subsystem.
-  - `unicornviz/app.py`: Event loop checks `_claimed_window_ids` dict before dispatching
-    hotkeys; routes to claim owner's `on_sdl_event()` if matched.
-  - `unicornviz/vj_api.py`: Add `register_subsystem()`, `claim_window_events()`,
-    `get_frame_bytes()`.
-  - `unicornviz/vj_api.py`: Add `VJApi.VERSION = (1, 0, 0)` (FP-08).
-
-  **Config:** `[control_room]` section under `config.toml`:
-  ```toml
-  [control_room]
-  enabled = true
-  display_index = 1       # operator monitor index (0-based)
-  width = 1280
-  height = 720
-  show_preview = true     # live thumbnail of current output
-  preview_scale = 0.25    # fraction of control room width
-  theme = "dark"          # dark | light | high_contrast
-  ```
-
-  **Drop-in location:** `drop-ins/control-room-01/` as a private GitHub submodule.
-  Main class: `ControlRoomController` — not a `BaseEffect`; a standalone subsystem
-  registered via `vj_api.register_subsystem()` during app init.
-
-  **Implementation phases:**
-  - Phase A: Core API additions (register_subsystem, claim_window_events, get_frame_bytes,
-    VERSION) — prerequisites, implement in main repo first.
-  - Phase B: Minimal control room window: opens on configured display, shows VJState
-    readout as text (SDL2_ttf or imgui), closes cleanly on app exit.
-  - Phase C: Effect selector grid, speed/zoom/reactivity sliders, postfx toggle row,
-    one-shot trigger buttons.
-  - Phase D: Live preview thumbnail (scaled from get_frame_bytes()).
-  - Phase E: Sub-menu panels: playlist editor, show-duration timer, streaming controls,
-    recording controls, MIDI device selector.
+  - MVP implemented: SDL operator window with live preview, transport controls, post-FX bank,
+    effect browser, tweakable controls.
+  - Core API surface landed: `register_subsystem()`, `claim_window_events()`, `get_frame_bytes()`
+    all live in `vj_api.py`; `VJApi.VERSION` present.
+  - **Open blocker:** operator-window starvation / audience-output freeze when control room is open
+    (see `docs/debug/control-room-debug-handoff.md`). Must resolve or gate before beta.
+  - Remaining UX: hardware-inspired bank/page layout pass, Decks/Cues/Timing panel,
+    richer sub-menu panels, remote-control options.
+  - Config: `[control_room]` section in `config.toml`; currently `enabled = false` pending
+    starvation fix.
 
 
 
 ## Delivery Strategy
 
-- `[todo]` Start with the lowest-risk operational improvements first: logging, CLI, docs, and installer.
-- `[todo]` Tackle platform/display support next: Windows and multi-monitor support affect many subsystems.
-- `[todo]` Add media asset pipelines after runtime foundations are stable.
+- `[done]` Start with the lowest-risk operational improvements first: logging, CLI, docs, and installer.
+- `[done]` Tackle platform/display support next: Windows and multi-monitor support affect many subsystems.
+- `[done]` Add media asset pipelines after runtime foundations are stable.
 - `[decision]` Finalize plugin/commercial model before implementing paid-effect distribution.
 
 ## Config Policy Note
