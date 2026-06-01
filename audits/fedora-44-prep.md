@@ -1,8 +1,8 @@
 # Unicorn Viz — Fedora 44 Migration Prep
 
 Owner: Engineering
-Status: active — remediation in progress
-Last updated: 2026-06-01 (remediation pass complete)
+Status: active — projectM resolved; path resolver pending
+Last updated: 2026-06-01 (projectM installation complete)
 
 Scope: Full system and codebase review against the Fedora 44 dev machine.
 Covers Python environment, system libraries, drop-in submodule status, known
@@ -30,7 +30,7 @@ actionable detail for each item.
 | libsndfile          | 1.2.2                     | ✅     |
 | ffmpeg              | 8.1.1-1.fc44              | ✅     |
 | SDL (system)        | sdl2-compat 2.32.68 (SDL3-backed) | ⚠️ ² |
-| libprojectM 4       | not installed             | ❌     |
+| libprojectM 4       | 4.1.0 at /usr/local/lib64 | ✅     |
 
 ¹ Project requires Python ≥ 3.11; 3.14 works, see §3.1 below.
 ² SDL2-compat is a compatibility shim over SDL3; see §3.2 below.
@@ -141,46 +141,41 @@ from the previous audit.
 
 ## 4. Missing System Libraries
 
-### 4.1 libprojectM 4 — CRITICAL for projectm-01
+### 4.1 libprojectM 4 — ✅ RESOLVED this session
 
-**Status:** Not installed. No Fedora 44 RPM exists in standard or RPM Fusion
-repos (as of 2026-06-01).
+**Status:** **Installed.** libprojectM 4.1.0 built from source and installed at
+`/usr/local/lib64/`. All 5 required ctypes symbols verified present.
+`drop-ins/projectm-01/install.sh` created to automate future installs.
+Preset pack: 4,188 `.milk` files from `presets-projectm-classic` (LGPL 2.1)
+installed locally at `drop-ins/projectm-01/presets/classic/` (gitignored).
 
-**Effect:** `projectm-01` drop-in falls back to its internal shader (the
-swirling palette fallback defined in `projectm_effect.py`). The app
-continues running; no crash. But MilkDrop preset playback is completely
-disabled.
-
-**Install path (build from source):**
+**Build summary:**
 
 ```bash
-# Install build dependencies
-sudo dnf install -y cmake gcc-c++ glm-devel mesa-libGL-devel \
-    mesa-libEGL-devel libGL-devel llvm-devel
-
-# Clone and build projectM 4
-git clone --recurse-submodules https://github.com/projectM-visualizer/projectm.git
-cd projectm
-mkdir build && cd build
-cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DENABLE_SDL=OFF \
-    -DENABLE_TESTING=OFF \
-    -DCMAKE_INSTALL_PREFIX=/usr/local
-make -j$(nproc)
-sudo make install
-sudo ldconfig
+# Automated by drop-ins/projectm-01/install.sh
+# Build deps: cmake 4.3.0, gcc-c++, glm-devel, mesa-libGL-devel, mesa-libEGL-devel
+# Source: https://github.com/projectM-visualizer/projectm.git (tag 4.1.0)
+# cmake flags: -DCMAKE_BUILD_TYPE=Release -DENABLE_SDL=OFF -DENABLE_TESTING=OFF
+#              -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=ON
+# Install: /usr/local/lib64/libprojectM-4.so.4.1.0
+# ldconfig: /etc/ld.so.conf.d/local-lib64.conf (was missing, added)
 ```
 
-After install, verify: `ldconfig -p | grep projectM`
+**Verification:**
 
-The drop-in looks for `libprojectM-4.so` or `libprojectM.so` automatically.
-Use `projectm_library` config key for a non-standard path.
+```
+$ ldconfig -p | grep projectm
+libprojectM-4.so.4 (libc6,x86-64) => /usr/local/lib64/libprojectM-4.so.4
+libprojectM-4.so (libc6,x86-64) => /usr/local/lib64/libprojectM-4.so
+...
+$ python3 -c "import ctypes.util; print(ctypes.util.find_library('projectM-4'))"
+libprojectM-4.so.4
+```
 
 **Note on v3 vs v4:** The projectm-01 Phase 1 implementation targets the
 projectM **4** C API (`projectm_create_with_opengl_load_proc`). The v3 API
 is different and will not work. On older Fedora (≤37) only v3 may have been
-available in repos. This machine should use v4 built from source.
+available in repos. This machine should use v4 built from source (now done).
 
 ---
 
@@ -320,10 +315,10 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
    (verified by SHA match). The 9 drop-ins cloned and initialized successfully
    in this worktree from those remotes.
 
-4. **Install libprojectM 4** — Build from source (instructions in §4.1).
-   The projectm-01 effect is already written and handles absence gracefully,
-   but MilkDrop playback requires the native library.
-   *Excluded from this session — tracked as separate task.*
+4. ✅ **Install libprojectM 4** — Done this session. Built from source (4.1.0),
+   installed to `/usr/local/lib64/`, ldconfig updated, ctypes verified.
+   `drop-ins/projectm-01/install.sh` created to automate future installs.
+   4,188 classic preset `.milk` files installed locally (gitignored).
 
 5. ✅ **Install spotipy** — Done this session (`spotipy 2.26.0`).
 
@@ -353,8 +348,10 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 12. **Compositor compat matrix doc** — formalize the tested display mode ×
     compositor combinations in `docs/configuration.md`.
 
-13. **projectm-01 preset pack** — Populate `drop-ins/projectm-01/presets/` with
-    sample `.milk` presets for first-launch experience.
+13. ✅ **projectm-01 preset pack** — 4,188 `.milk` presets from
+    `presets-projectm-classic` (LGPL 2.1) installed locally at
+    `drop-ins/projectm-01/presets/classic/` (gitignored). Fetched
+    automatically by `drop-ins/projectm-01/install.sh`.
 
 ---
 
