@@ -409,64 +409,20 @@ class Overlays:
                 ('Ctrl+Alt+K', 'Toggle Candy Frame scaling for current effect'),
                 ('Ctrl+Alt+S', 'Start Spotify Pro auth flow'),
                 ('Ctrl+Alt+Shift+S', 'Logout Spotify Pro (clear local token)'),
-                ('Ctrl+Shift+J', 'Toggle Auto VJ (fallback shortcut)'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
                 ('Ctrl+Wheel Up/Down', 'Rotate scene frame (lasts 3 s idle)'),
-                ('Middle Click', 'Reset hue+rotation / Toggle Auto VJ'),
+                ('Middle Click', 'Reset scroll FX (hue/rotation)'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
                 ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
                 ('m', 'MIDI device'),
                 ('i', 'Invert colors'),
             ],
         ),
-        (
-            'Display Modes',
-            [
-                ('x', 'Single display'),
-                ('X', 'Span all'),
-                ('Ctrl+X', 'Mirror all'),
-                ('Alt+X', 'Config default'),
-            ],
-        ),
-        (
-            'Camera Overlay',
-            [
-                ('KP 1-9', 'PiP position'),
-                ('KP 0 / .', 'PiP fullscreen / hide'),
-                ('KP / *', 'Treatment prev / next'),
-                ('KP - +', 'PiP size'),
-                ('KP Enter', 'Treatment auto-cycle'),
-            ],
-        ),
     ]
 
-    DROPIN_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
-        (
-            'Unicorn Tears',
-            [
-                ('Ctrl+U', 'Dancing unicorn overlay'),
-                ('Alt+U', 'Rainbow Nova celebration'),
-                ('Ctrl+Alt+U', 'Screen burst'),
-                ('U', 'Unicorn Tears effect'),
-            ],
-        ),
-        (
-            'Auto VJ',
-            [
-                ('Ctrl+Alt+J', 'Toggle Auto VJ on/off'),
-            ],
-        ),
-        (
-            'Auto VJ Ping-Pong',
-            [
-                ('Ctrl+J  then  A', 'Pin current effect → slot A'),
-                ('Ctrl+J  then  B', 'Pin current effect → slot B'),
-                ('Ctrl+J  then  P', 'Toggle ping-pong mode (needs A+B)'),
-                ('Ctrl+J  then  R', 'Auto-pick friend pair for A/B'),
-                ('Ctrl+J  then  C', 'Clear ping-pong slots'),
-            ],
-        ),
-    ]
+    # Drop-in help is now registered dynamically via HELP_ENTRIES in each drop-in
+    # module and collected by discover_dropin_help_entries() at startup.
+    DROPIN_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = []
 
     NUM_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
     SHIFT_KEYS = ["S+1", "S+2", "S+3", "S+4", "S+5", "S+6", "S+7", "S+8", "S+9", "S+0"]

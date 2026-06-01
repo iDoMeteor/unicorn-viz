@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING
 
 import sdl2
@@ -33,9 +32,6 @@ class HotkeyHandler:
         self._shortcut_effects = playlist.shortcut_effects
         self._overlays = overlays
         self._audio = audio_manager
-        self._ctrlj_armed: bool = False
-        self._ctrlj_arm_t: float = 0.0
-        self._CTRLJ_WINDOW: float = 3.0  # seconds the leader key stays armed
 
     def attach_midi(self, midi: "MidiManager") -> None:
         """Register MIDI event listener after construction."""
@@ -123,7 +119,7 @@ class HotkeyHandler:
         is_auto_vj_control = (
             ((mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j)
             or ((mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_j)
-            or self._ctrlj_armed
+            or bool(getattr(a.auto_vj_controller, '_ctrlj_armed', False))
         )
         if not is_passive and not is_auto_vj_control:
             a.vj_api.mark_user_action('key')
@@ -154,128 +150,11 @@ class HotkeyHandler:
                         o.flash_message(f'Variant: {result}', 1.5)
                     return
 
-        # Fallback Auto VJ toggle for environments where Ctrl+Alt+J is reserved.
-        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_j:
-            msg = a.toggle_auto_vj()
-            o.flash_message(msg, 2.0)
+        # Ctrl+Alt+K — toggle current-effect frame scaling (core app feature).
+        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_k:
+            msg = a.toggle_current_effect_frame_scaling()
+            o.flash_message(msg, 1.6)
             return
-
-        # System-level post-process slot controls (Ctrl+Alt+number).
-        # Handle before help-overlay numeric controls and effect jump shortcuts.
-        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
-            if sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
-                slot = int(sym - sdl2.SDLK_0)
-                message = a.select_postfx_slot(slot)
-                o.flash_message(message, 1.5)
-                return
-            if sym == sdl2.SDLK_0:
-                # Smoke & Bubbles club post-fx (slot 10).
-                message = a.select_postfx_slot(10)
-                o.flash_message(message, 1.5)
-                return
-            if sym == sdl2.SDLK_c:
-                msg = a.toggle_candy_frame()
-                o.flash_message(msg, 1.8)
-                return
-            if sym == sdl2.SDLK_k:
-                msg = a.toggle_current_effect_frame_scaling()
-                o.flash_message(msg, 1.6)
-                return
-            if sym == sdl2.SDLK_j:
-                msg = a.toggle_auto_vj()
-                o.flash_message(msg, 2.0)
-                return
-            if sym == sdl2.SDLK_o:
-                _active, msg = a.vj_api.toggle_control_room()
-                o.flash_message(msg, 2.0)
-                return
-            if sym == sdl2.SDLK_f:
-                if mod & sdl2.KMOD_SHIFT:
-                    # Ctrl+Alt+Shift+F — abort grand finale
-                    msg = a.abort_grand_finale()
-                    o.flash_message(msg, 2.0)
-                else:
-                    # Ctrl+Alt+F — trigger grand finale
-                    msg = a.trigger_grand_finale()
-                    o.flash_message(msg, 2.5)
-                return
-            if sym == sdl2.SDLK_s:
-                if mod & sdl2.KMOD_SHIFT:
-                    msg = a.logout_spotify_pro()
-                else:
-                    msg = a.start_spotify_pro_auth()
-                o.flash_message(msg, 2.0)
-                return
-            # DEV/TEST: Ctrl+Alt+Shift+D — manually trigger FireDJCelebration.
-            # Temporary key; remove once satisfied with the effect.
-            if (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_d:
-                vj = a.auto_vj_controller
-                if vj is not None:
-                    vj._fire_dj_session_fired = False  # noqa: SLF001
-                    vj._trigger_fire_dj_celebration()  # noqa: SLF001
-                    o.flash_message('🔥 Fire DJ [TEST]', 1.5)
-                else:
-                    o.flash_message('Auto VJ not loaded', 1.5)
-                return
-
-        # Ctrl+J leader key — arm a 2-second window for Auto VJ sub-commands.
-        # Streamlined map: A/B/P/R/C/M.
-        if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_j:
-            self._ctrlj_armed = True
-            self._ctrlj_arm_t = time.monotonic()
-            o.flash_message('AUTO VJ \u2192 A/B/P/R/C/M', 1.2)
-            return
-
-        if self._ctrlj_armed:
-            if time.monotonic() - self._ctrlj_arm_t <= self._CTRLJ_WINDOW:
-                vj = a.auto_vj_controller
-                self._ctrlj_armed = False
-                msg: str | None = None
-
-                if vj is None:
-                    msg = 'Auto VJ not loaded'
-                elif sym == sdl2.SDLK_a:
-                    cur = a.current_effect_name
-                    if cur:
-                        vj.pin_slot('A', cur)
-                        msg = f'Ping-pong A = {cur}'
-                    else:
-                        msg = 'No active effect to pin'
-                elif sym == sdl2.SDLK_b:
-                    cur = a.current_effect_name
-                    if cur:
-                        vj.pin_slot('B', cur)
-                        msg = f'Ping-pong B = {cur}'
-                    else:
-                        msg = 'No active effect to pin'
-                elif sym == sdl2.SDLK_p:
-                    active = bool(vj.toggle_pingpong())
-                    msg = 'Ping-pong ON' if active else 'Ping-pong OFF'
-                elif sym == sdl2.SDLK_c:
-                    vj.clear_pingpong()
-                    msg = 'Ping-pong slots cleared'
-                elif sym == sdl2.SDLK_r:
-                    pair = vj.random_pingpong_pair()
-                    if pair is None:
-                        msg = 'No ping-pong friend pairs available'
-                    else:
-                        a_name, b_name = pair
-                        vj.pin_slot('A', a_name)
-                        vj.pin_slot('B', b_name)
-                        msg = f'Ping-pong pair: {a_name} \u2194 {b_name}'
-                elif sym == sdl2.SDLK_m:
-                    method = getattr(vj, 'cycle_profile', None)
-                    if callable(method):
-                        profile = method()
-                        msg = f'Auto VJ profile: {profile}'
-                    else:
-                        msg = 'Auto VJ profile cycling unavailable'
-
-                if msg is not None:
-                    o.flash_message(msg, 2.0)
-                    return
-            else:
-                self._ctrlj_armed = False
 
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
         if mod & sdl2.KMOD_CTRL and effect is not None:
@@ -290,6 +169,8 @@ class HotkeyHandler:
                         result = method()
                         if result:
                             o.flash_message(f'{label}: {result}', 1.5)
+                        else:
+                            o.flash_message(f'{label}: nothing loaded', 1.5)
                         return
             elif sym == sdl2.SDLK_p:
                 for method_name, label in (
@@ -302,6 +183,8 @@ class HotkeyHandler:
                         result = method()
                         if result:
                             o.flash_message(f'{label}: {result}', 1.5)
+                        else:
+                            o.flash_message(f'{label}: nothing loaded', 1.5)
                         return
             elif sym == sdl2.SDLK_r:
                 for method_name, label in (
@@ -314,7 +197,17 @@ class HotkeyHandler:
                         result = method()
                         if result:
                             o.flash_message(f'{label}: {result}', 1.5)
+                        else:
+                            o.flash_message(f'{label}: nothing loaded', 1.5)
                         return
+
+        # Registered drop-in key handlers.
+        for _handler in a.vj_api.key_handlers:
+            _result = _handler(sym, mod)
+            if _result is not False:
+                if isinstance(_result, str) and _result:
+                    o.flash_message(_result, 2.0)
+                return
 
         # Help overlay interaction mode: section expand/collapse and focus nav.
         if getattr(o, 'help_visible', False):
@@ -471,10 +364,6 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_m:
             o.toggle_midi_selector()
 
-        elif sym == sdl2.SDLK_F8:
-            live, message = a.toggle_streaming()
-            o.flash_message(message, 1.8 if live else 1.2)
-
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect
             # Toggle is global — persists even when current effect lacks 'speed'.
@@ -509,18 +398,6 @@ class HotkeyHandler:
                     lo, hi = a.random_range_for('reactivity', 0.40, 2.00)
                     current = am.get_reactivity()
                     o.flash_message(f'Reactivity random ON  {current:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
-
-        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9:
-            provider = a.set_stream_provider('rumble')
-            o.flash_message(f'Stream provider: {provider}', 1.2)
-
-        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F10:
-            provider = a.set_stream_provider('youtube')
-            o.flash_message(f'Stream provider: {provider}', 1.2)
-
-        elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F11:
-            provider = a.set_stream_provider('custom')
-            o.flash_message(f'Stream provider: {provider}', 1.2)
 
         elif sym == sdl2.SDLK_e:
             eq_cls = None
@@ -599,14 +476,7 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_LEFTBRACKET:
             am = self._audio
-            if mod & sdl2.KMOD_ALT:
-                # Alt+[ — PiP size down (webcam)
-                if a.has_webcam_system:
-                    val = a.scale_pip(-0.05)
-                    o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
-                else:
-                    o.flash_message('Camera PiP not available', 1.0)
-            elif mod & sdl2.KMOD_SHIFT:
+            if mod & sdl2.KMOD_SHIFT:
                 # { — reactivity min
                 val = am.set_reactivity(0.1)
                 o.flash_message("Reactivity  MIN  0.10", 1.5)
@@ -617,14 +487,7 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_RIGHTBRACKET:
             am = self._audio
-            if mod & sdl2.KMOD_ALT:
-                # Alt+] — PiP size up (webcam)
-                if a.has_webcam_system:
-                    val = a.scale_pip(0.05)
-                    o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
-                else:
-                    o.flash_message('Camera PiP not available', 1.0)
-            elif mod & sdl2.KMOD_SHIFT:
+            if mod & sdl2.KMOD_SHIFT:
                 # } — reactivity max
                 val = am.set_reactivity(5.0)
                 o.flash_message("Reactivity  MAX  5.00", 1.5)
@@ -782,31 +645,6 @@ class HotkeyHandler:
                 val = a.apply_render_scale_delta(0.05)
                 o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
-        elif sym == sdl2.SDLK_u:
-            if mod & sdl2.KMOD_CTRL and mod & sdl2.KMOD_ALT:
-                a.trigger_burst()
-                o.flash_message('\U0001f300  BURST', 0.6)
-            elif mod & sdl2.KMOD_ALT:
-                a.trigger_rainbow_nova()
-                o.flash_message('\U0001f308  RAINBOW NOVA', 0.9)
-            elif mod & sdl2.KMOD_CTRL:
-                a.trigger_dancing_unicorn()
-                o.flash_message('\U0001f984  UNICORN INCOMING', 0.8)
-            elif mod & sdl2.KMOD_SHIFT:
-                unicorn_cls = None
-                for cls in p.effects:
-                    if cls.__name__ == "UnicornTears" or cls.NAME == "Unicorn Tears":
-                        unicorn_cls = cls
-                        break
-                if unicorn_cls is not None:
-                    a.goto_effect(unicorn_cls)
-                    o.flash_name(unicorn_cls.NAME)
-                else:
-                    o.flash_message("Unicorn Tears not found", 1.5)
-            else:
-                a.show_splash()
-                o.flash_message("Splash replay", 1.5)
-
         elif sym == sdl2.SDLK_x:
             # Display mode controls: X=single, Shift+X=span, Ctrl+X=mirror, Alt+X=config
             if mod & sdl2.KMOD_ALT:
@@ -845,74 +683,6 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_F9:
             a.trigger_streaming_cta()
-
-        # Webcam PiP layout controls (numpad only; does not affect top-row shortcuts)
-        elif sym == sdl2.SDLK_KP_0:
-            if a.set_camera_layout('0'):
-                o.flash_message('Camera: fullscreen', 1.5)
-            else:
-                o.flash_message('Camera: not available', 1.2)
-
-        elif sym == sdl2.SDLK_KP_PERIOD:
-            if a.set_camera_layout('.'):
-                o.flash_message('Camera: hidden', 1.5)
-            else:
-                o.flash_message('Camera: not available', 1.2)
-
-        elif sym in (
-            sdl2.SDLK_KP_1, sdl2.SDLK_KP_2, sdl2.SDLK_KP_3,
-            sdl2.SDLK_KP_4, sdl2.SDLK_KP_5, sdl2.SDLK_KP_6,
-            sdl2.SDLK_KP_7, sdl2.SDLK_KP_8, sdl2.SDLK_KP_9,
-        ):
-            kp_map = {
-                sdl2.SDLK_KP_1: '1', sdl2.SDLK_KP_2: '2', sdl2.SDLK_KP_3: '3',
-                sdl2.SDLK_KP_4: '4', sdl2.SDLK_KP_5: '5', sdl2.SDLK_KP_6: '6',
-                sdl2.SDLK_KP_7: '7', sdl2.SDLK_KP_8: '8', sdl2.SDLK_KP_9: '9',
-            }
-            token = kp_map[sym]
-            labels = {
-                '1': 'bottom-left', '2': 'bottom-center', '3': 'bottom-right',
-                '4': 'left', '5': 'center', '6': 'right',
-                '7': 'top-left', '8': 'top-center', '9': 'top-right',
-            }
-            if a.set_camera_layout(token):
-                o.flash_message(f"Camera: {labels[token]}", 1.5)
-            else:
-                o.flash_message('Camera: not available', 1.2)
-
-        # Camera treatment cycling / PiP sizing (KP operator row)
-        elif sym == sdl2.SDLK_KP_DIVIDE:
-            name = a.goto_prev_webcam_effect()
-            if name:
-                o.flash_message(f'Camera treatment: {name}', 1.5)
-            else:
-                o.flash_message('Camera: not available', 1.2)
-
-        elif sym == sdl2.SDLK_KP_MULTIPLY:
-            name = a.goto_next_webcam_effect()
-            if name:
-                o.flash_message(f'Camera treatment: {name}', 1.5)
-            else:
-                o.flash_message('Camera: not available', 1.2)
-
-        elif sym == sdl2.SDLK_KP_MINUS:
-            val = a.scale_pip(-0.05)
-            if val > 0:
-                o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
-            else:
-                o.flash_message('Camera: not available', 1.0)
-
-        elif sym == sdl2.SDLK_KP_PLUS:
-            val = a.scale_pip(0.05)
-            if val > 0:
-                o.flash_message(f'Camera PiP: {val:.0%}', 1.0)
-            else:
-                o.flash_message('Camera: not available', 1.0)
-
-        elif sym == sdl2.SDLK_KP_ENTER:
-            active = a.toggle_webcam_auto_cycle()
-            state = 'ON' if active else 'OFF'
-            o.flash_message(f'Camera treatment auto-cycle: {state}', 1.5)
 
     def _screenshot(self) -> None:
         import datetime

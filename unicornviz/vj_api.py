@@ -6,9 +6,10 @@ changing runtime behavior unless explicitly called by a controller.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from unicornviz.effects.registry import get_effects
 
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
 
 
 VJ_API_VERSION = (1, 0, 0)
+
+log = logging.getLogger(__name__)
 
 __all__ = ['VJ_API_VERSION', 'VJState', 'VJApi']
 
@@ -66,6 +69,7 @@ class VJApi:
 
     def __init__(self, app: App) -> None:
         self._app = app
+        self._key_handlers: dict[str, Callable[[int, int], 'str | None | bool']] = {}
 
     @property
     def ctx(self) -> moderngl.Context | None:
@@ -207,15 +211,32 @@ class VJApi:
             session_remaining_s=self.get_time_remaining(),
         )
 
-    def goto_effect(self, name: str) -> bool:
-        target = name.strip().lower()
-        if not target:
+    def goto_effect(self, target: 'str | type') -> bool:
+        """Navigate to a named or class-referenced effect.
+
+        ``target`` may be a display-name/class-name string or a class object.
+        """
+        if isinstance(target, type):
+            self._app.goto_effect(target)
+            return True
+        name = str(target).strip().lower()
+        if not name:
             return False
         for cls in get_effects():
-            if cls.NAME.lower() == target or cls.__name__.lower() == target:
+            if cls.NAME.lower() == name or cls.__name__.lower() == name:
                 self._app.goto_effect(cls)
                 return True
         return False
+
+    def find_effect(self, class_name: str, display_name: str) -> type | None:
+        """Return the effect class matching *class_name* or *display_name*.
+
+        Returns ``None`` when no matching effect is registered.
+        """
+        for cls in get_effects():
+            if cls.__name__ == class_name or cls.NAME == display_name:
+                return cls
+        return None
 
     def goto_random_effect(self, tags: list[str] | None = None, exclude_current: bool = True) -> str | None:
         effects = list(get_effects())
@@ -401,11 +422,55 @@ class VJApi:
         self._app.trigger_dancing_unicorn()
         return True
 
-    def trigger_grand_finale(self) -> bool:
+    def trigger_grand_finale(self) -> str:
+        """Trigger the grand finale sequence; returns a flash-message string."""
         if self._app._grand_finale is None:  # noqa: SLF001
-            return False
-        self._app.trigger_grand_finale()
-        return True
+            return 'Grand Finale drop-in not loaded'
+        return str(self._app.trigger_grand_finale())
+
+    def abort_grand_finale(self) -> str:
+        """Abort the grand finale and restore pre-finale state."""
+        return str(self._app.abort_grand_finale())
+
+    def toggle_auto_vj(self) -> str:
+        """Toggle Auto VJ controller on/off; returns a flash-message string."""
+        return str(self._app.toggle_auto_vj())
+
+    def toggle_candy_frame(self) -> str:
+        """Toggle the Candy Frame neon border on/off."""
+        return str(self._app.toggle_candy_frame())
+
+    def select_postfx_slot(self, slot: int) -> str:
+        """Activate post-FX slot *slot* (1–10); returns a flash-message string."""
+        return str(self._app.select_postfx_slot(int(slot)))
+
+    def set_stream_provider(self, provider: str) -> str:
+        """Switch the RTMP stream provider preset; returns provider name string."""
+        return str(self._app.set_stream_provider(str(provider)))
+
+    def set_camera_layout(self, token: str) -> bool:
+        """Set the webcam PiP layout token ('0', '.', '1'–'9')."""
+        return bool(self._app.set_camera_layout(str(token)))
+
+    def scale_pip(self, delta: float) -> float:
+        """Scale the webcam PiP overlay by *delta* fraction (+/- 0.05)."""
+        return float(self._app.scale_pip(float(delta)))
+
+    def goto_prev_webcam_effect(self) -> str | None:
+        """Step to the previous webcam treatment; returns name or None."""
+        return self._app.goto_prev_webcam_effect()
+
+    def goto_next_webcam_effect(self) -> str | None:
+        """Step to the next webcam treatment; returns name or None."""
+        return self._app.goto_next_webcam_effect()
+
+    def toggle_webcam_auto_cycle(self) -> bool:
+        """Toggle the webcam treatment auto-cycle; returns new active state."""
+        return bool(self._app.toggle_webcam_auto_cycle())
+
+    def trigger_burst(self) -> bool:
+        """Trigger a screen-burst effect (alias for trigger_screen_burst)."""
+        return self.trigger_screen_burst()
 
     def set_postfx_slot(self, slot: int) -> bool:
         if int(slot) == 0:
@@ -539,3 +604,31 @@ class VJApi:
             float(lo_raw) if lo_raw is not None else None,
             float(hi_raw) if hi_raw is not None else None,
         )
+
+    # ── Drop-in key handler registry ──────────────────────────────────────
+
+    def register_key_handler(
+        self,
+        name: str,
+        handler: Callable[[int, int], 'str | None | bool'],
+    ) -> None:
+        """Register a drop-in key handler.
+
+        *handler(sym, mod)* is called for every SDL KEYDOWN event before core
+        key bindings.  It must return:
+
+        - ``str``   — handled; the string is shown as a flash message
+        - ``None``  — handled silently; no flash
+        - ``False`` — not handled; pass through to the next handler / core
+        """
+        self._key_handlers[str(name)] = handler
+        log.debug('Key handler registered: %s', name)
+
+    def unregister_key_handler(self, name: str) -> None:
+        """Remove a previously registered handler (e.g. on drop-in teardown)."""
+        self._key_handlers.pop(str(name), None)
+
+    @property
+    def key_handlers(self) -> list[Callable[[int, int], 'str | None | bool']]:
+        """Current list of registered handlers in insertion order."""
+        return list(self._key_handlers.values())

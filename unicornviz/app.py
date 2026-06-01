@@ -353,6 +353,14 @@ def _load_rainbow_nova_class() -> type:
     )
 
 
+def _load_unicorn_tears_controller_class() -> type:
+    """Load UnicornTearsController from the unicorn-tears drop-in."""
+    return load_dropin_symbol(
+        'unicorn-tears-01/unicorn_tears.py',
+        'UnicornTearsController',
+    )
+
+
 def _load_candy_frame_class() -> type:
     """Load CandyFrameController from the candy-frame drop-in."""
     return load_dropin_symbol(
@@ -425,6 +433,7 @@ class App:
         self._postfx_controller = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
+        self._unicorn_tears: Any = None
         self._candy_frame = None
         self._auto_vj = None
         self._spotify = None
@@ -647,6 +656,7 @@ class App:
             control_room_cls = _load_control_room_controller_class()
             self._control_room = control_room_cls(self, control_room_cfg)
             self.vj_api.register_subsystem('control_room', self._control_room)
+            self.vj_api.register_key_handler('control_room', self._control_room.handle_key)
             self.rebind_main_gl_context()
             log.info('ControlRoomController loaded from drop-in')
             return True, f'Control Room open on display {getattr(self._control_room, "_display_index", "?")}'
@@ -671,6 +681,7 @@ class App:
         # The explicit calls below are defensive against older drop-ins that
         # don't implement close_now().
         self.unregister_subsystem('control_room')
+        self.vj_api.unregister_key_handler('control_room')
         self._control_room = None
         self.rebind_main_gl_context()
         return False, 'Control Room closed'
@@ -1044,6 +1055,15 @@ class App:
         except Exception as exc:
             log.warning('RainbowNova not available: %s', exc)
             self._rainbow_nova = None
+        # UnicornTearsController — hotkey dispatcher for all U-key variants.
+        try:
+            utc_cls = _load_unicorn_tears_controller_class()
+            self._unicorn_tears = utc_cls(self.vj_api)
+            self.vj_api.register_key_handler('unicorn_tears', self._unicorn_tears.handle_key)
+            log.info('UnicornTearsController loaded from drop-in')
+        except Exception as exc:
+            log.warning('UnicornTearsController not available: %s', exc)
+            self._unicorn_tears = None
         # Candy Frame neon border overlay (optional, from candy-frame drop-in).
         try:
             candy_cls = _load_candy_frame_class()
@@ -1051,6 +1071,8 @@ class App:
             if not isinstance(candy_cfg, dict):
                 candy_cfg = {}
             self._candy_frame = candy_cls(self._ctx, self._width, self._height, candy_cfg)
+            self._candy_frame.set_vj_api(self.vj_api)
+            self.vj_api.register_key_handler('candy_frame', self._candy_frame.handle_key)
             log.info('CandyFrameController loaded from candy-frame drop-in')
         except Exception as exc:
             log.warning('CandyFrameController not available: %s', exc)
@@ -1072,6 +1094,8 @@ class App:
         if isinstance(self._webcam_system, _NullWebcamSystem):
             self._webcam_system = None
         else:
+            self._webcam_system.set_vj_api(self.vj_api)
+            self.vj_api.register_key_handler('webcam', self._webcam_system.handle_key)
             log.info('WebcamSystem loaded from drop-in')
 
         # System-level post-process stack (optional drop-in).
@@ -1097,6 +1121,8 @@ class App:
         if isinstance(self._postfx_controller, _NullPostFxController):
             self._postfx_controller = None
         else:
+            self._postfx_controller.set_vj_api(self.vj_api)
+            self.vj_api.register_key_handler('postfx', self._postfx_controller.handle_key)
             log.info('PostFxController loaded from drop-in')
 
         # System-level screen burst timing/transform controller (optional).
@@ -1907,6 +1933,7 @@ void main() {
                     self._spotify_pro = spotify_pro_cls(self, spotify_pro_cfg)
                     if bool(getattr(self._spotify_pro, 'enabled', False)):
                         self.vj_api.register_subsystem('spotify_pro', self._spotify_pro)
+                        self.vj_api.register_key_handler('spotify_pro', self._spotify_pro.handle_key)
                         log.info('SpotifyProController loaded from drop-in')
                     else:
                         self._spotify_pro = None
@@ -1923,6 +1950,7 @@ void main() {
                 auto_vj_cfg = {}
             self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
             self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
+            self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
             log.info('AutoVJController loaded from drop-in')
         except Exception as exc:
             self._auto_vj = None
@@ -1936,6 +1964,7 @@ void main() {
             if not isinstance(gf_cfg, dict):
                 gf_cfg = {}
             self._grand_finale = gf_cls(self, gf_cfg)
+            self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
             log.info('GrandFinaleController loaded from drop-in')
         except Exception as exc:
             self._grand_finale = None
@@ -1965,11 +1994,15 @@ void main() {
         if isinstance(self._streamer, _NullRTMPStreamer):
             self._streamer = None
         elif self._streamer.enabled and self._streamer.auto_start:
+            self._streamer.set_vj_api(self.vj_api)
+            self.vj_api.register_key_handler('streamer', self._streamer.handle_key)
             if self._streamer.start():
                 log.info('RTMP streamer auto-started: %s', self._streamer.destination_label)
             else:
                 log.warning('RTMP streamer auto-start failed: %s', self._streamer.last_error)
         else:
+            self._streamer.set_vj_api(self.vj_api)
+            self.vj_api.register_key_handler('streamer', self._streamer.handle_key)
             log.info(
                 'RTMP streamer loaded (enabled=%s auto_start=%s)',
                 self._streamer.enabled,
