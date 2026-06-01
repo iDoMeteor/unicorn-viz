@@ -14,6 +14,8 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any, Type
 
+from unicornviz.paths import APP_ROOT
+
 
 log = logging.getLogger(__name__)
 
@@ -57,11 +59,11 @@ def _normalise_help_entries(
 
 
 def _dropins_root() -> Path:
-    return Path(__file__).resolve().parents[1] / 'drop-ins'
+    return APP_ROOT / 'drop-ins'
 
 
 def _project_config_path() -> Path:
-    return Path(__file__).resolve().parents[1] / 'config.toml'
+    return APP_ROOT / 'config.toml'
 
 
 def _dropin_aliases(name: str) -> set[str]:

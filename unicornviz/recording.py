@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from unicornviz.config import Config
+from unicornviz.paths import resolve_path
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class Recorder:
     def __init__(self, cfg: Config, width: int, height: int) -> None:
         self._enabled = bool(cfg.get('recording', 'enabled', default=True))
         self._auto_record = bool(cfg.get('recording', 'auto_record', default=False))
-        self._directory = Path(str(cfg.get('recording', 'directory', default='recordings')))
+        self._directory = resolve_path(cfg.get('recording', 'directory', default='recordings'))
         self._ffmpeg_path = str(cfg.get('recording', 'ffmpeg_path', default='ffmpeg'))
         self._container = str(cfg.get('recording', 'container', default='mp4'))
         self._fps = int(cfg.get('recording', 'fps', default=60))

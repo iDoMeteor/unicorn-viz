@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import sdl2
 
+from unicornviz.paths import resolve_path
+
 if TYPE_CHECKING:
     from unicornviz.app import App
     from unicornviz.playlist import Playlist
@@ -455,14 +457,14 @@ class HotkeyHandler:
                 o.toggle_audio_selector()
             elif mod & sdl2.KMOD_SHIFT:
                 # Shift+A — our own ANSI art
-                ansi_dir = self._app.cfg.get("ansi", "ansi_own_dir",
-                                             default="assets/ansi")
+                ansi_dir = str(resolve_path(self._app.cfg.get("ansi", "ansi_own_dir",
+                                                               default="assets/ansi")))
                 a.goto_ansi(ansi_dir)
                 o.flash_message("ANSI: Own art", 2.0)
             else:
                 # a — ACiD art
-                acid_dir = self._app.cfg.get("ansi", "ansi_acid_dir",
-                                             default="assets/ansi/acid")
+                acid_dir = str(resolve_path(self._app.cfg.get("ansi", "ansi_acid_dir",
+                                                               default="assets/ansi/acid")))
                 a.goto_ansi(acid_dir)
                 o.flash_message("ACiD: Art", 2.0)
 
@@ -927,7 +929,7 @@ class HotkeyHandler:
         img = Image.frombytes("RGB", (w, h), data)
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = Path("screenshots")
+        out_dir = resolve_path("screenshots")
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"unicornviz_{ts}.png"
         img.save(path)

@@ -33,6 +33,7 @@ from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
 from unicornviz.dropins import load_dropin_symbol, discover_dropin_help_entries
+from unicornviz.paths import resolve_path
 from unicornviz.vj_api import VJApi
 from unicornviz.keystroke_log import KeystrokeLogger
 
@@ -1628,7 +1629,7 @@ void main() {
                 "ansi", "ansi_dir_auto",
                 default=self.cfg.get("ansi", "ansi_dir", default="assets/ansi"),
             )
-            effect_cfg = {"ansi_dir": str(ansi_dir), **effect_cfg}
+            effect_cfg = {"ansi_dir": str(resolve_path(ansi_dir)), **effect_cfg}
         return cls(self._ctx, self._width, self._height, effect_cfg)
 
     def _switch_effect(self, cls: Type[BaseEffect]) -> None:
@@ -1739,7 +1740,7 @@ void main() {
                 break
 
         # Splash screen — shown before any effect loads
-        splash_path = self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")
+        splash_path = str(resolve_path(self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")))
         splash_duration_audio = _SPLASH_TOTAL_DURATION
         splash_duration_silent = _SPLASH_TOTAL_DURATION
         if Path(splash_path).exists():

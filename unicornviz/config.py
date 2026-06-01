@@ -1,13 +1,15 @@
 """
 TOML configuration loader.
 
-Reads ``config.toml`` from the working directory (the project root) and
-deep-merges it with built-in defaults so every key always has a value.
+Reads ``config.toml`` from the project root (resolved via
+:mod:`unicornviz.paths`) and deep-merges it with built-in defaults so every
+key always has a value.  The app works correctly when launched from any
+working directory.
 
 Usage::
 
-    cfg = Config()                    # loads config.toml
-    cfg = Config("my_config.toml")    # explicit path
+    cfg = Config()                    # loads APP_ROOT/config.toml
+    cfg = Config("my_config.toml")    # path relative to CWD, or absolute
 
     width  = cfg.get("window", "width", default=1920)
     device = cfg.get("audio", "device", default="")
@@ -20,6 +22,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 from typing import Any
+
+from unicornviz.paths import APP_ROOT
 
 
 _DEFAULTS: dict[str, Any] = {
@@ -122,7 +126,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 class Config:
-    def __init__(self, path: str | Path = "config.toml", overrides: dict[str, Any] | None = None) -> None:
+    def __init__(self, path: str | Path = APP_ROOT / 'config.toml', overrides: dict[str, Any] | None = None) -> None:
         self._data = dict(_DEFAULTS)
         p = Path(path)
         if p.exists():

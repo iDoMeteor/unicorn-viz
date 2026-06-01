@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 import moderngl
 
+from unicornviz.paths import resolve_path
+
 _CHAR_W = 8
 _CHAR_H = 16
 _NUM_CHARS = 256
@@ -97,7 +99,7 @@ def build_font_atlas(ctx: moderngl.Context) -> moderngl.Texture:
     Build and return a 2048×16 RGBA font atlas texture (one channel used).
     Tries to load assets/fonts/font8x16.bin first; falls back to built-in.
     """
-    font_path = Path("assets/fonts/font8x16.bin")
+    font_path = resolve_path("assets/fonts/font8x16.bin")
     atlas = np.zeros((_CHAR_H, _ATLAS_W), dtype=np.uint8)
 
     if font_path.exists():

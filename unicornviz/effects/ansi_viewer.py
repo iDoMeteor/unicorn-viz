@@ -18,6 +18,7 @@ import moderngl
 from unicornviz.effects.base import BaseEffect, AudioData
 from unicornviz.ansi.loader import ANSIParser
 from unicornviz.ansi.font import build_font_atlas
+from unicornviz.paths import resolve_path
 from unicornviz.ansi.renderer import canvas_to_texture
 
 log = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ class ANSIViewer(BaseEffect):
         dirs = [d.strip() for d in str(raw_dir).split(",")]
         self._files: list[Path] = []
         for d in dirs:
-            p = Path(d)
+            p = resolve_path(d)
             self._files += sorted(p.glob("*.ans")) + sorted(p.glob("*.ANS"))
         if not self._files:
             log.warning("No .ANS files found in %s", raw_dir)
