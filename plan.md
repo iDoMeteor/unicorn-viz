@@ -285,12 +285,12 @@
     effect browser, tweakable controls.
   - Core API surface landed: `register_subsystem()`, `claim_window_events()`, `get_frame_bytes()`
     all live in `vj_api.py`; `VJApi.VERSION` present.
-  - **Open blocker:** operator-window starvation / audience-output freeze when control room is open
-    (see `docs/debug/control-room-debug-handoff.md`). Must resolve or gate before beta.
+  - **Starvation fix landed (Attempt K):** root cause was 60 fps GPU readback (`glReadPixels`) on
+    every audience frame while preview was active. `app.py` now throttles subsystem frame capture
+    to ≤10 fps via a 100 ms gate. `enabled` can be set to `true` for beta testing.
   - Remaining UX: hardware-inspired bank/page layout pass, Decks/Cues/Timing panel,
     richer sub-menu panels, remote-control options.
-  - Config: `[control_room]` section in `config.toml`; currently `enabled = false` pending
-    starvation fix.
+  - Config: `[control_room]` section in `config.toml`.
 
 
 

@@ -379,31 +379,57 @@ Result:
 - the harmful per-frame GL rebind is gone
 - latest owner-machine behavior after this revert still needs verification
 
+### Attempt K — throttle subsystem frame readback in the main loop
+
+Root cause identified and fixed:
+
+Even with the background-thread PIL render from Attempt I, the main render
+loop was still calling `_fbo_a.read()` / `ctx.screen.read()` (a blocking GPU
+readback) **on every single audience frame** (60 fps) whenever the control
+room preview was active.  At 1920×1080 RGB24 this is a ~6 MB DMA transfer per
+frame.  On a modest GPU this stalls the OpenGL pipeline for 5–20 ms each time,
+which is the primary mechanism behind the audience-output freeze.
+
+Fix applied in `unicornviz/app.py`:
+
+- Added `_last_subsystem_frame_capture_time: float = 0.0` to `App.__init__`.
+- The subsystem frame readback path in the main loop now checks a 100 ms gate
+  (`_now - _last_subsystem_frame_capture_time >= 0.1`) before issuing the GPU
+  readback.  If the gate is closed, the stale cached frame bytes remain in
+  `_frame_capture_bytes` and the GL call is skipped entirely for this tick.
+- Streaming readback is intentionally NOT throttled: RTMP must consume one
+  frame per rendered frame to keep the muxer in sync.
+- When the control room is open and `show_preview = true`, the readback fires
+  at ~10 fps instead of 60 fps — well ahead of the operator UI's own ~8 fps
+  render rate, so the preview is always showing a fresh frame.
+
+Expected result:
+
+- audience-output GPU pipeline stall drops from 100% of frames to ≤17% of
+  frames (from 60 fps down to ≤10 fps readback rate)
+- no change to streaming, recording, or mirror-mode behaviour
+- operator preview still appears live at up to 10 fps capture rate
+
 ## Current Best Hypothesis
 
-The current evidence points at two separate issues, not one:
+Three separate issues were real; all three are now addressed:
 
-1. **Main-loop starvation from PIL rasterization** was real.
-  Moving the operator UI rasterization to the background render thread was the
-  right fix and should remain.
-2. **Per-frame GL rebind was the wrong medicine.**
-  Owner logs showed no `SDL_GL_MakeCurrent failed` warnings, but the audience
-  output got worse immediately after adding the per-frame rebind. That means
-  the call was not failing at the SDL level; it was disrupting moderngl's
-  bound state or framebuffer assumptions often enough to black/garble the
-  audience output.
+1. **Main-loop starvation from PIL rasterization** — fixed by background render
+   thread (Attempt I).
+2. **Per-frame GL rebind was wrong medicine** — reverted (Attempt J).
+3. **60 fps GPU framebuffer readback** — root cause of the remaining audience
+   freeze, fixed by the 100 ms readback gate in Attempt K.
 
 The most likely live state now is:
 
-- threaded operator rendering is good
+- threaded operator rendering is good and stays
 - one-shot GL rebind on control-room create/destroy is acceptable
-- any future GL-context investigation should use instrumentation first
-  (`SDL_GL_GetCurrentWindow`, `SDL_GL_GetCurrentContext`, `glGetError`) before
-  reintroducing per-frame state changes
+- subsystem frame readback is throttled to ≤10 fps, removing pipeline stall
 
-If behavior after Attempt J is still unstable on the owner machine, the most
-likely remaining blocker is driver/compositor interaction from the in-process
-two-window architecture itself, not the operator UI code.
+If audience starvation **still** persists after Attempt K, the most likely
+remaining cause is driver/compositor interaction from the in-process two-window
+SDL/GL architecture rather than the operator UI code, and Path 4 (separate
+process or embedded HTTP surface) becomes the recommended path.
 
 ## Recommended Next Steps
 

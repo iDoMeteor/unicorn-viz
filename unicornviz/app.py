@@ -450,6 +450,11 @@ class App:
         self._frame_capture_width: int = 0
         self._frame_capture_height: int = 0
         self._frame_capture_components: int = 0
+        # Timestamp of the last GPU readback done for subsystem preview consumers
+        # (e.g. the control-room live preview).  Used to throttle the expensive
+        # glReadPixels call so it fires at subsystem render rate, not at the full
+        # audience output frame rate.
+        self._last_subsystem_frame_capture_time: float = 0.0
         self._rng = np.random.default_rng()
         self._speed_randomized: bool = False
         self._reactivity_randomized: bool = False
@@ -2564,15 +2569,29 @@ void main() {
                 self._streamer is not None and self._streamer.is_streaming
             )
             need_frame_for_subsystems = self._subsystems_need_frame_capture()
-            if need_frame_for_streaming or need_frame_for_subsystems:
+            # Throttle the subsystem preview readback so it fires at the
+            # subsystem's own render rate (≤15 fps) rather than the full
+            # audience output frame rate.  Without this, a single glReadPixels
+            # call on each 1080p+ frame stalls the GPU pipeline for 5–20 ms,
+            # which is the primary cause of the audience-output freeze observed
+            # while the control-room operator window is open.
+            # Streaming readback is not throttled; it must produce one frame
+            # per rendered frame to keep the RTMP muxer in sync.
+            subsystem_capture_due = False
+            if need_frame_for_subsystems:
+                _now = time.monotonic()
+                if _now - self._last_subsystem_frame_capture_time >= 0.1:
+                    subsystem_capture_due = True
+                    self._last_subsystem_frame_capture_time = _now
+            if need_frame_for_streaming or subsystem_capture_due:
                 try:
                     stream_frame = self._read_streaming_frame()
                 except Exception as exc:
                     log.error('Streaming frame readback failed: %s', exc)
                     stream_frame = None
-            if need_frame_for_subsystems:
+            if subsystem_capture_due:
                 self._update_frame_capture_snapshot(stream_frame)
-            else:
+            elif not need_frame_for_subsystems:
                 self._update_frame_capture_snapshot(None)
             need_frame_for_recording = (
                 self._recorder is not None and self._recorder.is_recording

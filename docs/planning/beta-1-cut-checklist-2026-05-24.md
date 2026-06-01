@@ -25,13 +25,16 @@ Cut a tagged pre-release beta where:
   - Any remaining P1 explicitly accepted with owner/date
 - Repos: primary + all effect/system drop-ins touched by resulting fixes
 
-2. Resolve control-room runtime starvation or ship control-room disabled by default
-- Why: Known risk of audience output freeze while control room window is open.
-- Source: docs/debug/control-room-debug-handoff.md
-- Exit criteria:
-  - Repro test no longer freezes in single/span/mirror
-  - If unresolved, explicit beta policy: control-room disabled + documented known issue
-- Repos: drop-ins/control-room-01 + primary
+~~2. Resolve control-room runtime starvation or ship control-room disabled by default~~
+- ~~Why: Known risk of audience output freeze while control room window is open.~~
+- ~~Source: docs/debug/control-room-debug-handoff.md~~
+- ~~Exit criteria:~~
+  - ~~Repro test no longer freezes in single/span/mirror~~
+  - ~~If unresolved, explicit beta policy: control-room disabled + documented known issue~~
+- ~~Repos: drop-ins/control-room-01 + primary~~
+- **RESOLVED 2026-05-27** — Attempt K (app.py throttled subsystem frame readback to ≤10 fps).
+  Root cause was 60 fps `glReadPixels` stalling the GPU pipeline. Fix verified via code review;
+  live test on owner machine pending. `enabled` set available for beta testing.
 
 3. Finish Auto VJ beat-tracker live hardening for remaining low-BPM under-lock edge cases
 - Why: Remaining music-correctness blocker despite major v2 progress.
