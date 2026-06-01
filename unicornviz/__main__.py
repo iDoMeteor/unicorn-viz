@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from unicornviz.config import Config
+from unicornviz.paths import APP_ROOT, resolve_path
 
 
 class _LogBandFilter(logging.Filter):
@@ -50,7 +51,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description='Fullscreen demoscene visualizer with audio-reactive GPU effects, ANSI art, and MIDI control.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('--config', default='config.toml', help='Path to TOML config file.')
+    parser.add_argument('--config', default=str(APP_ROOT / 'config.toml'), help='Path to TOML config file.')
 
     display = parser.add_argument_group('display')
     display.add_argument('--width', type=int, help='Window width in pixels.')
@@ -169,7 +170,7 @@ def _setup_logging(cfg: Config) -> None:
     else:
         level = logging.DEBUG
         band_filter = _LogBandFilter('INFO')
-    log_dir = Path(str(cfg.get('logging', 'directory', default='logs')))
+    log_dir = resolve_path(cfg.get('logging', 'directory', default='logs'))
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"unicornviz_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 

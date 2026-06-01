@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 import moderngl
 import numpy as np
 
+from unicornviz.paths import resolve_path
+
 try:
     from PIL import Image, ImageDraw, ImageFont
     _PIL_AVAILABLE = True
@@ -237,7 +239,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
     """
     if _PIL_AVAILABLE:
         font_candidates = [
-            Path('assets/fonts/ui-font.ttf'),
+            resolve_path('assets/fonts/ui-font.ttf'),
             Path('/usr/share/fonts/adobe-source-code-pro-fonts/SourceCodePro-Medium.otf'),
             Path('/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf'),
             Path('/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf'),
@@ -273,7 +275,7 @@ def _build_font_texture(ctx: moderngl.Context) -> tuple[moderngl.Texture, int, i
     N_CHARS = 128
     data = np.zeros((8, N_CHARS * 8), dtype=np.uint8)
 
-    font_path = Path("assets/fonts/font8x8.bin")
+    font_path = resolve_path("assets/fonts/font8x8.bin")
     if font_path.exists():
         raw = font_path.read_bytes()
         for codepoint in range(min(N_CHARS, len(raw) // 8)):

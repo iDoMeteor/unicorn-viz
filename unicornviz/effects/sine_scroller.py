@@ -103,10 +103,10 @@ _CHAR_H = 8
 
 
 def _load_font(ctx: moderngl.Context) -> moderngl.Texture:
-    from pathlib import Path
+    from unicornviz.paths import resolve_path
     atlas_w = _ATLAS_COLS * _CHAR_W
     data = np.zeros((_CHAR_H, atlas_w), dtype=np.uint8)
-    font_path = Path("assets/fonts/font8x8.bin")
+    font_path = resolve_path("assets/fonts/font8x8.bin")
     if font_path.exists():
         raw = font_path.read_bytes()
         for cp in range(min(128, len(raw) // 8)):
