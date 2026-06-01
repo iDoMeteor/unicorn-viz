@@ -968,6 +968,16 @@ class App:
                 f"SDL_GL_CreateContext failed: {sdl2.SDL_GetError().decode()}"
             )
         sdl2.SDL_GL_SetSwapInterval(1)  # vsync
+
+        # Inhibit compositor keyboard-shortcut interception so that combos like
+        # Ctrl+Alt+J reach the app reliably on Wayland.  On X11 and other
+        # backends SDL_SetWindowKeyboardGrab is effectively a no-op.
+        sdl2.SDL_SetWindowKeyboardGrab(self._window, sdl2.SDL_TRUE)
+        if sdl2.SDL_GetCurrentVideoDriver().decode().lower() == 'wayland':
+            log.info(
+                'Keyboard grab requested (Wayland): compositor shortcuts inhibited'
+            )
+
         self._set_cursor_visible(self._show_cursor_default)
 
         # After fullscreen is applied the OS may give us a different size.
