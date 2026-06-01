@@ -35,6 +35,7 @@ _DEFAULTS: dict[str, Any] = {
         "display_index": 0,
         "display_mode": "single",
         "exclude_display_indices": [],
+        "keyboard_grab": True,
     },
     "demo": {
         "mode": "sequential",

@@ -980,14 +980,19 @@ class App:
             )
         sdl2.SDL_GL_SetSwapInterval(1)  # vsync
 
-        # Inhibit compositor keyboard-shortcut interception so that combos like
-        # Ctrl+Alt+J reach the app reliably on Wayland.  On X11 and other
-        # backends SDL_SetWindowKeyboardGrab is effectively a no-op.
-        sdl2.SDL_SetWindowKeyboardGrab(self._window, sdl2.SDL_TRUE)
-        if sdl2.SDL_GetCurrentVideoDriver().decode().lower() == 'wayland':
-            log.info(
-                'Keyboard grab requested (Wayland): compositor shortcuts inhibited'
-            )
+        # On Wayland, the compositor intercepts Ctrl+Alt+<key> combos before SDL
+        # sees them.  Requesting a keyboard grab activates
+        # zwp_keyboard_shortcuts_inhibit_manager_v1 so those combos reach us.
+        # Only done on Wayland (X11 has no such interception and needs no grab).
+        # Disable via `keyboard_grab = false` in [window] if you prefer to keep
+        # compositor shortcuts active at the cost of losing Ctrl+Alt+* hotkeys.
+        _video_driver = sdl2.SDL_GetCurrentVideoDriver().decode().lower()
+        _grab_enabled = bool(self.cfg.get('window', 'keyboard_grab', default=True))
+        if _video_driver == 'wayland' and _grab_enabled:
+            sdl2.SDL_SetWindowKeyboardGrab(self._window, sdl2.SDL_TRUE)
+            log.info('Keyboard grab active (Wayland): compositor shortcuts inhibited')
+        elif _video_driver == 'wayland':
+            log.info('Keyboard grab disabled by config; Ctrl+Alt+* may be intercepted by compositor')
 
         self._set_cursor_visible(self._show_cursor_default)
 
