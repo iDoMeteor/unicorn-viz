@@ -412,3 +412,41 @@ start_preset = ""
 #   beat_tracker_engine = "v2"
 # ---------------------------------------------------------------------------
 # beat_tracker_engine = "v2"
+
+# ---------------------------------------------------------------------------
+# projectM affinity & preset behavior (inside [auto_vj] section)
+#
+# projectm_affinity       — Per-swap probability (0..1) that the director
+#                           biases toward ProjectM Presets when available.
+#                           0 = disabled. Profile defaults: chill=0.15,
+#                           normie=0.25, raver=0.30.
+# projectm_dwell_mult     — Dwell-time multiplier applied when projectM wins
+#                           an affinity pick (profile defaults ~2.0–2.5).
+# projectm_preset_min_interval_s — Minimum seconds between Auto VJ–driven
+#                           preset changes inside projectM (dance behavior).
+# projectm_preset_on_event_chance — Probability (0..1) of triggering a
+#                           random preset on musical events (drop/impact/
+#                           build/climax) while projectM is active.
+#
+# projectm_preset_pingpong_enabled — Raver-only: allow preset-level ping-pong
+#                           inside projectM (bouncing between two presets).
+# projectm_preset_pingpong_beats   — Beats between preset swaps.
+# projectm_preset_pingpong_min_swaps / max_swaps — Budget range.
+#
+# Post-FX ping-pong (raver only, layered on top of effect/preset ping-pong):
+# postfx_pingpong_enabled         — Enable the parallel postfx oscillator.
+# postfx_pingpong_beats           — Beats between post-FX slot swaps.
+# postfx_pingpong_min_swaps / max_swaps — Budget range per run.
+# postfx_pingpong_trigger_chance  — Probability of starting a run on beat.
+#
+# Example (add inside your [auto_vj] block):
+#   [auto_vj]
+#   projectm_affinity = 0.30
+#   projectm_dwell_mult = 2.0
+#   projectm_preset_min_interval_s = 6.0
+#   projectm_preset_on_event_chance = 0.75
+#   projectm_preset_pingpong_enabled = true
+#   projectm_preset_pingpong_beats = 4
+#   postfx_pingpong_enabled = true
+#   postfx_pingpong_trigger_chance = 0.40
+# ---------------------------------------------------------------------------

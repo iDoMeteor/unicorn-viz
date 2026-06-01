@@ -202,8 +202,13 @@ class HotkeyHandler:
                         return
 
         # Registered drop-in key handlers.
-        for _handler in a.vj_api.key_handlers:
-            _result = _handler(sym, mod)
+        for _name, _handler in a.vj_api.key_handler_items():
+            try:
+                _result = _handler(sym, mod)
+            except Exception:
+                log.exception('Key handler %r raised; unregistering', _name)
+                a.vj_api.unregister_key_handler(_name)
+                continue
             if _result is not False:
                 if isinstance(_result, str) and _result:
                     o.flash_message(_result, 2.0)

@@ -228,15 +228,81 @@ class VJApi:
                 return True
         return False
 
-    def find_effect(self, class_name: str, display_name: str) -> type | None:
-        """Return the effect class matching *class_name* or *display_name*.
+    def find_effect(self, class_name: str, display_name: str | None = None) -> type | None:
+        """Return the effect class matching *class_name* or (optionally) *display_name*.
 
         Returns ``None`` when no matching effect is registered.
         """
         for cls in get_effects():
-            if cls.__name__ == class_name or cls.NAME == display_name:
+            if cls.__name__ == class_name or (display_name and cls.NAME == display_name):
                 return cls
         return None
+
+    def show_splash(self) -> None:
+        """Replay the startup splash sequence."""
+        self._app.show_splash()  # noqa: SLF001
+
+    def projectm_available(self) -> bool:
+        """Return True when a ProjectMEffect class is registered as a discoverable effect."""
+        return self.find_effect('ProjectMEffect', 'ProjectM Presets') is not None
+
+    def projectm_active(self) -> bool:
+        """Return True when ProjectMEffect is the currently displayed effect."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            return inst is not None and type(inst).__name__ == 'ProjectMEffect'
+        except Exception:
+            return False
+
+    def projectm_preset_count(self) -> int:
+        """Return the number of loaded projectM presets (0 when not active or unavailable)."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            if inst is None or type(inst).__name__ != 'ProjectMEffect':
+                return 0
+            return int(getattr(inst, 'preset_count', 0) or 0)
+        except Exception:
+            return 0
+
+    def projectm_next_preset(self) -> str | None:
+        """Advance to the next projectM preset; returns label or None."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            if inst is None or type(inst).__name__ != 'ProjectMEffect':
+                return None
+            return inst.next_preset()  # type: ignore[union-attr]
+        except Exception:
+            return None
+
+    def projectm_prev_preset(self) -> str | None:
+        """Step to the previous projectM preset; returns label or None."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            if inst is None or type(inst).__name__ != 'ProjectMEffect':
+                return None
+            return inst.prev_preset()  # type: ignore[union-attr]
+        except Exception:
+            return None
+
+    def projectm_random_preset(self) -> str | None:
+        """Jump to a random projectM preset; returns label or None."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            if inst is None or type(inst).__name__ != 'ProjectMEffect':
+                return None
+            return inst.random_preset()  # type: ignore[union-attr]
+        except Exception:
+            return None
+
+    def projectm_goto_preset(self, index: int) -> str | None:
+        """Go to a specific preset by index; returns label or None."""
+        try:
+            inst = self._app._current_effect  # noqa: SLF001
+            if inst is None or type(inst).__name__ != 'ProjectMEffect':
+                return None
+            return inst.goto_preset(int(index))  # type: ignore[union-attr]
+        except Exception:
+            return None
 
     def goto_random_effect(self, tags: list[str] | None = None, exclude_current: bool = True) -> str | None:
         effects = list(get_effects())
@@ -498,6 +564,21 @@ class VJApi:
         self._app._postfx_controller.clear_active_slot()  # noqa: SLF001
         return True
 
+    def postfx_friend_pairs(self) -> list[tuple[int, int]]:
+        """Return post-FX friend pairs for ping-pong use.
+
+        Returns a list of ``(slot_a, slot_b)`` tuples where each pair represents
+        a curated pairing.  Returns an empty list when no Post-FX controller is
+        available.
+        """
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is None:
+                return []
+            return pc.friend_pairs()
+        except Exception:
+            return []
+
     def is_user_busy(self) -> bool:
         return bool(time.monotonic() < self._app._user_action_deadline)  # noqa: SLF001
 
@@ -632,3 +713,7 @@ class VJApi:
     def key_handlers(self) -> list[Callable[[int, int], 'str | None | bool']]:
         """Current list of registered handlers in insertion order."""
         return list(self._key_handlers.values())
+
+    def key_handler_items(self) -> list[tuple[str, Callable[[int, int], 'str | None | bool']]]:
+        """Registered (name, handler) pairs in insertion order."""
+        return list(self._key_handlers.items())

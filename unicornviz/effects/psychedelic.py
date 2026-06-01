@@ -79,7 +79,7 @@ class Psychedelic(BaseEffect):
     NAME   = 'Psychedelic'
     AUTHOR = 'unicorn-viz'
     TAGS   = ['psychedelic', 'audio', 'shader']
-    PING_PONG_FRIENDS = ['Fractal Zoom', 'Kaleidoscope', 'Unicorn Tears']
+    PING_PONG_FRIENDS = ['Fractal Zoom', 'Kaleidoscope', 'Unicorn Tears', 'ProjectM Presets']
 
     def _init(self) -> None:
         self.parameters = {'speed': float(self.config.get('speed', 1.0))}
