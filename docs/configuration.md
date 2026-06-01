@@ -27,6 +27,18 @@ Notes:
     fallback at startup for more reliable placement; if fallback fails it
     continues on Wayland with limitations.
 
+### Compositor Compatibility Matrix
+
+Verified on Fedora 44 (2026-06-01):
+
+| display_mode | GNOME Wayland | MATE (X11) | Notes |
+|--------------|:-------------:|:----------:|-------|
+| `single`     | ✅            | untested   | |
+| `span_all`   | ✅            | untested   | |
+| `mirror_all` | ✅            | untested   | |
+
+MATE/X11 testing pending.
+
 ---
 
 ## `[demo]`

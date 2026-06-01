@@ -331,8 +331,9 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
    and `resolve_path()`; all hardcoded relative paths in core and all 4
    affected drop-ins patched. Committed `b6ec783`.
 
-9. **Verify Wayland multi-head** on this machine's compositor against the
-   matrix: GNOME Wayland single / span_all / mirror_all.
+9. ✅ **Verify Wayland multi-head** — All three modes (single, span_all,
+   mirror_all) verified working on GNOME Wayland / Fedora 44. Compat matrix
+   added to `docs/configuration.md`. MATE/X11 testing deferred.
 
 ### P3 — Nice to have / future
 
@@ -340,11 +341,10 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
     blocks now include `portaudio-devel`, `libsndfile-devel`; ffmpeg warning
     updated with RPM Fusion instructions.
 
-11. **ALSA opt-in probe mode** (F44-06) — add `audio.allow_alsa = false`
-    (default) config toggle for diagnostics.
+11. ~~**ALSA opt-in probe mode**~~ (F44-06) — Deferred; not needed on this machine.
 
-12. **Compositor compat matrix doc** — formalize the tested display mode ×
-    compositor combinations in `docs/configuration.md`.
+12. ✅ **Compositor compat matrix doc** — Table added to `docs/configuration.md`;
+    GNOME Wayland all modes verified. MATE/X11 to be updated when tested.
 
 13. ✅ **projectm-01 preset pack** — 4,188 `.milk` presets from
     `presets-projectm-classic` (LGPL 2.1) installed locally at
