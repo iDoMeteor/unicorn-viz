@@ -380,19 +380,18 @@ scale_when_framed = true
 # via the current Unicorn Viz GL context, and supports Ctrl+N/P/R preset
 # switching while the effect is active.
 # ---------------------------------------------------------------------------
-# [effects.ProjectMEffect]
-# speed = 1.0
-# preset_duration = 20.0
-# smooth_transition = true
-# lock_preset = false
-# start_clean = false
-# beat_sensitivity = 1.0
-# fps_hint = 60
-# projectm_library = ""
-# preset_dir = "drop-ins/projectm-01/presets"
-# preset_dirs = "drop-ins/projectm-01/presets,/opt/projectm/presets"
-# texture_dirs = "assets/projectm-textures"
-# start_preset = ""
+[effects.ProjectMEffect]
+speed = 1.0
+preset_duration = 20.0
+smooth_transition = true
+lock_preset = false
+start_clean = false
+beat_sensitivity = 1.0
+fps_hint = 60
+projectm_library = ""
+preset_dirs = "drop-ins/projectm-01/presets"
+texture_dirs = "drop-ins/projectm-01/presets/presets-milkdrop-texture-pack/textures"
+start_preset = ""
 
 # ---------------------------------------------------------------------------
 # Beat tracker engine selection (inside [auto_vj] section)
