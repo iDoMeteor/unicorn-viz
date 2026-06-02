@@ -512,9 +512,65 @@ Expected result:
 - `_destroy_control_room` now logs "ControlRoomController closed" making
   toggle sequences fully traceable in logs
 
-## Current Best Hypothesis
+### Attempt N — replace SDL window-surface path with SDL_CreateRenderer (software)
 
-Five separate issues were real; all five are now addressed:
+**Root cause of the persistent black window — final hypothesis:**
+
+All prior attempts (K–M) fixed real bugs (starvation, key-repeat, zombie GC,
+initial surface commit, 60 fps buffer flooding), but the fundamental problem
+remained: `SDL_GetWindowSurface` + `SDL_UpdateWindowSurface` is the raw
+`wl_shm` surface API.  SDL2's software surface path does NOT participate in the
+Wayland frame-callback / `wl_buffer.release` handshake.  When the primary
+window has an active EGL context, Mutter categorises the process as a GL client
+and applies stricter `wl_buffer` ownership enforcement to all secondary windows.
+The result is that SDL2's raw surface commits are silently dropped and the
+surface stays black — regardless of frame rate.
+
+**Fix (Attempt N):**
+
+Replace the entire `SDL_GetWindowSurface` / `SDL_BlitScaled` /
+`SDL_UpdateWindowSurface` path with `SDL_CreateRenderer(SDL_RENDERER_SOFTWARE)`
++ a streaming texture:
+
+```
+# _create_window():
+self._renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE)
+self._texture  = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                   SDL_TEXTUREACCESS_STREAMING, w, h)
+# Initial clear so the compositor sees a committed surface immediately:
+SDL_SetRenderDrawColor / SDL_RenderClear / SDL_RenderPresent
+
+# present():
+SDL_UpdateTexture(texture, None, pixel_bytes, pitch)
+SDL_RenderClear / SDL_RenderCopy / SDL_RenderPresent
+```
+
+`SDL_CreateRenderer` uses SDL2's internal Wayland render driver which correctly
+participates in the `wl_frame_callback` → commit → `wl_buffer.release` cycle,
+meaning Mutter will never see a commit before it has released the previous
+buffer.  This is the portable path — identical behaviour on X11, Windows
+(GDI), macOS (CoreGraphics), and Wayland.
+
+Additional wins:
+- Eliminates `SDL_CreateRGBSurfaceFrom` + `SDL_ConvertSurface` per frame
+  (pixel format conversion overhead gone — we use ARGB8888 throughout which
+  matches PIL's BGRA output byte order on LE systems)
+- Texture resize on window resize handled gracefully (destroy + re-create
+  texture inside `present()`)
+- `_destroy_window` now explicitly destroys texture before renderer before
+  window (correct SDL2 teardown order)
+
+Commits:
+- (pending test)
+
+Expected result:
+- Operator window renders correctly on Wayland/GNOME/Mutter
+- No change in behaviour on X11 or Windows
+- Slightly lower CPU in `present()` (one less surface conversion per frame)
+
+
+
+Six separate issues were real; all six are now addressed:
 
 1. **Main-loop starvation from PIL rasterization** — fixed by background render
    thread (Attempt I).
@@ -525,10 +581,14 @@ Five separate issues were real; all five are now addressed:
    Attempt L (key-repeat filter, creating guard, zombie GC, initial FillRect
    commit on window creation).
 5. **Wayland wl_shm buffer flooding (60 fps commits of unchanged pixels)** —
-   root cause of the persistent "black window / appears briefly then black"
-   pattern on GNOME/Mutter.  Fixed by Attempt M: `present()` now only calls
-   `SDL_UpdateWindowSurface` when the render thread has produced a new frame
-   (tracked via `_frame_id` / `_presented_frame_id` counters).
+   fixed by Attempt M: `present()` now only commits when the render thread has
+   produced a new frame (tracked via `_frame_id` / `_presented_frame_id`).
+6. **SDL raw wl_shm surface incompatible with GL client process** — root cause
+   of the persistent black window on Wayland.  Fixed by Attempt N: replaced
+   `SDL_GetWindowSurface` / `SDL_UpdateWindowSurface` with
+   `SDL_CreateRenderer(SDL_RENDERER_SOFTWARE)` + streaming texture.  SDL2's
+   software renderer participates correctly in the Wayland frame-callback /
+   `wl_buffer.release` handshake that Mutter requires from GL-client processes.
 
 The most likely live state now is:
 
@@ -536,15 +596,7 @@ The most likely live state now is:
 - one-shot GL rebind on control-room create/destroy is acceptable
 - subsystem frame readback is throttled to ≤10 fps, removing pipeline stall
 - operator surface committed at ~8 fps (render_interval rate), not 60 fps
-- Wayland black window on first open and after move should now be resolved
-
-If the window **still** goes black, the remaining candidates are:
-- Mutter rejecting `wl_shm` entirely for secondary windows when a GL context
-  owns the primary surface → try `SDL_VIDEODRIVER=x11` to force XWayland
-- A Mesa/Wayland driver bug specific to the GPU in use → check `SDL_GetError()`
-  output in logs for `blit failed` or `surface update failed` warnings
-- If both fail: Path 4 (separate process with HTTP/WebSocket surface) is the
-  correct long-term architecture
+- Wayland black window should now be resolved via SDL software renderer path
 
 ## Recommended Next Steps
 
