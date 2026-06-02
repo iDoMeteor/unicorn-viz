@@ -2,7 +2,7 @@
 fullscreen = true
 show_cursor = false
 display_mode  = "single"   # single | span_all | mirror_all
-display_index  = 2
+display_index  = 0
 #exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
 [demo]
@@ -30,6 +30,21 @@ scale_when_framed = true
 
 [logging]
 level = "info"
+
+[midi]
+device = "apc mini mk2 notes"  # port name substring; empty = MIDI disabled
+preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_mini | novation_launchcontrol | generic | ""
+# Connect to "apc mini mk2 control" instead for fader CCs (CC 48-55).
+# Per-CC parameter overrides.  Uncomment and extend to remap individual knobs/faders.
+# [midi.cc_map]
+# 48 = "speed"
+# 49 = "reactivity"
+# Per-note action overrides.  Uncomment to remap individual pads.
+# APC mini mk2 top row pads: 56=next 57=prev 58=random 59=pause 60=fullscreen
+# Scene launch buttons:     112=next 113=prev 114=random 115=pause
+# [midi.note_map]
+# 56 = "next"
+# 57 = "prev"
 
 [dropins]
 exclude = "none"
@@ -265,7 +280,7 @@ postfx_cruise_slots = [1,2,3,7,9]
 # tweakable controls, and an effect browser.
 # ---------------------------------------------------------------------------
 [control_room]
-enabled = true
+enabled = false
 #fullscreen = true       # borderless fullscreen on the chosen display (default true)
 #display_index = 0
 #width = 1920
@@ -390,7 +405,7 @@ beat_sensitivity = 1.0
 fps_hint = 60
 projectm_library = ""
 preset_dirs = "drop-ins/projectm-01/presets"
-texture_dirs = "drop-ins/projectm-01/presets/presets-milkdrop-texture-pack/textures"
+texture_dirs = ["drop-ins/projectm-01/presets/presets-milkdrop-texture-pack/textures", "drop-ins/projectm-01/textures"]
 start_preset = ""
 
 # ---------------------------------------------------------------------------
