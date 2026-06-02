@@ -56,18 +56,20 @@ class AudioManager:
         self._last_data_raw = AudioData()
 
     @staticmethod
-    def _clone_audio(data: AudioData) -> AudioData:
-        clone = AudioData()
-        clone.bass = float(data.bass)
-        clone.mid = float(data.mid)
-        clone.treble = float(data.treble)
-        clone.beat = float(data.beat)
-        clone.bpm = float(data.bpm)
-        clone.bass_flux = float(data.bass_flux)
-        clone.mid_flux = float(data.mid_flux)
-        clone.fft[:] = data.fft
-        clone.waveform[:] = data.waveform
-        return clone
+    def _copy_audio_into(source: AudioData, target: AudioData) -> None:
+        """Copy all fields from source into target in-place (no allocation)."""
+        target.bass = source.bass
+        target.mid = source.mid
+        target.treble = source.treble
+        target.bass_n = source.bass_n
+        target.mid_n = source.mid_n
+        target.treble_n = source.treble_n
+        target.beat = source.beat
+        target.bpm = source.bpm
+        target.bass_flux = source.bass_flux
+        target.mid_flux = source.mid_flux
+        target.fft[:] = source.fft
+        target.waveform[:] = source.waveform
 
     def start(self) -> None:
         log.debug("AudioManager: starting capture")
@@ -151,16 +153,15 @@ class AudioManager:
         if block is not None and len(block) > 0:
             rms = float(np.sqrt(np.mean(block * block)))
             log.debug("Audio frame: rms=%.4f bass=%.3f mid=%.3f treble=%.3f", rms, self._last_data.bass, self._last_data.mid, self._last_data.treble)
-        raw = self._analyzer.process(block)
-        self._last_data_raw = raw
-        data = self._clone_audio(raw)
+        self._analyzer.process(block, out=self._last_data_raw)
+        self._copy_audio_into(self._last_data_raw, self._last_data)
         if self._reactivity != 1.0:
-            data.bass   = min(1.0, data.bass   * self._reactivity)
-            data.mid    = min(1.0, data.mid    * self._reactivity)
-            data.treble = min(1.0, data.treble * self._reactivity)
-            if data.fft is not None:
-                data.fft = np.clip(data.fft * self._reactivity, 0.0, 1.0)
-        self._last_data = data
+            r = self._reactivity
+            self._last_data.bass   = min(1.0, self._last_data.bass   * r)
+            self._last_data.mid    = min(1.0, self._last_data.mid    * r)
+            self._last_data.treble = min(1.0, self._last_data.treble * r)
+            np.multiply(self._last_data.fft, r, out=self._last_data.fft)
+            np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
         return self._last_data
 
     def get_audio_data_raw(self) -> AudioData:

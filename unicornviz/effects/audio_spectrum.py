@@ -315,6 +315,17 @@ class AudioSpectrum(BaseEffect):
         self._mid    = 0.0
         self._treble = 0.0
 
+        # Wave 2.4 — pre-allocated VBO fill buffers to eliminate Python list
+        # churn in _build_bars() / _build_waveform() on every render frame.
+        # Max blocks per bar matches the VBO reservation: 40 × 6 verts × 6 floats.
+        self._bars_work_buf: np.ndarray = np.zeros(
+            _N_BARS * 40 * 6 * 6, dtype=np.float32
+        )
+        # Waveform scratch: x column is constant and set once here.
+        self._wave_xs: np.ndarray = np.linspace(-1.0, 1.0, _N_WAVE, dtype=np.float32)
+        self._wave_work_buf: np.ndarray = np.zeros((_N_WAVE, 2), dtype=np.float32)
+        self._wave_work_buf[:, 0] = self._wave_xs
+
         # Log-spaced band edges: each EQ bar covers [edges[i], edges[i+1]) bins.
         self._band_edges = _build_log_band_edges(
             _N_BARS, _FFT_BINS, _BIN_HZ, _F_MIN, _F_MAX,
@@ -364,42 +375,57 @@ class AudioSpectrum(BaseEffect):
             self._wave.fill(0.0)
 
     def _build_bars(self) -> tuple[np.ndarray, int]:
-        """Build bars as stacked discrete blocks (80s boombox style)."""
-        verts = []
+        """Build bars as stacked discrete blocks (80s boombox style).
+
+        Writes directly into the pre-allocated ``_bars_work_buf`` to avoid
+        Python list allocation and the ``np.array()`` conversion on every frame.
+        """
+        buf = self._bars_work_buf
+        ptr = 0
         bar_w = 2.0 / _N_BARS
-        block_h = 0.05  # Height of each discrete block
-        
+        block_h: float = 0.05
+        peak_block_h: float = 0.02
+
         for i in range(_N_BARS):
             h = float(self._smooth[i]) * 1.8
             x0 = -1.0 + i * bar_w + bar_w * 0.05
             x1 = x0 + bar_w * 0.90
             r, g, b = _bar_colour(i, _N_BARS)
             mag = float(self._smooth[i])
-            
-            # Stack discrete blocks from bottom up
-            num_blocks = max(1, int(h / block_h))
-            for block_idx in range(num_blocks):
-                by0 = -1.0 + block_idx * block_h
-                by1 = by0 + block_h * 0.9  # Small gap between blocks
-                # 2 triangles per block
-                for x, y in [(x0, by0), (x1, by0), (x0, by1), (x1, by0), (x1, by1), (x0, by1)]:
-                    verts += [x, y, mag, r, g, b]
-            
-            # Peak indicator: translucent inverse-color block at peak height
+
+            n_blocks = max(1, min(int(h / block_h), 38))
+            for k in range(n_blocks):
+                by0 = -1.0 + k * block_h
+                by1 = by0 + block_h * 0.9
+                buf[ptr:ptr + 36] = (
+                    x0, by0, mag, r, g, b,
+                    x1, by0, mag, r, g, b,
+                    x0, by1, mag, r, g, b,
+                    x1, by0, mag, r, g, b,
+                    x1, by1, mag, r, g, b,
+                    x0, by1, mag, r, g, b,
+                )
+                ptr += 36
+
             py = -1.0 + float(self._peak[i]) * 1.8
-            peak_block_h = 0.02
             inv_r, inv_g, inv_b = 1.0 - r, 1.0 - g, 1.0 - b
-            for x, y in [(x0, py), (x1, py), (x0, py + peak_block_h), (x1, py), (x1, py + peak_block_h), (x0, py + peak_block_h)]:
-                verts += [x, y, inv_r, inv_g, inv_b, 0.6]
-        
-        arr = np.array(verts, dtype=np.float32)
-        return arr, len(arr) // 6
+            buf[ptr:ptr + 36] = (
+                x0, py,                 inv_r, inv_g, inv_b, 0.6,
+                x1, py,                 inv_r, inv_g, inv_b, 0.6,
+                x0, py + peak_block_h,  inv_r, inv_g, inv_b, 0.6,
+                x1, py,                 inv_r, inv_g, inv_b, 0.6,
+                x1, py + peak_block_h,  inv_r, inv_g, inv_b, 0.6,
+                x0, py + peak_block_h,  inv_r, inv_g, inv_b, 0.6,
+            )
+            ptr += 36
+
+        return buf[:ptr], ptr // 6
 
     def _build_waveform(self, y_base: float, y_scale: float) -> tuple[np.ndarray, int]:
-        xs = np.linspace(-1.0, 1.0, _N_WAVE, dtype=np.float32)
-        ys = y_base + self._wave * y_scale
-        verts = np.column_stack([xs, ys])
-        return verts.astype(np.float32), len(verts)
+        """Build waveform vertex data in-place using pre-allocated scratch buffer."""
+        np.multiply(self._wave, y_scale, out=self._wave_work_buf[:, 1])
+        self._wave_work_buf[:, 1] += y_base
+        return self._wave_work_buf, _N_WAVE
 
     def render(self) -> None:
         mode = int(self.parameters["mode"]) % 3

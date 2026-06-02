@@ -136,6 +136,10 @@ class Analyzer:
         self._n_fft = self._bands * 2
         self._bin_hz = _ASSUMED_SAMPLE_RATE / max(1, self._n_fft)
 
+        # Wave 3.1 — scratch buffers to avoid per-frame heap allocation
+        self._spectrum_work: np.ndarray = np.zeros(fft_bands, dtype=np.float32)
+        self._windowed_buf: np.ndarray = np.zeros(1024, dtype=np.float32)
+
         self._setup_frequency_bands()
 
     def _setup_frequency_bands(self) -> None:
@@ -283,27 +287,39 @@ class Analyzer:
             self._window_cache[n] = window
         return window
 
-    def process(self, pcm: np.ndarray | None, t: float | None = None) -> AudioData:
+    def process(
+        self,
+        pcm: np.ndarray | None,
+        t: float | None = None,
+        out: AudioData | None = None,
+    ) -> AudioData:
         """Process one block of PCM audio and return an AudioData snapshot.
 
         pcm: float32 mono array, or None for a silent frame.
         t:   optional audio-time in seconds (for offline / harness use).
              When None, wall-clock time.monotonic() is used.
+        out: optional pre-allocated AudioData to fill in-place.  When provided
+             the caller's buffer is mutated and returned (no allocation).
+             Fields not computed for a silent frame are reset to their defaults.
         """
-        data = AudioData()
+        data = out if out is not None else AudioData()
         now: float = t if t is not None else time.monotonic()
         self._last_audio_time = now
 
         if pcm is None or len(pcm) == 0:
             return data
 
-        # Window + FFT
+        # Window + FFT — use scratch buffer to avoid per-frame allocation
         n = len(pcm)
         window = self._window_for(n)
-        windowed = pcm[:n] * window
+        if n > len(self._windowed_buf):
+            self._windowed_buf = np.empty(n, dtype=np.float32)
+        np.multiply(pcm[:n], window, out=self._windowed_buf[:n])
+        windowed = self._windowed_buf[:n]
         rms = float(np.sqrt(np.mean(windowed * windowed)))
-        spectrum = np.abs(np.fft.rfft(windowed, n=self._bands * 2))
-        spectrum = spectrum[: self._bands].astype(np.float32)
+        fft_raw = np.fft.rfft(windowed, n=self._bands * 2)
+        np.abs(fft_raw[: self._bands], out=self._spectrum_work)
+        spectrum = self._spectrum_work
 
         self._last_raw_rms = rms
 
