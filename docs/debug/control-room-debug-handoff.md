@@ -410,7 +410,55 @@ Expected result:
 - no change to streaming, recording, or mirror-mode behaviour
 - operator preview still appears live at up to 10 fps capture rate
 
-### Attempt L — fix double-creation race and Wayland initial black window
+### Attempt M — throttle SDL_UpdateWindowSurface to render-thread frame rate
+
+Root cause identified from "appears briefly on move then goes black" pattern
+observed on Fedora 44 (Wayland, GNOME 47, Mutter 47, Mesa 26.0.7):
+
+**The Wayland wl_shm buffer flooding problem:**
+
+`present()` is called every main-loop tick (~60 fps) and was unconditionally
+calling `SDL_UpdateWindowSurface` — even when the render thread hadn't
+produced a new frame yet (render_interval defaults to 0.125 s = 8 fps).
+
+On Wayland, `SDL_GetWindowSurface` backs the window with a `wl_shm_pool`
+buffer.  When `SDL_UpdateWindowSurface` is called, SDL2 commits that buffer
+to the compositor.  The compositor (Mutter) sends a `wl_buffer.release` event
+when it's done with the buffer and a `wl_callback.done` frame-sync event when
+it's ready for the next commit.  SDL2's software surface path does not wait
+for these events — it just commits again on the next call.
+
+Flooding Mutter with 60 identical commits per second violates the `wl_buffer`
+ownership contract (you must not overwrite a buffer before the compositor
+releases it) and triggers Mutter's frame-throttling logic, which causes it to
+stop displaying the surface content.  The window appears black.
+
+The "appears briefly after moving between displays" pattern is the smoking gun:
+the window move causes SDL2 to internally destroy and recreate the `wl_shm`
+surface, resetting the buffer state and giving one clean commit.  The
+60 fps flooding then resumes and Mutter goes black again within seconds.
+
+**Fix:**
+
+Added `_frame_id: int` (incremented by the render thread under `_frame_lock`
+each time a new PIL image is rasterized) and `_presented_frame_id: int`
+(set in `present()` after a successful `SDL_UpdateWindowSurface` call).
+`present()` now reads both values atomically under the lock and skips the
+entire blit + surface commit when `frame_id == _presented_frame_id`.  The
+surface is committed at the render thread's rate (~8 fps) instead of the
+main loop's rate (60 fps).
+
+When `_needs_surface_refresh` is True (window move, expose, focus events),
+`_presented_frame_id` is reset to `-1` so the next available frame forces a
+commit regardless of whether the counter advanced.
+
+Commits:
+- `d3a7fd5` — control-room-01 submodule (frame-id throttle in present())
+
+Expected result:
+- Operator window shows the rendered UI consistently on Wayland
+- No more "briefly appears then goes black" on first open or after move
+- Main loop is not slowed by redundant surface commits
 
 Root causes identified from `unicornviz_20260601_194545.log` on Fedora 44
 (Wayland, GNOME/Mutter, Mesa 26.0.7):
@@ -466,27 +514,37 @@ Expected result:
 
 ## Current Best Hypothesis
 
-Four separate issues were real; all four are now addressed:
+Five separate issues were real; all five are now addressed:
 
 1. **Main-loop starvation from PIL rasterization** — fixed by background render
    thread (Attempt I).
 2. **Per-frame GL rebind was wrong medicine** — reverted (Attempt J).
 3. **60 fps GPU framebuffer readback** — root cause of audience freeze, fixed
    by the 100 ms readback gate in Attempt K.
-4. **Key-repeat double-toggle + Wayland black window** — fixed by Attempt L
-   (key-repeat filter, creating guard, zombie GC, initial surface commit).
+4. **Key-repeat double-toggle + initial Wayland surface commit** — fixed by
+   Attempt L (key-repeat filter, creating guard, zombie GC, initial FillRect
+   commit on window creation).
+5. **Wayland wl_shm buffer flooding (60 fps commits of unchanged pixels)** —
+   root cause of the persistent "black window / appears briefly then black"
+   pattern on GNOME/Mutter.  Fixed by Attempt M: `present()` now only calls
+   `SDL_UpdateWindowSurface` when the render thread has produced a new frame
+   (tracked via `_frame_id` / `_presented_frame_id` counters).
 
 The most likely live state now is:
 
 - threaded operator rendering is good and stays
 - one-shot GL rebind on control-room create/destroy is acceptable
 - subsystem frame readback is throttled to ≤10 fps, removing pipeline stall
-- Wayland-specific black window on first open should now be resolved
+- operator surface committed at ~8 fps (render_interval rate), not 60 fps
+- Wayland black window on first open and after move should now be resolved
 
-If audience starvation **still** persists after Attempt L, the most likely
-remaining cause is driver/compositor interaction from the in-process two-window
-SDL/GL architecture, and Path 4 (separate process or embedded HTTP surface)
-becomes the recommended path.
+If the window **still** goes black, the remaining candidates are:
+- Mutter rejecting `wl_shm` entirely for secondary windows when a GL context
+  owns the primary surface → try `SDL_VIDEODRIVER=x11` to force XWayland
+- A Mesa/Wayland driver bug specific to the GPU in use → check `SDL_GetError()`
+  output in logs for `blit failed` or `surface update failed` warnings
+- If both fail: Path 4 (separate process with HTTP/WebSocket surface) is the
+  correct long-term architecture
 
 ## Recommended Next Steps
 
