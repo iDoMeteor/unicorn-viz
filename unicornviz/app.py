@@ -440,6 +440,7 @@ class App:
         self._spotify_pro = None
         self._grand_finale = None
         self._control_room = None
+        self._control_room_creating: bool = False
         self._control_room_startup_cfg: dict[str, Any] | None = None
         self._control_room_startup_frames_remaining: int = 0
         self._streamer = None
@@ -641,12 +642,13 @@ class App:
 
     def _create_control_room(self, cfg_override: dict[str, Any] | None = None) -> tuple[bool, str]:
         """Create and register the optional control-room subsystem."""
+        if self._control_room_creating:
+            return False, 'Control Room creation already in progress'
         if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
             return True, 'Control Room already open'
-        # Garbage-collect any orphaned controller that's pending shutdown but
-        # whose update() hasn't run yet (e.g. rapid toggle while ESC-close is
-        # still queued).  Otherwise we'd leak the old SDL window.
-        if self._control_room is not None and getattr(self._control_room, '_pending_shutdown', False):
+        # Garbage-collect any orphaned controller (pending-shutdown OR zombie window
+        # already closed) so we never leak an old SDL window on rapid toggles.
+        if self._control_room is not None:
             try:
                 close_fn = getattr(self._control_room, 'close_now', None)
                 if callable(close_fn):
@@ -657,6 +659,7 @@ class App:
         control_room_cfg = cfg_override or self.cfg.get('control_room', default={}) or {}
         if not isinstance(control_room_cfg, dict):
             control_room_cfg = {}
+        self._control_room_creating = True
         try:
             control_room_cls = _load_control_room_controller_class()
             self._control_room = control_room_cls(self, control_room_cfg)
@@ -669,6 +672,8 @@ class App:
             self._control_room = None
             log.warning('ControlRoomController not available: %s', exc)
             return False, f'Control Room unavailable: {exc}'
+        finally:
+            self._control_room_creating = False
 
     def _destroy_control_room(self) -> tuple[bool, str]:
         """Shutdown and unregister the optional control-room subsystem."""
@@ -689,6 +694,7 @@ class App:
         self.vj_api.unregister_key_handler('control_room')
         self._control_room = None
         self.rebind_main_gl_context()
+        log.info('ControlRoomController closed')
         return False, 'Control Room closed'
 
     def toggle_control_room(self) -> tuple[bool, str]:
@@ -2050,7 +2056,8 @@ void main() {
                     self._running = False
                 elif event.type == sdl2.SDL_KEYDOWN:
                     self._update_ctrl_state(event.key.keysym.sym, True)
-                    hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
+                    if not event.key.repeat:
+                        hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
                 elif event.type == sdl2.SDL_KEYUP:
                     self._update_ctrl_state(event.key.keysym.sym, False)
                 elif event.type == sdl2.SDL_WINDOWEVENT:
