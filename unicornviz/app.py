@@ -559,6 +559,20 @@ class App:
         """Unregister a runtime subsystem from the app loop."""
         self._subsystems.pop(str(name).strip(), None)
 
+    def has_subsystem(self, name: str) -> bool:
+        """Return True when a named runtime subsystem is registered."""
+        key = str(name).strip()
+        return bool(key) and key in self._subsystems
+
+    def get_subsystem(self, name: str) -> Any | None:
+        """Return a named runtime subsystem instance, or None if not registered."""
+        key = str(name).strip()
+        return self._subsystems.get(key) if key else None
+
+    def list_subsystems(self) -> list[str]:
+        """Return the names of all currently registered subsystems."""
+        return list(self._subsystems)
+
     def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
         """Route SDL events for a claimed window to a subsystem handler."""
         if int(window_id) <= 0 or handler is None:

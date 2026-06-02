@@ -100,17 +100,20 @@ class VJApi:
 
     def has_subsystem(self, name: str) -> bool:
         """Return True when a named runtime subsystem is registered."""
-        key = str(name).strip()
-        if not key:
-            return False
-        return key in self._app._subsystems  # noqa: SLF001
+        return self._app.has_subsystem(name)
 
     def get_subsystem(self, name: str) -> object | None:
         """Return a named runtime subsystem instance when registered."""
-        key = str(name).strip()
-        if not key:
-            return None
-        return self._app._subsystems.get(key)  # noqa: SLF001
+        return self._app.get_subsystem(name)
+
+    def list_subsystems(self) -> list[str]:
+        """Return the names of all currently registered runtime subsystems.
+
+        Useful for drop-ins that need to coordinate with other subsystems at
+        runtime (e.g. an automation controller checking whether streaming or
+        the control room is active).
+        """
+        return self._app.list_subsystems()
 
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""

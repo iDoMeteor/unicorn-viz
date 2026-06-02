@@ -43,7 +43,7 @@
   - runtime/logging/config/docs drift was corrected
   - low-risk runtime cleanup and allocation cleanup landed in the app/audio/effect hot paths
   - built-in recording landed with auto-record, configurable output, live-only indicator behavior, and Linux audio mux support
-  - stale helper cleanup (for superseded audio-device logic) can be folded into a future cleanup PR
+  - stale helper cleanup (for superseded audio-device logic): `_find_monitor_device()` removed from `unicornviz/audio/capture.py` (2026-06-01); superseded by `_candidate_monitor_devices()` which was already the sole caller path.
 - `[done]` Add structured log output under `logs/`.
 - `[done]` Add configurable log level via config and command line.
 - `[done]` Add command-line overrides for common config values.
@@ -283,8 +283,10 @@
   Notes:
   - MVP implemented: SDL operator window with live preview, transport controls, post-FX bank,
     effect browser, tweakable controls.
-  - Core API surface landed: `register_subsystem()`, `claim_window_events()`, `get_frame_bytes()`
-    all live in `vj_api.py`; `VJApi.VERSION` present.
+  - Core API surface landed and complete: `register_subsystem()`, `unregister_subsystem()`,
+    `has_subsystem()`, `get_subsystem()`, `list_subsystems()`, `claim_window_events()`,
+    `get_frame_bytes()` all in `vj_api.py`; `VJApi.VERSION` present.  `has_subsystem` /
+    `get_subsystem` now delegate through proper `app.py` methods (SLF001 noqa removed).
   - **Starvation fix landed (Attempt K):** root cause was 60 fps GPU readback (`glReadPixels`) on
     every audience frame while preview was active. `app.py` now throttles subsystem frame capture
     to ≤10 fps via a 100 ms gate. `enabled` can be set to `true` for beta testing.

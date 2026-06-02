@@ -133,64 +133,6 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
     return candidates
 
 
-def _find_monitor_device(hint: str) -> int | None:
-    """
-    Return device index matching hint, or auto-select best monitor source.
-
-    Auto-select priority (when hint is empty):
-      1. OBS virtual monitor (OBS is running and routing desktop audio)
-      2. Any PipeWire/PulseAudio monitor sink
-      3. None (sounddevice will use the system default input)
-    """
-    if not _SD_AVAILABLE:
-        return None
-    try:
-        devices = sd.query_devices()
-    except Exception:
-        return None
-
-    hint_lower = hint.lower()
-
-    # Explicit hint: find first input device whose name contains the hint
-    if hint_lower:
-        for i, d in enumerate(devices):
-            if d.get("max_input_channels", 0) < 1:
-                continue
-            if hint_lower in d["name"].lower():
-                return i
-        log.warning("Audio: no device matching %r found, falling back to auto", hint)
-
-    # Auto-detect: prefer OBS monitor (captures desktop audio through OBS)
-    for i, d in enumerate(devices):
-        if d.get("max_input_channels", 0) < 1:
-            continue
-        name = d["name"].lower()
-        if "obs" in name and "monitor" in name:
-            log.info("Audio: auto-selected OBS monitor device %d (%s)", i, d["name"])
-            return i
-
-    # On Windows, prefer WASAPI loopback/stereo-mix style sources.
-    if sys.platform.startswith('win'):
-        for i, d in enumerate(devices):
-            if d.get('max_input_channels', 0) < 1:
-                continue
-            name = d['name'].lower()
-            if 'loopback' in name or 'stereo mix' in name or 'what u hear' in name:
-                log.info('Audio: auto-selected Windows loopback-style device %d (%s)', i, d['name'])
-                return i
-
-    # Fall back to any PipeWire/PulseAudio monitor sink
-    for i, d in enumerate(devices):
-        if d.get("max_input_channels", 0) < 1:
-            continue
-        name = d["name"].lower()
-        if "monitor" in name:
-            log.info("Audio: auto-selected monitor device %d (%s)", i, d["name"])
-            return i
-
-    return None
-
-
 class AudioCapture:
     """
     Runs a sounddevice InputStream in a background thread.
