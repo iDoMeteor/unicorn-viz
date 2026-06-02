@@ -410,26 +410,83 @@ Expected result:
 - no change to streaming, recording, or mirror-mode behaviour
 - operator preview still appears live at up to 10 fps capture rate
 
+### Attempt L — fix double-creation race and Wayland initial black window
+
+Root causes identified from `unicornviz_20260601_194545.log` on Fedora 44
+(Wayland, GNOME/Mutter, Mesa 26.0.7):
+
+**Bug 1 — SDL key-repeat double-toggle:**
+The `SDL_KEYDOWN` handler in `app.py` did not filter `event.key.repeat`.
+On Wayland/Linux, holding a key generates repeated `SDL_KEYDOWN` events with
+`repeat != 0`.  When the user held O while pressing Ctrl+Alt, two repeat events
+with `KMOD_CTRL|KMOD_ALT` fired before the keyup arrived.  The log confirmed
+two back-to-back "ControlRoomController loaded" entries with no destroy between
+them — the first repeat created the window, the second toggled it back off
+(silent destroy, no log entry), then the scheduled 8-frame startup countdown
+fired, passed the `is None` guard, and created a second conflicting instance.
+
+Fix: `if not event.key.repeat:` guard before `hotkeys.handle()` in the
+`SDL_KEYDOWN` branch of the main event loop.
+
+**Bug 2 — Zombie-controller creation bypass:**
+The old zombie GC in `_create_control_room` only triggered when
+`_pending_shutdown=True`.  A controller whose window was silently destroyed
+(e.g. via the repeat-toggle above) had `_window=None` (`is_open=False`) but
+`_pending_shutdown=False` — zombie state.  The next creation call passed the
+`is_open` guard, leaked the zombie, and then tried to create a second window in
+the same SDL thread.
+
+Fix: `_control_room_creating` bool flag (set before constructor call, cleared
+in `finally`) stops re-entrant creation.  Broadened zombie GC now catches ANY
+controller where `is_open` is False, not just ones with `_pending_shutdown`.
+Added `log.info` to `_destroy_control_room` so destroys are visible in logs.
+
+**Bug 3 — Wayland compositor never receives initial surface commit:**
+On Wayland, `SDL_GetWindowSurface` creates a software surface but the
+compositor does not show the window until `SDL_UpdateWindowSurface` is called
+with actual pixel content.  Without this, the operator window stays black even
+after the render thread produces its first frame, because the compositor has
+never seen a commit and keeps the surface unmapped.
+
+Fix: immediately after `SDL_GetWindowID`, call `SDL_GetWindowSurface`,
+`SDL_FillRect` with the theme background colour (RGB from `self._theme.bg`),
+and `SDL_UpdateWindowSurface`.  The compositor maps the surface right away and
+shows the dark background while the render thread warms up.
+
+Commits:
+- `3ce7560` — main repo (app.py: key-repeat filter + creating guard + zombie GC)
+- `4822e83` — control-room-01 submodule (Wayland initial surface commit)
+
+Expected result:
+- operator window opens with the correct dark background on first use instead
+  of a black rectangle
+- no double-creation or silent zombie leaks from held-key scenarios
+- `_destroy_control_room` now logs "ControlRoomController closed" making
+  toggle sequences fully traceable in logs
+
 ## Current Best Hypothesis
 
-Three separate issues were real; all three are now addressed:
+Four separate issues were real; all four are now addressed:
 
 1. **Main-loop starvation from PIL rasterization** — fixed by background render
    thread (Attempt I).
 2. **Per-frame GL rebind was wrong medicine** — reverted (Attempt J).
-3. **60 fps GPU framebuffer readback** — root cause of the remaining audience
-   freeze, fixed by the 100 ms readback gate in Attempt K.
+3. **60 fps GPU framebuffer readback** — root cause of audience freeze, fixed
+   by the 100 ms readback gate in Attempt K.
+4. **Key-repeat double-toggle + Wayland black window** — fixed by Attempt L
+   (key-repeat filter, creating guard, zombie GC, initial surface commit).
 
 The most likely live state now is:
 
 - threaded operator rendering is good and stays
 - one-shot GL rebind on control-room create/destroy is acceptable
 - subsystem frame readback is throttled to ≤10 fps, removing pipeline stall
+- Wayland-specific black window on first open should now be resolved
 
-If audience starvation **still** persists after Attempt K, the most likely
+If audience starvation **still** persists after Attempt L, the most likely
 remaining cause is driver/compositor interaction from the in-process two-window
-SDL/GL architecture rather than the operator UI code, and Path 4 (separate
-process or embedded HTTP surface) becomes the recommended path.
+SDL/GL architecture, and Path 4 (separate process or embedded HTTP surface)
+becomes the recommended path.
 
 ## Recommended Next Steps
 
