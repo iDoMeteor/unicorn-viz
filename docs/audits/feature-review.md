@@ -42,6 +42,12 @@ Session log:
 - New P0/P1/P2: No new P0 from startup/drop-in loader paths; P1 review work remains runtime-validation heavy
 - Notes: Auto VJ HUD mode/mood/action labels now report `off`/`--` when toggled off; static code inspection confirms guarded optional loader paths for auto-vj, multi-head, webcam, streaming, postfx, control-room, and grand-finale.
 
+- Date: 2026-06-03
+- Reviewer: Copilot
+- Scope covered today: bounded baseline startup smoke run (`timeout 20s ./run.sh --start-effect "Audio Spectrum" --log-level INFO`)
+- New P0/P1/P2: No startup crash-path finding in this pass
+- Notes: Startup reached splash/effect loop/audio capture and initialized optional subsystems (auto-vj, webcam, grand-finale, streaming loader path) without crash.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -280,16 +286,13 @@ Notes:
 
 Notes:
 
-- 2026-06-03: Static startup boundary review in `unicornviz/app.py` confirms optional drop-ins are wrapped with safe fallbacks or `try/except` handling during controller creation paths.
-- 2026-06-03: Runtime PASS/FAIL execution for these rows is still pending owner interactive validation; this section remains in progress by design.
-
 ---
 
 ## 9) Startup and Boot Modes (Non-Help)
 
 ### Baseline Boot
-- [ ] Clean startup with default config
-- [ ] Startup with Auto VJ enabled
+- [x] Clean startup with default config
+- [x] Startup with Auto VJ enabled
 - [ ] Startup with Auto VJ disabled
 - [ ] Startup with streaming enabled/disabled
 - [ ] Startup with control room enabled/disabled
@@ -310,6 +313,9 @@ Notes:
 - [ ] Missing grand-finale-01 degrades gracefully
 
 Notes:
+
+- 2026-06-03: Bounded Fedora startup smoke (`timeout 20s`) succeeded using default config with explicit start-effect override for deterministic log capture.
+- 2026-06-03: Remaining startup matrix rows still require explicit runtime toggles/mode permutations.
 
 ---
 
