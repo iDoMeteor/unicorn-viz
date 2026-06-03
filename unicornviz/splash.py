@@ -147,10 +147,12 @@ class Splash:
         image_path: str | Path = "images/unicorn-viz-01.png",
         duration: float = 4.0,
         bass_supplier: Callable[[], float] | None = None,
+        render_viewport: tuple[int, int, int, int] | None = None,
     ) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
+        self._render_viewport = render_viewport
         self._duration = duration
         self._done = False
         self._bass_supplier = bass_supplier
@@ -277,8 +279,12 @@ class Splash:
     def _render(self, alpha: float, pulse: float, hue_time: float, anim_mix: float) -> None:
         ctx = self._ctx
         ctx.screen.use()
-        ctx.viewport = (0, 0, self._width, self._height)
         ctx.clear(0.0, 0.0, 0.0, 1.0)
+        if self._render_viewport is not None:
+            vx, vy, vw, vh = self._render_viewport
+            ctx.viewport = (int(vx), int(vy), int(vw), int(vh))
+        else:
+            ctx.viewport = (0, 0, self._width, self._height)
         ctx.enable(moderngl.BLEND)
         ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self._tex.use(location=0)

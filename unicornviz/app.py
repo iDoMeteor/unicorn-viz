@@ -811,6 +811,18 @@ class App:
             return None
         return (x0, y0, x1 - x0, y1 - y0)
 
+    def _splash_render_target(self) -> tuple[int, int, tuple[int, int, int, int] | None]:
+        """Return splash texture size and optional destination viewport.
+
+        In span/mirror modes, splash renders into the primary display region so
+        startup visuals and replay match the audience display anchor.
+        """
+        view = self._primary_display_viewport()
+        if view is None:
+            return self._width, self._height, None
+        _, _, vw, vh = view
+        return max(1, int(vw)), max(1, int(vh)), view
+
     def _move_window_to_display(self) -> None:
         self._multihead.move_window_to_display(self._window, self._width, self._height)
 
@@ -1762,17 +1774,21 @@ void main() {
         try:
             from unicornviz.splash import Splash
             config = self._splash_config
+
+            splash_w, splash_h, splash_viewport = self._splash_render_target()
+
             def _splash_bass() -> float:
                 audio = config["audio_manager"].get_audio_data()
                 return float(audio.bass) if audio else 0.0
             
             splash = Splash(
                 self._ctx,
-                self._width,
-                self._height,
+                splash_w,
+                splash_h,
                 image_path=config["path"],
                 duration=_SPLASH_TOTAL_DURATION,
                 bass_supplier=_splash_bass,
+                render_viewport=splash_viewport,
             )
             splash.run(self._window)
             splash.destroy()
@@ -1847,16 +1863,19 @@ void main() {
         if Path(splash_path).exists():
             from unicornviz.splash import Splash
 
+            splash_w, splash_h, splash_viewport = self._splash_render_target()
+
             def _splash_bass() -> float:
                 return float(audio_manager.get_audio_data().bass)
 
             splash = Splash(
                 self._ctx,
-                self._width,
-                self._height,
+                splash_w,
+                splash_h,
                 image_path=splash_path,
                 duration=_SPLASH_TOTAL_DURATION,
                 bass_supplier=_splash_bass,
+                render_viewport=splash_viewport,
             )
             # Decide duration based on audio during splash run
             if splash.run(self._window):
