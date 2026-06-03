@@ -412,7 +412,7 @@ start_preset = ""
 # is below dark_brightness_threshold (0.0-1.0), the preset is skipped.
 # Set dark_skip_enabled = false to turn this off entirely.
 dark_skip_enabled = true
-dark_skip_after = 3.0
+dark_skip_after = 1.0
 dark_brightness_threshold = 0.02
 
 # ---------------------------------------------------------------------------
