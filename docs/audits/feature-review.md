@@ -54,6 +54,12 @@ Session log:
 - New P0/P1/P2: No startup crash-path finding across startup display modes in this pass
 - Notes: All three mode runs reached SDL+OpenGL init and audio-ready markers before timeout cutoff.
 
+- Date: 2026-06-03
+- Reviewer: Copilot
+- Scope covered today: bounded startup matrix checks with temporary config overrides (Auto VJ disabled, streaming enabled, control-room enabled)
+- New P0/P1/P2: No startup crash-path finding in these matrix rows
+- Notes: Temporary config files under `/tmp` were used so live `config.toml` values remained untouched.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -299,9 +305,9 @@ Notes:
 ### Baseline Boot
 - [x] Clean startup with default config
 - [x] Startup with Auto VJ enabled
-- [ ] Startup with Auto VJ disabled
-- [ ] Startup with streaming enabled/disabled
-- [ ] Startup with control room enabled/disabled
+- [x] Startup with Auto VJ disabled
+- [x] Startup with streaming enabled/disabled
+- [x] Startup with control room enabled/disabled
 
 ### Display Startup
 - [x] Startup in single mode
@@ -323,6 +329,7 @@ Notes:
 - 2026-06-03: Bounded Fedora startup smoke (`timeout 20s`) succeeded using default config with explicit start-effect override for deterministic log capture.
 - 2026-06-03: Remaining startup matrix rows still require explicit runtime toggles/mode permutations.
 - 2026-06-03: Additional bounded startup checks succeeded for `single`, `span_all`, and `mirror_all` via CLI display-mode override; each run reached SDL/OpenGL/audio-ready state before timeout.
+- 2026-06-03: Temporary-config startup checks confirmed Auto VJ disabled startup (`Phase 4 loaded (disabled)`), streamer enabled startup (`enabled=True auto_start=False`), and control-room enabled startup (`scheduled` then `loaded from drop-in`).
 
 ---
 
