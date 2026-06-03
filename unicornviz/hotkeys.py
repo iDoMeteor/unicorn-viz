@@ -1,7 +1,9 @@
 """Hotkey handler — maps SDL keysyms and MIDI notes to app/playlist/overlay actions."""
 from __future__ import annotations
 
+from collections import deque
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 import sdl2
@@ -32,14 +34,27 @@ class HotkeyHandler:
         self._shortcut_effects = playlist.shortcut_effects
         self._overlays = overlays
         self._audio = audio_manager
+        self._pending_midi_events: deque[MidiEvent] = deque()
+        self._midi_lock = threading.Lock()
 
     def attach_midi(self, midi: "MidiManager") -> None:
         """Register MIDI event listener after construction."""
         midi.add_listener(self._on_midi)
 
     def _on_midi(self, event: "MidiEvent") -> None:
+        with self._midi_lock:
+            self._pending_midi_events.append(event)
+
+    def process_pending_midi(self) -> None:
+        """Dispatch queued MIDI input on the main thread."""
+        with self._midi_lock:
+            events = list(self._pending_midi_events)
+            self._pending_midi_events.clear()
+        for event in events:
+            self._dispatch_midi_event(event)
+
+    def _dispatch_midi_event(self, event: "MidiEvent") -> None:
         a = self._app
-        p = self._playlist
         o = self._overlays
         if event.type == 'note_on':
             action = a.midi_action_for_note(event.number)
@@ -77,6 +92,16 @@ class HotkeyHandler:
             sym_name = sym_name.decode("utf-8", errors="replace")
         log.debug("Key: %s (mod=0x%04x)", sym_name, mod)
 
+        mod_labels: list[str] = []
+        if mod & sdl2.KMOD_CTRL:
+            mod_labels.append('CTRL')
+        if mod & sdl2.KMOD_SHIFT:
+            mod_labels.append('SHIFT')
+        if mod & sdl2.KMOD_ALT:
+            mod_labels.append('ALT')
+        if mod & sdl2.KMOD_GUI:
+            mod_labels.append('GUI')
+
         # Keystroke logger — capture key + beat context if enabled.
         ks_log = getattr(a, '_keystroke_logger', None)
         if ks_log is not None:
@@ -85,6 +110,7 @@ class HotkeyHandler:
             ks_log.log_key(
                 sym_name,
                 effect_name=a.current_effect_name,
+                modifiers=mod_labels,
                 bpm=float(getattr(_grid, 'bpm', 0.0) or 0.0),
                 beat_phase=float(getattr(_grid, 'beat_phase', 0.0) or 0.0),
                 energy=float(getattr(_grid, 'energy', 0.0) or 0.0),
@@ -131,6 +157,70 @@ class HotkeyHandler:
             a.vj_api.mark_user_action('key')
 
         effect = a.current_effect
+
+        def _projectm_manager_effect():
+            current = a.resolve_projectm_manager_effect()
+            if current is None:
+                log.info('ProjectM manager unavailable: no ProjectM effect instance could be resolved')
+                return None
+            required = (
+                'preset_catalog',
+                'goto_preset_path',
+                'enable_all_presets',
+                'disable_all_presets',
+                'enable_category',
+                'disable_category',
+                'isolate_category',
+                'set_presets_enabled',
+                'delete_presets',
+            )
+            for name in required:
+                if not callable(getattr(current, name, None)):
+                    log.info(
+                        'ProjectM manager unavailable for effect %s: missing %s',
+                        getattr(current, 'NAME', current.__class__.__name__),
+                        name,
+                    )
+                    return None
+            return current
+
+        def _sync_projectm_manager():
+            manager_effect = _projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            catalog = manager_effect.preset_catalog()
+            current_path = str(getattr(manager_effect, 'current_preset_path', '') or '')
+            log.debug(
+                'ProjectM manager sync: effect=%s catalog=%d current=%s',
+                getattr(manager_effect, 'NAME', manager_effect.__class__.__name__),
+                len(catalog),
+                current_path,
+            )
+            o.set_projectm_manager_entries(catalog, current_path)
+            return manager_effect
+
+        def _set_projectm_manager_visible(visible: bool) -> None:
+            visible = bool(visible)
+            if bool(getattr(o, 'projectm_manager_visible', False)) != visible:
+                o.toggle_projectm_manager()
+            setter = getattr(a, 'set_projectm_manager_modal_active', None)
+            if callable(setter):
+                setter(visible)
+
+        def _preview_projectm_selection(manager_effect) -> str | None:
+            selected = o.get_projectm_selected_preset()
+            if selected is None or not bool(selected.get('enabled', False)):
+                return None
+            target_path = str(selected.get('path', '') or '')
+            if not target_path:
+                return None
+            current_path = str(getattr(manager_effect, 'current_preset_path', '') or '')
+            if current_path == target_path:
+                return getattr(manager_effect, '_active_label', None)
+            result = manager_effect.goto_preset_path(target_path)
+            if result:
+                _sync_projectm_manager()
+            return result
 
         # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and effect is not None:
@@ -269,7 +359,7 @@ class HotkeyHandler:
                 o.flash_message('Help: collapsed all sections', 1.2)
                 return
 
-        # MIDI selector navigation — active when the MIDI device picker is open.
+        # Audio selector navigation — active when the audio source picker is open.
         if o.audio_selector_visible:
             o.note_help_activity()
             if sym in (sdl2.SDLK_UP, sdl2.SDLK_LEFT):
@@ -303,6 +393,123 @@ class HotkeyHandler:
                 return
             # Any other key falls through to ESC check below.
 
+        if getattr(o, 'projectm_manager_visible', False):
+            manager_effect = _sync_projectm_manager()
+            if manager_effect is None:
+                _set_projectm_manager_visible(False)
+                o.flash_message('ProjectM manager unavailable', 1.5)
+                return
+
+            if sym == sdl2.SDLK_ESCAPE:
+                _set_projectm_manager_visible(False)
+                return
+            if sym == sdl2.SDLK_m and (mod & sdl2.KMOD_CTRL):
+                _set_projectm_manager_visible(False)
+                return
+
+            if sym == sdl2.SDLK_TAB:
+                o.move_projectm_focus(1)
+                return
+            if sym == sdl2.SDLK_LEFT:
+                o.move_projectm_focus(-1)
+                return
+            if sym == sdl2.SDLK_RIGHT:
+                o.move_projectm_focus(1)
+                return
+            if sym == sdl2.SDLK_UP:
+                if o.projectm_manager_focus_pane == 0:
+                    o.move_projectm_category_selection(-1)
+                    _preview_projectm_selection(manager_effect)
+                else:
+                    o.move_projectm_preset_selection(-1)
+                    _preview_projectm_selection(manager_effect)
+                return
+            if sym == sdl2.SDLK_DOWN:
+                if o.projectm_manager_focus_pane == 0:
+                    o.move_projectm_category_selection(1)
+                    _preview_projectm_selection(manager_effect)
+                else:
+                    o.move_projectm_preset_selection(1)
+                    _preview_projectm_selection(manager_effect)
+                return
+            if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                if o.projectm_manager_focus_pane == 0:
+                    o.move_projectm_focus(1)
+                    _preview_projectm_selection(manager_effect)
+                    return
+                selected = o.get_projectm_selected_preset()
+                if selected is None:
+                    o.flash_message('ProjectM: no preset selected', 1.2)
+                    return
+                if not bool(selected.get('enabled', False)):
+                    o.flash_message('ProjectM: preset is disabled', 1.4)
+                    return
+                result = _preview_projectm_selection(manager_effect)
+                if result:
+                    _sync_projectm_manager()
+                    o.flash_message(f'Preset: {result}', 1.6)
+                return
+            if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_a:
+                remaining = manager_effect.disable_all_presets()
+                _sync_projectm_manager()
+                o.flash_message(f'ProjectM: all disabled ({remaining} enabled)', 1.8)
+                return
+            if (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_a:
+                remaining = manager_effect.enable_all_presets()
+                _sync_projectm_manager()
+                o.flash_message(f'ProjectM: enabled all ({remaining} enabled)', 1.8)
+                return
+            if sym == sdl2.SDLK_i and o.projectm_manager_focus_pane == 0:
+                category = o.get_projectm_selected_category()
+                remaining = manager_effect.enable_all_presets() if category == '(all)' else manager_effect.isolate_category(category)
+                _sync_projectm_manager()
+                o.flash_message(f'ProjectM isolate: {category} ({remaining} enabled)', 1.8)
+                return
+            if sym == sdl2.SDLK_e:
+                if o.projectm_manager_focus_pane == 0:
+                    category = o.get_projectm_selected_category()
+                    remaining = manager_effect.enable_all_presets() if category == '(all)' else manager_effect.enable_category(category)
+                    _sync_projectm_manager()
+                    o.flash_message(f'ProjectM enabled: {category} ({remaining} enabled)', 1.8)
+                else:
+                    selected = o.get_projectm_selected_preset()
+                    if selected is None:
+                        o.flash_message('ProjectM: no preset selected', 1.2)
+                        return
+                    remaining = manager_effect.set_presets_enabled([str(selected.get('path', ''))], True)
+                    _sync_projectm_manager()
+                    o.flash_message(f'ProjectM preset enabled ({remaining} enabled)', 1.6)
+                return
+            if sym == sdl2.SDLK_d:
+                if o.projectm_manager_focus_pane == 0:
+                    category = o.get_projectm_selected_category()
+                    remaining = manager_effect.disable_all_presets() if category == '(all)' else manager_effect.disable_category(category)
+                    _sync_projectm_manager()
+                    o.flash_message(f'ProjectM disabled: {category} ({remaining} enabled)', 1.8)
+                else:
+                    selected = o.get_projectm_selected_preset()
+                    if selected is None:
+                        o.flash_message('ProjectM: no preset selected', 1.2)
+                        return
+                    remaining = manager_effect.set_presets_enabled([str(selected.get('path', ''))], False)
+                    _sync_projectm_manager()
+                    o.flash_message(f'ProjectM preset disabled ({remaining} enabled)', 1.6)
+                return
+            if sym == sdl2.SDLK_DELETE:
+                selected = o.get_projectm_selected_preset()
+                if selected is None:
+                    o.flash_message('ProjectM: no preset selected', 1.2)
+                    return
+                permanent = bool(mod & sdl2.KMOD_SHIFT)
+                deleted = manager_effect.delete_presets([str(selected.get('path', ''))], permanent=permanent)
+                if deleted > 0:
+                    _sync_projectm_manager()
+                    o.flash_message('ProjectM preset hard-deleted' if permanent else 'ProjectM preset moved to trash', 1.8)
+                else:
+                    o.flash_message('ProjectM delete failed', 1.6)
+                return
+            return
+
         if sym == sdl2.SDLK_ESCAPE:
             # ESC closes the currently-open menu first; only exits when no menu is open.
             if getattr(o, 'help_visible', False):
@@ -316,6 +523,9 @@ class HotkeyHandler:
                 return
             if o.midi_selector_visible:
                 o.toggle_midi_selector()
+                return
+            if getattr(o, 'projectm_manager_visible', False):
+                _set_projectm_manager_visible(False)
                 return
             a.request_exit()
 
@@ -394,7 +604,7 @@ class HotkeyHandler:
                 # Ctrl+Shift+A is intentionally unbound to avoid conflicts.
                 return
             elif (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_SHIFT):
-                # Ctrl+A — alternate audio source selector menu key.
+                # Ctrl+A — legacy fallback binding for audio source selector
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
                 o.set_audio_sources(sources, current_idx)
@@ -407,13 +617,37 @@ class HotkeyHandler:
                 o.toggle_audio_selector()
 
         elif sym == sdl2.SDLK_m:
-            if o.midi_selector_visible:
-                o.toggle_midi_selector()
+            if mod & sdl2.KMOD_CTRL:
+                log.info(
+                    'Ctrl+M pressed: effect=%s mods=%s',
+                    a.current_effect_name or '(none)',
+                    '+'.join(mod_labels) or '(none)',
+                )
+                manager_effect = _sync_projectm_manager()
+                if manager_effect is None:
+                    log.info(
+                        'ProjectM manager open rejected for effect=%s',
+                        a.current_effect_name or '(none)',
+                    )
+                    o.flash_message('ProjectM manager unavailable for this effect', 1.6)
+                else:
+                    next_state = not o.projectm_manager_visible
+                    log.info(
+                        'ProjectM manager %s for effect=%s',
+                        'opening' if next_state else 'closing',
+                        getattr(manager_effect, 'NAME', manager_effect.__class__.__name__),
+                    )
+                    _set_projectm_manager_visible(next_state)
+                    if next_state:
+                        _preview_projectm_selection(manager_effect)
             else:
-                ports = a.get_midi_ports()
-                current = a._midi_manager.port_name if a._midi_manager is not None else ''  # noqa: SLF001
-                o.set_midi_ports(ports, current)
-                o.toggle_midi_selector()
+                if o.midi_selector_visible:
+                    o.toggle_midi_selector()
+                else:
+                    ports = a.get_midi_ports()
+                    current = a._midi_manager.port_name if a._midi_manager is not None else ''  # noqa: SLF001
+                    o.set_midi_ports(ports, current)
+                    o.toggle_midi_selector()
 
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect

@@ -450,12 +450,19 @@ class Overlays:
         self._show_help = False
         self._show_audio = False
         self._show_midi = False
+        self._show_projectm_manager = False
         self._audio_sources: list[str] = []
         self._audio_current_idx: int = 0
         self._audio_selected_idx: int = 0
         self._midi_ports: list[str] = []
         self._midi_current_port: str = ''
         self._midi_selected_idx: int = 0   # 0 = "None (disable)"
+        self._projectm_entries: list[dict[str, object]] = []
+        self._projectm_categories: list[str] = ['(all)']
+        self._projectm_category_idx: int = 0
+        self._projectm_preset_idx: int = 0
+        self._projectm_focus_pane: int = 1
+        self._projectm_current_path: str = ''
         self._help_timer: float = 0.0
         self._hud_timer: float = 0.0
         self._flash_text: str = ""
@@ -1257,6 +1264,10 @@ void main() {
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
 
+        if self._show_projectm_manager:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.60))
+            self._render_projectm_manager()
+
         if self._show_audio:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_audio_selector()
@@ -1425,6 +1436,225 @@ void main() {
         self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
                         px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
 
+    def set_projectm_manager_entries(
+        self,
+        entries: list[dict[str, object]],
+        current_path: str,
+    ) -> None:
+        """Populate the projectM manager browser with catalog entries."""
+        self._projectm_entries = list(entries)
+        self._projectm_current_path = str(current_path or '')
+        categories = {'(all)'}
+        for entry in self._projectm_entries:
+            category_key = str(entry.get('category_key', '') or '(uncategorized)')
+            categories.add(category_key)
+        ordered = ['(all)'] + sorted(
+            (cat for cat in categories if cat != '(all)'),
+            key=lambda text: text.lower(),
+        )
+        self._projectm_categories = ordered
+        self._projectm_category_idx = max(0, min(self._projectm_category_idx, len(self._projectm_categories) - 1))
+        self._sync_projectm_preset_selection()
+
+    def _projectm_filtered_entries(self) -> list[dict[str, object]]:
+        category = self.get_projectm_selected_category()
+        if category == '(all)':
+            return list(self._projectm_entries)
+        return [
+            entry for entry in self._projectm_entries
+            if str(entry.get('category_key', '')) == category
+        ]
+
+    def _projectm_category_stats(self, category: str) -> tuple[int, int]:
+        entries = self._projectm_entries if category == '(all)' else [
+            entry for entry in self._projectm_entries
+            if str(entry.get('category_key', '')) == category
+        ]
+        total = len(entries)
+        enabled = sum(1 for entry in entries if bool(entry.get('enabled', False)))
+        return enabled, total
+
+    def _sync_projectm_preset_selection(self) -> None:
+        entries = self._projectm_filtered_entries()
+        if not entries:
+            self._projectm_preset_idx = 0
+            return
+        for idx, entry in enumerate(entries):
+            if str(entry.get('path', '')) == self._projectm_current_path:
+                self._projectm_preset_idx = idx
+                return
+        self._projectm_preset_idx = max(0, min(self._projectm_preset_idx, len(entries) - 1))
+
+    def move_projectm_category_selection(self, delta: int) -> None:
+        """Move the projectM category cursor by delta rows (wraps)."""
+        total = max(1, len(self._projectm_categories))
+        self._projectm_category_idx = (self._projectm_category_idx + delta) % total
+        self._sync_projectm_preset_selection()
+
+    def move_projectm_preset_selection(self, delta: int) -> None:
+        """Move the projectM preset cursor by delta rows (wraps)."""
+        entries = self._projectm_filtered_entries()
+        total = max(1, len(entries))
+        self._projectm_preset_idx = (self._projectm_preset_idx + delta) % total
+
+    def move_projectm_focus(self, delta: int) -> None:
+        """Switch projectM manager focus between category and preset panes."""
+        self._projectm_focus_pane = (self._projectm_focus_pane + delta) % 2
+
+    def get_projectm_selected_category(self) -> str:
+        """Return the currently highlighted category key."""
+        if not self._projectm_categories:
+            return '(all)'
+        idx = max(0, min(self._projectm_category_idx, len(self._projectm_categories) - 1))
+        return self._projectm_categories[idx]
+
+    def get_projectm_selected_preset(self) -> dict[str, object] | None:
+        """Return the currently highlighted preset entry for the active filter."""
+        entries = self._projectm_filtered_entries()
+        if not entries:
+            return None
+        idx = max(0, min(self._projectm_preset_idx, len(entries) - 1))
+        return entries[idx]
+
+    def _render_projectm_manager(self) -> None:
+        """Draw the projectM preset manager modal."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.4)
+
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.90, 1320.0)
+        panel_h = min(H * 0.86, 860.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+        left_w = max(260.0, panel_w * 0.28)
+        right_w = panel_w - left_w - 28.0
+        left_x = px + 14.0
+        right_x = left_x + left_w + 14.0
+        content_y = py + 86.0
+        content_h = panel_h - 164.0
+        footer_y = py + panel_h - 56.0
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.03, 0.04, 0.10, 0.96))
+        border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.92)
+        bw = 2.0
+        self._draw_rect(px, py, panel_w, bw, border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, border)
+        self._draw_rect(px, py, bw, panel_h, border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, border)
+
+        self._draw_text(
+            'PROJECTM PRESET MANAGER',
+            px + 18.0,
+            py + 14.0,
+            scale=3.5,
+            color=(0.28 + 0.20 * pulse, 0.78, 1.0, 1.0),
+        )
+        enabled_total, total_total = self._projectm_category_stats('(all)')
+        self._draw_text(
+            f'Visible catalog: {enabled_total}/{total_total} enabled',
+            px + 18.0,
+            py + 48.0,
+            scale=2.2,
+            color=(0.52, 0.85, 0.58, 0.88),
+        )
+
+        self._draw_rect(left_x, content_y, left_w, content_h, (0.04, 0.08, 0.13, 0.82))
+        self._draw_rect(right_x, content_y, right_w, content_h, (0.03, 0.07, 0.12, 0.82))
+
+        left_border = (1.0, 0.62, 0.20, 0.70 if self._projectm_focus_pane == 0 else 0.32)
+        right_border = (0.14, 0.90, 1.0, 0.70 if self._projectm_focus_pane == 1 else 0.32)
+        self._draw_rect(left_x, content_y, left_w, 2.0, left_border)
+        self._draw_rect(right_x, content_y, right_w, 2.0, right_border)
+
+        self._draw_text('CATEGORIES', left_x + 12.0, content_y + 10.0, scale=2.4, color=(1.0, 0.88, 0.56, 0.96))
+        self._draw_text('PRESETS', right_x + 12.0, content_y + 10.0, scale=2.4, color=(0.72, 0.92, 1.0, 0.96))
+
+        row_h = 28.0
+        cat_start_y = content_y + 48.0
+        visible_cat_rows = max(1, int((content_h - 60.0) // row_h))
+        cat_top = 0
+        if self._projectm_category_idx >= visible_cat_rows:
+            cat_top = self._projectm_category_idx - visible_cat_rows + 1
+
+        for local_idx, category in enumerate(self._projectm_categories[cat_top:cat_top + visible_cat_rows]):
+            idx = cat_top + local_idx
+            ry = cat_start_y + local_idx * row_h
+            is_sel = idx == self._projectm_category_idx
+            enabled_count, total_count = self._projectm_category_stats(category)
+            label = f'{category} [{enabled_count}/{total_count}]'
+            if is_sel:
+                self._draw_rect(left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, (0.25, 0.18, 0.06, 0.90))
+                self._draw_text(f'> {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.92, 0.22, 1.0))
+            else:
+                self._draw_text(f'  {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(0.84, 0.86, 0.94, 0.84))
+
+        preset_entries = self._projectm_filtered_entries()
+        preset_start_y = content_y + 48.0
+        preset_visible_rows = max(1, int((content_h - 138.0) // row_h))
+        preset_top = 0
+        if self._projectm_preset_idx >= preset_visible_rows:
+            preset_top = self._projectm_preset_idx - preset_visible_rows + 1
+
+        visible_rows = preset_entries[preset_top:preset_top + preset_visible_rows]
+        for local_idx, entry in enumerate(visible_rows):
+            idx = preset_top + local_idx
+            ry = preset_start_y + local_idx * row_h
+            is_sel = idx == self._projectm_preset_idx
+            path = str(entry.get('path', ''))
+            is_current = path == self._projectm_current_path
+            enabled = bool(entry.get('enabled', False))
+            prefix = '*' if is_current else ' '
+            status = 'ON ' if enabled else 'OFF'
+            name = str(entry.get('display_name', ''))[:54]
+            label = f'{prefix} [{status}] {name}'
+            if is_sel:
+                self._draw_rect(right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, (0.08, 0.24, 0.54, 0.90))
+                self._draw_text(f'> {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.94, 0.26, 1.0))
+            else:
+                color = (0.40, 0.92, 0.44, 0.90) if enabled else (0.98, 0.48, 0.48, 0.88)
+                self._draw_text(f'  {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=color)
+
+        details_y = content_y + content_h - 76.0
+        self._draw_rect(right_x + 8.0, details_y, right_w - 16.0, 64.0, (0.04, 0.11, 0.17, 0.86))
+        selected = self.get_projectm_selected_preset()
+        if selected is None:
+            self._draw_text('No presets in selected category.', right_x + 18.0, details_y + 14.0, scale=2.1, color=(0.88, 0.88, 0.92, 0.88))
+        else:
+            pack_name = str(selected.get('pack_name', '-'))
+            category_key = str(selected.get('category_key', '(uncategorized)'))
+            path = str(selected.get('path', ''))
+            enabled = 'ON' if bool(selected.get('enabled', False)) else 'OFF'
+            self._draw_text(
+                f'Pack: {pack_name}    Category: {category_key}    State: {enabled}',
+                right_x + 18.0,
+                details_y + 10.0,
+                scale=1.85,
+                color=(0.62, 0.88, 1.0, 0.92),
+            )
+            self._draw_text(
+                path[:92],
+                right_x + 18.0,
+                details_y + 34.0,
+                scale=1.55,
+                color=(0.80, 0.84, 0.92, 0.88),
+            )
+
+        self._draw_text(
+            'Tab/Left/Right: pane    Up/Down: browse + preview    Enter: confirm    E/D: enable-disable    I: isolate',
+            px + 18.0,
+            footer_y - 10.0,
+            scale=1.8,
+            color=(0.58, 0.68, 0.78, 0.86),
+        )
+        self._draw_text(
+            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Delete: trash    Shift+Delete: hard delete    Esc: close',
+            px + 18.0,
+            footer_y + 12.0,
+            scale=1.8,
+            color=(0.58, 0.68, 0.78, 0.86),
+        )
+
     def _render_help(self) -> None:
         t  = self._hud_t
         hp = self._help_pulse_t
@@ -1439,8 +1669,7 @@ void main() {
         y = panel_pad
         w = self._width  - panel_pad * 2.0
         h = self._height - panel_pad * 2.0
-        # Increase help readability on high-resolution canvases while preserving
-        # existing sizing at 1080p-class resolutions.
+        # Keep help legible on high-res canvases without overpowering 1080p.
         res_ratio = min(self._width, self._height) / 1080.0
         help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
 
@@ -1859,6 +2088,14 @@ void main() {
         return self._show_midi
 
     @property
+    def projectm_manager_visible(self) -> bool:
+        return self._show_projectm_manager
+
+    @property
+    def projectm_manager_focus_pane(self) -> int:
+        return self._projectm_focus_pane
+
+    @property
     def flash_messages_enabled(self) -> bool:
         return self._flash_enabled
 
@@ -2004,6 +2241,9 @@ void main() {
 
     def toggle_midi_selector(self) -> None:
         self._show_midi = not self._show_midi
+
+    def toggle_projectm_manager(self) -> None:
+        self._show_projectm_manager = not self._show_projectm_manager
 
     def set_recording_state(self, active: bool, elapsed_seconds: float = 0.0) -> None:
         self._recording_active = active

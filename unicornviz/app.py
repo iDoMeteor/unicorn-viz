@@ -423,6 +423,7 @@ class App:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
         self._running = False
         self._paused = False
+        self._projectm_manager_modal_active = False
         self._auto_advance = bool(self.cfg.get('demo', 'auto_advance', default=True))  # Toggle with hotkey T
         self._ctrl_held = False
         self._ctx: moderngl.Context | None = None
@@ -1759,6 +1760,12 @@ void main() {
 
     def _switch_effect(self, cls: Type[BaseEffect]) -> None:
         """Begin transition to a new effect."""
+        if self._projectm_manager_modal_active:
+            log.info(
+                'Effect switch blocked while ProjectM manager is open: %s',
+                getattr(cls, 'NAME', getattr(cls, '__name__', str(cls))),
+            )
+            return
         # Invert does not carry through transitions.
         self._invert_colors = False
         if self._current_effect is not None:
@@ -2183,6 +2190,7 @@ void main() {
             now = time.perf_counter()
             dt = min(now - prev_time, 0.1)  # cap at 100 ms to avoid spiral
             prev_time = now
+            manager_modal_active = self._projectm_manager_modal_active
 
             # Poll events
             event = sdl2.SDL_Event()
@@ -2216,12 +2224,16 @@ void main() {
                         self._set_cursor_visible(self._cursor_should_be_visible())
                 elif event.type == sdl2.SDL_MOUSEWHEEL:
                     dy = int(event.wheel.y)
+                    if manager_modal_active:
+                        continue
                     if dy != 0 and self._postfx_controller is not None:
                         if self._ctrl_held:
                             self._postfx_controller.on_ctrl_scroll(dy)
                         else:
                             self._postfx_controller.on_scroll(dy)
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
+                    if manager_modal_active:
+                        continue
                     if event.button.button == sdl2.SDL_BUTTON_MIDDLE:
                         if self._postfx_controller is not None:
                             if (self._postfx_controller.is_hue_active
@@ -2242,12 +2254,10 @@ void main() {
                         log.info('SDL display topology change detected; rebuilding multi-head outputs')
                         self._rebuild_multihead_outputs()
 
-            # Dispatch pending MIDI events to active effect
-            if hasattr(self, "_midi_manager"):
-                pass   # MidiManager uses a callback thread; forward via action hooks
+            hotkeys.process_pending_midi()
 
             # Auto-playlist advance
-            if not self._paused and self._next_effect is None and self._auto_advance:
+            if not manager_modal_active and not self._paused and self._next_effect is None and self._auto_advance:
                 allow_advance = True
                 if isinstance(self._current_effect, ANSIViewer):
                     allow_advance = self._current_effect.reached_bottom
@@ -2263,7 +2273,7 @@ void main() {
             self._audio = audio_manager.get_audio_data()
             self._audio_raw = audio_manager.get_audio_data_raw()
 
-            if self._auto_vj is not None:
+            if self._auto_vj is not None and not manager_modal_active:
                 try:
                     self._auto_vj.update(dt, self._audio_raw or self._audio)
                     self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
@@ -2298,31 +2308,40 @@ void main() {
                         pass
                     self.vj_api.set_status_pill('AUTO VJ  ERROR')
 
-            if self._grand_finale is not None:
+            if self._grand_finale is not None and not manager_modal_active:
                 try:
                     self._grand_finale.update(dt, self._audio)
                 except Exception as exc:
                     log.warning('GrandFinaleController update failed: %s', exc)
 
-            for name, subsystem in list(self._subsystems.items()):
-                updater = getattr(subsystem, 'update', None)
-                if not callable(updater):
-                    continue
-                try:
-                    updater(dt, self._audio)
-                except Exception as exc:
-                    log.warning('%s subsystem update failed: %s', name, exc)
+            if not manager_modal_active:
+                for name, subsystem in list(self._subsystems.items()):
+                    updater = getattr(subsystem, 'update', None)
+                    if not callable(updater):
+                        continue
+                    try:
+                        updater(dt, self._audio)
+                    except Exception as exc:
+                        log.warning('%s subsystem update failed: %s', name, exc)
 
             # Update effects
             if not self._paused:
-                if self._current_effect:
+                allow_current_effect_update = True
+                allow_next_effect_update = True
+                if manager_modal_active and self._next_effect is None:
+                    allow_current_effect_update = (
+                        self._current_effect is not None
+                        and type(self._current_effect).__name__ == 'ProjectMEffect'
+                    )
+                    allow_next_effect_update = False
+                if self._current_effect and allow_current_effect_update:
                     audio_cur = self._audio_for_effect(
                         self._audio,
                         self._current_effect,
                         self._audio_scratch_current,
                     )
                     self._current_effect.update(dt, audio_cur)
-                if self._next_effect:
+                if self._next_effect and allow_next_effect_update:
                     audio_next = self._audio_for_effect(
                         self._audio,
                         self._next_effect,
@@ -2928,14 +2947,27 @@ void main() {
     def _render(self, dt: float) -> None:
         ctx = self._ctx
         mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
-        burst_active = self._burst_controller.active
-        nova_active = self._rainbow_nova is not None and self._rainbow_nova.is_active
-        candy_active = self._candy_frame is not None and bool(self._candy_frame.active)
+        manager_modal_active = self._projectm_manager_modal_active
+        burst_active = self._burst_controller.active and not manager_modal_active
+        nova_active = (
+            self._rainbow_nova is not None
+            and self._rainbow_nova.is_active
+            and not manager_modal_active
+        )
+        candy_active = (
+            self._candy_frame is not None
+            and bool(self._candy_frame.active)
+            and not manager_modal_active
+        )
         finale_overlay_active = (
-            self._grand_finale is not None and self._grand_finale.overlay_active
+            self._grand_finale is not None
+            and self._grand_finale.overlay_active
+            and not manager_modal_active
         )
         postfx_active = (
-            self._postfx_controller is not None and self._postfx_controller.is_active()
+            self._postfx_controller is not None
+            and self._postfx_controller.is_active()
+            and not manager_modal_active
         )
         # Advance burst timer
         if burst_active:
@@ -3475,6 +3507,21 @@ void main() {
     def toggle_pause(self) -> None:
         self._paused = not self._paused
 
+    def set_projectm_manager_modal_active(self, active: bool) -> None:
+        """Set whether the ProjectM preset manager owns runtime control."""
+        new_state = bool(active)
+        if self._projectm_manager_modal_active == new_state:
+            return
+        self._projectm_manager_modal_active = new_state
+        for effect in (self._current_effect, self._next_effect):
+            setter = getattr(effect, 'set_manager_preview_active', None)
+            if callable(setter):
+                setter(new_state)
+        log.info(
+            'ProjectM manager modal %s',
+            'enabled' if new_state else 'disabled',
+        )
+
     @property
     def current_effect(self) -> BaseEffect | None:
         return self._current_effect
@@ -3482,6 +3529,47 @@ void main() {
     @property
     def current_effect_name(self) -> str:
         return self._current_effect.NAME if self._current_effect is not None else ''
+
+    def resolve_projectm_manager_effect(self) -> BaseEffect | None:
+        """Return a ProjectM manager-capable effect instance, switching if needed.
+
+        If ProjectM is already active or queued as the next transition target,
+        return that instance. Otherwise, switch to ProjectM Presets and return
+        the newly instantiated pending effect so the manager can open on a
+        single Ctrl+M press from any current effect.
+        """
+        required = (
+            'preset_catalog',
+            'goto_preset_path',
+            'enable_all_presets',
+            'disable_all_presets',
+            'enable_category',
+            'disable_category',
+            'isolate_category',
+            'set_presets_enabled',
+            'delete_presets',
+        )
+
+        for inst in (self._current_effect, self._next_effect):
+            if inst is None:
+                continue
+            if type(inst).__name__ != 'ProjectMEffect':
+                continue
+            if all(callable(getattr(inst, name, None)) for name in required):
+                return inst
+
+        projectm_cls = self.vj_api.find_effect('ProjectMEffect', 'ProjectM Presets')
+        if projectm_cls is None:
+            return None
+
+        log.info('ProjectM manager: switching to ProjectM Presets from %s', self.current_effect_name or '(none)')
+        self.goto_effect(projectm_cls)
+
+        pending = self._next_effect
+        if pending is not None and type(pending).__name__ == 'ProjectMEffect':
+            if all(callable(getattr(pending, name, None)) for name in required):
+                return pending
+        return None
 
     @property
     def auto_vj_controller(self):

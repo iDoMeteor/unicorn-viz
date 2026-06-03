@@ -250,6 +250,20 @@ out vec2 out_pos;
 - Screenshots (`unicornviz_*.png`) are gitignored; don't commit them.
 - Commit & push after each substantial change; avoid large monolithic commits.
 
+## Regression Test Discipline
+
+- Any commit that changes runtime behavior must include corresponding updates to
+  regression tests in the same task when practical (add or adjust tests to
+  encode the intended behavior).
+- Before committing, agents should run the most relevant regression tests for
+  touched areas (for example hotkeys/overlays/audio) and report the exact
+  failing tests if any fail.
+- If any regression test fails at any point, the agent must immediately report
+  it to the user with file/test names and stop claiming success until resolved
+  or explicitly deferred by the user.
+- Do not silently proceed past known red tests; unresolved failures must be
+  called out in commit notes and user updates.
+
 ---
 
 ## Documentation SOP

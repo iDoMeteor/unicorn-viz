@@ -3,6 +3,7 @@ from __future__ import annotations
 import sdl2
 
 from unicornviz.hotkeys import HotkeyHandler
+from unicornviz.midi import MidiEvent
 
 
 class _VJApi:
@@ -190,3 +191,19 @@ def test_audio_selector_enter_applies_selected_source() -> None:
     assert app.audio_source_selected == 1
     assert overlays.audio_selector_visible is False
     assert 'Audio source: device-1' in overlays.messages
+
+
+def test_midi_note_is_queued_until_main_thread_dispatch() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'ansi'
+
+    handler._on_midi(MidiEvent('note_on', 0, 60, 1.0))
+
+    assert overlays.toggled_audio == 0
+    assert app.vj_api.marked == []
+
+    handler.process_pending_midi()
+
+    assert overlays.toggled_audio == 1
+    assert overlays.audio_selector_visible is True
+    assert app.vj_api.marked == ['key']

@@ -53,6 +53,7 @@ class KeystrokeLogger:
         key_label: str,
         effect_name: str,
         *,
+        modifiers: list[str] | None = None,
         bpm: float = 0.0,
         beat_phase: float = 0.0,
         energy: float = 0.0,
@@ -66,6 +67,8 @@ class KeystrokeLogger:
             'key': key_label,
             'effect': effect_name,
         }
+        if modifiers:
+            entry['mods'] = list(modifiers)
         if bpm > 0.0:
             entry['bpm'] = round(bpm, 1)
         if beat_phase > 0.0:
