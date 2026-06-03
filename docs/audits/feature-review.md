@@ -48,6 +48,12 @@ Session log:
 - New P0/P1/P2: No startup crash-path finding in this pass
 - Notes: Startup reached splash/effect loop/audio capture and initialized optional subsystems (auto-vj, webcam, grand-finale, streaming loader path) without crash.
 
+- Date: 2026-06-03
+- Reviewer: Copilot
+- Scope covered today: bounded display-startup smokes via CLI overrides (`--display-mode single|span_all|mirror_all`)
+- New P0/P1/P2: No startup crash-path finding across startup display modes in this pass
+- Notes: All three mode runs reached SDL+OpenGL init and audio-ready markers before timeout cutoff.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -298,9 +304,9 @@ Notes:
 - [ ] Startup with control room enabled/disabled
 
 ### Display Startup
-- [ ] Startup in single mode
-- [ ] Startup in span_all mode
-- [ ] Startup in mirror_all mode
+- [x] Startup in single mode
+- [x] Startup in span_all mode
+- [x] Startup in mirror_all mode
 - [ ] Excluded display indices config behaves as expected
 
 ### Optional Submodule Independence
@@ -316,6 +322,7 @@ Notes:
 
 - 2026-06-03: Bounded Fedora startup smoke (`timeout 20s`) succeeded using default config with explicit start-effect override for deterministic log capture.
 - 2026-06-03: Remaining startup matrix rows still require explicit runtime toggles/mode permutations.
+- 2026-06-03: Additional bounded startup checks succeeded for `single`, `span_all`, and `mirror_all` via CLI display-mode override; each run reached SDL/OpenGL/audio-ready state before timeout.
 
 ---
 
