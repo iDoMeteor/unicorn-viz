@@ -322,12 +322,12 @@ Notes:
 
 ### Optional Submodule Independence
 - [x] Missing auto-vj-01 degrades gracefully
-- [ ] Missing multi-head-01 degrades gracefully
-- [ ] Missing webcam-01 degrades gracefully
+- [x] Missing multi-head-01 degrades gracefully
+- [x] Missing webcam-01 degrades gracefully
 - [x] Missing streaming-01 degrades gracefully
-- [ ] Missing postfx-01 degrades gracefully
+- [x] Missing postfx-01 degrades gracefully
 - [x] Missing control-room-01 degrades gracefully
-- [ ] Missing grand-finale-01 degrades gracefully
+- [x] Missing grand-finale-01 degrades gracefully
 
 Notes:
 
@@ -339,6 +339,10 @@ Notes:
 - 2026-06-03: Missing `auto-vj-01` runtime check (temporary directory hide, debug startup) logged `AutoVJController not available: Drop-in file not found .../drop-ins/auto-vj-01/auto_vj.py` while startup continued to `GrandFinaleController loaded` and `RTMP streamer loaded`.
 - 2026-06-03: Missing `streaming-01` runtime check logged `RTMP streamer unavailable: Drop-in file not found .../drop-ins/streaming-01/rtmp_streamer.py` with no startup crash.
 - 2026-06-03: Missing `control-room-01` runtime check (with temporary config forcing `[control_room].enabled = true`) logged `ControlRoomController not available: Drop-in file not found .../drop-ins/control-room-01/control_room.py` after scheduled startup frames, with no startup crash.
+- 2026-06-03: Missing `multi-head-01` runtime check logged `MultiHeadController unavailable ... falling back to single-display mode`; startup still reached audio-ready state.
+- 2026-06-03: Missing `webcam-01` runtime check logged `WebcamSystem not available: Drop-in file not found .../drop-ins/webcam-01/webcam_overlay.py` with startup continuing.
+- 2026-06-03: Missing `postfx-01` runtime check logged `PostFxController not available: Drop-in file not found .../drop-ins/postfx-01/postfx_controller.py` with startup continuing.
+- 2026-06-03: Missing `grand-finale-01` runtime check logged `GrandFinaleController not available: Drop-in file not found .../drop-ins/grand-finale-01/grand_finale.py` after audio-ready startup.
 
 ---
 
