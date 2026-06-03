@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
 _SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
+_SPLASH_REPLAY_COOLDOWN_S = 1.25
 _TRANSITION_MODE_MAP = {
     'crossfade': 0,
     'smoothfade': 1,
@@ -487,6 +488,7 @@ class App:
         self._audio_scratch_current = AudioData()
         self._audio_scratch_next = AudioData()
         self._splash_config: dict | None = None
+        self._last_splash_replay_t: float = -1e9
         self._fbo_a: moderngl.Framebuffer | None = None
         self._fbo_b: moderngl.Framebuffer | None = None
         self._blend_prog: moderngl.Program | None = None
@@ -1818,6 +1820,15 @@ void main() {
         """Replay the splash screen (hotkey U)."""
         if self._splash_config is None:
             return
+        now = time.monotonic()
+        if (now - self._last_splash_replay_t) < _SPLASH_REPLAY_COOLDOWN_S:
+            log.info(
+                'Splash replay ignored (cooldown %.2fs)',
+                _SPLASH_REPLAY_COOLDOWN_S,
+            )
+            return
+        self._last_splash_replay_t = now
+        log.info('Splash replay requested')
         try:
             from unicornviz.splash import Splash
             config = self._splash_config
