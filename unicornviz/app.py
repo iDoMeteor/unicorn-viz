@@ -1325,22 +1325,6 @@ void main() {
             return f'Candy Frame ON  ({pattern})'
         return 'Candy Frame OFF'
 
-    def toggle_current_effect_frame_scaling(self) -> str:
-        """Toggle Candy Frame inner-viewport scaling for the active effect."""
-        effect = self._current_effect
-        if effect is None:
-            return 'No active effect'
-        if bool(getattr(effect, 'candy_frame_disallow', False)):
-            return f'{effect.NAME}: Candy Frame disallowed by config'
-
-        new_value = not bool(getattr(effect, 'scale_when_framed', False))
-        effect.scale_when_framed = new_value
-        return (
-            f'{effect.NAME}: frame scaling ON'
-            if new_value
-            else f'{effect.NAME}: frame scaling OFF'
-        )
-
     def trigger_grand_finale(self) -> str:
         """Trigger the grand finale sequence; returns a flash-message string."""
         if self._grand_finale is None:
@@ -2883,8 +2867,7 @@ void main() {
     ) -> tuple[int, int, int, int]:
         """Return viewport for rendering an effect into a target.
 
-        When Candy Frame is active and the effect opts in via
-        ``scale_when_framed = true``, render inside the frame content area.
+        When Candy Frame is active, render inside the frame content area.
         """
         if target_width <= 0 or target_height <= 0:
             return (0, 0, max(1, target_width), max(1, target_height))
@@ -2910,12 +2893,8 @@ void main() {
             return (0, 0, target_width, target_height)
 
     def _effect_requests_frame_scaling(self, effect: BaseEffect | None) -> bool:
-        """Return True when effect requests inner-frame scaling."""
-        if effect is None:
-            return False
-        if bool(getattr(effect, 'candy_frame_disallow', False)):
-            return False
-        return bool(getattr(effect, 'scale_when_framed', False))
+        """Return True when an effect should render inside Candy Frame bounds."""
+        return effect is not None
 
     def _render_effect_to_current_target(
         self,

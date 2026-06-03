@@ -298,12 +298,6 @@ class HotkeyHandler:
                         o.flash_message(f'Variant: {result}', 1.5)
                     return
 
-        # Ctrl+Alt+K — toggle current-effect frame scaling (core app feature).
-        if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_k:
-            msg = a.toggle_current_effect_frame_scaling()
-            o.flash_message(msg, 1.6)
-            return
-
         # Effect-local Ctrl+N/Ctrl+P/Ctrl+R navigation when supported.
         if mod & sdl2.KMOD_CTRL and effect is not None:
             if sym == sdl2.SDLK_n:

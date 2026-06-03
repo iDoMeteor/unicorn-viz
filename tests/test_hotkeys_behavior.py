@@ -102,9 +102,6 @@ class _App:
         self._keystroke_logger = None
         self.audio_source_selected: int | None = None
 
-    def toggle_current_effect_frame_scaling(self) -> str:
-        return 'frame scaling toggled'
-
     def get_audio_sources(self) -> list[str]:
         return ['device-0', 'device-1']
 
@@ -140,13 +137,13 @@ def test_system_combo_alt_tab_does_not_mark_user_action() -> None:
     assert app.vj_api.marked == []
 
 
-def test_ctrl_alt_k_marks_user_action_and_dispatches_chord() -> None:
+def test_ctrl_alt_k_marks_user_action_without_legacy_scaling_toggle() -> None:
     handler, app, overlays = _handler()
 
     handler.handle(sdl2.SDLK_k, sdl2.KMOD_CTRL | sdl2.KMOD_ALT)
 
     assert app.vj_api.marked == ['key']
-    assert 'frame scaling toggled' in overlays.messages
+    assert overlays.messages == []
 
 
 def test_a_opens_audio_selector() -> None:

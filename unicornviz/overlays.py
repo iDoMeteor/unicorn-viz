@@ -403,7 +403,6 @@ class Overlays:
                 ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
                 ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
                 ('Ctrl+Alt+C', 'Toggle Candy Frame neon border overlay'),
-                ('Ctrl+Alt+K', 'Toggle Candy Frame scaling for current effect'),
                 ('Ctrl+Alt+S', 'Start Spotify Pro auth flow'),
                 ('Ctrl+Alt+Shift+S', 'Logout Spotify Pro (clear local token)'),
                 ('Wheel Up/Down', 'Hue-shift frame (lasts 3 s idle)'),
