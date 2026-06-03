@@ -934,10 +934,7 @@ class App:
             if logical_changed:
                 self._update_render_target_size()
                 self._release_readback_pbos()
-                if self._recorder and self._recorder.is_recording:
-                    self._recorder.stop()
-                    self._sync_recording_overlay()
-                    log.warning('Recording stopped due to display topology change')
+                self._handle_recording_resize_interruption('display topology change')
                 if self._streamer is not None:
                     self._streamer.resize(self._width, self._height)
                 if self._current_effect:
@@ -3221,6 +3218,22 @@ void main() {
         self._mirror_composite_fbo = self._make_fbo()
         return self._mirror_composite_fbo
 
+    def _handle_recording_resize_interruption(self, reason: str) -> None:
+        """Rotate active recording when output dimensions change mid-session."""
+        if self._recorder is None or not self._recorder.is_recording:
+            return
+        _stopped, stop_msg = self.stop_recording()
+        restarted, _start_msg = self.start_recording()
+        if restarted:
+            msg = f'{stop_msg} | Recording restarted ({reason})'
+            level = log.info
+        else:
+            msg = f'{stop_msg} | Recording stopped ({reason})'
+            level = log.warning
+        level(msg)
+        if self._overlays is not None:
+            self._overlays.flash_message(msg, 2.6)
+
     def _on_resize(self, w: int, h: int) -> None:
         if self._display_mode == 'mirror_all':
             # Window grew/shrunk; logical size stays at one display worth.
@@ -3236,10 +3249,7 @@ void main() {
             self._update_render_target_size()
             self._rebuild_fbos()
             self._release_readback_pbos()
-            if self._recorder and self._recorder.is_recording:
-                self._recorder.stop()
-                self._sync_recording_overlay()
-                log.warning('Recording stopped due to resize/fullscreen change')
+            self._handle_recording_resize_interruption('resize/fullscreen change')
             if self._streamer is not None:
                 self._streamer.resize(self._width, self._height)
             if self._current_effect:
@@ -3259,10 +3269,7 @@ void main() {
             self._candy_frame.resize(w, h)
         self._update_render_target_size()
         self._release_readback_pbos()
-        if self._recorder and self._recorder.is_recording:
-            self._recorder.stop()
-            self._sync_recording_overlay()
-            log.warning('Recording stopped due to resize/fullscreen change')
+        self._handle_recording_resize_interruption('resize/fullscreen change')
         if self._streamer is not None:
             self._streamer.resize(w, h)
         if self._current_effect:
