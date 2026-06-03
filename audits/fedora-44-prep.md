@@ -1,8 +1,8 @@
 # Unicorn Viz — Fedora 44 Migration Prep
 
 Owner: Engineering
-Status: active — projectM resolved; path resolver pending
-Last updated: 2026-06-01 (projectM installation complete)
+Status: active — core blockers resolved; remaining items have explicit beta policy
+Last updated: 2026-06-03
 
 Scope: Full system and codebase review against the Fedora 44 dev machine.
 Covers Python environment, system libraries, drop-in submodule status, known
@@ -290,10 +290,10 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 |--------|----------|--------------------------------------------|---------------------|
 | F44-01 | High     | Resource path resolution fails outside CWD | Open — excluded from this session (separate task) |
 | F44-02 | High     | Missing bundled font assets                | **Resolved** — font8x16.bin generated, ui-font.ttf bundled |
-| F44-03 | High     | Multi-head placement compositor-dependent  | Open — known limitation, no compositor matrix tested |
-| F44-04 | Medium   | Multi-head doc/arch drift                  | Open — legacy methods not yet cleaned |
+| F44-03 | High     | Multi-head placement compositor-dependent  | Reclassified — known compositor limitation with beta policy (primary-centered fallback in span/mirror; owner validation required on target topology) |
+| F44-04 | Medium   | Multi-head doc/arch drift                  | Reclassified — non-blocking for beta; keep truth-sync in feature/audit trackers |
 | F44-05 | Medium   | ffmpeg availability                        | **Resolved** — ffmpeg 8.1.1 installed |
-| F44-06 | Medium   | ALSA fallback hidden by skip policy        | Open — low priority; PipeWire works |
+| F44-06 | Medium   | ALSA fallback hidden by skip policy        | Deferred — non-blocking on PipeWire-first Fedora target |
 
 ---
 

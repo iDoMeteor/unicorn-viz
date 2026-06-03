@@ -1,7 +1,7 @@
 # Unicorn Viz — Full System Audit (2026-06-01)
 
 Owner: Engineering
-Status: active — partially resolved; remaining findings tracked below
+Status: active — P0 findings closed; remaining P1/P2/P3 findings tracked below
 Last updated: 2026-06-03
 
 Scope: Whole-system consistency, latent bugs / side-effects, and optimization
@@ -68,7 +68,7 @@ Still open / not fully closed:
 - A-06 open: tracked `build/lib/**` shadow tree still present (51 files).
 - A-07 open: Unicorn Tears `HELP_ENTRIES` still labels plain `U` as effect
   jump while runtime behavior maps plain `U` to splash replay and `Shift+U` to
-  effect jump.
+  effect jump (P2 help-text/documentation mismatch only; no crash-path impact).
 - A-09 open: `unicornviz/app.py` remains monolithic.
 - A-10 open: hashed module naming remains in drop-in loader path.
 

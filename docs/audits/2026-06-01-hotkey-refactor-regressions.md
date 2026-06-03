@@ -1,7 +1,7 @@
 # Hotkey Refactor — P0 Regression Hotfix Brief (2026-06-01)
 
 Owner: Auto VJ team + Effects team + Core
-Status: mostly resolved — P0 crash/dead-subsystem items closed; follow-ups remain
+Status: resolved for P0 scope — follow-up item is P2 documentation/help-text alignment
 Last updated: 2026-06-03
 
 This is the actionable companion to
@@ -31,7 +31,8 @@ Resolution state:
 Remaining non-P0 follow-up from this brief:
 
 - Unicorn Tears `HELP_ENTRIES` text still needs alignment with runtime mapping
-    (`U` splash replay, `Shift+U` jump to effect).
+    (`U` splash replay, `Shift+U` jump to effect); tracked as P2 and does not
+    affect crash-path safety.
 
 ---
 
