@@ -395,9 +395,9 @@ Per-effect one-shot checklist:
 ### Built-in roster
 
 - [x] 3D Cube (cube_3d) | Rating Before: 5/5 | Rating After: N/A (operator: "no need")
-   Operator review (2026-06-03, shortcut 1): Visual quality 5/5; Audio response 9/5 (operator-entered); Performance single/span/mirror 5/5; Ping-pong friends PASS; Candy frame options PASS; Startup variance PASS; Parameter sanity FAIL (reactivity and zoom appeared non-responsive); Hotkey sanity PASS; Fixes needed: P2 only. Notes: baseline felt 4/5 but "super retro" pushed final to 5/5.
-- [x] Wavey Gravy (alien_biome) | Rating Before: 7/5 | Rating After: N/A
-   Operator review (2026-06-03, shortcut 2): Visual quality 7/5; Audio response 7/5; Performance single/span/mirror PASS; Ping-pong friends PASS; Startup variance FAIL; Parameter sanity PASS; Hotkey sanity PASS; Fixes needed: P1 across all requested changes. Notes: left-side highlight source (UFO) should travel around scene rather than hugging edges/hanging in one area; spinning element should be more reactive; increase color variance; add sparkles; improve response to speed/reactivity controls; default zoom should be further out; vertical bars should dance more and vary count. Operator noted reactivity is great in one highlighted area but overall control responsiveness still feels weak.
+- [x] 3D Cube (cube_3d) | Rating Before: 5/5 | Rating After: N/A (operator: "no need")
+   Operator review (2026-06-03, shortcut 1): Visual quality 5/5; Audio response 9/5 (operator-entered); Performance single/span/mirror 5/5; Ping-pong friends PASS; Startup variance PASS; Parameter sanity FAIL (reactivity and zoom appeared non-responsive); Hotkey sanity PASS; Fixes needed: P2 only. Notes: baseline felt 4/5 but "super retro" pushed final to 5/5.
+- [ ] Wavey Gravy (alien_biome) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] ANSI Viewer (ansi_viewer) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Audio Spectrum (audio_spectrum) - startup variance EXEMPT | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Copper Bars (copper_bars) | Rating Before: ___/5 | Rating After: ___/5
@@ -431,7 +431,8 @@ Use the same per-effect one-shot checklist as built-ins.
 
 ### Drop-in visual roster
 
-- [ ] Alien Invasion (alien-invasion-01) | Rating Before: ___/5 | Rating After: ___/5
+- [x] Alien Invasion (alien-invasion-01) | Rating Before: 7/5 | Rating After: N/A
+   Operator review (2026-06-03, shortcut 2): Visual quality 7/5; Audio response 7/5; Performance single/span/mirror PASS; Ping-pong friends PASS; Startup variance FAIL; Parameter sanity PASS; Hotkey sanity PASS; Fixes needed: P1 across all requested changes. Notes: left-side highlight source (UFO) should travel around scene rather than hugging edges/hanging in one area; spinning element should be more reactive; increase color variance; add sparkles; improve response to speed/reactivity controls; default zoom should be further out; vertical bars should dance more and vary count. Operator noted reactivity is great in one highlighted area but overall control responsiveness still feels weak.
 - [ ] Cyber War (cyber-war-01) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Disco Ball (disco-ball-01) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Hacker Terminal (hacker-terminal-01) | Rating Before: ___/5 | Rating After: ___/5
