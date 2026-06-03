@@ -36,6 +36,12 @@ Session log:
 - New P0/P1/P2: P1 display-mode/menu-placement candidate resolved in code path; no new P0 found in automated validation
 - Notes: Local regression suite remains green after changes (26 passed); operator runtime validation still required for final signoff.
 
+- Date: 2026-06-03
+- Reviewer: Copilot
+- Scope covered today: F44 truth-sync cleanup + Auto VJ HUD off-state fix + startup/drop-in independence evidence pass
+- New P0/P1/P2: No new P0 from startup/drop-in loader paths; P1 review work remains runtime-validation heavy
+- Notes: Auto VJ HUD mode/mood/action labels now report `off`/`--` when toggled off; static code inspection confirms guarded optional loader paths for auto-vj, multi-head, webcam, streaming, postfx, control-room, and grand-finale.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -209,6 +215,7 @@ Notes:
 - Sims / Images / Videos are not fully testable on this machine because assets are missing.
 - Streaming still needs later verification.
 - Unicorn Tears hotkeys were reported good.
+- Auto VJ HUD disabled-state labels now explicitly show OFF semantics (mode/mood off, action timer hidden) after runtime toggle.
 
 ### Auto VJ
 - [ ] Ctrl+Alt+J toggle Auto VJ
@@ -272,6 +279,9 @@ Notes:
 - [ ] U jump to Unicorn Tears effect
 
 Notes:
+
+- 2026-06-03: Static startup boundary review in `unicornviz/app.py` confirms optional drop-ins are wrapped with safe fallbacks or `try/except` handling during controller creation paths.
+- 2026-06-03: Runtime PASS/FAIL execution for these rows is still pending owner interactive validation; this section remains in progress by design.
 
 ---
 

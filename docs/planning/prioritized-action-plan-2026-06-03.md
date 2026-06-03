@@ -66,7 +66,7 @@ into one execution order that can be worked down without reopening every source 
 
 2. Close any remaining hotkey crash-path risk and sync stale P0 audit docs.
    Status:
-   - In progress on 2026-06-03 (core keypath/help-label cleanup landed; stale 2026-06-01 audit truth-sync still pending)
+   - Completed on 2026-06-03 (2026-06-01 hotkey/system audit docs truth-synced to current runtime state)
    Why:
    - old P0 hotkey/regression docs are now partially stale relative to landed fixes
    Scope:
@@ -79,6 +79,8 @@ into one execution order that can be worked down without reopening every source 
    - audit docs show current truth and are no longer action-ambiguous
 
 3. Fedora/open-platform blocker cleanup still marked open in prep audit.
+   Status:
+   - Completed on 2026-06-03 (F44-03/F44-04/F44-06 explicitly reclassified/deferred with beta policy)
    Why:
    - fedora prep still tracks open items including multi-head compositor limits and doc drift
    Scope:
@@ -164,8 +166,8 @@ into one execution order that can be worked down without reopening every source 
 ## Execution order
 
 1. P0.1 runtime stability closure (completed 2026-06-03)
-2. P0.2 hotkey crash-path + audit truth-sync
-3. P0.3 Fedora open-item closure/reclassification
+2. P0.2 hotkey crash-path + audit truth-sync (completed 2026-06-03)
+3. P0.3 Fedora open-item closure/reclassification (completed 2026-06-03)
 4. P1.4 full feature-review execution
 5. P1.5 beta checklist closeout
 6. P1.6 installer ownership closure
@@ -176,9 +178,9 @@ into one execution order that can be worked down without reopening every source 
 
 ## Next Items (Current)
 
-1. P0.2: truth-sync stale 2026-06-01 hotkey/system audit docs to current HEAD and close any remaining crash-path ambiguity.
-2. P0.3: close/reclassify Fedora prep open items F44-03/F44-04/F44-06 with explicit beta policy.
-3. P1.4: continue feature-review execution after owner validates Display Modes runtime behavior on target Fedora layout.
+1. P1.4: continue feature-review execution, with owner runtime signoff for Display Modes as the first interactive checkpoint.
+2. P1.5: beta checklist closeout (ProjectM primary-machine status, recording/streaming soak, dependency contract messaging).
+3. P1.6: installer/distribution ownership closure.
 
 ## Suggested operating cadence
 

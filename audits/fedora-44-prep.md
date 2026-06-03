@@ -126,7 +126,7 @@ The F44-05 concern from the previous audit ("ffmpeg may be unavailable") is
 resolved on this machine. The runtime preflight should confirm the binary is
 found before recording/streaming starts — that behavior exists in `recording.py`.
 
-### 3.6 Wayland Multi-Head Placement (F44-03 — still open)
+### 3.6 Wayland Multi-Head Placement (F44-03 — reclassified)
 
 Multi-head (`span_all`, `mirror_all`) under GNOME Wayland remains
 compositor-dependent for window placement. The existing X11 fallback behavior
@@ -230,7 +230,7 @@ git submodule update --init --recursive  # most submodules
 
 ## 6. Asset Gaps
 
-### 6.1 Fonts (F44-02 — still open)
+### 6.1 Fonts (F44-02 — resolved)
 
 | Asset                    | Present | Used by |
 |--------------------------|---------|---------|
@@ -288,7 +288,7 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 
 | ID     | Severity | Title                                      | Status (2026-06-01) |
 |--------|----------|--------------------------------------------|---------------------|
-| F44-01 | High     | Resource path resolution fails outside CWD | Open — excluded from this session (separate task) |
+| F44-01 | High     | Resource path resolution fails outside CWD | **Resolved** — `unicornviz/paths.py` landed and call sites were migrated |
 | F44-02 | High     | Missing bundled font assets                | **Resolved** — font8x16.bin generated, ui-font.ttf bundled |
 | F44-03 | High     | Multi-head placement compositor-dependent  | Reclassified — known compositor limitation with beta policy (primary-centered fallback in span/mirror; owner validation required on target topology) |
 | F44-04 | Medium   | Multi-head doc/arch drift                  | Reclassified — non-blocking for beta; keep truth-sync in feature/audit trackers |
