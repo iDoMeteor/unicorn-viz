@@ -50,6 +50,7 @@ _DEFAULTS: dict[str, Any] = {
         "profile": "house",
         "reactivity": 1.0,
         "latency": "high",
+        "prefer_default_input": True,
         "start_timeout_s": 4.0,
         "start_retries": 2,
         "start_retry_backoff_s": 0.5,

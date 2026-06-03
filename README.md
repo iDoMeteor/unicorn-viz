@@ -153,7 +153,7 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 - **Effect startup randomization** — every effect produces a visually distinct appearance each activation; parameters like palette, speed, intensity, zoom vary automatically to prevent repetition
 
 ### Audio & Visualization
-- **Live audio capture** — PipeWire/ALSA monitor input with automatic source priority (Spotify > Firefox > system)
+- **Live audio capture** — startup prefers the current system default input, with fast in-app source switching when needed (`Ctrl+Shift+A`)
 - **Real-time FFT + beat intelligence** — profile-aware onset weighting, adaptive MAD thresholding, ACF tempo lane scoring with BPM priors, phase-lock confidence tracking, and drop/build energy slope analysis for musically coherent automation
 - **Per-effect audio reactivity override** — constrain or amplify responsiveness per effect via config
 
@@ -309,7 +309,8 @@ effect_duration = 20        # auto-advance every 20 seconds
 mode = "sequential"         # or "random"
 
 [audio]
-device = ""                 # "" = auto-detect (Spotify > default)
+device = ""                 # "" = no hint; start on system default input
+prefer_default_input = true  # startup source policy when device=""
 reactivity = 1.0            # 0.5x to 5.0x audio sensitivity
 ```
 
@@ -345,11 +346,13 @@ You can control verbosity from config or CLI:
 
 ## Audio Setup
 
-Unicorn Viz automatically detects and prioritizes audio sources:
+Unicorn Viz startup source selection works like this:
 
-1. **Spotify** (if running) — native app audio
-2. **Firefox/Chrome** — web audio (YouTube, web radio, etc.)
-3. **System default** — fallback if no app sources available
+1. **System default input first** — safest startup behavior for mixed live rigs
+2. **Automatic fallback candidates** — tried only when the active source stays silent
+3. **Manual override anytime** — open the source selector (`Ctrl+Shift+A`) to pick another input
+
+By default, Unicorn Viz starts on **Audio Spectrum** (`[playlist].start_effect = "Audio Spectrum"`) specifically so you can immediately verify that the analyzer is receiving signal before moving into other effects.
 
 On **PipeWire**: audio sources are captured via monitor sinks. On **ALSA**: loopback setup required.
 

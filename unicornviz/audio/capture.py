@@ -39,7 +39,11 @@ _DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
 _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
 
 
-def _candidate_monitor_devices(hint: str) -> list[int | None]:
+def _candidate_monitor_devices(
+    hint: str,
+    *,
+    prefer_default_input: bool = True,
+) -> list[int | None]:
     """Return ordered candidate input devices for auto-fallback probing.
 
     On Linux the ALSA hostapi is deliberately skipped in favour of
@@ -177,7 +181,13 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
 
     ranked = sorted((rank, idx) for idx, rank in best_rank.items())
     candidates = [i for _, i in ranked]
-    candidates.append(None)
+    if prefer_default_input:
+        # Startup policy: when no explicit device hint is configured, try the
+        # current OS default source first. Operators can still pick any source
+        # from the selector, and auto-fallback can still advance if needed.
+        candidates.insert(0, None)
+    else:
+        candidates.append(None)
     return candidates
 
 
@@ -192,6 +202,7 @@ class AudioCapture:
         device_hint: str = "",
         buffer_seconds: float = 2.0,
         latency: str = "high",
+        prefer_default_input: bool = True,
         fallback_rms_threshold: float = _DEFAULT_FALLBACK_RMS_THRESHOLD,
         fallback_silence_seconds: float = _DEFAULT_FALLBACK_SILENCE_SECONDS,
         fallback_cooldown_seconds: float = _DEFAULT_FALLBACK_COOLDOWN_SECONDS,
@@ -218,6 +229,7 @@ class AudioCapture:
         self._fallback_silence_seconds = max(0.25, float(fallback_silence_seconds))
         self._fallback_cooldown_seconds = max(0.0, float(fallback_cooldown_seconds))
         self._auto_fallback_enabled = bool(auto_fallback_enabled)
+        self._prefer_default_input = bool(prefer_default_input)
         self._last_fallback_time = 0.0
 
     def _open_stream(self, device: int | None) -> None:
@@ -378,7 +390,10 @@ class AudioCapture:
             log.info("Audio capture disabled (sounddevice not available)")
             return
 
-        self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+        self._candidate_devices = _candidate_monitor_devices(
+            self._device_hint,
+            prefer_default_input=self._prefer_default_input,
+        )
         log.debug("Audio: candidate devices = %s", self._candidate_devices)
 
         last_exc: Exception | None = None
@@ -558,7 +573,10 @@ class AudioCapture:
         if not _SD_AVAILABLE:
             return ['disabled']
         if not self._candidate_devices:
-            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
             self._candidate_index = 0
         labels: list[str] = []
         for device in self._candidate_devices:
@@ -568,7 +586,10 @@ class AudioCapture:
     def current_source_index(self) -> int:
         """Return index of currently selected candidate device."""
         if not self._candidate_devices:
-            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
             self._candidate_index = 0
         if not self._candidate_devices:
             return 0
@@ -581,7 +602,10 @@ class AudioCapture:
         if not self._active:
             return 'inactive'
         if not self._candidate_devices:
-            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
             self._candidate_index = 0
         if not self._candidate_devices:
             return self.current_source_label()
@@ -622,7 +646,10 @@ class AudioCapture:
         This is an operator-triggered source switch used by live hotkeys.
         """
         if not self._candidate_devices:
-            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
             self._candidate_index = 0
         if len(self._candidate_devices) <= 1:
             return self.current_source_label()

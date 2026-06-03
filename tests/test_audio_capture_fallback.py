@@ -125,3 +125,32 @@ def test_cycle_source_restores_previous_when_target_fails(monkeypatch) -> None:
     assert calls == [2, 1]
     assert c._candidate_index == 0
     assert label == 'device-1'
+
+
+def test_candidate_order_prefers_default_input_first(monkeypatch) -> None:
+    class _CandidateSD:
+        @staticmethod
+        def query_devices(device=None, kind=None):
+            if kind == 'input':
+                return {'name': 'default-input'}
+            if device is not None:
+                return {
+                    'name': f'device-{device}',
+                    'max_input_channels': 2,
+                    'hostapi': 0,
+                }
+            return [
+                {'name': 'PipeWire monitor', 'max_input_channels': 2, 'hostapi': 0},
+                {'name': 'USB webcam mic', 'max_input_channels': 1, 'hostapi': 0},
+            ]
+
+        @staticmethod
+        def query_hostapis():
+            return [{'name': 'PipeWire'}]
+
+    monkeypatch.setattr(capture_mod, 'sd', _CandidateSD())
+    monkeypatch.setattr(capture_mod, '_SD_AVAILABLE', True)
+
+    candidates = capture_mod._candidate_monitor_devices('', prefer_default_input=True)
+
+    assert candidates[0] is None
