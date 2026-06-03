@@ -891,6 +891,14 @@ class App:
         if self._window is None:
             return
 
+        # Keep the main SDL window aligned to refreshed topology bounds.
+        if self._display_mode in {'span_all', 'mirror_all'}:
+            x, y, w, h = self._all_display_bounds()
+            sdl2.SDL_SetWindowPosition(self._window, x, y)
+            sdl2.SDL_SetWindowSize(self._window, w, h)
+            self._window_origin_x = int(x)
+            self._window_origin_y = int(y)
+
         wx = ctypes.c_int(0)
         wy = ctypes.c_int(0)
         sdl2.SDL_GetWindowPosition(self._window, wx, wy)
@@ -905,11 +913,46 @@ class App:
         if wh.value > 0:
             self._window_height = int(wh.value)
 
+        if self._display_mode == 'span_all':
+            if self._window_width != self._width or self._window_height != self._height:
+                self._on_resize(self._window_width, self._window_height)
+            return
+
         if self._display_mode == 'mirror_all':
+            primary_layout = self._primary_active_layout()
+            logical_changed = False
+            if primary_layout is not None:
+                new_w = int(primary_layout[2])
+                new_h = int(primary_layout[3])
+                logical_changed = (new_w != self._width) or (new_h != self._height)
+                self._width = new_w
+                self._height = new_h
             self._mirror_rects = self._multihead_mirror_layout(
                 self._window_origin_x,
                 self._window_origin_y,
             )
+            if logical_changed:
+                self._update_render_target_size()
+                self._release_readback_pbos()
+                if self._recorder and self._recorder.is_recording:
+                    self._recorder.stop()
+                    self._sync_recording_overlay()
+                    log.warning('Recording stopped due to display topology change')
+                if self._streamer is not None:
+                    self._streamer.resize(self._width, self._height)
+                if self._current_effect:
+                    self._current_effect.resize(self._width, self._height)
+                if self._next_effect:
+                    self._next_effect.resize(self._width, self._height)
+                if self._webcam_system is not None:
+                    self._webcam_system.resize(self._width, self._height)
+                if self._candy_frame is not None:
+                    self._candy_frame.resize(self._width, self._height)
+                if self._postfx_controller is not None:
+                    self._postfx_controller.resize(self._render_width, self._render_height)
+                if self._grand_finale is not None:
+                    self._grand_finale.resize(self._width, self._height)
+                self._rebuild_fbos()
             log.info('Mirror topology rebuilt: origin=(%d,%d) window=%dx%d rects=%s',
                      self._window_origin_x,
                      self._window_origin_y,
