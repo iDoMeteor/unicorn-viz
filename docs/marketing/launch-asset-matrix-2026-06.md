@@ -20,10 +20,10 @@ Use consistent naming so clips, thumbnails, and copy are easy to track.
 - `HERO`: flagship trailers, event promos, major reveal edits.
 - `PROOF`: product demos, free-vs-paid comparisons, workflow clips.
 - `HYPE`: short high-energy highlights, countdown cuts, reactions.
-- `STORY`: artist voice, mission posts, founder letters, behind-the-scenes.
+- `STORY`: artist voice, founder letters, behind-the-scenes.
 - `COMMUNITY`: polls, Q&A prompts, supporter shout-outs, fan features.
 - `OFFER`: merch cards, premium drop-in highlights, bundle explainers.
-- `CAUSE`: 10% animal-support messages tied to specific campaign actions.
+- `SITE_NOTE`: small website-only support note for the 10% animals-in-need message.
 
 ## Platform Matrix
 
@@ -70,9 +70,9 @@ defaults and tailor lightly per platform tone.
 - "Grab the premiere merch capsule before it closes."
 - "Join founding supporter tiers for early access."
 
-### Mission CTA
+### Website-only support note
 
-- "Every purchase helps: 10% goes to animals in need."
+- "10% of proceeds help animals in need." (footer/support page usage only)
 
 ## Creative Specs Snapshot
 
@@ -98,7 +98,7 @@ day index once the premiere date is locked.
 | D-8 | PROOF + STORY | YouTube, Substack, X | Post a 60-second setup walkthrough featuring stream prep, audio routing, and visual scene checks. | Watch the build |
 | D-7 | OFFER | Fourthwall, unicornviz.com, X | Publish free-vs-premium comparison graphic with concise benefits and launch pricing window. | Unlock premium drop-ins |
 | D-6 | HYPE | X, Facebook Reels, YouTube Shorts, Rumble | Drop the highest-energy clip so far with one signature effect and fast cut transitions. | Watch the premiere live |
-| D-5 | CAUSE + STORY | Substack, Facebook, X, official sites | Publish a mission post: 10% of proceeds support animals in need, with concrete language about how support works. | Support the launch |
+| D-5 | STORY | Substack, Facebook, X | Publish a world-building post: why this six-day run is a full narrative event, not a single stream. | Save the date |
 | D-4 | COMMUNITY + PROOF | Locals, Twitch, Kick, X | Announce pre-launch hangout stream with live Q&A and a short feature demonstration. | Join the hangout |
 | D-3 | HERO | YouTube, Rumble, X, Facebook | Release final trailer with stream intro reel, artist face/voice, and strongest visual sequence. | Turn on reminders |
 | D-2 | OFFER + HYPE | Fourthwall, official sites, X, Facebook | Publish merch capsule hero card and digital bundle card with scarcity-safe closing date. | Buy the premiere pack |

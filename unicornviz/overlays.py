@@ -463,6 +463,7 @@ class Overlays:
         self._projectm_preset_idx: int = 0
         self._projectm_focus_pane: int = 1
         self._projectm_current_path: str = ''
+        self._projectm_search_query: str = ''
         self._help_timer: float = 0.0
         self._hud_timer: float = 0.0
         self._flash_text: str = ""
@@ -1458,12 +1459,44 @@ void main() {
 
     def _projectm_filtered_entries(self) -> list[dict[str, object]]:
         category = self.get_projectm_selected_category()
-        if category == '(all)':
-            return list(self._projectm_entries)
+        query = self._projectm_search_query.strip().lower()
+
+        def _category_ok(entry: dict[str, object]) -> bool:
+            if category == '(all)':
+                return True
+            return str(entry.get('category_key', '')) == category
+
+        def _query_ok(entry: dict[str, object]) -> bool:
+            if not query:
+                return True
+            haystack = ' '.join(
+                [
+                    str(entry.get('display_name', '')),
+                    str(entry.get('pack_name', '')),
+                    str(entry.get('category_key', '')),
+                    ' '.join(str(t) for t in (entry.get('tags', []) or [])),
+                ]
+            ).lower()
+            return query in haystack
+
         return [
             entry for entry in self._projectm_entries
-            if str(entry.get('category_key', '')) == category
+            if _category_ok(entry) and _query_ok(entry)
         ]
+
+    def set_projectm_search_query(self, query: str) -> None:
+        """Set the ProjectM manager text filter and keep selection coherent."""
+        self._projectm_search_query = str(query)
+        self._sync_projectm_preset_selection()
+
+    def clear_projectm_search_query(self) -> None:
+        """Clear the ProjectM manager text filter."""
+        self.set_projectm_search_query('')
+
+    @property
+    def projectm_search_query(self) -> str:
+        """Return current ProjectM manager text filter."""
+        return self._projectm_search_query
 
     def _projectm_category_stats(self, category: str) -> tuple[int, int]:
         entries = self._projectm_entries if category == '(all)' else [
@@ -1558,6 +1591,17 @@ void main() {
             scale=2.2,
             color=(0.52, 0.85, 0.58, 0.88),
         )
+        query = self._projectm_search_query
+        query_display = query if query else '(none)'
+        if len(query_display) > 52:
+            query_display = '...' + query_display[-49:]
+        self._draw_text(
+            f'Search: {query_display}',
+            px + 18.0,
+            py + 70.0,
+            scale=1.9,
+            color=(0.86, 0.90, 1.0, 0.88),
+        )
 
         self._draw_rect(left_x, content_y, left_w, content_h, (0.04, 0.08, 0.13, 0.82))
         self._draw_rect(right_x, content_y, right_w, content_h, (0.03, 0.07, 0.12, 0.82))
@@ -1641,14 +1685,14 @@ void main() {
             )
 
         self._draw_text(
-            'Tab/Left/Right: pane    Up/Down: browse + preview    Enter: confirm    E/D: enable-disable    I: isolate',
+            'Tab/Left/Right: pane    Up/Down: browse + preview    Enter: confirm    /: search mode    E/D: enable-disable    I: isolate',
             px + 18.0,
             footer_y - 10.0,
             scale=1.8,
             color=(0.58, 0.68, 0.78, 0.86),
         )
         self._draw_text(
-            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Delete: trash    Shift+Delete: hard delete    Esc: close',
+            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Ctrl+Z: undo    Ctrl+Y/Ctrl+Shift+Z: redo    Delete: trash    Esc/Ctrl+M: close + revert unconfirmed',
             px + 18.0,
             footer_y + 12.0,
             scale=1.8,

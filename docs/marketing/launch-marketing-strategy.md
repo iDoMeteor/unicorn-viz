@@ -14,12 +14,18 @@ Launch Unicorn Viz and DJ Unicorn Tears as a single entertainment and creator-pr
 
 This campaign is built around a 30-day pre-premiere runway, a 6-day live event block, and a 60-day post-premiere growth cycle.
 
+## Priority Stack
+
+1. Show first.
+2. Software second.
+3. Everything else supports those two outcomes.
+
 ## Working Assumptions
 
 - Unicorn Viz core software remains free.
 - Most drop-ins are paid products and should be framed as premium expansion packs.
 - DJ Unicorn Tears is the flagship on-camera identity for the launch.
-- 10% of gross proceeds are donated to animals in need and should be treated as a permanent brand promise.
+- 10% of gross proceeds are donated to animals in need and should remain a lightweight website/support-page note rather than a repeated campaign headline.
 - The official homes are unicorntears.com and unicornviz.com.
 - OBS is not fully production-ready yet, so the livestream plan must support both OBS-based workflows and Unicorn Viz native streaming.
 
@@ -97,6 +103,7 @@ Actions:
 - Publish or stage launch landing pages on unicorntears.com and unicornviz.com.
 - Build a single link path for all bios with route-specific tracking.
 - Set up Fourthwall products, digital delivery, donation language, and animal-support messaging.
+- Set up Fourthwall products and digital delivery; keep any donation copy concise and site-local.
 - Decide the default membership stack: Substack for editorial/email, Locals for hangouts, SubscribeStar as backup recurring support.
 - Finalize the free launch offer and the first premium drop-in bundle.
 - Cut the first 12 to 20 short-form assets before public cadence starts.
@@ -112,8 +119,8 @@ Goals:
 Actions:
 
 - Release the DJ Unicorn Tears intro/theme audio paired with a 15 to 30 second hero teaser.
-- Publish a launch post on Substack explaining the project, world premiere, and the animal donation commitment.
-- Drop short clips that each highlight one angle: music identity, visual identity, free software, premium drop-ins, and mission.
+- Publish a launch post on Substack focused on the show vision and world premiere promise.
+- Drop short clips that each highlight one angle: music identity, visual identity, free software, and premium drop-ins.
 - Start daily countdown language on X, Facebook Stories, YouTube Shorts, and vertical clips for all mirrored channels.
 - Reach out to creators, DJs, visual artists, and niche press with the one-sheet and creator pack.
 - Seed one free gated reward for email or Substack signups such as wallpapers, a preview loop pack, or a teaser mix.

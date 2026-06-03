@@ -34,6 +34,10 @@ class HotkeyHandler:
         self._shortcut_effects = playlist.shortcut_effects
         self._overlays = overlays
         self._audio = audio_manager
+        self._projectm_preview_origin_path: str = ''
+        self._projectm_preview_committed_path: str = ''
+        self._projectm_preview_dirty: bool = False
+        self._projectm_search_mode: bool = False
         self._pending_midi_events: deque[MidiEvent] = deque()
         self._midi_lock = threading.Lock()
 
@@ -173,6 +177,8 @@ class HotkeyHandler:
                 'isolate_category',
                 'set_presets_enabled',
                 'delete_presets',
+                'undo_last_bulk_state_change',
+                'redo_last_bulk_state_change',
             )
             for name in required:
                 if not callable(getattr(current, name, None)):
@@ -206,6 +212,12 @@ class HotkeyHandler:
             setter = getattr(a, 'set_projectm_manager_modal_active', None)
             if callable(setter):
                 setter(visible)
+            if not visible:
+                self._projectm_preview_origin_path = ''
+                self._projectm_preview_committed_path = ''
+                self._projectm_preview_dirty = False
+                self._projectm_search_mode = False
+                o.clear_projectm_search_query()
 
         def _preview_projectm_selection(manager_effect) -> str | None:
             selected = o.get_projectm_selected_preset()
@@ -219,8 +231,48 @@ class HotkeyHandler:
                 return getattr(manager_effect, '_active_label', None)
             result = manager_effect.goto_preset_path(target_path)
             if result:
+                committed = self._projectm_preview_committed_path
+                self._projectm_preview_dirty = bool(committed and target_path != committed)
                 _sync_projectm_manager()
             return result
+
+        def _commit_projectm_selection() -> None:
+            selected = o.get_projectm_selected_preset()
+            if selected is None:
+                return
+            target_path = str(selected.get('path', '') or '')
+            if not target_path:
+                return
+            self._projectm_preview_committed_path = target_path
+            self._projectm_preview_dirty = False
+
+        def _close_projectm_manager_with_revert(manager_effect) -> None:
+            if self._projectm_preview_dirty and self._projectm_preview_committed_path:
+                restored = manager_effect.goto_preset_path(self._projectm_preview_committed_path)
+                _sync_projectm_manager()
+                if restored:
+                    o.flash_message(f'ProjectM reverted: {restored}', 1.6)
+            _set_projectm_manager_visible(False)
+
+        def _projectm_search_char() -> str:
+            if sdl2.SDLK_a <= sym <= sdl2.SDLK_z:
+                base = chr(ord('a') + (sym - sdl2.SDLK_a))
+                if mod & sdl2.KMOD_SHIFT:
+                    return base.upper()
+                return base
+            if sdl2.SDLK_0 <= sym <= sdl2.SDLK_9:
+                return chr(ord('0') + (sym - sdl2.SDLK_0))
+            if sdl2.SDLK_KP_0 <= sym <= sdl2.SDLK_KP_9:
+                return chr(ord('0') + (sym - sdl2.SDLK_KP_0))
+            if sym == sdl2.SDLK_SPACE:
+                return ' '
+            if sym in (sdl2.SDLK_MINUS, sdl2.SDLK_KP_MINUS):
+                return '-'
+            if sym in (sdl2.SDLK_PERIOD, sdl2.SDLK_KP_PERIOD):
+                return '.'
+            if sym in (sdl2.SDLK_SLASH, sdl2.SDLK_KP_DIVIDE):
+                return '/'
+            return ''
 
         # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and effect is not None:
@@ -400,11 +452,41 @@ class HotkeyHandler:
                 o.flash_message('ProjectM manager unavailable', 1.5)
                 return
 
+            if self._projectm_search_mode:
+                if sym == sdl2.SDLK_ESCAPE:
+                    self._projectm_search_mode = False
+                    o.flash_message('ProjectM search mode: off', 1.0)
+                    return
+                if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                    self._projectm_search_mode = False
+                    _preview_projectm_selection(manager_effect)
+                    o.flash_message('ProjectM search applied', 1.0)
+                    return
+                if (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_BACKSPACE:
+                    o.clear_projectm_search_query()
+                    _preview_projectm_selection(manager_effect)
+                    return
+                if sym == sdl2.SDLK_BACKSPACE:
+                    q = o.projectm_search_query
+                    if q:
+                        o.set_projectm_search_query(q[:-1])
+                        _preview_projectm_selection(manager_effect)
+                    return
+                ch = _projectm_search_char()
+                if ch:
+                    o.set_projectm_search_query(o.projectm_search_query + ch)
+                    _preview_projectm_selection(manager_effect)
+                return
+
             if sym == sdl2.SDLK_ESCAPE:
-                _set_projectm_manager_visible(False)
+                _close_projectm_manager_with_revert(manager_effect)
                 return
             if sym == sdl2.SDLK_m and (mod & sdl2.KMOD_CTRL):
-                _set_projectm_manager_visible(False)
+                _close_projectm_manager_with_revert(manager_effect)
+                return
+            if sym == sdl2.SDLK_SLASH and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI | sdl2.KMOD_SHIFT)):
+                self._projectm_search_mode = True
+                o.flash_message('ProjectM search mode: type to filter', 1.2)
                 return
 
             if sym == sdl2.SDLK_TAB:
@@ -446,8 +528,9 @@ class HotkeyHandler:
                     return
                 result = _preview_projectm_selection(manager_effect)
                 if result:
+                    _commit_projectm_selection()
                     _sync_projectm_manager()
-                    o.flash_message(f'Preset: {result}', 1.6)
+                    o.flash_message(f'Preset committed: {result}', 1.6)
                 return
             if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_a:
                 remaining = manager_effect.disable_all_presets()
@@ -458,6 +541,25 @@ class HotkeyHandler:
                 remaining = manager_effect.enable_all_presets()
                 _sync_projectm_manager()
                 o.flash_message(f'ProjectM: enabled all ({remaining} enabled)', 1.8)
+                return
+            if (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_z:
+                restored = manager_effect.undo_last_bulk_state_change()
+                _sync_projectm_manager()
+                if restored:
+                    o.flash_message(f'ProjectM undo: {restored}', 2.0)
+                else:
+                    o.flash_message('ProjectM undo: no snapshot available', 1.6)
+                return
+            if (mod & sdl2.KMOD_CTRL) and (
+                sym == sdl2.SDLK_y
+                or ((mod & sdl2.KMOD_SHIFT) and sym == sdl2.SDLK_z)
+            ):
+                restored = manager_effect.redo_last_bulk_state_change()
+                _sync_projectm_manager()
+                if restored:
+                    o.flash_message(f'ProjectM redo: {restored}', 2.0)
+                else:
+                    o.flash_message('ProjectM redo: no snapshot available', 1.6)
                 return
             if sym == sdl2.SDLK_i and o.projectm_manager_focus_pane == 0:
                 category = o.get_projectm_selected_category()
@@ -637,9 +739,14 @@ class HotkeyHandler:
                         'opening' if next_state else 'closing',
                         getattr(manager_effect, 'NAME', manager_effect.__class__.__name__),
                     )
-                    _set_projectm_manager_visible(next_state)
                     if next_state:
+                        self._projectm_preview_origin_path = str(getattr(manager_effect, 'current_preset_path', '') or '')
+                        self._projectm_preview_committed_path = self._projectm_preview_origin_path
+                        self._projectm_preview_dirty = False
+                        _set_projectm_manager_visible(True)
                         _preview_projectm_selection(manager_effect)
+                    else:
+                        _close_projectm_manager_with_revert(manager_effect)
             else:
                 if o.midi_selector_visible:
                     o.toggle_midi_selector()

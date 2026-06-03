@@ -1,7 +1,7 @@
 [window]
 fullscreen = true
 show_cursor = false
-display_mode  = "mirror_all"   # single | span_all | mirror_all
+display_mode  = "single"   # single | span_all | mirror_all
 display_index  = 0
 #exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
