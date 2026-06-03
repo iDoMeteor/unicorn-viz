@@ -766,20 +766,24 @@ class App:
         return self._multihead.window_position_for_display(display_index, self._width, self._height)
 
     def _primary_display_viewport(self) -> tuple[int, int, int, int] | None:
-        """Return window-local viewport for the primary display in multi-display modes."""
+        """Return window-local viewport for the primary display in multi-display modes.
+
+        Primary is resolved as the largest active display layout so overlay
+        menus center on the main audience screen in mixed-size topologies.
+        """
         if self._display_mode not in {'mirror_all', 'span_all'}:
             return None
         if self._window is None:
             return None
-        bounds = self._display_bounds(self._display_index)
-        if bounds is not None:
-            px, py, pw, ph = int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h)
+        layouts = self._multihead_layouts()
+        if layouts:
+            # Resolve "primary" deterministically as the largest active output.
+            px, py, pw, ph = max(layouts, key=lambda rect: int(rect[2]) * int(rect[3]))
         else:
-            # Fallback to first active layout if display index is unavailable.
-            layouts = self._multihead_layouts()
-            if not layouts:
+            bounds = self._display_bounds(self._display_index)
+            if bounds is None:
                 return None
-            px, py, pw, ph = layouts[0]
+            px, py, pw, ph = int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h)
         # Use the actual SDL window origin rather than cached layout origins.
         # This avoids drift when compositor/window-manager placement differs.
         wx = ctypes.c_int(0)
