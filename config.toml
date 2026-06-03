@@ -1,7 +1,7 @@
 [window]
 fullscreen = true
 show_cursor = false
-display_mode  = "single"   # single | span_all | mirror_all
+display_mode  = "mirror_all"   # single | span_all | mirror_all
 display_index  = 0
 #exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
@@ -407,6 +407,13 @@ projectm_library = ""
 preset_dirs = "drop-ins/projectm-01/presets"
 texture_dirs = ["drop-ins/projectm-01/presets/presets-milkdrop-texture-pack/textures", "drop-ins/projectm-01/textures"]
 start_preset = ""
+
+# Dark-preset auto-skip: if average brightness after dark_skip_after seconds
+# is below dark_brightness_threshold (0.0-1.0), the preset is skipped.
+# Set dark_skip_enabled = false to turn this off entirely.
+dark_skip_enabled = true
+dark_skip_after = 3.0
+dark_brightness_threshold = 0.02
 
 # ---------------------------------------------------------------------------
 # Beat tracker engine selection (inside [auto_vj] section)
