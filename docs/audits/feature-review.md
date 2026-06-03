@@ -353,8 +353,8 @@ Track both enabled and disabled behavior for each drop-in.
 | Drop-in | Enabled PASS/FAIL | Disabled PASS/FAIL | Notes |
 |---|---|---|---|
 | alien-invasion-01 | [ ] | [ ] | |
-| auto-vj-01 | [ ] | [ ] | |
-| control-room-01 | [ ] | [ ] | |
+| auto-vj-01 | [x] | [x] | Temp-config startups: enabled run logged `AutoVJController loaded from drop-in`; disabled run logged `AutoVJController Phase 4 loaded (disabled)`. |
+| control-room-01 | [x] | [x] | Temp-config startups: enabled run logged `ControlRoomController scheduled ...` then `loaded from drop-in`; disabled run skipped controller without startup crash. |
 | cyber-war-01 | [ ] | [ ] | |
 | disco-ball-01 | [ ] | [ ] | |
 | grand-finale-01 | [ ] | [ ] | |
@@ -364,7 +364,7 @@ Track both enabled and disabled behavior for each drop-in.
 | postfx-01 | [ ] | [ ] | |
 | projectm-01 | [ ] | [ ] | |
 | sims-01 | [ ] | [ ] | |
-| streaming-01 | [ ] | [ ] | |
+| streaming-01 | [x] | [x] | Temp-config startups: enabled run logged `RTMP streamer loaded (enabled=True auto_start=False)`; default disabled run logged `enabled=False auto_start=False`. |
 | textures-01 | [ ] | [ ] | |
 | tron-grid-01 | [ ] | [ ] | |
 | unicorn-tears-01 | [ ] | [ ] | |
