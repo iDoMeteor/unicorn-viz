@@ -309,30 +309,80 @@ frames synchronously from the final screen output.
 ## MIDI Control
 
 Unicorn Viz listens on the first available MIDI input port (or the port
-matching the `device` substring in `config.toml`).
+matching the `device` substring in `config.toml`).  The `M` key opens a
+live device selector — use **↑/↓** to navigate and **Enter** to hot-swap the
+active port without restarting.
 
-### Default CC mapping
+### Built-in presets
 
-| CC  | Parameter        | Effect                   |
-|-----|------------------|--------------------------|
-| 74  | `speed`          | Animation rate           |
-| 71  | `intensity`      | Effect-specific intensity|
-| 91  | `glow`           | Phosphor glow (ANSI)     |
-| 93  | `crt`            | CRT barrel distortion     |
-| 7   | `volume`         | (reserved)               |
+Select a preset in `config.toml` under `[midi] preset = "..."`.
 
-### Default Note mapping (channel 1)
+| Preset                | Targets                              |
+|-----------------------|--------------------------------------|
+| `akai_mpk_mini`       | Akai MPK Mini MK2/MK3 (default)     |
+| `novation_launchcontrol` | Novation LaunchControl XL         |
+| `generic`             | Generic USB keyboard (C4–A4 layout) |
+| `""`                  | No preset — hardcoded defaults only |
 
-| Note | Name | Action        |
-|------|------|---------------|
-| C4 (60) | —  | Next effect   |
-| D4 (62) | —  | Prev effect   |
-| F4 (65) | —  | Random mode   |
-| G4 (67) | —  | Pause         |
-| A4 (69) | —  | Fullscreen    |
+### Akai MPK Mini default mapping
 
-Tested with the Novation LaunchControl XL and a generic USB MIDI keyboard.
-Any class-compliant USB MIDI device should work.
+**Knobs (K1–K8 = CC 70–77)**
+
+| Knob | CC | Parameter         |
+|------|----|-------------------|
+| K1   | 70 | `speed`           |
+| K2   | 71 | `intensity`       |
+| K3   | 72 | `zoom`            |
+| K4   | 73 | `reactivity`      |
+| K5   | 74 | `glow`            |
+| K6   | 75 | `crt`             |
+| K7   | 76 | *(reserved)*      |
+| K8   | 77 | *(reserved)*      |
+
+**Pads — Bank A (notes 36–43 / C2–G2)**
+
+| Pad | Note | Action        |
+|-----|------|---------------|
+| 1   | 36   | Next effect   |
+| 2   | 37   | Prev effect   |
+| 3   | 38   | Random mode   |
+| 4   | 39   | Pause / resume |
+| 5   | 40   | Fullscreen    |
+| 6   | 41   | ANSI art      |
+| 7   | 42   | Audio Spectrum |
+| 8   | 43   | *(reserved)*  |
+
+**Pads — Bank B (notes 44–51 / G#2–D#3)** — unmapped by default; add
+overrides in `[midi.note_map]` as needed.
+
+### Per-device config overrides
+
+Individual CC and note assignments can be overridden without changing the
+preset.  In `config.toml`:
+
+```toml
+[midi]
+device = "akai"           # port name substring; empty = disabled
+preset = "akai_mpk_mini"  # built-in preset name (see above)
+
+[midi.cc_map]
+70 = "speed"
+71 = "reactivity"
+72 = "zoom"
+
+[midi.note_map]
+36 = "next"
+37 = "prev"
+38 = "random"
+39 = "pause"
+44 = "fullscreen"
+```
+
+Keys are raw CC/note numbers.  The override layer is applied on top of the
+preset so you only need to list the values you want to change.
+
+Tested with the Akai MPK Mini MK2/MK3, the Novation LaunchControl XL, and a
+generic USB MIDI keyboard.  Any class-compliant USB MIDI device should work.
 
 ---
 
@@ -368,7 +418,12 @@ fft_bands      = 512
 buffer_seconds = 10.0
 
 [midi]
-device = ""             # empty = disabled, or name substring
+device = "akai"           # empty = disabled, or name substring
+preset = "akai_mpk_mini"  # akai_mpk_mini | novation_launchcontrol | generic | ""
+# [midi.cc_map]   # uncomment to override individual CCs
+# 70 = "speed"
+# [midi.note_map] # uncomment to override individual notes
+# 36 = "next"
 
 [logging]
 level = "INFO"

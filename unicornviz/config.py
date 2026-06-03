@@ -35,7 +35,6 @@ _DEFAULTS: dict[str, Any] = {
         "display_index": 0,
         "display_mode": "single",
         "exclude_display_indices": [],
-        "keyboard_grab": True,
     },
     "demo": {
         "mode": "sequential",
@@ -48,13 +47,24 @@ _DEFAULTS: dict[str, Any] = {
         "device": "",
         "fft_bands": 512,
         "buffer_seconds": 10.0,  # Large buffer for GPU rendering stalls and resolution flexibility
+        "profile": "house",
         "reactivity": 1.0,
         "latency": "high",
+        "start_timeout_s": 4.0,
+        "start_retries": 2,
+        "start_retry_backoff_s": 0.5,
+        "auto_fallback_enabled": True,
+        "fallback_rms_threshold": 0.0015,
+        "fallback_silence_seconds": 6.0,
+        "fallback_cooldown_seconds": 8.0,
         "silence_rms_floor": 0.0060,
         "silence_rms_span": 0.045,
     },
     "midi": {
         "device": "",
+        "preset": "",    # named preset: "akai_mpk_mini" | "novation_launchcontrol" | "generic" | ""
+        "cc_map": {},    # per-CC overrides: {CC_number: param_name} — applied after preset
+        "note_map": {},  # per-note overrides: {note_number: action_name} — applied after preset
     },
     "ansi": {
         "ansi_dir_auto": "assets/ansi",

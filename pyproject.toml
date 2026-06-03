@@ -18,9 +18,20 @@ dependencies = [
     "Pillow>=10.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
 [project.scripts]
 unicorn-viz = "unicornviz.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["unicornviz*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-ra"

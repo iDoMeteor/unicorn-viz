@@ -557,7 +557,29 @@ Avoid `discard` in performance-critical per-pixel paths; use alpha blending.
 
 ## Test Strategy
 
-The project does not yet have a `tests/` directory.  Recommended approach:
+The project uses pytest with a baseline suite under `tests/`.
+
+Current baseline coverage includes:
+
+- audio fallback state-machine behavior (`tests/test_audio_capture_fallback.py`)
+- VJ API safety when optional PostFX drop-in is absent (`tests/test_vj_api_postfx.py`)
+- audio startup/fallback defaults (`tests/test_config_audio_defaults.py`)
+
+Run all tests:
+
+```bash
+/home/jj/Repos/unicorn-viz/.venv/bin/python -m pytest
+```
+
+Run one module:
+
+```bash
+/home/jj/Repos/unicorn-viz/.venv/bin/python -m pytest tests/test_audio_capture_fallback.py
+```
+
+Detailed workflow and policy are in [Testing Guide](testing.md).
+
+Recommended expansion approach:
 
 ### Unit tests (headless)
 

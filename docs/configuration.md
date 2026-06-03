@@ -66,8 +66,18 @@ Aliases:
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
 | `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal` |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
+| `start_timeout_s` | float | `4.0` | Per-attempt timeout for audio startup during app launch. |
+| `start_retries` | int | `2` | Number of additional launch-time audio startup retries after the initial attempt. |
+| `start_retry_backoff_s` | float | `0.5` | Delay between launch-time audio startup retries. |
+| `auto_fallback_enabled` | bool | `true` | Enable/disable mid-session automatic source fallback when capture appears silent. |
+| `fallback_rms_threshold` | float | `0.0015` | Capture RMS level considered silent for source-fallback decisions. |
+| `fallback_silence_seconds` | float | `6.0` | Continuous silence duration required before switching to a fallback source. |
+| `fallback_cooldown_seconds` | float | `8.0` | Minimum delay between automatic fallback attempts. |
 | `silence_rms_floor` | float | `0.0060` | RMS floor below which input is treated as silent (raise if b/m/t moves with no music) |
 | `silence_rms_span`  | float | `0.045`  | RMS range above the floor over which the spectrum scales 0→1 |
+
+Notes:
+- Audio is mandatory at startup. If all configured startup attempts fail, Unicorn Viz exits instead of running without audio.
 
 ---
 

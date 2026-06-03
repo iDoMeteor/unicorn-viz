@@ -1,8 +1,8 @@
 # Hotkey Architecture Refactor Plan
 
 Owner: Effects Team
-Status: ready for implementation
-Last updated: 2026-06-01
+Status: superseded in part
+Last updated: 2026-06-03
 
 ---
 
@@ -11,20 +11,17 @@ Last updated: 2026-06-01
 Two related bugs were diagnosed on 2026-06-01 via keystroke and app logs:
 
 1. **Ctrl+Alt+J not toggling Auto VJ** — Wayland compositor was intercepting the
-   keypress after the first few successful fires. `Left Ctrl` and `Left Alt` arrived
-   in SDL but `J` was silently eaten by the compositor.
-   **Fixed:** `SDL_SetWindowKeyboardGrab(SDL_TRUE)` added in `app.py` immediately
-   after window creation (commit `1cdd0dd`). This activates the Wayland
-   `zwp_keyboard_shortcuts_inhibit_manager_v1` protocol for the window surface,
-   instructing the compositor to stop intercepting shortcuts. No-op on X11.
+    keypress after the first few successful fires. `Left Ctrl` and `Left Alt` arrived
+    in SDL but `J` was silently eaten by the compositor.
+    Historical note: this document originally proposed/used SDL keyboard grab as a
+    workaround. That runtime path was intentionally removed on 2026-06-03.
 
 2. **Ctrl+N/P/R not changing ProjectM presets** — Two sub-causes:
-   a. Same Wayland interception (fixed by the keyboard grab above).
+    a. Same Wayland interception (previously mitigated by keyboard grab; now removed).
    b. ProjectM loaded with `0 preset(s)` because `preset_dir` was not configured —
       `next_preset()` returns `None` silently with no user feedback.
 
-The keyboard grab fix resolves the interception for all combos app-wide. The
-architectural refactor below is the follow-on work to enforce the rule that
+The architectural refactor below is the follow-on work to enforce the rule that
 **drop-in hotkeys must be registered by the drop-in, not hard-coded in core**.
 
 ---

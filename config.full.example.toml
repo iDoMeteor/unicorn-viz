@@ -12,8 +12,6 @@ title = "Unicorn Viz"
 display_mode = "single"      # single | span_all | mirror_all
 display_index = 0             # raw SDL display index used by single mode
 exclude_display_indices = []  # raw SDL display indices ignored only by span_all / mirror_all
-# keyboard_grab = true   # Wayland only: inhibit compositor Ctrl+Alt+* interception (no effect on X11)
-#                        # Set false if you want compositor shortcuts (Super, Ctrl+Alt+T, etc.) while focused
 
 [demo]
 # "sequential" or "random"
@@ -523,11 +521,12 @@ zoom = 1.0
 # projectm_preset_pingpong_max_swaps = 10
 
 # ── Post-FX ping-pong (raver only, layered) ──────────────────────────────────
-# Parallel oscillator that bounces between two curated post-FX slots every N
-# beats.  Runs simultaneously with effect/preset ping-pong.
+# Accelerating oscillator: fires slot A at full natural duration, then B as A
+# concludes, each subsequent swap shorter by decay factor until min_interval is
+# reached, then finale plays the last slot at full duration and exits.
+# Runs simultaneously with effect/preset ping-pong.
 #
 # postfx_pingpong_enabled = true
-# postfx_pingpong_beats = 4
-# postfx_pingpong_min_swaps = 6
-# postfx_pingpong_max_swaps = 14
+# postfx_pingpong_decay = 0.68           # per-swap multiplier; lower = faster
+# postfx_pingpong_min_interval_s = 0.12  # floor (s) — finale fires at this point
 # postfx_pingpong_trigger_chance = 0.40
