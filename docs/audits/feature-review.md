@@ -30,6 +30,12 @@ Session log:
 - New P0/P1/P2: P1 candidate display-mode alignment/menu-placement issues on Fedora 44 multi-monitor layout; P2 candidate help scaling at 3840x2160 @ 200%; P2 candidate hotkey/help text cleanup for tweakables/audio/Spotify grouping
 - Notes: Operator-confirmed broad hotkey coverage with targeted follow-up items captured in section notes below.
 
+- Date: 2026-06-03
+- Reviewer: Copilot
+- Scope covered today: Display-mode/menu alignment hardening (primary-centered overlays and splash), mirror logical-canvas sync, topology-change geometry reapply, recording continuity on resize/topology changes
+- New P0/P1/P2: P1 display-mode/menu-placement candidate resolved in code path; no new P0 found in automated validation
+- Notes: Local regression suite remains green after changes (26 passed); operator runtime validation still required for final signoff.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -169,10 +175,12 @@ Notes:
 
 Notes:
 
-- 2026-06-03: Overall status `Not done`.
-- 2026-06-03: Fedora 44 still feels buggy when switching display modes back and forth.
-- 2026-06-03: Splash/startup behavior in mirror mode and span/mirror alignment is off for the current monitor layout (two small monitors above one large display).
-- 2026-06-03: Menus still appear in inconvenient positions in span/mirror modes.
+- 2026-06-03: Overall status `Engineering pass complete`.
+- 2026-06-03: Primary-centered placement landed for overlays/menus in `span_all` and `mirror_all`.
+- 2026-06-03: Splash now targets primary viewport in multi-display modes.
+- 2026-06-03: Mirror logical canvas sizing now follows primary active layout; topology-change rebuild reapplies geometry/state.
+- 2026-06-03: Active recording now rotates across resize/topology dimension changes to preserve continuity.
+- 2026-06-03: Final status remains `Pending owner runtime validation` on Fedora 44 monitor topology.
 
 ---
 
@@ -193,11 +201,10 @@ Notes:
 
 ## 8) Drop-in Help Sections (Runtime Alphabetical)
 
-2026-06-03 block status: `Not done`.
+2026-06-03 block status: `In progress`.
 
 - Spotify auth still needs work.
 - Control Room still not working on Fedora 44.
-- Multi-head help is missing the `Shift+` span-all entry.
 - Multi-head help now shows `Shift+X` for span-all.
 - Sims / Images / Videos are not fully testable on this machine because assets are missing.
 - Streaming still needs later verification.

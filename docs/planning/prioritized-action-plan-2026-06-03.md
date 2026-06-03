@@ -4,6 +4,19 @@ Owner: Engineering
 Status: active
 Last updated: 2026-06-03
 
+## Progress Update (2026-06-03)
+
+- Completed since plan creation:
+   - Display-mode alignment hardening for primary-centered overlays/menus/splash in `span_all` and `mirror_all`.
+   - Mirror logical-canvas sizing and topology-change geometry/state reapply sync.
+   - Recording continuity improvement on resize/topology dimension changes (segment rotation instead of silent stop).
+   - Multi-head help entry correction (`Shift+X` for span-all).
+   - Hotkey/help cleanup for removed alternate binds and stale labels.
+- Verification snapshot:
+   - `pytest -q`: 26 passed, 1 warning.
+- Still required for closure:
+   - Owner runtime validation pass on Fedora 44 mixed-size layout for final Display Modes signoff.
+
 ## Purpose
 
 Consolidate outstanding work from audit reports, debug handoffs, and planning docs
@@ -52,6 +65,8 @@ into one execution order that can be worked down without reopening every source 
    - explicit documented fallback behavior when no viable source remains
 
 2. Close any remaining hotkey crash-path risk and sync stale P0 audit docs.
+   Status:
+   - In progress on 2026-06-03 (core keypath/help-label cleanup landed; stale 2026-06-01 audit truth-sync still pending)
    Why:
    - old P0 hotkey/regression docs are now partially stale relative to landed fixes
    Scope:
@@ -74,6 +89,8 @@ into one execution order that can be worked down without reopening every source 
 ## P1 Workstream (Beta readiness)
 
 4. Execute and complete the full feature-review matrix.
+   Status:
+   - In progress on 2026-06-03 (Help/Basics/Playback/Tweakables/Audio+Visual/Camera covered; Display Modes engineering fixes landed, owner runtime signoff pending)
    Why:
    - feature review checklist is still largely unchecked and is the practical release gate
    Scope:
@@ -156,6 +173,12 @@ into one execution order that can be worked down without reopening every source 
 8. P2.8 repo hygiene cleanup
 9. P2.9 docs pipeline stage-1 rollout
 10. P3 backlog execution
+
+## Next Items (Current)
+
+1. P0.2: truth-sync stale 2026-06-01 hotkey/system audit docs to current HEAD and close any remaining crash-path ambiguity.
+2. P0.3: close/reclassify Fedora prep open items F44-03/F44-04/F44-06 with explicit beta policy.
+3. P1.4: continue feature-review execution after owner validates Display Modes runtime behavior on target Fedora layout.
 
 ## Suggested operating cadence
 
