@@ -453,6 +453,9 @@ class Overlays:
         self._show_help = False
         self._show_audio = False
         self._show_midi = False
+        self._midi_ports: list[str] = []
+        self._midi_current_port: str = ''
+        self._midi_selected_idx: int = 0   # 0 = "None (disable)"
         self._help_timer: float = 0.0
         self._hud_timer: float = 0.0
         self._flash_text: str = ""
@@ -1253,6 +1256,96 @@ void main() {
             # dark underlay behind help
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
+
+        if self._show_midi:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
+            self._render_midi_selector()
+
+    # ------------------------------------------------------------------
+    # MIDI device selector
+    # ------------------------------------------------------------------
+
+    def set_midi_ports(self, ports: list[str], current_port: str) -> None:
+        """Populate the MIDI selector port list before opening the overlay."""
+        self._midi_ports = list(ports)
+        self._midi_current_port = current_port
+        # Pre-select the currently active port (offset +1 because index 0 = None)
+        self._midi_selected_idx = 0
+        for i, p in enumerate(self._midi_ports):
+            if p == current_port:
+                self._midi_selected_idx = i + 1
+                break
+
+    def move_midi_selection(self, delta: int) -> None:
+        """Move the MIDI selector cursor by delta rows (wraps)."""
+        total = len(self._midi_ports) + 1   # +1 for the "None" entry
+        self._midi_selected_idx = (self._midi_selected_idx + delta) % total
+
+    def get_midi_selected_port(self) -> str:
+        """Return the port name currently highlighted ('' = None / disable)."""
+        if self._midi_selected_idx == 0:
+            return ''
+        idx = self._midi_selected_idx - 1
+        if idx < len(self._midi_ports):
+            return self._midi_ports[idx]
+        return ''
+
+    def _render_midi_selector(self) -> None:
+        """Draw the MIDI device selector modal."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.8)
+
+        W = float(self._width)
+        H = float(self._height)
+        row_h = 38.0
+        n_rows = len(self._midi_ports) + 1   # +1 for None entry
+        panel_w = min(W * 0.62, 780.0)
+        panel_h = 80.0 + n_rows * row_h + 56.0
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+
+        # Panel background
+        self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
+        # Neon border
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(px,               py,               panel_w, bw,       c_border)
+        self._draw_rect(px,               py + panel_h - bw, panel_w, bw,     c_border)
+        self._draw_rect(px,               py,               bw,       panel_h, c_border)
+        self._draw_rect(px + panel_w - bw, py,              bw,       panel_h, c_border)
+
+        # Title
+        self._draw_text('MIDI DEVICE SELECT', px + 18, py + 14, scale=3.5,
+                        color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
+
+        # Current device status line
+        status = f'Active: {self._midi_current_port}' if self._midi_current_port else 'Active: none'
+        self._draw_text(status, px + 18, py + 48, scale=2.2,
+                        color=(0.5, 0.8, 0.5, 0.85))
+
+        # Port rows
+        entries = ['(none — disable MIDI)'] + self._midi_ports
+        for i, name in enumerate(entries):
+            ry = py + 80.0 + i * row_h
+            is_sel = i == self._midi_selected_idx
+            is_active = (i == 0 and not self._midi_current_port) or (
+                i > 0 and self._midi_ports[i - 1] == self._midi_current_port
+            )
+
+            if is_sel:
+                self._draw_rect(px + 8, ry - 2, panel_w - 16, row_h - 4,
+                                (0.10, 0.25, 0.55, 0.85))
+                self._draw_text(f'> {name}', px + 22, ry + 5, scale=2.8,
+                                color=(1.0, 0.92, 0.2, 1.0))
+            else:
+                label_color = (0.3, 0.9, 0.3, 0.9) if is_active else (0.7, 0.8, 1.0, 0.75)
+                self._draw_text(f'  {name}', px + 22, ry + 5, scale=2.8,
+                                color=label_color)
+
+        # Instructions footer
+        fy = py + panel_h - 40.0
+        self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
+                        px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
 
     def _render_help(self) -> None:
         t  = self._hud_t

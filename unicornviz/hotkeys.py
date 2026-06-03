@@ -41,26 +41,32 @@ class HotkeyHandler:
         a = self._app
         p = self._playlist
         o = self._overlays
-        if event.type == "note_on":
+        if event.type == 'note_on':
             action = a.midi_action_for_note(event.number)
-            if action == "next":
+            if action == 'next':
                 self.handle(sdl2.SDLK_n, 0)
-            elif action == "prev":
+            elif action == 'prev':
                 self.handle(sdl2.SDLK_p, 0)
-            elif action == "random":
+            elif action == 'random':
                 self.handle(sdl2.SDLK_r, 0)
-            elif action == "pause":
+            elif action == 'pause':
                 self.handle(sdl2.SDLK_SPACE, 0)
-            elif action == "fullscreen":
+            elif action == 'fullscreen':
                 self.handle(sdl2.SDLK_f, 0)
-        elif event.type == "cc":
+            elif action == 'audio_toggle':
+                self.handle(sdl2.SDLK_e, 0)
+            elif action == 'eq':
+                self.handle(sdl2.SDLK_e, 0)
+            elif action == 'ansi':
+                self.handle(sdl2.SDLK_a, 0)
+        elif event.type == 'cc':
             effect = a.current_effect
             if effect is not None:
                 param = a.midi_param_for_cc(event.number)
                 if param and param in effect.parameters:
                     lo, hi = 0.1, 4.0
                     effect.parameters[param] = lo + event.value * (hi - lo)
-                    o.flash_message(f"MIDI {param}: {effect.parameters[param]:.2f}", 1.0)
+                    o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
 
     def handle(self, sym: int, mod: int) -> None:
         a = self._app
@@ -263,6 +269,23 @@ class HotkeyHandler:
                 o.flash_message('Help: collapsed all sections', 1.2)
                 return
 
+        # MIDI selector navigation — active when the MIDI device picker is open.
+        if o.midi_selector_visible:
+            o.note_help_activity()
+            if sym in (sdl2.SDLK_UP, sdl2.SDLK_LEFT):
+                o.move_midi_selection(-1)
+                return
+            elif sym in (sdl2.SDLK_DOWN, sdl2.SDLK_RIGHT):
+                o.move_midi_selection(1)
+                return
+            elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                port = o.get_midi_selected_port()
+                msg = a.select_midi_device(port)
+                o.toggle_midi_selector()
+                o.flash_message(msg, 2.5)
+                return
+            # Any other key falls through to ESC check below.
+
         if sym == sdl2.SDLK_ESCAPE:
             # ESC closes the currently-open menu first; only exits when no menu is open.
             if getattr(o, 'help_visible', False):
@@ -367,7 +390,13 @@ class HotkeyHandler:
                 o.flash_message("ACiD: Art", 2.0)
 
         elif sym == sdl2.SDLK_m:
-            o.toggle_midi_selector()
+            if o.midi_selector_visible:
+                o.toggle_midi_selector()
+            else:
+                ports = a.get_midi_ports()
+                current = a._midi_manager.port_name if a._midi_manager is not None else ''  # noqa: SLF001
+                o.set_midi_ports(ports, current)
+                o.toggle_midi_selector()
 
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect
