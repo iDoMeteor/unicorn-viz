@@ -313,7 +313,7 @@ Notes:
 - [x] Startup in single mode
 - [x] Startup in span_all mode
 - [x] Startup in mirror_all mode
-- [ ] Excluded display indices config behaves as expected
+- [x] Excluded display indices config behaves as expected
 
 ### Optional Submodule Independence
 - [ ] Missing auto-vj-01 degrades gracefully
@@ -330,6 +330,7 @@ Notes:
 - 2026-06-03: Remaining startup matrix rows still require explicit runtime toggles/mode permutations.
 - 2026-06-03: Additional bounded startup checks succeeded for `single`, `span_all`, and `mirror_all` via CLI display-mode override; each run reached SDL/OpenGL/audio-ready state before timeout.
 - 2026-06-03: Temporary-config startup checks confirmed Auto VJ disabled startup (`Phase 4 loaded (disabled)`), streamer enabled startup (`enabled=True auto_start=False`), and control-room enabled startup (`scheduled` then `loaded from drop-in`).
+- 2026-06-03: Multi-index exclusion validated with temporary configs: `exclude_display_indices = [0, 1]` produced `Excluding displays from mirror_all: 0, 1` and mirror rects reduced to only the remaining display; span_all logged the same exclusion policy.
 
 ---
 
