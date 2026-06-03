@@ -737,6 +737,13 @@ class App:
             layouts = getattr(self._multihead, '_display_layouts', None)
         return list(layouts) if layouts else []
 
+    def _primary_active_layout(self) -> tuple[int, int, int, int] | None:
+        """Return the active layout treated as primary for audience rendering."""
+        layouts = self._multihead_layouts()
+        if not layouts:
+            return None
+        return max(layouts, key=lambda rect: int(rect[2]) * int(rect[3]))
+
     def _multihead_mirror_layout(self, origin_x: int, origin_y: int) -> list[tuple[int, int, int, int]]:
         """Return per-display rects in window-local coords, with fallback."""
         fn = getattr(self._multihead, 'mirror_layout', None)
@@ -775,10 +782,10 @@ class App:
             return None
         if self._window is None:
             return None
-        layouts = self._multihead_layouts()
-        if layouts:
+        primary_layout = self._primary_active_layout()
+        if primary_layout is not None:
             # Resolve "primary" deterministically as the largest active output.
-            px, py, pw, ph = max(layouts, key=lambda rect: int(rect[2]) * int(rect[3]))
+            px, py, pw, ph = primary_layout
         else:
             bounds = self._display_bounds(self._display_index)
             if bounds is None:
@@ -987,10 +994,10 @@ class App:
             x_pos, y_pos, win_w, win_h = self._all_display_bounds()
             # Logical canvas: prefer first display's dimensions for crisp 1:1
             # blits when displays share resolution. Falls back to configured size.
-            layouts = self._multihead_layouts()
-            if layouts:
-                logical_w = layouts[0][2]
-                logical_h = layouts[0][3]
+            primary_layout = self._primary_active_layout()
+            if primary_layout is not None:
+                logical_w = primary_layout[2]
+                logical_h = primary_layout[3]
             self._width = logical_w
             self._height = logical_h
             self._window_width = win_w
@@ -3363,12 +3370,12 @@ void main() {
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
         if self._display_mode == 'mirror_all':
-            # Switch logical canvas to first display's resolution and rebuild
+            # Switch logical canvas to primary display's resolution and rebuild
             # mirror viewport rects against the new window origin.
-            layouts = self._multihead_layouts()
-            if layouts:
-                self._width = layouts[0][2]
-                self._height = layouts[0][3]
+            primary_layout = self._primary_active_layout()
+            if primary_layout is not None:
+                self._width = primary_layout[2]
+                self._height = primary_layout[3]
             self._window_width = w_i.value or self._window_width
             self._window_height = h_i.value or self._window_height
             self._mirror_rects = self._multihead_mirror_layout(
