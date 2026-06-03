@@ -228,12 +228,14 @@ class _NullPostFxController:
     """Safe fallback when post-fx drop-in is unavailable."""
 
     enabled = False
+    active_slot = 0
 
     def __init__(self, ctx: moderngl.Context, width: int, height: int, cfg: dict | None = None) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
         self._cfg = cfg or {}
+        self._slot_hit_duration: dict[int, float] = {}
 
     @property
     def is_hue_active(self) -> bool:
@@ -267,6 +269,12 @@ class _NullPostFxController:
 
     def clear_scroll_fx(self) -> None:
         return
+
+    def clear_active_slot(self) -> None:
+        return
+
+    def friend_pairs(self) -> list[tuple[int, int]]:
+        return []
 
     def apply(
         self,
@@ -1004,20 +1012,6 @@ class App:
                 f"SDL_GL_CreateContext failed: {sdl2.SDL_GetError().decode()}"
             )
         sdl2.SDL_GL_SetSwapInterval(1)  # vsync
-
-        # On Wayland, the compositor intercepts Ctrl+Alt+<key> combos before SDL
-        # sees them.  Requesting a keyboard grab activates
-        # zwp_keyboard_shortcuts_inhibit_manager_v1 so those combos reach us.
-        # Only done on Wayland (X11 has no such interception and needs no grab).
-        # Disable via `keyboard_grab = false` in [window] if you prefer to keep
-        # compositor shortcuts active at the cost of losing Ctrl+Alt+* hotkeys.
-        _video_driver = sdl2.SDL_GetCurrentVideoDriver().decode().lower()
-        _grab_enabled = bool(self.cfg.get('window', 'keyboard_grab', default=True))
-        if _video_driver == 'wayland' and _grab_enabled:
-            sdl2.SDL_SetWindowKeyboardGrab(self._window, sdl2.SDL_TRUE)
-            log.info('Keyboard grab active (Wayland): compositor shortcuts inhibited')
-        elif _video_driver == 'wayland':
-            log.info('Keyboard grab disabled by config; Ctrl+Alt+* may be intercepted by compositor')
 
         self._set_cursor_visible(self._show_cursor_default)
 
@@ -1790,8 +1784,44 @@ void main() {
         self._init_moderngl()
 
         # Subsystems (audio starts before splash so splash can react to music)
+        log.info('Startup: initializing audio subsystem')
         audio_manager = AudioManager(self.cfg)
-        audio_manager.start()
+        audio_start_timeout_s = float(self.cfg.get('audio', 'start_timeout_s', default=4.0))
+        audio_start_retries = int(self.cfg.get('audio', 'start_retries', default=2))
+        audio_start_backoff_s = float(
+            self.cfg.get('audio', 'start_retry_backoff_s', default=0.5)
+        )
+        if audio_start_retries < 0:
+            audio_start_retries = 0
+        total_audio_attempts = audio_start_retries + 1
+        for attempt in range(1, total_audio_attempts + 1):
+            log.info(
+                'Startup: audio attempt %d/%d (timeout=%.2fs)',
+                attempt,
+                total_audio_attempts,
+                audio_start_timeout_s,
+            )
+            try:
+                audio_manager.start(timeout_s=audio_start_timeout_s)
+                log.info('Startup: audio subsystem ready')
+                break
+            except Exception as exc:
+                log.error(
+                    'Startup: audio attempt %d/%d failed: %s',
+                    attempt,
+                    total_audio_attempts,
+                    exc,
+                )
+                try:
+                    audio_manager.stop()
+                except Exception:
+                    log.debug('Startup: audio cleanup failed after attempt %d', attempt)
+                if attempt >= total_audio_attempts:
+                    raise RuntimeError(
+                        f'Audio startup failed after {total_audio_attempts} attempts'
+                    ) from exc
+                if audio_start_backoff_s > 0:
+                    time.sleep(audio_start_backoff_s)
         self._audio_manager = audio_manager
 
         # Kick off background image decoding so disk I/O overlaps with the splash.
@@ -1809,6 +1839,7 @@ void main() {
         splash_path = str(resolve_path(self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")))
         splash_duration_audio = _SPLASH_TOTAL_DURATION
         splash_duration_silent = _SPLASH_TOTAL_DURATION
+        log.info('Startup: entering splash setup (path=%s)', splash_path)
         if Path(splash_path).exists():
             from unicornviz.splash import Splash
 
@@ -1846,8 +1877,19 @@ void main() {
         # presenting black frames to mirror outputs.
         self._create_mirror_outputs()
 
-        midi_device_hint = self.cfg.get("midi", "device", default="")
-        midi_manager = MidiManager(device_hint=midi_device_hint)
+        midi_device_hint = self.cfg.get('midi', 'device', default='')
+        midi_preset = self.cfg.get('midi', 'preset', default='')
+        _raw_cc = self.cfg.get('midi', 'cc_map', default={}) or {}
+        _raw_note = self.cfg.get('midi', 'note_map', default={}) or {}
+        # TOML bare-key integers arrive as strings; convert to int.
+        midi_cc_override = {int(k): v for k, v in _raw_cc.items()} if _raw_cc else None
+        midi_note_override = {int(k): v for k, v in _raw_note.items()} if _raw_note else None
+        midi_manager = MidiManager(
+            device_hint=midi_device_hint,
+            preset=midi_preset,
+            cc_map_override=midi_cc_override,
+            note_map_override=midi_note_override,
+        )
         midi_manager.start()
         self._midi_manager = midi_manager
 
@@ -3391,6 +3433,32 @@ void main() {
         if self._midi_manager is None:
             return None
         return self._midi_manager.cc_to_param(number)
+
+    def select_midi_device(self, port_name: str) -> str:
+        """
+        Hot-swap the active MIDI input port.
+
+        Passes ``port_name`` as a device hint substring to ``MidiManager.reopen()``.
+        An empty string closes the current port and disables MIDI.
+        Returns a human-readable status string for HUD display.
+        """
+        from unicornviz.midi import list_ports
+        if self._midi_manager is None:
+            return 'MIDI: subsystem unavailable'
+        ok = self._midi_manager.reopen(port_name)
+        if not port_name:
+            return 'MIDI: disabled'
+        if ok:
+            return f'MIDI: {self._midi_manager.port_name}'
+        ports = list_ports()
+        if not ports:
+            return 'MIDI: no ports found'
+        return f'MIDI: port not found ({port_name!r})'
+
+    def get_midi_ports(self) -> list[str]:
+        """Return available MIDI input port names for the device selector UI."""
+        from unicornviz.midi import list_ports
+        return list_ports()
 
     def select_postfx_slot(self, slot: int) -> str:
         """Select active post-process slot (0 disables)."""

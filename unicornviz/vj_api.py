@@ -164,7 +164,7 @@ class VJApi:
         postfx_active = False
         if app._postfx_controller is not None:  # noqa: SLF001
             postfx_active = bool(app._postfx_controller.is_active())  # noqa: SLF001
-            postfx_slot = int(app._postfx_controller.active_slot)  # noqa: SLF001
+            postfx_slot = int(getattr(app._postfx_controller, 'active_slot', 0))  # noqa: SLF001
 
         dancing_active = False
         if app._dancing_unicorn is not None:  # noqa: SLF001
@@ -537,6 +537,14 @@ class VJApi:
         """Toggle the webcam treatment auto-cycle; returns new active state."""
         return bool(self._app.toggle_webcam_auto_cycle())
 
+    def goto_prev_camera(self) -> str | None:
+        """Switch to the previous camera device; returns device label or None."""
+        return self._app.goto_prev_camera()
+
+    def goto_next_camera(self) -> str | None:
+        """Switch to the next camera device; returns device label or None."""
+        return self._app.goto_next_camera()
+
     def trigger_burst(self) -> bool:
         """Trigger a screen-burst effect (alias for trigger_screen_burst)."""
         return self.trigger_screen_burst()
@@ -564,8 +572,25 @@ class VJApi:
     def clear_postfx(self) -> bool:
         if self._app._postfx_controller is None:  # noqa: SLF001
             return False
-        self._app._postfx_controller.clear_active_slot()  # noqa: SLF001
+        clear_slot = getattr(self._app._postfx_controller, 'clear_active_slot', None)  # noqa: SLF001
+        if not callable(clear_slot):
+            return False
+        clear_slot()
         return True
+
+    def postfx_slot_duration(self, slot: int) -> float:
+        """Return the configured display duration (seconds) for a post-FX slot.
+
+        Returns 1.0 when the post-FX controller is unavailable or the slot is
+        not found.
+        """
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is not None:
+                return float(pc._slot_hit_duration.get(int(slot), 1.0))  # noqa: SLF001
+        except Exception:
+            pass
+        return 1.0
 
     def postfx_friend_pairs(self) -> list[tuple[int, int]]:
         """Return post-FX friend pairs for ping-pong use.
