@@ -27,6 +27,7 @@ This is the canonical map for project documentation.
 - Audit reports and review snapshots: [docs/audits](audits)
   - Full system audit (2026-06-01): [docs/audits/2026-06-01-system-audit.md](audits/2026-06-01-system-audit.md)
   - Hotkey refactor P0 hotfix brief (2026-06-01): [docs/audits/2026-06-01-hotkey-refactor-regressions.md](audits/2026-06-01-hotkey-refactor-regressions.md)
+  - 24-hour committed-work regression audit (2026-06-03): [docs/audits/2026-06-03-24h-regression-audit.md](audits/2026-06-03-24h-regression-audit.md)
 - Historical/superseded notes: [docs/archive](archive)
 
 ## Documentation SOP

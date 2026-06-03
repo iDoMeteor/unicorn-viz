@@ -10,6 +10,8 @@ This folder contains the canonical marketing and launch materials for Unicorn Vi
 
 - [Launch Marketing Strategy](launch-marketing-strategy.md)
 - [June Launch Calendar](june-launch-calendar-2026.md)
+- [Launch Asset Matrix (Platform Posts, CTAs, 14-Day Prompt Bank)](launch-asset-matrix-2026-06.md)
+- [Website Funnel Structure (unicorntears.com and unicornviz.com)](website-funnel-structure.md)
 - [DJ Unicorn Tears World Premiere - Launch One-Sheet (HTML)](dj-unicorn-tears-world-premiere-one-sheet.html)
 - [DJ Unicorn Tears World Premiere - Launch One-Sheet (PDF)](dj-unicorn-tears-world-premiere-one-sheet.pdf)
 - [Creator Launch Pack (HTML)](creator-private-launch.html)

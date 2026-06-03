@@ -68,6 +68,7 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/postfx-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/postfx-01/docs/troubleshooting.md)
 - projectm-01
+  - [Planning](../drop-ins/projectm-01/docs/planning.md)
   - [Operations](../drop-ins/projectm-01/docs/operations.md)
   - [Configuration](../drop-ins/projectm-01/docs/configuration.md)
   - [Integration](../drop-ins/projectm-01/docs/integration.md)

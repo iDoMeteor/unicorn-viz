@@ -224,6 +224,7 @@ Actions:
 - Establish a predictable weekly schedule for one live set, one product piece, one editorial piece, and daily short-form.
 - Launch the next drop-in or content pack before the premiere buzz fully cools.
 - Bring in collaborators, remixes, guest sets, or creator showcases.
+- Prepare an affiliate pilot for software and premium drop-ins, including referral links, commission policy, and creator onboarding.
 - Segment email and supporter audiences by interest: music, visuals, merch, and insider access.
 - Promote case studies and creator outcomes to sell Unicorn Viz as a serious tool, not just a novelty stream backdrop.
 
@@ -240,6 +241,7 @@ Actions:
 - Free software as the top-of-funnel acquisition engine.
 - Paid drop-ins as the main digital revenue driver.
 - Fourthwall storefront as the main merch and digital bundle retail surface until custom site flows are fully mature.
+- Affiliate program for software and premium drop-ins is planned for a later rollout phase after launch stabilization.
 - Memberships split by role: Substack for editorial loyalty, Locals for live community, SubscribeStar as recurring revenue redundancy.
 - Buy Me a Coffee, PayPal, and Rumble Wallet for direct support and low-friction tipping.
 
