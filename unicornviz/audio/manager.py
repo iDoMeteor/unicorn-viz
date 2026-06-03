@@ -5,6 +5,7 @@ Also manages MIDI (stub for now, full impl in Phase 6).
 from __future__ import annotations
 
 import logging
+import threading
 
 import numpy as np
 
@@ -23,6 +24,18 @@ class AudioManager:
         fft_bands = cfg.get("audio", "fft_bands", default=512)
         buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
         latency = cfg.get("audio", "latency", default="high")
+        fallback_rms_threshold = float(
+            cfg.get('audio', 'fallback_rms_threshold', default=0.0015)
+        )
+        fallback_silence_seconds = float(
+            cfg.get('audio', 'fallback_silence_seconds', default=6.0)
+        )
+        fallback_cooldown_seconds = float(
+            cfg.get('audio', 'fallback_cooldown_seconds', default=8.0)
+        )
+        auto_fallback_enabled = bool(
+            cfg.get('audio', 'auto_fallback_enabled', default=True)
+        )
         # Silence gate thresholds (RMS).  Anything below ``silence_rms_floor``
         # is treated as no input; ``silence_rms_span`` is the RMS range above
         # the floor over which the spectrum scales 0 → 1.  Defaults are tuned
@@ -45,6 +58,10 @@ class AudioManager:
             device_hint=device_hint,
             buffer_seconds=buffer_seconds,
             latency=latency,
+            fallback_rms_threshold=fallback_rms_threshold,
+            fallback_silence_seconds=fallback_silence_seconds,
+            fallback_cooldown_seconds=fallback_cooldown_seconds,
+            auto_fallback_enabled=auto_fallback_enabled,
         )
         self._analyzer = Analyzer(
             fft_bands=fft_bands,
@@ -71,10 +88,49 @@ class AudioManager:
         target.fft[:] = source.fft
         target.waveform[:] = source.waveform
 
-    def start(self) -> None:
-        log.debug("AudioManager: starting capture")
-        self._capture.start()
-        log.debug("AudioManager: capture started, analyzer ready")
+    def start(self, timeout_s: float | None = None) -> None:
+        """Start audio capture and require an active capture source.
+
+        If ``timeout_s`` is provided and positive, capture startup runs in a
+        short-lived daemon thread so startup can fail fast instead of hanging
+        indefinitely in native audio backends.
+        """
+
+        log.debug('AudioManager: starting capture')
+
+        if timeout_s is None or timeout_s <= 0:
+            self._capture.start()
+        else:
+            start_exc: Exception | None = None
+
+            def _start_capture() -> None:
+                nonlocal start_exc
+                try:
+                    self._capture.start()
+                except Exception as exc:  # pragma: no cover - defensive only
+                    start_exc = exc
+
+            worker = threading.Thread(
+                target=_start_capture,
+                name='uv-audio-start',
+                daemon=True,
+            )
+            worker.start()
+            worker.join(timeout=float(timeout_s))
+            if worker.is_alive():
+                raise TimeoutError(
+                    f'Audio capture startup timed out after {float(timeout_s):.2f}s'
+                )
+            if start_exc is not None:
+                raise RuntimeError(f'Audio capture startup failed: {start_exc}') from start_exc
+
+        if not self._capture.active:
+            raise RuntimeError('Audio capture did not become active')
+
+        log.info(
+            'AudioManager: capture active (source=%s)',
+            self._capture.current_source_label(),
+        )
 
     def stop(self) -> None:
         self._capture.stop()

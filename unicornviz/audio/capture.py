@@ -10,6 +10,7 @@ Feeds a ring buffer consumed by the analyzer on the main thread.
 from __future__ import annotations
 
 import logging
+import subprocess
 import sys
 import threading
 import time
@@ -31,6 +32,11 @@ _BLOCK_SIZE = 1024
 _CHANNELS = 2
 _WARMUP_DURATION = 0.3  # seconds: time to let buffer stabilize after stream opens
 _STATUS_LOG_INTERVAL = 2.0
+_OPEN_DEVICE_TIMEOUT_S = 1.5  # guard against hostapi/device open hangs
+_CLOSE_STREAM_TIMEOUT_S = 1.0
+_DEFAULT_FALLBACK_RMS_THRESHOLD = 0.0015
+_DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
+_DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
 
 
 def _candidate_monitor_devices(hint: str) -> list[int | None]:
@@ -68,6 +74,18 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
         # hostapis often have 'alsa' nowhere in their name.
         return _hostapi_for(d).strip() == 'alsa'
 
+    def _is_pseudo_input(name: str) -> bool:
+        lower = name.strip().lower()
+        return any(
+            key in lower for key in (
+                'speech-dispatcher',
+                'audio-src',
+                'dummy',
+                'alsa capture [python',
+                'pipewire alsa [python',
+            )
+        )
+
     hint_lower = hint.lower()
     if hint_lower:
         matches = [
@@ -75,6 +93,7 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
             if d.get('max_input_channels', 0) >= 1
             and hint_lower in d['name'].lower()
             and not (is_linux and _is_alsa(d))
+            and not (is_linux and _is_pseudo_input(str(d.get('name', ''))))
         ]
         return matches or [None]
 
@@ -86,22 +105,37 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
         if d.get('max_input_channels', 0) < 1:
             continue
         name = d['name'].lower()
+        if is_linux and _is_pseudo_input(name):
+            continue
         if 'obs' in name:
             log.info("Audio: OBS detected: device %d (%s)", i, d['name'])
 
     # Rank candidates:
-    # 0 = WASAPI loopback (Windows)
-    # 1 = stereo mix / what-u-hear (Windows)
-    # 1 = preferred app sources (Spotify/VLC/MPV)
-    # 2 = browser app sources (often silent unless tab is active)
-    # 3 = pipewire/default input
-    # 4 = generic non-OBS monitor
+    # Linux:
+    #   0 = PipeWire/Pulse monitor sources
+    #   1 = PipeWire/Pulse default input
+    #   2 = other PipeWire/Pulse inputs
+    #   3 = preferred app sources on non-JACK hostapis
+    #   4 = browser app sources on non-JACK hostapis
+    #   5 = generic non-OBS monitor
+    #   8 = JACK sources (de-prioritized due to startup instability)
+    # Windows:
+    #   0 = WASAPI loopback
+    #   1 = stereo mix / what-u-hear
     # 99 = OBS, raw ALSA on Linux, and unknown/undesired inputs
     for i, d in enumerate(devices):
         if d.get('max_input_channels', 0) < 1:
             continue
         name = d['name'].lower()
+        if is_linux and _is_pseudo_input(name):
+            continue
         hostapi_name = _hostapi_for(d)
+        is_pipewire_like = (
+            'pipewire' in hostapi_name
+            or 'pulse' in hostapi_name
+            or 'pulseaudio' in hostapi_name
+        )
+        is_jack = hostapi_name.strip() == 'jack audio connection kit'
         rank = 99
 
         if is_linux and _is_alsa(d):
@@ -112,14 +146,28 @@ def _candidate_monitor_devices(hint: str) -> list[int | None]:
             rank = 0
         elif is_windows and any(key in name for key in ('stereo mix', 'what u hear')):
             rank = 1
-        elif any(key in name for key in ('spotify', 'vlc', 'mpv')):
+        elif is_linux and 'monitor' in name and 'obs' not in name and (
+            is_pipewire_like or 'pipewire' in name or 'pulse' in name
+        ):
+            rank = 0
+        elif is_linux and 'default' in name and is_pipewire_like:
             rank = 1
-        elif any(key in name for key in ('firefox', 'chrome', 'chromium', 'brave')):
+        elif is_linux and is_pipewire_like:
             rank = 2
-        elif 'pipewire' in name or 'default' in name:
+        elif any(key in name for key in ('spotify', 'vlc', 'mpv')) and not is_jack:
             rank = 3
-        elif 'monitor' in name and 'obs' not in name:
+        elif any(key in name for key in ('firefox', 'chrome', 'chromium', 'brave')) and not is_jack:
             rank = 4
+        elif 'monitor' in name and 'obs' not in name:
+            rank = 5
+        elif is_linux and any(
+            key in name for key in ('speech-dispatcher', 'audio-src', 'dummy')
+        ):
+            rank = 98
+        elif is_linux and is_jack and 'monitor' in name and 'obs' not in name:
+            rank = 6
+        elif is_linux and is_jack:
+            rank = 8
         elif 'obs' in name:
             rank = 99
 
@@ -144,6 +192,10 @@ class AudioCapture:
         device_hint: str = "",
         buffer_seconds: float = 2.0,
         latency: str = "high",
+        fallback_rms_threshold: float = _DEFAULT_FALLBACK_RMS_THRESHOLD,
+        fallback_silence_seconds: float = _DEFAULT_FALLBACK_SILENCE_SECONDS,
+        fallback_cooldown_seconds: float = _DEFAULT_FALLBACK_COOLDOWN_SECONDS,
+        auto_fallback_enabled: bool = True,
     ) -> None:
         self._device_hint = device_hint
         self._buffer_seconds = buffer_seconds
@@ -162,6 +214,11 @@ class AudioCapture:
         self._stream_opened_time: float = 0.0  # Track when stream opens for warmup
         self._last_status_log_time = 0.0
         self._suppressed_status_count = 0
+        self._fallback_rms_threshold = max(0.0, float(fallback_rms_threshold))
+        self._fallback_silence_seconds = max(0.25, float(fallback_silence_seconds))
+        self._fallback_cooldown_seconds = max(0.0, float(fallback_cooldown_seconds))
+        self._auto_fallback_enabled = bool(auto_fallback_enabled)
+        self._last_fallback_time = 0.0
 
     def _open_stream(self, device: int | None) -> None:
         native_rate: int = _SAMPLE_RATE
@@ -200,6 +257,7 @@ class AudioCapture:
         self._active = True
         self._silent_blocks = 0
         self._stream_opened_time = time.time()  # Start warmup timer
+        self._last_fallback_time = self._stream_opened_time
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
@@ -221,18 +279,131 @@ class AudioCapture:
             log.info('Audio capture: using default input device at %d Hz', native_rate)
         log.info('Audio capture started: %d Hz, %d ch, latency=%s', native_rate, native_channels, self._latency)
 
+    def _describe_device(self, device: int | None) -> str:
+        if device is None:
+            return 'default input'
+        try:
+            info = sd.query_devices(device)
+            return f"{device} ({info.get('name', 'unknown')})"
+        except Exception:
+            return f'{device} (unknown)'
+
+    def _probe_device_openable(self, device: int | None, timeout_s: float) -> bool:
+        """Probe whether a device can open in an isolated process.
+
+        PortAudio can deadlock in-process on some broken endpoints; probing in a
+        subprocess keeps the main process clean and lets startup skip bad devices.
+        """
+        device_expr = 'None' if device is None else str(int(device))
+        code = (
+            'import sounddevice as sd\n'
+            f'device = {device_expr}\n'
+            'try:\n'
+            '    info = sd.query_devices(kind="input") if device is None else sd.query_devices(device)\n'
+            '    rate = int(info.get("default_samplerate", 48000))\n'
+            '    channels = max(1, min(2, int(info.get("max_input_channels", 2))))\n'
+            '    stream = sd.InputStream(\n'
+            '        device=device,\n'
+            '        samplerate=rate,\n'
+            '        channels=channels,\n'
+            '        blocksize=1024,\n'
+            '        dtype="float32",\n'
+            '    )\n'
+            '    stream.start()\n'
+            '    stream.stop()\n'
+            '    stream.close()\n'
+            'except Exception:\n'
+            '    raise SystemExit(2)\n'
+            'raise SystemExit(0)\n'
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, '-c', code],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False
+        except Exception:
+            return False
+        return result.returncode == 0
+
+    def _close_stream_safely(self, stream: object | None, context: str) -> None:
+        """Close a sounddevice stream with a bounded timeout.
+
+        Some hostapi/device combinations can block indefinitely on stop/close;
+        run teardown in a daemon thread so app shutdown is never stuck.
+        """
+        if stream is None:
+            return
+
+        def _close_worker() -> None:
+            try:
+                abort = getattr(stream, 'abort', None)
+                if callable(abort):
+                    abort()
+            except Exception:
+                pass
+            try:
+                stop = getattr(stream, 'stop', None)
+                if callable(stop):
+                    stop()
+            except Exception:
+                pass
+            try:
+                close = getattr(stream, 'close', None)
+                if callable(close):
+                    close()
+            except Exception:
+                pass
+
+        worker = threading.Thread(
+            target=_close_worker,
+            name='uv-audio-close',
+            daemon=True,
+        )
+        worker.start()
+        worker.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
+        if worker.is_alive():
+            log.warning(
+                'Audio: stream close timed out after %.2fs during %s; continuing shutdown',
+                _CLOSE_STREAM_TIMEOUT_S,
+                context,
+            )
+
     def start(self) -> None:
         if not _SD_AVAILABLE:
             log.info("Audio capture disabled (sounddevice not available)")
             return
 
-        try:
-            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
-            self._candidate_index = 0
-            log.debug("Audio: candidate devices = %s", self._candidate_devices)
-            self._open_stream(self._candidate_devices[self._candidate_index])
-        except Exception as exc:
-            log.warning("Could not open audio stream: %s", exc)
+        self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+        log.debug("Audio: candidate devices = %s", self._candidate_devices)
+
+        last_exc: Exception | None = None
+        for idx, device in enumerate(self._candidate_devices):
+            self._candidate_index = idx
+            try:
+                if not self._probe_device_openable(device, timeout_s=_OPEN_DEVICE_TIMEOUT_S):
+                    raise TimeoutError(
+                        f'Audio device probe timed out/failed for '
+                        f'{self._describe_device(device)}'
+                    )
+                self._open_stream(device)
+                return
+            except Exception as exc:
+                last_exc = exc
+                log.warning(
+                    'Audio open failed for candidate %s: %s',
+                    self._describe_device(device),
+                    exc,
+                )
+
+        if last_exc is not None:
+            log.warning('Could not open any audio stream candidate: %s', last_exc)
+        else:
+            log.warning('Could not open any audio stream candidate')
 
     def _callback(
         self,
@@ -258,7 +429,7 @@ class AudioCapture:
                 self._suppressed_status_count += 1
         mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
         rms = float(np.sqrt(np.mean(mono * mono)))
-        if rms < 0.005:
+        if rms < self._fallback_rms_threshold:
             self._silent_blocks += 1
         else:
             self._silent_blocks = 0
@@ -272,26 +443,32 @@ class AudioCapture:
         
         Suppressed during warmup to avoid device switches that cause overflow.
         """
+        if not self._auto_fallback_enabled:
+            return
         if not self._is_warmed_up():
             log.debug("Audio: fallback check suppressed during warmup")
             return
         if self._device_hint or len(self._candidate_devices) <= 1:
             return
+        now = time.time()
+        if self._fallback_cooldown_seconds > 0.0:
+            if now - self._last_fallback_time < self._fallback_cooldown_seconds:
+                return
         silent_time = self._silent_blocks * (_BLOCK_SIZE / max(self._sample_rate, 1))
-        if silent_time < 0.8:
+        if silent_time < self._fallback_silence_seconds:
             return
         if self._candidate_index + 1 >= len(self._candidate_devices):
             log.debug("Audio: silent for %.2fs but no more fallback candidates", silent_time)
             return
         log.debug("Audio: silent for %.2fs, attempting fallback (current=%d)", silent_time, self._candidate_index)
 
-        current = self._candidate_devices[self._candidate_index]
-        self._candidate_index += 1
-        nxt = self._candidate_devices[self._candidate_index]
+        current_idx = self._candidate_index
+        current = self._candidate_devices[current_idx]
+        next_idx = current_idx + 1
+        nxt = self._candidate_devices[next_idx]
         try:
             if self._stream is not None:
-                self._stream.stop()
-                self._stream.close()
+                self._close_stream_safely(self._stream, context='audio fallback')
                 self._stream = None
             current_name = sd.query_devices(current)['name'] if current is not None else 'None'
             next_name = sd.query_devices(nxt)['name'] if nxt is not None else 'default'
@@ -300,8 +477,20 @@ class AudioCapture:
                 current_name, nxt if nxt is not None else -1, next_name,
             )
             self._open_stream(nxt)
+            self._candidate_index = next_idx
+            self._last_fallback_time = time.time()
         except Exception as exc:
             log.warning('Audio fallback failed: %s', exc)
+            # Attempt to recover the prior source so we do not report active
+            # capture while no stream exists.
+            try:
+                log.info('Audio: restoring previous source %s after fallback failure', self._describe_device(current))
+                self._open_stream(current)
+                self._candidate_index = current_idx
+            except Exception as restore_exc:
+                log.warning('Audio restore after fallback failure also failed: %s', restore_exc)
+                self._stream = None
+                self._active = False
 
     def _is_warmed_up(self) -> bool:
         """Check if stream has had enough time to stabilize after opening."""
@@ -330,8 +519,7 @@ class AudioCapture:
 
     def stop(self) -> None:
         if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
+            self._close_stream_safely(self._stream, context='shutdown')
             self._stream = None
         self._active = False
 
