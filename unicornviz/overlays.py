@@ -400,9 +400,8 @@ class Overlays:
             'Audio + Visual',
             [
                 ('e', 'EQ / spectrum'),
-                ('a', 'ACiD art'),
-                ('A', 'Own ANSI art'),
-                ('Ctrl+A', 'Audio source'),
+                ('a / A', 'Audio source selector menu'),
+                ('Ctrl+Shift+A / Ctrl+A', 'Audio source selector menu (alternate)'),
                 ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
                 ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
                 ('Ctrl+Alt+C', 'Toggle Candy Frame neon border overlay'),
@@ -453,6 +452,9 @@ class Overlays:
         self._show_help = False
         self._show_audio = False
         self._show_midi = False
+        self._audio_sources: list[str] = []
+        self._audio_current_idx: int = 0
+        self._audio_selected_idx: int = 0
         self._midi_ports: list[str] = []
         self._midi_current_port: str = ''
         self._midi_selected_idx: int = 0   # 0 = "None (disable)"
@@ -1257,9 +1259,87 @@ void main() {
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
 
+        if self._show_audio:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
+            self._render_audio_selector()
+
         if self._show_midi:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_midi_selector()
+
+    # ------------------------------------------------------------------
+    # Audio source selector
+    # ------------------------------------------------------------------
+
+    def set_audio_sources(self, sources: list[str], current_index: int) -> None:
+        """Populate the audio selector source list before opening the overlay."""
+        self._audio_sources = list(sources)
+        total = max(1, len(self._audio_sources))
+        idx = max(0, min(int(current_index), total - 1))
+        self._audio_current_idx = idx
+        self._audio_selected_idx = idx
+
+    def move_audio_selection(self, delta: int) -> None:
+        """Move the audio selector cursor by delta rows (wraps)."""
+        total = max(1, len(self._audio_sources))
+        self._audio_selected_idx = (self._audio_selected_idx + delta) % total
+
+    def get_audio_selected_index(self) -> int:
+        """Return the source index currently highlighted in selector."""
+        if not self._audio_sources:
+            return 0
+        return max(0, min(self._audio_selected_idx, len(self._audio_sources) - 1))
+
+    def _render_audio_selector(self) -> None:
+        """Draw the audio source selector modal."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.8)
+
+        W = float(self._width)
+        H = float(self._height)
+        row_h = 38.0
+        n_rows = max(1, len(self._audio_sources))
+        panel_w = min(W * 0.62, 860.0)
+        panel_h = 80.0 + n_rows * row_h + 56.0
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(px, py, panel_w, bw, c_border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
+        self._draw_rect(px, py, bw, panel_h, c_border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+
+        self._draw_text('AUDIO SOURCE SELECT', px + 18, py + 14, scale=3.5,
+                        color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
+
+        active_name = 'none'
+        if self._audio_sources and 0 <= self._audio_current_idx < len(self._audio_sources):
+            active_name = self._audio_sources[self._audio_current_idx]
+        self._draw_text(f'Active: {active_name}', px + 18, py + 48, scale=2.2,
+                        color=(0.5, 0.8, 0.5, 0.85))
+
+        entries = self._audio_sources if self._audio_sources else ['(no sources available)']
+        for i, name in enumerate(entries):
+            ry = py + 80.0 + i * row_h
+            is_sel = i == self._audio_selected_idx
+            is_active = i == self._audio_current_idx
+
+            if is_sel:
+                self._draw_rect(px + 8, ry - 2, panel_w - 16, row_h - 4,
+                                (0.10, 0.25, 0.55, 0.85))
+                self._draw_text(f'> {name}', px + 22, ry + 5, scale=2.8,
+                                color=(1.0, 0.92, 0.2, 1.0))
+            else:
+                label_color = (0.3, 0.9, 0.3, 0.9) if is_active else (0.7, 0.8, 1.0, 0.75)
+                self._draw_text(f'  {name}', px + 22, ry + 5, scale=2.8,
+                                color=label_color)
+
+        fy = py + panel_h - 40.0
+        self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
+                        px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
 
     # ------------------------------------------------------------------
     # MIDI device selector

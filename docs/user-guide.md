@@ -156,10 +156,11 @@ python -m unicornviz --help
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
-| `a`               | ACiD art                                                      |
-| `Shift+A`         | ANSI own art                                                  |
-| `Ctrl+A`          | Audio device selector                                         |
+| `A` / `Shift+A`   | Open audio source selector menu                               |
+| `Ctrl+Shift+A` / `Ctrl+A` | Open audio source selector menu (alternate)          |
 | `Alt+A` / `Alt+Shift+A` | Cycle audio profile (next / prev)                    |
+
+Note: the prior ANSI art shortcuts on the A family are temporarily disabled and will be reassigned to a non-conflicting key group.
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
@@ -258,7 +259,7 @@ These controls only take effect while the **Webcam Overlay** drop-in effect is a
 | `V`               | Toggle video recording on / off                               |
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
-| `A`               | Audio device selector                                         |
+| `A` / `Shift+A`   | Open audio source selector menu                               |
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |

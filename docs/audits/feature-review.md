@@ -118,9 +118,9 @@ Notes:
 ## 5) Audio + Visual
 
 - [ ] e jump to EQ/Audio Spectrum
-- [ ] a jump to ACiD art
-- [ ] A jump to own ANSI art
-- [ ] Ctrl+A audio source selector
+- [ ] A / Shift+A open audio source selector menu
+- [ ] Ctrl+Shift+A / Ctrl+A open audio source selector menu (alternate)
+- [ ] ANSI A-family shortcuts intentionally disabled pending remap plan
 - [ ] Alt+A / Alt+Shift+A BPM profile next/prev
 - [ ] Ctrl+Alt+1..9 / 0 Post FX quick-hit trigger
 - [ ] Mouse wheel hue-shift frame works and expires on idle timer

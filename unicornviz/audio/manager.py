@@ -153,6 +153,22 @@ class AudioManager:
         """Return a user-facing label for the active audio input source."""
         return self._capture.current_source_label()
 
+    def list_sources(self) -> list[str]:
+        """Return candidate capture sources for selector UI."""
+        return self._capture.source_labels()
+
+    def get_source_index(self) -> int:
+        """Return currently selected source index in candidate list."""
+        return self._capture.current_source_index()
+
+    def select_source(self, index: int) -> str:
+        """Select capture source by candidate index and return active label."""
+        return self._capture.select_source(index)
+
+    def cycle_source(self, delta: int) -> str:
+        """Cycle to another capture source and return active source label."""
+        return self._capture.cycle_source(delta)
+
     def get_raw_input_rms(self) -> float:
         """Return the last raw input RMS measured by the analyzer.
 

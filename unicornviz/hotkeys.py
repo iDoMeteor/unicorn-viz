@@ -270,6 +270,23 @@ class HotkeyHandler:
                 return
 
         # MIDI selector navigation — active when the MIDI device picker is open.
+        if o.audio_selector_visible:
+            o.note_help_activity()
+            if sym in (sdl2.SDLK_UP, sdl2.SDLK_LEFT):
+                o.move_audio_selection(-1)
+                return
+            elif sym in (sdl2.SDLK_DOWN, sdl2.SDLK_RIGHT):
+                o.move_audio_selection(1)
+                return
+            elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                source_idx = o.get_audio_selected_index()
+                msg = a.select_audio_source(source_idx)
+                o.toggle_audio_selector()
+                o.flash_message(msg, 2.5)
+                return
+            # Any other key falls through to ESC check below.
+
+        # MIDI selector navigation — active when the MIDI device picker is open.
         if o.midi_selector_visible:
             o.note_help_activity()
             if sym in (sdl2.SDLK_UP, sdl2.SDLK_LEFT):
@@ -373,21 +390,24 @@ class HotkeyHandler:
                 next_profile = self._audio.set_profile(profiles[next_idx])
                 o.flash_message(f'BPM Profile: {next_profile.name}', 1.2)
                 log.info('Audio profile changed: %s → %s', current_profile.name, next_profile.name)
-            elif mod & sdl2.KMOD_CTRL:
-                # Ctrl+A — audio source selector
+            elif (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
+                # Ctrl+Shift+A — alternate audio source selector menu key.
+                sources = a.get_audio_sources()
+                current_idx = a.get_audio_source_index()
+                o.set_audio_sources(sources, current_idx)
                 o.toggle_audio_selector()
-            elif mod & sdl2.KMOD_SHIFT:
-                # Shift+A — our own ANSI art
-                ansi_dir = str(resolve_path(self._app.cfg.get("ansi", "ansi_own_dir",
-                                                               default="assets/ansi")))
-                a.goto_ansi(ansi_dir)
-                o.flash_message("ANSI: Own art", 2.0)
+            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+A — alternate audio source selector menu key.
+                sources = a.get_audio_sources()
+                current_idx = a.get_audio_source_index()
+                o.set_audio_sources(sources, current_idx)
+                o.toggle_audio_selector()
             else:
-                # a — ACiD art
-                acid_dir = str(resolve_path(self._app.cfg.get("ansi", "ansi_acid_dir",
-                                                               default="assets/ansi/acid")))
-                a.goto_ansi(acid_dir)
-                o.flash_message("ACiD: Art", 2.0)
+                # A-family default — open audio source selector menu.
+                sources = a.get_audio_sources()
+                current_idx = a.get_audio_source_index()
+                o.set_audio_sources(sources, current_idx)
+                o.toggle_audio_selector()
 
         elif sym == sdl2.SDLK_m:
             if o.midi_selector_visible:

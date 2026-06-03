@@ -552,3 +552,80 @@ class AudioCapture:
             return name or f'device {device}'
         except Exception:
             return f'device {device}'
+
+    def source_labels(self) -> list[str]:
+        """Return ordered candidate source labels for selector UI."""
+        if not _SD_AVAILABLE:
+            return ['disabled']
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_index = 0
+        labels: list[str] = []
+        for device in self._candidate_devices:
+            labels.append(self._describe_device(device))
+        return labels
+
+    def current_source_index(self) -> int:
+        """Return index of currently selected candidate device."""
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_index = 0
+        if not self._candidate_devices:
+            return 0
+        return max(0, min(self._candidate_index, len(self._candidate_devices) - 1))
+
+    def _switch_to_candidate_index(self, target_idx: int) -> str:
+        """Switch capture stream to a specific candidate index."""
+        if not _SD_AVAILABLE:
+            return 'disabled'
+        if not self._active:
+            return 'inactive'
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_index = 0
+        if not self._candidate_devices:
+            return self.current_source_label()
+
+        bounded_idx = max(0, min(int(target_idx), len(self._candidate_devices) - 1))
+        current_idx = self._candidate_index
+        if bounded_idx == current_idx:
+            return self.current_source_label()
+
+        current_device = self._candidate_devices[current_idx]
+        target_device = self._candidate_devices[bounded_idx]
+        try:
+            if self._stream is not None:
+                self._close_stream_safely(self._stream, context='operator source select')
+                self._stream = None
+            self._open_stream(target_device)
+            self._candidate_index = bounded_idx
+            self._last_fallback_time = time.time()
+            return self.current_source_label()
+        except Exception as exc:
+            log.warning('Audio source select failed: %s', exc)
+            try:
+                self._open_stream(current_device)
+                self._candidate_index = current_idx
+            except Exception as restore_exc:
+                log.warning('Audio source restore failed after select error: %s', restore_exc)
+                self._stream = None
+                self._active = False
+            return self.current_source_label()
+
+    def select_source(self, index: int) -> str:
+        """Select a specific capture source by candidate index."""
+        return self._switch_to_candidate_index(index)
+
+    def cycle_source(self, delta: int) -> str:
+        """Switch to another candidate input source and return its label.
+
+        This is an operator-triggered source switch used by live hotkeys.
+        """
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(self._device_hint)
+            self._candidate_index = 0
+        if len(self._candidate_devices) <= 1:
+            return self.current_source_label()
+        step = -1 if int(delta) < 0 else 1
+        target_idx = (self.current_source_index() + step) % len(self._candidate_devices)
+        return self._switch_to_candidate_index(target_idx)

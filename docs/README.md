@@ -22,6 +22,7 @@ This is the canonical map for project documentation.
 - Auto VJ training protocol: [docs/planning/auto-vj-training-pack-protocol.md](planning/auto-vj-training-pack-protocol.md)
 - Hotkey architecture refactor: [docs/planning/hotkey-architecture-refactor.md](planning/hotkey-architecture-refactor.md)
 - Hotkey cross-platform conflict remap plan (2026-06-03): [docs/planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md](planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md)
+- Prioritized action plan (2026-06-03): [docs/planning/prioritized-action-plan-2026-06-03.md](planning/prioritized-action-plan-2026-06-03.md)
 - Debug and handoff notes: [docs/debug](debug)
 - Audit reports and review snapshots: [docs/audits](audits)
   - Full system audit (2026-06-01): [docs/audits/2026-06-01-system-audit.md](audits/2026-06-01-system-audit.md)

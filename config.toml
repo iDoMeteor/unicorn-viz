@@ -1,7 +1,7 @@
 [window]
 fullscreen = true
 show_cursor = false
-display_mode  = "single"   # single | span_all | mirror_all
+display_mode  = "mirror_all"   # single | span_all | mirror_all
 display_index  = 0
 #exclude_display_indices = [0]   # raw SDL display indices ignored only by span_all / mirror_all
 
@@ -47,7 +47,7 @@ preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_m
 # 57 = "prev"
 
 [dropins]
-exclude = "sims-01,images-01,videos-01"
+exclude = "none"
 
 [recording]
 auto_record = false
@@ -449,14 +449,10 @@ start_preset = ""
 # projectm_preset_pingpong_min_swaps / max_swaps — Budget range.
 #
 # Post-FX ping-pong (raver only, layered on top of effect/preset ping-pong):
-# postfx_pingpong_enabled         — Enable the accelerating postfx oscillator.
-# postfx_pingpong_decay           — Per-swap interval multiplier (0..1); lower=faster
-#                                   acceleration. Default 0.68 (raver). Each swap's
-#                                   hold time = previous × decay, floored at min_interval.
-# postfx_pingpong_min_interval_s  — Floor interval (seconds) at which the finale fires.
-#                                   The finale lets the last slot play its full natural
-#                                   duration, then the sequence exits.
-# postfx_pingpong_trigger_chance  — Probability of starting a run each check.
+# postfx_pingpong_enabled         — Enable the parallel postfx oscillator.
+# postfx_pingpong_beats           — Beats between post-FX slot swaps.
+# postfx_pingpong_min_swaps / max_swaps — Budget range per run.
+# postfx_pingpong_trigger_chance  — Probability of starting a run on beat.
 #
 # Example (add inside your [auto_vj] block):
 #   [auto_vj]

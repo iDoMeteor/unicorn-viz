@@ -1,9 +1,7 @@
 name: Compatibility Matrix
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   linux-matrix:

@@ -577,6 +577,13 @@ Run one module:
 /home/jj/Repos/unicorn-viz/.venv/bin/python -m pytest tests/test_audio_capture_fallback.py
 ```
 
+Install pre-commit hooks (pytest runs before every commit):
+
+```bash
+/home/jj/Repos/unicorn-viz/.venv/bin/python -m pip install pre-commit
+/home/jj/Repos/unicorn-viz/.venv/bin/pre-commit install
+```
+
 Detailed workflow and policy are in [Testing Guide](testing.md).
 
 Recommended expansion approach:
@@ -610,11 +617,10 @@ effect.render()
 ctx.release()
 ```
 
-### CI
+### Commit Gate
 
-Recommended CI matrix (GitHub Actions):
-- `ubuntu-latest` with `libgl1-mesa-dri` (software renderer for GL tests)
-- `windows-latest` for basic import smoke tests (no GL)
+Test gate is enforced via local pre-commit hooks in this repository.
+Use `pre-commit run --all-files` to run the same checks on demand.
 
 ---
 

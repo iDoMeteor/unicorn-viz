@@ -3460,6 +3460,24 @@ void main() {
         from unicornviz.midi import list_ports
         return list_ports()
 
+    def get_audio_sources(self) -> list[str]:
+        """Return available audio capture sources for selector UI."""
+        return self._audio_manager.list_sources()
+
+    def get_audio_source_index(self) -> int:
+        """Return currently selected audio source index for selector UI."""
+        return self._audio_manager.get_source_index()
+
+    def select_audio_source(self, index: int) -> str:
+        """Select a specific audio source by index and return a HUD message."""
+        label = self._audio_manager.select_source(index)
+        return f'Audio source: {label}'
+
+    def cycle_audio_source(self, delta: int) -> str:
+        """Cycle active audio capture source and return a HUD message."""
+        label = self._audio_manager.cycle_source(delta)
+        return f'Audio source: {label}'
+
     def select_postfx_slot(self, slot: int) -> str:
         """Select active post-process slot (0 disables)."""
         if self._postfx_controller is None:
