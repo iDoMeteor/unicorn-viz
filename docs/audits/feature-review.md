@@ -321,12 +321,12 @@ Notes:
 - [x] Excluded display indices config behaves as expected
 
 ### Optional Submodule Independence
-- [ ] Missing auto-vj-01 degrades gracefully
+- [x] Missing auto-vj-01 degrades gracefully
 - [ ] Missing multi-head-01 degrades gracefully
 - [ ] Missing webcam-01 degrades gracefully
-- [ ] Missing streaming-01 degrades gracefully
+- [x] Missing streaming-01 degrades gracefully
 - [ ] Missing postfx-01 degrades gracefully
-- [ ] Missing control-room-01 degrades gracefully
+- [x] Missing control-room-01 degrades gracefully
 - [ ] Missing grand-finale-01 degrades gracefully
 
 Notes:
@@ -336,6 +336,9 @@ Notes:
 - 2026-06-03: Additional bounded startup checks succeeded for `single`, `span_all`, and `mirror_all` via CLI display-mode override; each run reached SDL/OpenGL/audio-ready state before timeout.
 - 2026-06-03: Temporary-config startup checks confirmed Auto VJ disabled startup (`Phase 4 loaded (disabled)`), streamer enabled startup (`enabled=True auto_start=False`), and control-room enabled startup (`scheduled` then `loaded from drop-in`).
 - 2026-06-03: Multi-index exclusion validated with temporary configs: `exclude_display_indices = [0, 1]` produced `Excluding displays from mirror_all: 0, 1` and mirror rects reduced to only the remaining display; span_all logged the same exclusion policy.
+- 2026-06-03: Missing `auto-vj-01` runtime check (temporary directory hide, debug startup) logged `AutoVJController not available: Drop-in file not found .../drop-ins/auto-vj-01/auto_vj.py` while startup continued to `GrandFinaleController loaded` and `RTMP streamer loaded`.
+- 2026-06-03: Missing `streaming-01` runtime check logged `RTMP streamer unavailable: Drop-in file not found .../drop-ins/streaming-01/rtmp_streamer.py` with no startup crash.
+- 2026-06-03: Missing `control-room-01` runtime check (with temporary config forcing `[control_room].enabled = true`) logged `ControlRoomController not available: Drop-in file not found .../drop-ins/control-room-01/control_room.py` after scheduled startup frames, with no startup crash.
 
 ---
 
