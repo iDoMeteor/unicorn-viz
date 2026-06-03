@@ -39,3 +39,26 @@ def test_vj_api_clear_postfx_returns_false_when_method_missing() -> None:
     app._postfx_controller = _ControllerWithoutClear()
 
     assert app.vj_api.clear_postfx() is False
+
+
+def test_vj_api_camera_navigation_delegates_to_webcam_system() -> None:
+    class _FakeWebcamSystem:
+        def next_camera(self) -> str:
+            return '/dev/video2'
+
+        def prev_camera(self) -> str:
+            return '/dev/video1'
+
+    app = App(_default_cfg())
+    app._webcam_system = _FakeWebcamSystem()
+
+    assert app.vj_api.goto_next_camera() == '/dev/video2'
+    assert app.vj_api.goto_prev_camera() == '/dev/video1'
+
+
+def test_vj_api_camera_navigation_safe_when_webcam_unavailable() -> None:
+    app = App(_default_cfg())
+    app._webcam_system = None
+
+    assert app.vj_api.goto_next_camera() is None
+    assert app.vj_api.goto_prev_camera() is None

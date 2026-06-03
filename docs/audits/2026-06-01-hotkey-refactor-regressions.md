@@ -1,8 +1,8 @@
 # Hotkey Refactor — P0 Regression Hotfix Brief (2026-06-01)
 
 Owner: Auto VJ team + Effects team + Core
-Status: action required — blocks demo/tag
-Last updated: 2026-06-01
+Status: mostly resolved — P0 crash/dead-subsystem items closed; follow-ups remain
+Last updated: 2026-06-03
 
 This is the actionable companion to
 `docs/audits/2026-06-01-system-audit.md`. It isolates the two showstopper
@@ -10,11 +10,28 @@ regressions introduced by the in-flight hotkey-architecture refactor
 (`docs/planning/hotkey-architecture-refactor.md`) so the owning teams can ship a
 hotfix without reading the full audit.
 
-Both regressions share a root cause: drop-in `handle_key()` methods were added,
+Both regressions shared a root cause: drop-in `handle_key()` methods were added,
 but (a) one overwrote an existing method definition, and (b) one calls
 `VJApi` methods that don't exist / have the wrong signature. Neither is caught
 at import time, and the key-dispatch path has no exception isolation, so they
 surface as a **hard crash or a silently dead subsystem at runtime**.
+
+## 2026-06-03 Truth-Sync
+
+Resolution state:
+
+- P0-1 resolved: `_profile_value` exists again in
+    `drop-ins/auto-vj-01/auto_vj.py` and Auto VJ initializes.
+- P0-2 resolved: `unicornviz/vj_api.py` now exposes `show_splash()` and
+    `find_effect(..., display_name: str | None = None)`; unicorn-tears U-key
+    paths no longer hard-crash.
+- Dispatch hardening resolved: `unicornviz/hotkeys.py` wraps drop-in handlers
+    in `try/except` and unregisters failing handlers.
+
+Remaining non-P0 follow-up from this brief:
+
+- Unicorn Tears `HELP_ENTRIES` text still needs alignment with runtime mapping
+    (`U` splash replay, `Shift+U` jump to effect).
 
 ---
 

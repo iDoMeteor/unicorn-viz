@@ -1,89 +1,130 @@
-# Unicorn Tears June Launch Calendar
+# DJ Unicorn Tears World Premiere Countdown Calendar
 
 Owner: Studio Marketing
-Status: draft
-Last updated: 2026-05-24
+Status: active
+Last updated: 2026-06-03
 
-## Scope
+## How To Use This Calendar
 
-Launch begins on 2026-06-01 and the public premiere target is always Rumble.
-This calendar is the first-pass operating schedule for the launch month.
+This is the operating calendar for the world premiere campaign. Replace `D`
+with the actual first day of the six-day livestream run.
 
-## Weekly Cadence
+- `D-30` through `D-1`: pre-release countdown.
+- `D1` through `D6`: live world-premiere event.
+- `D+1` through `D+60`: post-release momentum and conversion window.
 
-- Rumble remains the premiere platform target for all flagship live moments.
-- YouTube, Spotify, X, Odysee, Brighteon, Twitch, and Kick support discoverability.
-- Community/membership channels (Patreon, Substack, SubscribeStar, Locals) support conversion.
-- Merch and digital product calls-to-action should rotate across the month but never replace the premiere CTA.
+Each day should have one hero CTA only. Secondary links can exist on the
+landing pages, not in the post itself.
 
-## June 1-7: Launch Week
+## Countdown Operating Rhythm
 
-| Date | Focus | Primary Output | CTA |
+### D-30 to D-24: foundation week
+
+| Day | Focus | Primary output | CTA |
 |---|---|---|---|
-| Jun 1 | Launch day | Premiere announcement + hero art + countdown video | Join the Rumble premiere |
-| Jun 2 | Creator social proof | Creator teaser cuts + behind-the-scenes stills | Follow, share, pre-save |
-| Jun 3 | Free download push | Free starter pack reveal | Download the free bundle |
-| Jun 4 | Premium preview | Premium drop-in showcase and demo clips | Upgrade to premium drops |
-| Jun 5 | Merch reveal | Posters / hoodies / apparel capsule preview | Join the merch waitlist |
-| Jun 6 | Live rehearsal | Short rehearsal clip + set prep post | RSVP for premiere stream |
-| Jun 7 | Premiere day | Live premiere on Rumble | Watch live on Rumble |
+| D-30 | Campaign reveal | Hero announcement post, key art, countdown page live | Join the countdown |
+| D-29 | Identity proof | Theme song teaser with visual flashes | Follow DJ Unicorn Tears |
+| D-28 | Product framing | What Unicorn Viz is and why it matters | Visit the official site |
+| D-27 | Community opening | Substack welcome note and Locals intro post | Join the mailing list |
+| D-26 | Builder story | Behind-the-scenes clip from setup or rehearsal | Share the post |
+| D-25 | Cause message | Animal-support mission post with clean branding | Support the launch |
+| D-24 | Trailer beat | Short countdown trailer cut | Set stream reminders |
 
-## June 8-14: Amplification Week
+### D-23 to D-17: intrigue week
 
-| Date | Focus | Primary Output | CTA |
+| Day | Focus | Primary output | CTA |
 |---|---|---|---|
-| Jun 8 | Replay clip | Best moment clip + reaction cut | Subscribe and follow |
-| Jun 9 | Artist story | DJ Unicorn Tears origin / identity post | Join mailing list |
-| Jun 10 | Product education | How premium drop-ins work | View the store |
-| Jun 11 | Community builder | Poll / Q&A / live comment response | Comment and share |
-| Jun 12 | Music push | Spotify/YouTube link post | Save the track |
-| Jun 13 | Merch push | Hoodie / poster product spotlight | Buy the capsule |
-| Jun 14 | Live set teaser | Mini live set or studio teaser | Tune in next week |
+| D-23 | Visual tease | High-energy short clip of unreleased visuals | Follow for the reveal |
+| D-22 | Artist voice | DJ Unicorn Tears direct-to-camera or text post | Join the countdown |
+| D-21 | Tool proof | Unicorn Viz demo clip from a signature effect | Download the waitlist pack |
+| D-20 | Creator outreach | Creator-facing post or private outreach packet send | Request creator access |
+| D-19 | Social proof | Quote cards, comments, or early reactions | Share and tag a friend |
+| D-18 | Audio identity | Stream intro reel or sonic branding preview | Save the date |
+| D-17 | Platform sync | Cross-platform event listing pass | Pick your watch platform |
 
-## June 15-21: Conversion Week
+### D-16 to D-10: offer week
 
-| Date | Focus | Primary Output | CTA |
+| Day | Focus | Primary output | CTA |
 |---|---|---|---|
-| Jun 15 | Free-to-paid bridge | Free download + premium comparison | Upgrade now |
-| Jun 16 | Creator outreach | Invite creator pack preview | Request creator access |
-| Jun 17 | Affiliate spotlight | Explain creator affiliate links | Join the affiliate program |
-| Jun 18 | Rumble clip | High-energy premiere cut | Watch the replay on Rumble |
-| Jun 19 | Merch reminder | Limited stock reminder | Purchase before sold out |
-| Jun 20 | Membership pitch | Patreon/Substack/Locals value post | Join membership |
-| Jun 21 | Community livestream | Short live Q&A or DJ clip | Ask questions live |
+| D-16 | Free offer | Explain free core software and free starter pack | Join the free download list |
+| D-15 | Premium offer | Tease premium drop-ins and launch bundles | Join the premium waitlist |
+| D-14 | Merch teaser | Premiere merch preview image or motion cut | Join the merch waitlist |
+| D-13 | Workflow proof | Clip showing live performance or VJ control | Watch the demo |
+| D-12 | Story post | Substack post on vision, scene roots, and future plans | Subscribe for updates |
+| D-11 | Supporter rail | Explain memberships and direct support options | Join the supporter tier |
+| D-10 | Reminder cut | Countdown clip with all key destinations | RSVP for live week |
 
-## June 22-30: Momentum Week
+### D-9 to D-3: escalation week
 
-| Date | Focus | Primary Output | CTA |
+| Day | Focus | Primary output | CTA |
 |---|---|---|---|
-| Jun 22 | Best-of montage | Premiere highlights reel | Share the montage |
-| Jun 23 | Premium feature | Specific premium drop-in featurette | Buy premium drops |
-| Jun 24 | Artist collab tease | Partner / remix teaser | Follow for the next drop |
-| Jun 25 | Platform expansion | Cross-post strategy update | Follow on your favorite platform |
-| Jun 26 | Community proof | Fan comments / creator reactions | Join the audience |
-| Jun 27 | Merch restock note | Restock or final call post | Order the merch |
-| Jun 28 | Broadcast reminder | Rumble replay push | Watch on Rumble |
-| Jun 29 | Email capture push | Newsletter / substack signup | Join the mailing list |
-| Jun 30 | Month-end recap | Launch recap + next-month teaser | Stay tuned |
+| D-9 | Schedule reveal | Publish the six-day run-of-show graphic | Save the schedule |
+| D-8 | Platform post | Watch options across YouTube, Twitch, Kick, Rumble, and official sites | Pick your platform |
+| D-7 | Product spotlight | Signature drop-in or official pack showcase | Wishlist the paid drop |
+| D-6 | Music spotlight | Theme song or remix-linked promo | Follow on Spotify |
+| D-5 | Community activation | Poll, Q&A prompt, or comments call-out | Reply and share |
+| D-4 | Creator reminder | Creator toolkit resend and outreach follow-up | Book coverage or reaction |
+| D-3 | Final teaser | Highest-energy trailer cut before live week | Turn on reminders |
 
-## Content Rules
+### D-2 to D-1: launch lock
 
-- Keep the premiere CTA visible in almost every post.
-- Make public posts high-energy, rave-forward, and visually loud.
-- Keep creator-only messaging separate from public marketing copy.
-- Use the term `premium drop-ins` in creator materials and store copy.
-- Use `Rumble` as the premiere destination in public launch language.
+| Day | Focus | Primary output | CTA |
+|---|---|---|---|
+| D-2 | Founder message | Personal written note or video about the premiere | Be there live |
+| D-1 | Final countdown | Day-by-day stream card plus final teaser | Show up tomorrow |
 
-## Assets Needed Before June 1
+## Six-Day Live Run
 
-- Final hero art set
-- Premiere trailer
-- Creator pack PDF
-- Public marketing PDF
-- Storefront and checkout flow
-- Affiliate link landing pages
-- Email capture and pre-save links
-- Merch mockups and product pages
+| Day | Theme | Primary output | CTA |
+|---|---|---|---|
+| D1 | Opening ceremony | Full launch stream and hero clips | Follow everywhere |
+| D2 | Free core spotlight | Stream focused on free Unicorn Viz entry point | Download free core |
+| D3 | Community night | Interactive session, Q&A, fan prompts | Join Substack or Locals |
+| D4 | Premium drop-ins | Showcase stream for paid expansions | Buy the premium bundle |
+| D5 | Remix and culture | Music-led set and artist identity push | Follow on Spotify |
+| D6 | Grand finale | Biggest set, recap, and next-wave teaser | Join the supporter tier |
+
+## Post-Release Operating Rhythm
+
+### D+1 to D+14: replay and conversion
+
+| Window | Focus | Primary outputs | CTA |
+|---|---|---|---|
+| D+1 to D+3 | Rapid replay | Best moments clips, replay links, thank-you posts | Watch the replay |
+| D+4 to D+7 | Product bridge | Free download push, premium comparisons, merch reminders | Upgrade or download |
+| D+8 to D+14 | Social proof | Testimonials, community screenshots, performance recap | Join the next wave |
+
+### D+15 to D+30: cadence lock-in
+
+| Week | Focus | Primary outputs | CTA |
+|---|---|---|---|
+| Week 3 | Tutorial and proof | Product walkthrough, builder post, feature demo | Try Unicorn Viz |
+| Week 4 | Next offer | New drop-in or bundle announcement, community hangout | Buy or subscribe |
+
+### D+31 to D+60: retention and expansion
+
+| Week | Focus | Primary outputs | CTA |
+|---|---|---|---|
+| Week 5 | Collabs and remixes | Guest feature, remix clip, creator spotlight | Follow the collab trail |
+| Week 6 | Merch or supporter push | Restock, supporter-only content, direct support reminder | Support the project |
+| Week 7 | Audience feedback | Survey, Q&A, comment mining | Tell us what you want next |
+| Week 8 | Next tentpole setup | Recap plus tease of next event or drop | Stay locked in |
+
+## Weekly Production Checklist
+
+- Schedule one hero long-form asset.
+- Produce at least five short clips from that week's material.
+- Queue one Substack post and one Locals-specific touchpoint.
+- Refresh the official home page hero section with the current CTA.
+- Export analytics snapshots twice per week.
+
+## Daily Launch Ops Checklist
+
+- Confirm stream title, description, thumbnails, and destination links.
+- Confirm store links and checkout paths are live.
+- Confirm moderator coverage and clip capture assignments.
+- Confirm the donation and animal-support message is present on landing pages.
+- Post the replay or highlight within 12 hours when possible.
 
 ## Related Docs
 

@@ -3817,6 +3817,18 @@ void main() {
             return None
         return self._webcam_system.prev_treatment()
 
+    def goto_next_camera(self) -> str | None:
+        """Switch to the next camera device. Returns device label or None."""
+        if self._webcam_system is None:
+            return None
+        return self._webcam_system.next_camera()
+
+    def goto_prev_camera(self) -> str | None:
+        """Switch to the previous camera device. Returns device label or None."""
+        if self._webcam_system is None:
+            return None
+        return self._webcam_system.prev_camera()
+
     def toggle_webcam_auto_cycle(self) -> bool:
         """Toggle auto-cycling camera treatments. Returns the new on/off state."""
         if self._webcam_system is None:

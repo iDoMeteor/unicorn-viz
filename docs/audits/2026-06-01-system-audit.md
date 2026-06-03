@@ -1,8 +1,8 @@
 # Unicorn Viz — Full System Audit (2026-06-01)
 
 Owner: Engineering
-Status: active — findings open, awaiting team execution
-Last updated: 2026-06-01
+Status: active — partially resolved; remaining findings tracked below
+Last updated: 2026-06-03
 
 Scope: Whole-system consistency, latent bugs / side-effects, and optimization
 opportunities, captured *during* the in-flight Fedora 44 compatibility pass and
@@ -43,6 +43,34 @@ Each finding has: **ID**, **Severity**, **Owner team**, **Evidence**
 | A-09 | 🟡 | core/app.py | `app.py` is 3,710 lines — monolith concentrating most runtime state | Core |
 | A-10 | 🔵 | core/dropins | `abs(hash(str(path)))` module naming is fragile; prefer stable derived names | Core |
 | A-11 | 🔵 | core/hotkeys | `Shift+U` no longer flashes effect name (minor UX regression) | Effects |
+
+## 2026-06-03 Truth-Sync Snapshot
+
+Closed since initial audit:
+
+- A-01 closed: `AutoVJController._profile_value` restored in
+  `drop-ins/auto-vj-01/auto_vj.py`.
+- A-02 closed: `VJApi.show_splash()` shim added and `find_effect` supports
+  optional display name in `unicornviz/vj_api.py`; unicorn-tears keypath no
+  longer crashes.
+- A-03 closed: drop-in key dispatch in `unicornviz/hotkeys.py` now isolates
+  handler exceptions and unregisters failing handlers.
+- A-08 closed: pytest baseline and configuration are present (`tests/` plus
+  `pyproject.toml` pytest settings).
+- A-11 closed: `Shift+U` now returns effect name for flash/banner behavior.
+
+Still open / not fully closed:
+
+- A-04 open: drop-in modules are still loaded via per-call `exec_module` and
+  hashed synthetic names in `unicornviz/dropins.py`.
+- A-05 open: core still reads private `auto_vj_controller._ctrlj_armed` in
+  `unicornviz/hotkeys.py`.
+- A-06 open: tracked `build/lib/**` shadow tree still present (51 files).
+- A-07 open: Unicorn Tears `HELP_ENTRIES` still labels plain `U` as effect
+  jump while runtime behavior maps plain `U` to splash replay and `Shift+U` to
+  effect jump.
+- A-09 open: `unicornviz/app.py` remains monolithic.
+- A-10 open: hashed module naming remains in drop-in loader path.
 
 ---
 
