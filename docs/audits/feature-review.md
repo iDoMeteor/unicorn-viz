@@ -228,12 +228,13 @@ Notes:
 2026-06-03 block status: `In progress`.
 
 - Spotify auth still needs work.
-- Control Room still not working on Fedora 44.
+- Control Room startup path is now loading on Fedora 44; interactive window-focus/toggle validation is still pending.
 - Multi-head help now shows `Shift+X` for span-all.
 - Sims / Images / Videos are not fully testable on this machine because assets are missing.
-- Streaming still needs later verification.
+- Streaming hotkey surface is present (`F8`, `Ctrl+F9/F10/F11`); live endpoint verification still pending.
 - Unicorn Tears hotkeys were reported good.
 - Auto VJ HUD disabled-state labels now explicitly show OFF semantics (mode/mood off, action timer hidden) after runtime toggle.
+- ProjectM preset hotkey surface is present (`Ctrl+N`, `Ctrl+P`, `Ctrl+R`) and fallback label path is implemented (`projectM unavailable`).
 
 ### Auto VJ
 - [ ] Ctrl+Alt+J toggle Auto VJ
@@ -297,6 +298,10 @@ Notes:
 - [ ] U jump to Unicorn Tears effect
 
 Notes:
+
+- 2026-06-03: Code-level verification confirms key-handler mappings exist for Auto VJ, Control Room, Streaming, and Unicorn Tears controllers.
+- 2026-06-03: ProjectM effect exposes next/prev/random preset methods and a graceful fallback mode when libprojectM is unavailable.
+- 2026-06-03: Splash incident review found one non-startup replay in `unicornviz_20260603_114423.log`, correlated with a single `U` keypress in `keystrokes-20260603-114434.log`; no repeating loop evidence in recent sessions.
 
 ---
 
