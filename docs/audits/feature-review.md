@@ -23,6 +23,13 @@ Session log template:
 - New P0/P1/P2:
 - Notes:
 
+Session log:
+- Date: 2026-06-03
+- Reviewer: owner + Copilot
+- Scope covered today: Help Usage, Basics, Playback, Tweakables, Audio + Visual, Display Modes, Camera Overlay, Drop-in hotkey block status pass
+- New P0/P1/P2: P1 candidate display-mode alignment/menu-placement issues on Fedora 44 multi-monitor layout; P2 candidate help scaling at 3840x2160 @ 200%; P2 candidate hotkey/help text cleanup for tweakables/audio/Spotify grouping
+- Notes: Operator-confirmed broad hotkey coverage with targeted follow-up items captured in section notes below.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -61,6 +68,9 @@ This order follows the in-app help flow first, then all non-help surfaces.
 
 Notes:
 
+- 2026-06-03: Overall status `Done`.
+- 2026-06-03: Layout looked good at 1920x1080, but help text/UI felt too small at 3840x2160 with 200% scaling; dynamic scaling adjustment needed.
+
 ---
 
 ## 2) Basics
@@ -80,6 +90,9 @@ Notes:
 
 Notes:
 
+- 2026-06-03: Overall status `Done`.
+- 2026-06-03: Operator reported all core basics worked; longer recording runs still need additional validation.
+
 ---
 
 ## 3) Playback
@@ -91,6 +104,8 @@ Notes:
 - [ ] \\ reset advance interval
 
 Notes:
+
+- 2026-06-03: Overall status `Done`.
 
 ---
 
@@ -113,6 +128,11 @@ Notes:
 
 Notes:
 
+- 2026-06-03: Overall status `Done`.
+- 2026-06-03: `k`/`K` alternative resolution-scale bindings removed from runtime and help text.
+- 2026-06-03: Speed min/max help label now shows `Ctrl+= / Ctrl+-`.
+- 2026-06-03: Speed random toggle help label now shows `Alt+= / Alt+-`.
+
 ---
 
 ## 5) Audio + Visual
@@ -133,6 +153,10 @@ Notes:
 
 Notes:
 
+- 2026-06-03: Overall status `Done`.
+- 2026-06-03: `Ctrl+Shift+A` alternate audio-selector binding removed; `Ctrl+A` remains.
+- 2026-06-03: Spotify help items belong in the Spotify section and the current Spotify items are not working.
+
 ---
 
 ## 6) Display Modes
@@ -144,6 +168,11 @@ Notes:
 - [ ] Switching modes repeatedly does not leak/crash
 
 Notes:
+
+- 2026-06-03: Overall status `Not done`.
+- 2026-06-03: Fedora 44 still feels buggy when switching display modes back and forth.
+- 2026-06-03: Splash/startup behavior in mirror mode and span/mirror alignment is off for the current monitor layout (two small monitors above one large display).
+- 2026-06-03: Menus still appear in inconvenient positions in span/mirror modes.
 
 ---
 
@@ -158,9 +187,21 @@ Notes:
 
 Notes:
 
+- 2026-06-03: Overall status `Done`.
+
 ---
 
 ## 8) Drop-in Help Sections (Runtime Alphabetical)
+
+2026-06-03 block status: `Not done`.
+
+- Spotify auth still needs work.
+- Control Room still not working on Fedora 44.
+- Multi-head help is missing the `Shift+` span-all entry.
+- Multi-head help now shows `Shift+X` for span-all.
+- Sims / Images / Videos are not fully testable on this machine because assets are missing.
+- Streaming still needs later verification.
+- Unicorn Tears hotkeys were reported good.
 
 ### Auto VJ
 - [ ] Ctrl+Alt+J toggle Auto VJ

@@ -391,12 +391,9 @@ class HotkeyHandler:
                 o.flash_message(f'BPM Profile: {next_profile.name}', 1.2)
                 log.info('Audio profile changed: %s → %s', current_profile.name, next_profile.name)
             elif (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
-                # Ctrl+Shift+A — alternate audio source selector menu key.
-                sources = a.get_audio_sources()
-                current_idx = a.get_audio_source_index()
-                o.set_audio_sources(sources, current_idx)
-                o.toggle_audio_selector()
-            elif mod & sdl2.KMOD_CTRL:
+                # Ctrl+Shift+A is intentionally unbound to avoid conflicts.
+                return
+            elif (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_SHIFT):
                 # Ctrl+A — alternate audio source selector menu key.
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
@@ -684,20 +681,6 @@ class HotkeyHandler:
                     o.flash_message(f'Zoom  {val:.2f}', 1.0)
                 else:
                     o.flash_message('Zoom not available for this effect', 1.0)
-
-        elif sym == sdl2.SDLK_k:
-            if mod & sdl2.KMOD_CTRL:
-                # Ctrl+K — reset render scale to config default
-                val = a.reset_render_scale()
-                o.flash_message(f'Res scale reset  {val:.2f}', 1.2)
-            elif mod & sdl2.KMOD_SHIFT:
-                # Shift+K — scale down
-                val = a.apply_render_scale_delta(-0.05)
-                o.flash_message(f'Res scale  {val:.2f}', 1.0)
-            else:
-                # K — scale up
-                val = a.apply_render_scale_delta(0.05)
-                o.flash_message(f'Res scale  {val:.2f}', 1.0)
 
         elif sym == sdl2.SDLK_x:
             # Display mode controls: X=single, Shift+X=span, Ctrl+X=mirror, Alt+X=config

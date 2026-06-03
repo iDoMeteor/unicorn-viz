@@ -159,13 +159,13 @@ def test_a_opens_audio_selector() -> None:
     assert overlays.audio_sources == ['device-0', 'device-1']
 
 
-def test_ctrl_shift_a_still_opens_audio_selector() -> None:
+def test_ctrl_shift_a_no_longer_opens_audio_selector() -> None:
     handler, app, overlays = _handler()
 
     handler.handle(sdl2.SDLK_a, sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT)
 
     assert app.vj_api.marked == ['key']
-    assert overlays.toggled_audio == 1
+    assert overlays.toggled_audio == 0
 
 
 def test_shift_a_opens_audio_selector() -> None:

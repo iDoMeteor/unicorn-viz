@@ -157,7 +157,7 @@ python -m unicornviz --help
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
 | `A` / `Shift+A`   | Open audio source selector menu                               |
-| `Ctrl+Shift+A` / `Ctrl+A` | Open audio source selector menu (alternate)          |
+| `Ctrl+A`          | Open audio source selector menu (alternate)                   |
 | `Alt+A` / `Alt+Shift+A` | Cycle audio profile (next / prev)                    |
 
 Note: the prior ANSI art shortcuts on the A family are temporarily disabled and will be reassigned to a non-conflicting key group.

@@ -386,11 +386,9 @@ class Overlays:
                 ('Shift+, / .', 'Res scale MIN / MAX'),
                 ('Ctrl+, / .', 'Reset res scale'),
                 ('Ctrl+G', 'Speed reset'),
-                ('Ctrl+K', 'Res scale reset (alt key)'),
-                ('k / K', 'Res scale up / down (alt keys)'),
-                ('= / -', 'Speed MAX / MIN'),
+                ('Ctrl+= / Ctrl+-', 'Speed MAX / MIN'),
                 ('+ / -', 'Speed up / down'),
-                ('= / -', 'Speed random ON / OFF'),
+                ('Alt+= / Alt+-', 'Speed random ON / OFF'),
                 ('z / Z', 'Zoom in / out'),
                 ('Alt+Z', 'Zoom random ON / OFF'),
                 ('Ctrl+Z', 'Zoom reset'),
@@ -401,7 +399,7 @@ class Overlays:
             [
                 ('e', 'EQ / spectrum'),
                 ('a / A', 'Audio source selector menu'),
-                ('Ctrl+Shift+A / Ctrl+A', 'Audio source selector menu (alternate)'),
+                ('Ctrl+A', 'Audio source selector menu (alternate)'),
                 ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
                 ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
                 ('Ctrl+Alt+C', 'Toggle Candy Frame neon border overlay'),
@@ -1441,6 +1439,10 @@ void main() {
         y = panel_pad
         w = self._width  - panel_pad * 2.0
         h = self._height - panel_pad * 2.0
+        # Increase help readability on high-resolution canvases while preserving
+        # existing sizing at 1080p-class resolutions.
+        res_ratio = min(self._width, self._height) / 1080.0
+        help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
 
         # ── outer halo (breathing) ────────────────────────────────────────
         halo_a = 0.05 + pulse_slow * 0.08
@@ -1563,12 +1565,26 @@ void main() {
         # title — inverse pulse
         title_a = 0.86 + (1.0 - pulse_med) * 0.14
         title_str = 'UNICORN VIZ - HELP'
-        self._draw_text(title_str, x + (w - len(title_str) * 8.0 * 2.95) * 0.5, y + 10.0, scale=2.95, color=(0.12, 0.98, 1.0, title_a))
+        title_scale = 2.95 * help_scale
+        self._draw_text(
+            title_str,
+            x + (w - len(title_str) * 8.0 * title_scale) * 0.5,
+            y + 10.0,
+            scale=title_scale,
+            color=(0.12, 0.98, 1.0, title_a),
+        )
         # Centered live date/time replacing former ProjectM preset labels.
         _now = datetime.datetime.now()
         dt_str = _now.strftime('<<  %a  %d %b %Y  //  %H:%M:%S  >>')
         dt_a = 0.78 + pulse_slow * 0.18
-        self._draw_text(dt_str, x + (w - len(dt_str) * 8.0 * 1.72) * 0.5, y + 56.0, scale=1.72, color=(0.90, 1.0, 0.82, dt_a))
+        dt_scale = 1.72 * help_scale
+        self._draw_text(
+            dt_str,
+            x + (w - len(dt_str) * 8.0 * dt_scale) * 0.5,
+            y + 56.0,
+            scale=dt_scale,
+            color=(0.90, 1.0, 0.82, dt_a),
+        )
 
         # ── left/right content panes ──────────────────────────────────────
         left_x = x + 14.0
@@ -1606,8 +1622,8 @@ void main() {
         if sections:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(sections) - 1))
 
-        card_title_scale = 2.30
-        item_scale = 2.10
+        card_title_scale = 2.30 * help_scale
+        item_scale = 2.10 * help_scale
         card_line_h = 8 * item_scale + 2.0
         card_pad = 8.0
 
@@ -1658,7 +1674,14 @@ void main() {
             col_y[idx] += section_h + 8.0
 
         # ── right pane: live shortcut map ─────────────────────────────────
-        self._draw_text('LIVE SHORTCUT MAP', right_x + 10.0, right_y + 10.0, scale=2.05, color=(1.0, 0.92, 0.58, 0.96))
+        live_map_scale = 2.05 * help_scale
+        self._draw_text(
+            'LIVE SHORTCUT MAP',
+            right_x + 10.0,
+            right_y + 10.0,
+            scale=live_map_scale,
+            color=(1.0, 0.92, 0.58, 0.96),
+        )
         self._draw_rect(right_x + 10.0, right_y + 30.0, right_w - 20.0, 2.0, (1.0, 0.72, 0.24, 0.60 + pulse_med * 0.20))
 
         rows = max(
@@ -1667,18 +1690,20 @@ void main() {
             len(self._ctrl_shortcuts),
             len(self._alt_shortcuts),
         )
+        shortcut_title_scale = 1.85 * help_scale
         sec_scale = item_scale
+        min_sec_scale = max(1.40, item_scale * 0.72)
         min_bottom_margin = 26.0
 
         def _shortcut_block_height(scale: float) -> float:
             line_h = 8 * scale + 2.0
-            return (8 * 1.85 + 3.0) + float(min(rows, 12)) * line_h
+            return (8 * shortcut_title_scale + 3.0) + float(min(rows, 12)) * line_h
 
         top = right_y + 42.0
         row_count = float(min(rows, 12))
-        while sec_scale > item_scale:
+        while sec_scale > min_sec_scale:
             sec_lh = 8 * sec_scale + 2.0
-            top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
+            top_block_h = (8 * shortcut_title_scale + 3.0) + row_count * sec_lh
             bottom_y = top + top_block_h + 28.0
             total_h = bottom_y + _shortcut_block_height(sec_scale)
             if total_h <= right_y + right_h - min_bottom_margin:
@@ -1688,14 +1713,14 @@ void main() {
         sec_lh = 8 * sec_scale + 2.0
 
         def _draw_shortcut_block(title: str, items: list[str], bx: float, by: float, color: tuple[float, float, float, float]) -> None:
-            self._draw_text(title, bx, by, scale=1.85, color=(0.96, 1.0, 0.70, 0.96))
-            y0 = by + 8 * 1.85 + 3.0
+            self._draw_text(title, bx, by, scale=shortcut_title_scale, color=(0.96, 1.0, 0.70, 0.96))
+            y0 = by + 8 * shortcut_title_scale + 3.0
             for i in range(min(rows, 12)):
                 text = items[i] if i < len(items) else '(none)'
                 self._draw_text(text, bx, y0 + i * sec_lh, scale=sec_scale, color=color)
 
         half = right_w * 0.48
-        top_block_h = (8 * 1.85 + 3.0) + row_count * sec_lh
+        top_block_h = (8 * shortcut_title_scale + 3.0) + row_count * sec_lh
         bottom_y = top + top_block_h + 28.0
         _draw_shortcut_block('1-0',   self._num_shortcuts,   right_x + 10.0, top,      (0.82, 1.0,  0.9,  0.95))
         _draw_shortcut_block('SHIFT', self._shift_shortcuts, right_x + half, top,      (0.92, 0.86, 1.0,  0.95))
@@ -1705,8 +1730,8 @@ void main() {
         # Dedicated Post FX block under number shortcuts, left aligned.
         if self._postfx_help_entries:
             postfx_y = bottom_y + _shortcut_block_height(sec_scale) + 18.0
-            self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=1.85, color=(0.98, 0.95, 0.72, 0.96))
-            py = postfx_y + 8 * 1.85 + 3.0
+            self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=shortcut_title_scale, color=(0.98, 0.95, 0.72, 0.96))
+            py = postfx_y + 8 * shortcut_title_scale + 3.0
             for key, desc in self._postfx_help_entries:
                 self._draw_text(
                     f'{key:<16} {desc}',
