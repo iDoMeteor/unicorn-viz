@@ -352,23 +352,23 @@ Track both enabled and disabled behavior for each drop-in.
 
 | Drop-in | Enabled PASS/FAIL | Disabled PASS/FAIL | Notes |
 |---|---|---|---|
-| alien-invasion-01 | [ ] | [ ] | |
+| alien-invasion-01 | [x] | [x] | Baseline debug startup registered `Alien Invasion`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | auto-vj-01 | [x] | [x] | Temp-config startups: enabled run logged `AutoVJController loaded from drop-in`; disabled run logged `AutoVJController Phase 4 loaded (disabled)`. |
 | control-room-01 | [x] | [x] | Temp-config startups: enabled run logged `ControlRoomController scheduled ...` then `loaded from drop-in`; disabled run skipped controller without startup crash. |
-| cyber-war-01 | [ ] | [ ] | |
-| disco-ball-01 | [ ] | [ ] | |
+| cyber-war-01 | [x] | [x] | Baseline debug startup registered `Cyber War`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
+| disco-ball-01 | [x] | [x] | Baseline debug startup registered `Disco Ball`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | grand-finale-01 | [x] | [x] | Enabled runs logged `GrandFinaleController loaded from drop-in`; missing-dropin run logged `GrandFinaleController not available .../grand-finale-01/grand_finale.py` with startup continuing. |
-| hacker-terminal-01 | [ ] | [ ] | |
-| images-01 | [ ] | [ ] | |
+| hacker-terminal-01 | [x] | [x] | Baseline debug startup registered `Hacker Terminal`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
+| images-01 | [x] | [x] | Baseline debug startup registered `Image Showcase`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | multi-head-01 | [x] | [x] | Enabled runs show multi-head display topology logs (`Display 0: origin=...`) and mirror/span startup; missing-dropin run logged fallback to single-display mode. |
 | postfx-01 | [x] | [x] | Enabled runs logged `PostFxController loaded from drop-in`; missing-dropin run logged `PostFxController not available .../postfx-01/postfx_controller.py` with startup continuing. |
-| projectm-01 | [ ] | [ ] | |
-| sims-01 | [ ] | [ ] | |
+| projectm-01 | [x] | [x] | Baseline debug startup registered `ProjectM Presets`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
+| sims-01 | [x] | [x] | Baseline debug startup registered `Sim Showcase`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | streaming-01 | [x] | [x] | Temp-config startups: enabled run logged `RTMP streamer loaded (enabled=True auto_start=False)`; default disabled run logged `enabled=False auto_start=False`. |
-| textures-01 | [ ] | [ ] | |
-| tron-grid-01 | [ ] | [ ] | |
+| textures-01 | [x] | [x] | Baseline debug startup registered both `Prism Storm` and `Texture Showcase`; hidden-dropin run removed both registrations (`count=0`) while still reaching audio-ready startup. |
+| tron-grid-01 | [x] | [x] | Baseline debug startup registered `Tron Grid`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | unicorn-tears-01 | [x] | [x] | Enabled runs logged `UnicornTearsController loaded from drop-in`; missing-dropin run logged unavailable warnings for DancingUnicornOverlay/RainbowNova/UnicornTearsController and still reached audio-ready startup. |
-| videos-01 | [ ] | [ ] | |
+| videos-01 | [x] | [x] | Baseline debug startup registered `Video Showcase`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | webcam-01 | [x] | [x] | Enabled runs logged `WebcamSystem loaded from drop-in`; missing-dropin run logged `WebcamSystem not available .../webcam-01/webcam_overlay.py` with startup continuing. |
 
 ---
@@ -534,7 +534,7 @@ Long-run checks:
 
 - Built-in effects tested: ___ / 26
 - Drop-in visual effects tested: ___ / 12
-- Drop-ins enable/disable matrix completed: ___ / 18
+- Drop-ins enable/disable matrix completed: 18 / 18
 - Help sections fully validated: ___ / 8+dynamic
 - Post FX slots validated: ___ / 10
 - Startup mode scenarios validated: ___ / 12
