@@ -27,18 +27,6 @@ class AudioManager:
         prefer_default_input = bool(
             cfg.get('audio', 'prefer_default_input', default=True)
         )
-        fallback_rms_threshold = float(
-            cfg.get('audio', 'fallback_rms_threshold', default=0.0015)
-        )
-        fallback_silence_seconds = float(
-            cfg.get('audio', 'fallback_silence_seconds', default=6.0)
-        )
-        fallback_cooldown_seconds = float(
-            cfg.get('audio', 'fallback_cooldown_seconds', default=8.0)
-        )
-        auto_fallback_enabled = bool(
-            cfg.get('audio', 'auto_fallback_enabled', default=True)
-        )
         # Silence gate thresholds (RMS).  Anything below ``silence_rms_floor``
         # is treated as no input; ``silence_rms_span`` is the RMS range above
         # the floor over which the spectrum scales 0 → 1.  Defaults are tuned
@@ -62,10 +50,6 @@ class AudioManager:
             buffer_seconds=buffer_seconds,
             latency=latency,
             prefer_default_input=prefer_default_input,
-            fallback_rms_threshold=fallback_rms_threshold,
-            fallback_silence_seconds=fallback_silence_seconds,
-            fallback_cooldown_seconds=fallback_cooldown_seconds,
-            auto_fallback_enabled=auto_fallback_enabled,
         )
         self._analyzer = Analyzer(
             fft_bands=fft_bands,
@@ -224,7 +208,6 @@ class AudioManager:
 
     def get_audio_data(self) -> AudioData:
         """Called every frame from the main loop."""
-        self._capture.maybe_fallback()
         block = self._capture.get_block()
         if block is not None and len(block) > 0:
             rms = float(np.sqrt(np.mean(block * block)))

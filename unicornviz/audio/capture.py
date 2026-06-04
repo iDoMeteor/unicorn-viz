@@ -221,16 +221,16 @@ class AudioCapture:
         self._active = False
         self._candidate_devices: list[int | None] = []
         self._candidate_index = 0
-        self._silent_blocks = 0
         self._stream_opened_time: float = 0.0  # Track when stream opens for warmup
         self._last_status_log_time = 0.0
         self._suppressed_status_count = 0
+        # Retain these args for backward-compatible config parsing, but automatic
+        # source fallback is intentionally disabled. Source changes are operator-only.
         self._fallback_rms_threshold = max(0.0, float(fallback_rms_threshold))
         self._fallback_silence_seconds = max(0.25, float(fallback_silence_seconds))
         self._fallback_cooldown_seconds = max(0.0, float(fallback_cooldown_seconds))
         self._auto_fallback_enabled = bool(auto_fallback_enabled)
         self._prefer_default_input = bool(prefer_default_input)
-        self._last_fallback_time = 0.0
 
     def _open_stream(self, device: int | None) -> None:
         native_rate: int = _SAMPLE_RATE
@@ -267,9 +267,7 @@ class AudioCapture:
         )
         self._stream.start()
         self._active = True
-        self._silent_blocks = 0
         self._stream_opened_time = time.time()  # Start warmup timer
-        self._last_fallback_time = self._stream_opened_time
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
@@ -443,69 +441,15 @@ class AudioCapture:
             else:
                 self._suppressed_status_count += 1
         mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
-        rms = float(np.sqrt(np.mean(mono * mono)))
-        if rms < self._fallback_rms_threshold:
-            self._silent_blocks += 1
-        else:
-            self._silent_blocks = 0
         with self._lock:
             self._buf.append(mono.copy())
         if len(self._buf) == 1:
-            log.debug("Audio: first block received (rms=%.4f, silent_blocks=%d)", rms, self._silent_blocks)
+            rms = float(np.sqrt(np.mean(mono * mono)))
+            log.debug("Audio: first block received (rms=%.4f)", rms)
 
     def maybe_fallback(self) -> None:
-        """Switch to next candidate device if current source appears silent.
-        
-        Suppressed during warmup to avoid device switches that cause overflow.
-        """
-        if not self._auto_fallback_enabled:
-            return
-        if not self._is_warmed_up():
-            log.debug("Audio: fallback check suppressed during warmup")
-            return
-        if self._device_hint or len(self._candidate_devices) <= 1:
-            return
-        now = time.time()
-        if self._fallback_cooldown_seconds > 0.0:
-            if now - self._last_fallback_time < self._fallback_cooldown_seconds:
-                return
-        silent_time = self._silent_blocks * (_BLOCK_SIZE / max(self._sample_rate, 1))
-        if silent_time < self._fallback_silence_seconds:
-            return
-        if self._candidate_index + 1 >= len(self._candidate_devices):
-            log.debug("Audio: silent for %.2fs but no more fallback candidates", silent_time)
-            return
-        log.debug("Audio: silent for %.2fs, attempting fallback (current=%d)", silent_time, self._candidate_index)
-
-        current_idx = self._candidate_index
-        current = self._candidate_devices[current_idx]
-        next_idx = current_idx + 1
-        nxt = self._candidate_devices[next_idx]
-        try:
-            if self._stream is not None:
-                self._close_stream_safely(self._stream, context='audio fallback')
-                self._stream = None
-            current_name = sd.query_devices(current)['name'] if current is not None else 'None'
-            next_name = sd.query_devices(nxt)['name'] if nxt is not None else 'default'
-            log.info(
-                'Audio capture: source %r silent, trying fallback %d (%s)',
-                current_name, nxt if nxt is not None else -1, next_name,
-            )
-            self._open_stream(nxt)
-            self._candidate_index = next_idx
-            self._last_fallback_time = time.time()
-        except Exception as exc:
-            log.warning('Audio fallback failed: %s', exc)
-            # Attempt to recover the prior source so we do not report active
-            # capture while no stream exists.
-            try:
-                log.info('Audio: restoring previous source %s after fallback failure', self._describe_device(current))
-                self._open_stream(current)
-                self._candidate_index = current_idx
-            except Exception as restore_exc:
-                log.warning('Audio restore after fallback failure also failed: %s', restore_exc)
-                self._stream = None
-                self._active = False
+        """Automatic audio-source fallback is disabled; source changes are manual."""
+        return
 
     def _is_warmed_up(self) -> bool:
         """Check if stream has had enough time to stabilize after opening."""
@@ -623,7 +567,6 @@ class AudioCapture:
                 self._stream = None
             self._open_stream(target_device)
             self._candidate_index = bounded_idx
-            self._last_fallback_time = time.time()
             return self.current_source_label()
         except Exception as exc:
             log.warning('Audio source select failed: %s', exc)

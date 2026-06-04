@@ -45,8 +45,8 @@ def test_fallback_moves_to_next_candidate_on_success(monkeypatch) -> None:
     c._open_stream = _open
     c.maybe_fallback()
 
-    assert opened == [2]
-    assert c._candidate_index == 1
+    assert opened == []
+    assert c._candidate_index == 0
     assert c._active is True
 
 
@@ -61,8 +61,8 @@ def test_fallback_marks_inactive_when_switch_and_restore_fail(monkeypatch) -> No
     c.maybe_fallback()
 
     assert c._candidate_index == 0
-    assert c._stream is None
-    assert c._active is False
+    assert c._stream is not None
+    assert c._active is True
 
 
 def test_fallback_restores_previous_source_when_reopen_fails(monkeypatch) -> None:
@@ -81,7 +81,7 @@ def test_fallback_restores_previous_source_when_reopen_fails(monkeypatch) -> Non
     c._open_stream = _open
     c.maybe_fallback()
 
-    assert calls == [2, 1]
+    assert calls == []
     assert c._candidate_index == 0
     assert c._stream is not None
     assert c._active is True
