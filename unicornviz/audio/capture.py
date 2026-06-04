@@ -9,14 +9,17 @@ Feeds a ring buffer consumed by the analyzer on the main thread.
 """
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import sys
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import numpy as np
+from unicornviz.paths import APP_ROOT
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +40,7 @@ _CLOSE_STREAM_TIMEOUT_S = 1.0
 _DEFAULT_FALLBACK_RMS_THRESHOLD = 0.0015
 _DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
 _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
+_DEFAULT_SOURCE_STATE_PATH = APP_ROOT / '.audio_source_state.json'
 
 
 def _candidate_monitor_devices(
@@ -221,16 +225,90 @@ class AudioCapture:
         self._active = False
         self._candidate_devices: list[int | None] = []
         self._candidate_index = 0
+        self._silent_blocks = 0
         self._stream_opened_time: float = 0.0  # Track when stream opens for warmup
         self._last_status_log_time = 0.0
         self._suppressed_status_count = 0
-        # Retain these args for backward-compatible config parsing, but automatic
-        # source fallback is intentionally disabled. Source changes are operator-only.
+        # Auto-source switching now only considers operator-tagged viable sources.
         self._fallback_rms_threshold = max(0.0, float(fallback_rms_threshold))
         self._fallback_silence_seconds = max(0.25, float(fallback_silence_seconds))
         self._fallback_cooldown_seconds = max(0.0, float(fallback_cooldown_seconds))
         self._auto_fallback_enabled = bool(auto_fallback_enabled)
         self._prefer_default_input = bool(prefer_default_input)
+        self._last_fallback_time = 0.0
+        self._state_path: Path = _DEFAULT_SOURCE_STATE_PATH
+        self._selected_source_key: str | None = None
+        self._viable_source_keys: set[str] = set()
+        self._load_source_state()
+
+    def _load_source_state(self) -> None:
+        try:
+            if not self._state_path.exists():
+                return
+            payload = json.loads(self._state_path.read_text(encoding='utf-8'))
+            if not isinstance(payload, dict):
+                return
+            selected = payload.get('selected_source_key')
+            if isinstance(selected, str) and selected:
+                self._selected_source_key = selected
+            viable = payload.get('viable_source_keys', [])
+            if isinstance(viable, list):
+                self._viable_source_keys = {
+                    str(item) for item in viable if isinstance(item, str) and item
+                }
+        except Exception as exc:
+            log.debug('Audio source state load skipped: %s', exc)
+
+    def _save_source_state(self) -> None:
+        try:
+            payload = {
+                'selected_source_key': self._selected_source_key or '',
+                'viable_source_keys': sorted(self._viable_source_keys),
+            }
+            self._state_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding='utf-8',
+            )
+        except Exception as exc:
+            log.warning('Audio source state save failed: %s', exc)
+
+    def _source_key_for_device(self, device: int | None) -> str:
+        if device is None:
+            return 'default'
+        try:
+            info = sd.query_devices(device)
+            name = str(info.get('name', '')).strip().lower()
+            if name:
+                return f'name:{name}'
+        except Exception:
+            pass
+        return f'idx:{device}'
+
+    def _candidate_keys(self) -> list[str]:
+        return [self._source_key_for_device(device) for device in self._candidate_devices]
+
+    def _apply_source_state_preferences(self) -> None:
+        if not self._candidate_devices:
+            return
+
+        # Honor persisted selection unless a config device hint is explicitly set.
+        if self._selected_source_key and not self._device_hint:
+            keys = self._candidate_keys()
+            if self._selected_source_key in keys:
+                target = keys.index(self._selected_source_key)
+                if target != 0:
+                    selected = self._candidate_devices.pop(target)
+                    self._candidate_devices.insert(0, selected)
+
+        candidate_keys = self._candidate_keys()
+        if not self._viable_source_keys:
+            self._viable_source_keys = set(candidate_keys)
+            self._save_source_state()
+            return
+        valid = {k for k in self._viable_source_keys if k in candidate_keys}
+        if not valid:
+            valid = set(candidate_keys)
+        self._viable_source_keys = valid
 
     def _open_stream(self, device: int | None) -> None:
         native_rate: int = _SAMPLE_RATE
@@ -267,7 +345,9 @@ class AudioCapture:
         )
         self._stream.start()
         self._active = True
+        self._silent_blocks = 0
         self._stream_opened_time = time.time()  # Start warmup timer
+        self._last_fallback_time = self._stream_opened_time
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
@@ -441,15 +521,107 @@ class AudioCapture:
             else:
                 self._suppressed_status_count += 1
         mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
+        rms = float(np.sqrt(np.mean(mono * mono)))
+        if rms < self._fallback_rms_threshold:
+            self._silent_blocks += 1
+        else:
+            self._silent_blocks = 0
         with self._lock:
             self._buf.append(mono.copy())
         if len(self._buf) == 1:
             rms = float(np.sqrt(np.mean(mono * mono)))
             log.debug("Audio: first block received (rms=%.4f)", rms)
 
+    def _next_viable_candidate_index(self, current_idx: int) -> int | None:
+        if len(self._candidate_devices) <= 1:
+            return None
+        keys = self._candidate_keys()
+        for step in range(1, len(self._candidate_devices)):
+            idx = (current_idx + step) % len(self._candidate_devices)
+            if keys[idx] in self._viable_source_keys:
+                return idx
+        return None
+
+    def _probe_source_rms(self, device: int | None, timeout_s: float = 0.8) -> float | None:
+        """Probe RMS for a candidate source in a subprocess.
+
+        Returns None when probing fails/times out.
+        """
+        device_expr = 'None' if device is None else str(int(device))
+        code = (
+            'import numpy as np\n'
+            'import sounddevice as sd\n'
+            f'device = {device_expr}\n'
+            'try:\n'
+            '    info = sd.query_devices(kind="input") if device is None else sd.query_devices(device)\n'
+            '    rate = int(info.get("default_samplerate", 48000))\n'
+            '    channels = max(1, min(2, int(info.get("max_input_channels", 2))))\n'
+            '    with sd.InputStream(device=device, samplerate=rate, channels=channels, blocksize=1024, dtype="float32") as stream:\n'
+            '        data, _ = stream.read(1024)\n'
+            '    mono = data.mean(axis=1) if data.ndim > 1 else data\n'
+            '    rms = float(np.sqrt(np.mean(mono * mono)))\n'
+            '    print(f"{rms:.8f}")\n'
+            'except Exception:\n'
+            '    raise SystemExit(2)\n'
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, '-c', code],
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        try:
+            return float((result.stdout or '').strip())
+        except Exception:
+            return None
+
     def maybe_fallback(self) -> None:
-        """Automatic audio-source fallback is disabled; source changes are manual."""
-        return
+        """Switch between viable sources when current source remains silent."""
+        if not self._auto_fallback_enabled:
+            return
+        if not self._is_warmed_up():
+            log.debug('Audio: fallback check suppressed during warmup')
+            return
+        if len(self._candidate_devices) <= 1:
+            return
+        if self._fallback_cooldown_seconds > 0.0:
+            now = time.time()
+            if now - self._last_fallback_time < self._fallback_cooldown_seconds:
+                return
+        silent_time = self._silent_blocks * (_BLOCK_SIZE / max(self._sample_rate, 1))
+        if silent_time < self._fallback_silence_seconds:
+            return
+
+        current_idx = self._candidate_index
+        target_idx = self._next_viable_candidate_index(current_idx)
+        if target_idx is None:
+            return
+
+        target_device = self._candidate_devices[target_idx]
+        target_rms = self._probe_source_rms(target_device)
+        if target_rms is None or target_rms < self._fallback_rms_threshold:
+            log.debug(
+                'Audio: candidate %s probe rms=%s below threshold %.5f; staying on current source',
+                self._describe_device(target_device),
+                'n/a' if target_rms is None else f'{target_rms:.5f}',
+                self._fallback_rms_threshold,
+            )
+            return
+
+        log.info(
+            'Audio capture: current source silent for %.2fs; switching to viable source %s (probe rms=%.5f)',
+            silent_time,
+            self._describe_device(target_device),
+            target_rms,
+        )
+        self._switch_to_candidate_index(target_idx)
+        self._last_fallback_time = time.time()
 
     def _is_warmed_up(self) -> bool:
         """Check if stream has had enough time to stabilize after opening."""
@@ -521,6 +693,7 @@ class AudioCapture:
                 self._device_hint,
                 prefer_default_input=self._prefer_default_input,
             )
+            self._apply_source_state_preferences()
             self._candidate_index = 0
         labels: list[str] = []
         for device in self._candidate_devices:
@@ -534,6 +707,7 @@ class AudioCapture:
                 self._device_hint,
                 prefer_default_input=self._prefer_default_input,
             )
+            self._apply_source_state_preferences()
             self._candidate_index = 0
         if not self._candidate_devices:
             return 0
@@ -550,6 +724,7 @@ class AudioCapture:
                 self._device_hint,
                 prefer_default_input=self._prefer_default_input,
             )
+            self._apply_source_state_preferences()
             self._candidate_index = 0
         if not self._candidate_devices:
             return self.current_source_label()
@@ -567,6 +742,8 @@ class AudioCapture:
                 self._stream = None
             self._open_stream(target_device)
             self._candidate_index = bounded_idx
+            self._selected_source_key = self._source_key_for_device(target_device)
+            self._save_source_state()
             return self.current_source_label()
         except Exception as exc:
             log.warning('Audio source select failed: %s', exc)
@@ -593,9 +770,51 @@ class AudioCapture:
                 self._device_hint,
                 prefer_default_input=self._prefer_default_input,
             )
+            self._apply_source_state_preferences()
             self._candidate_index = 0
         if len(self._candidate_devices) <= 1:
             return self.current_source_label()
         step = -1 if int(delta) < 0 else 1
         target_idx = (self.current_source_index() + step) % len(self._candidate_devices)
         return self._switch_to_candidate_index(target_idx)
+
+    def source_viable_flags(self) -> list[bool]:
+        """Return per-candidate viable flags used by selector UI."""
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
+            self._apply_source_state_preferences()
+            self._candidate_index = 0
+        keys = self._candidate_keys()
+        if not self._viable_source_keys:
+            self._viable_source_keys = set(keys)
+            self._save_source_state()
+        return [k in self._viable_source_keys for k in keys]
+
+    def toggle_source_viable(self, index: int) -> tuple[bool, str]:
+        """Toggle viability tag for candidate index and persist selection state."""
+        if not self._candidate_devices:
+            self._candidate_devices = _candidate_monitor_devices(
+                self._device_hint,
+                prefer_default_input=self._prefer_default_input,
+            )
+            self._apply_source_state_preferences()
+            self._candidate_index = 0
+        if not self._candidate_devices:
+            return False, 'No audio sources available'
+
+        idx = max(0, min(int(index), len(self._candidate_devices) - 1))
+        key = self._source_key_for_device(self._candidate_devices[idx])
+        currently_viable = key in self._viable_source_keys
+        if currently_viable:
+            if len(self._viable_source_keys) <= 1:
+                return True, 'At least one viable source must remain enabled'
+            self._viable_source_keys.discard(key)
+            self._save_source_state()
+            return False, f'Viable source OFF: {self._describe_device(self._candidate_devices[idx])}'
+
+        self._viable_source_keys.add(key)
+        self._save_source_state()
+        return True, f'Viable source ON: {self._describe_device(self._candidate_devices[idx])}'

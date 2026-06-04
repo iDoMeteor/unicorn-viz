@@ -451,6 +451,7 @@ class Overlays:
         self._show_midi = False
         self._show_projectm_manager = False
         self._audio_sources: list[str] = []
+        self._audio_viable_flags: list[bool] = []
         self._audio_current_idx: int = 0
         self._audio_selected_idx: int = 0
         self._midi_ports: list[str] = []
@@ -1280,13 +1281,32 @@ void main() {
     # Audio source selector
     # ------------------------------------------------------------------
 
-    def set_audio_sources(self, sources: list[str], current_index: int) -> None:
+    def set_audio_sources(
+        self,
+        sources: list[str],
+        current_index: int,
+        viable_flags: list[bool] | None = None,
+    ) -> None:
         """Populate the audio selector source list before opening the overlay."""
         self._audio_sources = list(sources)
+        if viable_flags is None or len(viable_flags) != len(self._audio_sources):
+            self._audio_viable_flags = [True] * len(self._audio_sources)
+        else:
+            self._audio_viable_flags = [bool(v) for v in viable_flags]
         total = max(1, len(self._audio_sources))
         idx = max(0, min(int(current_index), total - 1))
         self._audio_current_idx = idx
         self._audio_selected_idx = idx
+
+    def toggle_audio_selected_viable(self) -> bool:
+        """Toggle viability tag for the currently selected audio source."""
+        if not self._audio_sources:
+            return False
+        idx = self.get_audio_selected_index()
+        if idx >= len(self._audio_viable_flags):
+            self._audio_viable_flags = [True] * len(self._audio_sources)
+        self._audio_viable_flags[idx] = not bool(self._audio_viable_flags[idx])
+        return bool(self._audio_viable_flags[idx])
 
     def move_audio_selection(self, delta: int) -> None:
         """Move the audio selector cursor by delta rows (wraps)."""
@@ -1335,19 +1355,23 @@ void main() {
             ry = py + 80.0 + i * row_h
             is_sel = i == self._audio_selected_idx
             is_active = i == self._audio_current_idx
+            is_viable = True
+            if i < len(self._audio_viable_flags):
+                is_viable = bool(self._audio_viable_flags[i])
+            tag = '[V]' if is_viable else '[ ]'
 
             if is_sel:
                 self._draw_rect(px + 8, ry - 2, panel_w - 16, row_h - 4,
                                 (0.10, 0.25, 0.55, 0.85))
-                self._draw_text(f'> {name}', px + 22, ry + 5, scale=2.8,
+                self._draw_text(f'> {tag} {name}', px + 22, ry + 5, scale=2.8,
                                 color=(1.0, 0.92, 0.2, 1.0))
             else:
                 label_color = (0.3, 0.9, 0.3, 0.9) if is_active else (0.7, 0.8, 1.0, 0.75)
-                self._draw_text(f'  {name}', px + 22, ry + 5, scale=2.8,
+                self._draw_text(f'  {tag} {name}', px + 22, ry + 5, scale=2.8,
                                 color=label_color)
 
         fy = py + panel_h - 40.0
-        self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
+        self._draw_text('Up/Down: navigate    T: toggle viable    Enter: apply    Esc: cancel',
                         px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
 
     # ------------------------------------------------------------------

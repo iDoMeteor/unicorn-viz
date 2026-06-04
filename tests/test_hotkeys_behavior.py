@@ -31,6 +31,7 @@ class _Overlay:
         self.toggled_audio = 0
         self.audio_selector_visible = False
         self.audio_sources: list[str] = []
+        self.audio_viable_flags: list[bool] = []
         self.audio_selected_index = 0
 
     def flash_message(self, text: str, _duration: float = 0.0) -> None:
@@ -46,9 +47,18 @@ class _Overlay:
         self.toggled_audio += 1
         self.audio_selector_visible = not self.audio_selector_visible
 
-    def set_audio_sources(self, sources: list[str], current_index: int) -> None:
+    def set_audio_sources(
+        self,
+        sources: list[str],
+        current_index: int,
+        viable_flags: list[bool] | None = None,
+    ) -> None:
         self.audio_sources = list(sources)
         self.audio_selected_index = current_index
+        if viable_flags is None:
+            self.audio_viable_flags = [True] * len(self.audio_sources)
+        else:
+            self.audio_viable_flags = list(viable_flags)
 
     def move_audio_selection(self, delta: int) -> None:
         if not self.audio_sources:
@@ -58,6 +68,11 @@ class _Overlay:
 
     def get_audio_selected_index(self) -> int:
         return self.audio_selected_index
+
+    def toggle_audio_selected_viable(self) -> bool:
+        idx = self.get_audio_selected_index()
+        self.audio_viable_flags[idx] = not self.audio_viable_flags[idx]
+        return self.audio_viable_flags[idx]
 
 
 class _Playlist:
@@ -101,6 +116,7 @@ class _App:
         self.current_effect_name = '-'
         self._keystroke_logger = None
         self.audio_source_selected: int | None = None
+        self.audio_source_viable_toggled: int | None = None
 
     def get_audio_sources(self) -> list[str]:
         return ['device-0', 'device-1']
@@ -108,9 +124,16 @@ class _App:
     def get_audio_source_index(self) -> int:
         return 0
 
+    def get_audio_source_viable_flags(self) -> list[bool]:
+        return [True, True]
+
     def select_audio_source(self, index: int) -> str:
         self.audio_source_selected = index
         return f'Audio source: device-{index}'
+
+    def toggle_audio_source_viable(self, index: int) -> str:
+        self.audio_source_viable_toggled = index
+        return f'Viable source toggled: device-{index}'
 
 
 def _handler() -> tuple[HotkeyHandler, _App, _Overlay]:
@@ -188,6 +211,21 @@ def test_audio_selector_enter_applies_selected_source() -> None:
     assert app.audio_source_selected == 1
     assert overlays.audio_selector_visible is False
     assert 'Audio source: device-1' in overlays.messages
+
+
+def test_audio_selector_t_toggles_viable_tag() -> None:
+    handler, app, overlays = _handler()
+    overlays.audio_selector_visible = True
+    overlays.audio_sources = ['device-0', 'device-1']
+    overlays.audio_viable_flags = [True, True]
+    overlays.audio_selected_index = 1
+
+    handler.handle(sdl2.SDLK_t, 0)
+
+    assert app.vj_api.marked == ['key']
+    assert app.audio_source_viable_toggled == 1
+    assert overlays.audio_viable_flags == [True, False]
+    assert 'Viable source toggled: device-1' in overlays.messages
 
 
 def test_midi_note_is_queued_until_main_thread_dispatch() -> None:

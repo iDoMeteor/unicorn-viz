@@ -414,6 +414,12 @@ class HotkeyHandler:
             elif sym in (sdl2.SDLK_DOWN, sdl2.SDLK_RIGHT):
                 o.move_audio_selection(1)
                 return
+            elif sym == sdl2.SDLK_t:
+                source_idx = o.get_audio_selected_index()
+                msg = a.toggle_audio_source_viable(source_idx)
+                o.toggle_audio_selected_viable()
+                o.flash_message(msg, 2.0)
+                return
             elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
                 source_idx = o.get_audio_selected_index()
                 msg = a.select_audio_source(source_idx)
@@ -703,13 +709,15 @@ class HotkeyHandler:
                 # Ctrl+A — legacy fallback binding for audio source selector
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
-                o.set_audio_sources(sources, current_idx)
+                viable_flags = a.get_audio_source_viable_flags()
+                o.set_audio_sources(sources, current_idx, viable_flags)
                 o.toggle_audio_selector()
             else:
                 # A-family default — open audio source selector menu.
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
-                o.set_audio_sources(sources, current_idx)
+                viable_flags = a.get_audio_source_viable_flags()
+                o.set_audio_sources(sources, current_idx, viable_flags)
                 o.toggle_audio_selector()
 
         elif sym == sdl2.SDLK_m:

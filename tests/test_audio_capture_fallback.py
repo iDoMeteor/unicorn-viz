@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import unicornviz.audio.capture as capture_mod
 from unicornviz.audio.capture import AudioCapture
@@ -24,10 +25,16 @@ def _make_capture() -> AudioCapture:
     c._stream = object()
     c._candidate_devices = [1, 2]
     c._candidate_index = 0
+    c._viable_source_keys = {
+        c._source_key_for_device(1),
+        c._source_key_for_device(2),
+    }
+    c._state_path = Path('/tmp/unicornviz-test-audio-source-state.json')
     c._silent_blocks = 99999
     c._sample_rate = 48000
     c._stream_opened_time = time.time() - 10.0
     c._close_stream_safely = lambda *_args, **_kwargs: None
+    c._save_source_state = lambda: None
     return c
 
 
@@ -43,10 +50,11 @@ def test_fallback_moves_to_next_candidate_on_success(monkeypatch) -> None:
         c._active = True
 
     c._open_stream = _open
+    c._probe_source_rms = lambda _device: 0.05
     c.maybe_fallback()
 
-    assert opened == []
-    assert c._candidate_index == 0
+    assert opened == [2]
+    assert c._candidate_index == 1
     assert c._active is True
 
 
@@ -54,10 +62,7 @@ def test_fallback_marks_inactive_when_switch_and_restore_fail(monkeypatch) -> No
     monkeypatch.setattr(capture_mod, 'sd', _FakeSD())
     c = _make_capture()
 
-    def _open(_device):
-        raise RuntimeError('forced failure')
-
-    c._open_stream = _open
+    c._probe_source_rms = lambda _device: 0.0
     c.maybe_fallback()
 
     assert c._candidate_index == 0
@@ -79,12 +84,39 @@ def test_fallback_restores_previous_source_when_reopen_fails(monkeypatch) -> Non
         c._active = True
 
     c._open_stream = _open
+    c._probe_source_rms = lambda _device: 0.05
     c.maybe_fallback()
 
-    assert calls == []
+    assert calls == [2, 1]
     assert c._candidate_index == 0
     assert c._stream is not None
     assert c._active is True
+
+
+def test_fallback_ignores_untagged_targets(monkeypatch) -> None:
+    monkeypatch.setattr(capture_mod, 'sd', _FakeSD())
+    c = _make_capture()
+    c._candidate_devices = [1, 2, 3]
+    c._candidate_index = 0
+    c._viable_source_keys = {
+        c._source_key_for_device(1),
+        c._source_key_for_device(3),
+    }
+
+    opened: list[int | None] = []
+
+    def _open(device):
+        opened.append(device)
+        c._stream = object()
+        c._active = True
+
+    c._open_stream = _open
+    c._probe_source_rms = lambda _device: 0.05
+
+    c.maybe_fallback()
+
+    assert opened == [3]
+    assert c._candidate_index == 2
 
 
 def test_cycle_source_moves_to_next_candidate(monkeypatch) -> None:

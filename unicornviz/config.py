@@ -54,8 +54,8 @@ _DEFAULTS: dict[str, Any] = {
         "start_timeout_s": 4.0,
         "start_retries": 2,
         "start_retry_backoff_s": 0.5,
-        # Deprecated: automatic source fallback is disabled; source changes are manual.
-        "auto_fallback_enabled": False,
+        # Automatic source switch is limited to operator-tagged viable sources.
+        "auto_fallback_enabled": True,
         "fallback_rms_threshold": 0.0015,
         "fallback_silence_seconds": 6.0,
         "fallback_cooldown_seconds": 8.0,

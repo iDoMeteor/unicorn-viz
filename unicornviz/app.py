@@ -3636,6 +3636,10 @@ void main() {
         """Return currently selected audio source index for selector UI."""
         return self._audio_manager.get_source_index()
 
+    def get_audio_source_viable_flags(self) -> list[bool]:
+        """Return viability flags for audio source selector UI."""
+        return self._audio_manager.source_viable_flags()
+
     def select_audio_source(self, index: int) -> str:
         """Select a specific audio source by index and return a HUD message."""
         label = self._audio_manager.select_source(index)
@@ -3645,6 +3649,11 @@ void main() {
         """Cycle active audio capture source and return a HUD message."""
         label = self._audio_manager.cycle_source(delta)
         return f'Audio source: {label}'
+
+    def toggle_audio_source_viable(self, index: int) -> str:
+        """Toggle viability tag for a source row and return a HUD message."""
+        _enabled, msg = self._audio_manager.toggle_source_viable(index)
+        return msg
 
     def select_postfx_slot(self, slot: int) -> str:
         """Select active post-process slot (0 disables)."""
