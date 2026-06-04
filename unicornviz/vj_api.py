@@ -607,6 +607,22 @@ class VJApi:
         except Exception:
             return []
 
+    def postfx_friend_groups(self) -> list[tuple[int, ...]]:
+        """Return post-FX friend groups (pairs and trios) for ping-pong use.
+
+        Returns a list of tuples where each tuple is a curated group of 2 or 3
+        slot indices.  Trios are derived from entries in ``POSTFX_FRIENDS`` that
+        have two partners.  Returns an empty list when no Post-FX controller is
+        available.
+        """
+        try:
+            pc = self._app._postfx_controller  # noqa: SLF001
+            if pc is None:
+                return []
+            return pc.friend_groups()
+        except Exception:
+            return []
+
     def is_user_busy(self) -> bool:
         return bool(time.monotonic() < self._app._user_action_deadline)  # noqa: SLF001
 
