@@ -1983,6 +1983,16 @@ void main() {
                         log.warning('Image Showcase cache warmup failed: %s', exc)
                 break
 
+        for effect_cls in effects:
+            if getattr(effect_cls, 'NAME', '') == 'ProjectM Presets' and hasattr(effect_cls, 'warm_up'):
+                pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
+                if bool(pm_cfg.get('enabled', True)):
+                    try:
+                        effect_cls.warm_up(self._ctx, self._width, self._height, pm_cfg)
+                    except Exception as exc:
+                        log.warning('ProjectM warm-up failed (non-fatal): %s', exc)
+                break
+
         playlist = Playlist(effects, self.cfg)
         self._playlist = playlist
         self._playlist_mode = playlist.mode
