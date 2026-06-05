@@ -29,6 +29,7 @@ import json
 import logging
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,11 @@ class SpotifyController:
         self._command_timeout_s = max(0.05, float(self._cfg.get('command_timeout_s', 0.25) or 0.25))
 
         self._playerctl = shutil.which('playerctl')
+        if self.enabled and sys.platform == 'win32':
+            log.warning(
+                'SpotifyController uses a playerctl/MPRIS backend and is not currently supported on Windows; '
+                'use spotify-pro-01 or add a Windows media-session backend'
+            )
         if self.enabled and self._playerctl is None:
             self.enabled = False
             log.warning('SpotifyController disabled: playerctl not found in PATH')

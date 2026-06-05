@@ -7,6 +7,11 @@ Last updated: 2026-05-24
 `spotify-01` is an optional runtime subsystem that polls Spotify metadata via
 MPRIS (`playerctl`) and exposes now-playing context to automation controllers.
 
+Current platform note: this backend is Linux-oriented. It depends on
+`playerctl` talking to an MPRIS-exposing desktop player. Windows is not
+currently supported by `spotify-01` without a separate Windows media-session
+backend.
+
 ## What It Provides
 
 - Track metadata snapshot (`track_id`, title, artist, album, status)
@@ -17,6 +22,8 @@ MPRIS (`playerctl`) and exposes now-playing context to automation controllers.
 
 - `playerctl` must be installed and available on `PATH`
 - Spotify desktop client (or compatible MPRIS player name)
+- On Windows, installing a package alone is not sufficient because the current
+	implementation expects an MPRIS-compatible backend.
 
 ## Installer
 

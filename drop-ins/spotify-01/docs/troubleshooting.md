@@ -2,13 +2,23 @@
 
 Owner: Drop-in Maintainers
 Status: active
-Last updated: 2026-05-24
+Last updated: 2026-06-05
 
 ## Subsystem Not Loading
 
 - Confirm `[spotify].enabled = true`.
 - Verify `playerctl` is installed (`command -v playerctl`).
 - Check app logs for `SpotifyController` warnings.
+
+### Windows Note
+
+- `spotify-01` is not currently a Windows-native backend.
+- The current implementation shells out to `playerctl`, which expects an
+	MPRIS-compatible media player session.
+- On Windows, that means there is no single missing package to install and be
+	done; the missing piece is a Windows media-session backend implementation.
+- For Windows today, prefer `spotify-pro-01` if authenticated Spotify Web API
+	data satisfies the use case.
 
 ## No Track Metadata
 
