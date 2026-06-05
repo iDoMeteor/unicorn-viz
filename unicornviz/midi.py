@@ -167,7 +167,7 @@ BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
             28: 'context_select',
             29: 'context_back',
             30: 'replay_splash',
-            31: 'invert',
+            31: 'controller_help',
 
             # Row 2
             16: 'speed_random',

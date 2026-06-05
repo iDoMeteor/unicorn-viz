@@ -420,6 +420,7 @@ class Overlays:
                 ('m', 'System monitor modal'),
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
+                ('Ctrl+Alt+H', 'Controller help modal (APC slot map)'),
                 ('i', 'Invert colors'),
             ],
         ),
@@ -463,6 +464,7 @@ class Overlays:
         self._show_audio = False
         self._show_midi = False
         self._show_system_monitor_modal = False
+        self._show_controller_help_modal = False
         self._show_projectm_manager = False
         self._audio_sources: list[str] = []
         self._audio_viable_flags: list[bool] = []
@@ -734,6 +736,178 @@ void main() {
         data = self._char_quads(text, x, y, scale, color)
         if data.size == 0:
             return
+
+    def _render_controller_help_modal(self) -> None:
+        """Draw a controller-focused mapping modal (APC mini mk2 first target)."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.7)
+
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.88, 1240.0)
+        panel_h = min(H * 0.86, 860.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.92)
+        self._draw_rect(px, py, panel_w, bw, c_border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
+        self._draw_rect(px, py, bw, panel_h, c_border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+
+        self._draw_text(
+            'CONTROLLER HELP // APC MINI MK2',
+            px + 18.0,
+            py + 14.0,
+            scale=3.2,
+            color=(0.30 + 0.20 * pulse, 0.76, 1.0, 1.0),
+        )
+        self._draw_text(
+            'Context slots drive side + bottom buttons and adapt by active modal.',
+            px + 20.0,
+            py + 46.0,
+            scale=2.0,
+            color=(0.66, 0.84, 0.95, 0.92),
+        )
+
+        col_gap = 14.0
+        col_w = (panel_w - 40.0 - col_gap * 2.0) / 3.0
+        col_x = [
+            px + 14.0,
+            px + 14.0 + col_w + col_gap,
+            px + 14.0 + (col_w + col_gap) * 2.0,
+        ]
+        top_y = py + 78.0
+
+        def _card(
+            x: float,
+            y: float,
+            w: float,
+            h: float,
+            title: str,
+            lines: list[str],
+            accent: tuple[float, float, float],
+        ) -> None:
+            self._draw_rect(x, y, w, h, (0.09, 0.12, 0.19, 0.88))
+            self._draw_rect(x, y, w, 2.0, (accent[0], accent[1], accent[2], 0.95))
+            self._draw_text(
+                title,
+                x + 10.0,
+                y + 8.0,
+                scale=2.2,
+                color=(accent[0], accent[1], accent[2], 0.98),
+            )
+            yy = y + 30.0
+            for line in lines:
+                self._draw_text(
+                    line,
+                    x + 10.0,
+                    yy,
+                    scale=1.85,
+                    color=(0.80, 0.87, 0.96, 0.95),
+                )
+                yy += 17.0
+
+        _card(
+            col_x[0],
+            top_y,
+            col_w,
+            248.0,
+            'Performance Context (no modal)',
+            [
+                'Slot1 next, Slot2 prev, Slot3 random, Slot4 pause',
+                'Slot5 fullscreen, Slot6 EQ/audio toggle',
+                'Slot7 ANSI, Slot8 controller help modal',
+                'Scene/Track small buttons mirror slots 1..8',
+            ],
+            (0.26 + 0.08 * pulse, 0.92, 0.80),
+        )
+
+        _card(
+            col_x[1],
+            top_y,
+            col_w,
+            248.0,
+            'Selector Contexts (Audio/MIDI)',
+            [
+                'Slot1/2: up/down',
+                'Slot3/4: left/right',
+                'Slot5: apply/select',
+                'Audio Slot6: toggle viable',
+                'Slot7/8: back / selector shortcut',
+            ],
+            (0.90, 0.78, 0.30 + 0.10 * pulse),
+        )
+
+        _card(
+            col_x[2],
+            top_y,
+            col_w,
+            248.0,
+            'Other Contexts',
+            [
+                'Help: slot nav + expand/collapse + close',
+                'ProjectM: slot nav, focus, search, close',
+                'System monitor: close + escape actions',
+                'Controller help: slots route to close/navigation',
+            ],
+            (0.56, 0.73 + 0.08 * pulse, 1.0),
+        )
+
+        _card(
+            col_x[0],
+            top_y + 262.0,
+            col_w,
+            208.0,
+            'APC Grid Highlights',
+            [
+                'Row7 transport/show globals',
+                'Row6 display modes + HUD/help/screenshot',
+                'Rows5-4 PostFX + finale + selector controls',
+                'Rows3-0 contextual and utility anchors',
+            ],
+            (0.42, 0.92, 0.58 + 0.06 * pulse),
+        )
+
+        _card(
+            col_x[1],
+            top_y + 262.0,
+            col_w,
+            208.0,
+            'Faders (CC 48-56)',
+            [
+                '48 speed, 49 intensity, 50 zoom, 51 reactivity',
+                '52 glow, 53 crt, 54 volume, 55 pan',
+                '56 master volume',
+                'All mapped by default in APC preset',
+            ],
+            (0.95, 0.62 + 0.08 * pulse, 0.34),
+        )
+
+        _card(
+            col_x[2],
+            top_y + 262.0,
+            col_w,
+            208.0,
+            'Operator Notes',
+            [
+                'Set [midi] preset = "akai_apc_mini_mk2"',
+                'Use device hint "apc mini mk2" for dual-port bind',
+                'Modal style intentionally matches native selectors',
+                'Framework designed to host future controller pages',
+            ],
+            (0.66, 0.78, 0.98),
+        )
+
+        self._draw_text(
+            'Ctrl+Alt+H: close    Esc: close    Context slots: side + bottom small buttons',
+            px + 18.0,
+            py + panel_h - 30.0,
+            scale=2.0,
+            color=(0.56, 0.67, 0.78, 0.82),
+        )
         # Resize VBO if needed
         needed = data.nbytes
         if needed > self._vbo.size:
@@ -1315,6 +1489,10 @@ void main() {
         if self._show_system_monitor_modal and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.56))
             self._render_system_monitor_modal()
+
+        if self._show_controller_help_modal and not route_modals_elsewhere:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.58))
+            self._render_controller_help_modal()
 
         if self._show_audio and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
@@ -2458,6 +2636,10 @@ void main() {
         return self._show_system_monitor_modal
 
     @property
+    def controller_help_modal_visible(self) -> bool:
+        return self._show_controller_help_modal
+
+    @property
     def projectm_manager_visible(self) -> bool:
         return self._show_projectm_manager
 
@@ -2486,6 +2668,13 @@ void main() {
                 'swap': float(self._sysmon_swap),
                 'disk_mbs': float(self._sysmon_disk_mbs),
                 'net_mbs': float(self._sysmon_net_mbs),
+            }
+        if self._show_controller_help_modal:
+            return {
+                'type': 'controller_help',
+                'title': 'CONTROLLER HELP // APC MINI MK2',
+                'device': 'akai_apc_mini_mk2',
+                'context_slots': True,
             }
         if self._show_audio:
             entries = self._audio_sources if self._audio_sources else ['(no sources available)']
@@ -2670,6 +2859,9 @@ void main() {
 
     def toggle_system_monitor_modal(self) -> None:
         self._show_system_monitor_modal = not self._show_system_monitor_modal
+
+    def toggle_controller_help_modal(self) -> None:
+        self._show_controller_help_modal = not self._show_controller_help_modal
 
     def toggle_projectm_manager(self) -> None:
         self._show_projectm_manager = not self._show_projectm_manager

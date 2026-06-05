@@ -35,6 +35,7 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'system_monitor': (sdl2.SDLK_m, 0),
     'control_room': (sdl2.SDLK_m, sdl2.KMOD_SHIFT),
     'projectm_manager': (sdl2.SDLK_m, sdl2.KMOD_CTRL),
+    'controller_help': (sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
     'help': (sdl2.SDLK_h, 0),
     'hud': (sdl2.SDLK_TAB, 0),
     'screenshot': (sdl2.SDLK_s, 0),
@@ -65,7 +66,7 @@ _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
         5: (sdl2.SDLK_f, 0),
         6: (sdl2.SDLK_e, 0),
         7: (sdl2.SDLK_a, 0),
-        8: (sdl2.SDLK_m, sdl2.KMOD_CTRL),
+        8: (sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
     },
     # Audio selector context: navigate, toggle viable, commit, back.
     'audio_selector': {
@@ -121,6 +122,17 @@ _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
         6: (sdl2.SDLK_TAB, 0),
         7: (sdl2.SDLK_SLASH, 0),
         8: (sdl2.SDLK_ESCAPE, 0),
+    },
+    # Controller help context: close-focused with minimal navigation.
+    'controller_help': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_TAB, 0),
+        6: (sdl2.SDLK_h, 0),
+        7: (sdl2.SDLK_ESCAPE, 0),
+        8: (sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
     },
 }
 
@@ -240,6 +252,8 @@ class HotkeyHandler:
         o = self._overlays
         if bool(getattr(o, 'projectm_manager_visible', False)):
             return 'projectm_manager'
+        if bool(getattr(o, 'controller_help_modal_visible', False)):
+            return 'controller_help'
         if bool(getattr(o, 'audio_selector_visible', False)):
             return 'audio_selector'
         if bool(getattr(o, 'midi_selector_visible', False)):
@@ -799,6 +813,9 @@ class HotkeyHandler:
             if getattr(o, 'system_monitor_modal_visible', False):
                 o.toggle_system_monitor_modal()
                 return
+            if getattr(o, 'controller_help_modal_visible', False):
+                o.toggle_controller_help_modal()
+                return
             if o.audio_selector_visible:
                 o.toggle_audio_selector()
                 return
@@ -841,7 +858,9 @@ class HotkeyHandler:
             o.toggle_name_overlay()
 
         elif sym == sdl2.SDLK_h:
-            if mod & sdl2.KMOD_SHIFT:
+            if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
+                o.toggle_controller_help_modal()
+            elif mod & sdl2.KMOD_SHIFT:
                 # H (Shift+h) — toggle flash message notifications
                 enabled = o.toggle_flash_messages()
                 # Force-render the status even if flash was just turned on.

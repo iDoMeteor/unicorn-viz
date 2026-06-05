@@ -24,6 +24,7 @@ class _Overlay:
     help_visible = False
     midi_selector_visible = False
     name_overlay_visible = False
+    controller_help_modal_visible = False
 
     def __init__(self) -> None:
         self.messages: list[str] = []
@@ -46,6 +47,9 @@ class _Overlay:
     def toggle_audio_selector(self) -> None:
         self.toggled_audio += 1
         self.audio_selector_visible = not self.audio_selector_visible
+
+    def toggle_controller_help_modal(self) -> None:
+        self.controller_help_modal_visible = not self.controller_help_modal_visible
 
     def set_audio_sources(
         self,
@@ -320,3 +324,23 @@ def test_midi_context_slot_can_toggle_audio_viable_in_selector_context() -> None
 
     assert app.audio_source_viable_toggled == 1
     assert overlays.audio_viable_flags == [True, False]
+
+
+def test_ctrl_alt_h_toggles_controller_help_modal() -> None:
+    handler, _app, overlays = _handler()
+
+    handler.handle(sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT)
+    assert overlays.controller_help_modal_visible is True
+
+    handler.handle(sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT)
+    assert overlays.controller_help_modal_visible is False
+
+
+def test_midi_controller_help_action_toggles_modal() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'controller_help'
+
+    handler._on_midi(MidiEvent('note_on', 0, 77, 1.0))
+    handler.process_pending_midi()
+
+    assert overlays.controller_help_modal_visible is True

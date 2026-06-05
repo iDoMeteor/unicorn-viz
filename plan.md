@@ -33,6 +33,11 @@
   - Active context now resolves between performance/audio-selector/midi-selector/help/system-monitor/projectm-manager.
   - Side+bottom APC small buttons now map to slot actions so behavior adapts automatically by current context.
   - Regression coverage extended in `tests/test_hotkeys_behavior.py` for default and audio-selector slot behavior.
+- `[done]` 2026-06-05 APC controller help modal (device-first).
+  Notes:
+  - Added a dedicated APC mini mk2 controller help modal with native Unicorn Viz modal styling.
+  - Toggle path: `Ctrl+Alt+H` and mapped controller action (`controller_help`).
+  - Modal content focuses on context slots, APC surface map, and fader assignments.
 - `[todo]` Post-functional UX: special controller help modal framework (multi-device).
   Notes:
   - Add a dedicated controller-surface help modal showing contextual slot maps and pad/fader legends.

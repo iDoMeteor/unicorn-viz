@@ -344,6 +344,7 @@ Recommended device settings:
 
 - `device = "apc mini mk2"` to allow robust paired Notes + Control port binding.
 - `preset = "akai_apc_mini_mk2"`.
+- Controller help modal: `Ctrl+Alt+H` (also available via APC mapped pad/context slot).
 
 ### Akai MPK Mini default mapping
 
