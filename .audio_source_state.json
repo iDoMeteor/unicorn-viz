@@ -1,5 +1,5 @@
 {
-  "selected_source_key": "name:pc speaker (realtek hd audio output with sst)",
+  "selected_source_key": "default",
   "viable_source_keys": [
     "default",
     "name:line 1 (virtual audio cable)",

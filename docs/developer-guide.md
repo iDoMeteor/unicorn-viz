@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Contents
 
@@ -152,8 +152,13 @@ unicorn-viz/
 | `toggle_fullscreen()` | Calls `SDL_SetWindowFullscreen` |
 | `toggle_pause()` | Freezes `dt` accumulation |
 | `_on_resize(w, h)` | Updates viewport; propagates to active effects and overlays |
-| `set_camera_layout(token)` | Delegates to `current_effect.set_camera_layout()` (WebcamOverlay drop-in) |
-| `scale_pip(delta)` | Adjusts `current_effect.parameters['pip_scale']` (WebcamOverlay drop-in) |
+| `set_camera_layout(token)` | Delegates to always-on `WebcamSystem` subsystem (`webcam-01`) |
+| `scale_pip(delta)` | Adjusts PiP scale in always-on `WebcamSystem` subsystem |
+| `set_active_webcam_camera(id)` | Direct camera selection by device id |
+| `set_webcam_camera_enabled(id, enabled)` | Enable/disable detected webcam devices |
+| `set_webcam_brightness()/set_webcam_contrast()` | Webcam image-control setters |
+| `set_webcam_flip_horizontal()/set_webcam_flip_vertical()` | Webcam flip-control setters |
+| `get_runtime_state()/set_runtime_state()` | Shared global runtime-state read/write helpers |
 
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen
@@ -688,7 +693,6 @@ Conventions for a drop-in:
 | `unicorn-tears-01` | `UnicornTears`    | Unicorn Tears    | `U` |
 | `webcam-01`        | `WebcamSystem`    | Webcam System    | keypad |
 | `images-01`        | `ImageShowcase`   | Image Showcase   | —   |
-| `webcam-01`        | `WebcamOverlay`   | Webcam Overlay   | —   |
 
 ### Subsystem drop-ins
 

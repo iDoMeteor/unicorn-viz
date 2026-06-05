@@ -134,6 +134,17 @@ _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
         7: (sdl2.SDLK_ESCAPE, 0),
         8: (sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
     },
+    # Webcam editor context.
+    'webcam_editor': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFTBRACKET, 0),
+        4: (sdl2.SDLK_RIGHTBRACKET, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_e, 0),
+        7: (sdl2.SDLK_r, 0),
+        8: (sdl2.SDLK_k, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
+    },
 }
 
 
@@ -250,6 +261,8 @@ class HotkeyHandler:
     def _active_midi_context(self) -> str:
         """Resolve the current MIDI context for slot-dispatch actions."""
         o = self._overlays
+        if bool(getattr(o, 'webcam_editor_modal_visible', False)):
+            return 'webcam_editor'
         if bool(getattr(o, 'projectm_manager_visible', False)):
             return 'projectm_manager'
         if bool(getattr(o, 'controller_help_modal_visible', False)):
@@ -464,6 +477,13 @@ class HotkeyHandler:
                 return '/'
             return ''
 
+        def _refresh_webcam_editor_payload() -> None:
+            devices = a.vj_api.list_webcam_cameras()
+            image_state = a.vj_api.webcam_image_state()
+            setter = getattr(o, 'set_webcam_editor_data', None)
+            if callable(setter):
+                setter(devices, image_state)
+
         # Effect-local Ctrl+Shift+N/Ctrl+Shift+P/Ctrl+Shift+R variant navigation.
         if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT) and effect is not None:
             if sym == sdl2.SDLK_n:
@@ -617,6 +637,91 @@ class HotkeyHandler:
                 o.flash_message(msg, 2.5)
                 return
             # Any other key falls through to ESC check below.
+
+        if getattr(o, 'webcam_editor_modal_visible', False):
+            o.note_help_activity()
+            _refresh_webcam_editor_payload()
+            if sym in (sdl2.SDLK_UP, sdl2.SDLK_LEFT):
+                o.move_webcam_editor_selection(-1)
+                return
+            elif sym in (sdl2.SDLK_DOWN, sdl2.SDLK_RIGHT):
+                o.move_webcam_editor_selection(1)
+                return
+            elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                camera_id = o.get_webcam_editor_selected_camera_id()
+                if camera_id is None or camera_id < 0:
+                    o.flash_message('Webcam: no camera selected', 1.2)
+                    return
+                label = a.vj_api.set_active_webcam_camera(camera_id)
+                if label is None:
+                    o.flash_message('Webcam: unable to switch camera', 1.4)
+                else:
+                    o.flash_message(f'Webcam camera: {label}', 1.4)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_e:
+                camera_id = o.get_webcam_editor_selected_camera_id()
+                if camera_id is None or camera_id < 0:
+                    o.flash_message('Webcam: no camera selected', 1.2)
+                    return
+                devices = a.vj_api.list_webcam_cameras()
+                target_enabled = None
+                for dev in devices:
+                    if int(dev.get('id', -1)) == int(camera_id):
+                        target_enabled = not bool(dev.get('enabled', True))
+                        break
+                if target_enabled is None:
+                    o.flash_message('Webcam: camera unavailable', 1.2)
+                    return
+                ok = a.vj_api.set_webcam_camera_enabled(camera_id, target_enabled)
+                if ok:
+                    o.flash_message(
+                        f'Webcam camera {camera_id}: {"enabled" if target_enabled else "disabled"}',
+                        1.4,
+                    )
+                else:
+                    o.flash_message('Webcam: camera unavailable', 1.2)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_r:
+                devices = a.vj_api.rediscover_webcam_cameras()
+                o.flash_message(f'Webcam rediscover: {len(devices)} found', 1.4)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_h:
+                active = a.vj_api.toggle_webcam_flip_horizontal()
+                o.flash_message(f'Webcam flip H: {"ON" if active else "OFF"}', 1.3)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_v:
+                active = a.vj_api.toggle_webcam_flip_vertical()
+                o.flash_message(f'Webcam flip V: {"ON" if active else "OFF"}', 1.3)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_LEFTBRACKET:
+                value = a.vj_api.adjust_webcam_brightness(-0.05)
+                o.flash_message(f'Webcam brightness {value:.2f}', 1.2)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_RIGHTBRACKET:
+                value = a.vj_api.adjust_webcam_brightness(0.05)
+                o.flash_message(f'Webcam brightness {value:.2f}', 1.2)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_SEMICOLON:
+                value = a.vj_api.adjust_webcam_contrast(-0.05)
+                o.flash_message(f'Webcam contrast {value:.2f}', 1.2)
+                _refresh_webcam_editor_payload()
+                return
+            elif sym == sdl2.SDLK_QUOTE:
+                value = a.vj_api.adjust_webcam_contrast(0.05)
+                o.flash_message(f'Webcam contrast {value:.2f}', 1.2)
+                _refresh_webcam_editor_payload()
+                return
+            elif (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_k:
+                o.toggle_webcam_editor_modal()
+                return
+            # Any other key falls through to ESC handling.
 
         # MIDI selector navigation — active when the MIDI device picker is open.
         if o.midi_selector_visible:
@@ -816,6 +921,9 @@ class HotkeyHandler:
             if getattr(o, 'controller_help_modal_visible', False):
                 o.toggle_controller_help_modal()
                 return
+            if getattr(o, 'webcam_editor_modal_visible', False):
+                o.toggle_webcam_editor_modal()
+                return
             if o.audio_selector_visible:
                 o.toggle_audio_selector()
                 return
@@ -871,6 +979,11 @@ class HotkeyHandler:
             else:
                 # h — toggle help overlay
                 o.toggle_help()
+
+        elif sym == sdl2.SDLK_k:
+            if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
+                _refresh_webcam_editor_payload()
+                o.toggle_webcam_editor_modal()
 
         elif sym == sdl2.SDLK_QUESTION or (
             sym == sdl2.SDLK_SLASH and (mod & sdl2.KMOD_SHIFT)

@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 All settings live in `config.toml` in the project root.
 
@@ -172,18 +172,36 @@ Notes:
 
 ## `[webcam]`
 
-Controls webcam **auto-cycle** behaviour — how long to show each webcam-type
-effect before the playlist auto-cycles to the next one when `KP Enter` is
-active.
+Controls the always-on webcam subsystem (`drop-ins/webcam-01`) and treatment
+auto-cycle behavior.
 
 | Key              | Type | Default | Description |
 |------------------|------|---------|-------------|
 | `cycle_interval` | int  | `0`     | Seconds per webcam effect. `0` = use `demo.effect_duration`. |
+| `switch_hide_duration_s` | float | `1.2` | Seconds to temporarily hide webcam PiP while switching camera devices. |
 
-> Camera capture settings (device, resolution, fps, PiP position) live under
-> `[effects.WebcamOverlay]` — see [effect-settings.md](effect-settings.md).
-> Camera support is provided entirely by the `drop-ins/webcam-01` drop-in.
-> There is no system-level camera overlay.
+Additional webcam capture and image keys (for example `device`, `width`,
+`height`, `fps`, `pip_scale`, `pip_position`, `treatment`, `brightness`,
+`contrast`, `flip_horizontal`, `flip_vertical`) are implemented by the
+`WebcamSystem` drop-in subsystem and are read from `[webcam]`.
+
+---
+
+## `[runtime_state]`
+
+Controls the shared runtime state store used by subsystems (webcam now;
+additional teams can share this in future).
+
+| Key    | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | str  | `"runtime/global_state.json"` | Runtime state JSON file path, relative to project root unless absolute. |
+
+Notes:
+- Runtime state now includes schema metadata at `_meta`:
+    - `schema = "unicornviz.runtime_state"`
+    - `schema_version = 1`
+- Webcam persistence writes under `webcam.*` and includes per-camera image
+    settings.
 
 ---
 

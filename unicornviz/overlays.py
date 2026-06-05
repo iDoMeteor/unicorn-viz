@@ -420,6 +420,7 @@ class Overlays:
                 ('m', 'System monitor modal'),
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
+                ('Ctrl+Alt+K', 'Webcam editor modal'),
                 ('Ctrl+Alt+H', 'Controller help modal (APC slot map)'),
                 ('i', 'Invert colors'),
             ],
@@ -456,6 +457,7 @@ class Overlays:
         self._hud_timeout_s = max(0.0, float(hud_timeout_s))
         self._flash_router = flash_router
         self._modal_gate = modal_gate
+        self._modal_route_debug_last: tuple[bool, str] | None = None
         self._recording_active = False
         self._recording_elapsed_seconds = 0.0
 
@@ -466,6 +468,7 @@ class Overlays:
         self._show_system_monitor_modal = False
         self._show_controller_help_modal = False
         self._show_projectm_manager = False
+        self._show_webcam_editor_modal = False
         self._audio_sources: list[str] = []
         self._audio_viable_flags: list[bool] = []
         self._audio_current_idx: int = 0
@@ -480,6 +483,16 @@ class Overlays:
         self._projectm_focus_pane: int = 1
         self._projectm_current_path: str = ''
         self._projectm_search_query: str = ''
+        self._webcam_editor_devices: list[dict[str, object]] = []
+        self._webcam_editor_selected_idx: int = 0
+        self._webcam_editor_state: dict[str, object] = {
+            'brightness': 1.0,
+            'contrast': 1.0,
+            'flip_horizontal': True,
+            'flip_vertical': False,
+            'switching': False,
+            'switch_hide_remaining_s': 0.0,
+        }
         self._sysmon_cpu: float = 0.0
         self._sysmon_ram: float = 0.0
         self._sysmon_swap: float = 0.0
@@ -736,6 +749,16 @@ void main() {
         data = self._char_quads(text, x, y, scale, color)
         if data.size == 0:
             return
+        # Resize VBO if needed.
+        needed = data.nbytes
+        if needed > self._vbo.size:
+            self._vbo.orphan(needed * 2)
+        self._vbo.write(data)
+        self._prog['color'].value = color
+        self._font_tex.use(location=0)
+        self._prog['font_tex'].value = 0
+        self._ctx.enable(moderngl.BLEND)
+        self._vao.render(moderngl.TRIANGLES, vertices=len(data) // 4)
 
     def _render_controller_help_modal(self) -> None:
         """Draw a controller-focused mapping modal (APC mini mk2 first target)."""
@@ -908,16 +931,6 @@ void main() {
             scale=2.0,
             color=(0.56, 0.67, 0.78, 0.82),
         )
-        # Resize VBO if needed
-        needed = data.nbytes
-        if needed > self._vbo.size:
-            self._vbo.orphan(needed * 2)
-        self._vbo.write(data)
-        self._prog["color"].value = color
-        self._font_tex.use(location=0)
-        self._prog["font_tex"].value = 0
-        self._ctx.enable(moderngl.BLEND)
-        self._vao.render(moderngl.TRIANGLES, vertices=len(data) // 4)
 
     def _render_recording_indicator(self) -> None:
         """Draw the live-only recording indicator when the name overlay is visible."""
@@ -1482,6 +1495,32 @@ void main() {
             except Exception:
                 route_modals_elsewhere = False
 
+        active_modal_type = ''
+        if self._show_projectm_manager:
+            active_modal_type = 'projectm_manager'
+        elif self._show_system_monitor_modal:
+            active_modal_type = 'system_monitor'
+        elif self._show_controller_help_modal:
+            active_modal_type = 'controller_help'
+        elif self._show_webcam_editor_modal:
+            active_modal_type = 'webcam_editor'
+        elif self._show_audio:
+            active_modal_type = 'audio_selector'
+        elif self._show_midi:
+            active_modal_type = 'midi_selector'
+
+        route_state = (route_modals_elsewhere, active_modal_type)
+        if route_state != self._modal_route_debug_last:
+            if active_modal_type:
+                destination = 'control_room' if route_modals_elsewhere else 'audience_overlay'
+                log.debug(
+                    'Overlay modal route: type=%s destination=%s gate=%s',
+                    active_modal_type,
+                    destination,
+                    route_modals_elsewhere,
+                )
+            self._modal_route_debug_last = route_state
+
         if self._show_projectm_manager and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.60))
             self._render_projectm_manager()
@@ -1493,6 +1532,10 @@ void main() {
         if self._show_controller_help_modal and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.58))
             self._render_controller_help_modal()
+
+        if self._show_webcam_editor_modal and not route_modals_elsewhere:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.58))
+            self._render_webcam_editor_modal()
 
         if self._show_audio and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
@@ -1684,6 +1727,119 @@ void main() {
         fy = py + panel_h - 40.0
         self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
                         px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
+
+    # ------------------------------------------------------------------
+    # Webcam editor modal
+    # ------------------------------------------------------------------
+
+    def set_webcam_editor_data(
+        self,
+        devices: list[dict[str, object]],
+        image_state: dict[str, object],
+    ) -> None:
+        """Populate webcam editor modal data before opening/rendering."""
+        self._webcam_editor_devices = list(devices)
+        if self._webcam_editor_devices:
+            selected = next(
+                (i for i, dev in enumerate(self._webcam_editor_devices) if bool(dev.get('selected', False))),
+                self._webcam_editor_selected_idx,
+            )
+            self._webcam_editor_selected_idx = max(0, min(selected, len(self._webcam_editor_devices) - 1))
+        else:
+            self._webcam_editor_selected_idx = 0
+        merged = dict(self._webcam_editor_state)
+        merged.update(dict(image_state or {}))
+        self._webcam_editor_state = merged
+
+    def move_webcam_editor_selection(self, delta: int) -> None:
+        """Move webcam editor camera selection cursor by delta rows (wraps)."""
+        total = len(self._webcam_editor_devices)
+        if total <= 0:
+            self._webcam_editor_selected_idx = 0
+            return
+        self._webcam_editor_selected_idx = (self._webcam_editor_selected_idx + int(delta)) % total
+
+    def get_webcam_editor_selected_camera_id(self) -> int | None:
+        """Return camera id currently highlighted in webcam editor modal."""
+        if not self._webcam_editor_devices:
+            return None
+        idx = max(0, min(self._webcam_editor_selected_idx, len(self._webcam_editor_devices) - 1))
+        try:
+            return int(self._webcam_editor_devices[idx].get('id'))
+        except Exception:
+            return None
+
+    def _render_webcam_editor_modal(self) -> None:
+        """Draw webcam editor modal for device/image controls."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.6)
+
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.72, 980.0)
+        panel_h = min(H * 0.80, 760.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(px, py, panel_w, bw, c_border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
+        self._draw_rect(px, py, bw, panel_h, c_border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+
+        self._draw_text('WEBCAM EDITOR', px + 18, py + 14, scale=3.5,
+                        color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
+
+        s = self._webcam_editor_state
+        b = float(s.get('brightness', 1.0) or 1.0)
+        c = float(s.get('contrast', 1.0) or 1.0)
+        fh = bool(s.get('flip_horizontal', False))
+        fv = bool(s.get('flip_vertical', False))
+        switching = bool(s.get('switching', False))
+        rem = float(s.get('switch_hide_remaining_s', 0.0) or 0.0)
+
+        self._draw_text(f'Brightness: {b:.2f}    Contrast: {c:.2f}', px + 18, py + 52, scale=2.2,
+                        color=(0.55, 0.85, 0.62, 0.90))
+        self._draw_text(f'Flip H: {"ON" if fh else "OFF"}    Flip V: {"ON" if fv else "OFF"}', px + 18, py + 76, scale=2.2,
+                        color=(0.70, 0.84, 1.0, 0.90))
+        if switching:
+            self._draw_text(f'SWITCHING... {rem:.1f}s', px + panel_w - 240, py + 76, scale=2.1,
+                            color=(1.0, 0.75, 0.22, 0.96))
+
+        row_h = 34.0
+        list_top = py + 110.0
+        entries = self._webcam_editor_devices if self._webcam_editor_devices else [
+            {'id': -1, 'label': '(no cameras detected)', 'enabled': False, 'selected': False},
+        ]
+
+        for i, entry in enumerate(entries[:12]):
+            ry = list_top + i * row_h
+            is_sel = i == self._webcam_editor_selected_idx
+            is_enabled = bool(entry.get('enabled', False))
+            is_active = bool(entry.get('selected', False))
+            cam_id = int(entry.get('id', -1))
+            label = str(entry.get('label', cam_id))
+            state_tag = 'ON' if is_enabled else 'OFF'
+            active_tag = '*' if is_active else ' '
+            text = f'{active_tag} {label:<12} [{state_tag}]'
+
+            if is_sel:
+                self._draw_rect(px + 12, ry - 1, panel_w - 24, row_h - 4,
+                                (0.10, 0.25, 0.55, 0.85))
+                self._draw_text(f'> {text}', px + 24, ry + 4, scale=2.5,
+                                color=(1.0, 0.92, 0.2, 1.0))
+            else:
+                col = (0.40, 0.92, 0.44, 0.90) if is_enabled else (0.98, 0.48, 0.48, 0.88)
+                self._draw_text(f'  {text}', px + 24, ry + 4, scale=2.5,
+                                color=col)
+
+        fy = py + panel_h - 64.0
+        self._draw_text('Up/Down: select camera   Enter: switch camera   E: enable/disable',
+                        px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.85))
+        self._draw_text('R: rediscover   [/]: brightness -/+   ;/\': contrast -/+   H/V: flip H/V   Esc/Ctrl+Alt+K: close',
+                        px + 18, fy + 22, scale=2.0, color=(0.55, 0.65, 0.75, 0.85))
 
     def set_projectm_manager_entries(
         self,
@@ -2643,6 +2799,10 @@ void main() {
     def projectm_manager_visible(self) -> bool:
         return self._show_projectm_manager
 
+    @property
+    def webcam_editor_modal_visible(self) -> bool:
+        return self._show_webcam_editor_modal
+
     def modal_snapshot(self) -> dict[str, object]:
         """Return active modal state for alternate render surfaces.
 
@@ -2675,6 +2835,14 @@ void main() {
                 'title': 'CONTROLLER HELP // APC MINI MK2',
                 'device': 'akai_apc_mini_mk2',
                 'context_slots': True,
+            }
+        if self._show_webcam_editor_modal:
+            return {
+                'type': 'webcam_editor',
+                'title': 'WEBCAM EDITOR',
+                'selected_index': int(self._webcam_editor_selected_idx),
+                'devices': list(self._webcam_editor_devices),
+                'image_state': dict(self._webcam_editor_state),
             }
         if self._show_audio:
             entries = self._audio_sources if self._audio_sources else ['(no sources available)']
@@ -2865,6 +3033,9 @@ void main() {
 
     def toggle_projectm_manager(self) -> None:
         self._show_projectm_manager = not self._show_projectm_manager
+
+    def toggle_webcam_editor_modal(self) -> None:
+        self._show_webcam_editor_modal = not self._show_webcam_editor_modal
 
     def set_recording_state(self, active: bool, elapsed_seconds: float = 0.0) -> None:
         self._recording_active = active

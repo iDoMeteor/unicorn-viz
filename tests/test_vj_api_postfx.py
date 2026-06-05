@@ -56,9 +56,24 @@ def test_vj_api_camera_navigation_delegates_to_webcam_system() -> None:
     assert app.vj_api.goto_prev_camera() == '/dev/video1'
 
 
+def test_vj_api_set_active_camera_delegates_to_webcam_system() -> None:
+    class _FakeWebcamSystem:
+        def set_active_camera(self, camera_id: int) -> str | None:
+            if camera_id == 4:
+                return '/dev/video4'
+            return None
+
+    app = App(_default_cfg())
+    app._webcam_system = _FakeWebcamSystem()
+
+    assert app.vj_api.set_active_webcam_camera(4) == '/dev/video4'
+    assert app.vj_api.set_active_webcam_camera(7) is None
+
+
 def test_vj_api_camera_navigation_safe_when_webcam_unavailable() -> None:
     app = App(_default_cfg())
     app._webcam_system = None
 
     assert app.vj_api.goto_next_camera() is None
     assert app.vj_api.goto_prev_camera() is None
+    assert app.vj_api.set_active_webcam_camera(1) is None

@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 This document lists every built-in effect and its tweakable values under `[effects.<ClassName>]` in `config.toml`.
 
@@ -379,21 +379,31 @@ zoom       = 1.0
 # random_zoom_max = 1.20
 ```
 
-### `WebcamOverlay` (`Webcam Overlay`)
+### `WebcamSystem` (always-on subsystem)
+
+Webcam controls are configured under `[webcam]` in `config.toml` (not under
+`[effects.*]`, because webcam is a runtime subsystem and not a playlist effect).
 
 ```toml
-[effects.WebcamOverlay]
-camera_device  = 0
-camera_width   = 1280
-camera_height  = 720
-camera_fps     = 30
-pip_position   = "bottom_right"
-pip_scale      = 0.33
-enabled        = true    # false disables camera worker for this effect
+[webcam]
+enabled = true
+device = 0
+width = 1280
+height = 720
+fps = 30
+pip_position = "bottom_right"
+pip_scale = 0.33
+treatment = "neon"
+brightness = 1.0
+contrast = 1.0
+flip_horizontal = true
+flip_vertical = false
+cycle_interval = 0
+switch_hide_duration_s = 1.2
 ```
 
-> **Note:** This is the standalone playlist *effect*.  The always-on system camera
-> overlay is configured under `[webcam]` — see [configuration.md](configuration.md).
+For the full key list and behavior notes, see
+[configuration.md](configuration.md).
 
 ### `VideoShowcase` (`Video Showcase`)
 

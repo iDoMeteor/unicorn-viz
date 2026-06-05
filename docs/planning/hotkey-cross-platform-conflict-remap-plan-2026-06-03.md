@@ -60,7 +60,7 @@ Rationale:
 | Ctrl+Alt+Shift+F | Ctrl+Shift+Alt+X | Grand Finale abort |
 | Ctrl+Alt+U | Ctrl+Shift+Alt+U | Screen Burst |
 | Ctrl+Alt+C | Ctrl+Shift+Alt+C | Candy Frame toggle |
-| Ctrl+Alt+K | Ctrl+Shift+Alt+K | Candy Frame effect scaling |
+| Ctrl+Alt+K | Ctrl+Shift+Alt+K | Webcam editor modal |
 
 ### 3) Replace Post FX numeric chords
 

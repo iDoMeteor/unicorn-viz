@@ -173,7 +173,7 @@ for _handler in a.vj_api.key_handlers:
 
 Then **remove** these now-redundant blocks from `handle()`:
 - `if (mod & KMOD_CTRL) and (mod & KMOD_ALT):` entire block (lines 165–219)
-  except `Ctrl+Alt+K` (frame scaling — core app feature, keep it)
+    except `Ctrl+Alt+K` (webcam editor modal — keep it)
 - `elif sym == sdl2.SDLK_F8:` streaming toggle
 - `elif (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_F9/F10/F11:` stream providers
 - `elif sym == sdl2.SDLK_u:` all unicorn-tears U variants
@@ -186,7 +186,7 @@ Then **remove** these now-redundant blocks from `handle()`:
 **Stays in core (do not remove):**
 - `Ctrl+Shift+N/P/R` effect variant protocol
 - `Ctrl+N/P/R` effect preset/scene/variant protocol
-- `Ctrl+Alt+K` frame scaling toggle (not a drop-in)
+- `Ctrl+Alt+K` webcam editor modal toggle
 - All single-key bindings: N/P/R playlist, F, Space, Tab, H, ?, A, M, R, S, V,
   Z, K, T, G, E, +, -, ,, ., ;, ', \\, I, X, F6, F7, F9 streaming CTA,
   digit shortcuts 0–9 / Shift+0–9 / Ctrl+0–9 / Alt+0–9
@@ -343,7 +343,7 @@ Note: `vj_api.find_effect(class_name, display_name)` and
 
 ---
 
-### Task 13 — webcam-01: add `handle_key` to `WebcamOverlay`
+### Task 13 — webcam-01: add `handle_key` to `WebcamSystem`
 **File:** `drop-ins/webcam-01/webcam_overlay.py`
 
 Handle the full webcam key surface:
@@ -414,7 +414,7 @@ self.vj_api.unregister_key_handler('control_room')
 - `HELP_ENTRIES` / `register_help_entries` / `discover_dropin_help_entries` —
   the help overlay registration system is already correct; this refactor does
   not touch it
-- `Ctrl+Alt+K` (frame scaling toggle) — core app feature, stays in `hotkeys.py`
+- `Ctrl+Alt+K` (webcam editor modal) — stays in `hotkeys.py`
 - All single-key and Ctrl+Shift+N/P/R bindings in `hotkeys.py`
 - The `Ctrl+N/P/R` effect preset/scene/variant protocol in `hotkeys.py`
 - The Ctrl+J leader key flash message `'AUTO VJ → A/B/P/R/C/M'` format

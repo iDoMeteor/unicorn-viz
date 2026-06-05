@@ -115,6 +115,18 @@ class VJApi:
         """
         return self._app.list_subsystems()
 
+    def get_runtime_state(self, dotted_path: str = '', default: object | None = None) -> object:
+        """Read a value from shared runtime state using dotted-path keys."""
+        return self._app.get_runtime_state(str(dotted_path), default)
+
+    def set_runtime_state(self, dotted_path: str, value: object) -> bool:
+        """Set a value in shared runtime state using dotted-path keys."""
+        key = str(dotted_path).strip()
+        if not key:
+            return False
+        self._app.set_runtime_state(key, value)
+        return True
+
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)
@@ -557,6 +569,62 @@ class VJApi:
         """Switch to the next camera device; returns device label or None."""
         return self._app.goto_next_camera()
 
+    def list_webcam_cameras(self) -> list[dict[str, object]]:
+        """Return detected webcam devices with enabled/selected metadata."""
+        return self._app.list_webcam_cameras()
+
+    def rediscover_webcam_cameras(self) -> list[dict[str, object]]:
+        """Re-scan webcam devices and return refreshed camera metadata."""
+        return self._app.rediscover_webcam_cameras()
+
+    def set_webcam_camera_enabled(self, camera_id: int, enabled: bool) -> bool:
+        """Enable or disable a webcam device by camera index."""
+        return bool(self._app.set_webcam_camera_enabled(int(camera_id), bool(enabled)))
+
+    def set_active_webcam_camera(self, camera_id: int) -> str | None:
+        """Switch directly to a webcam device by camera index."""
+        return self._app.set_active_webcam_camera(int(camera_id))
+
+    def set_webcam_brightness(self, value: float) -> float:
+        """Set webcam brightness multiplier and return clamped value."""
+        return float(self._app.set_webcam_brightness(float(value)))
+
+    def set_webcam_contrast(self, value: float) -> float:
+        """Set webcam contrast multiplier and return clamped value."""
+        return float(self._app.set_webcam_contrast(float(value)))
+
+    def adjust_webcam_brightness(self, delta: float) -> float:
+        """Adjust webcam brightness by delta and return new value."""
+        return float(self._app.adjust_webcam_brightness(float(delta)))
+
+    def adjust_webcam_contrast(self, delta: float) -> float:
+        """Adjust webcam contrast by delta and return new value."""
+        return float(self._app.adjust_webcam_contrast(float(delta)))
+
+    def set_webcam_flip_horizontal(self, enabled: bool) -> bool:
+        """Enable or disable horizontal mirror flip for webcam frames."""
+        return bool(self._app.set_webcam_flip_horizontal(bool(enabled)))
+
+    def set_webcam_flip_vertical(self, enabled: bool) -> bool:
+        """Enable or disable vertical flip for webcam frames."""
+        return bool(self._app.set_webcam_flip_vertical(bool(enabled)))
+
+    def toggle_webcam_flip_horizontal(self) -> bool:
+        """Toggle horizontal mirror flip for webcam frames."""
+        return bool(self._app.toggle_webcam_flip_horizontal())
+
+    def toggle_webcam_flip_vertical(self) -> bool:
+        """Toggle vertical flip for webcam frames."""
+        return bool(self._app.toggle_webcam_flip_vertical())
+
+    def webcam_flip_state(self) -> dict[str, bool]:
+        """Return webcam horizontal/vertical flip state."""
+        return self._app.webcam_flip_state()
+
+    def webcam_image_state(self) -> dict[str, float | bool]:
+        """Return webcam image controls (brightness/contrast/flip) state."""
+        return self._app.webcam_image_state()
+
     def trigger_burst(self) -> bool:
         """Trigger a screen-burst effect (alias for trigger_screen_burst)."""
         return self.trigger_screen_burst()
@@ -575,6 +643,22 @@ class VJApi:
         if 'coming soon' in lower:
             return False
         return True
+
+    def postfx_slots(self) -> list[tuple[int, str, bool]]:
+        """Return available post-FX slot definitions as (slot, label, enabled)."""
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return []
+        slot_map = getattr(pc, 'SLOT_MAP', ())
+        out: list[tuple[int, str, bool]] = []
+        for item in slot_map:
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            slot = int(item[0])
+            label = str(item[1])
+            enabled = bool(item[2]) if len(item) > 2 else True
+            out.append((slot, label, enabled))
+        return out
 
     def hold_postfx_slot(self, slot: int, duration_s: float) -> bool:
         # Phase 1: trigger slot immediately; timed holds land in later phases.

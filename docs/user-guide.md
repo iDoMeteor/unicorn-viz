@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Contents
 
@@ -583,7 +583,6 @@ python -m unicornviz --log-level DEBUG
 | Unicorn Tears     | `UnicornTears`     | `U` | psychedelic, audio           | Prismatic teardrops through a deep star-field     |
 | Webcam System     | `WebcamSystem`     | keypad | System-wide camera PiP with switchable treatments | 
 | Image Showcase    | `ImageShowcase`    | —   | images, audio, slideshow     | Audio-reactive still-image slideshow              |
-| Webcam Overlay    | `WebcamOverlay`    | —   | webcam, overlay, camera      | Live camera feed with animated background          |
 
 ---
 
@@ -615,10 +614,11 @@ SDL_VIDEODRIVER=x11 python -m unicornviz
 
 ### Camera / Webcam not working
 
-1. The Webcam Overlay is a **drop-in effect** — navigate to it in the playlist.
-2. Check device index in `[effects.WebcamOverlay] camera_device = 0`; try `1`, `2` if needed.
-3. Close any app holding the camera (Cheese, OBS) — the drop-in retries automatically every 3 s.
-4. Run with `--log-level DEBUG` to see V4L2 open/read details.
+1. Webcam is an always-on subsystem (`webcam-01`), not a playlist effect.
+2. Check `[webcam] device = 0`; try `1`, `2` if needed.
+3. Open the webcam editor modal (`Ctrl+Alt+K`) to rediscover devices and enable/disable cameras.
+4. Close any app holding the camera (OBS, Teams, browser tabs using camera).
+5. Run with `--log-level DEBUG` to see camera open/read/switch details.
 
 ### Screenshot is blank / upside-down
 

@@ -40,8 +40,10 @@ from unicornviz.dropins import (
     unregister_runtime_capability,
     CONTROL_ROOM_RUNTIME_CAPABILITY,
     MULTIHEAD_RUNTIME_CAPABILITY,
+    POSTFX_RUNTIME_CAPABILITY,
 )
 from unicornviz.paths import resolve_path
+from unicornviz.runtime_state import RuntimeStateStore
 from unicornviz.vj_api import VJApi
 from unicornviz.keystroke_log import KeystrokeLogger
 
@@ -343,7 +345,7 @@ def _load_rtmp_streamer_class() -> type:
 def _load_postfx_controller_class() -> type:
     """Load PostFxController directly from the postfx-01 drop-in."""
     try:
-        return load_dropin_symbol('postfx-01/postfx_controller.py', 'PostFxController')
+        return load_runtime_capability_class(POSTFX_RUNTIME_CAPABILITY)
     except Exception as exc:
         log.warning('PostFxController not available: %s', exc)
         return _NullPostFxController
@@ -540,6 +542,12 @@ class App:
         self._vj_status_pill: str = ''
         self._last_auto_vj_error_key: str = ''
         self._last_auto_vj_error_t: float = -1e9
+        runtime_state_path = self.cfg.get(
+            'runtime_state',
+            'path',
+            default='runtime/global_state.json',
+        )
+        self._runtime_state = RuntimeStateStore(str(runtime_state_path))
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -613,6 +621,29 @@ class App:
     def list_subsystems(self) -> list[str]:
         """Return the names of all currently registered subsystems."""
         return list(self._subsystems)
+
+    def get_runtime_state(self, dotted_path: str = '', default: Any = None) -> Any:
+        """Read a value from shared runtime state using dotted-path keys."""
+        return self._runtime_state.get(dotted_path, default)
+
+    def set_runtime_state(self, dotted_path: str, value: Any) -> None:
+        """Set a value in shared runtime state using dotted-path keys."""
+        self._runtime_state.set(dotted_path, value)
+
+    def _persist_webcam_runtime_state(self) -> None:
+        """Persist webcam subsystem state into the shared runtime store."""
+        if self._webcam_system is None:
+            return
+        exporter = getattr(self._webcam_system, 'get_persistence_state', None)
+        if not callable(exporter):
+            return
+        try:
+            payload = exporter()
+        except Exception as exc:
+            log.warning('Webcam runtime-state export failed: %s', exc)
+            return
+        if isinstance(payload, dict):
+            self.set_runtime_state('webcam', payload)
 
     def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
         """Route SDL events for a claimed window to a subsystem handler."""
@@ -1258,6 +1289,14 @@ class App:
         except Exception as exc:
             log.warning('WebcamSystem init failed: %s', exc)
             self._webcam_system = _NullWebcamSystem(self._ctx, self._width, self._height, cam_cfg)
+        if not isinstance(self._webcam_system, _NullWebcamSystem):
+            try:
+                persisted_webcam = self.get_runtime_state('webcam', default={})
+                apply_state = getattr(self._webcam_system, 'apply_persistence_state', None)
+                if callable(apply_state) and isinstance(persisted_webcam, dict):
+                    apply_state(persisted_webcam)
+            except Exception as exc:
+                log.warning('Webcam runtime-state import failed: %s', exc)
         self._webcam_system.start()
         self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
             self.cfg.get('demo', 'effect_duration', default=20)
@@ -1267,6 +1306,7 @@ class App:
         else:
             self._webcam_system.set_vj_api(self.vj_api)
             self.vj_api.register_key_handler('webcam', self._webcam_system.handle_key)
+            self._persist_webcam_runtime_state()
             log.info('WebcamSystem loaded from drop-in')
 
         # System-level post-process stack (optional drop-in).
@@ -1293,7 +1333,11 @@ class App:
             self._postfx_controller = None
         else:
             self._postfx_controller.set_vj_api(self.vj_api)
-            self.vj_api.register_key_handler('postfx', self._postfx_controller.handle_key)
+            register_runtime_capability(
+                self.vj_api,
+                self._postfx_controller,
+                POSTFX_RUNTIME_CAPABILITY,
+            )
             log.info('PostFxController loaded from drop-in')
 
         # System-level screen burst timing/transform controller (optional).
@@ -3000,6 +3044,7 @@ void main() {
         audio_manager.stop()
         midi_manager.stop()
         if self._webcam_system is not None:
+            self._persist_webcam_runtime_state()
             self._webcam_system.destroy()
             self._webcam_system = None
         if self._candy_frame is not None:
@@ -3033,6 +3078,7 @@ void main() {
             self._burst_prog.release()
         self._destroy_mirror_outputs()
         self._release_readback_pbos()
+        self._runtime_state.save()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
         sdl2.SDL_DestroyWindow(self._window)
         sdl2.SDL_Quit()
@@ -4170,43 +4216,171 @@ void main() {
         """Advance to next camera treatment. Returns treatment name or None."""
         if self._webcam_system is None:
             return None
-        return self._webcam_system.next_treatment()
+        result = self._webcam_system.next_treatment()
+        self._persist_webcam_runtime_state()
+        return result
 
     def goto_prev_webcam_effect(self) -> str | None:
         """Step back to previous camera treatment. Returns treatment name or None."""
         if self._webcam_system is None:
             return None
-        return self._webcam_system.prev_treatment()
+        result = self._webcam_system.prev_treatment()
+        self._persist_webcam_runtime_state()
+        return result
 
     def goto_next_camera(self) -> str | None:
         """Switch to the next camera device. Returns device label or None."""
         if self._webcam_system is None:
             return None
-        return self._webcam_system.next_camera()
+        result = self._webcam_system.next_camera()
+        if result is not None:
+            self._persist_webcam_runtime_state()
+        return result
 
     def goto_prev_camera(self) -> str | None:
         """Switch to the previous camera device. Returns device label or None."""
         if self._webcam_system is None:
             return None
-        return self._webcam_system.prev_camera()
+        result = self._webcam_system.prev_camera()
+        if result is not None:
+            self._persist_webcam_runtime_state()
+        return result
+
+    def list_webcam_cameras(self) -> list[dict[str, object]]:
+        """Return detected webcam devices with enabled/selected metadata."""
+        if self._webcam_system is None:
+            return []
+        return list(self._webcam_system.list_cameras())
+
+    def rediscover_webcam_cameras(self) -> list[dict[str, object]]:
+        """Re-scan webcam devices and return refreshed device metadata."""
+        if self._webcam_system is None:
+            return []
+        self._webcam_system.rediscover_cameras()
+        self._persist_webcam_runtime_state()
+        return list(self._webcam_system.list_cameras())
+
+    def set_webcam_camera_enabled(self, camera_id: int, enabled: bool) -> bool:
+        """Enable or disable a webcam device by numeric camera index."""
+        if self._webcam_system is None:
+            return False
+        ok = bool(self._webcam_system.set_camera_enabled(camera_id, enabled))
+        if ok:
+            self._persist_webcam_runtime_state()
+        return ok
+
+    def set_active_webcam_camera(self, camera_id: int) -> str | None:
+        """Switch directly to a webcam device by numeric camera index."""
+        if self._webcam_system is None:
+            return None
+        result = self._webcam_system.set_active_camera(camera_id)
+        if result is not None:
+            self._persist_webcam_runtime_state()
+        return result
+
+    def set_webcam_brightness(self, value: float) -> float:
+        """Set webcam software brightness multiplier and return clamped value."""
+        if self._webcam_system is None:
+            return 0.0
+        result = float(self._webcam_system.set_brightness(value))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def set_webcam_contrast(self, value: float) -> float:
+        """Set webcam software contrast multiplier and return clamped value."""
+        if self._webcam_system is None:
+            return 0.0
+        result = float(self._webcam_system.set_contrast(value))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def adjust_webcam_brightness(self, delta: float) -> float:
+        """Adjust webcam software brightness by delta and return new value."""
+        if self._webcam_system is None:
+            return 0.0
+        result = float(self._webcam_system.adjust_brightness(delta))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def adjust_webcam_contrast(self, delta: float) -> float:
+        """Adjust webcam software contrast by delta and return new value."""
+        if self._webcam_system is None:
+            return 0.0
+        result = float(self._webcam_system.adjust_contrast(delta))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def set_webcam_flip_horizontal(self, enabled: bool) -> bool:
+        """Enable or disable horizontal mirror flip for webcam frames."""
+        if self._webcam_system is None:
+            return False
+        result = bool(self._webcam_system.set_flip_horizontal(enabled))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def set_webcam_flip_vertical(self, enabled: bool) -> bool:
+        """Enable or disable vertical flip for webcam frames."""
+        if self._webcam_system is None:
+            return False
+        result = bool(self._webcam_system.set_flip_vertical(enabled))
+        self._persist_webcam_runtime_state()
+        return result
+
+    def toggle_webcam_flip_horizontal(self) -> bool:
+        """Toggle horizontal mirror flip for webcam frames."""
+        if self._webcam_system is None:
+            return False
+        result = bool(self._webcam_system.toggle_flip_horizontal())
+        self._persist_webcam_runtime_state()
+        return result
+
+    def toggle_webcam_flip_vertical(self) -> bool:
+        """Toggle vertical flip for webcam frames."""
+        if self._webcam_system is None:
+            return False
+        result = bool(self._webcam_system.toggle_flip_vertical())
+        self._persist_webcam_runtime_state()
+        return result
+
+    def webcam_flip_state(self) -> dict[str, bool]:
+        """Return webcam horizontal/vertical flip state."""
+        if self._webcam_system is None:
+            return {'horizontal': False, 'vertical': False}
+        return dict(self._webcam_system.webcam_flip_state())
+
+    def webcam_image_state(self) -> dict[str, float | bool]:
+        """Return webcam image controls (brightness/contrast/flip) state."""
+        if self._webcam_system is None:
+            return {
+                'brightness': 0.0,
+                'contrast': 0.0,
+                'flip_horizontal': False,
+                'flip_vertical': False,
+            }
+        return dict(self._webcam_system.webcam_image_state())
 
     def toggle_webcam_auto_cycle(self) -> bool:
         """Toggle auto-cycling camera treatments. Returns the new on/off state."""
         if self._webcam_system is None:
             return False
-        return self._webcam_system.toggle_auto_cycle()
+        result = self._webcam_system.toggle_auto_cycle()
+        self._persist_webcam_runtime_state()
+        return result
 
     def scale_pip(self, delta: float) -> float:
         """Adjust webcam PiP scale. Returns new value, or 0 if unavailable."""
         if self._webcam_system is None:
             return 0.0
-        return self._webcam_system.scale_pip(delta)
+        result = self._webcam_system.scale_pip(delta)
+        self._persist_webcam_runtime_state()
+        return result
 
     def set_camera_layout(self, layout: str) -> bool:
         """Set webcam PiP position. Returns True when the system is available."""
         if self._webcam_system is None:
             return False
         self._webcam_system.set_layout(layout)
+        self._persist_webcam_runtime_state()
         return True
 
     @property

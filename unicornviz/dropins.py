@@ -61,6 +61,13 @@ MULTIHEAD_RUNTIME_CAPABILITY = DropinRuntimeCapability(
     class_symbol='MultiHeadController',
 )
 
+POSTFX_RUNTIME_CAPABILITY = DropinRuntimeCapability(
+    name='postfx',
+    relative_file='postfx-01/postfx_controller.py',
+    class_symbol='PostFxController',
+    key_handler_attr='handle_key',
+)
+
 
 def _normalise_help_entries(
     raw_entries: Any,
