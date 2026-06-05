@@ -21,6 +21,12 @@
   - Added built-in named mappings for transport, selectors/modals, display modes, finale triggers, and randomization toggles.
   - Added contextual navigation actions (`context_up/down/left/right/select/back`) and `postfx_N` dispatch support.
   - Regression coverage extended in `tests/test_hotkeys_behavior.py` for named/contextual/unmapped note actions.
+- `[done]` 2026-06-05 APC mini mk2 maximal surface mapping (Item 3).
+  Notes:
+  - `akai_apc_mini_mk2` now maps the full pad grid (`0..63`) plus side/bottom buttons (`100..107`, `112..119`).
+  - Mapping emphasizes contextual side/bottom navigation, full pad utilization, and broad live-control coverage.
+  - Slider/fader mapping remains fully populated (`48..56`).
+  - Added regression checks in `tests/test_midi_apc_preset.py` for full pad/button/fader coverage.
 - `[done]` **Pre-release future-proofing pass** — all FP-01 through FP-13 items verified complete
   (loaders guarded, config skeletons present, stable contracts declared, HELP_ENTRIES docs written,
   VJApi versioned, grand-finale private-attr violations resolved).  `plan-future-proofing.md`

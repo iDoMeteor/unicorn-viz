@@ -323,10 +323,27 @@ Select a preset in `config.toml` under `[midi] preset = "..."`.
 
 | Preset                | Targets                              |
 |-----------------------|--------------------------------------|
+| `akai_apc_mini_mk2`   | Akai APC mini mk2 (Notes + Control) |
 | `akai_mpk_mini`       | Akai MPK Mini MK2/MK3 (default)     |
 | `novation_launchcontrol` | Novation LaunchControl XL         |
 | `generic`             | Generic USB keyboard (C4–A4 layout) |
 | `""`                  | No preset — hardcoded defaults only |
+
+### Akai APC mini mk2 maximal mapping
+
+The APC preset is now a full-surface mapping.
+
+- Grid pads `0..63`: fully mapped (transport, display modes, PostFX quick-hits,
+  selectors, contextual navigation, and utility actions).
+- Bottom track buttons `100..107`: contextual nav cluster + selector shortcuts.
+- Scene launch buttons `112..119`: high-priority live controls.
+- Faders `48..56`: speed, intensity, zoom, reactivity, glow, crt, volume, pan,
+  and master volume.
+
+Recommended device settings:
+
+- `device = "apc mini mk2"` to allow robust paired Notes + Control port binding.
+- `preset = "akai_apc_mini_mk2"`.
 
 ### Akai MPK Mini default mapping
 

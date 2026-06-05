@@ -64,7 +64,7 @@ _DEFAULTS: dict[str, Any] = {
     },
     "midi": {
         "device": "",
-        "preset": "",    # named preset: "akai_mpk_mini" | "novation_launchcontrol" | "generic" | ""
+        "preset": "",    # named preset: "akai_apc_mini_mk2" | "akai_mpk_mini" | "novation_launchcontrol" | "generic" | ""
         "cc_map": {},    # per-CC overrides: {CC_number: param_name} — applied after preset
         "note_map": {},  # per-note overrides: {note_number: action_name} — applied after preset
     },

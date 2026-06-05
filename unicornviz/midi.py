@@ -98,7 +98,10 @@ BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
     # Notes port: 8x8 pad grid (notes 0-63, row 0 bottom = notes 0-7,
     #             row 7 top = notes 56-63), scene launch buttons (notes 112-119)
     # Control port: track faders 1-8 (CC 48-55), master fader (CC 56)
-    # Default mapping uses top pad row (56-63) and scene buttons (112-119) for actions.
+    # Default mapping covers full performance surface:
+    # - Grid 0-63: transport, display, postfx triggers, selectors, contextual nav
+    # - Track buttons 100-107: contextual nav + selector shortcuts
+    # - Scene buttons 112-119: high-priority show controls
     # Connect to "APC mini mk2 Notes" for pad triggers (device = "notes").
     # Connect to "APC mini mk2 Control" for fader CCs (device = "control").
     'akai_apc_mini_mk2': {
@@ -116,24 +119,105 @@ BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
             56: 'volume',
         },
         'note_map': {
-            # Top pad row (row 7, notes 56-63) — primary action triggers
+            # Row 7 (top): transport + show globals
             56: 'next',
             57: 'prev',
             58: 'random',
             59: 'pause',
             60: 'fullscreen',
             61: 'audio_toggle',
-            62: 'eq',
-            63: 'ansi',
-            # Scene launch buttons (notes 112-119) — same actions, right side column
+            62: 'ansi',
+            63: 'projectm_manager',
+
+            # Row 6
+            48: 'display_single',
+            49: 'display_span_included',
+            50: 'display_span_all',
+            51: 'display_mirror_included',
+            52: 'display_mirror_all',
+            53: 'help',
+            54: 'hud',
+            55: 'screenshot',
+
+            # Row 5: PostFX quick-hits
+            40: 'postfx_1',
+            41: 'postfx_2',
+            42: 'postfx_3',
+            43: 'postfx_4',
+            44: 'postfx_5',
+            45: 'postfx_6',
+            46: 'postfx_7',
+            47: 'postfx_8',
+
+            # Row 4
+            32: 'postfx_9',
+            33: 'postfx_10',
+            34: 'grand_finale',
+            35: 'grand_finale_abort',
+            36: 'control_room',
+            37: 'system_monitor',
+            38: 'audio_selector',
+            39: 'midi_selector',
+
+            # Row 3: contextual navigation strip
+            24: 'context_left',
+            25: 'context_right',
+            26: 'context_up',
+            27: 'context_down',
+            28: 'context_select',
+            29: 'context_back',
+            30: 'replay_splash',
+            31: 'invert',
+
+            # Row 2
+            16: 'speed_random',
+            17: 'reactivity_random',
+            18: 'zoom_random',
+            19: 'eq',
+            20: 'audio_toggle',
+            21: 'ansi',
+            22: 'random',
+            23: 'pause',
+
+            # Row 1
+            8: 'next',
+            9: 'prev',
+            10: 'fullscreen',
+            11: 'projectm_manager',
+            12: 'display_single',
+            13: 'audio_selector',
+            14: 'midi_selector',
+            15: 'help',
+
+            # Row 0 (bottom)
+            0: 'context_left',
+            1: 'context_right',
+            2: 'context_up',
+            3: 'context_down',
+            4: 'context_select',
+            5: 'context_back',
+            6: 'postfx_1',
+            7: 'postfx_10',
+
+            # Bottom track buttons (100-107)
+            100: 'context_up',
+            101: 'context_down',
+            102: 'context_left',
+            103: 'context_right',
+            104: 'context_select',
+            105: 'context_back',
+            106: 'audio_selector',
+            107: 'midi_selector',
+
+            # Scene launch buttons (112-119)
             112: 'next',
             113: 'prev',
             114: 'random',
             115: 'pause',
             116: 'fullscreen',
-            117: 'audio_toggle',
-            118: 'eq',
-            119: 'ansi',
+            117: 'projectm_manager',
+            118: 'control_room',
+            119: 'grand_finale',
         },
     },
 
