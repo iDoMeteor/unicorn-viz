@@ -194,7 +194,7 @@ Effect after fix:
 
 ### 12. `[noted]` `Analyzer` band split for `bass` / `mid` / `treble` is also off
 
-Current behavior in [unicornviz/audio/analyzer.py](unicornviz/audio/analyzer.py):
+Current behavior in [unicornviz/audio/analyzer.py](../unicornviz/audio/analyzer.py):
 1. `lo = bands // 32 = 16`, so `bass = mean(spectrum[:16])` ≈ 0–750 Hz. That is wider than the standard "bass" band (~60–250 Hz).
 2. `mid = mean(spectrum[16:256])` ≈ 750 Hz – 12 kHz. That includes most of the treble range.
 3. `treble = mean(spectrum[256:])` ≈ 12 kHz – 24 kHz. That sits almost entirely above the musically useful range.
@@ -212,9 +212,9 @@ Recommendation:
 
 ## Files Touched by This Audit
 
-1. [unicornviz/effects/audio_spectrum.py](unicornviz/effects/audio_spectrum.py) — log-spaced EQ band mapping with pink-noise compensation.
-2. [unicornviz/app.py](unicornviz/app.py) — mirror vertical flip, single shared screen read per frame, span_all `toggle_fullscreen` cleanup.
-3. [audits/multi-head-2026-05-10.md](audits/multi-head-2026-05-10.md) — this report.
+1. [unicornviz/effects/audio_spectrum.py](../unicornviz/effects/audio_spectrum.py) — log-spaced EQ band mapping with pink-noise compensation.
+2. [unicornviz/app.py](../unicornviz/app.py) — mirror vertical flip, single shared screen read per frame, span_all `toggle_fullscreen` cleanup.
+3. [audits/multi-head-2026-05-10.md](multi-head-2026-05-10.md) — this report.
 
 ---
 

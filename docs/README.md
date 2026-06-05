@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-05-24
+Last updated: 2026-06-04
 
 This is the canonical map for project documentation.
 
@@ -23,7 +23,9 @@ This is the canonical map for project documentation.
 - Hotkey architecture refactor: [docs/planning/hotkey-architecture-refactor.md](planning/hotkey-architecture-refactor.md)
 - Hotkey cross-platform conflict remap plan (2026-06-03): [docs/planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md](planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md)
 - Prioritized action plan (2026-06-03): [docs/planning/prioritized-action-plan-2026-06-03.md](planning/prioritized-action-plan-2026-06-03.md)
+- Effect tweakables backlog (2026-06-04): [docs/planning/effect-tweakables-backlog-2026-06-04.md](planning/effect-tweakables-backlog-2026-06-04.md)
 - Debug and handoff notes: [docs/debug](debug)
+  - Audio startup regression + validation hardening (2026-06-04): [docs/debug/audio-startup-regression-2026-06-04.md](debug/audio-startup-regression-2026-06-04.md)
 - Audit reports and review snapshots: [docs/audits](audits)
   - Full system audit (2026-06-01): [docs/audits/2026-06-01-system-audit.md](audits/2026-06-01-system-audit.md)
   - Hotkey refactor P0 hotfix brief (2026-06-01): [docs/audits/2026-06-01-hotkey-refactor-regressions.md](audits/2026-06-01-hotkey-refactor-regressions.md)

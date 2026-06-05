@@ -1,5 +1,9 @@
 # Unicorn Viz — Developer Guide
 
+Owner: Studio Documentation
+Status: active
+Last updated: 2026-06-04
+
 ## Contents
 
 1. [Architecture Overview](#architecture-overview)
@@ -110,20 +114,17 @@ unicorn-viz/
 │       ├── cube_3d.py         → 3D Cube
 │       ├── dali.py            → Dali
 │       ├── escher.py          → Escher
-│       ├── fire.py            → Curtains
 │       ├── fire_lifelike.py   → Fire
 │       ├── fractal_zoom.py    → Fractal Zoom
 │       ├── metaballs.py       → Metaballs
 │       ├── particle_storm.py  → Particle Storm
 │       ├── plasma.py          → Plasma
-│       ├── raymarcher.py      → Raymarcher
 │       ├── sine_scroller.py   → Sine Scroller 2.0
 │       ├── starfield.py       → Starfield
 │       ├── system_monitor.py  → System Monitor
 │       ├── tunnel.py          → Tunnel
 │       ├── van_gogh.py        → Van Gogh
 │       ├── vector.py          → Vector
-│       ├── water.py           → Water
 │       └── (+ drop-in effects loaded at runtime via dropins.py)
 ├── config.toml
 ├── requirements.txt
@@ -157,9 +158,8 @@ unicorn-viz/
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen
 over `transition_duration` seconds.  Supported modes: `crossfade`,
-`smoothfade`, `scanwipe_x`, `scanwipe_y`, `dissolve`, `zoomblend`,
-`radialwipe`, `lumawipe`, `stripewipe`, `anglesweep`, `glitchsoft`,
-`prismsplit`, `shuffle` (random pick each transition).
+`smoothfade`, `scanwipe`, `scanwipe_x`, `scanwipe_y`, `dissolve`,
+`zoomblend`, `shuffle`, `random`.
 
 ### Effects System
 
@@ -247,6 +247,20 @@ CC → `effect.parameters[*]` and Note → same actions as keyboard hotkeys.
 
 **Config** (`config.py`): Deep-merges `config.toml` over `_DEFAULTS`.  All
 access via `cfg.get("section", "key", default=x)` — never raises.
+
+Validation lifecycle:
+- `python -m unicornviz` calls `register_dropin_config_validators()` first,
+    then `cfg.validate()` before app startup.
+- Built-in config sections are validated for type compatibility and key
+    constraints (enum/range/list element checks).
+- Validation failures raise `ConfigValidationError` and stop startup with a
+    consolidated, operator-readable message.
+
+Drop-in config validators:
+- A drop-in can provide `drop-ins/<name>/config_validator.py`.
+- Export callable: `validate_config(config_data) -> list[str] | None`.
+- Errors returned there are automatically namespaced as `dropin:<name>: ...`
+    and merged into the same startup validation output.
 
 **Playlist** (`playlist.py`): Wraps a `list[Type[BaseEffect]]`.  `advance()`
 is sequential or random depending on `mode`.  Supports a pinned sequence from

@@ -20,7 +20,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    # Git hook tooling used by .pre-commit-config.yaml
     "pre-commit>=3.7",
+    # Local hook test runner
     "pytest>=8.0",
 ]
 

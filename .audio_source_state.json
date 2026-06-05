@@ -1,7 +1,7 @@
 {
-  "selected_source_key": "name:hd webcam c615 mono",
+  "selected_source_key": "name:built-in audio analog stereo",
   "viable_source_keys": [
-    "name:built-in audio analog stereo",
-    "name:librewolf"
+    "default",
+    "name:built-in audio analog stereo"
   ]
 }

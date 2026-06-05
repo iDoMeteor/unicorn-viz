@@ -26,13 +26,14 @@ void main() {
 _FRAG = """
 #version 330
 // Psychedelic — palette-sine neon field.
-// Uniforms: iTime, iBass, iMid, iTreble, iSpeed.
+// Uniforms: iTime, iBass, iMid, iTreble, iSpeed, iZoom.
 // Outputs: fragColor (RGBA).
 uniform float iTime;
 uniform float iBass;
 uniform float iMid;
 uniform float iTreble;
 uniform float iSpeed;
+uniform float iZoom;
 in  vec2 v_uv;
 out vec4 fragColor;
 
@@ -45,7 +46,7 @@ vec3 palette(float t) {
 }
 
 void main() {
-    vec2 uv = v_uv;
+    vec2 uv = (v_uv - 0.5) / max(iZoom, 0.08) + 0.5;
     float t = iTime * iSpeed;
     float f = 0.0;
     f += sin(uv.x * 16.0 + t * 1.2) * 0.25;
@@ -82,7 +83,10 @@ class Psychedelic(BaseEffect):
     PING_PONG_FRIENDS = ['Fractal Zoom', 'Kaleidoscope', 'Unicorn Tears', 'ProjectM Presets']
 
     def _init(self) -> None:
-        self.parameters = {'speed': float(self.config.get('speed', 1.0))}
+        self.parameters = {
+            'speed': float(self.config.get('speed', 1.0)),
+            'zoom': float(self.config.get('zoom', 1.0)),
+        }
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad(self._prog)
         self._bass   = 0.0
@@ -107,6 +111,7 @@ class Psychedelic(BaseEffect):
         _set('iMid',    self._mid)
         _set('iTreble', self._treble)
         _set('iSpeed',  float(self.parameters['speed']))
+        _set('iZoom',   max(0.08, float(self.parameters['zoom'])))
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:

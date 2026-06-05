@@ -1860,9 +1860,13 @@ void main() {
         audio_start_backoff_s = float(
             self.cfg.get('audio', 'start_retry_backoff_s', default=0.5)
         )
+        audio_require_startup = bool(
+            self.cfg.get('audio', 'require_startup', default=False)
+        )
         if audio_start_retries < 0:
             audio_start_retries = 0
         total_audio_attempts = audio_start_retries + 1
+        audio_start_ok = False
         for attempt in range(1, total_audio_attempts + 1):
             log.info(
                 'Startup: audio attempt %d/%d (timeout=%.2fs)',
@@ -1873,6 +1877,7 @@ void main() {
             try:
                 audio_manager.start(timeout_s=audio_start_timeout_s)
                 log.info('Startup: audio subsystem ready')
+                audio_start_ok = True
                 break
             except Exception as exc:
                 log.error(
@@ -1885,12 +1890,13 @@ void main() {
                     audio_manager.stop()
                 except Exception:
                     log.debug('Startup: audio cleanup failed after attempt %d', attempt)
-                if attempt >= total_audio_attempts:
-                    raise RuntimeError(
-                        f'Audio startup failed after {total_audio_attempts} attempts'
-                    ) from exc
                 if audio_start_backoff_s > 0:
                     time.sleep(audio_start_backoff_s)
+        if not audio_start_ok:
+            msg = f'Audio startup failed after {total_audio_attempts} attempts'
+            if audio_require_startup:
+                raise RuntimeError(msg)
+            log.warning('%s; continuing with audio disabled/inactive', msg)
         self._audio_manager = audio_manager
 
         # Kick off background image decoding so disk I/O overlaps with the splash.
@@ -2179,8 +2185,14 @@ void main() {
         self._webcam_cycle_interval = float(
             self.cfg.get('webcam', 'cycle_interval', default=0)
         ) or float(self._effect_duration)
+        perf_debug_enabled = log.isEnabledFor(logging.DEBUG)
+        perf_frame_counter = 0
+        perf_sample_every = 120
+        perf_slow_frame_ms = 25.0
 
         while self._running:
+            if perf_debug_enabled:
+                perf_frame_start = time.perf_counter()
             now = time.perf_counter()
             dt = min(now - prev_time, 0.1)  # cap at 100 ms to avoid spiral
             prev_time = now
@@ -2247,8 +2259,12 @@ void main() {
                     ):
                         log.info('SDL display topology change detected; rebuilding multi-head outputs')
                         self._rebuild_multihead_outputs()
+            if perf_debug_enabled:
+                perf_after_events = time.perf_counter()
 
             hotkeys.process_pending_midi()
+            if perf_debug_enabled:
+                perf_after_midi = time.perf_counter()
 
             # Auto-playlist advance
             if not manager_modal_active and not self._paused and self._next_effect is None and self._auto_advance:
@@ -2262,10 +2278,14 @@ void main() {
                     next_cls = playlist.advance()
                     log.info("Auto-advance → %s", next_cls.NAME)
                     self._switch_effect(next_cls)
+            if perf_debug_enabled:
+                perf_after_auto_advance = time.perf_counter()
 
             # Update audio
             self._audio = audio_manager.get_audio_data()
             self._audio_raw = audio_manager.get_audio_data_raw()
+            if perf_debug_enabled:
+                perf_after_audio = time.perf_counter()
 
             if self._auto_vj is not None and not manager_modal_active:
                 try:
@@ -2301,12 +2321,16 @@ void main() {
                     except Exception:
                         pass
                     self.vj_api.set_status_pill('AUTO VJ  ERROR')
+            if perf_debug_enabled:
+                perf_after_auto_vj = time.perf_counter()
 
             if self._grand_finale is not None and not manager_modal_active:
                 try:
                     self._grand_finale.update(dt, self._audio)
                 except Exception as exc:
                     log.warning('GrandFinaleController update failed: %s', exc)
+            if perf_debug_enabled:
+                perf_after_grand_finale = time.perf_counter()
 
             if not manager_modal_active:
                 for name, subsystem in list(self._subsystems.items()):
@@ -2317,6 +2341,8 @@ void main() {
                         updater(dt, self._audio)
                     except Exception as exc:
                         log.warning('%s subsystem update failed: %s', name, exc)
+            if perf_debug_enabled:
+                perf_after_subsystem_update = time.perf_counter()
 
             # Update effects
             if not self._paused:
@@ -2329,6 +2355,12 @@ void main() {
                     )
                     allow_next_effect_update = False
                 if self._current_effect and allow_current_effect_update:
+                    auto_vj_profile = ''
+                    if self._auto_vj is not None:
+                        auto_vj_profile = str(getattr(self._auto_vj, '_profile', '')).lower()
+                    is_raver_mode = bool(self._auto_vj is not None and auto_vj_profile == 'raver')
+                    setattr(self._current_effect, '_raver_mode_active', is_raver_mode)
+                    setattr(self._current_effect, '_auto_vj_profile', auto_vj_profile)
                     audio_cur = self._audio_for_effect(
                         self._audio,
                         self._current_effect,
@@ -2336,12 +2368,20 @@ void main() {
                     )
                     self._current_effect.update(dt, audio_cur)
                 if self._next_effect and allow_next_effect_update:
+                    auto_vj_profile = ''
+                    if self._auto_vj is not None:
+                        auto_vj_profile = str(getattr(self._auto_vj, '_profile', '')).lower()
+                    is_raver_mode = bool(self._auto_vj is not None and auto_vj_profile == 'raver')
+                    setattr(self._next_effect, '_raver_mode_active', is_raver_mode)
+                    setattr(self._next_effect, '_auto_vj_profile', auto_vj_profile)
                     audio_next = self._audio_for_effect(
                         self._audio,
                         self._next_effect,
                         self._audio_scratch_next,
                     )
                     self._next_effect.update(dt, audio_next)
+            if perf_debug_enabled:
+                perf_after_effect_update = time.perf_counter()
 
             # Keep persistent name overlay in sync with the active effect.
             # ANSIViewer shows the current art title; all other effects show NAME.
@@ -2569,6 +2609,8 @@ void main() {
             self._playlist_mode = playlist.mode
             self._playlist_index = playlist.index
             self._playlist_size = len(playlist.effects)
+            if perf_debug_enabled:
+                perf_after_hud = time.perf_counter()
 
             # Render
             self._render(dt)
@@ -2717,9 +2759,11 @@ void main() {
                 overlays.resize(vw, vh)
                 self._ctx.screen.use()
                 self._ctx.viewport = (vx, vy, vw, vh)
+                self._normalize_gl_render_state()
                 overlays.render(dt, include_recording_indicator=False)
             else:
                 overlays.resize(self._width, self._height)
+                self._normalize_gl_render_state()
                 overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
             need_frame_for_streaming = (
@@ -2771,14 +2815,20 @@ void main() {
                 overlays.resize(vw, vh)
                 self._ctx.screen.use()
                 self._ctx.viewport = (vx, vy, vw, vh)
+                self._normalize_gl_render_state()
                 overlays.render_live_recording_indicator()
             else:
                 overlays.resize(self._width, self._height)
+                self._normalize_gl_render_state()
                 overlays.render_live_recording_indicator()
             if need_frame_for_mirror and shared_frame is not None:
                 self._present_mirror_outputs(shared_frame)
+            if perf_debug_enabled:
+                perf_before_swap = time.perf_counter()
 
             sdl2.SDL_GL_SwapWindow(self._window)
+            if perf_debug_enabled:
+                perf_after_swap = time.perf_counter()
 
             for name, subsystem in list(self._subsystems.items()):
                 presenter = getattr(subsystem, 'present', None)
@@ -2788,6 +2838,37 @@ void main() {
                     presenter()
                 except Exception as exc:
                     log.warning('%s subsystem present failed: %s', name, exc)
+            if perf_debug_enabled:
+                perf_after_subsystem_present = time.perf_counter()
+                perf_frame_counter += 1
+                frame_total_ms = (perf_after_subsystem_present - perf_frame_start) * 1000.0
+                if (
+                    frame_total_ms >= perf_slow_frame_ms
+                    or (perf_frame_counter % perf_sample_every) == 0
+                ):
+                    log.debug(
+                        (
+                            'Perf frame: total=%.2fms events=%.2fms midi=%.2fms '
+                            'auto=%.2fms audio=%.2fms auto_vj=%.2fms finale=%.2fms '
+                            'subsys_upd=%.2fms effects=%.2fms hud=%.2fms draw=%.2fms '
+                            'swap=%.2fms subsys_present=%.2fms fps=%.1f mode=%s'
+                        ),
+                        frame_total_ms,
+                        (perf_after_events - perf_frame_start) * 1000.0,
+                        (perf_after_midi - perf_after_events) * 1000.0,
+                        (perf_after_auto_advance - perf_after_midi) * 1000.0,
+                        (perf_after_audio - perf_after_auto_advance) * 1000.0,
+                        (perf_after_auto_vj - perf_after_audio) * 1000.0,
+                        (perf_after_grand_finale - perf_after_auto_vj) * 1000.0,
+                        (perf_after_subsystem_update - perf_after_grand_finale) * 1000.0,
+                        (perf_after_effect_update - perf_after_subsystem_update) * 1000.0,
+                        (perf_after_hud - perf_after_effect_update) * 1000.0,
+                        (perf_before_swap - perf_after_hud) * 1000.0,
+                        (perf_after_swap - perf_before_swap) * 1000.0,
+                        (perf_after_subsystem_present - perf_after_swap) * 1000.0,
+                        (1.0 / dt) if dt > 0.0 else 0.0,
+                        self._display_mode,
+                    )
 
             if self._control_room_startup_cfg is not None:
                 if self._control_room_startup_frames_remaining > 0:
@@ -2932,6 +3013,24 @@ void main() {
         finally:
             if use_scissor:
                 self._ctx.scissor = prev_scissor
+
+    def _normalize_gl_render_state(self) -> None:
+        """Restore conservative GL state before HUD/overlay draw passes."""
+        ctx = self._ctx
+        # Keep canonical alpha-blend parameters, but leave blending disabled
+        # so next-frame effect passes start from a neutral baseline.
+        ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        ctx.disable(moderngl.BLEND)
+        # Defensive resets for effects that mutate global render state.
+        ctx.disable(moderngl.PROGRAM_POINT_SIZE)
+        ctx.disable(moderngl.DEPTH_TEST)
+        ctx.disable(moderngl.CULL_FACE)
+        ctx.scissor = None
+        try:
+            ctx.color_mask = (True, True, True, True)
+        except Exception:
+            # Some backends may not expose writable color masks.
+            pass
 
     def _render(self, dt: float) -> None:
         ctx = self._ctx
@@ -3952,18 +4051,6 @@ void main() {
         _ = kind
         grace = float(self.cfg.get('auto_vj', 'manual_grace_s', default=8.0))
         self._user_action_deadline = time.monotonic() + max(0.0, grace)
-
-    def goto_ansi(self, ansi_dir: str) -> None:
-        """Launch ANSIViewer with an explicit art directory."""
-        # Invert does not carry through transitions.
-        self._invert_colors = False
-        if self._current_effect is not None:
-            self._previous_effect_name = self._current_effect.NAME
-        if self._next_effect is not None:
-            self._next_effect.destroy()
-        cfg_override = {"ansi_dir": ansi_dir}
-        self._next_effect = ANSIViewer(self._ctx, self._width, self._height, cfg_override)
-        self._transition_t = 0.0
 
     def adjust_advance_interval(self, delta: float) -> float:
         """Adjust the auto-advance interval by delta seconds. Returns new value."""

@@ -106,12 +106,30 @@ class Metaballs(BaseEffect):
         self._treble = 0.0
         self._beat = 0.0
         self._retarget_timer = 0.0
-        self._retarget_interval = float(self.rng.uniform(4.0, 8.0))
+        self._retarget_interval = self._next_retarget_interval()
+
+    def _is_raver_mode(self) -> bool:
+        """Return True when Auto VJ currently reports the raver profile."""
+        return bool(getattr(self, '_raver_mode_active', False))
+
+    def _next_retarget_interval(self) -> float:
+        """Sample next retarget interval with raver-mode pacing boost."""
+        if self._is_raver_mode():
+            # ~75% toward old (4..8s) from current calm (7..13s): 4.75..9.25s
+            return float(self.rng.uniform(4.75, 9.25))
+        return float(self.rng.uniform(7.0, 13.0))
 
     def _retarget_motion(self) -> None:
         """Re-seed orbital profiles and sometimes vary active ball count."""
-        if float(self.rng.uniform(0.0, 1.0)) < 0.45:
-            self._ball_count = int(self.rng.integers(_MIN_BALLS, _MAX_BALLS + 1))
+        raver = self._is_raver_mode()
+        change_chance = 0.3875 if raver else 0.20
+        if float(self.rng.uniform(0.0, 1.0)) < change_chance:
+            if raver and float(self.rng.uniform(0.0, 1.0)) < 0.35:
+                self._ball_count = int(self.rng.integers(_MIN_BALLS, _MAX_BALLS + 1))
+            else:
+                delta_span = 4 if raver else 2
+                delta = int(self.rng.integers(-delta_span, delta_span + 1))
+                self._ball_count = int(np.clip(self._ball_count + delta, _MIN_BALLS, _MAX_BALLS))
         self._phases = self.rng.uniform(0.0, math.tau, (_MAX_BALLS, 4))
         self._freqs = self.rng.uniform(0.25, 1.35, (_MAX_BALLS, 4))
         self._amps = self.rng.uniform(0.35, 1.28, (_MAX_BALLS, 2))
@@ -125,14 +143,15 @@ class Metaballs(BaseEffect):
         if audio.beat > 0.5:
             self._beat = 1.0
             # Beat can occasionally jump to a fresh cluster personality.
-            if float(self.rng.uniform(0.0, 1.0)) < 0.35:
+            beat_retarget_chance = 0.30 if self._is_raver_mode() else 0.15
+            if float(self.rng.uniform(0.0, 1.0)) < beat_retarget_chance:
                 self._retarget_motion()
         self._beat = max(0.0, self._beat - dt * 3.0)
 
         self._retarget_timer += dt
         if self._retarget_timer >= self._retarget_interval:
             self._retarget_timer = 0.0
-            self._retarget_interval = float(self.rng.uniform(4.0, 8.0))
+            self._retarget_interval = self._next_retarget_interval()
             self._retarget_motion()
 
     def render(self) -> None:

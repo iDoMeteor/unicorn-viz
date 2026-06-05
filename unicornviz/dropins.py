@@ -12,8 +12,10 @@ import sys
 import tomllib
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-from typing import Any, Type
+from types import ModuleType
+from typing import Any, Callable, Type
 
+from unicornviz.config import register_config_validator
 from unicornviz.paths import APP_ROOT
 
 
@@ -21,6 +23,8 @@ log = logging.getLogger(__name__)
 
 _EXCLUDE_CACHE_SIG: tuple[float, int] | None = None
 _EXCLUDE_CACHE: tuple[bool, set[str]] = (False, set())
+_REGISTERED_VALIDATOR_FILES: set[str] = set()
+_MODULE_CACHE: dict[Path, ModuleType] = {}
 
 
 def _normalise_help_entries(
@@ -159,17 +163,40 @@ def _is_dropin_excluded(name: str) -> bool:
     return any(a in excludes for a in aliases)
 
 
-def _load_module_from_file(file_path: Path, module_name: str):
-    spec = spec_from_file_location(module_name, file_path)
+def _stable_dropin_module_name(file_path: Path) -> str:
+    """Return a deterministic module name for a drop-in file path."""
+    try:
+        rel = file_path.resolve().relative_to(_dropins_root().resolve())
+    except Exception:
+        rel = file_path.resolve()
+    stem = rel.with_suffix('')
+    parts = [re.sub(r'[^0-9a-zA-Z_]', '_', p) for p in stem.parts]
+    return f"unicornviz_dropins_{'_'.join(parts)}"
+
+
+def _load_module_from_file(file_path: Path, module_name: str | None = None) -> ModuleType:
+    resolved = file_path.resolve()
+    cached = _MODULE_CACHE.get(resolved)
+    if cached is not None:
+        return cached
+
+    name = module_name or _stable_dropin_module_name(resolved)
+    existing = sys.modules.get(name)
+    if isinstance(existing, ModuleType):
+        _MODULE_CACHE[resolved] = existing
+        return existing
+
+    spec = spec_from_file_location(name, resolved)
     if spec is None or spec.loader is None:
         raise ImportError(f'Failed to load module spec from {file_path}')
     module = module_from_spec(spec)
-    sys.modules[module_name] = module
+    sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
     except Exception:
-        sys.modules.pop(module_name, None)
+        sys.modules.pop(name, None)
         raise
+    _MODULE_CACHE[resolved] = module
     return module
 
 
@@ -182,8 +209,7 @@ def load_dropin_symbol(relative_file: str, symbol_name: str) -> Any:
     file_path = _dropins_root() / relative_file
     if not file_path.exists():
         raise ImportError(f'Drop-in file not found: {file_path}')
-    module_name = f'dropin_symbol_{file_path.stem}_{abs(hash(str(file_path)))}'
-    module = _load_module_from_file(file_path, module_name)
+    module = _load_module_from_file(file_path)
     if not hasattr(module, symbol_name):
         raise ImportError(f'Symbol {symbol_name!r} not found in drop-in: {file_path}')
     return getattr(module, symbol_name)
@@ -201,9 +227,8 @@ def discover_dropin_effect_classes(base_cls: Type) -> list[Type]:
             continue
         if _is_dropin_excluded(file_path.parent.name):
             continue
-        module_name = f'dropin_effect_{file_path.stem}_{abs(hash(str(file_path)))}'
         try:
-            module = _load_module_from_file(file_path, module_name)
+            module = _load_module_from_file(file_path)
         except Exception as exc:
             log.warning('Skipping drop-in module %s: %s', file_path, exc)
             continue
@@ -235,9 +260,8 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
             continue
         if _is_dropin_excluded(file_path.parent.name):
             continue
-        module_name = f'dropin_help_{file_path.stem}_{abs(hash(str(file_path)))}'
         try:
-            module = _load_module_from_file(file_path, module_name)
+            module = _load_module_from_file(file_path)
         except Exception as exc:
             log.warning('Skipping drop-in help module %s: %s', file_path, exc)
             continue
@@ -266,3 +290,49 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
                     seen.add(entry)
 
     return discovered
+
+
+def register_dropin_config_validators() -> list[str]:
+    """Register per-drop-in config validators from `config_validator.py` files.
+
+    Each drop-in may optionally provide:
+
+    - `drop-ins/<name>/config_validator.py`
+    - callable `validate_config(config_data: dict) -> list[str] | None`
+
+    Returned error strings are namespaced by drop-in and merged into the core
+    config validation output.
+    """
+    root = _dropins_root()
+    if not root.exists():
+        return []
+
+    registered: list[str] = []
+    for file_path in sorted(root.glob('*/config_validator.py')):
+        dropin_name = file_path.parent.name
+        if _is_dropin_excluded(dropin_name):
+            continue
+
+        key = str(file_path.resolve())
+        if key in _REGISTERED_VALIDATOR_FILES:
+            continue
+
+        try:
+            module = _load_module_from_file(file_path)
+        except Exception as exc:
+            log.warning('Skipping drop-in config validator %s: %s', file_path, exc)
+            continue
+
+        validator = getattr(module, 'validate_config', None)
+        if not callable(validator):
+            log.warning(
+                'Drop-in config validator module %s has no callable validate_config()',
+                file_path,
+            )
+            continue
+
+        register_config_validator(f'dropin:{dropin_name}', validator)
+        _REGISTERED_VALIDATOR_FILES.add(key)
+        registered.append(dropin_name)
+
+    return registered

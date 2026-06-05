@@ -25,7 +25,7 @@ class AudioManager:
         buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
         latency = cfg.get("audio", "latency", default="high")
         prefer_default_input = bool(
-            cfg.get('audio', 'prefer_default_input', default=True)
+            cfg.get('audio', 'prefer_default_input', default=False)
         )
         fallback_rms_threshold = float(
             cfg.get('audio', 'fallback_rms_threshold', default=0.0015)

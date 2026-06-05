@@ -1,6 +1,19 @@
 # Unicorn Viz — Configuration Reference
 
+Owner: Studio Documentation
+Status: active
+Last updated: 2026-06-04
+
 All settings live in `config.toml` in the project root.
+
+Validation behavior:
+- Startup performs fail-fast config validation in `unicornviz.__main__` before
+    app initialization.
+- Type errors and invalid enum/range values in built-in sections are reported as
+    a single aggregated error list.
+- Optional drop-ins may provide `drop-ins/<name>/config_validator.py` with a
+    `validate_config(config_data)` function. Those validator errors are included
+    in the same output and namespaced as `dropin:<name>`.
 
 ---
 
@@ -47,12 +60,11 @@ MATE/X11 testing pending.
 |----------------------|--------|----------------|-----------------------------------------------------|
 | `mode`               | str    | `"sequential"` | Playlist mode: `"sequential"` or `"random"`         |
 | `effect_duration`    | int    | `20`           | Seconds before auto-advancing to the next effect    |
-| `transition`         | str    | `"crossfade"`  | Transition type: `"crossfade"`, `"smoothfade"`, `"scanwipe_x"`, `"scanwipe_y"`, `"dissolve"`, `"zoomblend"`, `"radialwipe"`, `"lumawipe"`, `"stripewipe"`, `"anglesweep"`, `"glitchsoft"`, `"prismsplit"`, `"shuffle"` |
+| `transition`         | str    | `"crossfade"`  | Transition type: `"crossfade"`, `"smoothfade"`, `"scanwipe"`, `"scanwipe_x"`, `"scanwipe_y"`, `"dissolve"`, `"zoomblend"`, `"shuffle"`, or `"random"` |
 | `transition_duration`| float  | `1.0`          | Transition length in seconds                        |
 
 Aliases:
 - `scanwipe` -> `scanwipe_y`
-- `radial` -> `radialwipe`
 - `cut` -> `smoothfade` (intentionally soft; avoids harsh hard cuts)
 
 ---
@@ -66,6 +78,8 @@ Aliases:
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
 | `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal` |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
+| `prefer_default_input` | bool | `true` | When true, startup prioritizes the current OS default input among candidates; when false, ranked monitor/app sources are preferred first. |
+| `require_startup` | bool | `false` | If true, Unicorn Viz exits when audio startup fails after retries. If false, startup continues without active audio and the visualizer runs in degraded mode. |
 | `start_timeout_s` | float | `4.0` | Per-attempt timeout for audio startup during app launch. |
 | `start_retries` | int | `2` | Number of additional launch-time audio startup retries after the initial attempt. |
 | `start_retry_backoff_s` | float | `0.5` | Delay between launch-time audio startup retries. |
@@ -77,7 +91,15 @@ Aliases:
 | `silence_rms_span`  | float | `0.045`  | RMS range above the floor over which the spectrum scales 0→1 |
 
 Notes:
-- Audio is mandatory at startup. If all configured startup attempts fail, Unicorn Viz exits instead of running without audio.
+- `audio.latency` accepts `"low"` / `"medium"` / `"high"` labels or a numeric
+    value in seconds. `"medium"` is normalized internally to a stable numeric
+    midpoint for PortAudio compatibility.
+- `audio.start_retries` must be `>= 0`; timing and threshold values under
+    `[audio]` must be non-negative.
+- With default settings (`require_startup = false`), startup does not crash if
+    audio cannot be initialized; it logs the failure and continues.
+- Set `require_startup = true` only for environments where audio availability is
+    mandatory and startup should abort on capture failure.
 
 ---
 
@@ -141,8 +163,7 @@ Notes:
 | Key              | Type | Default              | Description                                                              |
 |------------------|------|----------------------|--------------------------------------------------------------------------|
 | `ansi_dir_auto`  | str  | `"assets/ansi"`      | Directory used by ANSI Viewer in normal playlist mode                    |
-| `ansi_own_dir`   | str  | `"assets/ansi"`      | Own hand-crafted art — launched with `,`                                 |
-| `ansi_acid_dir`  | str  | `"assets/ansi/acid"` | ACiD Productions art — launched with `.`                                 |
+| `ansi_dir`       | str  | `"assets/ansi"`      | Legacy fallback key (kept for backward compatibility)                    |
 
 ---
 
@@ -160,7 +181,6 @@ active.
 > `[effects.WebcamOverlay]` — see [effect-settings.md](effect-settings.md).
 > Camera support is provided entirely by the `drop-ins/webcam-01` drop-in.
 > There is no system-level camera overlay.
-| `ansi_dir`       | str  | `"assets/ansi"`      | Legacy fallback key (kept for backward compatibility)                    |
 
 ---
 
@@ -226,7 +246,6 @@ Available parameters per effect:
 | AudioSpectrum     | `glow`      | 0.0–1.0    | Bar glow                        |
 | FractalZoom       | `max_iter`  | 32–512     | Iteration depth                 |
 | UnicornTears      | `speed`     | 0.05–10.0  | Fall speed multiplier           |
-| Raymarcher        | `speed`     | 0.05–10.0  | Scene animation speed           |
 
 ---
 

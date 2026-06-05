@@ -129,5 +129,5 @@ class Playlist:
     @property
     def shortcut_effects(self) -> list[Type[BaseEffect]]:
         """Effects used by numeric hotkeys (exclude special-key effects)."""
-        excluded = {"ANSIViewer", "UnicornTears"}
+        excluded = {"UnicornTears"}
         return [cls for cls in self._effects if cls.__name__ not in excluded]

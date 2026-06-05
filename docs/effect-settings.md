@@ -1,5 +1,9 @@
 # Unicorn Viz — Effect Settings Reference
 
+Owner: Studio Documentation
+Status: active
+Last updated: 2026-06-04
+
 This document lists every built-in effect and its tweakable values under `[effects.<ClassName>]` in `config.toml`.
 
 Notes:
@@ -182,13 +186,6 @@ speed = 1.0
 palette = 0.0
 ```
 
-### `Raymarcher` (`Raymarcher`)
-
-```toml
-[effects.Raymarcher]
-speed = 1.0
-```
-
 ### `SineScroller` (`Sine Scroller 2.0`)
 
 ```toml
@@ -244,14 +241,6 @@ zoom  = 1.0
 # random_speed_max = 1.20
 # random_zoom_min = 0.85
 # random_zoom_max = 1.15
-```
-
-### `Water` (`Water`)
-
-```toml
-[effects.Water]
-amplitude = 1.0
-speed = 1.0
 ```
 
 ---

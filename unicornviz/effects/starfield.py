@@ -41,6 +41,7 @@ uniform vec3  iLayerScaleMul;
 uniform vec3  iLayerDensity;
 uniform float iNebulaTone;
 uniform float iTwinkleBias;
+uniform float iRayEnergy;
 
 in  vec2 v_uv;
 out vec4 fragColor;
@@ -167,6 +168,21 @@ vec3 warpStreaks(vec2 uv, float t, float warp) {
     return col;
 }
 
+vec3 musicRays(vec2 uv, float t, float energy) {
+    if (energy < 0.01) return vec3(0.0);
+    float angle = atan(uv.y, uv.x);
+    float radius = length(uv);
+
+    float spoke_count = 12.0 + iMid * 10.0;
+    float spoke = abs(cos(angle * spoke_count + t * (0.7 + iBass * 1.3)));
+    float beam = pow(spoke, 18.0 - iTreble * 5.0);
+    beam *= exp(-radius * (1.7 - iBass * 0.5));
+
+    float flutter = 0.65 + 0.35 * sin(t * (4.0 + iTreble * 3.0) + angle * 4.0);
+    vec3 tint = mix(vec3(0.24, 0.86, 1.00), vec3(0.88, 0.38, 1.00), 0.45 + 0.35 * iMid);
+    return tint * beam * flutter * energy * (0.55 + iBass * 0.75);
+}
+
 void main() {
     float ar = iResolution.x / iResolution.y;
     vec2 uv = v_uv * vec2(ar, 1.0);
@@ -209,6 +225,7 @@ void main() {
 
     // Warp streaks from beat
     col += warpStreaks(v_uv + iDrift * 0.5, t + flow * 0.4, iWarp + iMicroBurst * 0.2);
+    col += musicRays(uv, t + flow * 0.9, iRayEnergy + iMicroBurst * 0.4);
 
     // Multi-core blooms: moving cloned center structures with pop in/out timing.
     col += coreCluster(uv, t, flow, iWarp + iMicroBurst * 0.4, iTreble);
@@ -248,6 +265,8 @@ class Starfield(BaseEffect):
         self._treble  = 0.0
         self._beat_decay = 0.0
         self._micro_burst = 0.0
+        self._ray_energy = 0.0
+        self._prev_bass = 0.0
 
         # 2.5 dynamics: slow camera drift/roll and evolving flow targets.
         self._drift_x = float(self.rng.uniform(-0.04, 0.04))
@@ -283,8 +302,13 @@ class Starfield(BaseEffect):
         if audio.beat > 0.5:
             self._beat_decay = 1.0
             self._micro_burst = 1.0
+            self._ray_energy = min(1.0, self._ray_energy + 0.55)
+        bass_rise = max(0.0, self._bass - self._prev_bass)
+        self._ray_energy = min(1.0, self._ray_energy + bass_rise * 1.4)
+        self._prev_bass = self._bass
         self._beat_decay = max(0.0, self._beat_decay - dt * 1.8)
         self._micro_burst = max(0.0, self._micro_burst - dt * 3.2)
+        self._ray_energy = max(0.0, self._ray_energy - dt * 1.35)
         self.parameters["warp"] = self._beat_decay
 
         # Retarget dynamics every few seconds to avoid long static feel.
@@ -334,6 +358,7 @@ class Starfield(BaseEffect):
         self._prog["iLayerDensity"].value = tuple(float(v) for v in self._layer_density)
         self._prog["iNebulaTone"].value = self._nebula_tone
         self._prog["iTwinkleBias"].value = self._twinkle_bias
+        self._prog["iRayEnergy"].value = self._ray_energy
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:

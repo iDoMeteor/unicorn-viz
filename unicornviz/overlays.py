@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import logging
 import math
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,12 @@ try:
     _PIL_AVAILABLE = True
 except Exception:
     _PIL_AVAILABLE = False
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except Exception:
+    _PSUTIL_AVAILABLE = False
 
 if TYPE_CHECKING:
     from unicornviz.effects.base import BaseEffect
@@ -410,7 +417,8 @@ class Overlays:
                 ('Middle Click', 'Reset scroll FX (hue/rotation)'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
                 ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
-                ('m', 'MIDI device'),
+                ('Shift+M', 'System monitor modal'),
+                ('Alt+M', 'MIDI device selector'),
                 ('i', 'Invert colors'),
             ],
         ),
@@ -449,6 +457,7 @@ class Overlays:
         self._show_help = False
         self._show_audio = False
         self._show_midi = False
+        self._show_system_monitor_modal = False
         self._show_projectm_manager = False
         self._audio_sources: list[str] = []
         self._audio_viable_flags: list[bool] = []
@@ -464,6 +473,27 @@ class Overlays:
         self._projectm_focus_pane: int = 1
         self._projectm_current_path: str = ''
         self._projectm_search_query: str = ''
+        self._sysmon_cpu: float = 0.0
+        self._sysmon_ram: float = 0.0
+        self._sysmon_swap: float = 0.0
+        self._sysmon_disk_mbs: float = 0.0
+        self._sysmon_net_mbs: float = 0.0
+        self._sysmon_sample_t: float = 0.0
+        self._sysmon_prev_io_t: float | None = None
+        self._sysmon_prev_disk_bytes: float | None = None
+        self._sysmon_prev_net_bytes: float | None = None
+        if _PSUTIL_AVAILABLE:
+            try:
+                psutil.cpu_percent(interval=None)
+                disk = psutil.disk_io_counters()
+                net = psutil.net_io_counters()
+                self._sysmon_prev_io_t = time.monotonic()
+                if disk is not None:
+                    self._sysmon_prev_disk_bytes = float(disk.read_bytes + disk.write_bytes)
+                if net is not None:
+                    self._sysmon_prev_net_bytes = float(net.bytes_recv + net.bytes_sent)
+            except Exception:
+                pass
         self._help_timer: float = 0.0
         self._hud_timer: float = 0.0
         self._flash_text: str = ""
@@ -1269,6 +1299,10 @@ void main() {
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.60))
             self._render_projectm_manager()
 
+        if self._show_system_monitor_modal:
+            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.56))
+            self._render_system_monitor_modal()
+
         if self._show_audio:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_audio_selector()
@@ -1722,6 +1756,258 @@ void main() {
             color=(0.58, 0.68, 0.78, 0.86),
         )
 
+    def _render_system_monitor_modal(self) -> None:
+        """Draw a neon monitor dashboard modal with an oscilloscope backdrop."""
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.2)
+
+        W = float(self._width)
+        H = float(self._height)
+
+        # Heart-monitor style background wave field.
+        baseline = H * 0.5
+        amp = H * (0.045 + 0.015 * math.sin(t * 1.2))
+        for i in range(0, 240):
+            x = (i / 239.0) * W
+            s = i / 239.0
+            y = baseline + math.sin(s * 28.0 - t * 3.3) * amp
+            y += math.sin(s * 57.0 + t * 2.2) * amp * 0.35
+            glow = 0.16 + 0.14 * (0.5 + 0.5 * math.sin(t * 5.0 + s * 17.0))
+            self._draw_rect(x, y - 1.0, 6.0, 2.0, (0.06, 0.92, 0.45, glow))
+
+        panel_w = min(W * 0.80, 1220.0)
+        panel_h = min(H * 0.76, 760.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+
+        self._sample_system_telemetry()
+
+        # Main panel shell.
+        self._draw_rect(px, py, panel_w, panel_h, (0.03, 0.05, 0.12, 0.93))
+        bw = 2.0
+        border = (0.16 * pulse, 0.74 * pulse, 1.00 * pulse, 0.92)
+        self._draw_rect(px, py, panel_w, bw, border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, border)
+        self._draw_rect(px, py, bw, panel_h, border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, border)
+
+        # Modal decorators: HUD-style side stacks and tick marks.
+        side_w = 14.0
+        block_defs = [
+            (24.0, (1.00, 0.58, 0.12), 0.66),
+            (6.0, None, 0.0),
+            (10.0, (0.10, 0.94, 1.00), 0.58),
+            (6.0, None, 0.0),
+            (34.0, (0.78, 0.38, 1.00), 0.54),
+            (6.0, None, 0.0),
+            (24.0, (1.00, 0.58, 0.12), 0.60),
+        ]
+        side_rx = px + panel_w + 4.0
+        side_lx = px - side_w - 4.0
+        by_r = py + 8.0
+        by_l = py + 8.0
+        for bh, rgb, alpha in block_defs:
+            if rgb is None:
+                by_r += bh
+                by_l += bh
+                continue
+            a = alpha + 0.20 * (0.5 + 0.5 * math.sin(t * 2.4 + by_r * 0.01))
+            col = (rgb[0], rgb[1], rgb[2], min(1.0, a))
+            self._draw_rect(side_rx, by_r, side_w, bh, col)
+            self._draw_rect(side_lx, by_l, side_w, bh, col)
+            by_r += bh
+            by_l += bh
+
+        tick_positions = [0.25, 0.5, 0.75]
+        tick_colors = [
+            (0.10, 0.94, 1.0, 0.58 + pulse * 0.18),
+            (1.00, 0.62, 0.20, 0.58 + pulse * 0.18),
+            (0.78, 0.38, 1.00, 0.58 + pulse * 0.18),
+        ]
+        tick_x_r = px + panel_w - 24.0
+        tick_x_l = px + 6.0
+        for tp, tc in zip(tick_positions, tick_colors):
+            ty = py + tp * panel_h
+            self._draw_rect(tick_x_r, ty, 18.0, 3.0, tc)
+            self._draw_rect(tick_x_l, ty, 18.0, 3.0, tc)
+
+        self._draw_text('SYSTEM MONITOR // CONTROL SURFACE', px + 18.0, py + 16.0, scale=3.0,
+                        color=(0.28 + 0.25 * pulse, 0.82, 1.0, 1.0))
+        self._draw_text('Shift+M: close modal', px + panel_w - 270.0, py + 20.0, scale=1.8,
+                        color=(0.68, 0.80, 0.92, 0.86))
+
+        state = self._hud_state
+
+        def _num(key: str, default: float = 0.0) -> float:
+            text = str(state.get(key, default))
+            out = ''
+            dot = False
+            sign = False
+            for ch in text:
+                if ch.isdigit():
+                    out += ch
+                elif ch == '.' and not dot:
+                    out += ch
+                    dot = True
+                elif ch == '-' and not sign and not out:
+                    out += ch
+                    sign = True
+                elif out:
+                    break
+            try:
+                return float(out)
+            except Exception:
+                return float(default)
+
+        fps = _num('fps', 0.0)
+        frame_ms = _num('frame_ms', 0.0)
+        bass = _num('bass', 0.0)
+        mid = _num('mid', 0.0)
+        treble = _num('treble', 0.0)
+        react = _num('reactivity', 1.0)
+        speed = _num('speed', 1.0)
+        zoom = _num('render_scale', 1.0)
+
+        # Left: metrics bars.
+        left_x = px + 20.0
+        left_y = py + 72.0
+        left_w = panel_w * 0.50
+        row_h = 44.0
+
+        def _metric_row(idx: int, label: str, value: float, max_value: float, color: tuple[float, float, float]) -> None:
+            y = left_y + idx * row_h
+            frac = 0.0 if max_value <= 0.0 else max(0.0, min(1.0, value / max_value))
+            self._draw_text(label, left_x, y + 8.0, scale=2.1, color=(0.72, 0.84, 0.98, 0.92))
+            bx = left_x + 170.0
+            bwid = left_w - 190.0
+            self._draw_rect(bx, y + 10.0, bwid, 18.0, (0.10, 0.16, 0.26, 0.75))
+            self._draw_rect(bx, y + 10.0, bwid * frac, 18.0, (color[0], color[1], color[2], 0.90))
+            self._draw_rect(bx + bwid * frac - 2.0, y + 8.0, 4.0, 22.0, (0.95, 0.98, 1.0, 0.65))
+            self._draw_text(f'{value:.2f}', bx + bwid + 12.0, y + 8.0, scale=2.0, color=(0.92, 0.95, 1.0, 0.92))
+
+        _metric_row(0, 'FPS', fps, 120.0, (0.22, 1.00, 0.58))
+        _metric_row(1, 'FRAME MS', max(0.0, 33.0 - frame_ms), 33.0, (0.16, 0.86, 1.00))
+        _metric_row(2, 'BASS', bass, 1.2, (1.00, 0.45, 0.18))
+        _metric_row(3, 'MID', mid, 1.2, (0.98, 0.76, 0.22))
+        _metric_row(4, 'TREBLE', treble, 1.2, (0.76, 0.95, 1.00))
+
+        # Right: control panel with faux knobs/sliders.
+        right_x = px + panel_w * 0.56
+        right_y = py + 82.0
+        self._draw_text('LIVE CONTROLS', right_x, right_y - 34.0, scale=2.4,
+                        color=(1.0, 0.88, 0.54, 0.94))
+
+        def _slider(idx: int, label: str, value: float, max_value: float, color: tuple[float, float, float]) -> None:
+            y = right_y + idx * 70.0
+            frac = 0.0 if max_value <= 0.0 else max(0.0, min(1.0, value / max_value))
+            self._draw_text(label, right_x, y, scale=2.0, color=(0.78, 0.88, 0.98, 0.9))
+            sx = right_x + 10.0
+            sy = y + 24.0
+            sw = panel_w * 0.34
+            sh = 16.0
+            self._draw_rect(sx, sy, sw, sh, (0.09, 0.14, 0.24, 0.78))
+            self._draw_rect(sx, sy, sw * frac, sh, (color[0], color[1], color[2], 0.92))
+            self._draw_rect(sx + sw * frac - 3.0, sy - 3.0, 6.0, sh + 6.0, (0.98, 0.98, 1.0, 0.78))
+            self._draw_text(f'{value:.2f}', sx + sw + 14.0, y + 20.0, scale=2.0,
+                            color=(0.92, 0.96, 1.0, 0.92))
+
+        _slider(0, 'REACTIVITY', react, 3.0, (0.14, 0.90, 1.00))
+        _slider(1, 'SPEED', speed, 4.0, (0.40, 1.00, 0.54))
+        _slider(2, 'ZOOM', zoom, 2.0, (0.98, 0.40, 1.00))
+
+        # Simple faux knobs for visual language consistency.
+        knob_y = right_y + 240.0
+        knob_r = 26.0
+        knob_gap = 110.0
+        labels = [('GAIN', bass), ('PULSE', mid), ('SHINE', treble)]
+        for i, (label, raw) in enumerate(labels):
+            cx = right_x + 30.0 + i * knob_gap
+            cy = knob_y
+            frac = max(0.0, min(1.0, raw / 1.2))
+            # Ring segments.
+            for s in range(28):
+                a = (s / 28.0) * 6.28318
+                x = cx + math.cos(a) * knob_r
+                y = cy + math.sin(a) * knob_r
+                on = s <= int(frac * 28.0)
+                col = (0.14, 0.90, 1.0, 0.86) if on else (0.10, 0.20, 0.30, 0.55)
+                self._draw_rect(x - 1.0, y - 1.0, 3.0, 3.0, col)
+            # Pointer.
+            pa = (-2.35 + frac * 4.70)
+            pxp = cx + math.cos(pa) * (knob_r - 6.0)
+            pyp = cy + math.sin(pa) * (knob_r - 6.0)
+            self._draw_rect(cx - 2.0, cy - 2.0, 4.0, 4.0, (0.88, 0.95, 1.0, 0.9))
+            self._draw_rect(pxp - 2.0, pyp - 2.0, 4.0, 4.0, (0.98, 0.84, 0.25, 0.95))
+            self._draw_text(label, cx - 26.0, cy + 38.0, scale=1.8, color=(0.74, 0.84, 0.94, 0.9))
+
+        # Bottom-half system telemetry board.
+        board_x = px + 20.0
+        board_y = py + panel_h * 0.56
+        board_w = panel_w - 40.0
+        board_h = panel_h * 0.34
+        self._draw_rect(board_x, board_y, board_w, board_h, (0.03, 0.08, 0.14, 0.86))
+        self._draw_rect(board_x, board_y, board_w, 2.0, (0.10, 0.94, 1.0, 0.46 + pulse * 0.16))
+
+        def _sys_row(idx: int, label: str, value: float, max_value: float, text: str, color: tuple[float, float, float]) -> None:
+            y = board_y + 14.0 + idx * 40.0
+            frac = 0.0 if max_value <= 0.0 else max(0.0, min(1.0, value / max_value))
+            self._draw_text(label, board_x + 10.0, y + 4.0, scale=2.0, color=(0.80, 0.90, 1.0, 0.92))
+            bx = board_x + 180.0
+            bwid = board_w - 300.0
+            self._draw_rect(bx, y + 6.0, bwid, 16.0, (0.08, 0.14, 0.24, 0.78))
+            self._draw_rect(bx, y + 6.0, bwid * frac, 16.0, (color[0], color[1], color[2], 0.92))
+            self._draw_rect(bx + bwid * frac - 2.0, y + 4.0, 4.0, 20.0, (0.95, 0.98, 1.0, 0.64))
+            self._draw_text(text, board_x + board_w - 102.0, y + 4.0, scale=2.0, color=(0.92, 0.96, 1.0, 0.90))
+
+        _sys_row(0, 'CPU', self._sysmon_cpu, 1.0, f'{self._sysmon_cpu * 100.0:4.1f}%', (1.00, 0.45, 0.18))
+        _sys_row(1, 'RAM', self._sysmon_ram, 1.0, f'{self._sysmon_ram * 100.0:4.1f}%', (0.72, 0.44, 1.00))
+        _sys_row(2, 'SWAP', self._sysmon_swap, 1.0, f'{self._sysmon_swap * 100.0:4.1f}%', (0.46, 0.78, 1.00))
+        _sys_row(3, 'DISK I/O', self._sysmon_disk_mbs, 120.0, f'{self._sysmon_disk_mbs:4.1f}M', (1.00, 0.78, 0.24))
+        _sys_row(4, 'NET I/O', self._sysmon_net_mbs, 120.0, f'{self._sysmon_net_mbs:4.1f}M', (0.22, 0.96, 0.66))
+
+        self._draw_text('TELEMETRY LINK STABLE  //  NO SIGNAL CLIP DETECTED',
+                        px + 20.0, py + panel_h - 28.0, scale=1.8,
+                        color=(0.56, 0.68, 0.80, 0.82))
+
+    def _sample_system_telemetry(self) -> None:
+        """Update modal telemetry metrics with lightweight cached psutil reads."""
+        if not _PSUTIL_AVAILABLE:
+            return
+        now = time.monotonic()
+        if now - self._sysmon_sample_t < 0.45:
+            return
+        self._sysmon_sample_t = now
+        try:
+            self._sysmon_cpu = max(0.0, min(1.0, psutil.cpu_percent(interval=None) / 100.0))
+            self._sysmon_ram = max(0.0, min(1.0, psutil.virtual_memory().percent / 100.0))
+            self._sysmon_swap = max(0.0, min(1.0, psutil.swap_memory().percent / 100.0))
+
+            disk = psutil.disk_io_counters()
+            net = psutil.net_io_counters()
+            if disk is None or net is None:
+                return
+
+            io_t_prev = self._sysmon_prev_io_t
+            disk_prev = self._sysmon_prev_disk_bytes
+            net_prev = self._sysmon_prev_net_bytes
+
+            disk_now = float(disk.read_bytes + disk.write_bytes)
+            net_now = float(net.bytes_recv + net.bytes_sent)
+            self._sysmon_prev_io_t = now
+            self._sysmon_prev_disk_bytes = disk_now
+            self._sysmon_prev_net_bytes = net_now
+
+            if io_t_prev is None or disk_prev is None or net_prev is None:
+                return
+
+            dt = max(1e-6, now - io_t_prev)
+            disk_rate = max(0.0, (disk_now - disk_prev) / dt)
+            net_rate = max(0.0, (net_now - net_prev) / dt)
+            self._sysmon_disk_mbs = disk_rate / (1024.0 * 1024.0)
+            self._sysmon_net_mbs = net_rate / (1024.0 * 1024.0)
+        except Exception:
+            pass
+
     def _render_help(self) -> None:
         t  = self._hud_t
         hp = self._help_pulse_t
@@ -2155,6 +2441,10 @@ void main() {
         return self._show_midi
 
     @property
+    def system_monitor_modal_visible(self) -> bool:
+        return self._show_system_monitor_modal
+
+    @property
     def projectm_manager_visible(self) -> bool:
         return self._show_projectm_manager
 
@@ -2308,6 +2598,9 @@ void main() {
 
     def toggle_midi_selector(self) -> None:
         self._show_midi = not self._show_midi
+
+    def toggle_system_monitor_modal(self) -> None:
+        self._show_system_monitor_modal = not self._show_system_monitor_modal
 
     def toggle_projectm_manager(self) -> None:
         self._show_projectm_manager = not self._show_projectm_manager

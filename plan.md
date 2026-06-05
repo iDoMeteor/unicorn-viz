@@ -14,6 +14,12 @@
   VJApi versioned, grand-finale private-attr violations resolved).  `plan-future-proofing.md`
   retired; individual FP items tracked in Phase 5 below.
 - `[todo]` Effect review pass — systematic quality/perf pass across existing built-in effects.
+- `[done]` 2026-06-04 effect review priority round (P0-P3 targeted set) completed and operator signed off.
+  Scope closed this round:
+  - P0: Sine Scroller 3.x, System Monitor -> Hexy Stars/modal split, Hacker Terminal, Unicorn Tears follow-up
+  - P1: Fractal Zoom, Starfield, Vector
+  - P2: Psychedelic zoom, Van Gogh long-view variation
+  - P3: Metaballs pacing policy, Prism Storm -> Prism Lattice theme/name alignment
 - `[done]` RTMP streaming subsystem drop-in.
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
 - `[todo]` Design vignette/post-process system (see Phase 4).

@@ -224,10 +224,6 @@ theme = "dark"   # dark | high_contrast
 [ansi]
 # default ANSI art directory
 ansi_dir_auto = "assets/ansi"
-# comma (,) hotkey
-ansi_own_dir = "assets/ansi"
-# period (.) hotkey
-ansi_acid_dir = "assets/ansi/acid"
 
 [playlist]
 # class name or display name; empty = first discovered effect
@@ -325,11 +321,6 @@ palette = 0.0
 # random_speed_min = 0.75
 # random_speed_max = 1.25
 
-[effects.Raymarcher]
-speed = 1.0
-# random_speed_min = 0.70
-# random_speed_max = 1.30
-
 [effects.SineScroller]
 speed = 1.5
 amplitude = 0.18
@@ -400,12 +391,6 @@ speed = 1.0
 speed = 1.0
 # random_speed_min = 0.75
 # random_speed_max = 1.25
-
-[effects.Water]
-amplitude = 1.0
-speed = 1.0
-# random_speed_min = 0.85
-# random_speed_max = 1.15
 
 [effects.CrystalPyramids]
 speed = 1.0

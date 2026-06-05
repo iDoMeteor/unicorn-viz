@@ -43,10 +43,33 @@ _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
 _DEFAULT_SOURCE_STATE_PATH = APP_ROOT / '.audio_source_state.json'
 
 
+def _normalize_latency(latency: str | float) -> str | float:
+    """Return a sounddevice-compatible latency value.
+
+    sounddevice accepts 'low'/'high' or numeric seconds. Keep support for
+    config value 'medium' by mapping it to a conservative numeric latency.
+    """
+    if isinstance(latency, (int, float)):
+        return max(0.0, float(latency))
+
+    value = str(latency).strip().lower()
+    if value in ('low', 'high'):
+        return value
+    if value == 'medium':
+        # PortAudio does not accept the string 'medium'; use a stable midpoint.
+        return 0.06
+
+    log.warning(
+        'Audio latency value %r is unsupported; using high latency fallback',
+        latency,
+    )
+    return 'high'
+
+
 def _candidate_monitor_devices(
     hint: str,
     *,
-    prefer_default_input: bool = True,
+    prefer_default_input: bool = False,
 ) -> list[int | None]:
     """Return ordered candidate input devices for auto-fallback probing.
 
@@ -205,8 +228,8 @@ class AudioCapture:
         self,
         device_hint: str = "",
         buffer_seconds: float = 2.0,
-        latency: str = "high",
-        prefer_default_input: bool = True,
+        latency: str | float = 'high',
+        prefer_default_input: bool = False,
         fallback_rms_threshold: float = _DEFAULT_FALLBACK_RMS_THRESHOLD,
         fallback_silence_seconds: float = _DEFAULT_FALLBACK_SILENCE_SECONDS,
         fallback_cooldown_seconds: float = _DEFAULT_FALLBACK_COOLDOWN_SECONDS,
@@ -214,7 +237,7 @@ class AudioCapture:
     ) -> None:
         self._device_hint = device_hint
         self._buffer_seconds = buffer_seconds
-        self._latency = latency
+        self._latency = _normalize_latency(latency)
         self._sample_rate = _SAMPLE_RATE
         self._channels = _CHANNELS
         self._buf: deque[np.ndarray] = deque(
@@ -472,18 +495,17 @@ class AudioCapture:
             self._device_hint,
             prefer_default_input=self._prefer_default_input,
         )
+        self._apply_source_state_preferences()
+        self._candidate_index = 0
         log.debug("Audio: candidate devices = %s", self._candidate_devices)
 
         last_exc: Exception | None = None
         for idx, device in enumerate(self._candidate_devices):
             self._candidate_index = idx
             try:
-                if not self._probe_device_openable(device, timeout_s=_OPEN_DEVICE_TIMEOUT_S):
-                    raise TimeoutError(
-                        f'Audio device probe timed out/failed for '
-                        f'{self._describe_device(device)}'
-                    )
                 self._open_stream(device)
+                self._selected_source_key = self._source_key_for_device(device)
+                self._save_source_state()
                 return
             except Exception as exc:
                 last_exc = exc
@@ -633,7 +655,11 @@ class AudioCapture:
     def get_block(self) -> np.ndarray | None:
         # Skip audio consumption during warmup to avoid buffer overflow
         if not self._is_warmed_up():
-            log.debug("Audio: warming up (%.1fs so far)", time.time() - self._stream_opened_time)
+            if self._stream_opened_time > 0.0:
+                log.debug(
+                    'Audio: warming up (%.1fs so far)',
+                    time.time() - self._stream_opened_time,
+                )
             return None
         with self._lock:
             if not self._buf:

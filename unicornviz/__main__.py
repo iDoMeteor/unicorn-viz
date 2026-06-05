@@ -13,7 +13,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from unicornviz.config import Config
+from unicornviz.config import Config, ConfigValidationError
+from unicornviz.dropins import register_dropin_config_validators
 from unicornviz.paths import APP_ROOT, resolve_path
 
 
@@ -38,7 +39,7 @@ class _LogBandFilter(logging.Filter):
         if self._band == 'DEBUG':
             return record.levelno in (logging.DEBUG, logging.INFO, logging.WARNING)
         if self._band == 'INFO':
-            return record.levelno == logging.INFO
+            return record.levelno in (logging.INFO, logging.WARNING)
         if self._band == 'WARN':
             return record.levelno == logging.WARNING
         # Fallback: default logging behavior.
@@ -216,11 +217,34 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     cfg = Config(args.config, overrides=_build_overrides(args))
+    register_dropin_config_validators()
+    try:
+        cfg.validate()
+    except ConfigValidationError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc
     _setup_logging(cfg)
     _install_exception_logging()
     from unicornviz.app import App
     app = App(cfg)
-    app.run()
+    try:
+        app.run()
+    except RuntimeError as exc:
+        if 'audio startup failed' in str(exc).lower() or 'audio capture' in str(exc).lower():
+            print(
+                '\n'
+                '  unicorn-viz could not start: audio capture failed.\n'
+                '\n'
+                '  Possible fixes:\n'
+                '    - Check that PipeWire / PulseAudio is running:  systemctl --user status pipewire\n'
+                '    - Restart the audio session:                     systemctl --user restart pipewire wireplumber\n'
+                '    - Set a specific device in config.toml:          [audio] device = "Built-in Audio Analog Stereo"\n'
+                '    - Allow degraded (no-audio) startup:             [audio] require_startup = false\n'
+                f'\n  Detail: {exc}\n',
+                file=__import__("sys").stderr,
+            )
+            raise SystemExit(1) from exc
+        raise
 
 
 if __name__ == "__main__":

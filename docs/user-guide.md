@@ -1,5 +1,9 @@
 # Unicorn Viz — User Guide
 
+Owner: Studio Documentation
+Status: active
+Last updated: 2026-06-04
+
 ## Contents
 
 1. [Requirements](#requirements)
@@ -541,14 +545,11 @@ python -m unicornviz --log-level DEBUG
 | Metaballs         | `Metaballs`         | futuristic, audio              | GLSL SDF metaball field                              |
 | Particle Storm    | `ParticleStorm`     | futuristic, particles, audio   | 100k GPU particles, curl noise, transform feedback   |
 | Plasma            | `Plasma`            | classic, audio                 | Sin/cos colour-field with palette drift              |
-| Raymarcher        | `Raymarcher`        | futuristic, audio, 3d          | SDF scene with torus, spheres, morphing geometry     |
 | Sine Scroller 2.0 | `SineScroller`      | classic, audio                 | Multi-sine bouncing text with rainbow colours        |
 | Starfield         | `Starfield`         | classic, audio                 | 3D warp-speed star tunnel                            |
 | System Monitor    | `SystemMonitor`     | diagnostic, hud, system        | Live CPU/RAM/GPU/audio performance graphs            |
 | Tunnel            | `Tunnel`            | classic, audio                 | Texture-mapped rotating tunnel with depth scroll     |
 | Van Gogh          | `VanGogh`           | art, audio                     | Post-impressionist flowing brush-stroke field        |
-| Vector            | `Vector`            | futuristic, audio, 3d          | 3D vector-field flow simulation                      |
-| Water             | `Water`             | simulation, audio, gpu         | Procedural ripple-wave surface                       |
 | Wavey Gravy       | `WaveyGravy`        | psychedelic, audio             | Psychedelic waving sine-noise field                  |
 
 ### Drop-in Effects
@@ -591,7 +592,7 @@ SDL_VIDEODRIVER=x11 python -m unicornviz
 ### Low frame rate
 
 - Reduce `[window] width/height` to 1280×720.
-- The Raymarcher and Particle Storm are heavy; skip them via `[playlist] sequence`.
+- Particle Storm is heavy; skip it via `[playlist] sequence`.
 - Reduce `Fractal Zoom` max_iter: `[effects.FractalZoom] max_iter = 80`.
 
 ### Camera / Webcam not working

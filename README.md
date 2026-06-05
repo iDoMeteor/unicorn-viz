@@ -147,7 +147,7 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 ## Features
 
 ### Visual Effects
-- **20+ built-in GPU-accelerated shaders** — classic (plasma, fire, tunnel, starfield), surreal (dali, escher), 3D (raymarcher, cube, metaballs), particle-based (particle storm), text (sine scroller 2.0), and more
+- **20+ built-in GPU-accelerated shaders** — classic (plasma, fire, tunnel, starfield), surreal (dali, escher), 3D (cube, metaballs, vector), particle-based (particle storm), text (sine scroller 2.0), and more
 - **14 drop-in effects** (tested and working; currently private repositories) — alien invasion, cyber war, disco ball, hacker terminal, texture showcase, tron grid, unicorn tears, webcam overlay, and more
 - **Audio reactivity** — all effects respond to bass/mid/treble/beat in real time via FFT analysis
 - **Effect startup randomization** — every effect produces a visually distinct appearance each activation; parameters like palette, speed, intensity, zoom vary automatically to prevent repetition
@@ -382,14 +382,12 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 | Metaballs | futuristic, audio | GLSL SDF metaball field |
 | Particle Storm | futuristic, particles | 100 k GPU particles with curl noise |
 | Plasma | classic, audio | Sin/cos colour-field with palette drift |
-| Raymarcher | futuristic, 3d | SDF scene: torus, spheres, morphing geometry |
 | Sine Scroller 2.0 | classic, audio | Multi-sine bouncing text with rainbow colours |
 | Starfield | classic, audio | 3D warp-speed star tunnel |
 | System Monitor | diagnostic, hud | Live CPU/RAM/GPU + audio graphs |
 | Tunnel | classic, audio | Texture-mapped rotating tunnel |
 | Van Gogh | art, audio | Post-impressionist flowing brush-stroke field |
 | Vector | futuristic, audio | 3D vector-field flow simulation |
-| Water | simulation, audio | Procedural ripple surface |
 | Wavey Gravy | psychedelic, audio | Psychedelic waving sine-noise field |
 
 **Drop-in Effects (tested and working; currently private repositories):**

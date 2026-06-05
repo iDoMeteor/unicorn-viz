@@ -620,6 +620,9 @@ class HotkeyHandler:
             if o.name_overlay_visible:
                 o.toggle_name_overlay()
                 return
+            if getattr(o, 'system_monitor_modal_visible', False):
+                o.toggle_system_monitor_modal()
+                return
             if o.audio_selector_visible:
                 o.toggle_audio_selector()
                 return
@@ -749,7 +752,7 @@ class HotkeyHandler:
                         _preview_projectm_selection(manager_effect)
                     else:
                         _close_projectm_manager_with_revert(manager_effect)
-            else:
+            elif mod & sdl2.KMOD_ALT:
                 if o.midi_selector_visible:
                     o.toggle_midi_selector()
                 else:
@@ -757,6 +760,8 @@ class HotkeyHandler:
                     current = a._midi_manager.port_name if a._midi_manager is not None else ''  # noqa: SLF001
                     o.set_midi_ports(ports, current)
                     o.toggle_midi_selector()
+            elif mod & sdl2.KMOD_SHIFT:
+                o.toggle_system_monitor_modal()
 
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect

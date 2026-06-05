@@ -98,10 +98,16 @@ _SHAPES = [
 _VERT = """
 #version 330
 in  vec3 in_pos;
+in  float in_phase;
+in  float in_edge;
 uniform mat4 uMVP;
 uniform float uScale;
+out float v_phase;
+out float v_edge;
 void main() {
     gl_Position = uMVP * vec4(in_pos * uScale, 1.0);
+    v_phase = in_phase;
+    v_edge = in_edge;
 }
 """
 
@@ -111,6 +117,10 @@ uniform vec3  uColor;
 uniform float uBrightness;
 uniform float uTime;
 uniform float uSparkle;
+uniform float uRacerPos;
+uniform float uRacerGlow;
+in float v_phase;
+in float v_edge;
 out vec4 fragColor;
 
 float hash(vec2 p) {
@@ -125,6 +135,16 @@ void main() {
     // Subtle sparkle touches: occasional pixel glints on wire edges.
     float spark = step(0.997, hash(floor(gl_FragCoord.xy * 0.35) + floor(uTime * 10.0)));
     col += vec3(1.0, 0.95, 0.85) * spark * uSparkle;
+
+    // Edge racers: bright beads traveling along each wire segment.
+    float racer_head = fract(uRacerPos + v_edge * 0.6180339);
+    float d = abs(v_phase - racer_head);
+    d = min(d, 1.0 - d);
+    float racer = smoothstep(0.20, 0.0, d);
+    float tail = smoothstep(0.42, 0.0, d) * 0.35;
+    vec3 racer_col = mix(vec3(0.95, 0.98, 1.0), uColor, 0.30);
+    float flicker = 0.80 + 0.20 * sin(uTime * 12.0 + v_edge * 19.0);
+    col += racer_col * (racer + tail) * uRacerGlow * flicker;
 
     fragColor = vec4(col, 1.0);
 }
@@ -186,18 +206,30 @@ class Vector(BaseEffect):
 
         # Build one VAO per shape; they share the same program
         self._vaos: list[moderngl.VertexArray] = []
+        self._vbos: list[moderngl.Buffer] = []
         self._n_lines: list[int] = []
         for (fn, col, scale) in _SHAPES:
             edges = fn()  # Nx6 float32
-            # Interleave as line endpoints: each row = [x0,y0,z0, x1,y1,z1]
-            # Flatten to N*2 vertices of 3 floats each
-            pts = edges.reshape(-1, 3)
-            vbo = self.ctx.buffer(pts.tobytes())
+            n_edges = int(edges.shape[0])
+            verts = np.empty((n_edges * 2, 5), dtype=np.float32)
+            for i in range(n_edges):
+                a = edges[i, 0:3]
+                b = edges[i, 3:6]
+                edge_id = float(i) / float(max(1, n_edges - 1))
+                verts[i * 2 + 0, 0:3] = a
+                verts[i * 2 + 0, 3] = 0.0
+                verts[i * 2 + 0, 4] = edge_id
+                verts[i * 2 + 1, 0:3] = b
+                verts[i * 2 + 1, 3] = 1.0
+                verts[i * 2 + 1, 4] = edge_id
+
+            vbo = self.ctx.buffer(verts.tobytes())
             vao = self.ctx.vertex_array(
-                self._prog, [(vbo, "3f", "in_pos")]
+                self._prog, [(vbo, "3f 1f 1f", "in_pos", "in_phase", "in_edge")]
             )
             self._vaos.append(vao)
-            self._n_lines.append(len(pts))
+            self._vbos.append(vbo)
+            self._n_lines.append(len(verts))
 
         aspect = self.width / max(self.height, 1)
         self._proj = _perspective(math.radians(50), aspect, 0.1, 100.0)
@@ -256,9 +288,16 @@ class Vector(BaseEffect):
             self._prog["uBrightness"].value = bright
             self._prog["uTime"].value = self.time
             self._prog["uSparkle"].value = 0.05 + self._treble * 0.16 + self._beat * 0.12
+            self._prog["uRacerPos"].value = (
+                self.time * (0.26 + float(self.parameters["speed"]) * 0.24 + self._bass * 0.40)
+                + idx * 0.19
+            ) % 1.0
+            self._prog["uRacerGlow"].value = 0.20 + self._mid * 0.40 + self._beat * 0.35
             self._vaos[idx].render(moderngl.LINES, vertices=self._n_lines[idx])
 
     def destroy(self) -> None:
         for vao in self._vaos:
             vao.release()
+        for vbo in self._vbos:
+            vbo.release()
         self._prog.release()

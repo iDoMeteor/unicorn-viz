@@ -38,6 +38,7 @@ uniform float iMid;
 uniform float iTreble;
 uniform float iBeat;
 uniform float iRotation;
+uniform float iVariant;
 uniform int   iMaxIter;
 
 in  vec2 v_uv;
@@ -47,7 +48,7 @@ vec3 palette(float t) {
     vec3 a = vec3(0.5, 0.5, 0.5);
     vec3 b = vec3(0.5, 0.5, 0.5);
     vec3 c = vec3(1.0, 0.9, 0.7);
-    vec3 d = vec3(0.05, 0.18, 0.36);
+    vec3 d = mix(vec3(0.03, 0.12, 0.28), vec3(0.11, 0.24, 0.43), iVariant);
     return a + b * cos(6.28318 * (c * t + d));
 }
 
@@ -91,6 +92,7 @@ void main() {
         float t = smooth_i / float(iMaxIter);
         float trap_mod = exp(-12.0 * orbit);
         float hue = t + iPalShift + iBass * 0.06 + trap_mod * 0.2;
+        hue += 0.08 * sin((z.x + z.y) * 0.65 + iVariant * 9.0);
         col = palette(hue);
         col += palette(hue + 0.23) * trap_mod * (0.35 + iTreble * 0.35);
     } else {
@@ -141,6 +143,8 @@ class FractalZoom(BaseEffect):
         self._zoom = float(self.rng.uniform(0.55, 0.95))
         self._rotation = float(self.rng.uniform(-math.pi, math.pi))
         self._pal_shift = float(self.rng.uniform(0.0, 1.0))
+        self._variant = float(self.rng.uniform(0.0, 1.0))
+        self._zoom_ceiling = float(self.rng.uniform(8.0e5, 3.2e6))
 
         self._bass = 0.0
         self._mid = 0.0
@@ -151,19 +155,26 @@ class FractalZoom(BaseEffect):
         # Long-run drift target to avoid repetitive framing.
         self._drift_x = 0.0
         self._drift_y = 0.0
-        self._target_drift_x = float(self.rng.uniform(-0.03, 0.03))
-        self._target_drift_y = float(self.rng.uniform(-0.03, 0.03))
+        self._target_drift_x = float(self.rng.uniform(-0.018, 0.018))
+        self._target_drift_y = float(self.rng.uniform(-0.018, 0.018))
         self._retarget_t = 0.0
         self._retarget_interval = float(self.rng.uniform(6.0, 11.0))
 
     def _choose_next_target(self) -> None:
         self._zoom = float(self.rng.uniform(0.55, 0.95))
-        self._target_idx = (self._target_idx + 1) % len(_TARGETS)
+        next_idx = int(self.rng.integers(0, len(_TARGETS)))
+        if next_idx == self._target_idx:
+            next_idx = (next_idx + 1) % len(_TARGETS)
+        self._target_idx = next_idx
         self._cx, self._cy = _TARGETS[self._target_idx]
-        self._cx += float(self.rng.uniform(-0.035, 0.035))
-        self._cy += float(self.rng.uniform(-0.035, 0.035))
+        self._cx += float(self.rng.uniform(-0.016, 0.016))
+        self._cy += float(self.rng.uniform(-0.016, 0.016))
         self._rotation = float(self.rng.uniform(-math.pi, math.pi))
         self._pal_shift = float(self.rng.uniform(0.0, 1.0))
+        self._variant = float(self.rng.uniform(0.0, 1.0))
+        self._zoom_ceiling = float(self.rng.uniform(8.0e5, 3.2e6))
+        self._drift_x = 0.0
+        self._drift_y = 0.0
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -188,15 +199,22 @@ class FractalZoom(BaseEffect):
         if self._retarget_t >= self._retarget_interval:
             self._retarget_t = 0.0
             self._retarget_interval = float(self.rng.uniform(6.0, 11.0))
-            self._target_drift_x = float(self.rng.uniform(-0.05, 0.05))
-            self._target_drift_y = float(self.rng.uniform(-0.05, 0.05))
+            drift_span = 0.024 if self._zoom < 140.0 else 0.010
+            self._target_drift_x = float(self.rng.uniform(-drift_span, drift_span))
+            self._target_drift_y = float(self.rng.uniform(-drift_span, drift_span))
 
         blend = min(1.0, dt * 0.35)
         self._drift_x += (self._target_drift_x - self._drift_x) * blend
         self._drift_y += (self._target_drift_y - self._drift_y) * blend
+        drift_mag = math.hypot(self._drift_x, self._drift_y)
+        max_drift = 0.032 if self._zoom < 120.0 else 0.014
+        if drift_mag > max_drift:
+            scale = max_drift / max(drift_mag, 1e-6)
+            self._drift_x *= scale
+            self._drift_y *= scale
 
         # Reset well before precision trouble to avoid black traps.
-        if self._zoom > 2.0e7:
+        if self._zoom > self._zoom_ceiling:
             self._choose_next_target()
 
     def render(self) -> None:
@@ -210,6 +228,7 @@ class FractalZoom(BaseEffect):
         self._prog['iTreble'].value = float(self._treble)
         self._prog['iBeat'].value = float(self._beat)
         self._prog['iRotation'].value = float(self._rotation)
+        self._prog['iVariant'].value = float(self._variant)
         self._prog['iMaxIter'].value = int(self.parameters['max_iter'] + self._bass * 26.0)
         self._vao.render(moderngl.TRIANGLE_STRIP)
 

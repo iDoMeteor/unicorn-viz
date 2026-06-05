@@ -33,6 +33,8 @@ uniform float iBeat;
 uniform float iSpeed;
 uniform float iFlow;
 uniform float iDrift;
+uniform float iEra;
+uniform float iHueDrift;
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -92,11 +94,13 @@ void main() {
     float brush = abs(sin((n + p.x * 0.7 + p.y * 0.9 + sin(t * 0.4) * iFlow) * 28.0));
     brush = pow(1.0 - brush, 3.5 - iBass * 1.2);
 
-    vec3 deepBlue = vec3(0.03, 0.07, 0.30);
-    vec3 cobalt   = vec3(0.09, 0.26, 0.75);
-    vec3 yellow   = vec3(1.00, 0.84, 0.20);
+    float eraWave = 0.5 + 0.5 * sin(t * 0.08 + iEra * 6.28318);
+    vec3 deepBlue = mix(vec3(0.03, 0.06, 0.24), vec3(0.06, 0.03, 0.22), eraWave);
+    vec3 cobalt   = mix(vec3(0.08, 0.24, 0.72), vec3(0.18, 0.20, 0.62), iHueDrift);
+    vec3 yellow   = mix(vec3(1.00, 0.84, 0.20), vec3(1.00, 0.62, 0.28), eraWave * 0.55);
 
     vec3 col = mix(deepBlue, cobalt, n);
+    col = mix(col, col.bgr, 0.10 * iHueDrift);
     col += yellow * brush * (0.35 + 0.6 * iMid);
 
     // Stars + dynamic streaklets
@@ -104,6 +108,7 @@ void main() {
     float streak = smoothstep(0.995, 1.0, hash(floor((uv + vec2(-t * 0.12, t * 0.07)) * 170.0)));
     col += vec3(1.0, 0.95, 0.75) * stars * (0.4 + iBeat * 0.7 + iTreble * 0.4);
     col += vec3(0.8, 0.9, 1.0) * streak * (0.05 + iTreble * 0.16);
+    col += palette(t * 0.02 + iEra * 0.6 + n * 0.2) * 0.05 * iHueDrift;
 
     col += vec3(1.0, 0.9, 0.7) * iBeat * 0.08;
 
@@ -135,6 +140,12 @@ class VanGogh(BaseEffect):
         self._target_drift = self._drift
         self._retarget_timer = 0.0
         self._retarget_interval = float(self.rng.uniform(4.0, 8.0))
+        self._era = float(self.rng.uniform(0.0, 1.0))
+        self._hue_drift = float(self.rng.uniform(0.0, 1.0))
+        self._target_era = self._era
+        self._target_hue_drift = self._hue_drift
+        self._long_timer = 0.0
+        self._long_interval = float(self.rng.uniform(18.0, 34.0))
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -152,9 +163,19 @@ class VanGogh(BaseEffect):
             self._target_flow = float(self.rng.uniform(0.0, 1.0))
             self._target_drift = float(self.rng.uniform(0.0, 0.55))
 
+        self._long_timer += dt
+        if self._long_timer >= self._long_interval:
+            self._long_timer = 0.0
+            self._long_interval = float(self.rng.uniform(18.0, 34.0))
+            self._target_era = float(self.rng.uniform(0.0, 1.0))
+            self._target_hue_drift = float(self.rng.uniform(0.0, 1.0))
+
         blend = min(1.0, dt * 0.55)
         self._flow += (self._target_flow - self._flow) * blend
         self._drift += (self._target_drift - self._drift) * blend
+        long_blend = min(1.0, dt * 0.08)
+        self._era += (self._target_era - self._era) * long_blend
+        self._hue_drift += (self._target_hue_drift - self._hue_drift) * long_blend
 
     def render(self) -> None:
         self._prog["iTime"].value = self.time
@@ -166,6 +187,8 @@ class VanGogh(BaseEffect):
         self._prog["iSpeed"].value = float(self.parameters["speed"])
         self._prog["iFlow"].value = self._flow
         self._prog["iDrift"].value = self._drift
+        self._prog["iEra"].value = self._era
+        self._prog["iHueDrift"].value = self._hue_drift
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:

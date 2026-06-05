@@ -60,6 +60,18 @@ Session log:
 - New P0/P1/P2: No startup crash-path finding in these matrix rows
 - Notes: Temporary config files under `/tmp` were used so live `config.toml` values remained untouched.
 
+- Date: 2026-06-04
+- Reviewer: owner
+- Scope covered today: one-shot visual review batch for built-in + drop-in effects (fractal_zoom through wavey gravy set, plus hacker_terminal/prism_storm/tron_grid/unicorn_tears)
+- New P0/P1/P2: P0 on Hacker Terminal, Sine Scroller, System Monitor positioning/role, Unicorn Tears avatar placement; P1 on Fractal Zoom startup variance and framing drift, Starfield depth/reactivity evolution, Vector motion accents; P2 on Psychedelic zoom and Van Gogh long-view variation; P3 on Metaballs default split pacing and Prism Storm naming/theme alignment
+- Notes: Assets still pending for images/sims/ansi/video review set.
+
+- Date: 2026-06-04
+- Reviewer: owner + Copilot
+- Scope covered today: implementation closure pass for the 2026-06-04 effect-priority batch
+- New P0/P1/P2: no new findings; implementation updates landed for all listed P0/P1/P2/P3 items from this batch
+- Notes: P0/P1/P2/P3 implementation scope from this operator batch is marked complete in code; remaining work is operator visual signoff and any follow-up tuning deltas.
+
 ---
 
 ## Canonical Runtime Review Order
@@ -567,4 +579,88 @@ Release decision:
 - Validate ping-pong friend pairing behavior and friend-map quality.
 - Validate scroll-wheel hue-shift/postfx interaction behavior and timer reset semantics.
 - Validate middle-click dual behavior (reset vs Auto VJ toggle) for predictability.
+
+### 2026-06-04 Operator Batch (Effect One-Shot Data)
+
+Format:
+- Rating = overall score (10-point scale)
+- Visual / Audio = 10-point scale
+- Single/Span/Mirror/Friends/Startup/Hotkey = pass/fail
+- Fix priority = operator-specified urgency
+
+#### Built-in effects
+
+- Fractal Zoom (`fractal_zoom`): Rating 8.5 | Visual 9 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P1
+   - Notes: Very beautiful fractal now but still starts too similarly and can get stuck in background/foreground framing, losing fractals out of frame over time.
+
+- Kaleidoscope (`kaleidoscope`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Fully dialed-in benchmark quality.
+
+- Metaballs (`metaballs`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P3
+   - Notes: Very intense current version; consider slightly reducing default ball-splitting pace.
+
+- Particle Storm (`particle_storm`): Rating 7.5 | Visual 7.5 | Audio 7.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Decent baseline; stronger with VJ support than standalone.
+
+- Plasma (`plasma`): Rating 9 | Visual 9 | Audio 8.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Newer version is quite strong.
+
+- Psychedelic (`psychedelic`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P2
+   - Notes: Solid newer pass; zoom control requested.
+
+- Sine Scroller 2.0 (`sine_scroller`): Rating 6 | Visual 5 | Audio 9 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P0
+   - Notes: Concept still good, but operator requests a full 3.0 rewrite toward modern neon/lazer visual identity.
+
+- Starfield (`starfield`): Rating 7 | Visual 7 | Audio 7 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P1
+   - Notes: Pleasant interlude but needs more life over time and stronger music-ray interaction.
+
+- System Monitor (`system_monitor`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P0
+   - Notes: Strong utility value; operator requests clearer labels and a special-tool hotkey path instead of normal rotation.
+
+- Tunnel (`tunnel`): Rating 9 | Visual 9 | Audio 8.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Strong favorite and stable in all display modes.
+
+- Van Gogh (`van_gogh`): Rating 9.5 | Visual 9.5 | Audio 9.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P2
+   - Notes: Excellent current result; request for longer-view color/variation evolution.
+
+- Vector (`vector`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P1
+   - Notes: Requested enhancement: pulsing beads/racers traveling along vector paths.
+
+- Wavey Gravy (`alien_biome`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Remove lingering references to former name.
+
+#### Drop-in visual effects
+
+- Hacker Terminal (`hacker-terminal-01`): Rating 7 | Visual 7 | Audio 5 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P0
+   - Notes: Strong potential with VJ, weak standalone response; explicit speed control requested; stronger audio-reactive behavior needed.
+
+- Prism Storm (`textures-01`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P3
+   - Notes: Visual quality is strong but naming/theme alignment requested (currently reads more tunnel-like than prism-like).
+
+- Tron Grid (`tron-grid-01`): Rating 9.5 | Visual 9.5 | Audio 9.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+   - Notes: Operator favorite; considered highly polished.
+
+- Unicorn Tears (`unicorn-tears-01`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P0
+   - Notes: Flagship quality; fix requested for dancing-unicorn avatar anchoring/scale origin to avoid top-edge blank-space drift inside heart composites.
+
+### 2026-06-04 Implementation Status Update (Effect-Priority Batch)
+
+- P0 implemented:
+   - Sine Scroller 3.x rewrite/tuning and compile-stability fixes landed.
+   - System Monitor split/reposition completed as Hexy Stars visual + dedicated monitor modal UX.
+   - Hacker Terminal tuning/controls pass landed in the same effect-priority sequence.
+   - Unicorn Tears avatar placement/anchoring follow-up landed.
+
+- P1 implemented:
+   - Fractal Zoom startup variance + framing-drift control updates landed.
+   - Starfield depth/reactivity evolution updates landed (including stronger music-ray interaction).
+   - Vector motion-accent updates landed (pulsing edge racers/beads).
+
+- P2 implemented:
+   - Psychedelic zoom tweakable landed.
+   - Van Gogh long-view variation/evolution pass landed.
+
+- P3 implemented:
+   - Metaballs split-pacing policy landed with raver-profile-specific partial rollback behavior.
+   - Prism Storm theme/name alignment landed (`Prism Lattice`).
 

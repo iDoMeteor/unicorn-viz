@@ -264,6 +264,14 @@ out vec2 out_pos;
 - Do not silently proceed past known red tests; unresolved failures must be
   called out in commit notes and user updates.
 
+## Git Hook Discipline
+
+- When git hooks (for example pre-commit hooks) emit warnings or errors, agents
+  must treat them as immediate action items: address the findings, rerun hooks,
+  and only then proceed to push.
+- Do not push with known unresolved hook warnings/errors unless the owner
+  explicitly approves a defer for that specific warning/error set.
+
 ---
 
 ## Documentation SOP

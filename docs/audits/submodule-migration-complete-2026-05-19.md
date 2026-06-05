@@ -125,7 +125,7 @@ git push
 
 ## Policy Compliance
 
-This migration aligns with the drop-in policy specified in [.github/copilot-instructions.md](../.github/copilot-instructions.md):
+This migration aligns with the drop-in policy specified in [.github/copilot-instructions.md](../../.github/copilot-instructions.md):
 
 ✅ Each drop-in has its own private GitHub repository
 ✅ All drop-ins are tracked as git submodules in main repo
