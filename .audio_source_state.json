@@ -1,7 +1,12 @@
 {
-  "selected_source_key": "name:built-in audio analog stereo",
+  "selected_source_key": "name:pc speaker (realtek hd audio output with sst)",
   "viable_source_keys": [
     "default",
-    "name:built-in audio analog stereo"
+    "name:line 1 (virtual audio cable)",
+    "name:line 1 (virtual cable 1)",
+    "name:microsoft sound mapper - input",
+    "name:pc speaker (realtek hd audio output with sst)",
+    "name:primary sound capture driver",
+    "name:stereo mix (realtek hd audio stereo input)"
   ]
 }

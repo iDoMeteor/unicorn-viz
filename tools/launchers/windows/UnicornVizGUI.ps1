@@ -125,6 +125,8 @@ function Invoke-UpdateAndRefresh {
 
     $commands = @(
         'git pull --ff-only',
+        'git submodule sync --recursive',
+        'git submodule update --init --recursive --remote',
         '"{0}" -m pip install --upgrade pip wheel' -f $pythonExe,
         '"{0}" -m pip install -r requirements.txt' -f $pythonExe
     )
@@ -287,7 +289,7 @@ $btnDesktop.FlatStyle = 'Flat'
 $form.Controls.Add($btnDesktop)
 
 $btnUpdate = New-Object System.Windows.Forms.Button
-$btnUpdate.Text = 'Update + Refresh Deps'
+$btnUpdate.Text = 'Update'
 $btnUpdate.Width = 220
 $btnUpdate.Height = 36
 $btnUpdate.Location = New-Object System.Drawing.Point(266, 258)

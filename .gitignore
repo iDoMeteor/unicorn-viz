@@ -14,3 +14,4 @@ screenshots/
 docs/archive/
 runtime/
 build/
+.audio_source_state.json
