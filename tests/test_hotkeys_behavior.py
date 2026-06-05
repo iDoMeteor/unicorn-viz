@@ -242,3 +242,40 @@ def test_midi_note_is_queued_until_main_thread_dispatch() -> None:
     assert overlays.toggled_audio == 1
     assert overlays.audio_selector_visible is True
     assert app.vj_api.marked == ['key']
+
+
+def test_midi_named_action_audio_selector_dispatches() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'audio_selector'
+
+    handler._on_midi(MidiEvent('note_on', 0, 61, 1.0))
+    handler.process_pending_midi()
+
+    assert overlays.toggled_audio == 1
+    assert overlays.audio_selector_visible is True
+    assert app.vj_api.marked == ['key']
+
+
+def test_midi_contextual_nav_action_dispatches() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'context_select'
+    overlays.audio_selector_visible = True
+    overlays.audio_sources = ['device-0', 'device-1']
+    overlays.audio_selected_index = 1
+
+    handler._on_midi(MidiEvent('note_on', 0, 62, 1.0))
+    handler.process_pending_midi()
+
+    assert app.audio_source_selected == 1
+    assert overlays.audio_selector_visible is False
+
+
+def test_midi_unmapped_named_action_noop() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'this_action_does_not_exist'
+
+    handler._on_midi(MidiEvent('note_on', 0, 63, 1.0))
+    handler.process_pending_midi()
+
+    assert overlays.toggled_audio == 0
+    assert app.vj_api.marked == []

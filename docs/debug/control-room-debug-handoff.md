@@ -1,5 +1,12 @@
 # Control Room Debug Handoff
 
+## 2026-06-05 Status Note
+
+- This document remains a historical debug handoff and should not be treated as current runtime truth for Windows.
+- Windows owner-machine runtime is currently passing for control-room operation.
+- Linux operator-window support is currently N/A for production; planned direction is a separate-process control room architecture.
+- Pending routing requirement: when control-room gating owns modals/messages, modal presentation on control room must be fullscreen.
+
 ## Goal
 
 Ship `drop-ins/control-room-01` as a stable in-process operator window for

@@ -366,7 +366,7 @@ Track both enabled and disabled behavior for each drop-in.
 |---|---|---|---|
 | alien-invasion-01 | [x] | [x] | Baseline debug startup registered `Alien Invasion`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | auto-vj-01 | [x] | [x] | Temp-config startups: enabled run logged `AutoVJController loaded from drop-in`; disabled run logged `AutoVJController Phase 4 loaded (disabled)`. |
-| control-room-01 | [x] | [x] | Temp-config startups: enabled run logged `ControlRoomController scheduled ...` then `loaded from drop-in`; disabled run skipped controller without startup crash. |
+| control-room-01 | [x] | [x] | Temp-config startups: enabled run logged `ControlRoomController scheduled ...` then `loaded from drop-in`; disabled run skipped controller without startup crash. Multi-head runtime matrix now tracks `single`, `span_included`, `span_all`, `mirror_included`, and `mirror_all`. |
 | cyber-war-01 | [x] | [x] | Baseline debug startup registered `Cyber War`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | disco-ball-01 | [x] | [x] | Baseline debug startup registered `Disco Ball`; hidden-dropin run removed registration (`count=0`) while still reaching audio-ready startup. |
 | grand-finale-01 | [x] | [x] | Enabled runs logged `GrandFinaleController loaded from drop-in`; missing-dropin run logged `GrandFinaleController not available .../grand-finale-01/grand_finale.py` with startup continuing. |

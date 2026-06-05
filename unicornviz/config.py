@@ -130,7 +130,7 @@ class ConfigValidationError(ValueError):
     """Raised when config values fail validation."""
 
 
-_DISPLAY_MODES = {'single', 'span_all', 'mirror_all'}
+_DISPLAY_MODES = {'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all'}
 _DEMO_MODES = {'sequential', 'random'}
 _TRANSITIONS = {
     'crossfade',
@@ -199,7 +199,7 @@ def _extra_constraints(data: dict[str, Any]) -> list[str]:
     if display_mode not in _DISPLAY_MODES:
         errors.append(
             "window.display_mode must be one of "
-            "'single', 'span_all', 'mirror_all'"
+            "'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all'"
         )
 
     demo_mode = str(demo.get('mode', '')).lower()

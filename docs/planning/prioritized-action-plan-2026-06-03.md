@@ -2,7 +2,7 @@
 
 Owner: Engineering
 Status: active
-Last updated: 2026-06-03
+Last updated: 2026-06-05
 
 ## Progress Update (2026-06-03)
 
@@ -12,6 +12,12 @@ Last updated: 2026-06-03
    - Recording continuity improvement on resize/topology dimension changes (segment rotation instead of silent stop).
    - Multi-head help entry correction (`Shift+X` for span-all).
    - Hotkey/help cleanup for removed alternate binds and stale labels.
+   - Control-room runtime pass confirmed on Windows owner-machine runs.
+- New policy notes (2026-06-05):
+   - Linux control-room support remains N/A for production until a separate-process operator architecture is delivered.
+   - Control-room modal/message gate requirement: modal presentation on control room must be fullscreen.
+   - Webcam note: camera switching is confirmed stable on Fedora 44 but currently locks runtime on Windows 11 during recent operator testing.
+   - Multi-head note: subsystem is otherwise stable, with span-mode scaling/alignment still tracked as a deferred follow-up bug.
 - Verification snapshot:
    - `pytest -q`: 26 passed, 1 warning.
 - Still required for closure:
@@ -51,12 +57,12 @@ into one execution order that can be worked down without reopening every source 
 
 1. Runtime stability closure for control room and audio fallback.
    Status:
-   - Completed on 2026-06-03 (owner validation passed for single/span_all/mirror_all plus audio-failure behavior)
+   - Completed on 2026-06-03 (owner validation passed for single/span_included/span_all/mirror_included/mirror_all plus audio-failure behavior)
    Why:
    - control-room handoff still flags audience starvation risk while operator window is open
    - recent live sessions reported mid-session audio fallback churn
    Scope:
-   - complete owner-machine validation matrix for control room in single, span_all, and mirror_all
+   - complete owner-machine validation matrix for control room in single, span_included, span_all, mirror_included, and mirror_all
    - complete long-session validation for audio fallback policy under steady source playback
    - decide default policy if any residual instability remains
    Acceptance criteria:

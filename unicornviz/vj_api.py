@@ -377,6 +377,18 @@ class VJApi:
         """Set the main audience display mode."""
         return self._app.set_display_mode(mode, reset_to_config=reset_to_config)
 
+    def supported_display_modes(self) -> tuple[str, ...]:
+        """Return display modes currently supported by the runtime."""
+        getter = getattr(self._app, 'supported_display_modes', None)
+        if not callable(getter):
+            return ('single',)
+        try:
+            modes = getter()
+        except Exception:
+            return ('single',)
+        out = tuple(str(mode).strip().lower() for mode in modes if str(mode).strip())
+        return out or ('single',)
+
     def set_advance_interval(self, seconds: float) -> float:
         self._app._effect_duration = max(10.0, float(seconds))  # noqa: SLF001
         return float(self._app._effect_duration)  # noqa: SLF001
@@ -640,6 +652,19 @@ class VJApi:
             self._app._overlays.flash_message(str(text), float(duration))  # noqa: SLF001
         except Exception:
             pass
+
+    def overlay_modal_snapshot(self) -> dict[str, object]:
+        """Return active overlay modal payload for alternate operator surfaces."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            snap = getattr(overlays, 'modal_snapshot', None)
+            if callable(snap):
+                payload = snap()
+                if isinstance(payload, dict):
+                    return payload
+        except Exception:
+            pass
+        return {}
 
     def hue_scroll(self, dy: int) -> None:
         """Accumulate scroll-wheel hue shift by dy steps (+up / -down)."""

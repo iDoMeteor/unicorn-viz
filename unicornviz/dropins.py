@@ -10,6 +10,7 @@ import logging
 import re
 import sys
 import tomllib
+from dataclasses import dataclass
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import ModuleType
@@ -25,6 +26,40 @@ _EXCLUDE_CACHE_SIG: tuple[float, int] | None = None
 _EXCLUDE_CACHE: tuple[bool, set[str]] = (False, set())
 _REGISTERED_VALIDATOR_FILES: set[str] = set()
 _MODULE_CACHE: dict[Path, ModuleType] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class DropinRuntimeCapability:
+    """Declarative runtime registration metadata for a drop-in component."""
+
+    name: str
+    relative_file: str
+    class_symbol: str
+    subsystem_name: str | None = None
+    key_handler_attr: str | None = None
+
+
+@dataclass(slots=True)
+class DropinBindingState:
+    """Track what runtime bindings were successfully registered."""
+
+    subsystem_registered: bool = False
+    key_handler_registered: bool = False
+
+
+CONTROL_ROOM_RUNTIME_CAPABILITY = DropinRuntimeCapability(
+    name='control_room',
+    relative_file='control-room-01/control_room.py',
+    class_symbol='ControlRoomController',
+    subsystem_name='control_room',
+    key_handler_attr='handle_key',
+)
+
+MULTIHEAD_RUNTIME_CAPABILITY = DropinRuntimeCapability(
+    name='multihead',
+    relative_file='multi-head-01/multihead.py',
+    class_symbol='MultiHeadController',
+)
 
 
 def _normalise_help_entries(
@@ -289,6 +324,82 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
                     discovered.append(entry)
                     seen.add(entry)
 
+    return discovered
+
+
+def load_runtime_capability_class(capability: DropinRuntimeCapability) -> type:
+    """Load the class backing a runtime capability declaration."""
+    cls = load_dropin_symbol(capability.relative_file, capability.class_symbol)
+    if not inspect.isclass(cls):
+        raise ImportError(
+            f'Runtime capability {capability.name} symbol is not a class: '
+            f'{capability.class_symbol}'
+        )
+    return cls
+
+
+def register_runtime_capability(
+    vj_api: Any,
+    instance: Any,
+    capability: DropinRuntimeCapability,
+) -> DropinBindingState:
+    """Register subsystem/key-handler bindings declared by capability metadata."""
+    state = DropinBindingState()
+    if capability.subsystem_name:
+        state.subsystem_registered = bool(
+            vj_api.register_subsystem(capability.subsystem_name, instance)
+        )
+
+    if capability.key_handler_attr:
+        handler = getattr(instance, capability.key_handler_attr, None)
+        if callable(handler):
+            vj_api.register_key_handler(capability.name, handler)
+            state.key_handler_registered = True
+    return state
+
+
+def unregister_runtime_capability(vj_api: Any, capability: DropinRuntimeCapability) -> None:
+    """Undo runtime bindings for a previously-registered capability."""
+    if capability.key_handler_attr:
+        vj_api.unregister_key_handler(capability.name)
+    if capability.subsystem_name:
+        vj_api.unregister_subsystem(capability.subsystem_name)
+
+
+def discover_runtime_capabilities() -> list[dict[str, Any]]:
+    """Discover optional CAPABILITIES metadata from drop-in modules.
+
+    This is a schema-light skeleton used for incremental migration away from
+    hardcoded app-side drop-in wiring. Modules may expose either
+    ``CAPABILITIES`` or ``DROPIN_CAPABILITIES`` as a dict/list payload.
+    """
+    root = _dropins_root()
+    if not root.exists():
+        return []
+
+    discovered: list[dict[str, Any]] = []
+    for file_path in sorted(root.glob('*/*.py')):
+        if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
+            continue
+        if _is_dropin_excluded(file_path.parent.name):
+            continue
+        try:
+            module = _load_module_from_file(file_path)
+        except Exception as exc:
+            log.warning('Skipping drop-in capability module %s: %s', file_path, exc)
+            continue
+
+        for attr_name in ('DROPIN_CAPABILITIES', 'CAPABILITIES'):
+            raw = getattr(module, attr_name, None)
+            if raw is None:
+                continue
+            if isinstance(raw, dict):
+                discovered.append({'dropin': file_path.parent.name, 'file': str(file_path.name), **raw})
+            elif isinstance(raw, (list, tuple)):
+                for item in raw:
+                    if isinstance(item, dict):
+                        discovered.append({'dropin': file_path.parent.name, 'file': str(file_path.name), **item})
+            break
     return discovered
 
 

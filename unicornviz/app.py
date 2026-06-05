@@ -32,7 +32,15 @@ from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
-from unicornviz.dropins import load_dropin_symbol, discover_dropin_help_entries
+from unicornviz.dropins import (
+    load_dropin_symbol,
+    discover_dropin_help_entries,
+    load_runtime_capability_class,
+    register_runtime_capability,
+    unregister_runtime_capability,
+    CONTROL_ROOM_RUNTIME_CAPABILITY,
+    MULTIHEAD_RUNTIME_CAPABILITY,
+)
 from unicornviz.paths import resolve_path
 from unicornviz.vj_api import VJApi
 from unicornviz.keystroke_log import KeystrokeLogger
@@ -84,6 +92,9 @@ class _NullMultiHeadController:
 
     def resolve_display_mode(self) -> str:
         return 'single'
+
+    def supported_display_modes(self) -> tuple[str, ...]:
+        return ('single',)
 
     def resolve_display_index(self, width: int, height: int) -> int:
         return 0
@@ -305,7 +316,7 @@ def _clamp_render_scale(value: float) -> float:
 def _load_multihead_controller_class() -> type:
     """Load MultiHeadController directly from the multi-head drop-in."""
     try:
-        return load_dropin_symbol('multi-head-01/multihead.py', 'MultiHeadController')
+        return load_runtime_capability_class(MULTIHEAD_RUNTIME_CAPABILITY)
     except Exception as exc:
         log.warning('MultiHeadController unavailable (%s); falling back to single-display mode', exc)
         return _NullMultiHeadController
@@ -412,10 +423,7 @@ def _load_grand_finale_class() -> type:
 
 def _load_control_room_controller_class() -> type:
     """Load ControlRoomController from the control-room drop-in."""
-    return load_dropin_symbol(
-        'control-room-01/control_room.py',
-        'ControlRoomController',
-    )
+    return load_runtime_capability_class(CONTROL_ROOM_RUNTIME_CAPABILITY)
 
 
 class App:
@@ -457,6 +465,7 @@ class App:
         self._playlist: Playlist | None = None
         self._subsystems: dict[str, Any] = {}
         self._claimed_window_handlers: dict[int, Callable[[Any], None]] = {}
+        self._hotkeys: HotkeyHandler | None = None
         self._frame_capture_bytes: bytes | None = None
         self._frame_capture_width: int = 0
         self._frame_capture_height: int = 0
@@ -551,12 +560,33 @@ class App:
         self._display_mode = self._multihead.resolve_display_mode()
         return self._display_mode
 
+    @staticmethod
+    def _is_span_mode(mode: str) -> bool:
+        return mode in {'span_included', 'span_all'}
+
+    @staticmethod
+    def _is_mirror_mode(mode: str) -> bool:
+        return mode in {'mirror_included', 'mirror_all'}
+
     def _set_multihead_mode(self, mode: str) -> None:
         """Update drop-in internal mode fields when available."""
         if hasattr(self._multihead, '_display_mode_requested'):
             setattr(self._multihead, '_display_mode_requested', mode)
         if hasattr(self._multihead, '_display_mode'):
             setattr(self._multihead, '_display_mode', mode)
+
+    def supported_display_modes(self) -> tuple[str, ...]:
+        """Return runtime-supported display modes in UI-friendly order."""
+        getter = getattr(self._multihead, 'supported_display_modes', None)
+        if callable(getter):
+            try:
+                raw = getter()
+            except Exception:
+                raw = ()
+            out = tuple(str(item).strip().lower() for item in raw if str(item).strip())
+            if out:
+                return out
+        return ('single',)
 
     def register_subsystem(self, name: str, subsystem: Any) -> bool:
         """Register a runtime subsystem for per-frame update/present callbacks."""
@@ -639,6 +669,18 @@ class App:
             log.warning('Claimed window event handler failed for window %d: %s', window_id, exc)
         return True
 
+    def dispatch_subwindow_keydown(self, sym: int, mod: int, repeat: bool = False) -> None:
+        """Forward a keydown from a claimed subsystem window to global hotkeys."""
+        self._update_ctrl_state(int(sym), True)
+        handler = self._hotkeys
+        if handler is None or bool(repeat):
+            return
+        handler.handle(int(sym), int(mod))
+
+    def dispatch_subwindow_keyup(self, sym: int) -> None:
+        """Forward keyup modifier state from claimed subsystem windows."""
+        self._update_ctrl_state(int(sym), False)
+
     def _subsystems_need_frame_capture(self) -> bool:
         """Return True when any registered subsystem wants preview-frame bytes."""
         return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
@@ -688,8 +730,11 @@ class App:
         try:
             control_room_cls = _load_control_room_controller_class()
             self._control_room = control_room_cls(self, control_room_cfg)
-            self.vj_api.register_subsystem('control_room', self._control_room)
-            self.vj_api.register_key_handler('control_room', self._control_room.handle_key)
+            register_runtime_capability(
+                self.vj_api,
+                self._control_room,
+                CONTROL_ROOM_RUNTIME_CAPABILITY,
+            )
             self.rebind_main_gl_context()
             log.info('ControlRoomController loaded from drop-in')
             return True, f'Control Room open on display {getattr(self._control_room, "_display_index", "?")}'
@@ -715,8 +760,7 @@ class App:
         # close_now() / _destroy_window() already unregisters and rebinds GL.
         # The explicit calls below are defensive against older drop-ins that
         # don't implement close_now().
-        self.unregister_subsystem('control_room')
-        self.vj_api.unregister_key_handler('control_room')
+        unregister_runtime_capability(self.vj_api, CONTROL_ROOM_RUNTIME_CAPABILITY)
         self._control_room = None
         self.rebind_main_gl_context()
         log.info('ControlRoomController closed')
@@ -727,6 +771,32 @@ class App:
         if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
             return self._destroy_control_room()
         return self._create_control_room()
+
+    def control_room_flash_gate_active(self) -> bool:
+        """Return True when flash notifications should route to control room."""
+        control_room_cfg = self.cfg.get('control_room', default={}) or {}
+        if not isinstance(control_room_cfg, dict):
+            control_room_cfg = {}
+        if not bool(control_room_cfg.get('enabled', False)):
+            return False
+        return (
+            self._control_room is not None
+            and bool(getattr(self._control_room, 'is_open', False))
+        )
+
+    def route_flash_message(self, text: str, duration: float = 2.0) -> bool:
+        """Route flash notifications to control room when gate conditions are met."""
+        if not self.control_room_flash_gate_active():
+            return False
+        handler = getattr(self._control_room, 'push_notice', None)
+        if not callable(handler):
+            return False
+        try:
+            handler(str(text), float(duration))
+            return True
+        except Exception as exc:
+            log.warning('Control room flash routing failed: %s', exc)
+            return False
 
     def _multihead_layouts(self) -> list[tuple[int, int, int, int]]:
         """Return display layouts from the multi-head drop-in.
@@ -775,13 +845,23 @@ class App:
     def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
         return self._multihead.window_position_for_display(display_index, self._width, self._height)
 
+    def _sync_window_origin_from_sdl(self) -> None:
+        """Sync cached window origin to compositor-reported SDL coordinates."""
+        if self._window is None:
+            return
+        wx = ctypes.c_int(0)
+        wy = ctypes.c_int(0)
+        sdl2.SDL_GetWindowPosition(self._window, wx, wy)
+        self._window_origin_x = int(wx.value)
+        self._window_origin_y = int(wy.value)
+
     def _primary_display_viewport(self) -> tuple[int, int, int, int] | None:
         """Return window-local viewport for the primary display in multi-display modes.
 
         Primary is resolved as the largest active display layout so overlay
         menus center on the main audience screen in mixed-size topologies.
         """
-        if self._display_mode not in {'mirror_all', 'span_all'}:
+        if self._display_mode not in {'mirror_included', 'mirror_all', 'span_included', 'span_all'}:
             return None
         if self._window is None:
             return None
@@ -810,8 +890,8 @@ class App:
         if pw <= 0 or ph <= 0:
             return None
 
-        canvas_w = max(1, self._window_width if self._display_mode == 'mirror_all' else self._width)
-        canvas_h = max(1, self._window_height if self._display_mode == 'mirror_all' else self._height)
+        canvas_w = max(1, self._window_width if self._is_mirror_mode(self._display_mode) else self._width)
+        canvas_h = max(1, self._window_height if self._is_mirror_mode(self._display_mode) else self._height)
 
         x0 = max(0, vx)
         y0 = max(0, vy)
@@ -857,7 +937,7 @@ class App:
 
     def _fullscreen_window_geometry(self) -> tuple[int, int, int, int]:
         """Compute the target geometry for fullscreen window creation."""
-        if self._display_mode == 'span_all':
+        if self._is_span_mode(self._display_mode):
             return self._all_display_bounds()
         bounds = self._display_bounds(self._display_index)
         if bounds is None:
@@ -895,7 +975,7 @@ class App:
             return
 
         # Keep the main SDL window aligned to refreshed topology bounds.
-        if self._display_mode in {'span_all', 'mirror_all'}:
+        if self._display_mode in {'span_included', 'span_all', 'mirror_included', 'mirror_all'}:
             x, y, w, h = self._all_display_bounds()
             sdl2.SDL_SetWindowPosition(self._window, x, y)
             sdl2.SDL_SetWindowSize(self._window, w, h)
@@ -916,12 +996,12 @@ class App:
         if wh.value > 0:
             self._window_height = int(wh.value)
 
-        if self._display_mode == 'span_all':
+        if self._is_span_mode(self._display_mode):
             if self._window_width != self._width or self._window_height != self._height:
                 self._on_resize(self._window_width, self._window_height)
             return
 
-        if self._display_mode == 'mirror_all':
+        if self._is_mirror_mode(self._display_mode):
             primary_layout = self._primary_active_layout()
             logical_changed = False
             if primary_layout is not None:
@@ -1016,7 +1096,7 @@ class App:
 
         flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_RESIZABLE
         self._display_mode = self._resolve_display_mode()
-        if self._display_mode in ('span_all', 'mirror_all') and self._fullscreen:
+        if self._display_mode in ('span_included', 'span_all', 'mirror_included', 'mirror_all') and self._fullscreen:
             flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_BORDERLESS
         elif self._fullscreen:
             if self._prefer_borderless_fullscreen():
@@ -1029,11 +1109,11 @@ class App:
         # rendered frame to each display's region as a viewport. Effects keep
         # rendering at single-display logical size to preserve composition.
         logical_w, logical_h = self._width, self._height
-        if self._display_mode == 'span_all':
+        if self._is_span_mode(self._display_mode):
             x_pos, y_pos, self._width, self._height = self._all_display_bounds()
             self._window_width = self._width
             self._window_height = self._height
-        elif self._display_mode == 'mirror_all':
+        elif self._is_mirror_mode(self._display_mode):
             x_pos, y_pos, win_w, win_h = self._all_display_bounds()
             # Logical canvas: prefer first display's dimensions for crisp 1:1
             # blits when displays share resolution. Falls back to configured size.
@@ -1057,8 +1137,8 @@ class App:
             self._window_height = self._height
 
         title = self.cfg.get("window", "title", default="Unicorn Viz")
-        win_create_w = self._window_width if self._display_mode == 'mirror_all' else self._width
-        win_create_h = self._window_height if self._display_mode == 'mirror_all' else self._height
+        win_create_w = self._window_width if self._is_mirror_mode(self._display_mode) else self._width
+        win_create_h = self._window_height if self._is_mirror_mode(self._display_mode) else self._height
         self._window = sdl2.SDL_CreateWindow(
             title.encode(),
             x_pos,
@@ -1086,9 +1166,10 @@ class App:
         w_i = ctypes.c_int(0)
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
-        if self._display_mode == 'mirror_all':
+        if self._is_mirror_mode(self._display_mode):
             # Window size = spanned canvas; logical _width/_height stay at
             # single-display size for effects/HUD/FBO sizing.
+            self._sync_window_origin_from_sdl()
             self._window_width = w_i.value or self._window_width
             self._window_height = h_i.value or self._window_height
             self._mirror_rects = self._multihead_mirror_layout(
@@ -2013,6 +2094,8 @@ void main() {
             show_recording_indicator=bool(self.cfg.get('recording', 'show_indicator', default=True)),
             hud_auto_hide=bool(self.cfg.get('overlays', 'hud_auto_hide', default=True)),
             hud_timeout_s=float(self.cfg.get('overlays', 'hud_timeout_s', default=60.0)),
+            flash_router=self.route_flash_message,
+            modal_gate=self.control_room_flash_gate_active,
         )
         self._overlays = overlays
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
@@ -2061,6 +2144,7 @@ void main() {
             audio_manager=audio_manager,
         )
         hotkeys.attach_midi(midi_manager)
+        self._hotkeys = hotkeys
 
         # Spotify controller (optional drop-in subsystem).
         spotify_cfg = self.cfg.get('spotify', default={}) or {}
@@ -2262,6 +2346,8 @@ void main() {
             if perf_debug_enabled:
                 perf_after_events = time.perf_counter()
 
+            if self._midi_manager is not None:
+                self._midi_manager.maintenance_update()
             hotkeys.process_pending_midi()
             if perf_debug_enabled:
                 perf_after_midi = time.perf_counter()
@@ -2615,7 +2701,7 @@ void main() {
             # Render
             self._render(dt)
             mirror_mode_active = (
-                self._display_mode == 'mirror_all' and bool(self._mirror_rects)
+                self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
             )
             candy_mode_active = (
                 self._candy_frame is not None and bool(self._candy_frame.active)
@@ -2906,6 +2992,7 @@ void main() {
                 log.warning('%s subsystem shutdown failed: %s', name, exc)
         self._subsystems.clear()
         self._claimed_window_handlers.clear()
+        self._hotkeys = None
         self._control_room = None
         if self._keystroke_logger is not None:
             self._keystroke_logger.close()
@@ -3034,7 +3121,7 @@ void main() {
 
     def _render(self, dt: float) -> None:
         ctx = self._ctx
-        mirror_mode = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
+        mirror_mode = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         manager_modal_active = self._projectm_manager_modal_active
         burst_active = self._burst_controller.active and not manager_modal_active
         nova_active = (
@@ -3366,8 +3453,9 @@ void main() {
             self._overlays.flash_message(msg, 2.6)
 
     def _on_resize(self, w: int, h: int) -> None:
-        if self._display_mode == 'mirror_all':
+        if self._is_mirror_mode(self._display_mode):
             # Window grew/shrunk; logical size stays at one display worth.
+            self._sync_window_origin_from_sdl()
             self._window_width = w
             self._window_height = h
             self._mirror_rects = self._multihead_mirror_layout(
@@ -3419,7 +3507,7 @@ void main() {
         # buffer don't linger in GL state during the texture re-allocations
         # below (which previously surfaced as a "cannot create texture" abort
         # when toggling mirror_all → single).
-        if self._display_mode != 'mirror_all':
+        if not self._is_mirror_mode(self._display_mode):
             composite = getattr(self, '_mirror_composite_fbo', None)
             if composite is not None:
                 try:
@@ -3445,7 +3533,7 @@ void main() {
 
     def toggle_fullscreen(self) -> None:
         self._fullscreen = not self._fullscreen
-        if self._display_mode == 'span_all':
+        if self._is_span_mode(self._display_mode):
             sdl2.SDL_SetWindowBordered(
                 self._window,
                 sdl2.SDL_FALSE if self._fullscreen else sdl2.SDL_TRUE,
@@ -3477,7 +3565,7 @@ void main() {
     def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
         """Switch display mode at runtime.
 
-        Modes: single, span_all, mirror_all.
+        Modes: single, span_included, span_all, mirror_included, mirror_all.
         """
         if reset_to_config:
             requested = str(self.cfg.get('window', 'display_mode', default='single')).lower()
@@ -3486,7 +3574,7 @@ void main() {
             requested = str(mode or self._display_mode).lower()
             requested_index = self._display_index
 
-        allowed = {'single', 'span_all', 'mirror_all'}
+        allowed = {'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all'}
         if requested not in allowed:
             requested = 'single'
 
@@ -3502,13 +3590,13 @@ void main() {
         self._destroy_mirror_outputs()
 
         if self._fullscreen:
-            if self._display_mode == 'span_all':
+            if self._is_span_mode(self._display_mode):
                 x, y, w, h = self._all_display_bounds()
                 sdl2.SDL_SetWindowFullscreen(self._window, 0)
                 sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
                 sdl2.SDL_SetWindowPosition(self._window, x, y)
                 sdl2.SDL_SetWindowSize(self._window, w, h)
-            elif self._display_mode == 'mirror_all':
+            elif self._is_mirror_mode(self._display_mode):
                 x, y, w, h = self._all_display_bounds()
                 sdl2.SDL_SetWindowFullscreen(self._window, 0)
                 sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
@@ -3529,11 +3617,11 @@ void main() {
         else:
             sdl2.SDL_SetWindowFullscreen(self._window, 0)
             sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_TRUE)
-            if self._display_mode == 'span_all':
+            if self._is_span_mode(self._display_mode):
                 x, y, w, h = self._all_display_bounds()
                 sdl2.SDL_SetWindowPosition(self._window, x, y)
                 sdl2.SDL_SetWindowSize(self._window, w, h)
-            elif self._display_mode == 'mirror_all':
+            elif self._is_mirror_mode(self._display_mode):
                 x, y, w, h = self._all_display_bounds()
                 sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
                 sdl2.SDL_SetWindowPosition(self._window, x, y)
@@ -3550,13 +3638,14 @@ void main() {
         w_i = ctypes.c_int(0)
         h_i = ctypes.c_int(0)
         sdl2.SDL_GetWindowSize(self._window, w_i, h_i)
-        if self._display_mode == 'mirror_all':
+        if self._is_mirror_mode(self._display_mode):
             # Switch logical canvas to primary display's resolution and rebuild
             # mirror viewport rects against the new window origin.
             primary_layout = self._primary_active_layout()
             if primary_layout is not None:
                 self._width = primary_layout[2]
                 self._height = primary_layout[3]
+            self._sync_window_origin_from_sdl()
             self._window_width = w_i.value or self._window_width
             self._window_height = h_i.value or self._window_height
             self._mirror_rects = self._multihead_mirror_layout(
@@ -3591,6 +3680,13 @@ void main() {
                 self._overlays.resize(self._width, self._height)
 
         return self._display_mode
+
+    def cycle_display_mode(self) -> str:
+        """Cycle through display modes in operator-friendly order."""
+        order = ['single', 'span_included', 'span_all', 'mirror_included', 'mirror_all']
+        current = self._display_mode if self._display_mode in order else 'single'
+        next_mode = order[(order.index(current) + 1) % len(order)]
+        return self.set_display_mode(next_mode)
 
     def toggle_pause(self) -> None:
         self._paused = not self._paused
@@ -3716,7 +3812,8 @@ void main() {
         if not port_name:
             return 'MIDI: disabled'
         if ok:
-            return f'MIDI: {self._midi_manager.port_name}'
+            label = self._midi_manager.active_port_label or self._midi_manager.port_name
+            return f'MIDI: {label}'
         ports = list_ports()
         if not ports:
             return 'MIDI: no ports found'
@@ -4019,7 +4116,7 @@ void main() {
         """
         if self._ctx is None:
             return None
-        mirror_mode_active = self._display_mode == 'mirror_all' and bool(self._mirror_rects)
+        mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         if mirror_mode_active and self._fbo_a is not None:
             return self._fbo_a.read(components=3, alignment=1)
         return self._ctx.screen.read(components=3, alignment=1)

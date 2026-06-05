@@ -27,13 +27,16 @@ Validation behavior:
 | `show_cursor`| bool    | `false`        | Keep mouse pointer visible by default      |
 | `title`      | str     | `"Unicorn Viz"`| Window title bar text                      |
 | `display_index` | int  | `0`            | SDL display / monitor index to target at startup and when entering fullscreen. |
-| `display_mode` | str   | `"single"`   | Display layout mode: `"single"`, `"span_all"`, or `"mirror_all"`. |
+| `display_mode` | str   | `"single"`   | Display layout mode: `"single"`, `"span_included"`, `"span_all"`, `"mirror_included"`, or `"mirror_all"`. |
 
 Notes:
 - `single`: render to one targeted display only.
-- `span_all`: create one large window stretched across the combined bounds of all displays.
-- `mirror_all`: render on the targeted display and mirror the final live output to every other detected display.
-- `span_all` and `mirror_all` are most reliable on X11. On Wayland compositors,
+- `span_included`: create one large window stretched across non-excluded displays.
+- `span_all`: create one large window stretched across all detected displays.
+- `mirror_included`: render one logical canvas and mirror it across non-excluded displays.
+- `mirror_all`: render one logical canvas and mirror it across all detected displays.
+- `exclude_display_indices` applies only to `span_included` and `mirror_included`.
+- span/mirror modes are most reliable on X11. On Wayland compositors,
   explicit window positioning may be ignored by design.
 - When `show_cursor = false`, holding Ctrl temporarily reveals the cursor.
 - when `display_mode` is not `single`, Unicorn Viz attempts an automatic X11

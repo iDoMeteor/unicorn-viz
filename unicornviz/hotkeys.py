@@ -21,6 +21,41 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+_MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
+    'next': (sdl2.SDLK_n, 0),
+    'prev': (sdl2.SDLK_p, 0),
+    'random': (sdl2.SDLK_r, 0),
+    'pause': (sdl2.SDLK_SPACE, 0),
+    'fullscreen': (sdl2.SDLK_f, 0),
+    'audio_toggle': (sdl2.SDLK_e, 0),
+    'eq': (sdl2.SDLK_e, 0),
+    'ansi': (sdl2.SDLK_a, 0),
+    'audio_selector': (sdl2.SDLK_a, sdl2.KMOD_SHIFT),
+    'midi_selector': (sdl2.SDLK_m, sdl2.KMOD_ALT),
+    'system_monitor': (sdl2.SDLK_m, 0),
+    'control_room': (sdl2.SDLK_m, sdl2.KMOD_SHIFT),
+    'projectm_manager': (sdl2.SDLK_m, sdl2.KMOD_CTRL),
+    'help': (sdl2.SDLK_h, 0),
+    'hud': (sdl2.SDLK_TAB, 0),
+    'screenshot': (sdl2.SDLK_s, 0),
+    'replay_splash': (sdl2.SDLK_u, 0),
+    'invert': (sdl2.SDLK_i, 0),
+    'display_single': (sdl2.SDLK_x, 0),
+    'display_span_included': (sdl2.SDLK_x, sdl2.KMOD_CTRL),
+    'display_span_all': (sdl2.SDLK_x, sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT),
+    'display_mirror_included': (sdl2.SDLK_x, sdl2.KMOD_ALT),
+    'display_mirror_all': (sdl2.SDLK_x, sdl2.KMOD_ALT | sdl2.KMOD_SHIFT),
+    'grand_finale': (sdl2.SDLK_f, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
+    'grand_finale_abort': (
+        sdl2.SDLK_f,
+        sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_SHIFT,
+    ),
+    'speed_random': (sdl2.SDLK_F6, 0),
+    'reactivity_random': (sdl2.SDLK_F7, 0),
+    'zoom_random': (sdl2.SDLK_z, sdl2.KMOD_ALT),
+}
+
+
 class HotkeyHandler:
     def __init__(
         self,
@@ -61,23 +96,33 @@ class HotkeyHandler:
         a = self._app
         o = self._overlays
         if event.type == 'note_on':
-            action = a.midi_action_for_note(event.number)
-            if action == 'next':
-                self.handle(sdl2.SDLK_n, 0)
-            elif action == 'prev':
-                self.handle(sdl2.SDLK_p, 0)
-            elif action == 'random':
-                self.handle(sdl2.SDLK_r, 0)
-            elif action == 'pause':
-                self.handle(sdl2.SDLK_SPACE, 0)
-            elif action == 'fullscreen':
-                self.handle(sdl2.SDLK_f, 0)
-            elif action == 'audio_toggle':
-                self.handle(sdl2.SDLK_e, 0)
-            elif action == 'eq':
-                self.handle(sdl2.SDLK_e, 0)
-            elif action == 'ansi':
-                self.handle(sdl2.SDLK_a, 0)
+            action_raw = a.midi_action_for_note(event.number)
+            action = str(action_raw or '').strip().lower()
+            if not action:
+                return
+
+            if self._dispatch_contextual_midi_action(action):
+                return
+
+            if action.startswith('postfx_'):
+                suffix = action.removeprefix('postfx_')
+                key_code = None
+                if suffix.isdigit():
+                    idx = int(suffix)
+                    if idx == 10:
+                        key_code = sdl2.SDLK_0
+                    elif 1 <= idx <= 9:
+                        key_code = sdl2.SDLK_1 + (idx - 1)
+                if key_code is not None:
+                    self.handle(key_code, sdl2.KMOD_CTRL | sdl2.KMOD_ALT)
+                    return
+
+            binding = _MIDI_NOTE_KEY_BINDINGS.get(action)
+            if binding is not None:
+                self.handle(binding[0], binding[1])
+                return
+
+            log.debug('MIDI: unmapped note action %r for note %d', action_raw, event.number)
         elif event.type == 'cc':
             effect = a.current_effect
             if effect is not None:
@@ -86,6 +131,35 @@ class HotkeyHandler:
                     lo, hi = 0.1, 4.0
                     effect.parameters[param] = lo + event.value * (hi - lo)
                     o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
+
+    def _dispatch_contextual_midi_action(self, action: str) -> bool:
+        """Dispatch selector/context navigation actions without hardcoding notes."""
+        up_actions = {'context_up', 'nav_up', 'select_up'}
+        down_actions = {'context_down', 'nav_down', 'select_down'}
+        left_actions = {'context_left', 'nav_left'}
+        right_actions = {'context_right', 'nav_right'}
+        select_actions = {'context_select', 'select', 'apply'}
+        back_actions = {'context_back', 'back', 'cancel'}
+
+        if action in up_actions:
+            self.handle(sdl2.SDLK_UP, 0)
+            return True
+        if action in down_actions:
+            self.handle(sdl2.SDLK_DOWN, 0)
+            return True
+        if action in left_actions:
+            self.handle(sdl2.SDLK_LEFT, 0)
+            return True
+        if action in right_actions:
+            self.handle(sdl2.SDLK_RIGHT, 0)
+            return True
+        if action in select_actions:
+            self.handle(sdl2.SDLK_RETURN, 0)
+            return True
+        if action in back_actions:
+            self.handle(sdl2.SDLK_ESCAPE, 0)
+            return True
+        return False
 
     def handle(self, sym: int, mod: int) -> None:
         a = self._app
@@ -761,6 +835,9 @@ class HotkeyHandler:
                     o.set_midi_ports(ports, current)
                     o.toggle_midi_selector()
             elif mod & sdl2.KMOD_SHIFT:
+                _active, msg = a.toggle_control_room()
+                o.flash_message(msg, 1.6)
+            else:
                 o.toggle_system_monitor_modal()
 
         elif sym == sdl2.SDLK_F6:
@@ -1031,16 +1108,26 @@ class HotkeyHandler:
                     o.flash_message('Zoom not available for this effect', 1.0)
 
         elif sym == sdl2.SDLK_x:
-            # Display mode controls: X=single, Shift+X=span, Ctrl+X=mirror, Alt+X=config
-            if mod & sdl2.KMOD_ALT:
-                mode = a.set_display_mode(reset_to_config=True)
-                o.flash_message(f'Display mode: {mode} (config)', 1.5)
-            elif mod & sdl2.KMOD_CTRL:
+            # Display mode controls:
+            # X=single
+            # Shift+X=cycle single/span/mirror included/all
+            # Ctrl+X=span included, Ctrl+Shift+X=span all
+            # Alt+X=mirror included, Alt+Shift+X=mirror all
+            if (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT):
                 mode = a.set_display_mode('mirror_all')
                 o.flash_message(f'Display mode: {mode}', 1.5)
-            elif mod & sdl2.KMOD_SHIFT:
+            elif (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
                 mode = a.set_display_mode('span_all')
                 o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_ALT:
+                mode = a.set_display_mode('mirror_included')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_CTRL:
+                mode = a.set_display_mode('span_included')
+                o.flash_message(f'Display mode: {mode}', 1.5)
+            elif mod & sdl2.KMOD_SHIFT:
+                mode = a.cycle_display_mode()
+                o.flash_message(f'Display mode: {mode} (cycle)', 1.5)
             else:
                 mode = a.set_display_mode('single')
                 o.flash_message(f'Display mode: {mode}', 1.5)

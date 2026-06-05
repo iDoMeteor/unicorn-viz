@@ -42,7 +42,7 @@ Complex drop-ins should also include:
 | tron-grid-01 | Yes | Not required | Simple effect drop-in |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | videos-01 | Yes | Not required | Media effect drop-in |
-| webcam-01 | Yes | Not required | Focused subsystem with limited surface |
+| webcam-01 | Yes | Not required | Focused subsystem with limited surface; planning doc added |
 
 ## Structured Docs Links (Complex Drop-ins)
 
@@ -53,6 +53,7 @@ Complex drop-ins should also include:
   - [Troubleshooting](../drop-ins/auto-vj-01/docs/troubleshooting.md)
   - [Training Pack Protocol](planning/auto-vj-training-pack-protocol.md)
 - control-room-01
+  - [Planning](planning/drop-in-planning.md)
   - [Operations](../drop-ins/control-room-01/docs/operations.md)
   - [Configuration](../drop-ins/control-room-01/docs/configuration.md)
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
@@ -91,3 +92,5 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/streaming-01/docs/configuration.md)
   - [Integration](../drop-ins/streaming-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/streaming-01/docs/troubleshooting.md)
+- webcam-01
+  - [Planning](../drop-ins/webcam-01/docs/planning.md)

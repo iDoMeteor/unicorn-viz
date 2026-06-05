@@ -9,9 +9,9 @@ height = 1080
 fullscreen = false
 show_cursor = false   # true keeps pointer visible by default; Ctrl still reveals when false
 title = "Unicorn Viz"
-display_mode = "single"      # single | span_all | mirror_all
+display_mode = "single"      # single | span_included | span_all | mirror_included | mirror_all
 display_index = 0             # raw SDL display index used by single mode
-exclude_display_indices = []  # raw SDL display indices ignored only by span_all / mirror_all
+exclude_display_indices = []  # raw SDL display indices ignored only by *_included modes
 
 [demo]
 # "sequential" or "random"

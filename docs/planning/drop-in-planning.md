@@ -2,6 +2,29 @@
 
 ## Control Room Follow-Ups
 
+### Control Room Manager Track (2026-06-05)
+
+- `[active]` Layout and sizing stabilization pass for `control-room-01`.
+  Notes:
+  - establish a single layout contract with panel min sizes, priority tiers, and deterministic compact fallbacks
+  - add explicit breakpoints (wide, medium, compact, tiny-safe)
+  - keep critical controls always visible in every breakpoint (transport, display mode switching, effect selection, emergency actions)
+  - route all geometry through one cached layout computation path during resize and redraw
+
+- `[active]` Operator ergonomics and scaling hardening.
+  Notes:
+  - derive fonts/padding/button sizes from one clamped UI scale value
+  - preserve preview aspect ratio with letterboxing rules
+  - enforce min readable text and min click target sizes
+
+- `[active]` Windows compatibility truth tracking for control room.
+  Notes:
+  - owner-machine Windows runtime currently passes for operator-window open/close and control flow
+  - hotkey model updated: `Shift+M` toggles control room, `M` controls system monitor modal
+  - control-room-focused key events now forward to global hotkeys when not consumed locally
+  - control-room display mode buttons now render from runtime-supported mode list so new multi-head modes appear without manual UI updates
+  - Linux operator-window remains N/A for production pending separate-process architecture
+
 - `[todo]` Add hardware-inspired page layout pass to `control-room-01`.
   Notes:
   - reorganise preview, transport, FX, and effect-selection zones to feel more like standard VJ hardware banks/pages

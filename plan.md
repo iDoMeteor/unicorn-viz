@@ -9,6 +9,18 @@
 
 ## Current Focus (May 18, 2026)
 
+- `[done]` 2026-06-05 MIDI controller hardening: APC mini mk2 robust input bind (Item 1).
+  Notes:
+  - `MidiManager` now supports multi-port opens and APC pair auto-binding (Notes + Control) under `akai_apc_mini_mk2`.
+  - Runtime maintenance reconnect is active for MIDI hotplug/disconnect handling.
+  - App frame loop now runs MIDI maintenance checks and reports all active MIDI ports in selector feedback.
+  - Regression coverage added in `tests/test_midi_port_resolution.py` for APC/generic port-target resolution.
+- `[done]` 2026-06-05 MIDI action dispatch expansion (Item 2).
+  Notes:
+  - `HotkeyHandler` note-on dispatch now uses a named action registry instead of a tiny hardcoded branch set.
+  - Added built-in named mappings for transport, selectors/modals, display modes, finale triggers, and randomization toggles.
+  - Added contextual navigation actions (`context_up/down/left/right/select/back`) and `postfx_N` dispatch support.
+  - Regression coverage extended in `tests/test_hotkeys_behavior.py` for named/contextual/unmapped note actions.
 - `[done]` **Pre-release future-proofing pass** — all FP-01 through FP-13 items verified complete
   (loaders guarded, config skeletons present, stable contracts declared, HELP_ENTRIES docs written,
   VJApi versioned, grand-finale private-attr violations resolved).  `plan-future-proofing.md`
@@ -289,6 +301,7 @@
   Notes:
   - MVP implemented: SDL operator window with live preview, transport controls, post-FX bank,
     effect browser, tweakable controls.
+  - Runtime validation on Windows is currently a pass on owner machine runs.
   - Core API surface landed and complete: `register_subsystem()`, `unregister_subsystem()`,
     `has_subsystem()`, `get_subsystem()`, `list_subsystems()`, `claim_window_events()`,
     `get_frame_bytes()` all in `vj_api.py`; `VJApi.VERSION` present.  `has_subsystem` /
@@ -298,6 +311,9 @@
     to ≤10 fps via a 100 ms gate. `enabled` can be set to `true` for beta testing.
   - Remaining UX: hardware-inspired bank/page layout pass, Decks/Cues/Timing panel,
     richer sub-menu panels, remote-control options.
+  - Linux operator-window support remains N/A; planned direction is a separate-process control room on Linux.
+  - Routing policy requirement: when control-room gating takes ownership of modals/messages,
+    modal surfaces on control room must be fullscreen.
   - Config: `[control_room]` section in `config.toml`.
 
 

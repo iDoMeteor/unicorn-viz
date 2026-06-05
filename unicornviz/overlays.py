@@ -10,7 +10,7 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import moderngl
 import numpy as np
@@ -417,7 +417,8 @@ class Overlays:
                 ('Middle Click', 'Reset scroll FX (hue/rotation)'),
                 ('Ctrl+Alt+F', 'Trigger Grand Finale sequence'),
                 ('Ctrl+Alt+Shift+F', 'Abort Grand Finale'),
-                ('Shift+M', 'System monitor modal'),
+                ('m', 'System monitor modal'),
+                ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
                 ('i', 'Invert colors'),
             ],
@@ -442,6 +443,8 @@ class Overlays:
         show_recording_indicator: bool = True,
         hud_auto_hide: bool = True,
         hud_timeout_s: float = 60.0,
+        flash_router: Callable[[str, float], bool] | None = None,
+        modal_gate: Callable[[], bool] | None = None,
     ) -> None:
         self._ctx = ctx
         self._width = width
@@ -450,6 +453,8 @@ class Overlays:
         self._show_recording_indicator = show_recording_indicator
         self._hud_auto_hide = bool(hud_auto_hide)
         self._hud_timeout_s = max(0.0, float(hud_timeout_s))
+        self._flash_router = flash_router
+        self._modal_gate = modal_gate
         self._recording_active = False
         self._recording_elapsed_seconds = 0.0
 
@@ -1295,19 +1300,27 @@ void main() {
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
 
-        if self._show_projectm_manager:
+        route_modals_elsewhere = False
+        gate = self._modal_gate
+        if callable(gate):
+            try:
+                route_modals_elsewhere = bool(gate())
+            except Exception:
+                route_modals_elsewhere = False
+
+        if self._show_projectm_manager and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.60))
             self._render_projectm_manager()
 
-        if self._show_system_monitor_modal:
+        if self._show_system_monitor_modal and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.56))
             self._render_system_monitor_modal()
 
-        if self._show_audio:
+        if self._show_audio and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_audio_selector()
 
-        if self._show_midi:
+        if self._show_midi and not route_modals_elsewhere:
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_midi_selector()
 
@@ -1833,7 +1846,7 @@ void main() {
 
         self._draw_text('SYSTEM MONITOR // CONTROL SURFACE', px + 18.0, py + 16.0, scale=3.0,
                         color=(0.28 + 0.25 * pulse, 0.82, 1.0, 1.0))
-        self._draw_text('Shift+M: close modal', px + panel_w - 270.0, py + 20.0, scale=1.8,
+        self._draw_text('M: close modal', px + panel_w - 270.0, py + 20.0, scale=1.8,
                         color=(0.68, 0.80, 0.92, 0.86))
 
         state = self._hud_state
@@ -2448,6 +2461,53 @@ void main() {
     def projectm_manager_visible(self) -> bool:
         return self._show_projectm_manager
 
+    def modal_snapshot(self) -> dict[str, object]:
+        """Return active modal state for alternate render surfaces.
+
+        Priority mirrors render order so only one modal is active at a time.
+        """
+        if self._show_projectm_manager:
+            selected = self.get_projectm_selected_preset()
+            return {
+                'type': 'projectm_manager',
+                'title': 'PROJECTM PRESET MANAGER',
+                'search_query': self._projectm_search_query,
+                'category': self.get_projectm_selected_category(),
+                'selected_name': str((selected or {}).get('display_name', '')),
+                'selected_pack': str((selected or {}).get('pack_name', '')),
+                'selected_path': str((selected or {}).get('path', '')),
+            }
+        if self._show_system_monitor_modal:
+            return {
+                'type': 'system_monitor',
+                'title': 'SYSTEM MONITOR',
+                'cpu': float(self._sysmon_cpu),
+                'ram': float(self._sysmon_ram),
+                'swap': float(self._sysmon_swap),
+                'disk_mbs': float(self._sysmon_disk_mbs),
+                'net_mbs': float(self._sysmon_net_mbs),
+            }
+        if self._show_audio:
+            entries = self._audio_sources if self._audio_sources else ['(no sources available)']
+            return {
+                'type': 'audio_selector',
+                'title': 'AUDIO SOURCE SELECT',
+                'active_index': int(self._audio_current_idx),
+                'selected_index': int(self._audio_selected_idx),
+                'entries': list(entries),
+                'viable_flags': list(self._audio_viable_flags),
+            }
+        if self._show_midi:
+            entries = ['(none - disable MIDI)'] + list(self._midi_ports)
+            return {
+                'type': 'midi_selector',
+                'title': 'MIDI DEVICE SELECT',
+                'active_port': str(self._midi_current_port),
+                'selected_index': int(self._midi_selected_idx),
+                'entries': entries,
+            }
+        return {}
+
     @property
     def projectm_manager_focus_pane(self) -> int:
         return self._projectm_focus_pane
@@ -2569,8 +2629,17 @@ void main() {
     def flash_message(self, msg: str, duration: float = 2.0) -> None:
         if not self._flash_enabled:
             return
-        self._flash_text = msg
-        self._flash_timer = duration
+        msg_text = str(msg)
+        msg_duration = float(duration)
+        router = self._flash_router
+        if callable(router):
+            try:
+                if bool(router(msg_text, msg_duration)):
+                    return
+            except Exception:
+                pass
+        self._flash_text = msg_text
+        self._flash_timer = msg_duration
 
     def toggle_name_overlay(self) -> None:
         self._show_name = not self._show_name

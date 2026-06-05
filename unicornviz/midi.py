@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -83,6 +84,9 @@ _NOTE_MAP_DEFAULT: dict[int, str] = {
     67: 'pause',         # G4
     69: 'fullscreen',    # A4
 }
+
+_APC_PRESET_NAME = 'akai_apc_mini_mk2'
+_APC_MODEL_TOKEN = 'apc mini mk2'
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +226,7 @@ def list_ports() -> list[str]:
 
 class MidiManager:
     """
-    Opens a MIDI input port and forwards CC/Note events to registered callbacks.
+    Opens one or more MIDI input ports and forwards CC/Note events to listeners.
 
     Map resolution order (later layers win):
     1. Built-in defaults (``_CC_MAP_DEFAULT`` / ``_NOTE_MAP_DEFAULT``)
@@ -240,8 +244,11 @@ class MidiManager:
     ) -> None:
         self._device_hint = device_hint.lower()
         self._listeners: list[Callable[[MidiEvent], None]] = []
-        self._midi_in: 'rtmidi.MidiIn | None' = None
+        self._midi_ins: list['rtmidi.MidiIn'] = []
+        self._port_names: list[str] = []
         self._port_name = ''
+        self._last_maintenance_attempt = 0.0
+        self._maintenance_interval_s = 2.0
         self._lock = threading.Lock()
         self._cc_map, self._note_map = self._build_maps(preset, cc_map_override, note_map_override)
         self._preset = preset
@@ -280,21 +287,21 @@ class MidiManager:
         self._listeners.append(fn)
 
     def start(self) -> None:
-        """Open the configured device port.  No-op when rtmidi is unavailable."""
+        """Open the configured device port(s).  No-op when rtmidi is unavailable."""
         if not _RTMIDI_OK:
             return
         if not self._device_hint:
             log.info('MIDI: disabled (device hint is empty)')
             return
-        self._open_port(self._device_hint)
+        self._open_ports(self._device_hint)
 
     def reopen(self, device_hint: str) -> bool:
         """
         Hot-swap to a different MIDI port without restarting the app.
 
-        Closes the current port (if any), then opens the port whose name
-        contains ``device_hint``.  Passing an empty string closes the current
-        port and leaves MIDI disabled.  Returns ``True`` on success.
+        Closes active port(s), then opens port(s) matching ``device_hint``.
+        Passing an empty string closes active ports and leaves MIDI disabled.
+        Returns ``True`` on success.
         """
         self.stop()
         self._device_hint = device_hint.lower()
@@ -304,25 +311,96 @@ class MidiManager:
         if not _RTMIDI_OK:
             log.warning('MIDI: rtmidi unavailable — cannot reopen')
             return False
-        return self._open_port(device_hint)
+        return self._open_ports(device_hint)
 
-    def _open_port(self, hint: str) -> bool:
+    def maintenance_update(self) -> None:
+        """Best-effort hotplug maintenance for reconnect/disconnect handling."""
+        if not _RTMIDI_OK or not self._device_hint:
+            return
+
+        now = time.monotonic()
+        if (now - self._last_maintenance_attempt) < self._maintenance_interval_s:
+            return
+        self._last_maintenance_attempt = now
+
+        available_ports = list_ports()
+        available_lower = {p.lower() for p in available_ports}
+
+        if self.available:
+            missing = [p for p in self._port_names if p.lower() not in available_lower]
+            if missing:
+                log.warning(
+                    'MIDI: active port(s) disappeared: %s — attempting reconnect',
+                    ', '.join(missing),
+                )
+                self.reopen(self._device_hint)
+            return
+
+        if self._resolve_target_indices(available_ports, self._device_hint, self._preset):
+            if self._open_ports(self._device_hint):
+                log.info('MIDI: reconnected %s', self.active_port_label)
+
+    @staticmethod
+    def _normalize_port_name(name: str) -> str:
+        return ' '.join(name.lower().split())
+
+    @classmethod
+    def _resolve_target_indices(cls, ports: list[str], hint: str, preset: str) -> list[int]:
+        hint_norm = cls._normalize_port_name(hint)
+        matches = [
+            i for i, name in enumerate(ports)
+            if hint_norm and hint_norm in cls._normalize_port_name(name)
+        ]
+
+        if preset != _APC_PRESET_NAME:
+            return matches[:1]
+
+        apc_model = [
+            i for i, name in enumerate(ports)
+            if _APC_MODEL_TOKEN in cls._normalize_port_name(name)
+        ]
+        if not apc_model:
+            return matches[:1]
+
+        # Respect explicit non-APC hints even when APC preset is selected.
+        if matches and not any(i in apc_model for i in matches):
+            return matches[:1]
+
+        # For APC, bind the model as a pair even when the hint points at just
+        # one side (Notes or Control).
+        candidates = list(apc_model)
+
+        notes = [
+            i for i in candidates
+            if 'notes' in cls._normalize_port_name(ports[i]) or ' note' in cls._normalize_port_name(ports[i])
+        ]
+        control = [i for i in candidates if 'control' in cls._normalize_port_name(ports[i])]
+
+        chosen: list[int] = []
+        if notes:
+            chosen.append(notes[0])
+        if control and control[0] not in chosen:
+            chosen.append(control[0])
+
+        # Fall back to up to two model ports when labels are unfamiliar.
+        for idx in candidates:
+            if len(chosen) >= 2:
+                break
+            if idx not in chosen:
+                chosen.append(idx)
+
+        return chosen[:2]
+
+    def _open_ports(self, hint: str) -> bool:
         try:
-            midi_in = rtmidi.MidiIn()
-            raw_ports = midi_in.get_ports()
-            ports = [p if isinstance(p, str) else p.decode('utf-8', errors='replace')
-                     for p in raw_ports]
+            ports = list_ports()
             if not ports:
                 log.info('MIDI: no ports available')
                 return False
 
-            chosen = None
-            for i, name in enumerate(ports):
-                if hint.lower() in name.lower():
-                    chosen = i
-                    break
+            chosen = self._resolve_target_indices(ports, hint, self._preset)
 
-            if chosen is None:
+            if not chosen:
                 log.warning(
                     'MIDI: no port matching %r — available: %s',
                     hint,
@@ -330,14 +408,26 @@ class MidiManager:
                 )
                 return False
 
-            self._port_name = ports[chosen]
-            midi_in.open_port(chosen)
-            midi_in.set_callback(self._callback)
-            midi_in.ignore_types(sysex=True, timing=True, active_sense=True)
-            self._midi_in = midi_in
-            log.info('MIDI: opened %s (preset=%r)', self._port_name, self._preset or 'default')
+            opened: list['rtmidi.MidiIn'] = []
+            chosen_names = [ports[i] for i in chosen]
+            for idx in chosen:
+                midi_in = rtmidi.MidiIn()
+                midi_in.open_port(idx)
+                midi_in.set_callback(self._callback)
+                midi_in.ignore_types(sysex=True, timing=True, active_sense=True)
+                opened.append(midi_in)
+
+            self._midi_ins = opened
+            self._port_names = chosen_names
+            self._port_name = chosen_names[0]
+            log.info(
+                'MIDI: opened %s (preset=%r)',
+                self.active_port_label,
+                self._preset or 'default',
+            )
             return True
         except Exception as exc:
+            self.stop()
             log.warning('MIDI: failed to open port: %s', exc)
             return False
 
@@ -389,21 +479,32 @@ class MidiManager:
         return self._note_map.get(note)
 
     def stop(self) -> None:
-        if self._midi_in is not None:
+        for midi_in in self._midi_ins:
             try:
-                self._midi_in.close_port()
+                midi_in.close_port()
             except Exception:
                 pass
-            self._midi_in = None
-            self._port_name = ''
+        self._midi_ins = []
+        self._port_names = []
+        self._port_name = ''
 
     @property
     def port_name(self) -> str:
         return self._port_name
 
     @property
+    def port_names(self) -> list[str]:
+        return list(self._port_names)
+
+    @property
+    def active_port_label(self) -> str:
+        if not self._port_names:
+            return ''
+        return ' + '.join(self._port_names)
+
+    @property
     def available(self) -> bool:
-        return self._midi_in is not None
+        return bool(self._midi_ins)
 
     @property
     def cc_map(self) -> dict[int, str]:
