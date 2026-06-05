@@ -27,6 +27,17 @@
   - Mapping emphasizes contextual side/bottom navigation, full pad utilization, and broad live-control coverage.
   - Slider/fader mapping remains fully populated (`48..56`).
   - Added regression checks in `tests/test_midi_apc_preset.py` for full pad/button/fader coverage.
+- `[done]` 2026-06-05 MIDI context state machine for controller slots (Item 4).
+  Notes:
+  - Added context-aware slot dispatch for note actions `context_slot_1..8`.
+  - Active context now resolves between performance/audio-selector/midi-selector/help/system-monitor/projectm-manager.
+  - Side+bottom APC small buttons now map to slot actions so behavior adapts automatically by current context.
+  - Regression coverage extended in `tests/test_hotkeys_behavior.py` for default and audio-selector slot behavior.
+- `[todo]` Post-functional UX: special controller help modal framework (multi-device).
+  Notes:
+  - Add a dedicated controller-surface help modal showing contextual slot maps and pad/fader legends.
+  - Architect as device-agnostic framework so APC and future controllers share the same modal system.
+  - Integrate modal source from preset/action metadata to avoid duplicating mappings in docs and code.
 - `[done]` **Pre-release future-proofing pass** — all FP-01 through FP-13 items verified complete
   (loaders guarded, config skeletons present, stable contracts declared, HELP_ENTRIES docs written,
   VJApi versioned, grand-finale private-attr violations resolved).  `plan-future-proofing.md`

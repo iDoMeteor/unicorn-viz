@@ -199,25 +199,25 @@ BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
             6: 'postfx_1',
             7: 'postfx_10',
 
-            # Bottom track buttons (100-107)
-            100: 'context_up',
-            101: 'context_down',
-            102: 'context_left',
-            103: 'context_right',
-            104: 'context_select',
-            105: 'context_back',
-            106: 'audio_selector',
-            107: 'midi_selector',
+            # Bottom track buttons (100-107): context slots 1..8
+            100: 'context_slot_1',
+            101: 'context_slot_2',
+            102: 'context_slot_3',
+            103: 'context_slot_4',
+            104: 'context_slot_5',
+            105: 'context_slot_6',
+            106: 'context_slot_7',
+            107: 'context_slot_8',
 
-            # Scene launch buttons (112-119)
-            112: 'next',
-            113: 'prev',
-            114: 'random',
-            115: 'pause',
-            116: 'fullscreen',
-            117: 'projectm_manager',
-            118: 'control_room',
-            119: 'grand_finale',
+            # Scene launch buttons (112-119): mirrored context slots 1..8
+            112: 'context_slot_1',
+            113: 'context_slot_2',
+            114: 'context_slot_3',
+            115: 'context_slot_4',
+            116: 'context_slot_5',
+            117: 'context_slot_6',
+            118: 'context_slot_7',
+            119: 'context_slot_8',
         },
     },
 

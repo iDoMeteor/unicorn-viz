@@ -279,3 +279,44 @@ def test_midi_unmapped_named_action_noop() -> None:
 
     assert overlays.toggled_audio == 0
     assert app.vj_api.marked == []
+
+
+def test_midi_context_slot_uses_performance_context_by_default() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'context_slot_1'
+
+    handler._on_midi(MidiEvent('note_on', 0, 64, 1.0))
+    handler.process_pending_midi()
+
+    # performance slot 1 -> next effect key path
+    assert app.vj_api.marked == ['key']
+    assert overlays.toggled_audio == 0
+
+
+def test_midi_context_slot_switches_in_audio_selector_context() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'context_slot_1'
+    overlays.audio_selector_visible = True
+    overlays.audio_sources = ['device-0', 'device-1']
+    overlays.audio_selected_index = 1
+
+    handler._on_midi(MidiEvent('note_on', 0, 65, 1.0))
+    handler.process_pending_midi()
+
+    # audio-selector slot 1 -> move selection up
+    assert overlays.audio_selected_index == 0
+
+
+def test_midi_context_slot_can_toggle_audio_viable_in_selector_context() -> None:
+    handler, app, overlays = _handler()
+    app.midi_action_for_note = lambda _note: 'context_slot_6'
+    overlays.audio_selector_visible = True
+    overlays.audio_sources = ['device-0', 'device-1']
+    overlays.audio_viable_flags = [True, True]
+    overlays.audio_selected_index = 1
+
+    handler._on_midi(MidiEvent('note_on', 0, 66, 1.0))
+    handler.process_pending_midi()
+
+    assert app.audio_source_viable_toggled == 1
+    assert overlays.audio_viable_flags == [True, False]

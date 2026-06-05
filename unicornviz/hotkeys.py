@@ -55,6 +55,75 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'zoom_random': (sdl2.SDLK_z, sdl2.KMOD_ALT),
 }
 
+_MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
+    # Default live-performance mapping when no selector/modal is active.
+    'performance': {
+        1: (sdl2.SDLK_n, 0),
+        2: (sdl2.SDLK_p, 0),
+        3: (sdl2.SDLK_r, 0),
+        4: (sdl2.SDLK_SPACE, 0),
+        5: (sdl2.SDLK_f, 0),
+        6: (sdl2.SDLK_e, 0),
+        7: (sdl2.SDLK_a, 0),
+        8: (sdl2.SDLK_m, sdl2.KMOD_CTRL),
+    },
+    # Audio selector context: navigate, toggle viable, commit, back.
+    'audio_selector': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_t, 0),
+        7: (sdl2.SDLK_ESCAPE, 0),
+        8: (sdl2.SDLK_a, sdl2.KMOD_SHIFT),
+    },
+    # MIDI selector context.
+    'midi_selector': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_ESCAPE, 0),
+        7: (sdl2.SDLK_m, sdl2.KMOD_ALT),
+        8: (sdl2.SDLK_h, 0),
+    },
+    # Help context: section nav/toggle/expand/collapse and exit.
+    'help': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_PLUS, sdl2.KMOD_SHIFT),
+        7: (sdl2.SDLK_MINUS, sdl2.KMOD_SHIFT),
+        8: (sdl2.SDLK_h, 0),
+    },
+    # System monitor modal: quick close + escape hatch actions.
+    'system_monitor': {
+        1: (sdl2.SDLK_ESCAPE, 0),
+        2: (sdl2.SDLK_m, 0),
+        3: (sdl2.SDLK_m, sdl2.KMOD_SHIFT),
+        4: (sdl2.SDLK_m, sdl2.KMOD_ALT),
+        5: (sdl2.SDLK_n, 0),
+        6: (sdl2.SDLK_p, 0),
+        7: (sdl2.SDLK_r, 0),
+        8: (sdl2.SDLK_SPACE, 0),
+    },
+    # ProjectM manager context: nav/focus/search/commit/close.
+    'projectm_manager': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_TAB, 0),
+        7: (sdl2.SDLK_SLASH, 0),
+        8: (sdl2.SDLK_ESCAPE, 0),
+    },
+}
+
 
 class HotkeyHandler:
     def __init__(
@@ -103,6 +172,11 @@ class HotkeyHandler:
 
             if self._dispatch_contextual_midi_action(action):
                 return
+
+            if action.startswith('context_slot_'):
+                suffix = action.removeprefix('context_slot_')
+                if suffix.isdigit() and self._dispatch_context_slot(int(suffix)):
+                    return
 
             if action.startswith('postfx_'):
                 suffix = action.removeprefix('postfx_')
@@ -160,6 +234,34 @@ class HotkeyHandler:
             self.handle(sdl2.SDLK_ESCAPE, 0)
             return True
         return False
+
+    def _active_midi_context(self) -> str:
+        """Resolve the current MIDI context for slot-dispatch actions."""
+        o = self._overlays
+        if bool(getattr(o, 'projectm_manager_visible', False)):
+            return 'projectm_manager'
+        if bool(getattr(o, 'audio_selector_visible', False)):
+            return 'audio_selector'
+        if bool(getattr(o, 'midi_selector_visible', False)):
+            return 'midi_selector'
+        if bool(getattr(o, 'help_visible', False)):
+            return 'help'
+        if bool(getattr(o, 'system_monitor_modal_visible', False)):
+            return 'system_monitor'
+        return 'performance'
+
+    def _dispatch_context_slot(self, slot: int) -> bool:
+        """Dispatch a context slot action based on the active UI/runtime mode."""
+        if slot < 1 or slot > 8:
+            return False
+        context = self._active_midi_context()
+        binding = _MIDI_CONTEXT_SLOT_BINDINGS.get(context, {}).get(slot)
+        if binding is None:
+            binding = _MIDI_CONTEXT_SLOT_BINDINGS['performance'].get(slot)
+        if binding is None:
+            return False
+        self.handle(binding[0], binding[1])
+        return True
 
     def handle(self, sym: int, mod: int) -> None:
         a = self._app
