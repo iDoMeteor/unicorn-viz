@@ -35,7 +35,8 @@ Complex drop-ins should also include:
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
 | sims-01 | Yes | Not required | Media/effect drop-in |
-| spotify-01 | Yes | Yes | Spotify metadata + Web API subsystem |
+| spotify-01 | Yes | Yes | Spotify metadata subsystem |
+| spotify-pro-01 | Yes | Yes | Authenticated Spotify Web API subsystem |
 | streaming-01 | Yes | Yes | Streaming subsystem |
 | textures-01 | Yes | Not required | Media effect drop-in |
 | tron-grid-01 | Yes | Not required | Simple effect drop-in |
@@ -78,8 +79,14 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/spotify-01/docs/configuration.md)
   - [Integration](../drop-ins/spotify-01/docs/integration.md)
   - [Planning](../drop-ins/spotify-01/docs/planning.md)
-  - [Spotify Web API Auth Prep](../drop-ins/spotify-01/docs/web-api-auth-prep.md)
+  - [Spotify Pro Auth Prep](../drop-ins/spotify-01/docs/spotify-pro-auth-prep.md)
   - [Troubleshooting](../drop-ins/spotify-01/docs/troubleshooting.md)
+- spotify-pro-01
+  - [Operations](../drop-ins/spotify-pro-01/docs/operations.md)
+  - [Configuration](../drop-ins/spotify-pro-01/docs/configuration.md)
+  - [Integration](../drop-ins/spotify-pro-01/docs/integration.md)
+  - [Planning](../drop-ins/spotify-pro-01/docs/planning.md)
+  - [Troubleshooting](../drop-ins/spotify-pro-01/docs/troubleshooting.md)
 - streaming-01
   - [Operations](../drop-ins/streaming-01/docs/operations.md)
   - [Configuration](../drop-ins/streaming-01/docs/configuration.md)

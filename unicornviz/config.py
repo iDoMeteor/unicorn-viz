@@ -131,6 +131,10 @@ class ConfigValidationError(ValueError):
 
 
 _DISPLAY_MODES = {'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all'}
+_DISPLAY_MODE_ALIASES = {
+    'span': 'span_included',
+    'mirror': 'mirror_included',
+}
 _DEMO_MODES = {'sequential', 'random'}
 _TRANSITIONS = {
     'crossfade',
@@ -196,10 +200,12 @@ def _extra_constraints(data: dict[str, Any]) -> list[str]:
     midi = data.get('midi', {})
 
     display_mode = str(window.get('display_mode', '')).lower()
+    display_mode = _DISPLAY_MODE_ALIASES.get(display_mode, display_mode)
     if display_mode not in _DISPLAY_MODES:
         errors.append(
             "window.display_mode must be one of "
-            "'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all'"
+            "'single', 'span_included', 'span_all', 'mirror_included', 'mirror_all' "
+            "(legacy aliases span/mirror are also accepted)"
         )
 
     demo_mode = str(demo.get('mode', '')).lower()
