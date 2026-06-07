@@ -115,9 +115,8 @@ Add thin delegation methods so drop-ins never need `self._app.*`:
 | `toggle_webcam_auto_cycle() -> bool` | `self._app.toggle_webcam_auto_cycle()` |
 
 Existing shims already in `VJApi` (no change needed): `toggle_streaming`,
-`toggle_control_room`, `start_spotify_pro_auth`, `logout_spotify_pro`,
-`trigger_rainbow_nova`, `trigger_dancing_unicorn`, `trigger_grand_finale`,
-`trigger_burst`.
+`toggle_control_room`, `trigger_rainbow_nova`, `trigger_dancing_unicorn`,
+`trigger_grand_finale`, `trigger_burst`.
 
 ---
 
@@ -260,15 +259,15 @@ def handle_key(self, sym: int, mod: int) -> str | None | bool:
 
 ---
 
-### Task 9 — spotify-pro-01: move hotkeys into `SpotifyProController`
-**File:** `drop-ins/spotify-pro-01/spotify_pro_controller.py`
+### Task 9 — spotify-01: move Spotify auth hotkeys into `SpotifyController`
+**File:** `drop-ins/spotify-01/spotify_controller.py`
 
 ```python
 def handle_key(self, sym: int, mod: int) -> str | None | bool:
     if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT) and sym == sdl2.SDLK_s:
         if mod & sdl2.KMOD_SHIFT:
-            return self._vj_api.logout_spotify_pro()
-        return self._vj_api.start_spotify_pro_auth()
+            return self.logout()
+        return self.begin_auth_async()
     return False
 ```
 
@@ -373,7 +372,7 @@ self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
 self.vj_api.register_key_handler('candy_frame', self._candy_frame.handle_key)
 self.vj_api.register_key_handler('control_room', self._control_room.handle_key)
 self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
-self.vj_api.register_key_handler('spotify_pro', self._spotify_pro.handle_key)
+self.vj_api.register_key_handler('spotify', self._spotify.handle_key)
 self.vj_api.register_key_handler('postfx', self._postfx.handle_key)
 self.vj_api.register_key_handler('streaming', self._streaming.handle_key)
 self.vj_api.register_key_handler('unicorn_tears', self._unicorn_tears.handle_key)
@@ -401,7 +400,7 @@ self.vj_api.unregister_key_handler('control_room')
 | `drop-ins/candy-frame-01/candy_frame_controller.py` | Add `handle_key` |
 | `drop-ins/control-room-01/control_room.py` | Add top-level `handle_key` |
 | `drop-ins/grand-finale-01/grand_finale.py` | Add `handle_key` |
-| `drop-ins/spotify-pro-01/spotify_pro_controller.py` | Add `handle_key` |
+| `drop-ins/spotify-01/spotify_controller.py` | Add `handle_key` |
 | `drop-ins/postfx-01/postfx_controller.py` | Add `handle_key` |
 | `drop-ins/streaming-01/rtmp_streamer.py` | Add `handle_key` |
 | `drop-ins/unicorn-tears-01/unicorn_tears.py` | Add `handle_key` |
@@ -434,7 +433,7 @@ and app log:
 - [ ] `Ctrl+Alt+C` — toggle Candy Frame
 - [ ] `Ctrl+Alt+O` — open/close Control Room
 - [ ] `Ctrl+Alt+F` / `Ctrl+Alt+Shift+F` — trigger/abort Grand Finale
-- [ ] `Ctrl+Alt+S` / `Ctrl+Alt+Shift+S` — Spotify Pro auth/logout
+- [ ] `Ctrl+Alt+S` / `Ctrl+Alt+Shift+S` — Spotify auth/logout
 - [ ] `Ctrl+Alt+1..9`, `Ctrl+Alt+0` — PostFX slot selection
 - [ ] `F8` — streaming toggle
 - [ ] `Ctrl+F9/F10/F11` — streaming provider selection

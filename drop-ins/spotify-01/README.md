@@ -4,26 +4,26 @@ Owner: Drop-in Maintainers
 Status: active
 Last updated: 2026-05-24
 
-`spotify-01` is an optional runtime subsystem that polls Spotify metadata via
-MPRIS (`playerctl`) and exposes now-playing context to automation controllers.
+`spotify-01` is an optional runtime subsystem that combines local Spotify
+metadata polling with optional authenticated Spotify Web API context.
 
-Current platform note: this backend is Linux-oriented. It depends on
-`playerctl` talking to an MPRIS-exposing desktop player. Windows is not
-currently supported by `spotify-01` without a separate Windows media-session
-backend.
+Current platform note: the local metadata backend is Linux-oriented because it
+depends on `playerctl` talking to an MPRIS-exposing desktop player. The Web API
+mode is the cross-platform path for queue, playlist, and auth-aware context.
 
 ## What It Provides
 
 - Track metadata snapshot (`track_id`, title, artist, album, status)
 - Playback timing (`duration_s`, `position_s`, progress)
 - Optional per-track feature map (`bpm`, `energy`, `danceability`, `valence`)
+- Optional PKCE auth, playback context, queue, and playlist metadata via
+	Spotify Web API
 
 ## Dependencies
 
-- `playerctl` must be installed and available on `PATH`
-- Spotify desktop client (or compatible MPRIS player name)
-- On Windows, installing a package alone is not sufficient because the current
-	implementation expects an MPRIS-compatible backend.
+- `playerctl` must be installed and available on `PATH` for local metadata mode
+- Spotify desktop client (or compatible MPRIS player name) for local metadata mode
+- Spotify Developer app + Client ID for Web API mode
 
 ## Installer
 
@@ -48,10 +48,9 @@ See `docs/configuration.md`.
 
 ## Planning
 
-See `docs/planning.md` for the current/future roadmap, including the planned
-authenticated Web API follow-up as a separate `spotify-pro-01` drop-in.
+See `docs/planning.md` for the current roadmap of the consolidated subsystem.
 
-For operator setup prerequisites, see `docs/spotify-pro-auth-prep.md`.
+For operator setup prerequisites, see `docs/web-api-auth-prep.md`.
 
 ## Troubleshooting
 

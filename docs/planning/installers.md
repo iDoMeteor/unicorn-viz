@@ -579,8 +579,7 @@ appropriate `drop-ins/` target path for the OS/package format.
 | postfx-01 | Copy-only bundle installer | None listed | Post-processing bundle. |
 | projectm-01 | Copy-only bundle installer | None listed | Engine integration bundle. |
 | sims-01 | Copy-only bundle installer | None listed | Media/effect bundle. |
-| spotify-01 | Copy-only + dependency check installer | `playerctl` on PATH | Installer verifies host MPRIS support before enabling. |
-| spotify-pro-01 | Copy-only bundle installer | None listed | Auth prep is handled separately. |
+| spotify-01 | Copy-only + dependency check installer | `playerctl` on PATH for local mode | Installer verifies host MPRIS support before enabling local metadata mode; Web API auth prep is documented separately. |
 | streaming-01 | Copy-only bundle installer | None listed | Streaming subsystem bundle. |
 | textures-01 | Copy-only bundle installer | None listed | Media bundle. |
 | tron-grid-01 | Copy-only bundle installer | None listed | Simple effect bundle. |

@@ -1,10 +1,10 @@
 [logging]
-level = "INFO"
+level = "debug"
 
 [window]
 fullscreen = true
 show_cursor = false
-display_mode  = "mirror_all"   # single | span_all | mirror_all
+display_mode  = "mirror"   # single | span_all | mirror_all
 display_index  = 0
 exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span_all / mirror_all
 
@@ -114,10 +114,10 @@ command_timeout_s = 0.25
 features_file = "assets/audio/spotify_features.json"
 
 # ---------------------------------------------------------------------------
-# Spotify Pro authenticated subsystem scaffold  (drop-ins/spotify-pro-01)
-# Depends on [spotify] and adds OAuth/Web API queue + playlist context.
+# Spotify Web API auth/context (inside drop-ins/spotify-01)
+# Adds OAuth/Web API queue + playlist context.
 # ---------------------------------------------------------------------------
-[spotify_pro]
+[spotify.web_api]
 enabled = true
 client_id = "9c8acb4afb744638917beab3b89ab369"
 redirect_uri = "http://127.0.0.1:43879/callback"
@@ -127,7 +127,7 @@ scopes = [
 	"playlist-read-private",
 	"playlist-read-collaborative",
 ]
-token_store = "runtime/spotify-pro-token.json"
+token_store = "runtime/spotify-token.json"
 poll_interval_s = 1.5
 http_timeout_s = 1.0
 queue_poll_every_n = 3

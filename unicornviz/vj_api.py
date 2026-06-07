@@ -361,30 +361,6 @@ class VJApi:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()
 
-    def start_spotify_pro_auth(self) -> str:
-        """Start Spotify Pro PKCE auth bootstrap, if the subsystem is loaded."""
-        return str(self._app.start_spotify_pro_auth())
-
-    def logout_spotify_pro(self) -> str:
-        """Logout Spotify Pro and clear local persisted auth token."""
-        return str(self._app.logout_spotify_pro())
-
-    def spotify_pro_snapshot(self) -> dict[str, object]:
-        """Return Spotify Pro snapshot payload when available."""
-        subsystem = self.get_subsystem('spotify_pro')
-        if subsystem is None:
-            return {}
-        snap = getattr(subsystem, 'snapshot', None)
-        if not callable(snap):
-            return {}
-        try:
-            payload = snap()
-        except Exception:
-            return {}
-        if not isinstance(payload, dict):
-            return {}
-        return payload
-
     def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
         """Set the main audience display mode."""
         return self._app.set_display_mode(mode, reset_to_config=reset_to_config)

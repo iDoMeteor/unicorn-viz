@@ -407,14 +407,6 @@ def _load_spotify_controller_class() -> type:
     )
 
 
-def _load_spotify_pro_controller_class() -> type:
-    """Load SpotifyProController from the spotify-pro drop-in."""
-    return load_dropin_symbol(
-        'spotify-pro-01/spotify_pro_controller.py',
-        'SpotifyProController',
-    )
-
-
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -457,7 +449,6 @@ class App:
         self._candy_frame = None
         self._auto_vj = None
         self._spotify = None
-        self._spotify_pro = None
         self._grand_finale = None
         self._control_room = None
         self._control_room_creating: bool = False
@@ -1477,24 +1468,6 @@ void main() {
         self.vj_api.set_status_pill(pill)
         return pill
 
-    def start_spotify_pro_auth(self) -> str:
-        """Begin Spotify Pro PKCE auth bootstrap asynchronously."""
-        if self._spotify_pro is None:
-            return 'Spotify Pro not loaded'
-        starter = getattr(self._spotify_pro, 'begin_auth_async', None)
-        if not callable(starter):
-            return 'Spotify Pro auth unavailable'
-        return str(starter())
-
-    def logout_spotify_pro(self) -> str:
-        """Logout Spotify Pro by clearing local auth/token state."""
-        if self._spotify_pro is None:
-            return 'Spotify Pro not loaded'
-        logout_fn = getattr(self._spotify_pro, 'logout', None)
-        if not callable(logout_fn):
-            return 'Spotify Pro logout unavailable'
-        return str(logout_fn())
-
     def _burst_transform(self) -> tuple[float, float]:
         """Return (scale, angle_radians) for current burst frame."""
         return self._burst_controller.transform()
@@ -2194,12 +2167,26 @@ void main() {
         spotify_cfg = self.cfg.get('spotify', default={}) or {}
         if not isinstance(spotify_cfg, dict):
             spotify_cfg = {}
-        if bool(spotify_cfg.get('enabled', False)):
+        spotify_web_cfg = spotify_cfg.get('web_api', {}) if isinstance(spotify_cfg, dict) else {}
+        if not isinstance(spotify_web_cfg, dict):
+            spotify_web_cfg = {}
+
+        if spotify_web_cfg:
+            spotify_cfg = dict(spotify_cfg)
+            spotify_cfg['web_api'] = spotify_web_cfg
+
+        load_spotify = bool(spotify_cfg.get('enabled', False)) or bool(
+            spotify_web_cfg.get('enabled', False)
+        )
+        if load_spotify:
             try:
                 spotify_cls = _load_spotify_controller_class()
                 self._spotify = spotify_cls(self, spotify_cfg)
                 if bool(getattr(self._spotify, 'enabled', False)):
                     self.vj_api.register_subsystem('spotify', self._spotify)
+                    key_handler = getattr(self._spotify, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('spotify', key_handler)
                     log.info('SpotifyController loaded from drop-in')
                 else:
                     self._spotify = None
@@ -2207,28 +2194,6 @@ void main() {
             except Exception as exc:
                 self._spotify = None
                 log.warning('SpotifyController not available: %s', exc)
-
-        # Spotify Pro controller (optional drop-in subsystem; depends on spotify).
-        spotify_pro_cfg = self.cfg.get('spotify_pro', default={}) or {}
-        if not isinstance(spotify_pro_cfg, dict):
-            spotify_pro_cfg = {}
-        if bool(spotify_pro_cfg.get('enabled', False)):
-            if self._spotify is None:
-                log.warning('SpotifyProController requires spotify-01; disable [spotify_pro] or enable [spotify] first')
-            else:
-                try:
-                    spotify_pro_cls = _load_spotify_pro_controller_class()
-                    self._spotify_pro = spotify_pro_cls(self, spotify_pro_cfg)
-                    if bool(getattr(self._spotify_pro, 'enabled', False)):
-                        self.vj_api.register_subsystem('spotify_pro', self._spotify_pro)
-                        self.vj_api.register_key_handler('spotify_pro', self._spotify_pro.handle_key)
-                        log.info('SpotifyProController loaded from drop-in')
-                    else:
-                        self._spotify_pro = None
-                        log.info('SpotifyProController loaded but disabled by runtime checks')
-                except Exception as exc:
-                    self._spotify_pro = None
-                    log.warning('SpotifyProController not available: %s', exc)
 
         # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
         try:
@@ -2560,8 +2525,8 @@ void main() {
             advance_total = max(0.1, self._effect_duration)
             advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
             spotify_visible = 'YES' if self._spotify is not None else 'NO'
-            spotify_pro_visible = 'YES' if self._spotify_pro is not None else 'NO'
-            spotify_pro_status = 'OFF'
+            spotify_auth_visible = 'NO'
+            spotify_auth_status = 'OFF'
             spotify_status = 'OFF'
             spotify_track = '-'
             spotify_artist = '-'
@@ -2606,22 +2571,15 @@ void main() {
                             return f'{mm:02d}:{ss:02d}'
 
                         spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
-            if self._spotify_pro is not None:
-                snap_fn = getattr(self._spotify_pro, 'snapshot', None)
-                if callable(snap_fn):
-                    try:
-                        spotify_pro = snap_fn()
-                    except Exception:
-                        spotify_pro = None
-                    if isinstance(spotify_pro, dict):
-                        auth_status = str(spotify_pro.get('auth_status', '') or '').strip().upper()
-                        token_expires = float(spotify_pro.get('token_expires_in_s', 0.0) or 0.0)
-                        queue_len = int(spotify_pro.get('queue_len', 0) or 0)
-                        if bool(spotify_pro.get('auth_ready', False)):
+                        spotify_auth_visible = 'YES' if bool(spotify.get('web_api_enabled', False)) else 'NO'
+                        auth_status = str(spotify.get('auth_status', '') or '').strip().upper()
+                        token_expires = float(spotify.get('token_expires_in_s', 0.0) or 0.0)
+                        queue_len = int(spotify.get('queue_len', 0) or 0)
+                        if bool(spotify.get('auth_ready', False)):
                             mins = max(0, int(round(token_expires / 60.0)))
-                            spotify_pro_status = f'READY {mins}M Q{queue_len}'
+                            spotify_auth_status = f'READY {mins}M Q{queue_len}'
                         elif auth_status:
-                            spotify_pro_status = auth_status.replace('_', ' ')
+                            spotify_auth_status = auth_status.replace('_', ' ')
             slot_label = 'PRESET IDX'
             preset_slot = '-/-'
             variant_label = 'VARIANT'
@@ -2709,8 +2667,8 @@ void main() {
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
                 'spotify_visible': spotify_visible,
-                'spotify_pro_visible': spotify_pro_visible,
-                'spotify_pro_status': spotify_pro_status,
+                'spotify_auth_visible': spotify_auth_visible,
+                'spotify_auth_status': spotify_auth_status,
                 'spotify_status': spotify_status,
                 'spotify_track': spotify_track,
                 'spotify_artist': spotify_artist,

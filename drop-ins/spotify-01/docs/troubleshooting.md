@@ -17,8 +17,15 @@ Last updated: 2026-06-05
 	MPRIS-compatible media player session.
 - On Windows, that means there is no single missing package to install and be
 	done; the missing piece is a Windows media-session backend implementation.
-- For Windows today, prefer `spotify-pro-01` if authenticated Spotify Web API
+- For Windows today, prefer `[spotify.web_api]` if authenticated Spotify Web API
 	data satisfies the use case.
+
+## Web API Auth Not Ready
+
+- Confirm `[spotify.web_api].enabled = true`.
+- Confirm `client_id` is set.
+- Confirm the configured redirect URI exactly matches the Spotify app settings.
+- Clear the token file and re-run auth if the cached token is stale or revoked.
 
 ## No Track Metadata
 

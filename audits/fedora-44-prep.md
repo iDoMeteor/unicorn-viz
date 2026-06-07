@@ -61,7 +61,7 @@ The active venv lives at `/home/jj/Repos/unicorn-viz/.venv` (Python 3.14.5).
   "Using SDL2 binaries from pysdl2-dll 2.32.0" and bypasses the system
   sdl2-compat entirely. SDL2-compat is therefore a non-issue for the venv path.
 
-⁴ Required by `spotify-pro-01`. Installed this session: `.venv/bin/pip install spotipy`.
+⁴ Required at the time for the authenticated Spotify integration later consolidated into `spotify-01`. Installed this session: `.venv/bin/pip install spotipy`.
 
 ### 2.1 Worktree venv
 
@@ -205,7 +205,7 @@ Run from `/home/jj/Repos/unicorn-viz`:
 | postfx-01           | ❌ empty              | Content in f33 repo; push to remote needed |
 | projectm-01         | ❌ empty              | Content in f33 repo; push to remote needed |
 | sims-01             | ❌ empty              | Content in f33 repo; push to remote needed |
-| spotify-pro-01      | ❌ empty              | Content in f33 repo; push to remote needed |
+| spotify-pro-01      | ❌ empty              | Historical note; this drop-in was later consolidated into `spotify-01` |
 | streaming-01        | ❌ empty              | Content in f33 repo; push to remote needed |
 
 All 9 uninitialized drop-ins have content in `/home/jj/Repos/unicorn-viz-f33/drop-ins/`
@@ -219,7 +219,7 @@ and need to be:
 their pinned SHAs. Several submodules had stale remote SHAs (commits not
 reachable via normal `upload-pack`); resolved by adding git `alternates` files
 pointing to the main repo's module object stores so local objects could be used
-directly. `spotify-pro-01` was fetched normally from remote.
+directly. Historical note: `spotify-pro-01` was fetched normally from remote before later consolidation into `spotify-01`.
 
 ```bash
 git submodule update --init --recursive  # most submodules
@@ -309,8 +309,9 @@ Items from `2026-05-26-fedora44-compat-audit.md`, updated:
 
 3. ✅ **Push and initialize 9 missing drop-ins** — All 9 drop-ins (auto-vj-01,
    candy-frame-01, control-room-01, grand-finale-01, postfx-01, projectm-01,
-   sims-01, spotify-pro-01, streaming-01) are pushed to their private GitHub
-   repos and initialized in this worktree.
+   sims-01, spotify-pro-01, streaming-01) were pushed to their private GitHub
+   repos and initialized in this worktree. Historical note: `spotify-pro-01`
+   was later consolidated into `spotify-01`.
 
 4. ✅ **Install libprojectM 4** — Done this session. Built from source (4.1.0),
    installed to `/usr/local/lib64/`, ldconfig updated, ctypes verified.

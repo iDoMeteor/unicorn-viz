@@ -28,7 +28,7 @@ This proposal covers high-friction combinations currently used by core and drop-
 - Ctrl+Alt+1..9,0 (Post FX quick slots)
 - Ctrl+Alt+J (Auto VJ)
 - Ctrl+Alt+O (Control Room)
-- Ctrl+Alt+S / Ctrl+Alt+Shift+S (Spotify Pro auth/logout)
+- Ctrl+Alt+S / Ctrl+Alt+Shift+S (Spotify auth/logout)
 - Ctrl+Alt+F / Ctrl+Alt+Shift+F (Grand Finale)
 - Ctrl+Alt+U (Screen Burst)
 - Alt+A / Alt+Shift+A (Audio profile cycling)
