@@ -41,6 +41,7 @@
   - enforce min readable text and min click target sizes
   - add a hard "screen too small" guard that switches to an operator-safe fallback instead of trying to cram the full layout into an unusable surface
   - operator-safe fallback should show only critical actions, key state, and a short reason that the full layout is suppressed at the current window size
+  - operator resolution priority (2026-06-07): treat 1920x1080 as the primary target profile; keep 1440x900 and 4K as first-class secondary profiles
 
 - `[active]` Layout behavior rules for dense rows.
   Notes:
@@ -48,6 +49,39 @@
   - examples: transport + auto-advance, display mode + display target, recording + streaming state, Auto VJ mode + lock/director state
   - multi-column rows must collapse deterministically at compact breakpoints instead of wrapping arbitrarily
   - row behavior should be part of the layout contract, not ad hoc per panel
+
+- `[active]` Intrinsic row packing and dynamic in-row sizing for the control column.
+  Notes:
+  - stop assuming one logical control group equals one full-width row in the right column
+  - introduce row items with intrinsic width hints, min/max width guidance, priority, and optional full-row preference
+  - second-column rows should be able to subdivide into dynamic internal columns so narrow controls do not create comically wide buttons while denser groups get squeezed
+  - some groups should explicitly request full-row treatment when operationally justified, for example transport and other high-priority control clusters
+  - taller/high-information surfaces should be allowed to share a row footprint or consume extra vertical space intentionally rather than inheriting equal-height treatment from unrelated panels
+  - optional drop-ins must participate through the same contract so additional controls pack predictably instead of just appending more tall rows
+
+- `[active]` Utility modal launcher strip for control room.
+  Notes:
+  - add a compact, always-discoverable button group that launches routed sub-modals from one place
+  - initial targets: audio selector, MIDI selector, ProjectM manager when available, HUD/help/controller help, system monitor, webcam editor where available
+  - launcher strip should degrade gracefully when a subsystem is unavailable instead of leaving broken gaps
+  - launcher placement should support both wide and compact breakpoints without stealing too much vertical space from primary controls
+  - operator decision (2026-06-07): default to an always-visible strip and adjust placement later if needed
+
+- `[active]` Global configuration editor initiative.
+  Notes:
+  - design a shared configuration editing model that can power both a control-room editor and a main-app editor
+  - editor should be schema-driven where possible so config sections can render consistently instead of hand-authoring each form twice
+  - control-room version should prioritize live-safe runtime/operator settings and guarded apply flows
+  - main-app version can expose the fuller configuration surface, including richer documentation and validation messaging
+  - treat this as a cross-surface system, not a one-off modal, so validation, defaults, comments, and writeback rules stay consistent
+  - operator decision (2026-06-07): first implementation scope is runtime-safe controls
+
+- `[active]` Declarable control-room layout and modal capability for drop-ins.
+  Notes:
+  - operator direction (2026-06-07): drop-ins should be able to declare layout intent rather than relying only on central hardcoded placement
+  - start with declarable layout metadata for row/cluster/modal participation and keep central fallback behavior when metadata is absent
+  - evaluate a modal-first extension point where drop-ins can declare a control-room modal surface instead of requiring persistent row residency
+  - preserve consistency by routing declared modals through the same themed fullscreen/routed modal framework used by core control-room utility modals
 
 - `[active]` Windows compatibility truth tracking for control room.
   Notes:
@@ -277,6 +311,13 @@ Rows that must stay multi-column at all breakpoints above too-small:
   Notes:
   - use this as the first bridge toward Serato / Mixxx / xwax style workflows
   - include room for deck timing, cue state, phrasing, and transition timing indicators
+
+- `[todo]` Add full control-room mouse support across all pages and routed modals.
+  Notes:
+  - every primary action currently available by keyboard should have an equivalent clickable control
+  - routed overlay modals (audio selector, midi selector, webcam editor, projectm manager where feasible) must support row/item click selection and commit actions
+  - preserve keyboard-first speed while ensuring pointer interactions never conflict with modal routing or focus rules
+  - include explicit hit-region tests for dense layouts and compact breakpoints to avoid dead zones
 
 ## Spotify Drop-In
 

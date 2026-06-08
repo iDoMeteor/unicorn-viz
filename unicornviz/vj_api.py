@@ -341,6 +341,536 @@ class VJApi:
     def list_effects(self) -> list[tuple[str, list[str]]]:
         return [(cls.NAME, list(getattr(cls, 'TAGS', []))) for cls in get_effects()]
 
+    def get_audio_sources(self) -> list[str]:
+        """Return available audio capture source labels."""
+        try:
+            return self._app.get_audio_sources()
+        except Exception:
+            return []
+
+    def get_audio_source_index(self) -> int:
+        """Return the currently active audio source index."""
+        try:
+            return int(self._app.get_audio_source_index())
+        except Exception:
+            return 0
+
+    def get_audio_source_viable_flags(self) -> list[bool]:
+        """Return current per-source viability flags for audio selector UIs."""
+        try:
+            return [bool(v) for v in self._app.get_audio_source_viable_flags()]
+        except Exception:
+            return []
+
+    def select_audio_source(self, index: int) -> str:
+        """Select a specific audio source index and return status text."""
+        try:
+            return str(self._app.select_audio_source(int(index)))
+        except Exception:
+            return 'Audio source selection failed'
+
+    def toggle_audio_source_viable(self, index: int) -> str:
+        """Toggle viability for an audio source row and return status text."""
+        try:
+            return str(self._app.toggle_audio_source_viable(int(index)))
+        except Exception:
+            return 'Audio source viability update failed'
+
+    def sync_audio_selector(self) -> None:
+        """Refresh overlay audio-selector rows from current runtime source state."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            overlays.set_audio_sources(
+                self._app.get_audio_sources(),
+                self._app.get_audio_source_index(),
+                self._app.get_audio_source_viable_flags(),
+            )
+        except Exception:
+            return
+
+    def close_audio_selector(self) -> None:
+        """Close the audio selector overlay when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'audio_selector_visible', False)):
+                overlays.toggle_audio_selector()
+        except Exception:
+            return
+
+    def open_audio_selector(self) -> bool:
+        """Open the audio selector overlay and sync its row state."""
+        try:
+            self.sync_audio_selector()
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'audio_selector_visible', False)):
+                overlays.toggle_audio_selector()
+            return True
+        except Exception:
+            return False
+
+    def set_audio_selector_index(self, index: int) -> int:
+        """Set highlighted audio selector row and return clamped index."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            setter = getattr(overlays, 'set_audio_selected_index', None)
+            if callable(setter):
+                return int(setter(int(index)))
+        except Exception:
+            pass
+        return 0
+
+    def get_audio_selector_index(self) -> int:
+        """Return highlighted audio selector row index."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            getter = getattr(overlays, 'get_audio_selected_index', None)
+            if callable(getter):
+                return int(getter())
+        except Exception:
+            pass
+        return 0
+
+    def sync_midi_selector(self) -> None:
+        """Refresh overlay MIDI-selector rows from current runtime port state."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            current = ''
+            manager = getattr(self._app, '_midi_manager', None)  # noqa: SLF001
+            if manager is not None:
+                current = str(getattr(manager, 'port_name', '') or '')
+            overlays.set_midi_ports(self._app.get_midi_ports(), current)
+        except Exception:
+            return
+
+    def close_midi_selector(self) -> None:
+        """Close the MIDI selector overlay when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'midi_selector_visible', False)):
+                overlays.toggle_midi_selector()
+        except Exception:
+            return
+
+    def open_midi_selector(self) -> bool:
+        """Open the MIDI selector overlay and sync its row state."""
+        try:
+            self.sync_midi_selector()
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'midi_selector_visible', False)):
+                overlays.toggle_midi_selector()
+            return True
+        except Exception:
+            return False
+
+    def set_midi_selector_index(self, index: int) -> int:
+        """Set highlighted MIDI selector row and return clamped index."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            setter = getattr(overlays, 'set_midi_selected_index', None)
+            if callable(setter):
+                return int(setter(int(index)))
+        except Exception:
+            pass
+        return 0
+
+    def get_midi_selector_index(self) -> int:
+        """Return highlighted MIDI selector row index."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            getter = getattr(overlays, 'get_midi_selected_index', None)
+            if callable(getter):
+                return int(getter())
+        except Exception:
+            pass
+        return 0
+
+    def select_midi_device(self, port_name: str) -> str:
+        """Select a MIDI input device by name (empty string disables MIDI)."""
+        try:
+            return str(self._app.select_midi_device(str(port_name)))
+        except Exception:
+            return 'MIDI selection failed'
+
+    def close_webcam_editor_modal(self) -> None:
+        """Close the webcam editor overlay modal when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'webcam_editor_modal_visible', False)):
+                overlays.toggle_webcam_editor_modal()
+        except Exception:
+            return
+
+    def open_webcam_editor_modal(self) -> bool:
+        """Open the webcam editor overlay modal."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'webcam_editor_modal_visible', False)):
+                overlays.toggle_webcam_editor_modal()
+            return True
+        except Exception:
+            return False
+
+    def close_system_monitor_modal(self) -> None:
+        """Close system monitor overlay modal when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'system_monitor_modal_visible', False)):
+                overlays.toggle_system_monitor_modal()
+        except Exception:
+            return
+
+    def open_system_monitor_modal(self) -> bool:
+        """Open system monitor overlay modal."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'system_monitor_modal_visible', False)):
+                overlays.toggle_system_monitor_modal()
+            return True
+        except Exception:
+            return False
+
+    def close_controller_help_modal(self) -> None:
+        """Close controller help overlay modal when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'controller_help_modal_visible', False)):
+                overlays.toggle_controller_help_modal()
+        except Exception:
+            return
+
+    def open_controller_help_modal(self) -> bool:
+        """Open controller help overlay modal."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'controller_help_modal_visible', False)):
+                overlays.toggle_controller_help_modal()
+            return True
+        except Exception:
+            return False
+
+    def close_projectm_manager(self) -> None:
+        """Close the ProjectM manager overlay modal when currently open."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'projectm_manager_visible', False)):
+                overlays.toggle_projectm_manager()
+        except Exception:
+            return
+
+    def open_projectm_manager(self) -> bool:
+        """Open the ProjectM manager overlay modal and sync manager catalog."""
+        try:
+            self.sync_projectm_manager()
+            overlays = self._app._overlays  # noqa: SLF001
+            if not bool(getattr(overlays, 'projectm_manager_visible', False)):
+                overlays.toggle_projectm_manager()
+            return True
+        except Exception:
+            return False
+
+    def toggle_help_overlay(self) -> bool:
+        """Toggle help overlay visibility; returns new visible state when known."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            overlays.toggle_help()
+            return bool(getattr(overlays, 'help_visible', False))
+        except Exception:
+            return False
+
+    def toggle_hud_overlay(self) -> bool:
+        """Toggle HUD/name overlay visibility; returns new visible state when known."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            overlays.toggle_name_overlay()
+            return bool(getattr(overlays, 'name_overlay_visible', False))
+        except Exception:
+            return False
+
+    def close_help_overlay(self) -> None:
+        """Close help overlay when currently visible."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'help_visible', False)):
+                overlays.toggle_help()
+        except Exception:
+            return
+
+    def help_move_focus(self, delta: int) -> bool:
+        """Move help section focus by delta; returns True if overlays support it."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            return bool(overlays.move_help_focus(int(delta)))
+        except Exception:
+            return False
+
+    def help_set_focus(self, index: int) -> bool:
+        """Set help section focus to a specific index."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            n = int(getattr(overlays, 'help_section_count', lambda: 0)())
+            if 0 <= index < n:
+                overlays.move_help_focus(index - overlays._help_focus_idx)  # noqa: SLF001
+                return True
+            return False
+        except Exception:
+            return False
+
+    def close_hud_overlay(self) -> None:
+        """Close HUD/name overlay when currently visible."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            if bool(getattr(overlays, 'name_overlay_visible', False)):
+                overlays.toggle_name_overlay()
+        except Exception:
+            return
+
+    def system_telemetry_snapshot(self) -> dict[str, float]:
+        """Return current system telemetry for operator surfaces."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            sample = getattr(overlays, '_sample_system_telemetry', None)
+            if callable(sample):
+                sample()
+            return {
+                'cpu': float(getattr(overlays, '_sysmon_cpu', 0.0) or 0.0),
+                'ram': float(getattr(overlays, '_sysmon_ram', 0.0) or 0.0),
+                'swap': float(getattr(overlays, '_sysmon_swap', 0.0) or 0.0),
+                'disk_mbs': float(getattr(overlays, '_sysmon_disk_mbs', 0.0) or 0.0),
+                'net_mbs': float(getattr(overlays, '_sysmon_net_mbs', 0.0) or 0.0),
+            }
+        except Exception:
+            return {
+                'cpu': 0.0,
+                'ram': 0.0,
+                'swap': 0.0,
+                'disk_mbs': 0.0,
+                'net_mbs': 0.0,
+            }
+
+    def auto_vj_snapshot(self) -> dict[str, object]:
+        """Return Auto VJ runtime state for operator/control-room surfaces."""
+        try:
+            auto_vj = getattr(self._app, '_auto_vj', None)  # noqa: SLF001
+            hud = getattr(self._app, '_hud_state', {})  # noqa: SLF001
+            if not isinstance(hud, dict):
+                hud = {}
+            available = auto_vj is not None
+            return {
+                'available': bool(available),
+                'enabled': bool(getattr(auto_vj, 'enabled', False)) if available else False,
+                'status': str(getattr(auto_vj, 'status_text', 'AUTO VJ OFF')) if available else 'AUTO VJ UNAVAILABLE',
+                'profile': str(getattr(auto_vj, '_profile', '-')) if available else '-',  # noqa: SLF001
+                'mode': str(getattr(auto_vj, '_mode', '-')) if available else '-',  # noqa: SLF001
+                'mood': str(hud.get('auto_vj_mood', '-') or '-'),
+                'scene': str(hud.get('auto_vj_scene', '-') or '-'),
+                'bpm': str(hud.get('auto_vj_bpm', '--') or '--'),
+                'action_in': str(hud.get('auto_vj_action_in', '--') or '--'),
+                'audio_profile': str(hud.get('audio_profile', '-') or '-'),
+                'audio_profile_reco': str(hud.get('audio_profile_reco', '-') or '-'),
+            }
+        except Exception:
+            return {
+                'available': False,
+                'enabled': False,
+                'status': 'AUTO VJ UNAVAILABLE',
+                'profile': '-',
+                'mode': '-',
+                'mood': '-',
+                'scene': '-',
+                'bpm': '--',
+                'action_in': '--',
+                'audio_profile': '-',
+                'audio_profile_reco': '-',
+            }
+
+    def sync_projectm_manager(self) -> bool:
+        """Refresh ProjectM manager entries from the active effect and return success."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return False
+            catalog_getter = getattr(manager_effect, 'preset_catalog', None)
+            if not callable(catalog_getter):
+                return False
+            overlays = self._app._overlays  # noqa: SLF001
+            current_path = str(getattr(manager_effect, 'current_preset_path', '') or '')
+            overlays.set_projectm_manager_entries(catalog_getter(), current_path)
+            return True
+        except Exception:
+            return False
+
+    def set_projectm_focus_pane(self, pane: int) -> int:
+        """Set ProjectM manager focus pane (0=category, 1=preset)."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            setter = getattr(overlays, 'set_projectm_focus_pane', None)
+            if callable(setter):
+                return int(setter(int(pane)))
+        except Exception:
+            pass
+        return 1 if int(pane) > 0 else 0
+
+    def set_projectm_category_index(self, index: int) -> int:
+        """Set ProjectM manager category row index and return clamped value."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            setter = getattr(overlays, 'set_projectm_category_index', None)
+            if callable(setter):
+                return int(setter(int(index)))
+        except Exception:
+            pass
+        return 0
+
+    def set_projectm_preset_index(self, index: int) -> int:
+        """Set ProjectM manager preset row index and return clamped value."""
+        try:
+            overlays = self._app._overlays  # noqa: SLF001
+            setter = getattr(overlays, 'set_projectm_preset_index', None)
+            if callable(setter):
+                return int(setter(int(index)))
+        except Exception:
+            pass
+        return 0
+
+    def apply_selected_projectm_preset(self) -> str | None:
+        """Apply currently selected ProjectM manager preset and return active label."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            goto = getattr(manager_effect, 'goto_preset_path', None)
+            if not callable(goto):
+                return None
+            overlays = self._app._overlays  # noqa: SLF001
+            selected_getter = getattr(overlays, 'get_projectm_selected_preset', None)
+            if not callable(selected_getter):
+                return None
+            selected = selected_getter()
+            if not isinstance(selected, dict):
+                return None
+            if not bool(selected.get('enabled', False)):
+                return None
+            path = str(selected.get('path', '') or '')
+            if not path:
+                return None
+            result = goto(path)
+            self.sync_projectm_manager()
+            return str(result) if result else None
+        except Exception:
+            return None
+
+    def projectm_enable_selected_category(self) -> tuple[str, int] | None:
+        """Enable all presets in selected ProjectM category; returns category and enabled count."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            overlays = self._app._overlays  # noqa: SLF001
+            get_category = getattr(overlays, 'get_projectm_selected_category', None)
+            if not callable(get_category):
+                return None
+            category = str(get_category() or '(all)')
+            if category == '(all)':
+                remaining = int(manager_effect.enable_all_presets())
+            else:
+                remaining = int(manager_effect.enable_category(category))
+            self.sync_projectm_manager()
+            return (category, remaining)
+        except Exception:
+            return None
+
+    def projectm_disable_selected_category(self) -> tuple[str, int] | None:
+        """Disable all presets in selected ProjectM category; returns category and enabled count."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            overlays = self._app._overlays  # noqa: SLF001
+            get_category = getattr(overlays, 'get_projectm_selected_category', None)
+            if not callable(get_category):
+                return None
+            category = str(get_category() or '(all)')
+            if category == '(all)':
+                remaining = int(manager_effect.disable_all_presets())
+            else:
+                remaining = int(manager_effect.disable_category(category))
+            self.sync_projectm_manager()
+            return (category, remaining)
+        except Exception:
+            return None
+
+    def projectm_isolate_selected_category(self) -> tuple[str, int] | None:
+        """Enable only selected ProjectM category; returns category and enabled count."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            overlays = self._app._overlays  # noqa: SLF001
+            get_category = getattr(overlays, 'get_projectm_selected_category', None)
+            if not callable(get_category):
+                return None
+            category = str(get_category() or '(all)')
+            if category == '(all)':
+                remaining = int(manager_effect.enable_all_presets())
+            else:
+                remaining = int(manager_effect.isolate_category(category))
+            self.sync_projectm_manager()
+            return (category, remaining)
+        except Exception:
+            return None
+
+    def projectm_set_selected_preset_enabled(self, enabled: bool) -> int | None:
+        """Set selected ProjectM preset enabled state; returns enabled preset count."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            overlays = self._app._overlays  # noqa: SLF001
+            get_selected = getattr(overlays, 'get_projectm_selected_preset', None)
+            if not callable(get_selected):
+                return None
+            selected = get_selected()
+            if not isinstance(selected, dict):
+                return None
+            path = str(selected.get('path', '') or '')
+            if not path:
+                return None
+            remaining = int(manager_effect.set_presets_enabled([path], bool(enabled)))
+            self.sync_projectm_manager()
+            return remaining
+        except Exception:
+            return None
+
+    def projectm_undo_last_bulk_state_change(self) -> str | None:
+        """Undo last ProjectM bulk state snapshot and return restored preset label."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            undo = getattr(manager_effect, 'undo_last_bulk_state_change', None)
+            if not callable(undo):
+                return None
+            restored = undo()
+            self.sync_projectm_manager()
+            return str(restored) if restored else None
+        except Exception:
+            return None
+
+    def projectm_redo_last_bulk_state_change(self) -> str | None:
+        """Redo last ProjectM bulk state snapshot and return restored preset label."""
+        try:
+            manager_effect = self._app.resolve_projectm_manager_effect()
+            if manager_effect is None:
+                return None
+            redo = getattr(manager_effect, 'redo_last_bulk_state_change', None)
+            if not callable(redo):
+                return None
+            restored = redo()
+            self.sync_projectm_manager()
+            return str(restored) if restored else None
+        except Exception:
+            return None
+
     def set_auto_advance(self, enabled: bool) -> None:
         self._app._auto_advance = bool(enabled)  # noqa: SLF001
 
@@ -508,6 +1038,11 @@ class VJApi:
     def toggle_candy_frame(self) -> str:
         """Toggle the Candy Frame neon border on/off."""
         return str(self._app.toggle_candy_frame())
+
+    def candy_frame_active(self) -> bool:
+        """Return whether the Candy Frame overlay is currently active."""
+        candy_frame = getattr(self._app, '_candy_frame', None)  # noqa: SLF001
+        return bool(candy_frame is not None and bool(getattr(candy_frame, 'active', False)))
 
     def select_postfx_slot(self, slot: int) -> str:
         """Activate post-FX slot *slot* (1–10); returns a flash-message string."""
@@ -794,6 +1329,63 @@ class VJApi:
                 pc.clear_scroll_fx()
         except Exception:
             pass
+
+    def set_hue_offset(self, value: float) -> bool:
+        """Set scroll-driven hue offset directly in normalized [0, 1] space."""
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return False
+        try:
+            pc._hue_offset = max(0.0, min(1.0, float(value)))  # noqa: SLF001
+            pc._hue_idle_t = float(getattr(pc, '_hue_idle_timeout', 3.0) or 3.0)  # noqa: SLF001
+            pc._hue_active = True  # noqa: SLF001
+            return True
+        except Exception:
+            return False
+
+    def set_rotation_degrees(self, degrees: float) -> bool:
+        """Set scroll-driven scene rotation directly in degrees."""
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return False
+        try:
+            pc._rot_angle = float(degrees) * 0.017453292519943295  # noqa: SLF001
+            pc._rot_idle_t = float(getattr(pc, '_rot_idle_timeout', 3.0) or 3.0)  # noqa: SLF001
+            pc._rot_active = True  # noqa: SLF001
+            return True
+        except Exception:
+            return False
+
+    def scroll_fx_state(self) -> dict[str, float | bool]:
+        """Return scroll-driven post-fx state for operator surfaces."""
+        pc = self._app._postfx_controller  # noqa: SLF001
+        if pc is None:
+            return {
+                'available': False,
+                'hue_active': False,
+                'rotation_active': False,
+                'hue_offset': 0.0,
+                'rotation_degrees': 0.0,
+            }
+
+        hue_offset = 0.0
+        rot_angle = 0.0
+        try:
+            hue_offset = float(getattr(pc, '_hue_offset', 0.0) or 0.0)
+        except Exception:
+            hue_offset = 0.0
+        try:
+            rot_angle = float(getattr(pc, '_rot_angle', 0.0) or 0.0)
+        except Exception:
+            rot_angle = 0.0
+
+        return {
+            'available': True,
+            'hue_active': bool(getattr(pc, 'is_hue_active', False)),
+            'rotation_active': bool(getattr(pc, 'is_rotation_active', False)),
+            'hue_offset': hue_offset,
+            'rotation_degrees': rot_angle * 57.29577951308232,
+        }
 
     def effect_param_range(self, name: str) -> tuple[float | None, float | None]:
         """Return the active effect's config overrides for ``random_<name>_min/max``.

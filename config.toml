@@ -49,6 +49,7 @@ preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_m
 
 [dropins]
 exclude = "none"
+safe_mode = false
 
 [recording]
 auto_record = false

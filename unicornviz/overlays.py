@@ -1473,7 +1473,15 @@ void main() {
                 color=(1.0, 0.8, 0.0, alpha),
             )
 
-        if self._show_name and self._name_text:
+        route_modals_elsewhere = False
+        gate = self._modal_gate
+        if callable(gate):
+            try:
+                route_modals_elsewhere = bool(gate())
+            except Exception:
+                route_modals_elsewhere = False
+
+        if self._show_name and self._name_text and not route_modals_elsewhere:
             self._render_hud()
 
         if include_recording_indicator:
@@ -1482,18 +1490,10 @@ void main() {
         if self._cta_timer > 0.0:
             self._render_cta(dt)
 
-        if self._show_help:
+        if self._show_help and not route_modals_elsewhere:
             # dark underlay behind help
             self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
-
-        route_modals_elsewhere = False
-        gate = self._modal_gate
-        if callable(gate):
-            try:
-                route_modals_elsewhere = bool(gate())
-            except Exception:
-                route_modals_elsewhere = False
 
         active_modal_type = ''
         if self._show_projectm_manager:
@@ -1508,6 +1508,10 @@ void main() {
             active_modal_type = 'audio_selector'
         elif self._show_midi:
             active_modal_type = 'midi_selector'
+        elif self._show_help:
+            active_modal_type = 'help_overlay'
+        elif self._show_name:
+            active_modal_type = 'hud_overlay'
 
         route_state = (route_modals_elsewhere, active_modal_type)
         if route_state != self._modal_route_debug_last:
@@ -1586,6 +1590,15 @@ void main() {
         if not self._audio_sources:
             return 0
         return max(0, min(self._audio_selected_idx, len(self._audio_sources) - 1))
+
+    def set_audio_selected_index(self, index: int) -> int:
+        """Set highlighted audio source row; returns clamped index."""
+        if not self._audio_sources:
+            self._audio_selected_idx = 0
+            return 0
+        clamped = max(0, min(int(index), len(self._audio_sources) - 1))
+        self._audio_selected_idx = clamped
+        return clamped
 
     def _render_audio_selector(self) -> None:
         """Draw the audio source selector modal."""
@@ -1670,6 +1683,21 @@ void main() {
         if idx < len(self._midi_ports):
             return self._midi_ports[idx]
         return ''
+
+    def get_midi_selected_index(self) -> int:
+        """Return highlighted MIDI selector row index."""
+        total = len(self._midi_ports) + 1
+        return max(0, min(self._midi_selected_idx, max(0, total - 1)))
+
+    def set_midi_selected_index(self, index: int) -> int:
+        """Set highlighted MIDI row; returns clamped index."""
+        total = len(self._midi_ports) + 1
+        if total <= 0:
+            self._midi_selected_idx = 0
+            return 0
+        clamped = max(0, min(int(index), total - 1))
+        self._midi_selected_idx = clamped
+        return clamped
 
     def _render_midi_selector(self) -> None:
         """Draw the MIDI device selector modal."""
@@ -1937,6 +1965,44 @@ void main() {
     def move_projectm_focus(self, delta: int) -> None:
         """Switch projectM manager focus between category and preset panes."""
         self._projectm_focus_pane = (self._projectm_focus_pane + delta) % 2
+
+    def set_projectm_focus_pane(self, pane: int) -> int:
+        """Set active ProjectM manager pane (0=category, 1=preset)."""
+        self._projectm_focus_pane = 1 if int(pane) > 0 else 0
+        return self._projectm_focus_pane
+
+    def set_projectm_category_index(self, index: int) -> int:
+        """Set ProjectM category selection index and sync dependent preset index."""
+        total = max(1, len(self._projectm_categories))
+        self._projectm_category_idx = max(0, min(int(index), total - 1))
+        self._sync_projectm_preset_selection()
+        return self._projectm_category_idx
+
+    def get_projectm_category_index(self) -> int:
+        """Return current ProjectM category selection index."""
+        total = max(1, len(self._projectm_categories))
+        return max(0, min(self._projectm_category_idx, total - 1))
+
+    def set_projectm_preset_index(self, index: int) -> int:
+        """Set ProjectM preset selection index for current category/search filter."""
+        entries = self._projectm_filtered_entries()
+        total = max(1, len(entries))
+        self._projectm_preset_idx = max(0, min(int(index), total - 1))
+        return self._projectm_preset_idx
+
+    def get_projectm_preset_index(self) -> int:
+        """Return current ProjectM preset selection index."""
+        entries = self._projectm_filtered_entries()
+        total = max(1, len(entries))
+        return max(0, min(self._projectm_preset_idx, total - 1))
+
+    def projectm_categories(self) -> list[str]:
+        """Return ProjectM category labels in current manager ordering."""
+        return list(self._projectm_categories)
+
+    def projectm_filtered_presets(self) -> list[dict[str, object]]:
+        """Return filtered ProjectM preset rows for current category/search state."""
+        return list(self._projectm_filtered_entries())
 
     def get_projectm_selected_category(self) -> str:
         """Return the currently highlighted category key."""
@@ -2810,11 +2876,25 @@ void main() {
         """
         if self._show_projectm_manager:
             selected = self.get_projectm_selected_preset()
+            presets = self.projectm_filtered_presets()
             return {
                 'type': 'projectm_manager',
                 'title': 'PROJECTM PRESET MANAGER',
                 'search_query': self._projectm_search_query,
                 'category': self.get_projectm_selected_category(),
+                'categories': self.projectm_categories(),
+                'category_index': int(self.get_projectm_category_index()),
+                'preset_index': int(self.get_projectm_preset_index()),
+                'focus_pane': int(self._projectm_focus_pane),
+                'entries': [
+                    {
+                        'display_name': str(entry.get('display_name', '')),
+                        'pack_name': str(entry.get('pack_name', '')),
+                        'path': str(entry.get('path', '')),
+                        'enabled': bool(entry.get('enabled', False)),
+                    }
+                    for entry in presets
+                ],
                 'selected_name': str((selected or {}).get('display_name', '')),
                 'selected_pack': str((selected or {}).get('pack_name', '')),
                 'selected_path': str((selected or {}).get('path', '')),
@@ -2862,6 +2942,32 @@ void main() {
                 'active_port': str(self._midi_current_port),
                 'selected_index': int(self._midi_selected_idx),
                 'entries': entries,
+            }
+        if self._show_help:
+            sections_list = self._iter_help_sections()
+            focus = max(0, min(self._help_focus_idx, len(sections_list) - 1))
+            return {
+                'type': 'help_overlay',
+                'title': 'HELP OVERLAY',
+                'section_count': len(sections_list),
+                'focus_section': sections_list[focus][0] if sections_list else '-',
+                'focus_idx': focus,
+                'sections': [
+                    {
+                        'name': name,
+                        'collapsed': bool(self._help_collapsed.get(name, False)),
+                        'entries': [{'key': k, 'desc': d} for k, d in entries],
+                    }
+                    for name, entries in sections_list
+                ],
+            }
+        if self._show_name:
+            return {
+                'type': 'hud_overlay',
+                'title': 'HUD OVERLAY',
+                'effect': str(self._hud_state.get('effect', '-') or '-'),
+                'fps': str(self._hud_state.get('fps', '-') or '-'),
+                'display_mode': str(self._hud_state.get('display_mode', '-') or '-'),
             }
         return {}
 

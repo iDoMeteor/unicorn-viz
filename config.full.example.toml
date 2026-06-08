@@ -58,6 +58,7 @@ directory = "logs"
 # - "all": disable all drop-ins
 # - comma-separated drop-in names, e.g. "webcam-01,postfx-01"
 exclude = "none"
+safe_mode = false
 
 [hotkeys]
 # F6 randomizes effect speed within this range (when effect exposes `speed`)

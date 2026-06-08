@@ -1390,6 +1390,9 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_F9:
             a.trigger_streaming_cta()
 
+        elif sym == sdl2.SDLK_F10:
+            a.trigger_streaming_song_cta(one_more=bool(mod & sdl2.KMOD_SHIFT))
+
     def _screenshot(self) -> None:
         import datetime
         import numpy as np

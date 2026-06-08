@@ -57,6 +57,7 @@ Complex drop-ins should also include:
   - [Operations](../drop-ins/control-room-01/docs/operations.md)
   - [Configuration](../drop-ins/control-room-01/docs/configuration.md)
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
+  - [Test Matrix](../drop-ins/control-room-01/docs/test-matrix.md)
   - [Troubleshooting](../drop-ins/control-room-01/docs/troubleshooting.md)
 - multi-head-01
   - [Operations](../drop-ins/multi-head-01/docs/operations.md)

@@ -424,6 +424,8 @@ class App:
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
         self._running = False
+        self._confirm_exit_enabled = bool(self.cfg.get('ui', 'confirm_exit', default=True))
+        self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
         self._paused = False
         self._projectm_manager_modal_active = False
         self._auto_advance = bool(self.cfg.get('demo', 'auto_advance', default=True))  # Toggle with hotkey T
@@ -520,7 +522,7 @@ class App:
         self._mirror_rects: list[tuple[int, int, int, int]] = []
         self._display_index = 0
         self._display_mode = 'single'
-        multihead_cls = _load_multihead_controller_class()
+        multihead_cls = _NullMultiHeadController if self._safe_mode else _load_multihead_controller_class()
         self._multihead = multihead_cls(self.cfg)
         self._fullscreen_mode = str(self.cfg.get('window', 'fullscreen_mode', default='auto')).lower()
         self._render_scale = _clamp_render_scale(
@@ -731,6 +733,8 @@ class App:
 
     def _create_control_room(self, cfg_override: dict[str, Any] | None = None) -> tuple[bool, str]:
         """Create and register the optional control-room subsystem."""
+        if self._safe_mode:
+            return False, 'Control Room unavailable in safe mode'
         if self._control_room_creating:
             return False, 'Control Room creation already in progress'
         if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
@@ -1227,121 +1231,124 @@ class App:
         self._build_blend_pipeline()
         self._build_invert_pipeline()
         self._build_burst_pipeline()
-        # Dancing unicorn overlay (optional, from unicorn-tears drop-in).
-        try:
-            dancing_cls = _load_dancing_unicorn_class()
-            dancing_cfg = self.cfg.get('dancing_unicorn', default={}) or {}
-            if not isinstance(dancing_cfg, dict):
-                dancing_cfg = {}
-            self._dancing_unicorn = dancing_cls(
-                self._ctx, self._width, self._height, dancing_cfg,
-            )
-            log.info('DancingUnicornOverlay loaded from unicorn-tears drop-in')
-        except Exception as exc:
-            log.warning('DancingUnicornOverlay not available: %s', exc)
-            self._dancing_unicorn = None
-        # Rainbow Nova celebration overlay (optional, from unicorn-tears drop-in).
-        try:
-            nova_cls = _load_rainbow_nova_class()
-            self._rainbow_nova = nova_cls(self._ctx, self._width, self._height)
-            log.info('RainbowNova loaded from unicorn-tears drop-in')
-        except Exception as exc:
-            log.warning('RainbowNova not available: %s', exc)
-            self._rainbow_nova = None
-        # UnicornTearsController — hotkey dispatcher for all U-key variants.
-        try:
-            utc_cls = _load_unicorn_tears_controller_class()
-            self._unicorn_tears = utc_cls(self.vj_api)
-            self.vj_api.register_key_handler('unicorn_tears', self._unicorn_tears.handle_key)
-            log.info('UnicornTearsController loaded from drop-in')
-        except Exception as exc:
-            log.warning('UnicornTearsController not available: %s', exc)
-            self._unicorn_tears = None
-        # Candy Frame neon border overlay (optional, from candy-frame drop-in).
-        try:
-            candy_cls = _load_candy_frame_class()
-            candy_cfg = self.cfg.get('candy_frame', default={}) or {}
-            if not isinstance(candy_cfg, dict):
-                candy_cfg = {}
-            self._candy_frame = candy_cls(self._ctx, self._width, self._height, candy_cfg)
-            self._candy_frame.set_vj_api(self.vj_api)
-            self.vj_api.register_key_handler('candy_frame', self._candy_frame.handle_key)
-            log.info('CandyFrameController loaded from candy-frame drop-in')
-        except Exception as exc:
-            log.warning('CandyFrameController not available: %s', exc)
-            self._candy_frame = None
-        # System-level webcam overlay (always-on PiP above effects, below HUD).
-        webcam_cls = _load_webcam_system_class()
-        cam_cfg = self.cfg.get('webcam', default={}) or {}
-        if not isinstance(cam_cfg, dict):
-            cam_cfg = {}
-        try:
-            self._webcam_system = webcam_cls(self._ctx, self._width, self._height, cam_cfg)
-        except Exception as exc:
-            log.warning('WebcamSystem init failed: %s', exc)
-            self._webcam_system = _NullWebcamSystem(self._ctx, self._width, self._height, cam_cfg)
-        if not isinstance(self._webcam_system, _NullWebcamSystem):
+        if not self._safe_mode:
+            # Dancing unicorn overlay (optional, from unicorn-tears drop-in).
             try:
-                persisted_webcam = self.get_runtime_state('webcam', default={})
-                apply_state = getattr(self._webcam_system, 'apply_persistence_state', None)
-                if callable(apply_state) and isinstance(persisted_webcam, dict):
-                    apply_state(persisted_webcam)
+                dancing_cls = _load_dancing_unicorn_class()
+                dancing_cfg = self.cfg.get('dancing_unicorn', default={}) or {}
+                if not isinstance(dancing_cfg, dict):
+                    dancing_cfg = {}
+                self._dancing_unicorn = dancing_cls(
+                    self._ctx, self._width, self._height, dancing_cfg,
+                )
+                log.info('DancingUnicornOverlay loaded from unicorn-tears drop-in')
             except Exception as exc:
-                log.warning('Webcam runtime-state import failed: %s', exc)
-        self._webcam_system.start()
-        self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
-            self.cfg.get('demo', 'effect_duration', default=20)
-        )
-        if isinstance(self._webcam_system, _NullWebcamSystem):
-            self._webcam_system = None
-        else:
-            self._webcam_system.set_vj_api(self.vj_api)
-            self.vj_api.register_key_handler('webcam', self._webcam_system.handle_key)
-            self._persist_webcam_runtime_state()
-            log.info('WebcamSystem loaded from drop-in')
+                log.warning('DancingUnicornOverlay not available: %s', exc)
+                self._dancing_unicorn = None
+            # Rainbow Nova celebration overlay (optional, from unicorn-tears drop-in).
+            try:
+                nova_cls = _load_rainbow_nova_class()
+                self._rainbow_nova = nova_cls(self._ctx, self._width, self._height)
+                log.info('RainbowNova loaded from unicorn-tears drop-in')
+            except Exception as exc:
+                log.warning('RainbowNova not available: %s', exc)
+                self._rainbow_nova = None
+            # UnicornTearsController — hotkey dispatcher for all U-key variants.
+            try:
+                utc_cls = _load_unicorn_tears_controller_class()
+                self._unicorn_tears = utc_cls(self.vj_api)
+                self.vj_api.register_key_handler('unicorn_tears', self._unicorn_tears.handle_key)
+                log.info('UnicornTearsController loaded from drop-in')
+            except Exception as exc:
+                log.warning('UnicornTearsController not available: %s', exc)
+                self._unicorn_tears = None
+            # Candy Frame neon border overlay (optional, from candy-frame drop-in).
+            try:
+                candy_cls = _load_candy_frame_class()
+                candy_cfg = self.cfg.get('candy_frame', default={}) or {}
+                if not isinstance(candy_cfg, dict):
+                    candy_cfg = {}
+                self._candy_frame = candy_cls(self._ctx, self._width, self._height, candy_cfg)
+                self._candy_frame.set_vj_api(self.vj_api)
+                self.vj_api.register_key_handler('candy_frame', self._candy_frame.handle_key)
+                log.info('CandyFrameController loaded from candy-frame drop-in')
+            except Exception as exc:
+                log.warning('CandyFrameController not available: %s', exc)
+                self._candy_frame = None
+            # System-level webcam overlay (always-on PiP above effects, below HUD).
+            webcam_cls = _load_webcam_system_class()
+            cam_cfg = self.cfg.get('webcam', default={}) or {}
+            if not isinstance(cam_cfg, dict):
+                cam_cfg = {}
+            try:
+                self._webcam_system = webcam_cls(self._ctx, self._width, self._height, cam_cfg)
+            except Exception as exc:
+                log.warning('WebcamSystem init failed: %s', exc)
+                self._webcam_system = _NullWebcamSystem(self._ctx, self._width, self._height, cam_cfg)
+            if not isinstance(self._webcam_system, _NullWebcamSystem):
+                try:
+                    persisted_webcam = self.get_runtime_state('webcam', default={})
+                    apply_state = getattr(self._webcam_system, 'apply_persistence_state', None)
+                    if callable(apply_state) and isinstance(persisted_webcam, dict):
+                        apply_state(persisted_webcam)
+                except Exception as exc:
+                    log.warning('Webcam runtime-state import failed: %s', exc)
+            self._webcam_system.start()
+            self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
+                self.cfg.get('demo', 'effect_duration', default=20)
+            )
+            if isinstance(self._webcam_system, _NullWebcamSystem):
+                self._webcam_system = None
+            else:
+                self._webcam_system.set_vj_api(self.vj_api)
+                self.vj_api.register_key_handler('webcam', self._webcam_system.handle_key)
+                self._persist_webcam_runtime_state()
+                log.info('WebcamSystem loaded from drop-in')
 
-        # System-level post-process stack (optional drop-in).
-        postfx_cls = _load_postfx_controller_class()
-        postfx_cfg = self.cfg.get('postfx', default={}) or {}
-        if not isinstance(postfx_cfg, dict):
-            postfx_cfg = {}
-        try:
-            self._postfx_controller = postfx_cls(
-                self._ctx,
-                self._render_width,
-                self._render_height,
-                postfx_cfg,
-            )
-        except Exception as exc:
-            log.warning('PostFxController init failed: %s', exc)
-            self._postfx_controller = _NullPostFxController(
-                self._ctx,
-                self._render_width,
-                self._render_height,
-                postfx_cfg,
-            )
-        if isinstance(self._postfx_controller, _NullPostFxController):
-            self._postfx_controller = None
-        else:
-            self._postfx_controller.set_vj_api(self.vj_api)
-            register_runtime_capability(
-                self.vj_api,
-                self._postfx_controller,
-                POSTFX_RUNTIME_CAPABILITY,
-            )
-            log.info('PostFxController loaded from drop-in')
+            # System-level post-process stack (optional drop-in).
+            postfx_cls = _load_postfx_controller_class()
+            postfx_cfg = self.cfg.get('postfx', default={}) or {}
+            if not isinstance(postfx_cfg, dict):
+                postfx_cfg = {}
+            try:
+                self._postfx_controller = postfx_cls(
+                    self._ctx,
+                    self._render_width,
+                    self._render_height,
+                    postfx_cfg,
+                )
+            except Exception as exc:
+                log.warning('PostFxController init failed: %s', exc)
+                self._postfx_controller = _NullPostFxController(
+                    self._ctx,
+                    self._render_width,
+                    self._render_height,
+                    postfx_cfg,
+                )
+            if isinstance(self._postfx_controller, _NullPostFxController):
+                self._postfx_controller = None
+            else:
+                self._postfx_controller.set_vj_api(self.vj_api)
+                register_runtime_capability(
+                    self.vj_api,
+                    self._postfx_controller,
+                    POSTFX_RUNTIME_CAPABILITY,
+                )
+                log.info('PostFxController loaded from drop-in')
 
-        # System-level screen burst timing/transform controller (optional).
-        try:
-            burst_cls = _load_screen_burst_controller_class()
-            burst_cfg = self.cfg.get('screen_burst', default={}) or {}
-            if not isinstance(burst_cfg, dict):
-                burst_cfg = {}
-            self._burst_controller = burst_cls(burst_cfg)
-            log.info('ScreenBurstController loaded from unicorn-tears drop-in')
-        except Exception as exc:
-            log.warning('ScreenBurstController not available: %s', exc)
-            self._burst_controller = _NullScreenBurstController()
+            # System-level screen burst timing/transform controller (optional).
+            try:
+                burst_cls = _load_screen_burst_controller_class()
+                burst_cfg = self.cfg.get('screen_burst', default={}) or {}
+                if not isinstance(burst_cfg, dict):
+                    burst_cfg = {}
+                self._burst_controller = burst_cls(burst_cfg)
+                log.info('ScreenBurstController loaded from unicorn-tears drop-in')
+            except Exception as exc:
+                log.warning('ScreenBurstController not available: %s', exc)
+                self._burst_controller = _NullScreenBurstController()
+        else:
+            log.info('Safe mode enabled: skipping optional visual drop-ins')
 
     def _build_present_pipeline(self) -> None:
         """Build fullscreen pass that copies a texture to screen."""
@@ -2163,79 +2170,82 @@ void main() {
         hotkeys.attach_midi(midi_manager)
         self._hotkeys = hotkeys
 
-        # Spotify controller (optional drop-in subsystem).
-        spotify_cfg = self.cfg.get('spotify', default={}) or {}
-        if not isinstance(spotify_cfg, dict):
-            spotify_cfg = {}
-        spotify_web_cfg = spotify_cfg.get('web_api', {}) if isinstance(spotify_cfg, dict) else {}
-        if not isinstance(spotify_web_cfg, dict):
-            spotify_web_cfg = {}
+        if not self._safe_mode:
+            # Spotify controller (optional drop-in subsystem).
+            spotify_cfg = self.cfg.get('spotify', default={}) or {}
+            if not isinstance(spotify_cfg, dict):
+                spotify_cfg = {}
+            spotify_web_cfg = spotify_cfg.get('web_api', {}) if isinstance(spotify_cfg, dict) else {}
+            if not isinstance(spotify_web_cfg, dict):
+                spotify_web_cfg = {}
 
-        if spotify_web_cfg:
-            spotify_cfg = dict(spotify_cfg)
-            spotify_cfg['web_api'] = spotify_web_cfg
+            if spotify_web_cfg:
+                spotify_cfg = dict(spotify_cfg)
+                spotify_cfg['web_api'] = spotify_web_cfg
 
-        load_spotify = bool(spotify_cfg.get('enabled', False)) or bool(
-            spotify_web_cfg.get('enabled', False)
-        )
-        if load_spotify:
-            try:
-                spotify_cls = _load_spotify_controller_class()
-                self._spotify = spotify_cls(self, spotify_cfg)
-                if bool(getattr(self._spotify, 'enabled', False)):
-                    self.vj_api.register_subsystem('spotify', self._spotify)
-                    key_handler = getattr(self._spotify, 'handle_key', None)
-                    if callable(key_handler):
-                        self.vj_api.register_key_handler('spotify', key_handler)
-                    log.info('SpotifyController loaded from drop-in')
-                else:
+            load_spotify = bool(spotify_cfg.get('enabled', False)) or bool(
+                spotify_web_cfg.get('enabled', False)
+            )
+            if load_spotify:
+                try:
+                    spotify_cls = _load_spotify_controller_class()
+                    self._spotify = spotify_cls(self, spotify_cfg)
+                    if bool(getattr(self._spotify, 'enabled', False)):
+                        self.vj_api.register_subsystem('spotify', self._spotify)
+                        key_handler = getattr(self._spotify, 'handle_key', None)
+                        if callable(key_handler):
+                            self.vj_api.register_key_handler('spotify', key_handler)
+                        log.info('SpotifyController loaded from drop-in')
+                    else:
+                        self._spotify = None
+                        log.info('SpotifyController loaded but disabled by runtime checks')
+                except Exception as exc:
                     self._spotify = None
-                    log.info('SpotifyController loaded but disabled by runtime checks')
+                    log.warning('SpotifyController not available: %s', exc)
+
+            # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
+            try:
+                auto_vj_cls = _load_auto_vj_controller_class()
+                auto_vj_cfg = self.cfg.get('auto_vj', default={}) or {}
+                if not isinstance(auto_vj_cfg, dict):
+                    auto_vj_cfg = {}
+                self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
+                self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
+                self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
+                log.info('AutoVJController loaded from drop-in')
             except Exception as exc:
-                self._spotify = None
-                log.warning('SpotifyController not available: %s', exc)
+                self._auto_vj = None
+                self.vj_api.set_status_pill(None)
+                log.warning('AutoVJController not available: %s', exc)
 
-        # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
-        try:
-            auto_vj_cls = _load_auto_vj_controller_class()
-            auto_vj_cfg = self.cfg.get('auto_vj', default={}) or {}
-            if not isinstance(auto_vj_cfg, dict):
-                auto_vj_cfg = {}
-            self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
-            self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
-            self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
-            log.info('AutoVJController loaded from drop-in')
-        except Exception as exc:
-            self._auto_vj = None
-            self.vj_api.set_status_pill(None)
-            log.warning('AutoVJController not available: %s', exc)
+            # Grand Finale controller (optional drop-in).
+            try:
+                gf_cls = _load_grand_finale_class()
+                gf_cfg = self.cfg.get('grand_finale', default={}) or {}
+                if not isinstance(gf_cfg, dict):
+                    gf_cfg = {}
+                self._grand_finale = gf_cls(self, gf_cfg)
+                self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
+                log.info('GrandFinaleController loaded from drop-in')
+            except Exception as exc:
+                self._grand_finale = None
+                log.warning('GrandFinaleController not available: %s', exc)
 
-        # Grand Finale controller (optional drop-in).
-        try:
-            gf_cls = _load_grand_finale_class()
-            gf_cfg = self.cfg.get('grand_finale', default={}) or {}
-            if not isinstance(gf_cfg, dict):
-                gf_cfg = {}
-            self._grand_finale = gf_cls(self, gf_cfg)
-            self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
-            log.info('GrandFinaleController loaded from drop-in')
-        except Exception as exc:
-            self._grand_finale = None
-            log.warning('GrandFinaleController not available: %s', exc)
-
-        # Control Room controller (optional drop-in subsystem).
-        control_room_cfg = self.cfg.get('control_room', default={}) or {}
-        if not isinstance(control_room_cfg, dict):
-            control_room_cfg = {}
-        if bool(control_room_cfg.get('enabled', False)):
-            self._control_room_startup_cfg = dict(control_room_cfg)
-            self._control_room_startup_frames_remaining = 8
-            log.info('ControlRoomController scheduled for startup after %d audience frames', self._control_room_startup_frames_remaining)
+            # Control Room controller (optional drop-in subsystem).
+            control_room_cfg = self.cfg.get('control_room', default={}) or {}
+            if not isinstance(control_room_cfg, dict):
+                control_room_cfg = {}
+            if bool(control_room_cfg.get('enabled', False)):
+                self._control_room_startup_cfg = dict(control_room_cfg)
+                self._control_room_startup_frames_remaining = 8
+                log.info('ControlRoomController scheduled for startup after %d audience frames', self._control_room_startup_frames_remaining)
+        else:
+            log.info('Safe mode enabled: skipping Spotify, Auto VJ, Grand Finale, and Control Room drop-ins')
 
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
         self._recorder = Recorder(self.cfg, self._width, self._height)
-        stream_cls = _load_rtmp_streamer_class()
+        stream_cls = _NullRTMPStreamer if self._safe_mode else _load_rtmp_streamer_class()
         stream_cfg = self.cfg.get('streaming', default={}) or {}
         if not isinstance(stream_cfg, dict):
             stream_cfg = {}
@@ -2297,7 +2307,7 @@ void main() {
                 if self._dispatch_claimed_window_event(event):
                     continue
                 if event.type == sdl2.SDL_QUIT:
-                    self._running = False
+                    self.request_exit()
                 elif event.type == sdl2.SDL_KEYDOWN:
                     self._update_ctrl_state(event.key.keysym.sym, True)
                     if not event.key.repeat:
@@ -3788,8 +3798,45 @@ void main() {
     def set_zoom_randomized(self, enabled: bool) -> None:
         self._zoom_randomized = bool(enabled)
 
-    def request_exit(self) -> None:
+    def _confirm_exit_dialog(self) -> bool:
+        """Show a modal yes/no confirmation dialog for app shutdown."""
+        if self._window is None:
+            return True
+
+        buttons = (sdl2.SDL_MessageBoxButtonData * 2)()
+        buttons[0] = sdl2.SDL_MessageBoxButtonData(
+            flags=sdl2.SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+            buttonid=0,
+            text=b'No',
+        )
+        buttons[1] = sdl2.SDL_MessageBoxButtonData(
+            flags=sdl2.SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,
+            buttonid=1,
+            text=b'Yes',
+        )
+
+        message_box = sdl2.SDL_MessageBoxData(
+            flags=sdl2.SDL_MESSAGEBOX_WARNING,
+            window=self._window,
+            title=b'Quit Unicorn Viz?',
+            message=b'Exit the main program now?',
+            numbuttons=2,
+            buttons=buttons,
+            colorScheme=None,
+        )
+        selected = ctypes.c_int(0)
+        result = sdl2.SDL_ShowMessageBox(ctypes.byref(message_box), ctypes.byref(selected))
+        if result < 0:
+            log.warning('Quit confirmation dialog failed: %s', sdl2.SDL_GetError().decode())
+            return False
+        return int(selected.value) == 1
+
+    def request_exit(self, *, force: bool = False) -> bool:
+        if not bool(force) and self._confirm_exit_enabled:
+            if not self._confirm_exit_dialog():
+                return False
         self._running = False
+        return True
 
     def midi_action_for_note(self, number: int) -> str | None:
         if self._midi_manager is None:
@@ -3945,6 +3992,29 @@ void main() {
 
         if payload is None:
             self._overlays.trigger_cta()
+            return 'CTA triggered (default)'
+
+        text, icon, duration = payload
+        self._overlays.trigger_cta_custom(str(text), str(icon), float(duration))
+        return 'CTA triggered'
+
+    def trigger_streaming_song_cta(self, one_more: bool = False) -> str:
+        """Trigger dedicated song CTA overlay via streaming drop-in ownership."""
+        if self._overlays is None:
+            return 'CTA unavailable'
+
+        payload = None
+        if self._streamer is not None:
+            method = getattr(self._streamer, 'trigger_song_cta', None)
+            if callable(method):
+                try:
+                    payload = method(bool(one_more))
+                except Exception as exc:
+                    log.debug('Streaming song CTA trigger failed: %s', exc)
+
+        if payload is None:
+            text = 'One more song!' if one_more else 'Last song!'
+            self._overlays.trigger_cta_custom(text, '🎵', 4.5)
             return 'CTA triggered (default)'
 
         text, icon, duration = payload
