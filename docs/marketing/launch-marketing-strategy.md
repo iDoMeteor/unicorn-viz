@@ -2,7 +2,7 @@
 
 Owner: Studio Marketing
 Status: active
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 ## Mission
 
@@ -11,6 +11,7 @@ Launch Unicorn Viz and DJ Unicorn Tears as a single entertainment and creator-pr
 1. A world-premiere livestream event people want to attend live and replay later.
 2. A clear free-to-paid funnel for Unicorn Viz core software, premium drop-ins, music, merch, and memberships.
 3. A repeatable content machine that can keep growing for at least 60 days after the premiere.
+4. A college-radio outreach lane that builds a target list early, then starts music/viz pitching about 2 weeks before premiere.
 
 This campaign is built around a 30-day pre-premiere runway, a 6-day live event block, and a 60-day post-premiere growth cycle.
 
@@ -28,6 +29,7 @@ This campaign is built around a 30-day pre-premiere runway, a 6-day live event b
 - 10% of gross proceeds are donated to animals in need and should remain a lightweight website/support-page note rather than a repeated campaign headline.
 - The official homes are unicorntears.com and unicornviz.com.
 - OBS is not fully production-ready yet, so the livestream plan must support both OBS-based workflows and Unicorn Viz native streaming.
+- College radio is a separate mission lane: collect station data throughout the prep runway, then start direct outreach roughly 14 days before premiere with songs, visual previews, and a concise pitch.
 
 ## Positioning
 
@@ -67,6 +69,8 @@ Use each platform for one clear job instead of posting the same asset everywhere
 | Kick | Secondary live distribution and creator reach | Community growth | Follow live |
 | X | Fast-moving hype, clips, countdowns, social proof | Press and creator networking | Watch / repost |
 | Facebook | Broad event awareness and retargetable community traffic | Group/community updates | RSVP and share |
+| Instagram | Reels-first visual discovery, story cadence, creator proof | Bio clicks and saves | Watch / save |
+| TikTok | Fast vertical discovery, process clips, hook-heavy proof | Comment velocity and follows | Watch / follow |
 | Locals | Smaller live hangouts and direct community discussion | Paid supporter funnel | Join the community |
 | Substack | Announcements, campaign narrative, launch diary | Email list backbone | Subscribe for updates |
 | Spotify | Theme song, remixes, artist profile credibility | Audio discovery | Follow the artist |
@@ -100,8 +104,10 @@ Goals:
 Actions:
 
 - Finalize naming, bios, profile art, headers, avatars, and handles across every platform.
+- Finalize naming, bios, profile art, headers, avatars, and handles across Facebook, Instagram, TikTok, YouTube, X, and the site hubs.
 - Publish or stage launch landing pages on unicorntears.com and unicornviz.com.
 - Build a single link path for all bios with route-specific tracking.
+- Pick one social management stack for scheduling, analytics, and approval flow before the first public cadence starts.
 - Set up Fourthwall products, digital delivery, donation language, and animal-support messaging.
 - Set up Fourthwall products and digital delivery; keep any donation copy concise and site-local.
 - Decide the default membership stack: Substack for editorial/email, Locals for hangouts, SubscribeStar as backup recurring support.
@@ -124,6 +130,7 @@ Actions:
 - Start daily countdown language on X, Facebook Stories, YouTube Shorts, and vertical clips for all mirrored channels.
 - Reach out to creators, DJs, visual artists, and niche press with the one-sheet and creator pack.
 - Seed one free gated reward for email or Substack signups such as wallpapers, a preview loop pack, or a teaser mix.
+- Build the college-radio station target list, including station name, school, city/state, format, contact page, and submission path.
 
 ### Phase 3: Proof and Conversion Warm-Up (T-16 to T-10)
 
@@ -140,6 +147,7 @@ Actions:
 - Open merch previews, product waitlists, and supporter tier previews.
 - Run one small community hangout on Locals to test live interaction and gather language that resonates.
 - Put the premiere countdown timer on both official sites and in pinned social posts.
+- Begin college-radio outreach prep: shortlist stations, sort by genre fit and geography, and prepare the pitch pack so outreach can begin 14 days before premiere.
 
 ### Phase 4: Countdown and Commitment (T-9 to T-1)
 
@@ -159,10 +167,10 @@ Actions:
 
 ## Baseline Weekly Cadence During Pre-Premiere
 
-- Short-form clips: 2 per day across priority channels, adapted natively rather than blindly cross-posted.
+- Short-form clips: 2 per day across priority channels, with Reels and TikToks treated as first-class vertical destinations rather than secondary mirrors.
 - Long-form video: 2 per week, alternating between set/demo and story/build content.
 - Editorial/email: 2 per week via Substack.
-- Community post: 3 per week across Locals and Facebook.
+- Community post: 3 per week across Locals, Facebook, and Instagram.
 - Livestream: 1 test or casual warm-up stream per week until the six-day block begins.
 
 ## Six-Day World Premiere Livestream Block
@@ -232,6 +240,7 @@ Actions:
 - Launch the next drop-in or content pack before the premiere buzz fully cools.
 - Bring in collaborators, remixes, guest sets, or creator showcases.
 - Prepare an affiliate pilot for software and premium drop-ins, including referral links, commission policy, and creator onboarding.
+- Start the college-radio outreach wave roughly 14 days before premiere and continue follow-up through the live block with songs, viz previews, and replay links.
 - Segment email and supporter audiences by interest: music, visuals, merch, and insider access.
 - Promote case studies and creator outcomes to sell Unicorn Viz as a serious tool, not just a novelty stream backdrop.
 
@@ -300,6 +309,7 @@ Decision triggers:
 5. Build the first two weeks of ready-to-post content assets before daily posting begins.
 6. Prepare the free core offer, first premium drop-in bundle, and first merch capsule.
 7. Run one full production rehearsal covering OBS and native Unicorn Viz streaming paths.
+8. Build the first college-radio target list and outreach packet so contact can begin two weeks before premiere.
 
 ## Related Docs
 

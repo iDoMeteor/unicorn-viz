@@ -2,7 +2,7 @@
 
 Owner: Studio Marketing
 Status: active
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 ## Purpose
 
@@ -42,8 +42,17 @@ All inbound traffic should map to one of these conversion paths:
 2. Download path: click to free core Unicorn Viz install flow.
 3. Buy path: click to paid drop-ins, bundles, or merch pages.
 4. Join path: click to Substack, Locals, supporter tiers, or email list.
+5. Social bridge path: click from bio links, story links, or profile CTAs into the best watch/download/buy/join page.
 
 Avoid sending cold traffic to generic pages with too many equal-priority links.
+
+## Social Bridge Pages
+
+Use one campaign-specific bridge page per brand so Instagram, Facebook, and TikTok bios can point to a single high-intent hub.
+
+- unicorntears.com should keep a compact link hub that prioritizes watch, join, support, and merch actions.
+- unicornviz.com should keep a compact link hub that prioritizes download, premium, demo, and docs actions.
+- Reels, Stories, and TikTok bios should not point at long generic homepages when a tighter campaign page exists.
 
 ## Homepage Architecture: Launch Mode
 
@@ -108,6 +117,7 @@ After D+7, reduce countdown emphasis and replace with replay and product depth.
 - `/support`: memberships, tipping rails, mission statement, and FAQ.
 - `/music`: Spotify and replay-linked music/track page.
 - `/store`: merch and digital artist-side products.
+- `/links`: compact campaign bridge page for social bios, story links, and platform-native CTAs.
 
 ### unicornviz.com
 
@@ -117,6 +127,7 @@ After D+7, reduce countdown emphasis and replace with replay and product depth.
 - `/demo`: live product demos and clips.
 - `/docs`: onboarding and core documentation links.
 - `/compare`: free core versus premium matrix.
+- `/links`: compact campaign bridge page for bios, reels, and short-form profile CTAs.
 
 ## Conversion Blocks and Copy
 

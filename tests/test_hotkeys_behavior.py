@@ -19,12 +19,26 @@ class _VJApi:
     def unregister_key_handler(self, _name: str) -> None:
         return
 
+    def list_webcam_cameras(self):
+        return []
+
+    def webcam_image_state(self):
+        return {
+            'active': False,
+            'path': '',
+            'opacity': 1.0,
+            'scale': 1.0,
+            'x': 0.5,
+            'y': 0.5,
+        }
+
 
 class _Overlay:
     help_visible = False
     midi_selector_visible = False
     name_overlay_visible = False
     controller_help_modal_visible = False
+    webcam_editor_modal_visible = False
 
     def __init__(self) -> None:
         self.messages: list[str] = []
@@ -41,6 +55,9 @@ class _Overlay:
     def toggle_name_overlay(self) -> None:
         self.toggled_name += 1
 
+    def flash_name(self, _name: str) -> None:
+        return
+
     def note_help_activity(self) -> None:
         return
 
@@ -50,6 +67,9 @@ class _Overlay:
 
     def toggle_controller_help_modal(self) -> None:
         self.controller_help_modal_visible = not self.controller_help_modal_visible
+
+    def toggle_webcam_editor_modal(self) -> None:
+        self.webcam_editor_modal_visible = not self.webcam_editor_modal_visible
 
     def set_audio_sources(
         self,
@@ -84,6 +104,12 @@ class _Playlist:
     index = 0
     effects = []
     shortcut_effects = []
+
+    def advance(self):
+        return type('_Effect', (), {'NAME': 'StubEffect'})
+
+    def go_index(self, _index: int):
+        return type('_Effect', (), {'NAME': 'StubEffect'})
 
 
 class _Audio:
@@ -138,6 +164,9 @@ class _App:
     def toggle_audio_source_viable(self, index: int) -> str:
         self.audio_source_viable_toggled = index
         return f'Viable source toggled: device-{index}'
+
+    def goto_effect(self, _cls) -> None:
+        return
 
 
 def _handler() -> tuple[HotkeyHandler, _App, _Overlay]:

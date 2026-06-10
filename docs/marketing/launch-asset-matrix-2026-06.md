@@ -2,7 +2,7 @@
 
 Owner: Studio Marketing
 Status: active
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 ## Purpose
 
@@ -35,6 +35,8 @@ Use consistent naming so clips, thumbnails, and copy are easy to track.
 | Kick | Live schedule cards, clip highlights | 1 to 2 warm-up streams/week pre-launch | Secondary live reach | Follow live |
 | X | Vertical clips, square statics, thread posts | 2 posts/day during countdown | Rapid awareness + social proof | Set reminder / repost |
 | Facebook | Reels, event cards, short captions, polls | 1 Reel/day + 3 feed posts/week | Mainstream awareness | RSVP / share |
+| Instagram | Reels, Stories, carousels, creator proof cards | 1 Reel/day + 3 Stories/week | Reels-first discovery | Watch / save |
+| TikTok | Vertical hooks, behind-the-scenes clips, process snippets | 1 to 2 posts/day during countdown | Fast discovery and comment velocity | Watch / follow |
 | Substack | Announcement letters, recaps, campaign notes | 2 posts/week countdown, 1 per live milestone | Audience capture + retention | Subscribe |
 | Locals | Hangout notices, short clips, supporter updates | 3 posts/week + 1 live hangout/week | Paid-community depth | Join community |
 | Spotify | Canvas-ready teaser loop, profile updates, playlist links | 2 support posts/week | Audio identity credibility | Follow artist |
@@ -89,20 +91,20 @@ day index once the premiere date is locked.
 
 | Day | Asset type | Platforms | Prompt | CTA |
 |---|---|---|---|---|
-| D-14 | HERO + HYPE | YouTube, X, Facebook, Rumble | Cut a 25-second "new world loading" teaser using the theme song intro and 3 rapid visual scenes. End on date + countdown marker. | Set your reminder |
+| D-14 | HERO + HYPE | YouTube, X, Facebook, Instagram, TikTok, Rumble | Cut a 25-second "new world loading" teaser using the theme song intro and 3 rapid visual scenes. End on date + countdown marker. | Set your reminder |
 | D-13 | STORY | Substack, X, Locals | Write a founder note: why DJ Unicorn Tears and Unicorn Viz are launching together now, and what makes the show different. | Subscribe for updates |
-| D-12 | PROOF | YouTube Shorts, X, Facebook Reels | Show free core visuals in a split-screen before/after with live audio reactivity. | Download free core |
-| D-11 | OFFER | Fourthwall, X, Facebook, official sites | Publish first premium drop-in preview card with one clear feature and one 8-second demo loop. | Join premium waitlist |
-| D-10 | COMMUNITY | Locals, Facebook, X | Run a poll: pick one of three visual themes for Day 3 stream segment. | Join community |
-| D-9 | HERO | All video platforms | Publish six-day stream schedule card plus 20-second stinger reel. | Pick your watch platform |
+| D-12 | PROOF | YouTube Shorts, X, Facebook Reels, Instagram Reels, TikTok | Show free core visuals in a split-screen before/after with live audio reactivity. | Download free core |
+| D-11 | OFFER | Fourthwall, X, Facebook, Instagram, official sites | Publish first premium drop-in preview card with one clear feature and one 8-second demo loop. | Join premium waitlist |
+| D-10 | COMMUNITY | Locals, Facebook, Instagram, X | Run a poll: pick one of three visual themes for Day 3 stream segment. | Join community |
+| D-9 | HERO | All video platforms | Publish six-day stream schedule card plus 20-second stinger reel, then cut vertical versions for IG and TikTok. | Pick your watch platform |
 | D-8 | PROOF + STORY | YouTube, Substack, X | Post a 60-second setup walkthrough featuring stream prep, audio routing, and visual scene checks. | Watch the build |
-| D-7 | OFFER | Fourthwall, unicornviz.com, X | Publish free-vs-premium comparison graphic with concise benefits and launch pricing window. | Unlock premium drop-ins |
-| D-6 | HYPE | X, Facebook Reels, YouTube Shorts, Rumble | Drop the highest-energy clip so far with one signature effect and fast cut transitions. | Watch the premiere live |
-| D-5 | STORY | Substack, Facebook, X | Publish a world-building post: why this six-day run is a full narrative event, not a single stream. | Save the date |
-| D-4 | COMMUNITY + PROOF | Locals, Twitch, Kick, X | Announce pre-launch hangout stream with live Q&A and a short feature demonstration. | Join the hangout |
-| D-3 | HERO | YouTube, Rumble, X, Facebook | Release final trailer with stream intro reel, artist face/voice, and strongest visual sequence. | Turn on reminders |
-| D-2 | OFFER + HYPE | Fourthwall, official sites, X, Facebook | Publish merch capsule hero card and digital bundle card with scarcity-safe closing date. | Buy the premiere pack |
-| D-1 | HERO + COMMUNITY | All platforms + Substack | Publish final countdown: what each of the 6 days delivers and where to watch. | Show up live tomorrow |
+| D-7 | OFFER | Fourthwall, unicornviz.com, X, Instagram | Publish free-vs-premium comparison graphic with concise benefits and launch pricing window. | Unlock premium drop-ins |
+| D-6 | HYPE | X, Facebook Reels, Instagram Reels, TikTok, YouTube Shorts, Rumble | Drop the highest-energy clip so far with one signature effect and fast cut transitions. | Watch the premiere live |
+| D-5 | STORY | Substack, Facebook, X, Instagram | Publish a world-building post: why this six-day run is a full narrative event, not a single stream. | Save the date |
+| D-4 | COMMUNITY + PROOF | Locals, Twitch, Kick, X, Instagram | Announce pre-launch hangout stream with live Q&A and a short feature demonstration. | Join the hangout |
+| D-3 | HERO | YouTube, Rumble, X, Facebook, Instagram, TikTok | Release final trailer with stream intro reel, artist face/voice, and strongest visual sequence. | Turn on reminders |
+| D-2 | OFFER + HYPE | Fourthwall, official sites, X, Facebook, Instagram, TikTok | Publish merch capsule hero card and digital bundle card with scarcity-safe closing date. | Buy the premiere pack |
+| D-1 | HERO + COMMUNITY | All platforms + Substack | Publish final countdown: what each of the 6 days delivers and where to watch, then cut platform-native reminders for Reels and TikTok. | Show up live tomorrow |
 
 ## Repurposing Rules
 

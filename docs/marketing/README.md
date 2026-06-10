@@ -2,7 +2,7 @@
 
 Owner: Studio Marketing
 Status: active
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 This folder contains the canonical marketing and launch materials for Unicorn Viz and DJ Unicorn Tears.
 
@@ -24,6 +24,11 @@ This folder contains the canonical marketing and launch materials for Unicorn Vi
 - [Week 6 Live Run Asset and Post Rollout (Day-01 to Day-06)](week-6-live-run-rollout.md)
 - [Week 6 Live Run Expanded Pack v1 (Prompts and Pre-Crafted Copy)](week-6-live-run-expanded-pack-v1.md)
 - [Launch Asset Matrix (Platform Posts, CTAs, 14-Day Prompt Bank)](launch-asset-matrix-2026-06.md)
+- [Social Ops Stack Recommendation](social-ops-stack.md)
+- [Pre-Launch 7-Day Prep Sprint](pre-launch-7-day-prep-sprint.md)
+- [College Radio Outreach Plan](college-radio-outreach-plan.md)
+- [College Radio Outreach Sheet Guide](college-radio-outreach-sheet-guide.md)
+- [College Radio Outreach Sheet Template (CSV)](college-radio-outreach-sheet-template.csv)
 - [Website Funnel Structure (unicorntears.com and unicornviz.com)](website-funnel-structure.md)
 - [DJ Unicorn Tears World Premiere - Launch One-Sheet (HTML)](dj-unicorn-tears-world-premiere-one-sheet.html)
 - [DJ Unicorn Tears World Premiere - Launch One-Sheet (PDF)](dj-unicorn-tears-world-premiere-one-sheet.pdf)
