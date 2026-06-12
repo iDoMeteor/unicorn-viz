@@ -34,6 +34,7 @@ uniform float iMid;
 uniform float iTreble;
 uniform float iSpeed;
 uniform float iZoom;
+uniform float iZoomPulse;
 in  vec2 v_uv;
 out vec4 fragColor;
 
@@ -46,7 +47,7 @@ vec3 palette(float t) {
 }
 
 void main() {
-    vec2 uv = (v_uv - 0.5) / max(iZoom, 0.08) + 0.5;
+    vec2 uv = (v_uv - 0.5) / max(iZoom * iZoomPulse, 0.08) + 0.5;
     float t = iTime * iSpeed;
     float f = 0.0;
     f += sin(uv.x * 16.0 + t * 1.2) * 0.25;
@@ -92,12 +93,19 @@ class Psychedelic(BaseEffect):
         self._bass   = 0.0
         self._mid    = 0.0
         self._treble = 0.0
+        self._beat   = 0.0
+        self._zoom_pulse = 1.0
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
         self._bass   = audio.bass_n
         self._mid    = audio.mid_n
         self._treble = audio.treble_n
+        if audio.beat > 0.5:
+            self._beat = 1.0
+        self._beat = max(0.0, self._beat - dt * 3.8)
+        target_pulse = 1.0 + self._bass * 0.06 + self._beat * 0.10
+        self._zoom_pulse += (target_pulse - self._zoom_pulse) * min(1.0, dt * 7.0)
 
     def render(self) -> None:
         def _set(name: str, value) -> None:
@@ -112,6 +120,7 @@ class Psychedelic(BaseEffect):
         _set('iTreble', self._treble)
         _set('iSpeed',  float(self.parameters['speed']))
         _set('iZoom',   max(0.08, float(self.parameters['zoom'])))
+        _set('iZoomPulse', float(self._zoom_pulse))
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:
