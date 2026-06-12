@@ -136,29 +136,15 @@ void main() {
     float spark = step(0.997, hash(floor(gl_FragCoord.xy * 0.35) + floor(uTime * 10.0)));
     col += vec3(1.0, 0.95, 0.85) * spark * uSparkle;
 
-    // Edge racers: bright beads with halos that run both directions along each wire.
-    float racer_head_a = fract(uRacerPos + v_edge * 0.6180339);
-    float racer_head_b = fract(1.0 - uRacerPos * 0.73 + v_edge * 0.4142136);
-
-    float d_a = abs(v_phase - racer_head_a);
-    d_a = min(d_a, 1.0 - d_a);
-    float d_b = abs(v_phase - racer_head_b);
-    d_b = min(d_b, 1.0 - d_b);
-
-    float racer_a = smoothstep(0.10, 0.0, d_a);
-    float racer_b = smoothstep(0.08, 0.0, d_b);
-    float halo_a = smoothstep(0.36, 0.0, d_a);
-    float halo_b = smoothstep(0.30, 0.0, d_b);
-    float tail_a = smoothstep(0.60, 0.0, d_a) * 0.55;
-    float tail_b = smoothstep(0.52, 0.0, d_b) * 0.40;
-    vec3 racer_col_a = mix(vec3(1.0, 1.0, 1.0), uColor, 0.10);
-    vec3 racer_col_b = mix(vec3(1.0, 0.92, 1.0), uColor, 0.24);
-    float flicker = 0.90 + 0.10 * sin(uTime * 9.0 + v_edge * 19.0);
-    col += racer_col_a * (racer_a * 2.4 + halo_a * 0.95 + tail_a * 0.55) * uRacerGlow * flicker;
-    col += racer_col_b * (racer_b * 1.9 + halo_b * 0.72 + tail_b * 0.40) * (uRacerGlow * 0.92) * (1.0 - 0.12 * flicker);
-
-    float edge_pulse = 0.22 + 0.18 * sin(uTime * 7.0 + v_edge * 13.0);
-    col += mix(uColor, vec3(1.0, 0.96, 1.0), 0.45) * edge_pulse * uRacerGlow * 0.70;
+    // Edge racers: bright beads traveling along each wire segment.
+    float racer_head = fract(uRacerPos + v_edge * 0.6180339);
+    float d = abs(v_phase - racer_head);
+    d = min(d, 1.0 - d);
+    float racer = smoothstep(0.20, 0.0, d);
+    float tail = smoothstep(0.42, 0.0, d) * 0.35;
+    vec3 racer_col = mix(vec3(0.95, 0.98, 1.0), uColor, 0.30);
+    float flicker = 0.80 + 0.20 * sin(uTime * 12.0 + v_edge * 19.0);
+    col += racer_col * (racer + tail) * uRacerGlow * flicker;
 
     fragColor = vec4(col, 1.0);
 }
