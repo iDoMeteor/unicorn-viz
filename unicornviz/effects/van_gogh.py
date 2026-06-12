@@ -35,6 +35,8 @@ uniform float iFlow;
 uniform float iDrift;
 uniform float iEra;
 uniform float iHueDrift;
+uniform float iMood;
+uniform float iStarDensity;
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -112,11 +114,13 @@ void main() {
     col += yellow * brush * (0.35 + 0.6 * iMid);
 
     // Stars + dynamic streaklets
-    float stars = step(0.996, hash(floor((uv + vec2(t * (0.2 + iFlow * 0.2), 0.0)) * 120.0)));
+    float star_thresh = 1.0 - iStarDensity * 3.0;
+    float stars = step(star_thresh, hash(floor((uv + vec2(t * (0.2 + iFlow * 0.2), 0.0)) * 120.0)));
     float streak = smoothstep(0.995, 1.0, hash(floor((uv + vec2(-t * 0.12, t * 0.07)) * 170.0)));
     col += vec3(1.0, 0.95, 0.75) * stars * (0.4 + iBeat * 0.7 + iTreble * 0.4);
     col += vec3(0.8, 0.9, 1.0) * streak * (0.05 + iTreble * 0.16);
-    col += palette(t * 0.02 + iEra * 0.6 + n * 0.2) * 0.05 * iHueDrift;
+    col += palette(t * 0.02 + iEra * 0.6 + n * 0.2 + iMood * 0.35) * (0.05 + iMood * 0.06) * iHueDrift;
+    col = mix(col, col.gbr, iMood * 0.08);
 
     col += vec3(1.0, 0.9, 0.7) * iBeat * 0.08;
 
@@ -154,6 +158,13 @@ class VanGogh(BaseEffect):
         self._target_hue_drift = self._hue_drift
         self._long_timer = 0.0
         self._long_interval = float(self.rng.uniform(18.0, 34.0))
+        # Second independent long-cycle: palette mood and star density
+        self._mood = float(self.rng.uniform(0.0, 1.0))
+        self._target_mood = self._mood
+        self._star_density = float(self.rng.uniform(0.003, 0.008))
+        self._target_star_density = self._star_density
+        self._mood_timer = 0.0
+        self._mood_interval = float(self.rng.uniform(22.0, 45.0))
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -178,12 +189,22 @@ class VanGogh(BaseEffect):
             self._target_era = float(self.rng.uniform(0.0, 1.0))
             self._target_hue_drift = float(self.rng.uniform(0.0, 1.0))
 
+        self._mood_timer += dt
+        if self._mood_timer >= self._mood_interval:
+            self._mood_timer = 0.0
+            self._mood_interval = float(self.rng.uniform(22.0, 45.0))
+            self._target_mood = float(self.rng.uniform(0.0, 1.0))
+            self._target_star_density = float(self.rng.uniform(0.003, 0.010))
+
         blend = min(1.0, dt * 0.55)
         self._flow += (self._target_flow - self._flow) * blend
         self._drift += (self._target_drift - self._drift) * blend
         long_blend = min(1.0, dt * 0.08)
         self._era += (self._target_era - self._era) * long_blend
         self._hue_drift += (self._target_hue_drift - self._hue_drift) * long_blend
+        mood_blend = min(1.0, dt * 0.04)
+        self._mood += (self._target_mood - self._mood) * mood_blend
+        self._star_density += (self._target_star_density - self._star_density) * mood_blend
 
     def render(self) -> None:
         self._prog["iTime"].value = self.time
@@ -197,6 +218,8 @@ class VanGogh(BaseEffect):
         self._prog["iDrift"].value = self._drift
         self._prog["iEra"].value = self._era
         self._prog["iHueDrift"].value = self._hue_drift
+        self._prog["iMood"].value = self._mood
+        self._prog["iStarDensity"].value = self._star_density
         self._vao.render(moderngl.TRIANGLE_STRIP)
 
     def destroy(self) -> None:
