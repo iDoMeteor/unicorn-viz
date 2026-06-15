@@ -2895,40 +2895,8 @@ void main() {
                         self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     else:
                         self._ctx.screen.use()
-                        if self._is_span_mode(self._display_mode):
-                            # In non-linear span topologies, draw frame geometry
-                            # per active display viewport so each panel gets a
-                            # correctly sized border.
-                            bounds_x, bounds_y, _bw, _bh = self._all_display_bounds()
-                            panel_views: list[tuple[int, int, int, int]] = []
-                            for lx, ly, lw, lh in self._multihead_layouts():
-                                vx = int(lx) - int(bounds_x)
-                                vy_top = int(ly) - int(bounds_y)
-                                vw = int(lw)
-                                vh = int(lh)
-                                if vw <= 0 or vh <= 0:
-                                    continue
-                                gl_y = int(self._height) - (vy_top + vh)
-                                panel_views.append((vx, gl_y, vw, vh))
-
-                            if panel_views:
-                                set_frame_only = getattr(self._candy_frame, 'set_frame_only', None)
-                                if callable(set_frame_only):
-                                    set_frame_only(True)
-                                for vx, vy, vw, vh in panel_views:
-                                    self._ctx.viewport = (vx, vy, vw, vh)
-                                    self._candy_frame.resize(vw, vh)
-                                    self._candy_frame.render(self._fbo_a.color_attachments[0])
-                                self._candy_frame.resize(self._width, self._height)
-                                if callable(set_frame_only):
-                                    set_frame_only(False)
-                                self._ctx.viewport = (0, 0, self._width, self._height)
-                            else:
-                                self._ctx.viewport = (0, 0, self._width, self._height)
-                                self._candy_frame.render(self._fbo_a.color_attachments[0])
-                        else:
-                            self._ctx.viewport = (0, 0, self._width, self._height)
-                            self._candy_frame.render(self._fbo_a.color_attachments[0])
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._candy_frame.render(self._fbo_a.color_attachments[0])
             # Fire DJ celebration overlay — on top of all other overlays, below HUD.
             _auto_vj = getattr(self, '_auto_vj', None)
             if _auto_vj is not None:
