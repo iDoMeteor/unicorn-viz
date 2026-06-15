@@ -1395,16 +1395,38 @@ class HotkeyHandler:
 
     def _screenshot(self) -> None:
         import datetime
-        import numpy as np
         from pathlib import Path
         from PIL import Image
 
         ctx = self._app.vj_api.ctx
         if ctx is None:
             return
-        w = self._app.vj_api.render_width
-        h = self._app.vj_api.render_height
-        data = ctx.screen.read(components=3)
+
+        # Use the actual screen framebuffer size for readback. In multi-head
+        # modes the logical render size can differ from the current screen size.
+        try:
+            w, h = ctx.screen.size
+            w = int(w)
+            h = int(h)
+        except Exception:
+            w = int(self._app.vj_api.render_width)
+            h = int(self._app.vj_api.render_height)
+
+        data = ctx.screen.read(components=3, alignment=1)
+        expected = max(1, int(w)) * max(1, int(h)) * 3
+        if len(data) < expected:
+            log.error(
+                'Screenshot readback short: got=%d expected=%d size=%dx%d',
+                len(data),
+                expected,
+                w,
+                h,
+            )
+            self._overlays.flash_message('Screenshot failed: short GPU readback', 2.0)
+            return
+        if len(data) > expected:
+            data = data[:expected]
+
         img = Image.frombytes("RGB", (w, h), data)
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
