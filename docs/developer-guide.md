@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-05
+Last updated: 2026-06-15
 
 ## Contents
 
@@ -537,6 +537,43 @@ Use `double` / `dvec2` only where precision is truly required (i.e.,
 `FractalZoom`).  Double precision is slower on many consumer GPUs.
 
 Avoid `discard` in performance-critical per-pixel paths; use alpha blending.
+
+### GLSL Validation Workflow
+
+Use `glslangValidator` to catch shader syntax errors before runtime.
+
+Fedora install:
+
+```bash
+sudo dnf install -y glslang
+```
+
+Validate all embedded shaders in core effects and drop-ins:
+
+```bash
+/home/jj/Repos/unicorn-viz/.venv/bin/python tools/validate_glsl.py
+```
+
+Validate a narrower scope (example: one drop-in):
+
+```bash
+/home/jj/Repos/unicorn-viz/.venv/bin/python tools/validate_glsl.py drop-ins/america-250-01
+```
+
+What the script does:
+
+- Scans Python files for embedded GLSL string literals containing `#version`.
+- Infers shader stage from symbol names like `_VERT`, `_FRAG`, and keyword args
+    such as `vertex_shader=` / `fragment_shader=`.
+- Runs `glslangValidator` on each extracted shader.
+- Reports totals for scanned files, shaders found, validated shaders, skipped
+    unknown-stage shaders, and failures.
+
+Exit codes:
+
+- `0`: all validated shaders passed
+- `1`: one or more shader validations failed
+- `2`: validator binary missing (`glslangValidator` not on `PATH`)
 
 ---
 
