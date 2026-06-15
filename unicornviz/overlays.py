@@ -760,6 +760,29 @@ void main() {
         self._ctx.enable(moderngl.BLEND)
         self._vao.render(moderngl.TRIANGLES, vertices=len(data) // 4)
 
+    def _draw_modal_underlay(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        alpha: float,
+        pad: float = 0.0,
+    ) -> None:
+        """Draw a local dim underlay sized to a modal/help panel.
+
+        The underlay is clamped to the active overlay canvas and intentionally
+        avoids full-viewport fills so modal backgrounds track panel geometry in
+        multi-head viewport routing.
+        """
+        x0 = max(0.0, float(x) - float(pad))
+        y0 = max(0.0, float(y) - float(pad))
+        x1 = min(float(self._width), float(x) + float(w) + float(pad))
+        y1 = min(float(self._height), float(y) + float(h) + float(pad))
+        if x1 <= x0 or y1 <= y0:
+            return
+        self._draw_rect(x0, y0, x1 - x0, y1 - y0, (0.0, 0.0, 0.0, float(alpha)))
+
     def _render_controller_help_modal(self) -> None:
         """Draw a controller-focused mapping modal (APC mini mk2 first target)."""
         t = self._hud_t
@@ -771,6 +794,8 @@ void main() {
         panel_h = min(H * 0.86, 860.0)
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
+
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.58, pad=10.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         bw = 2.0
@@ -1491,8 +1516,6 @@ void main() {
             self._render_cta(dt)
 
         if self._show_help and not route_modals_elsewhere:
-            # dark underlay behind help
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.45))
             self._render_help()
 
         active_modal_type = ''
@@ -1526,27 +1549,21 @@ void main() {
             self._modal_route_debug_last = route_state
 
         if self._show_projectm_manager and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.60))
             self._render_projectm_manager()
 
         if self._show_system_monitor_modal and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.56))
             self._render_system_monitor_modal()
 
         if self._show_controller_help_modal and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.58))
             self._render_controller_help_modal()
 
         if self._show_webcam_editor_modal and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.58))
             self._render_webcam_editor_modal()
 
         if self._show_audio and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_audio_selector()
 
         if self._show_midi and not route_modals_elsewhere:
-            self._draw_rect(0.0, 0.0, float(self._width), float(self._height), (0.0, 0.0, 0.0, 0.55))
             self._render_midi_selector()
 
     # ------------------------------------------------------------------
@@ -1613,6 +1630,8 @@ void main() {
         panel_h = 80.0 + n_rows * row_h + 56.0
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
+
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.55, pad=8.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         bw = 2.0
@@ -1713,6 +1732,8 @@ void main() {
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
 
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.55, pad=8.0)
+
         # Panel background
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         # Neon border
@@ -1808,6 +1829,8 @@ void main() {
         panel_h = min(H * 0.80, 760.0)
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
+
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.58, pad=10.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         bw = 2.0
@@ -2038,6 +2061,8 @@ void main() {
         content_h = panel_h - 164.0
         footer_y = py + panel_h - 56.0
 
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.60, pad=12.0)
+
         self._draw_rect(px, py, panel_w, panel_h, (0.03, 0.04, 0.10, 0.96))
         border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.92)
         bw = 2.0
@@ -2192,6 +2217,8 @@ void main() {
         panel_h = min(H * 0.76, 760.0)
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
+
+        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.56, pad=12.0)
 
         self._sample_system_telemetry()
 
@@ -2435,6 +2462,9 @@ void main() {
         y = panel_pad
         w = self._width  - panel_pad * 2.0
         h = self._height - panel_pad * 2.0
+
+        self._draw_modal_underlay(x, y, w, h, alpha=0.45, pad=12.0)
+
         # Keep help legible on high-res canvases without overpowering 1080p.
         res_ratio = min(self._width, self._height) / 1080.0
         help_scale = min(1.28, max(1.0, res_ratio ** 0.35))

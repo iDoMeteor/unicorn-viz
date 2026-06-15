@@ -520,6 +520,7 @@ class App:
         self._window_origin_x = 0
         self._window_origin_y = 0
         self._mirror_rects: list[tuple[int, int, int, int]] = []
+        self._primary_overlay_view_debug_last: tuple[int, int, int, int] | None = None
         self._display_index = 0
         self._display_mode = 'single'
         multihead_cls = _NullMultiHeadController if self._safe_mode else _load_multihead_controller_class()
@@ -837,11 +838,39 @@ class App:
         return list(layouts) if layouts else []
 
     def _primary_active_layout(self) -> tuple[int, int, int, int] | None:
-        """Return the active layout treated as primary for audience rendering."""
+        """Return the active layout treated as primary for audience rendering.
+
+        Primary follows the configured window.display_index (resolved by the
+        multi-head controller) and falls back to the first active layout when
+        unavailable.
+        """
         layouts = self._multihead_layouts()
         if not layouts:
             return None
-        return max(layouts, key=lambda rect: int(rect[2]) * int(rect[3]))
+
+        primary_index = int(getattr(self._multihead, 'display_index', self._display_index))
+        active_indices = getattr(self._multihead, '_active_display_indices', None)
+
+        # Prefer SDL display bounds for the resolved display_index so layout
+        # lookup stays stable regardless of active-layout ordering.
+        if isinstance(active_indices, list) and active_indices and primary_index not in active_indices:
+            primary_index = int(active_indices[0])
+        bounds = self._display_bounds(primary_index)
+        if bounds is not None:
+            return (int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h))
+
+        active_indices = getattr(self._multihead, '_active_display_indices', None)
+        if isinstance(active_indices, list) and len(active_indices) == len(layouts):
+            for idx, rect in zip(active_indices, layouts, strict=False):
+                if int(idx) == primary_index:
+                    return rect
+
+        # Backward/compat fallback for controllers that expose only an ordered
+        # active-layout list where display index maps directly by position.
+        if 0 <= primary_index < len(layouts):
+            return layouts[primary_index]
+
+        return layouts[0]
 
     def _multihead_mirror_layout(self, origin_x: int, origin_y: int) -> list[tuple[int, int, int, int]]:
         """Return per-display rects in window-local coords, with fallback."""
@@ -884,8 +913,7 @@ class App:
     def _primary_display_viewport(self) -> tuple[int, int, int, int] | None:
         """Return window-local viewport for the primary display in multi-display modes.
 
-        Primary is resolved as the largest active display layout so overlay
-        menus center on the main audience screen in mixed-size topologies.
+        Primary is resolved from configured display index via active layouts.
         """
         if self._display_mode not in {'mirror_included', 'mirror_all', 'span_included', 'span_all'}:
             return None
@@ -893,22 +921,31 @@ class App:
             return None
         primary_layout = self._primary_active_layout()
         if primary_layout is not None:
-            # Resolve "primary" deterministically as the largest active output.
             px, py, pw, ph = primary_layout
         else:
             bounds = self._display_bounds(self._display_index)
             if bounds is None:
                 return None
             px, py, pw, ph = int(bounds.x), int(bounds.y), int(bounds.w), int(bounds.h)
-        # Use the actual SDL window origin rather than cached layout origins.
-        # This avoids drift when compositor/window-manager placement differs.
-        wx = ctypes.c_int(0)
-        wy = ctypes.c_int(0)
-        sdl2.SDL_GetWindowPosition(self._window, wx, wy)
-        origin_x = int(wx.value)
-        origin_y = int(wy.value)
+
+        # Map display bounds into the same layout-space origin used to build
+        # span/mirror window geometry. This avoids compositor-dependent drift
+        # from SDL_GetWindowPosition that can split a modal across displays.
+        bounds_x, bounds_y, _bounds_w, _bounds_h = self._all_display_bounds()
+        origin_x = int(bounds_x)
+        origin_y = int(bounds_y)
+
+        # Safety fallback for transient topology changes where all-bounds may
+        # be unavailable/misaligned for a frame.
+        if self._window is not None and (origin_x == 0 and origin_y == 0):
+            wx = ctypes.c_int(0)
+            wy = ctypes.c_int(0)
+            sdl2.SDL_GetWindowPosition(self._window, wx, wy)
+            origin_x = int(wx.value)
+            origin_y = int(wy.value)
+
         vx = px - origin_x
-        vy = py - origin_y
+        vy_top = py - origin_y
 
         # Guard against transient/invalid topology states while displays are
         # connecting/disconnecting. Returning None falls back to full-canvas
@@ -919,13 +956,34 @@ class App:
         canvas_w = max(1, self._window_width if self._is_mirror_mode(self._display_mode) else self._width)
         canvas_h = max(1, self._window_height if self._is_mirror_mode(self._display_mode) else self._height)
 
+        # Convert from top-left display layout coordinates to OpenGL viewport
+        # coordinates (bottom-left origin).
+        vy = canvas_h - (vy_top + ph)
+
         x0 = max(0, vx)
         y0 = max(0, vy)
         x1 = min(canvas_w, vx + pw)
         y1 = min(canvas_h, vy + ph)
         if x1 <= x0 or y1 <= y0:
             return None
-        return (x0, y0, x1 - x0, y1 - y0)
+        view = (x0, y0, x1 - x0, y1 - y0)
+        if view != self._primary_overlay_view_debug_last:
+            log.info(
+                'Primary overlay viewport: mode=%s primary_index=%d display_rect=(%d,%d,%d,%d) origin=(%d,%d) canvas=%dx%d gl_view=%s',
+                self._display_mode,
+                int(getattr(self._multihead, 'display_index', self._display_index)),
+                px,
+                py,
+                pw,
+                ph,
+                origin_x,
+                origin_y,
+                canvas_w,
+                canvas_h,
+                view,
+            )
+            self._primary_overlay_view_debug_last = view
+        return view
 
     def _splash_render_target(self) -> tuple[int, int, tuple[int, int, int, int] | None]:
         """Return splash texture size and optional destination viewport.
