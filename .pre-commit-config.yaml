@@ -13,3 +13,9 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: glsl-validate
+        name: glsl-validate
+        entry: .venv/bin/python tools/validate_glsl.py
+        language: system
+        files: ^(unicornviz/|drop-ins/).+\.py$
+        pass_filenames: true
