@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-04
+Last updated: 2026-06-14
 
 This is the canonical map for project documentation.
 
@@ -24,12 +24,16 @@ This is the canonical map for project documentation.
 - Hotkey cross-platform conflict remap plan (2026-06-03): [docs/planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md](planning/hotkey-cross-platform-conflict-remap-plan-2026-06-03.md)
 - Prioritized action plan (2026-06-03): [docs/planning/prioritized-action-plan-2026-06-03.md](planning/prioritized-action-plan-2026-06-03.md)
 - Effect tweakables backlog (2026-06-04): [docs/planning/effect-tweakables-backlog-2026-06-04.md](planning/effect-tweakables-backlog-2026-06-04.md)
-- Debug and handoff notes: [docs/debug](debug)
-  - Audio startup regression + validation hardening (2026-06-04): [docs/debug/audio-startup-regression-2026-06-04.md](debug/audio-startup-regression-2026-06-04.md)
-- Audit reports and review snapshots: [docs/audits](audits)
-  - Full system audit (2026-06-01): [docs/audits/2026-06-01-system-audit.md](audits/2026-06-01-system-audit.md)
-  - Hotkey refactor P0 hotfix brief (2026-06-01): [docs/audits/2026-06-01-hotkey-refactor-regressions.md](audits/2026-06-01-hotkey-refactor-regressions.md)
-  - 24-hour committed-work regression audit (2026-06-03): [docs/audits/2026-06-03-24h-regression-audit.md](audits/2026-06-03-24h-regression-audit.md)
+- Feature review remediation plan (2026-06-10): [docs/planning/feature-review-remediation-plan-2026-06-10.md](planning/feature-review-remediation-plan-2026-06-10.md)
+- Multi-head viewport regression tests issue (2026-06-14): [docs/planning/multihead-viewport-regression-tests-issue-2026-06-14.md](planning/multihead-viewport-regression-tests-issue-2026-06-14.md)
+- Active audit tracker: [docs/audits](audits)
+  - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
+- Archived debug and handoff notes: [docs/archive/debug](archive/debug)
+  - Audio startup regression + validation hardening (2026-06-04): [docs/archive/debug/audio-startup-regression-2026-06-04.md](archive/debug/audio-startup-regression-2026-06-04.md)
+- Archived audit reports and review snapshots: [docs/archive/audits](archive/audits)
+  - Full system audit (2026-06-01): [docs/archive/audits/2026-06-01-system-audit.md](archive/audits/2026-06-01-system-audit.md)
+  - Hotkey refactor P0 hotfix brief (2026-06-01): [docs/archive/audits/2026-06-01-hotkey-refactor-regressions.md](archive/audits/2026-06-01-hotkey-refactor-regressions.md)
+  - 24-hour committed-work regression audit (2026-06-03): [docs/archive/audits/2026-06-03-24h-regression-audit.md](archive/audits/2026-06-03-24h-regression-audit.md)
 - Historical/superseded notes: [docs/archive](archive)
 
 ## Documentation SOP
