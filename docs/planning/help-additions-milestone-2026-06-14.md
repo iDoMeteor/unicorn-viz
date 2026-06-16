@@ -1,5 +1,5 @@
 Owner: UI/Overlays
-Status: in progress (phase 1 and phase 2 landed)
+Status: in progress (phase 1, phase 2, and phase 3 landed)
 Last updated: 2026-06-16
 
 # Help Overlay Icon Rail + Section Content Milestone
@@ -116,14 +116,12 @@ Completed:
 
 Still open:
 
-1. Phase 3 cursor visibility integration has not been implemented in this milestone sequence.
-2. Phase 4 multi-head validation sweep remains to be recorded as a dedicated validation pass.
+1. Phase 4 multi-head validation sweep remains to be recorded as a dedicated validation pass.
 
 Next:
 
 1. Run dedicated multi-head/help-overlay visual validation for single/span/mirror topologies.
-2. Decide whether modal-aware cursor policy should be implemented now (phase 3) or deferred.
-3. If phase 3 is approved, add cursor visibility guard and re-run regression checks.
+2. Run an explicit cursor-behavior smoke test in each supported display mode and record results.
 
 ## Delivery Phases
 
@@ -164,7 +162,7 @@ Files:
 - `unicornviz/overlays.py`
 - `unicornviz/hotkeys.py`
 
-## Phase 3 — Cursor Visibility Integration [OPEN]
+## Phase 3 — Cursor Visibility Integration [DONE]
 
 Goal: ensure pointer visibility is modal-aware and consistent.
 

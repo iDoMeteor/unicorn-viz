@@ -1880,9 +1880,32 @@ void main() {
         except Exception:
             pass
 
+    def _cursor_modal_override_active(self) -> bool:
+        """Return True when any overlay modal/help/selector is active."""
+        overlays = getattr(self, '_overlays', None)
+        if overlays is None:
+            return False
+        visibility_flags = (
+            'help_visible',
+            'audio_selector_visible',
+            'midi_selector_visible',
+            'system_monitor_modal_visible',
+            'controller_help_modal_visible',
+            'projectm_manager_visible',
+            'webcam_editor_modal_visible',
+        )
+        for name in visibility_flags:
+            if bool(getattr(overlays, name, False)):
+                return True
+        return False
+
     def _cursor_should_be_visible(self) -> bool:
-        """Return effective cursor visibility from default setting and Ctrl hold."""
-        return self._show_cursor_default or self._ctrl_held
+        """Return effective cursor visibility from base policy + modal override."""
+        return (
+            self._show_cursor_default
+            or self._ctrl_held
+            or self._cursor_modal_override_active()
+        )
 
     def _update_ctrl_state(self, sym: int, is_keydown: bool) -> None:
         if sym in (sdl2.SDLK_LCTRL, sdl2.SDLK_RCTRL):
@@ -2435,6 +2458,7 @@ void main() {
                     ):
                         log.info('SDL display topology change detected; rebuilding multi-head outputs')
                         self._rebuild_multihead_outputs()
+            self._set_cursor_visible(self._cursor_should_be_visible())
             if perf_debug_enabled:
                 perf_after_events = time.perf_counter()
 
