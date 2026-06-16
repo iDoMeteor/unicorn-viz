@@ -1,8 +1,8 @@
 # Audit Response Plan
 
 This file turns the findings in:
-- `audits/2026-05-09-code-audit.md`
-- `audits/2026-05-09-feature-enhancements.md`
+- `docs/archive/legacy-root-audits/2026-05-09-code-audit.md`
+- `docs/archive/legacy-root-audits/2026-05-09-feature-enhancements.md`
 
 into an execution strategy.
 

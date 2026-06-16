@@ -117,7 +117,26 @@ class CopperBars(BaseEffect):
     NAME = "Copper Bars"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "amiga", "audio"]
-    PING_PONG_FRIENDS = ['Sine Scroller 2.0', 'Plasma', 'Vector']
+    PING_PONG_FRIENDS = [
+        'Sine Scroller 3.1',
+        'Plasma',
+        'Vector',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Particle Storm',
+        'Prism Lattice',
+        'Psychedelic',
+        'Starfield',
+        'Tunnel',
+        'Unicorn Tears',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Breakout',
+    ]
 
     def _init(self) -> None:
         self.parameters = {

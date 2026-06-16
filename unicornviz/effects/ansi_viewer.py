@@ -114,7 +114,7 @@ class ANSIViewer(BaseEffect):
     NAME = "ANSI Viewer"
     AUTHOR = "unicorn-viz"
     TAGS = ["ansi", "classic", "audio"]
-    PING_PONG_FRIENDS = ['Sine Scroller 2.0', 'Copper Bars', 'System Monitor']
+    PING_PONG_FRIENDS: list[str] = []
 
     def _init(self) -> None:
         self.parameters = {

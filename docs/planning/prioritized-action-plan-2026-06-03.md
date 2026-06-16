@@ -2,7 +2,7 @@
 
 Owner: Engineering
 Status: active
-Last updated: 2026-06-05
+Last updated: 2026-06-12
 
 ## Progress Update (2026-06-03)
 
@@ -23,6 +23,23 @@ Last updated: 2026-06-05
 - Still required for closure:
    - Owner runtime validation pass on Fedora 44 mixed-size layout for final Display Modes signoff.
 
+## Q&A Decisions (2026-06-12)
+
+- Keep: P0 global runtime state architecture (single state file + incremental updates).
+- Keep: full feature-review completion + owner signoff.
+- Defer/external follow-up: Auto VJ beat-detection deep rewrite (mostly complete / not primary gate now).
+- Keep (targeted): Linux control-room follow-up; current pain points are
+   windowed scaling drift and fullscreen crash after first frame.
+- Keep: multi-head span-mode scaling/alignment deferred bug.
+- Keep: remove private-field coupling on `_ctrlj_armed` by promoting public surface.
+- Done: Unicorn Tears help-text mismatch item.
+- Keep: app monolith decomposition as maintainability backlog.
+- Do now: docs metadata-header cleanup tracked under P2 docs pipeline rollout.
+- Reject from active planning: Fedora deferred non-blockers.
+- Reject from active planning: old May audit backlog as active gate items.
+- Policy lock: do not pursue Wayland keyboard-grab restoration; do not restore
+   ACiD/dual-source ANSI switching.
+
 ## Purpose
 
 Consolidate outstanding work from audit reports, debug handoffs, and planning docs
@@ -31,14 +48,14 @@ into one execution order that can be worked down without reopening every source 
 ## Source documents reviewed
 
 - plan.md
-- audits/fedora-44-prep.md
-- audits/2026-05-09-code-audit.md
-- audits/2026-05-14-code-audit.md
-- audits/multi-head-2026-05-10.md
-- docs/audits/2026-06-01-system-audit.md
-- docs/audits/2026-06-01-hotkey-refactor-regressions.md
+- docs/archive/legacy-root-audits/fedora-44-prep.md
+- docs/archive/legacy-root-audits/2026-05-09-code-audit.md
+- docs/archive/legacy-root-audits/2026-05-14-code-audit.md
+- docs/archive/legacy-root-audits/multi-head-2026-05-10.md
+- docs/archive/audits/2026-06-01-system-audit.md
+- docs/archive/audits/2026-06-01-hotkey-refactor-regressions.md
 - docs/audits/feature-review.md
-- docs/debug/control-room-debug-handoff.md
+- docs/archive/debug/control-room-debug-handoff.md
 - docs/planning/beta-1-cut-checklist-2026-05-24.md
 - docs/planning/installers.md
 - docs/planning/recording-implementation-plan.md
@@ -94,6 +111,24 @@ into one execution order that can be worked down without reopening every source 
    Acceptance criteria:
    - each open F44 item has either a landed fix or an explicit non-blocking beta policy
 
+4. Global runtime state persistence architecture (replace one-off state files).
+    Status:
+    - New on 2026-06-12 (P0)
+    Why:
+    - runtime currently persists audio source state in a dedicated file while
+       other mutable runtime/operator state is fragmented or exit-dependent
+    Scope:
+    - design and implement a single global runtime state file under project root
+    - migrate existing `.audio_source_state.json` usage into the global state schema
+    - persist state incrementally on runtime changes (no save-at-exit-only model)
+    - define scope boundaries: persist operator/runtime preferences only, never
+       transient per-frame signal data
+    Acceptance criteria:
+    - one canonical state file is the only persisted runtime state surface
+    - audio source selection/viability and other approved runtime selectors are
+       updated immediately on change and restored correctly on startup
+    - no behavior depends solely on end-of-process flush for correctness
+
 ## P1 Workstream (Beta readiness)
 
 4. Execute and complete the full feature-review matrix.
@@ -112,11 +147,27 @@ into one execution order that can be worked down without reopening every source 
    Why:
    - beta cut checklist still carries open release-critical items
    Scope:
-   - finalize ProjectM primary-machine validation status
    - run combined recording and streaming soak validation
    - finalize drop-in dependency contract for beta channel messaging
    Acceptance criteria:
    - all top-10 checklist items are either done or explicitly deferred with owner/date
+
+7. Linux control-room follow-up (targeted crash/scale fixes).
+   Why:
+   - Windows path is stable, but Linux still needs targeted runtime fixes
+   Scope:
+   - resolve windowed scaling/alignment drift in control-room view
+   - resolve fullscreen-mode crash after first rendered frame
+   Acceptance criteria:
+   - repeated open/close and fullscreen/windowed transitions remain stable in Linux runs
+
+8. Multi-head span-mode scaling/alignment deferred issue.
+   Why:
+   - known visual correctness bug still open in subsystem docs
+   Scope:
+   - reproduce on owner topology and land stable span-mode alignment correction
+   Acceptance criteria:
+   - no span-mode scaling drift across display-mode transitions and resize/topology events
 
 6. Installer and distribution ownership actions from installers plan.
    Why:
@@ -130,7 +181,7 @@ into one execution order that can be worked down without reopening every source 
 
 ## P2 Workstream (Hardening and maintainability)
 
-7. Drop-in loader and startup hardening from system audit.
+9. Drop-in loader and startup hardening from system audit.
    Why:
    - system audit still tracks startup inefficiency and module identity risk
    Scope:
@@ -140,7 +191,7 @@ into one execution order that can be worked down without reopening every source 
    - one file path maps to one module load per process
    - startup log and timing confirm reduced duplicate loading
 
-8. Repository hygiene and stale artifact cleanup.
+10. Repository hygiene and stale artifact cleanup.
    Why:
    - stale build outputs and historical drift increase audit noise and editing risk
    Scope:
@@ -149,11 +200,12 @@ into one execution order that can be worked down without reopening every source 
    Acceptance criteria:
    - no tracked build shadow copies remain
 
-9. Documentation quality pipeline rollout.
+11. Documentation quality pipeline rollout + metadata cleanup.
    Why:
    - docs CI/CD plan remains draft while planning/audit drift keeps recurring
    Scope:
    - implement Stage 1 PR validation in warning mode
+   - resolve current metadata-header warning backlog in maintained docs
    - baseline metadata and link integrity
    Acceptance criteria:
    - docs pipeline runs on PRs and nightly checks
@@ -161,7 +213,7 @@ into one execution order that can be worked down without reopening every source 
 
 ## P3 Workstream (Backlog and expansion)
 
-10. Product-expansion planning items after beta gates clear.
+12. Product-expansion planning items after beta gates clear.
     Scope examples:
     - drop-in ecosystem expansions from drop-in planning and plan.md
     - cross-platform hotkey remap rollout after stabilization cycle
@@ -174,25 +226,28 @@ into one execution order that can be worked down without reopening every source 
 1. P0.1 runtime stability closure (completed 2026-06-03)
 2. P0.2 hotkey crash-path + audit truth-sync (completed 2026-06-03)
 3. P0.3 Fedora open-item closure/reclassification (completed 2026-06-03)
-4. P1.4 full feature-review execution
-5. P1.5 beta checklist closeout
-6. P1.6 installer ownership closure
-7. P2.7 drop-in loader hardening
-8. P2.8 repo hygiene cleanup
-9. P2.9 docs pipeline stage-1 rollout
-10. P3 backlog execution
+4. P0.4 global runtime state persistence architecture
+5. P1.4 full feature-review execution
+6. P1.5 beta checklist closeout
+7. P1.6 installer ownership closure
+8. P1.7 Linux control-room targeted fixes
+9. P1.8 multi-head span-mode scaling/alignment fix
+10. P2.9 drop-in loader hardening
+11. P2.10 repo hygiene cleanup
+12. P2.11 docs pipeline + metadata cleanup
+13. P3 backlog execution
 
 ## Next Items (Current)
 
-1. P1.4: continue feature-review execution, with owner runtime signoff for Display Modes as the first interactive checkpoint.
-2. P1.5: beta checklist closeout (ProjectM primary-machine status, recording/streaming soak, dependency contract messaging).
-3. P1.6: installer/distribution ownership closure.
+1. P0.4: design and land global runtime state file + incremental state updates.
+2. P1.4: continue feature-review execution, with owner runtime signoff for Display Modes as the first interactive checkpoint.
+3. P2.11: run docs metadata cleanup pass now (clear current warning set), then keep docs checks in warning mode until baseline stays clean.
 
 ## Suggested operating cadence
 
 - Run work in 1-week slices with end-of-slice truth-sync updates to:
-  - docs/audits/2026-06-01-system-audit.md
-  - docs/audits/2026-06-01-hotkey-refactor-regressions.md
+   - docs/archive/audits/2026-06-01-system-audit.md
+   - docs/archive/audits/2026-06-01-hotkey-refactor-regressions.md
   - docs/planning/beta-1-cut-checklist-2026-05-24.md
   - plan.md
 - Keep each slice tied to one dominant risk class.

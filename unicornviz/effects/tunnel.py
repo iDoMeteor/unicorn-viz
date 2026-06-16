@@ -157,7 +157,28 @@ class Tunnel(BaseEffect):
     NAME   = "Tunnel"
     AUTHOR = "unicorn-viz"
     TAGS   = ["classic", "audio", "futuristic"]
-    PING_PONG_FRIENDS = ['Plasma', 'Wavey Gravy', 'Particle Storm', 'ProjectM Presets']
+    PING_PONG_FRIENDS = [
+        'Plasma',
+        'Wavey Gravy',
+        'Particle Storm',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Starfield',
+        'Van Gogh',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Alien Invasion',
+        'Hacker Terminal',
+        'Cyber War',
+        'Unicorn Tears',
+        'Cosmos',
+    ]
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0)), "vignette": 0.0}

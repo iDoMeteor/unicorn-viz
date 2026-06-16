@@ -8,9 +8,9 @@ Scope audited:
 - docs/planning/drop-in-planning.md
 - docs/planning/installers.md
 - drop-ins/auto-vj-01/PLAN.md
-- docs/debug/control-room-debug-handoff.md
+- docs/archive/debug/control-room-debug-handoff.md
 - docs/planning/recording-implementation-plan.md
-- docs/audits/dropin-audit-report-2026-05-19.md
+- docs/archive/audits/dropin-audit-report-2026-05-19.md
 
 Method:
 1. Extract done/todo/pre-release claims from planning docs.
@@ -91,7 +91,7 @@ Method:
 4. Control-room live stability issue remains open
 - Current state:
   - Handoff still identifies operator-window starvation/freeze as unresolved risk
-- Evidence: docs/debug/control-room-debug-handoff.md
+- Evidence: docs/archive/debug/control-room-debug-handoff.md
 - Classification: Open (accurately marked)
 
 5. Recording long-run audio stability remains open
@@ -121,7 +121,7 @@ Method:
 - But grand-finale-01 implementation exists with trigger/abort path.
 - Classification: Stale doc status
 
-5. docs/audits/dropin-audit-report-2026-05-19.md states submodule registration is 14/17
+5. docs/archive/audits/dropin-audit-report-2026-05-19.md states submodule registration is 14/17
 - Current .gitmodules shows those previously missing modules are now submodules.
 - Classification: Snapshot stale (historical report, not current state)
 
@@ -154,7 +154,7 @@ Notes:
 - Move grand-finale system from todo to done (or split into implemented + polish/hardening todo).
 - Reword scroll-wheel item from design todo to implementation tune/validation todo.
 
-3. Treat docs/audits/dropin-audit-report-2026-05-19.md as historical snapshot:
+3. Treat docs/archive/audits/dropin-audit-report-2026-05-19.md as historical snapshot:
 - Keep report immutable, but add a short note in docs/planning index or release notes that submodule migration state has changed since that audit.
 
 ---

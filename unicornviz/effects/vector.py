@@ -188,7 +188,7 @@ class Vector(BaseEffect):
     NAME = "Vector"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "demoscene", "3d", "audio"]
-    PING_PONG_FRIENDS = ['3D Cube']
+    PING_PONG_FRIENDS = ['3D Cube', 'Disco Ball']
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

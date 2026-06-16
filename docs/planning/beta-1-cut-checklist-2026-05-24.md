@@ -27,7 +27,7 @@ Cut a tagged pre-release beta where:
 
 ~~2. Resolve control-room runtime starvation or ship control-room disabled by default~~
 - ~~Why: Known risk of audience output freeze while control room window is open.~~
-- ~~Source: docs/debug/control-room-debug-handoff.md~~
+- ~~Source: docs/archive/debug/control-room-debug-handoff.md~~
 - ~~Exit criteria:~~
   - ~~Repro test no longer freezes in single/span/mirror~~
   - ~~If unresolved, explicit beta policy: control-room disabled + documented known issue~~
@@ -38,7 +38,7 @@ Cut a tagged pre-release beta where:
 
 3. Finish Auto VJ beat-tracker live hardening for remaining low-BPM under-lock edge cases
 - Why: Remaining music-correctness blocker despite major v2 progress.
-- Source: docs/debug/auto-vj-handoff-2026-05-21.md
+- Source: docs/archive/debug/auto-vj-handoff-2026-05-21.md
 - Exit criteria:
   - Live validation against known slow/medium tracks
   - Harness metrics do not regress vs current baseline

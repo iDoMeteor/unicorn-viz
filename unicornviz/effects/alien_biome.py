@@ -97,7 +97,7 @@ class AlienBiome(BaseEffect):
     TAGS = ["sci-fi", "audio", "shader"]
     SPEED_TIME_BIAS = 0.35
     SPEED_TIME_SCALE = 0.9
-    PING_PONG_FRIENDS = ['Tunnel', 'Plasma', 'Psychedelic']
+    PING_PONG_FRIENDS = ['Tunnel', 'Plasma', 'Psychedelic', 'Unicorn Tears']
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

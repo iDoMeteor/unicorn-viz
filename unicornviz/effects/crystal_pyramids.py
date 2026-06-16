@@ -218,7 +218,22 @@ class CrystalPyramids(BaseEffect):
     TAGS = ["futuristic", "audio", "mythic", "crystal"]
     SPEED_TIME_BIAS = 0.42
     SPEED_TIME_SCALE = 0.70
-    PING_PONG_FRIENDS = ['Particle Storm', 'Prism Storm', 'Vector']
+    PING_PONG_FRIENDS = [
+        'Particle Storm',
+        'Prism Lattice',
+        'Vector',
+        'Fireworks',
+        'Hexy Stars',
+        'Plasma',
+        'Sine Scroller 3.1',
+        'Tunnel',
+        'Unicorn Tears',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Cyber War',
+    ]
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

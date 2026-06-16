@@ -120,7 +120,7 @@ class Dali(BaseEffect):
     TAGS = ["art", "surreal", "audio"]
     SPEED_TIME_BIAS = 0.35
     SPEED_TIME_SCALE = 0.75
-    PING_PONG_FRIENDS = ['Escher', 'Van Gogh', 'Psychedelic']
+    PING_PONG_FRIENDS = ['Escher', 'Van Gogh', 'Psychedelic', 'Unicorn Tears']
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

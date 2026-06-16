@@ -18,10 +18,12 @@ _VERT_BARS = """
 in  vec2  in_pos;
 in  float in_mag;
 in  vec3  in_col;
+out vec2  v_pos;
 out float v_mag;
 out vec3  v_col;
 void main() {
     gl_Position = vec4(in_pos, 0.0, 1.0);
+    v_pos = in_pos;
     v_mag = in_mag;
     v_col = in_col;
 }
@@ -29,11 +31,38 @@ void main() {
 
 _FRAG_BARS = """
 #version 330
+uniform float iTime;
+uniform float iBass;
+uniform float iTreble;
+uniform float iGlow;
+uniform float iReactivity;
+in  vec2  v_pos;
 in  float v_mag;
 in  vec3  v_col;
 out vec4  fragColor;
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 void main() {
-    fragColor = vec4(v_col * (0.6 + v_mag * 0.4), 1.0);
+    vec2 cell = floor((v_pos + 1.0) * vec2(12.0, 8.0));
+    vec2 local_uv = fract((v_pos + 1.0) * vec2(12.0, 8.0));
+    float seed = hash(cell + floor(iTime * 4.0));
+    vec2 spark_pos = vec2(hash(cell + 1.37), hash(cell + 3.91));
+    float spark = smoothstep(0.28, 0.0, distance(local_uv, spark_pos));
+    spark *= smoothstep(0.995, 1.0, seed);
+
+    float core = smoothstep(0.48, 0.0, distance(local_uv, vec2(0.5)));
+    float shimmer = 0.65 + 0.35 * sin(iTime * 5.5 + v_pos.y * 18.0 + v_mag * 10.0);
+    float glow = clamp(0.50 + v_mag * 0.42 + iGlow * 0.18 + core * 0.24, 0.35, 1.0);
+    float reactivity = clamp(iReactivity, 0.1, 1.2);
+    float intensity = 0.58 + v_mag * (0.26 + iBass * 0.20) * reactivity;
+    vec3 sparkle_col = mix(v_col, vec3(1.0, 0.96, 0.72), 0.55);
+    vec3 col = v_col * intensity;
+    col += v_col * core * (0.18 + iGlow * 0.10) * shimmer * reactivity;
+    col += sparkle_col * spark * (0.45 + iTreble * 0.70) * reactivity;
+    fragColor = vec4(clamp(col, 0.0, 1.0), glow);
 }
 """
 
@@ -271,10 +300,20 @@ class AudioSpectrum(BaseEffect):
     NAME = "Audio Spectrum"
     AUTHOR = "unicorn-viz"
     TAGS = ["audio", "visualizer"]
-    PING_PONG_FRIENDS = ['System Monitor', 'Particle Storm', 'Plasma']
+    PING_PONG_FRIENDS = [
+        'Audio Spectrogram',
+        'Audio Tracks',
+        'Audio Waveforms',
+        'Sine Scroller 3.1',
+        'Unicorn Tears',
+    ]
 
     def _init(self) -> None:
-        self.parameters = {"mode": 2, "glow": 1.0}
+        self.parameters = {
+            "mode": 2,
+            "glow": 1.0,
+            "reactivity": max(0.1, min(1.2, float(self.config.get('reactivity', 1.0)))),
+        }
         self.scale_when_framed = bool(self.config.get('scale_when_framed', True))
 
         self._nebula_prog = self._make_program(_VERT_FULL, _FRAG_NEBULA)
@@ -450,6 +489,11 @@ class AudioSpectrum(BaseEffect):
             bar_data, n_bar_verts = self._build_bars()
             if bar_data.nbytes <= self._bar_vbo.size:
                 self._bar_vbo.write(bar_data)
+                self._bar_prog["iTime"].value = self.time
+                self._bar_prog["iBass"].value = self._bass
+                self._bar_prog["iTreble"].value = self._treble
+                self._bar_prog["iGlow"].value = float(self.parameters["glow"])
+                self._bar_prog["iReactivity"].value = float(self.parameters["reactivity"])
                 self._bar_vao.render(moderngl.TRIANGLES, vertices=n_bar_verts)
 
         # Keep squiggle waveform only in dedicated oscilloscope mode.

@@ -60,6 +60,8 @@
 - `[todo]` Design external plugin loading for paid effect packs.
 - `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
 - `[done]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with beat-context snapshot (bpm, beat_phase, energy, vj_mode) per keypress; gated by `[keystrokes] enabled = false`.
+- `[todo]` Execute feature-review remediation plan (2026-06-10) and close all open P0/P1 findings before release gating.
+- `[todo]` P0 runtime-state architecture: replace one-off state files with a single global runtime state file and incremental in-session persistence updates.
 - `[todo]` Add config gate for multi-display overlay scoping (base behavior is landed: help/HUD now render on primary display in `span_all` / `mirror_all`).
 - `[done]` Design and implement a "grand finale" effect sequence for set-ending moments (audio-linked crescendo + controlled cooldown).
 - `[todo]` Design Drop strategy pivot from effect-tag targeting toward post-fx profile targeting (hard-hit look first, effect swap second).

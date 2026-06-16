@@ -182,7 +182,26 @@ class ParticleStorm(BaseEffect):
     NAME   = "Particle Storm"
     AUTHOR = "unicorn-viz"
     TAGS   = ["futuristic", "audio", "particles"]
-    PING_PONG_FRIENDS = ['Crystal Pyramids', 'Tunnel', 'Vector']
+    PING_PONG_FRIENDS = [
+        'Crystal Pyramids',
+        'Tunnel',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Plasma',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Starfield',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Hacker Terminal',
+        'Cyber War',
+    ]
 
     # 7 floats per particle: pos(2) vel(2) life(1) seed(1) hue(1)
     _STRIDE = 7 * 4

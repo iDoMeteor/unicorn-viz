@@ -127,7 +127,27 @@ class SystemMonitor(BaseEffect):
     NAME = 'Hexy Stars'
     AUTHOR = 'Autopilot'
     TAGS = ['futuristic', 'audio', 'stars', 'hex']
-    PING_PONG_FRIENDS = ['Audio Spectrum', 'Hacker Terminal', 'Cyber War']
+    PING_PONG_FRIENDS = [
+        'Hacker Terminal',
+        'Cyber War',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Metaballs',
+        'Particle Storm',
+        'Plasma',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Starfield',
+        'Tunnel',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Alien Invasion',
+        'Unicorn Tears',
+    ]
 
     def _init(self) -> None:
         self.parameters = {

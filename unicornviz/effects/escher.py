@@ -100,7 +100,19 @@ class Escher(BaseEffect):
     TAGS = ["art", "optical", "audio"]
     SPEED_TIME_BIAS = 0.35
     SPEED_TIME_SCALE = 0.8
-    PING_PONG_FRIENDS = ['Dali', 'Van Gogh', 'Vector']
+    PING_PONG_FRIENDS = [
+        'Van Gogh',
+        'Hexy Stars',
+        'Particle Storm',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Tunnel',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Hacker Terminal',
+    ]
 
     def _init(self) -> None:
         self.scale_when_framed = bool(self.config.get('scale_when_framed', True))

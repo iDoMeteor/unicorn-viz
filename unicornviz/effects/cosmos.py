@@ -113,7 +113,27 @@ class Cosmos(BaseEffect):
     TAGS = ["space", "audio", "shader"]
     SPEED_TIME_BIAS = 0.2
     SPEED_TIME_SCALE = 0.8
-    PING_PONG_FRIENDS = ['Starfield', 'Alien Invasion']
+    PING_PONG_FRIENDS = [
+        'Starfield',
+        'Alien Invasion',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Particle Storm',
+        'Plasma',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Tunnel',
+        'Unicorn Tears',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Breakout',
+    ]
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

@@ -79,6 +79,10 @@ _DEFAULTS: dict[str, Any] = {
         "duration_audio": 7.0,
         "duration_silent": 4.0,
     },
+    "spotify": {
+        "now_playing_banner": True,
+        "now_playing_banner_hold_s": 20.0,
+    },
     "playlist": {
         "sequence": [],
         "start_effect": "Audio Spectrum",

@@ -151,7 +151,28 @@ class SineScroller(BaseEffect):
     NAME = 'Sine Scroller 3.1'
     AUTHOR = 'unicorn-viz'
     TAGS = ['classic', 'audio', 'futuristic', 'neon', 'lasers']
-    PING_PONG_FRIENDS = ['Copper Bars', 'Vector', 'ANSI Viewer']
+    PING_PONG_FRIENDS = [
+        'Copper Bars',
+        'Audio Spectrum',
+        'Audio Spectrogram',
+        'Audio Tracks',
+        'Audio Waveforms',
+        'Hexy Stars',
+        'Metaballs',
+        'Plasma',
+        'Prism Lattice',
+        'Psychedelic',
+        'Tunnel',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Alien Invasion',
+        'Hacker Terminal',
+        'Cyber War',
+        'Unicorn Tears',
+        'Breakout',
+    ]
 
     def _init(self) -> None:
         self.parameters = {

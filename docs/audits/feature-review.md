@@ -590,13 +590,13 @@ Format:
 
 #### Built-in effects
 
-- Fractal Zoom (`fractal_zoom`): Rating 8.5 | Visual 9 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P1
+- Fractal Zoom (`fractal_zoom`): Rating 8.5 | Visual 9 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority done
    - Notes: Very beautiful fractal now but still starts too similarly and can get stuck in background/foreground framing, losing fractals out of frame over time.
 
 - Kaleidoscope (`kaleidoscope`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
    - Notes: Fully dialed-in benchmark quality.
 
-- Metaballs (`metaballs`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P3
+- Metaballs (`metaballs`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Very intense current version; consider slightly reducing default ball-splitting pace.
 
 - Particle Storm (`particle_storm`): Rating 7.5 | Visual 7.5 | Audio 7.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
@@ -605,25 +605,25 @@ Format:
 - Plasma (`plasma`): Rating 9 | Visual 9 | Audio 8.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
    - Notes: Newer version is quite strong.
 
-- Psychedelic (`psychedelic`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P2
+- Psychedelic (`psychedelic`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Solid newer pass; zoom control requested.
 
-- Sine Scroller 2.0 (`sine_scroller`): Rating 6 | Visual 5 | Audio 9 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P0
+- Sine Scroller 2.0 (`sine_scroller`): Rating 6 | Visual 5 | Audio 9 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority done
    - Notes: Concept still good, but operator requests a full 3.0 rewrite toward modern neon/lazer visual identity.
 
-- Starfield (`starfield`): Rating 7 | Visual 7 | Audio 7 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P1
+- Starfield (`starfield`): Rating 7 | Visual 7 | Audio 7 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Pleasant interlude but needs more life over time and stronger music-ray interaction.
 
-- System Monitor (`system_monitor`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P0
+- System Monitor (`system_monitor`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Strong utility value; operator requests clearer labels and a special-tool hotkey path instead of normal rotation.
 
 - Tunnel (`tunnel`): Rating 9 | Visual 9 | Audio 8.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
    - Notes: Strong favorite and stable in all display modes.
 
-- Van Gogh (`van_gogh`): Rating 9.5 | Visual 9.5 | Audio 9.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P2
+- Van Gogh (`van_gogh`): Rating 9.5 | Visual 9.5 | Audio 9.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Excellent current result; request for longer-view color/variation evolution.
 
-- Vector (`vector`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P1
+- Vector (`vector`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Requested enhancement: pulsing beads/racers traveling along vector paths.
 
 - Wavey Gravy (`alien_biome`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
@@ -631,16 +631,16 @@ Format:
 
 #### Drop-in visual effects
 
-- Hacker Terminal (`hacker-terminal-01`): Rating 7 | Visual 7 | Audio 5 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority P0
+- Hacker Terminal (`hacker-terminal-01`): Rating 7 | Visual 7 | Audio 5 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority done
    - Notes: Strong potential with VJ, weak standalone response; explicit speed control requested; stronger audio-reactive behavior needed.
 
-- Prism Storm (`textures-01`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P3
+- Prism Storm (`textures-01`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Visual quality is strong but naming/theme alignment requested (currently reads more tunnel-like than prism-like).
 
 - Tron Grid (`tron-grid-01`): Rating 9.5 | Visual 9.5 | Audio 9.5 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
    - Notes: Operator favorite; considered highly polished.
 
-- Unicorn Tears (`unicorn-tears-01`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority P0
+- Unicorn Tears (`unicorn-tears-01`): Rating 10 | Visual 10 | Audio 10 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Flagship quality; fix requested for dancing-unicorn avatar anchoring/scale origin to avoid top-edge blank-space drift inside heart composites.
 
 ### 2026-06-04 Implementation Status Update (Effect-Priority Batch)
@@ -658,6 +658,16 @@ Format:
 
 - P2 implemented:
    - Psychedelic zoom tweakable landed.
+
+### 2026-06-12 Implementation Status Update
+
+- Marked done (deferred or accepted as-is):
+   - Sine Scroller — accepted as complete at current 3.x state.
+   - System Monitor — accepted as complete at current state.
+   - Vector — motion-accent attempt reverted; accepted as-is for now.
+- P1 effects completed today:
+   - Alien Invasion startup randomization landed (drop-in commit 1136b37).
+   - Fractal Zoom scene variation expanded (main repo commit d94febe).
    - Van Gogh long-view variation/evolution pass landed.
 
 - P3 implemented:

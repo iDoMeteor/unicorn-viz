@@ -135,7 +135,7 @@ class VanGogh(BaseEffect):
     TAGS = ["art", "audio", "shader"]
     SPEED_TIME_BIAS = 0.3
     SPEED_TIME_SCALE = 0.8
-    PING_PONG_FRIENDS = ['Dali', 'Escher', 'Psychedelic']
+    PING_PONG_FRIENDS = ['Dali', 'Escher', 'Psychedelic', 'Unicorn Tears']
 
     def _init(self) -> None:
         self.scale_when_framed = bool(self.config.get('scale_when_framed', True))

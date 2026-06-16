@@ -3066,9 +3066,9 @@ void main() {
         if not entries:
             return 0.0
 
-        band_h = max(66.0, 60.0 * help_scale)
+        band_h = max(78.0, 72.0 * help_scale)
         tile = max(37.0, min(50.0, 42.5 * help_scale))
-        gap = max(10.0, 12.0 * help_scale)
+        gap = max(14.0, 16.0 * help_scale)
         pad_x = max(8.0, 10.0 * help_scale)
         pad_y = max(6.0, 8.0 * help_scale)
         cell_w = tile + pad_x * 2.0
@@ -3076,7 +3076,7 @@ void main() {
 
         total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
         start_x = x + max(0.0, (w - total_w) * 0.5)
-        rail_y = y + 10.0
+        rail_y = y + max(0.0, (band_h - cell_h) * 0.5)
 
         self._draw_rect(x + 20.0, y + band_h - 4.0, w - 40.0, 2.0, (1.0, 0.70, 0.24, 0.42))
 
@@ -3411,20 +3411,20 @@ void main() {
         res_ratio = min(self._width, self._height) / 1080.0
         help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
         icon_band_y = py + 100.0
-        band_h = max(66.0, 60.0 * help_scale)
+        band_h = max(78.0, 72.0 * help_scale)
         entries = self._help_icon_entries()
         if not entries:
             return False
 
         tile = max(37.0, min(50.0, 42.5 * help_scale))
-        gap = max(10.0, 12.0 * help_scale)
+        gap = max(14.0, 16.0 * help_scale)
         pad_x = max(8.0, 10.0 * help_scale)
         pad_y = max(6.0, 8.0 * help_scale)
         cell_w = tile + pad_x * 2.0
         cell_h = tile + pad_y * 2.0
         total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
         start_x = px + max(0.0, (pw - total_w) * 0.5)
-        rail_y = icon_band_y + 10.0
+        rail_y = icon_band_y + max(0.0, (band_h - cell_h) * 0.5)
 
         if y < icon_band_y or y > icon_band_y + band_h:
             return False

@@ -10,6 +10,8 @@ enabled = false
 player = "spotify"
 poll_interval_s = 0.75
 command_timeout_s = 0.25
+now_playing_banner = true
+now_playing_banner_hold_s = 10.0
 # features_file = "assets/audio/spotify_features.json"
 
 [spotify.web_api]
@@ -37,6 +39,8 @@ resolve_playlist_context = true
 - `player`: MPRIS player name passed to `playerctl --player=<name>`.
 - `poll_interval_s`: Metadata poll cadence in seconds.
 - `command_timeout_s`: Per-command timeout guard in seconds.
+- `now_playing_banner`: Enables the top-pinned track-change banner.
+- `now_playing_banner_hold_s`: Time in seconds before the banner slides out.
 - `features_file`: Optional JSON map keyed by Spotify track id with feature payload.
 
 ## Web API Keys

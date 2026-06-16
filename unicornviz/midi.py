@@ -377,7 +377,15 @@ class MidiManager:
         if not self._device_hint:
             log.info('MIDI: disabled (device hint is empty)')
             return
-        self._open_ports(self._device_hint)
+        hint = self._device_hint
+        if not self._open_ports(hint):
+            # Disable background maintenance polling until the operator explicitly
+            # selects a MIDI device again from the runtime selector.
+            self._device_hint = ''
+            log.info(
+                'MIDI: startup device %r unavailable; polling disabled until explicit selection',
+                hint,
+            )
 
     def reopen(self, device_hint: str) -> bool:
         """
@@ -395,7 +403,12 @@ class MidiManager:
         if not _RTMIDI_OK:
             log.warning('MIDI: rtmidi unavailable — cannot reopen')
             return False
-        return self._open_ports(device_hint)
+        ok = self._open_ports(device_hint)
+        if not ok:
+            # Avoid repeated ALSA sequencer probing noise when the requested
+            # device is absent; keep MIDI disabled until next explicit select.
+            self._device_hint = ''
+        return ok
 
     def maintenance_update(self) -> None:
         """Best-effort hotplug maintenance for reconnect/disconnect handling."""

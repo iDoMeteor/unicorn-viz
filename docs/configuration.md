@@ -161,6 +161,18 @@ Notes:
 
 ---
 
+## `[spotify]`
+
+| Key                         | Type   | Default | Description |
+|-----------------------------|--------|---------|-------------|
+| `now_playing_banner`        | bool   | `true`  | Show a top-pinned now-playing banner when Spotify starts a new track. |
+| `now_playing_banner_hold_s` | float  | `10.0`  | How long the Spotify banner stays visible before sliding out. |
+
+Notes:
+- The banner is independent from `[overlays].flash_messages`, so Spotify can surface track-change notices even when general flash popups are disabled.
+
+---
+
 ## `[ansi]`
 
 | Key              | Type | Default              | Description                                                              |

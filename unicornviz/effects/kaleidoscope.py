@@ -158,7 +158,28 @@ class Kaleidoscope(BaseEffect):
     NAME   = 'Kaleidoscope'
     AUTHOR = 'unicorn-viz'
     TAGS   = ['classic', 'audio', 'psychedelic']
-    PING_PONG_FRIENDS = ['Fractal Zoom', 'Psychedelic', 'Unicorn Tears', 'ProjectM Presets']
+    PING_PONG_FRIENDS = [
+        'Fractal Zoom',
+        'Psychedelic',
+        'Unicorn Tears',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Particle Storm',
+        'Plasma',
+        'Prism Lattice',
+        'Sine Scroller 3.1',
+        'Starfield',
+        'Tunnel',
+        'Van Gogh',
+        'Wavey Gravy',
+        'Tron Grid',
+        'Alien Invasion',
+        'Hacker Terminal',
+        'Cyber War',
+    ]
 
     def _init(self) -> None:
         self.parameters = {

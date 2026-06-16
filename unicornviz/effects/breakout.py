@@ -190,7 +190,25 @@ class Breakout(BaseEffect):
     NAME = 'Breakout'
     AUTHOR = 'Copilot'
     TAGS = ['classic', 'audio', 'futuristic', 'arcade']
-    PING_PONG_FRIENDS = ['Vector', 'Tron Grid', 'Kaleidoscope']
+    PING_PONG_FRIENDS = [
+        'Tron Grid',
+        'Kaleidoscope',
+        'Copper Bars',
+        'Escher',
+        'Fireworks',
+        'Hexy Stars',
+        'Metaballs',
+        'Particle Storm',
+        'Plasma',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Starfield',
+        'Tunnel',
+        'Unicorn Tears',
+        'Van Gogh',
+        'Wavey Gravy',
+    ]
 
     GRID_COLS = 12
     GRID_ROWS = 7

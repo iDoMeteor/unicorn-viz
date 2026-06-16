@@ -147,7 +147,7 @@ class Cube3D(BaseEffect):
     NAME = "3D Cube"
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "3d", "audio"]
-    PING_PONG_FRIENDS = ['Vector']
+    PING_PONG_FRIENDS = ['Vector', 'Disco Ball']
 
     def _init(self) -> None:
         self.parameters = {"speed": float(self.config.get("speed", 1.0))}

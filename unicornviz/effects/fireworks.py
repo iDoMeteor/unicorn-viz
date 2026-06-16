@@ -218,7 +218,21 @@ class Fireworks(BaseEffect):
     NAME   = "Fireworks"
     AUTHOR = "unicorn-viz"
     TAGS   = ["classic", "audio", "particles", "celebration"]
-    PING_PONG_FRIENDS = ['Starfield', 'Cosmos', 'Plasma']
+    PING_PONG_FRIENDS = [
+        'Starfield',
+        'Cosmos',
+        'Plasma',
+        'Hexy Stars',
+        'Metaballs',
+        'Particle Storm',
+        'Prism Lattice',
+        'Psychedelic',
+        'Sine Scroller 3.1',
+        'Tunnel',
+        'Tron Grid',
+        'Kaleidoscope',
+        'Hacker Terminal',
+    ]
 
     def _init(self) -> None:
         self.candy_frame_disallow = bool(self.config.get('candy_frame_disallow', True))
