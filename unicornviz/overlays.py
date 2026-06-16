@@ -474,14 +474,18 @@ class CTAOverlay:
 
     def destroy(self) -> None:
         """Release all GL resources."""
-        if self._quad_vao is not None:
-            self._quad_vao.release()
-        if self._quad_vbo is not None:
-            self._quad_vbo.release()
-        if self._blit_prog is not None:
-            self._blit_prog.release()
-        if self._textures is not None:
-            for _t in self._textures:
+        quad_vao = getattr(self, '_quad_vao', None)
+        quad_vbo = getattr(self, '_quad_vbo', None)
+        blit_prog = getattr(self, '_blit_prog', None)
+        textures = getattr(self, '_textures', None)
+        if quad_vao is not None:
+            quad_vao.release()
+        if quad_vbo is not None:
+            quad_vbo.release()
+        if blit_prog is not None:
+            blit_prog.release()
+        if textures is not None:
+            for _t in textures:
                 _t.release()
 
     def _ensure_resources(self, ctx: moderngl.Context) -> None:
@@ -735,6 +739,8 @@ class Overlays:
             'glyph': 'UT',
             'description': 'About / links page',
             'accent': (0.98, 0.78, 1.00),
+            'action_kind': 'placeholder',
+            'message': 'DJ UT info page coming soon',
         },
         {
             'id': 'contact',
@@ -742,6 +748,8 @@ class Overlays:
             'glyph': '@',
             'description': 'Send logs / VJ data / screenshots / recordings',
             'accent': (0.10, 0.94, 1.00),
+            'action_kind': 'placeholder',
+            'message': 'Contact flow coming soon',
         },
         {
             'id': 'share',
@@ -749,6 +757,9 @@ class Overlays:
             'glyph': 'SH',
             'description': 'Open share link flow',
             'accent': (0.98, 0.96, 0.72),
+            'action_kind': 'url',
+            'target': 'https://unicorntears.com',
+            'message': 'Opening share page',
         },
         {
             'id': 'login_out',
@@ -756,6 +767,8 @@ class Overlays:
             'glyph': 'IN',
             'description': 'Future auth flow placeholder',
             'accent': (0.72, 1.00, 0.66),
+            'action_kind': 'placeholder',
+            'message': 'Login/Out coming soon',
         },
         {
             'id': 'settings',
@@ -763,6 +776,8 @@ class Overlays:
             'glyph': 'SET',
             'description': 'Future app settings placeholder',
             'accent': (1.00, 0.68, 0.28),
+            'action_kind': 'placeholder',
+            'message': 'Settings panel coming soon',
         },
         {
             'id': 'account',
@@ -770,6 +785,8 @@ class Overlays:
             'glyph': 'AC',
             'description': 'Future account hub placeholder',
             'accent': (0.78, 0.38, 1.00),
+            'action_kind': 'placeholder',
+            'message': 'Account panel coming soon',
         },
         {
             'id': 'shop',
@@ -777,6 +794,8 @@ class Overlays:
             'glyph': '$',
             'description': 'Open web store flow',
             'accent': (0.98, 0.62, 0.22),
+            'action_kind': 'placeholder',
+            'message': 'Shop link coming soon',
         },
         {
             'id': 'dropins',
@@ -784,6 +803,8 @@ class Overlays:
             'glyph': 'DI',
             'description': 'ProjectM browser / future in-app purchases',
             'accent': (0.66, 0.92, 1.00),
+            'action_kind': 'projectm_manager',
+            'message': 'Opening drop-ins browser',
         },
     ]
 
@@ -935,6 +956,7 @@ class Overlays:
         self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
         self._help_icon_focus_idx: int = 0
+        self._pending_help_icon_action: dict[str, str] | None = None
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
 
@@ -1166,6 +1188,11 @@ void main() {
         self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
         self._draw_rect(px, py, bw, panel_h, c_border)
         self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5)
+
 
         self._draw_text(
             'CONTROLLER HELP // APC MINI MK2',
@@ -2002,6 +2029,11 @@ void main() {
         self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
         self._draw_rect(px, py, bw, panel_h, c_border)
         self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5)
+
 
         self._draw_text('AUDIO SOURCE SELECT', px + 18, py + 14, scale=3.5,
                         color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
@@ -2106,6 +2138,11 @@ void main() {
         self._draw_rect(px,               py,               bw,       panel_h, c_border)
         self._draw_rect(px + panel_w - bw, py,              bw,       panel_h, c_border)
 
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5)
+
         # Title
         self._draw_text('MIDI DEVICE SELECT', px + 18, py + 14, scale=3.5,
                         color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
@@ -2194,6 +2231,11 @@ void main() {
         self._draw_rect(px, py + panel_h - bw, panel_w, bw, c_border)
         self._draw_rect(px, py, bw, panel_h, c_border)
         self._draw_rect(px + panel_w - bw, py, bw, panel_h, c_border)
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5)
+
 
         self._draw_text('WEBCAM EDITOR', px + 18, py + 14, scale=3.5,
                         color=(0.3 + 0.2 * pulse, 0.75, 1.0, 1.0))
@@ -2402,7 +2444,12 @@ void main() {
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.4)
 
-        px, py, panel_w, panel_h, W, H = self._begin_panel(0.90, 1320.0, 0.86, 860.0, underlay_alpha=0.60, underlay_pad=12.0)
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.90, 1320.0)
+        panel_h = min(H * 0.86, 860.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
         left_w = max(260.0, panel_w * 0.28)
         right_w = panel_w - left_w - 28.0
         left_x = px + 14.0
@@ -2418,6 +2465,11 @@ void main() {
         self._draw_rect(px, py + panel_h - bw, panel_w, bw, border)
         self._draw_rect(px, py, bw, panel_h, border)
         self._draw_rect(px + panel_w - bw, py, bw, panel_h, border)
+
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5)
 
         self._draw_text(
             'PROJECTM PRESET MANAGER',
@@ -2535,9 +2587,16 @@ void main() {
             color=(0.58, 0.68, 0.78, 0.86),
         )
         self._draw_text(
-            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Ctrl+Z: undo    Ctrl+Y/Ctrl+Shift+Z: redo    Delete: trash    Esc/Ctrl+M: close + revert unconfirmed',
+            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Ctrl+Z: undo    Ctrl+Y/Ctrl+Shift+Z: redo    Delete: trash',
             px + 18.0,
             footer_y + 12.0,
+            scale=1.8,
+            color=(0.58, 0.68, 0.78, 0.86),
+        )
+        self._draw_text(
+            'Esc/Ctrl+M: close + revert unconfirmed',
+            px + 18.0,
+            footer_y + 32.0,
             scale=1.8,
             color=(0.58, 0.68, 0.78, 0.86),
         )
@@ -2561,7 +2620,10 @@ void main() {
             glow = 0.16 + 0.14 * (0.5 + 0.5 * math.sin(t * 5.0 + s * 17.0))
             self._draw_rect(x, y - 1.0, 6.0, 2.0, (0.06, 0.92, 0.45, glow))
 
-        px, py, panel_w, panel_h, W, H = self._begin_panel(0.80, 1220.0, 0.76, 760.0, underlay_alpha=0.56, underlay_pad=12.0)
+        panel_w = min(W * 0.80, 1220.0)
+        panel_h = min(H * 0.76, 760.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
 
         self._sample_system_telemetry()
 
@@ -2752,6 +2814,7 @@ void main() {
                         px + 20.0, py + panel_h - 28.0, scale=1.8,
                         color=(0.56, 0.68, 0.80, 0.82))
 
+
     def _sample_system_telemetry(self) -> None:
         """Update modal telemetry metrics with lightweight cached psutil reads."""
         if not _PSUTIL_AVAILABLE:
@@ -2791,6 +2854,7 @@ void main() {
         except Exception:
             pass
 
+
     def _render_help(self) -> None:
         t  = self._hud_t
         hp = self._help_pulse_t
@@ -2826,6 +2890,11 @@ void main() {
         self._draw_rect(x - 1.0, y + h - 1.0, w + 2.0, 2.0,  (0.10, 0.94, 1.0, border_a))
         self._draw_rect(x - 1.0, y - 1.0, 2.0, h + 2.0,      (0.10, 0.94, 1.0, border_a))
         self._draw_rect(x + w - 1.0, y - 1.0, 2.0, h + 2.0,  (0.10, 0.94, 1.0, border_a))
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(x, y, w, h, bass, mid, treble, t, speed_scale=0.45, size_scale=0.45)
+
 
         # ── sparkle sprite chasing the help border ────────────────────────
         sprite_t = math.fmod(t * 0.176, 1.0)   # slightly slower lap than HUD
@@ -2997,15 +3066,13 @@ void main() {
         if not entries:
             return 0.0
 
-        band_h = max(78.0, 70.0 * help_scale)
-        tile = max(44.0, min(58.0, 50.0 * help_scale))
+        band_h = max(66.0, 60.0 * help_scale)
+        tile = max(37.0, min(50.0, 42.5 * help_scale))
         gap = max(10.0, 12.0 * help_scale)
-        label_scale = max(0.92, min(1.18, 1.02 * help_scale))
-        label_h = 8.0 * label_scale + 2.0
         pad_x = max(8.0, 10.0 * help_scale)
         pad_y = max(6.0, 8.0 * help_scale)
         cell_w = tile + pad_x * 2.0
-        cell_h = tile + label_h + pad_y * 2.0 + 4.0
+        cell_h = tile + pad_y * 2.0
 
         total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
         start_x = x + max(0.0, (w - total_w) * 0.5)
@@ -3032,19 +3099,11 @@ void main() {
                 self._draw_rect(cell_x - 1.0, rail_y - 1.0, cell_w + 2.0, cell_h + 2.0, (accent[0], accent[1], accent[2], border_a))
 
             glyph = str(entry.get('glyph', ''))[:3].upper()
-            label = str(entry.get('label', ''))
             glyph_scale = max(1.18, min(1.68, 1.42 * help_scale))
             glyph_w = len(glyph) * 8.0 * glyph_scale
             glyph_x = cell_x + pad_x + (tile - glyph_w) * 0.5
             glyph_y = rail_y + pad_y + (tile - 8.0 * glyph_scale) * 0.5 + 2.0
             self._draw_text(glyph, glyph_x, glyph_y, scale=glyph_scale, color=(1.0, 1.0, 1.0, 0.98))
-
-            label_scale = max(0.94, min(1.16, 1.02 * help_scale))
-            label_w = len(label) * 8.0 * label_scale
-            label_x = cell_x + (cell_w - label_w) * 0.5
-            label_y = rail_y + pad_y + tile + 8.0
-            label_color = (accent[0], accent[1], accent[2], 1.0 if is_active else 0.92)
-            self._draw_text(label, label_x, label_y, scale=label_scale, color=label_color)
         return band_h
 
     def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
@@ -3333,9 +3392,7 @@ void main() {
                 return False
             idx = max(0, min(self._help_icon_focus_idx, len(entries) - 1))
             entry = entries[idx]
-            label = str(entry.get('label', 'Icon'))
-            description = str(entry.get('description', '')).strip()
-            self.flash_message(f'Help icon: {label}' + (f' // {description}' if description else ''), 1.5)
+            self._queue_help_icon_action(entry)
             return True
         return self.toggle_help_focus_section()
 
@@ -3354,19 +3411,17 @@ void main() {
         res_ratio = min(self._width, self._height) / 1080.0
         help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
         icon_band_y = py + 100.0
-        band_h = max(78.0, 70.0 * help_scale)
+        band_h = max(66.0, 60.0 * help_scale)
         entries = self._help_icon_entries()
         if not entries:
             return False
 
-        tile = max(44.0, min(58.0, 50.0 * help_scale))
+        tile = max(37.0, min(50.0, 42.5 * help_scale))
         gap = max(10.0, 12.0 * help_scale)
-        label_scale = max(0.92, min(1.18, 1.02 * help_scale))
-        label_h = 8.0 * label_scale + 2.0
         pad_x = max(8.0, 10.0 * help_scale)
         pad_y = max(6.0, 8.0 * help_scale)
         cell_w = tile + pad_x * 2.0
-        cell_h = tile + label_h + pad_y * 2.0 + 8.0
+        cell_h = tile + pad_y * 2.0
         total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
         start_x = px + max(0.0, (pw - total_w) * 0.5)
         rail_y = icon_band_y + 10.0
@@ -3379,11 +3434,26 @@ void main() {
             if cell_x <= x <= cell_x + cell_w and rail_y <= y <= rail_y + cell_h:
                 self._help_focus_region = 'icons'
                 self._help_icon_focus_idx = idx
-                label = str(entry.get('label', 'Icon'))
-                description = str(entry.get('description', '')).strip()
-                self.flash_message(f'Help icon: {label}' + (f' // {description}' if description else ''), 1.3)
+                self._queue_help_icon_action(entry)
                 return True
         return False
+
+    def _queue_help_icon_action(self, entry: dict[str, object]) -> None:
+        """Queue a normalized icon action payload for app-level dispatch."""
+        self._pending_help_icon_action = {
+            'id': str(entry.get('id', '') or '').strip(),
+            'label': str(entry.get('label', '') or '').strip(),
+            'description': str(entry.get('description', '') or '').strip(),
+            'action_kind': str(entry.get('action_kind', 'placeholder') or 'placeholder').strip(),
+            'target': str(entry.get('target', '') or '').strip(),
+            'message': str(entry.get('message', '') or '').strip(),
+        }
+
+    def pop_help_icon_action(self) -> dict[str, str] | None:
+        """Return and clear the next pending help icon action payload."""
+        payload = self._pending_help_icon_action
+        self._pending_help_icon_action = None
+        return payload
 
     def note_help_activity(self) -> None:
         """Reset help auto-hide timer after keyboard interaction."""
@@ -3640,6 +3710,75 @@ void main() {
         self._flash_text = msg_text
         self._flash_timer = msg_duration
 
+    def _rect_border_point(self, x: float, y: float, w: float, h: float, distance: float) -> tuple[float, float]:
+        perim = 2.0 * (w + h)
+        dist = distance % perim
+        if dist < w:
+            return x + dist, y
+        dist -= w
+        if dist < h:
+            return x + w, y + dist
+        dist -= h
+        if dist < w:
+            return x + w - dist, y + h
+        dist -= w
+        return x, y + h - dist
+
+    def _neon_palette_rgb(self, phase: float) -> tuple[float, float, float]:
+        palette = (
+            (0.88, 0.30, 1.00),
+            (0.14, 0.98, 1.00),
+            (1.00, 0.28, 0.78),
+        )
+        weights = [
+            max(0.0, math.sin(phase + 0.0)) ** 2,
+            max(0.0, math.sin(phase + 2.09439510239)) ** 2,
+            max(0.0, math.sin(phase + 4.18879020479)) ** 2,
+        ]
+        total = max(0.001, weights[0] + weights[1] + weights[2])
+        return (
+            (palette[0][0] * weights[0] + palette[1][0] * weights[1] + palette[2][0] * weights[2]) / total,
+            (palette[0][1] * weights[0] + palette[1][1] * weights[1] + palette[2][1] * weights[2]) / total,
+            (palette[0][2] * weights[0] + palette[1][2] * weights[1] + palette[2][2] * weights[2]) / total,
+        )
+
+    def _draw_audio_reactive_border_bulbs(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        bass: float,
+        mid: float,
+        treble: float,
+        t: float,
+        *,
+        speed_scale: float = 1.0,
+        size_scale: float = 1.0,
+    ) -> None:
+        bass = max(0.0, min(1.0, bass))
+        mid = max(0.0, min(1.0, mid))
+        treble = max(0.0, min(1.0, treble))
+        speed_scale = max(0.05, float(speed_scale))
+        size_scale = max(0.05, float(size_scale))
+
+        wobble = 0.55 + 0.45 * math.sin(t * 3.1 * speed_scale)
+        phase_a = math.fmod(t * (0.16 + treble * 0.05) * speed_scale + bass * 0.7, 1.0)
+        phase_b = math.fmod(t * (0.14 + bass * 0.04) * speed_scale + 0.5 + mid * 0.4, 1.0)
+
+        for idx, (orb_phase, orb_bias) in enumerate(((phase_a, 0.0), (phase_b, 1.3))):
+            cx, cy = self._rect_border_point(x, y, w, h, orb_phase * 2.0 * (w + h))
+            color = self._neon_palette_rgb(t * 1.6 * speed_scale + bass * 5.5 + orb_bias)
+            radius = (7.0 + bass * 4.0 + mid * 2.0 + wobble * 1.5 + idx * 0.35) * size_scale
+            outer_a = 0.10 + bass * 0.10 + wobble * 0.05
+            mid_a = 0.25 + mid * 0.12 + wobble * 0.08
+            core_a = 0.56 + treble * 0.18 + wobble * 0.12
+
+            # Layered glow squares approximate a round, bulbous sprite while staying cheap.
+            self._draw_rect(cx - radius * 2.0, cy - radius * 2.0, radius * 4.0, radius * 4.0, (color[0], color[1], color[2], outer_a))
+            self._draw_rect(cx - radius * 1.25, cy - radius * 1.25, radius * 2.5, radius * 2.5, (color[0], color[1], color[2], mid_a))
+            self._draw_rect(cx - radius * 0.70, cy - radius * 0.70, radius * 1.4, radius * 1.4, (1.0, 1.0, 1.0, core_a))
+
     def toggle_name_overlay(self) -> None:
         self._show_name = not self._show_name
         self._hud_timer = self._hud_timeout_s if (self._show_name and self._hud_auto_hide) else 0.0
@@ -3698,14 +3837,18 @@ void main() {
 
     def destroy(self) -> None:
         """Release all GL resources."""
-        if self._quad_vao is not None:
-            self._quad_vao.release()
-        if self._quad_vbo is not None:
-            self._quad_vbo.release()
-        if self._blit_prog is not None:
-            self._blit_prog.release()
-        if self._textures is not None:
-            for _t in self._textures:
+        quad_vao = getattr(self, '_quad_vao', None)
+        quad_vbo = getattr(self, '_quad_vbo', None)
+        blit_prog = getattr(self, '_blit_prog', None)
+        textures = getattr(self, '_textures', None)
+        if quad_vao is not None:
+            quad_vao.release()
+        if quad_vbo is not None:
+            quad_vbo.release()
+        if blit_prog is not None:
+            blit_prog.release()
+        if textures is not None:
+            for _t in textures:
                 _t.release()
 
     def _ensure_resources(self, ctx: moderngl.Context) -> None:

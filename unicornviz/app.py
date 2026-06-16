@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import subprocess
 import time
 import ctypes
 import sys
@@ -2406,6 +2407,12 @@ void main() {
                         if overlays is not None and bool(getattr(overlays, 'help_visible', False)):
                             try:
                                 if bool(overlays.handle_help_mouse_click(float(event.button.x), float(event.button.y))):
+                                    pop_action = getattr(overlays, 'pop_help_icon_action', None)
+                                    action = pop_action() if callable(pop_action) else None
+                                    if isinstance(action, dict):
+                                        msg = self.handle_help_icon_action(action)
+                                        if msg:
+                                            overlays.flash_message(msg, 1.6)
                                     continue
                             except Exception as exc:
                                 log.warning('Help overlay mouse handling failed: %s', exc)
@@ -2606,6 +2613,8 @@ void main() {
             spotify_status = 'OFF'
             spotify_track = '-'
             spotify_artist = '-'
+            spotify_album = '-'
+            spotify_length = '--:--'
             spotify_progress = '--:--/--:-- 0%'
             if self._spotify is not None:
                 snap_fn = getattr(self._spotify, 'snapshot', None)
@@ -2633,6 +2642,7 @@ void main() {
 
                         spotify_track = _clip(str(spotify.get('title', '') or ''), 24)
                         spotify_artist = _clip(str(spotify.get('artist', '') or ''), 24)
+                        spotify_album = _clip(str(spotify.get('album', '') or ''), 24)
 
                         pos = max(0.0, float(spotify.get('position_s', 0.0) or 0.0))
                         dur = max(0.0, float(spotify.get('duration_s', 0.0) or 0.0))
@@ -2646,6 +2656,7 @@ void main() {
                                 return f'{hh:02d}:{mm:02d}:{ss:02d}'
                             return f'{mm:02d}:{ss:02d}'
 
+                        spotify_length = _fmt_secs(dur)
                         spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
                         spotify_auth_visible = 'YES' if bool(spotify.get('web_api_enabled', False)) else 'NO'
                         auth_status = str(spotify.get('auth_status', '') or '').strip().upper()
@@ -2748,6 +2759,8 @@ void main() {
                 'spotify_status': spotify_status,
                 'spotify_track': spotify_track,
                 'spotify_artist': spotify_artist,
+                'spotify_album': spotify_album,
+                'spotify_length': spotify_length,
                 'spotify_progress': spotify_progress,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
                 'postfx_debug': (
@@ -3785,6 +3798,45 @@ void main() {
             'ProjectM manager modal %s',
             'enabled' if new_state else 'disabled',
         )
+
+    def _open_external_url(self, url: str) -> bool:
+        """Open an external URL using the platform launcher without blocking."""
+        target = str(url or '').strip()
+        if not target:
+            return False
+        try:
+            subprocess.Popen(
+                ['xdg-open', target],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception as exc:
+            log.warning('Failed to launch external URL %s: %s', target, exc)
+            return False
+
+    def handle_help_icon_action(self, action: dict[str, str]) -> str:
+        """Dispatch a help icon action payload and return user-facing status text."""
+        action_kind = str(action.get('action_kind', 'placeholder') or 'placeholder').strip().lower()
+        message = str(action.get('message', '') or '').strip()
+        label = str(action.get('label', 'Help icon') or 'Help icon').strip()
+        target = str(action.get('target', '') or '').strip()
+
+        if action_kind == 'url':
+            if not target:
+                return message or f'{label}: link unavailable'
+            if self._open_external_url(target):
+                return message or f'Opening {label}'
+            return f'{label}: failed to open link'
+
+        if action_kind == 'projectm_manager':
+            opened = bool(self.vj_api.open_projectm_manager())
+            if opened:
+                self.set_projectm_manager_modal_active(True)
+                return message or 'Opened drop-ins browser'
+            return 'Drop-ins browser unavailable'
+
+        return message or f'{label}: coming soon'
 
     @property
     def current_effect(self) -> BaseEffect | None:

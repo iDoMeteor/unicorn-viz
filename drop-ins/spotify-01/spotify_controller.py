@@ -86,6 +86,11 @@ class SpotifyController:
             0.05,
             float(self._cfg.get('command_timeout_s', 0.25) or 0.25),
         )
+        self._now_playing_banner_enabled = bool(self._cfg.get('now_playing_banner', True))
+        self._now_playing_banner_hold_s = max(
+            1.0,
+            float(self._cfg.get('now_playing_banner_hold_s', 10.0) or 10.0),
+        )
 
         self._playerctl = shutil.which('playerctl')
         if self._local_enabled and sys.platform == 'win32':
@@ -134,6 +139,10 @@ class SpotifyController:
         self._title: str = ''
         self._artist: str = ''
         self._album: str = ''
+        self._previous_track_id: str = ''
+        self._previous_title: str = ''
+        self._previous_artist: str = ''
+        self._previous_album: str = ''
 
         self._duration_s: float = 0.0
         self._position_s: float = 0.0
@@ -307,10 +316,16 @@ class SpotifyController:
             'title': self._title,
             'artist': self._artist,
             'album': self._album,
+            'previous_track_id': self._previous_track_id,
+            'previous_title': self._previous_title,
+            'previous_artist': self._previous_artist,
+            'previous_album': self._previous_album,
             'duration_s': duration,
             'position_s': position,
             'progress': progress,
             'change_counter': self._change_counter,
+            'now_playing_banner_enabled': self._now_playing_banner_enabled,
+            'now_playing_banner_hold_s': self._now_playing_banner_hold_s,
             'bpm': float(features.get('bpm', 0.0) or 0.0),
             'energy': float(features.get('energy', 0.0) or 0.0),
             'danceability': float(features.get('danceability', 0.0) or 0.0),
@@ -490,6 +505,10 @@ class SpotifyController:
         self._duration_s = duration_s
 
         if new_track_key and new_track_key != old_track_key:
+            self._previous_track_id = self._track_id
+            self._previous_title = self._title
+            self._previous_artist = self._artist
+            self._previous_album = self._album
             self._track_id = track_id
             self._title = title
             self._artist = artist

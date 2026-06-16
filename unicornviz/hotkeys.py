@@ -583,6 +583,12 @@ class HotkeyHandler:
                         return
                 elif sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
                     if o.activate_help_focus_item():
+                        pop_action = getattr(o, 'pop_help_icon_action', None)
+                        action = pop_action() if callable(pop_action) else None
+                        if isinstance(action, dict):
+                            msg = a.handle_help_icon_action(action)
+                            if msg:
+                                o.flash_message(msg, 1.6)
                         return
                 elif sym in (sdl2.SDLK_ESCAPE,):
                     pass
