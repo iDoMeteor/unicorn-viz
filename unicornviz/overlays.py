@@ -959,6 +959,8 @@ class Overlays:
         self._pending_help_icon_action: dict[str, str] | None = None
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
+        self._help_icon_asset_dir: Path = resolve_path('assets/icons/help')
+        self._help_icon_textures: dict[str, moderngl.Texture] = {}
 
 
         self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h, self._font_path = _build_font_texture(ctx)
@@ -967,6 +969,8 @@ class Overlays:
         self._prog = self._build_program()
         self._build_vbo()
         self._build_panel_vbo()
+        self._build_icon_vbo()
+        self._load_help_icon_textures()
         self._cta = CTAOverlay(self._font_path, list(_CTA_SLOTS), _CTA_SHOW_DURATION)
 
     def _build_panel_vbo(self) -> None:
@@ -992,6 +996,104 @@ void main() {
             self._panel_prog,
             [(self._panel_vbo, "2f", "in_vert")],
         )
+
+    def _build_icon_vbo(self) -> None:
+        """Build shader/VAO for RGBA help icon textures."""
+        vert = """
+#version 330
+in vec2 in_vert;
+in vec2 in_uv;
+out vec2 v_uv;
+void main() {
+    gl_Position = vec4(in_vert, 0.0, 1.0);
+    v_uv = in_uv;
+}
+"""
+        frag = """
+#version 330
+uniform sampler2D icon_tex;
+uniform float icon_alpha;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    vec4 c = texture(icon_tex, v_uv);
+    fragColor = vec4(c.rgb, c.a * icon_alpha);
+}
+"""
+        self._icon_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
+        self._icon_vbo = self._ctx.buffer(reserve=6 * 4 * 4)
+        self._icon_vao = self._ctx.vertex_array(
+            self._icon_prog,
+            [(self._icon_vbo, "2f 2f", "in_vert", "in_uv")],
+        )
+
+    def _load_help_icon_textures(self) -> None:
+        """Load icon textures from assets/icons/help/<id>.(png|webp|jpg|jpeg)."""
+        self._help_icon_textures = {}
+        if not _PIL_AVAILABLE:
+            return
+        if not self._help_icon_asset_dir.exists():
+            return
+
+        suffixes = ('.png', '.webp', '.jpg', '.jpeg')
+        for entry in self._help_icon_entries():
+            icon_id = str(entry.get('id', '') or '').strip()
+            if not icon_id:
+                continue
+            src_path: Path | None = None
+            for suffix in suffixes:
+                candidate = self._help_icon_asset_dir / f'{icon_id}{suffix}'
+                if candidate.exists():
+                    src_path = candidate
+                    break
+            if src_path is None:
+                continue
+            try:
+                img = Image.open(src_path).convert('RGBA')
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                tex = self._ctx.texture(img.size, 4, img.tobytes())
+                tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+                tex.repeat_x = False
+                tex.repeat_y = False
+                self._help_icon_textures[icon_id] = tex
+            except Exception as exc:
+                log.warning('Failed to load help icon texture %s: %s', src_path, exc)
+
+    def _draw_icon_texture(
+        self,
+        tex: moderngl.Texture,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        alpha: float = 1.0,
+    ) -> None:
+        """Draw an RGBA icon texture in screen pixels."""
+        def px(px_val: float) -> float:
+            return (px_val / self._width) * 2.0 - 1.0
+
+        def py(py_val: float) -> float:
+            return 1.0 - (py_val / self._height) * 2.0
+
+        x0 = px(x)
+        x1 = px(x + w)
+        y0 = py(y)
+        y1 = py(y + h)
+        verts = np.array([
+            x0, y0, 0.0, 0.0,
+            x1, y0, 1.0, 0.0,
+            x0, y1, 0.0, 1.0,
+            x1, y0, 1.0, 0.0,
+            x1, y1, 1.0, 1.0,
+            x0, y1, 0.0, 1.0,
+        ], dtype=np.float32)
+        self._icon_vbo.write(verts)
+        self._icon_prog['icon_alpha'].value = float(max(0.0, min(1.0, alpha)))
+        tex.use(location=0)
+        self._icon_prog['icon_tex'].value = 0
+        self._ctx.enable(moderngl.BLEND)
+        self._icon_vao.render(moderngl.TRIANGLES, vertices=6)
 
     def _draw_rect(
         self,
@@ -3098,12 +3200,22 @@ void main() {
             if is_active:
                 self._draw_rect(cell_x - 1.0, rail_y - 1.0, cell_w + 2.0, cell_h + 2.0, (accent[0], accent[1], accent[2], border_a))
 
-            glyph = str(entry.get('glyph', ''))[:3].upper()
-            glyph_scale = max(1.18, min(1.68, 1.42 * help_scale))
-            glyph_w = len(glyph) * 8.0 * glyph_scale
-            glyph_x = cell_x + pad_x + (tile - glyph_w) * 0.5
-            glyph_y = rail_y + pad_y + (tile - 8.0 * glyph_scale) * 0.5 + 2.0
-            self._draw_text(glyph, glyph_x, glyph_y, scale=glyph_scale, color=(1.0, 1.0, 1.0, 0.98))
+            icon_id = str(entry.get('id', '') or '').strip()
+            icon_tex = self._help_icon_textures.get(icon_id)
+            icon_inset = max(2.0, 2.5 * help_scale)
+            icon_x = cell_x + pad_x + icon_inset
+            icon_y = rail_y + pad_y + icon_inset
+            icon_size = max(4.0, tile - icon_inset * 2.0)
+            if icon_tex is not None:
+                icon_alpha = 1.0 if is_active else 0.94
+                self._draw_icon_texture(icon_tex, icon_x, icon_y, icon_size, icon_size, alpha=icon_alpha)
+            else:
+                glyph = str(entry.get('glyph', ''))[:3].upper()
+                glyph_scale = max(1.18, min(1.68, 1.42 * help_scale))
+                glyph_w = len(glyph) * 8.0 * glyph_scale
+                glyph_x = cell_x + pad_x + (tile - glyph_w) * 0.5
+                glyph_y = rail_y + pad_y + (tile - 8.0 * glyph_scale) * 0.5 + 2.0
+                self._draw_text(glyph, glyph_x, glyph_y, scale=glyph_scale, color=(1.0, 1.0, 1.0, 0.98))
         return band_h
 
     def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
@@ -3837,6 +3949,25 @@ void main() {
 
     def destroy(self) -> None:
         """Release all GL resources."""
+        icon_textures = getattr(self, '_help_icon_textures', None)
+        if isinstance(icon_textures, dict):
+            for tex in icon_textures.values():
+                try:
+                    tex.release()
+                except Exception:
+                    pass
+            icon_textures.clear()
+
+        icon_vao = getattr(self, '_icon_vao', None)
+        icon_vbo = getattr(self, '_icon_vbo', None)
+        icon_prog = getattr(self, '_icon_prog', None)
+        if icon_vao is not None:
+            icon_vao.release()
+        if icon_vbo is not None:
+            icon_vbo.release()
+        if icon_prog is not None:
+            icon_prog.release()
+
         quad_vao = getattr(self, '_quad_vao', None)
         quad_vbo = getattr(self, '_quad_vbo', None)
         blit_prog = getattr(self, '_blit_prog', None)

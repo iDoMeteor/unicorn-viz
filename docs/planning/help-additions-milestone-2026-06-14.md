@@ -208,5 +208,15 @@ Commit sequencing:
    - transparent PNG
    - square source (128x128 or 256x256)
    - filename slug per icon id
+4. Dedicated asset directory: `assets/icons/help/`
+5. Current id-based filenames:
+   - `about.png`
+   - `contact.png`
+   - `share.png`
+   - `login_out.png`
+   - `settings.png`
+   - `account.png`
+   - `shop.png`
+   - `dropins.png`
 
 Owner decision needed before final polish pass: provide custom icon pack externally vs. have agent generate first-pass icon set in-repo.
