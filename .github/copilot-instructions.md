@@ -272,6 +272,23 @@ out vec2 out_pos;
 - Do not push with known unresolved hook warnings/errors unless the owner
   explicitly approves a defer for that specific warning/error set.
 
+## Git History Safety (Hard Stop)
+
+- Agents must **never** intentionally detach `HEAD`.
+- Agents must **never** do work while in detached `HEAD` state.
+- Agents must **never** run `git rebase`.
+- Agents must **never** run `git cherry-pick`.
+- Agents must **never** run any force-push variant (`git push --force`,
+  `git push --force-with-lease`, or equivalent).
+- Agents must **never** rewrite branch history in any repository (main repo or
+  drop-in submodule repos).
+- If an operation would require any of the above, the agent must stop
+  immediately and report:
+  1. the exact conflict/blocker,
+  2. the impacted repository and branch,
+  3. the safe non-history-rewrite options,
+  then wait for explicit user instruction before taking further git action.
+
 ---
 
 ## Documentation SOP

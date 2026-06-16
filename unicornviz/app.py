@@ -986,6 +986,37 @@ class App:
             self._primary_overlay_view_debug_last = view
         return view
 
+    def _overlay_mouse_coords(
+        self,
+        x: float,
+        y: float,
+        primary_overlay_view: tuple[int, int, int, int] | None,
+    ) -> tuple[float, float] | None:
+        """Return overlay-local mouse coordinates for hit-testing.
+
+        SDL mouse events are top-left-origin window coords. Overlay rendering in
+        multi-display modes may target a GL viewport (`primary_overlay_view`)
+        defined in bottom-left-origin coordinates, so convert before dispatch.
+        """
+        if primary_overlay_view is None:
+            return float(x), float(y)
+
+        vx, vy, vw, vh = primary_overlay_view
+        canvas_h = (
+            max(1, int(self._window_height))
+            if self._is_mirror_mode(self._display_mode)
+            else max(1, int(self._height))
+        )
+        view_top = canvas_h - (int(vy) + int(vh))
+        view_left = int(vx)
+
+        local_x = float(x) - float(view_left)
+        local_y = float(y) - float(view_top)
+
+        if local_x < 0.0 or local_y < 0.0 or local_x > float(vw) or local_y > float(vh):
+            return None
+        return local_x, local_y
+
     def _splash_render_target(self) -> tuple[int, int, tuple[int, int, int, int] | None]:
         """Return splash texture size and optional destination viewport.
 
@@ -2429,7 +2460,12 @@ void main() {
                         overlays = getattr(self, '_overlays', None)
                         if overlays is not None and bool(getattr(overlays, 'help_visible', False)):
                             try:
-                                if bool(overlays.handle_help_mouse_click(float(event.button.x), float(event.button.y))):
+                                hit = self._overlay_mouse_coords(
+                                    float(event.button.x),
+                                    float(event.button.y),
+                                    self._primary_display_viewport(),
+                                )
+                                if hit is not None and bool(overlays.handle_help_mouse_click(hit[0], hit[1])):
                                     pop_action = getattr(overlays, 'pop_help_icon_action', None)
                                     action = pop_action() if callable(pop_action) else None
                                     if isinstance(action, dict):
