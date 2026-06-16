@@ -322,6 +322,307 @@ _CTA_SLOTS: list[tuple[str, str]] = [
 ]
 
 
+
+class CTAOverlay:
+    """Self-contained call-to-action hype animation overlay.
+
+    Manages the GLSL blit shader, PIL texture atlas, and animation state so
+    the parent Overlays class does not own any CTA-specific GL resources.
+    """
+
+    def __init__(
+        self,
+        font_path: 'Path | None',
+        slots: list[tuple[str, str]],
+        show_duration: float,
+    ) -> None:
+        self._font_path = font_path
+        self._slots = list(slots)
+        self._show_duration = float(show_duration)
+        self._slot: int = -1
+        self._timer: float = 0.0
+        self._t: float = 0.0
+        self._textures: list[moderngl.Texture] | None = None
+        self._tex_w: int = 1600
+        self._tex_h: int = 340
+        self._blit_prog: moderngl.Program | None = None
+        self._quad_vbo: moderngl.Buffer | None = None
+        self._quad_vao: moderngl.VertexArray | None = None
+        self._slots_key: tuple[tuple[str, str], ...] | None = None
+
+    @property
+    def is_active(self) -> bool:
+        """Return True when the CTA animation is running."""
+        return self._timer > 0.0
+
+    def trigger(self) -> None:
+        """Advance to the next slot and start the hype animation."""
+        if not self._slots:
+            return
+        self._slot = (self._slot + 1) % len(self._slots)
+        self._timer = self._show_duration
+        self._t = 0.0
+
+    def trigger_custom(
+        self,
+        text: str,
+        icon: str = '',
+        duration: 'float | None' = None,
+    ) -> None:
+        """Trigger a custom one-off CTA message."""
+        msg = str(text).strip()
+        if not msg:
+            return
+        self._slots = [(msg, str(icon or '').strip())]
+        self._show_duration = (
+            max(0.2, float(duration)) if duration is not None else _CTA_SHOW_DURATION
+        )
+        self._textures = None
+        self._slots_key = None
+        self._slot = 0
+        self._timer = self._show_duration
+        self._t = 0.0
+
+    def render(
+        self,
+        dt: float,
+        ctx: moderngl.Context,
+        draw_rect: Callable,
+        width: int,
+        height: int,
+    ) -> None:
+        """Tick and render the CTA overlay; no-op when inactive."""
+        if not self.is_active:
+            return
+        self._ensure_resources(ctx)
+        if self._blit_prog is None or self._textures is None:
+            return
+        if not (0 <= self._slot < len(self._textures)):
+            return
+
+        self._timer -= dt
+        self._t += dt
+
+        elapsed = self._show_duration - self._timer
+        _ENTRY = 0.45
+        _EXIT_START = self._show_duration - 0.65
+        _EXIT_DUR = 0.65
+
+        if elapsed < _ENTRY:
+            t_e = elapsed / _ENTRY
+            spring = 1.0 - math.exp(-t_e * 6.0) * math.cos(t_e * math.pi * 2.2)
+            scale_f = max(0.0, min(1.08, spring))
+            alpha = min(1.0, t_e * 4.0)
+        elif elapsed > _EXIT_START:
+            t_x = min(1.0, (elapsed - _EXIT_START) / _EXIT_DUR)
+            scale_f = 1.0 - t_x * 0.12
+            alpha = max(0.0, 1.0 - t_x * t_x)
+        else:
+            hold_t = elapsed - _ENTRY
+            scale_f = 1.0 + 0.012 * math.sin(hold_t * 3.1)
+            alpha = 1.0
+
+        if alpha <= 0.0:
+            return
+
+        tex = self._textures[self._slot]
+        tw = self._tex_w * scale_f
+        th = self._tex_h * scale_f
+        cx = width * 0.5
+        cy = height * 0.46
+        tx0 = cx - tw * 0.5
+        ty0 = cy - th * 0.5
+
+        t = self._t
+        cyc = 0.5 + 0.5 * math.sin(t * 2.8)
+        gr = 0.9 + 0.1 * cyc
+        gg = 0.05 + 0.10 * cyc
+        gb = 0.85 - 0.4 * cyc
+
+        for pad, glow_a in ((100, 0.14), (68, 0.18), (40, 0.23), (20, 0.29), (8, 0.37)):
+            draw_rect(
+                tx0 - pad, ty0 - pad, tw + pad * 2, th + pad * 2,
+                (gr, gg, gb, glow_a * alpha),
+            )
+
+        phase = min(1.0, max(0.0, (elapsed - _ENTRY) / max(0.01, _EXIT_START - _ENTRY)))
+        w_f, h_f = float(width), float(height)
+
+        def to_ndc(px_: float, py_: float) -> tuple[float, float]:
+            return (px_ / w_f) * 2.0 - 1.0, 1.0 - (py_ / h_f) * 2.0
+
+        nx0, ny_top = to_ndc(tx0, ty0)
+        nx1, ny_bot = to_ndc(tx0 + tw, ty0 + th)
+
+        verts = np.array([
+            nx0, ny_top,  0.0, 0.0,
+            nx1, ny_top,  1.0, 0.0,
+            nx0, ny_bot,  0.0, 1.0,
+            nx1, ny_top,  1.0, 0.0,
+            nx1, ny_bot,  1.0, 1.0,
+            nx0, ny_bot,  0.0, 1.0,
+        ], dtype=np.float32)
+
+        self._quad_vbo.write(verts)
+        self._blit_prog['iTime'].value = t
+        self._blit_prog['iPhase'].value = phase
+        self._blit_prog['iAlpha'].value = alpha
+        tex.use(location=0)
+        self._blit_prog['iChannel0'].value = 0
+        ctx.enable(moderngl.BLEND)
+        self._quad_vao.render(moderngl.TRIANGLES, vertices=6)
+
+    def destroy(self) -> None:
+        """Release all GL resources."""
+        if self._quad_vao is not None:
+            self._quad_vao.release()
+        if self._quad_vbo is not None:
+            self._quad_vbo.release()
+        if self._blit_prog is not None:
+            self._blit_prog.release()
+        if self._textures is not None:
+            for _t in self._textures:
+                _t.release()
+
+    def _ensure_resources(self, ctx: moderngl.Context) -> None:
+        """Lazily build GLSL shader and PIL-rendered textures."""
+        if self._blit_prog is None:
+            vert = """
+#version 330
+in vec2 in_pos;
+in vec2 in_uv;
+out vec2 v_uv;
+void main() {
+    v_uv = in_uv;
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+}
+"""
+            frag = """
+#version 330
+uniform sampler2D iChannel0;
+uniform float     iTime;
+uniform float     iPhase;
+uniform float     iAlpha;
+in  vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    float ca  = mix(0.018, 0.004, clamp(iPhase * 2.5, 0.0, 1.0));
+    float r   = texture(iChannel0, v_uv + vec2(-ca, 0.0)).r;
+    float g   = texture(iChannel0, v_uv).g;
+    float b   = texture(iChannel0, v_uv + vec2( ca, 0.0)).b;
+    float a   = texture(iChannel0, v_uv).a;
+    float cyc  = 0.5 + 0.5 * sin(iTime * 2.8);
+    vec3  nA   = vec3(1.0,  0.12, 0.88);
+    vec3  nB   = vec3(0.05, 0.95, 1.0);
+    vec3  neon = mix(nA, nB, cyc);
+    vec3  col  = vec3(r, g, b);
+    float lum  = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, col * neon * 1.5, 0.45 * lum);
+    col *= 0.92 + 0.08 * sin(v_uv.y * 160.0 + iTime * 18.0);
+    col *= 0.90 + 0.10 * sin(iTime * 9.2);
+    fragColor = vec4(col, a * iAlpha);
+}
+"""
+            self._blit_prog = ctx.program(vertex_shader=vert, fragment_shader=frag)
+            self._quad_vbo = ctx.buffer(reserve=6 * 4 * 4)
+            self._quad_vao = ctx.vertex_array(
+                self._blit_prog,
+                [(self._quad_vbo, '2f 2f', 'in_pos', 'in_uv')],
+            )
+
+        slots_key = tuple(self._slots)
+        if self._textures is not None and self._slots_key == slots_key:
+            return
+
+        if self._textures is not None:
+            for _t in self._textures:
+                _t.release()
+        self._textures = []
+        self._slots_key = slots_key
+        if not _PIL_AVAILABLE:
+            return
+
+        text_font = None
+        emoji_font = None
+        try:
+            if self._font_path is not None and self._font_path.exists():
+                text_font = ImageFont.truetype(str(self._font_path), size=132)
+        except Exception:
+            pass
+        try:
+            icon_font_path = next(
+                (p for p in [
+                    Path('/usr/share/fonts/gdouros-symbola/Symbola.ttf'),
+                    Path('/usr/share/fonts/gdouros-symbola/Symbola.otf'),
+                    Path('/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf'),
+                    Path('/usr/share/fonts/google-noto-emoji-fonts/NotoColorEmoji.ttf'),
+                    Path('/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf'),
+                ] if p.exists()),
+                None,
+            )
+            if icon_font_path is not None:
+                emoji_font = ImageFont.truetype(str(icon_font_path), size=140)
+        except Exception:
+            pass
+
+        TEX_W, TEX_H = self._tex_w, self._tex_h
+        for text, icon in self._slots:
+            try:
+                img = self._build_image(text, icon, TEX_W, TEX_H, text_font, emoji_font)
+            except Exception:
+                log.debug('CTA image render failed for %r; using blank', text, exc_info=True)
+                img = Image.new('RGBA', (TEX_W, TEX_H), (0, 0, 0, 0))
+            data = np.array(img, dtype=np.uint8)
+            tex = ctx.texture((TEX_W, TEX_H), 4, data=data.tobytes())
+            tex.filter = moderngl.LINEAR, moderngl.LINEAR
+            self._textures.append(tex)
+
+    def _build_image(
+        self,
+        text: str,
+        icon: str,
+        width: int,
+        height: int,
+        text_font: 'ImageFont.FreeTypeFont | None',
+        emoji_font: 'ImageFont.FreeTypeFont | None',
+    ) -> 'Image.Image':
+        """Render one CTA slot to a transparent RGBA PIL image."""
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        font = text_font or ImageFont.load_default()
+        icon_font = emoji_font or font
+        icon_clean = icon.replace('\ufe0f', '').strip()
+
+        bbox_t = draw.textbbox((0, 0), text, font=font)
+        tw = bbox_t[2] - bbox_t[0]
+        th = bbox_t[3] - bbox_t[1]
+
+        iw, ih = 0, 0
+        bbox_i = (0, 0, 0, 0)
+        if icon_clean:
+            try:
+                bbox_i = draw.textbbox((0, 0), icon_clean, font=icon_font)
+                iw = bbox_i[2] - bbox_i[0]
+                ih = bbox_i[3] - bbox_i[1]
+            except Exception:
+                icon_clean = ''
+
+        gap = 36 if icon_clean else 0
+        total_w = tw + gap + iw
+        tx = max(0, (width - total_w) // 2)
+        ty = (height - th) // 2
+
+        draw.text((tx - bbox_t[0], ty - bbox_t[1]), text, font=font, fill=(255, 255, 255, 255))
+
+        if icon_clean:
+            ix = tx + tw + gap
+            iy = ty + (th - ih) // 2
+            draw.text((ix - bbox_i[0], iy - bbox_i[1]), icon_clean, font=icon_font, fill=(255, 255, 255, 255))
+
+        return img
+
+
 class Overlays:
     """Manages all HUD/overlay rendering."""
 
@@ -576,19 +877,6 @@ class Overlays:
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
 
-        # CTA hype overlay state
-        self._cta_slots: list[tuple[str, str]] = list(_CTA_SLOTS)
-        self._cta_show_duration: float = _CTA_SHOW_DURATION
-        self._cta_slots_key: tuple[tuple[str, str], ...] | None = None
-        self._cta_timer: float = 0.0
-        self._cta_slot: int = -1
-        self._cta_t: float = 0.0
-        self._cta_textures: list[moderngl.Texture] | None = None
-        self._cta_tex_w: int = 1600
-        self._cta_tex_h: int = 340
-        self._cta_blit_prog: moderngl.Program | None = None
-        self._cta_quad_vbo: moderngl.Buffer | None = None
-        self._cta_quad_vao: moderngl.VertexArray | None = None
 
         self._font_tex, self._glyph_w, self._glyph_h, self._atlas_w, self._atlas_h, self._font_path = _build_font_texture(ctx)
         # Keep historical scale semantics (scale=1 roughly equals an 8 px cell).
@@ -596,6 +884,7 @@ class Overlays:
         self._prog = self._build_program()
         self._build_vbo()
         self._build_panel_vbo()
+        self._cta = CTAOverlay(self._font_path, list(_CTA_SLOTS), _CTA_SHOW_DURATION)
 
     def _build_panel_vbo(self) -> None:
         """Build shader/VAO for simple colored overlay rectangles."""
@@ -783,19 +1072,31 @@ void main() {
             return
         self._draw_rect(x0, y0, x1 - x0, y1 - y0, (0.0, 0.0, 0.0, float(alpha)))
 
+    def _begin_panel(
+        self,
+        frac_w: float,
+        max_w: float,
+        frac_h: float,
+        max_h: float,
+        underlay_alpha: float = 0.58,
+        underlay_pad: float = 10.0,
+    ) -> tuple[float, float, float, float, float, float]:
+        """Compute centred panel geometry, draw dim underlay, return (px, py, pw, ph, W, H)."""
+        W = float(self._width)
+        H = float(self._height)
+        pw = min(W * float(frac_w), float(max_w))
+        ph = min(H * float(frac_h), float(max_h))
+        px = (W - pw) * 0.5
+        py = (H - ph) * 0.5
+        self._draw_modal_underlay(px, py, pw, ph, alpha=underlay_alpha, pad=underlay_pad)
+        return px, py, pw, ph, W, H
+
     def _render_controller_help_modal(self) -> None:
         """Draw a controller-focused mapping modal (APC mini mk2 first target)."""
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.7)
 
-        W = float(self._width)
-        H = float(self._height)
-        panel_w = min(W * 0.88, 1240.0)
-        panel_h = min(H * 0.86, 860.0)
-        px = (W - panel_w) * 0.5
-        py = (H - panel_h) * 0.5
-
-        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.58, pad=10.0)
+        px, py, panel_w, panel_h, W, H = self._begin_panel(0.88, 1240.0, 0.86, 860.0, underlay_alpha=0.58, underlay_pad=10.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         bw = 2.0
@@ -1512,8 +1813,8 @@ void main() {
         if include_recording_indicator:
             self._render_recording_indicator()
 
-        if self._cta_timer > 0.0:
-            self._render_cta(dt)
+        if self._cta.is_active:
+            self._cta.render(dt, self._ctx, self._draw_rect, self._width, self._height)
 
         if self._show_help and not route_modals_elsewhere:
             self._render_help()
@@ -1823,14 +2124,7 @@ void main() {
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.6)
 
-        W = float(self._width)
-        H = float(self._height)
-        panel_w = min(W * 0.72, 980.0)
-        panel_h = min(H * 0.80, 760.0)
-        px = (W - panel_w) * 0.5
-        py = (H - panel_h) * 0.5
-
-        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.58, pad=10.0)
+        px, py, panel_w, panel_h, W, H = self._begin_panel(0.72, 980.0, 0.80, 760.0, underlay_alpha=0.58, underlay_pad=10.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.12, 0.96))
         bw = 2.0
@@ -2047,12 +2341,7 @@ void main() {
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.4)
 
-        W = float(self._width)
-        H = float(self._height)
-        panel_w = min(W * 0.90, 1320.0)
-        panel_h = min(H * 0.86, 860.0)
-        px = (W - panel_w) * 0.5
-        py = (H - panel_h) * 0.5
+        px, py, panel_w, panel_h, W, H = self._begin_panel(0.90, 1320.0, 0.86, 860.0, underlay_alpha=0.60, underlay_pad=12.0)
         left_w = max(260.0, panel_w * 0.28)
         right_w = panel_w - left_w - 28.0
         left_x = px + 14.0
@@ -2060,8 +2349,6 @@ void main() {
         content_y = py + 86.0
         content_h = panel_h - 164.0
         footer_y = py + panel_h - 56.0
-
-        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.60, pad=12.0)
 
         self._draw_rect(px, py, panel_w, panel_h, (0.03, 0.04, 0.10, 0.96))
         border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.92)
@@ -2213,12 +2500,7 @@ void main() {
             glow = 0.16 + 0.14 * (0.5 + 0.5 * math.sin(t * 5.0 + s * 17.0))
             self._draw_rect(x, y - 1.0, 6.0, 2.0, (0.06, 0.92, 0.45, glow))
 
-        panel_w = min(W * 0.80, 1220.0)
-        panel_h = min(H * 0.76, 760.0)
-        px = (W - panel_w) * 0.5
-        py = (H - panel_h) * 0.5
-
-        self._draw_modal_underlay(px, py, panel_w, panel_h, alpha=0.56, pad=12.0)
+        px, py, panel_w, panel_h, W, H = self._begin_panel(0.80, 1220.0, 0.76, 760.0, underlay_alpha=0.56, underlay_pad=12.0)
 
         self._sample_system_telemetry()
 
@@ -2641,6 +2923,23 @@ void main() {
             seg_a = 0.28 + 0.22 * (0.5 + 0.5 * math.sin(t * 1.8 + s * 0.52))
             self._draw_rect(x + s * (seg_w_b + seg_gap), y + h - 8.0, seg_w_b, 8.0, (0.12, 0.96, 1.0, seg_a))
         self._draw_rect(x, y + h - 10.0, w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
+
+        self._draw_help_section_content(x, y, w, h, help_scale)
+
+    def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float) -> None:
+        """Draw section cards and shortcut map in the help panel content area."""
+        t = self._hud_t
+        hp = self._help_pulse_t
+        pulse_med = 0.5 + 0.5 * math.sin(t * 2.3)
+
+        left_x = x + 14.0
+        left_y = y + 98.0
+        left_w = w * 0.64
+        left_h = h - 100.0
+        right_x = left_x + left_w + 10.0
+        right_y = left_y
+        right_w = x + w - right_x - 14.0
+        right_h = left_h
 
         # ── section cards ─────────────────────────────────────────────────
         sections = self._iter_help_sections()
@@ -3091,12 +3390,7 @@ void main() {
 
     def trigger_cta(self) -> None:
         """Advance to the next CTA slot and start the hype animation."""
-        if not self._cta_slots:
-            return
-        self._cta_slot = (self._cta_slot + 1) % len(self._cta_slots)
-        self._cta_timer = self._cta_show_duration
-        self._cta_t = 0.0
-        self._ensure_cta_resources()
+        self._cta.trigger()
 
     def trigger_cta_custom(
         self,
@@ -3105,19 +3399,7 @@ void main() {
         duration: float | None = None,
     ) -> None:
         """Trigger a custom CTA message (used by streaming drop-in ownership)."""
-        msg = str(text).strip()
-        if not msg:
-            return
-        self._cta_slots = [(msg, str(icon or '').strip())]
-        self._cta_show_duration = (
-            max(0.2, float(duration)) if duration is not None else _CTA_SHOW_DURATION
-        )
-        self._cta_textures = None
-        self._cta_slots_key = None
-        self._cta_slot = 0
-        self._cta_timer = self._cta_show_duration
-        self._cta_t = 0.0
-        self._ensure_cta_resources()
+        self._cta.trigger_custom(text, icon, duration)
 
     def flash_message(self, msg: str, duration: float = 2.0) -> None:
         if not self._flash_enabled:
@@ -3185,13 +3467,22 @@ void main() {
         self._width = w
         self._height = h
 
-    # ------------------------------------------------------------------
-    # CTA hype overlay — internal helpers
-    # ------------------------------------------------------------------
 
-    def _ensure_cta_resources(self) -> None:
-        """Lazily build the neon blit shader and PIL textures for all CTA slots."""
-        if self._cta_blit_prog is None:
+    def destroy(self) -> None:
+        """Release all GL resources."""
+        if self._quad_vao is not None:
+            self._quad_vao.release()
+        if self._quad_vbo is not None:
+            self._quad_vbo.release()
+        if self._blit_prog is not None:
+            self._blit_prog.release()
+        if self._textures is not None:
+            for _t in self._textures:
+                _t.release()
+
+    def _ensure_resources(self, ctx: moderngl.Context) -> None:
+        """Lazily build GLSL shader and PIL-rendered textures."""
+        if self._blit_prog is None:
             vert = """
 #version 330
 in vec2 in_pos;
@@ -3211,13 +3502,11 @@ uniform float     iAlpha;
 in  vec2 v_uv;
 out vec4 fragColor;
 void main() {
-    // Chromatic aberration: strong on entry, subtle on hold
     float ca  = mix(0.018, 0.004, clamp(iPhase * 2.5, 0.0, 1.0));
     float r   = texture(iChannel0, v_uv + vec2(-ca, 0.0)).r;
     float g   = texture(iChannel0, v_uv).g;
     float b   = texture(iChannel0, v_uv + vec2( ca, 0.0)).b;
     float a   = texture(iChannel0, v_uv).a;
-    // Neon hue cycle: hot-pink <-> electric cyan
     float cyc  = 0.5 + 0.5 * sin(iTime * 2.8);
     vec3  nA   = vec3(1.0,  0.12, 0.88);
     vec3  nB   = vec3(0.05, 0.95, 1.0);
@@ -3225,29 +3514,27 @@ void main() {
     vec3  col  = vec3(r, g, b);
     float lum  = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(col, col * neon * 1.5, 0.45 * lum);
-    // Scanline shimmer
     col *= 0.92 + 0.08 * sin(v_uv.y * 160.0 + iTime * 18.0);
-    // Beat-sync pulse
     col *= 0.90 + 0.10 * sin(iTime * 9.2);
     fragColor = vec4(col, a * iAlpha);
 }
 """
-            self._cta_blit_prog = self._ctx.program(vertex_shader=vert, fragment_shader=frag)
-            self._cta_quad_vbo = self._ctx.buffer(reserve=6 * 4 * 4)
-            self._cta_quad_vao = self._ctx.vertex_array(
-                self._cta_blit_prog,
-                [(self._cta_quad_vbo, '2f 2f', 'in_pos', 'in_uv')],
+            self._blit_prog = ctx.program(vertex_shader=vert, fragment_shader=frag)
+            self._quad_vbo = ctx.buffer(reserve=6 * 4 * 4)
+            self._quad_vao = ctx.vertex_array(
+                self._blit_prog,
+                [(self._quad_vbo, '2f 2f', 'in_pos', 'in_uv')],
             )
 
-        slots_key = tuple(self._cta_slots)
-        if self._cta_textures is not None and self._cta_slots_key == slots_key:
+        slots_key = tuple(self._slots)
+        if self._textures is not None and self._slots_key == slots_key:
             return
 
-        if self._cta_textures is not None:
-            for _t in self._cta_textures:
+        if self._textures is not None:
+            for _t in self._textures:
                 _t.release()
-        self._cta_textures = []
-        self._cta_slots_key = slots_key
+        self._textures = []
+        self._slots_key = slots_key
         if not _PIL_AVAILABLE:
             return
 
@@ -3274,19 +3561,19 @@ void main() {
         except Exception:
             pass
 
-        TEX_W, TEX_H = self._cta_tex_w, self._cta_tex_h
-        for text, icon in self._cta_slots:
+        TEX_W, TEX_H = self._tex_w, self._tex_h
+        for text, icon in self._slots:
             try:
-                img = self._render_cta_image(text, icon, TEX_W, TEX_H, text_font, emoji_font)
+                img = self._build_image(text, icon, TEX_W, TEX_H, text_font, emoji_font)
             except Exception:
                 log.debug('CTA image render failed for %r; using blank', text, exc_info=True)
                 img = Image.new('RGBA', (TEX_W, TEX_H), (0, 0, 0, 0))
             data = np.array(img, dtype=np.uint8)
-            tex = self._ctx.texture((TEX_W, TEX_H), 4, data=data.tobytes())
+            tex = ctx.texture((TEX_W, TEX_H), 4, data=data.tobytes())
             tex.filter = moderngl.LINEAR, moderngl.LINEAR
-            self._cta_textures.append(tex)
+            self._textures.append(tex)
 
-    def _render_cta_image(
+    def _build_image(
         self,
         text: str,
         icon: str,
@@ -3295,13 +3582,12 @@ void main() {
         text_font: 'ImageFont.FreeTypeFont | None',
         emoji_font: 'ImageFont.FreeTypeFont | None',
     ) -> 'Image.Image':
-        """Render one CTA message + icon to a transparent RGBA PIL image."""
+        """Render one CTA slot to a transparent RGBA PIL image."""
         img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
         font = text_font or ImageFont.load_default()
         icon_font = emoji_font or font
-        # Strip variation selectors so fallback fonts render cleanly
         icon_clean = icon.replace('\ufe0f', '').strip()
 
         bbox_t = draw.textbbox((0, 0), text, font=font)
@@ -3323,7 +3609,6 @@ void main() {
         tx = max(0, (width - total_w) // 2)
         ty = (height - th) // 2
 
-        # Pure white text — neon color tint applied by the GLSL shader
         draw.text((tx - bbox_t[0], ty - bbox_t[1]), text, font=font, fill=(255, 255, 255, 255))
 
         if icon_clean:
@@ -3332,102 +3617,3 @@ void main() {
             draw.text((ix - bbox_i[0], iy - bbox_i[1]), icon_clean, font=icon_font, fill=(255, 255, 255, 255))
 
         return img
-
-    def _render_cta(self, dt: float) -> None:
-        """Tick and draw the active CTA overlay with spring-bounce entry and neon glow."""
-        if self._cta_blit_prog is None or self._cta_textures is None:
-            return
-        if not (0 <= self._cta_slot < len(self._cta_textures)):
-            return
-
-        self._cta_timer -= dt
-        self._cta_t += dt
-
-        elapsed = self._cta_show_duration - self._cta_timer
-        _ENTRY = 0.45
-        _EXIT_START = self._cta_show_duration - 0.65
-        _EXIT_DUR = 0.65
-
-        if elapsed < _ENTRY:
-            t_e = elapsed / _ENTRY
-            spring = 1.0 - math.exp(-t_e * 6.0) * math.cos(t_e * math.pi * 2.2)
-            scale_f = max(0.0, min(1.08, spring))
-            alpha = min(1.0, t_e * 4.0)
-        elif elapsed > _EXIT_START:
-            t_x = min(1.0, (elapsed - _EXIT_START) / _EXIT_DUR)
-            scale_f = 1.0 - t_x * 0.12
-            alpha = max(0.0, 1.0 - t_x * t_x)
-        else:
-            hold_t = elapsed - _ENTRY
-            scale_f = 1.0 + 0.012 * math.sin(hold_t * 3.1)
-            alpha = 1.0
-
-        if alpha <= 0.0:
-            return
-
-        tex = self._cta_textures[self._cta_slot]
-        tw = self._cta_tex_w * scale_f
-        th = self._cta_tex_h * scale_f
-        cx = self._width * 0.5
-        cy = self._height * 0.46
-        tx0 = cx - tw * 0.5
-        ty0 = cy - th * 0.5
-
-        # Neon glow color cycling (hot-pink <-> electric cyan)
-        t = self._cta_t
-        cyc = 0.5 + 0.5 * math.sin(t * 2.8)
-        gr = 0.9 + 0.1 * cyc
-        gg = 0.05 + 0.10 * cyc
-        gb = 0.85 - 0.4 * cyc
-
-        # Layered glow halos behind the text
-        for pad, glow_a in ((100, 0.14), (68, 0.18), (40, 0.23), (20, 0.29), (8, 0.37)):
-            self._draw_rect(
-                tx0 - pad, ty0 - pad, tw + pad * 2, th + pad * 2,
-                (gr, gg, gb, glow_a * alpha),
-            )
-
-        # Blit texture with chromatic-aberration + neon shader
-        phase = min(1.0, max(0.0, (elapsed - _ENTRY) / max(0.01, _EXIT_START - _ENTRY)))
-        w, h = float(self._width), float(self._height)
-
-        def to_ndc(px: float, py: float) -> tuple[float, float]:
-            return (px / w) * 2.0 - 1.0, 1.0 - (py / h) * 2.0
-
-        nx0, ny_top = to_ndc(tx0, ty0)
-        nx1, ny_bot = to_ndc(tx0 + tw, ty0 + th)
-
-        verts = np.array([
-            nx0, ny_top,  0.0, 0.0,
-            nx1, ny_top,  1.0, 0.0,
-            nx0, ny_bot,  0.0, 1.0,
-            nx1, ny_top,  1.0, 0.0,
-            nx1, ny_bot,  1.0, 1.0,
-            nx0, ny_bot,  0.0, 1.0,
-        ], dtype=np.float32)
-
-        self._cta_quad_vbo.write(verts)
-        self._cta_blit_prog['iTime'].value = t
-        self._cta_blit_prog['iPhase'].value = phase
-        self._cta_blit_prog['iAlpha'].value = alpha
-        tex.use(location=0)
-        self._cta_blit_prog['iChannel0'].value = 0
-        self._ctx.enable(moderngl.BLEND)
-        self._cta_quad_vao.render(moderngl.TRIANGLES, vertices=6)
-
-    def destroy(self) -> None:
-        self._font_tex.release()
-        self._prog.release()
-        self._vbo.release()
-        self._panel_prog.release()
-        self._panel_vbo.release()
-        self._panel_vao.release()
-        if self._cta_quad_vao is not None:
-            self._cta_quad_vao.release()
-        if self._cta_quad_vbo is not None:
-            self._cta_quad_vbo.release()
-        if self._cta_blit_prog is not None:
-            self._cta_blit_prog.release()
-        if self._cta_textures is not None:
-            for _t in self._cta_textures:
-                _t.release()
