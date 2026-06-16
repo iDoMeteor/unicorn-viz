@@ -728,6 +728,65 @@ class Overlays:
         ),
     ]
 
+    HELP_ICON_ENTRIES: list[dict[str, object]] = [
+        {
+            'id': 'about',
+            'label': 'DJ UT',
+            'glyph': 'UT',
+            'description': 'About / links page',
+            'accent': (0.98, 0.78, 1.00),
+        },
+        {
+            'id': 'contact',
+            'label': 'Contact',
+            'glyph': '@',
+            'description': 'Send logs / VJ data / screenshots / recordings',
+            'accent': (0.10, 0.94, 1.00),
+        },
+        {
+            'id': 'share',
+            'label': 'Share',
+            'glyph': 'SH',
+            'description': 'Open share link flow',
+            'accent': (0.98, 0.96, 0.72),
+        },
+        {
+            'id': 'login_out',
+            'label': 'Login/Out',
+            'glyph': 'IN',
+            'description': 'Future auth flow placeholder',
+            'accent': (0.72, 1.00, 0.66),
+        },
+        {
+            'id': 'settings',
+            'label': 'Settings',
+            'glyph': 'SET',
+            'description': 'Future app settings placeholder',
+            'accent': (1.00, 0.68, 0.28),
+        },
+        {
+            'id': 'account',
+            'label': 'Account',
+            'glyph': 'AC',
+            'description': 'Future account hub placeholder',
+            'accent': (0.78, 0.38, 1.00),
+        },
+        {
+            'id': 'shop',
+            'label': 'Shop',
+            'glyph': '$',
+            'description': 'Open web store flow',
+            'accent': (0.98, 0.62, 0.22),
+        },
+        {
+            'id': 'dropins',
+            'label': 'Drop-ins',
+            'glyph': 'DI',
+            'description': 'ProjectM browser / future in-app purchases',
+            'accent': (0.66, 0.92, 1.00),
+        },
+    ]
+
     # Drop-in help is now registered dynamically via HELP_ENTRIES in each drop-in
     # module and collected by discover_dropin_help_entries() at startup.
     DROPIN_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = []
@@ -873,7 +932,9 @@ class Overlays:
         self._dynamic_help_order: list[str] = []
         self._postfx_help_entries: list[tuple[str, str]] = []
         self._help_collapsed: dict[str, bool] = {}
+        self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
+        self._help_icon_focus_idx: int = 0
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
 
@@ -2893,11 +2954,15 @@ void main() {
             color=(0.90, 1.0, 0.82, dt_a),
         )
 
+        icon_band_y = y + 100.0
+        icon_band_h = self._render_help_icon_rail(x, icon_band_y, w, help_scale)
+        content_top_y = icon_band_y + icon_band_h + 14.0
+
         # ── left/right content panes ──────────────────────────────────────
         left_x = x + 14.0
-        left_y = y + 98.0
+        left_y = content_top_y
         left_w = w * 0.64
-        left_h = h - 100.0
+        left_h = (y + h) - left_y - 10.0
 
         right_x = left_x + left_w + 10.0
         right_y = left_y
@@ -2924,18 +2989,74 @@ void main() {
             self._draw_rect(x + s * (seg_w_b + seg_gap), y + h - 8.0, seg_w_b, 8.0, (0.12, 0.96, 1.0, seg_a))
         self._draw_rect(x, y + h - 10.0, w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
 
-        self._draw_help_section_content(x, y, w, h, help_scale)
+        self._draw_help_section_content(x, y, w, h, help_scale, content_top_y)
 
-    def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float) -> None:
+    def _render_help_icon_rail(self, x: float, y: float, w: float, help_scale: float) -> float:
+        """Draw the centered help icon rail and return its rendered height."""
+        entries = self._help_icon_entries()
+        if not entries:
+            return 0.0
+
+        band_h = max(78.0, 70.0 * help_scale)
+        tile = max(44.0, min(58.0, 50.0 * help_scale))
+        gap = max(10.0, 12.0 * help_scale)
+        label_scale = max(0.92, min(1.18, 1.02 * help_scale))
+        label_h = 8.0 * label_scale + 2.0
+        pad_x = max(8.0, 10.0 * help_scale)
+        pad_y = max(6.0, 8.0 * help_scale)
+        cell_w = tile + pad_x * 2.0
+        cell_h = tile + label_h + pad_y * 2.0 + 4.0
+
+        total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
+        start_x = x + max(0.0, (w - total_w) * 0.5)
+        rail_y = y + 10.0
+
+        self._draw_rect(x + 20.0, y + band_h - 4.0, w - 40.0, 2.0, (1.0, 0.70, 0.24, 0.42))
+
+        for idx, entry in enumerate(entries):
+            cell_x = start_x + idx * (cell_w + gap)
+            accent = self._help_icon_accent(entry)
+            is_active = self._help_focus_region == 'icons' and idx == self._help_icon_focus_idx
+            pulse = 0.5 + 0.5 * math.sin(self._help_pulse_t * 4.2 + idx * 0.63)
+            glow_a = 0.12 + pulse * 0.14 if is_active else 0.05 + pulse * 0.05
+            border_a = 0.62 if is_active else 0.28
+
+            self._draw_rect(cell_x - 2.0, rail_y - 2.0, cell_w + 4.0, cell_h + 4.0, (accent[0], accent[1], accent[2], glow_a))
+            self._draw_rect(cell_x, rail_y, cell_w, cell_h, (0.03 + accent[0] * 0.03, 0.05 + accent[1] * 0.05, 0.09 + accent[2] * 0.04, 0.72))
+            self._draw_rect(cell_x, rail_y, cell_w, 3.0, (accent[0], accent[1], accent[2], 0.82))
+            self._draw_rect(cell_x + 1.0, rail_y + 1.0, cell_w - 2.0, tile + 2.0, (0.06, 0.08, 0.14, 0.95))
+            self._draw_rect(cell_x + pad_x, rail_y + pad_y, tile, tile, (accent[0], accent[1], accent[2], 0.18 + pulse * 0.10))
+            self._draw_rect(cell_x + pad_x + 1.0, rail_y + pad_y + 1.0, tile - 2.0, tile - 2.0, (0.04, 0.05, 0.10, 0.90))
+            self._draw_rect(cell_x + pad_x, rail_y + pad_y, tile, 4.0, (accent[0], accent[1], accent[2], 0.70))
+            if is_active:
+                self._draw_rect(cell_x - 1.0, rail_y - 1.0, cell_w + 2.0, cell_h + 2.0, (accent[0], accent[1], accent[2], border_a))
+
+            glyph = str(entry.get('glyph', ''))[:3].upper()
+            label = str(entry.get('label', ''))
+            glyph_scale = max(1.18, min(1.68, 1.42 * help_scale))
+            glyph_w = len(glyph) * 8.0 * glyph_scale
+            glyph_x = cell_x + pad_x + (tile - glyph_w) * 0.5
+            glyph_y = rail_y + pad_y + (tile - 8.0 * glyph_scale) * 0.5 + 2.0
+            self._draw_text(glyph, glyph_x, glyph_y, scale=glyph_scale, color=(1.0, 1.0, 1.0, 0.98))
+
+            label_scale = max(0.94, min(1.16, 1.02 * help_scale))
+            label_w = len(label) * 8.0 * label_scale
+            label_x = cell_x + (cell_w - label_w) * 0.5
+            label_y = rail_y + pad_y + tile + 8.0
+            label_color = (accent[0], accent[1], accent[2], 1.0 if is_active else 0.92)
+            self._draw_text(label, label_x, label_y, scale=label_scale, color=label_color)
+        return band_h
+
+    def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
         """Draw section cards and shortcut map in the help panel content area."""
         t = self._hud_t
         hp = self._help_pulse_t
         pulse_med = 0.5 + 0.5 * math.sin(t * 2.3)
 
         left_x = x + 14.0
-        left_y = y + 98.0
+        left_y = content_top_y
         left_w = w * 0.64
-        left_h = h - 100.0
+        left_h = (y + h) - left_y - 10.0
         right_x = left_x + left_w + 10.0
         right_y = left_y
         right_w = x + w - right_x - 14.0
@@ -2983,7 +3104,7 @@ void main() {
                 self._draw_rect(sx2 - 2.0, sy2 - 2.0, col_w + 4.0, section_h + 4.0, (accent[0], accent[1], accent[2], edge_a))
             self._draw_rect(sx2, sy2, col_w, section_h, (0.05 + accent[0] * 0.05, 0.08 + accent[1] * 0.06, 0.14 + accent[2] * 0.05, 0.62))
             self._draw_rect(sx2, sy2, col_w, 3.0, (accent[0], accent[1], accent[2], 0.78))
-            marker = '>' if sec_idx == self._help_focus_idx else ' '
+            marker = '>' if (self._help_focus_region == 'sections' and sec_idx == self._help_focus_idx) else ' '
             icon = '+' if collapsed else '-'
             header = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
             self._draw_text(header, sx2 + card_pad, sy2 + card_pad, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
@@ -3160,6 +3281,109 @@ void main() {
                 self._help_collapsed[name] = name not in default_expanded
         if valid:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(valid) - 1))
+
+    def _help_icon_entries(self) -> list[dict[str, object]]:
+        """Return the static help icon entries."""
+        return list(self.HELP_ICON_ENTRIES)
+
+    def _help_icon_accent(self, entry: dict[str, object]) -> tuple[float, float, float]:
+        accent = entry.get('accent', (0.9, 0.9, 0.9))
+        if isinstance(accent, tuple) and len(accent) == 3:
+            return float(accent[0]), float(accent[1]), float(accent[2])
+        return (0.9, 0.9, 0.9)
+
+    def help_focus_region(self) -> str:
+        """Return the active help focus region."""
+        return self._help_focus_region
+
+    def help_icon_count(self) -> int:
+        """Return the number of help icons available in the rail."""
+        return len(self.HELP_ICON_ENTRIES)
+
+    def toggle_help_focus_region(self) -> bool:
+        """Toggle focus between the help section list and icon rail."""
+        if not self._show_help:
+            return False
+        self._help_focus_region = 'icons' if self._help_focus_region == 'sections' else 'sections'
+        return True
+
+    def move_help_icon_focus(self, delta: int) -> bool:
+        """Move focus within the help icon rail."""
+        n = self.help_icon_count()
+        if n <= 0:
+            return False
+        self._help_icon_focus_idx = (self._help_icon_focus_idx + delta) % n
+        self._help_focus_region = 'icons'
+        return True
+
+    def move_help_focus_active(self, delta: int) -> bool:
+        """Move focus in whichever help region is currently active."""
+        if self._help_focus_region == 'icons':
+            return self.move_help_icon_focus(delta)
+        return self.move_help_focus(delta)
+
+    def activate_help_focus_item(self) -> bool:
+        """Activate the currently-focused help item.
+
+        Phase 1 keeps icon activation local and non-networked.
+        """
+        if self._help_focus_region == 'icons':
+            entries = self._help_icon_entries()
+            if not entries:
+                return False
+            idx = max(0, min(self._help_icon_focus_idx, len(entries) - 1))
+            entry = entries[idx]
+            label = str(entry.get('label', 'Icon'))
+            description = str(entry.get('description', '')).strip()
+            self.flash_message(f'Help icon: {label}' + (f' // {description}' if description else ''), 1.5)
+            return True
+        return self.toggle_help_focus_section()
+
+    def handle_help_mouse_click(self, x: float, y: float) -> bool:
+        """Handle mouse clicks on the help icon rail."""
+        if not self._show_help:
+            return False
+        panel_pad = 44.0
+        px = panel_pad
+        py = panel_pad
+        pw = self._width - panel_pad * 2.0
+        ph = self._height - panel_pad * 2.0
+        if x < px or x > px + pw or y < py or y > py + ph:
+            return False
+
+        res_ratio = min(self._width, self._height) / 1080.0
+        help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
+        icon_band_y = py + 100.0
+        band_h = max(78.0, 70.0 * help_scale)
+        entries = self._help_icon_entries()
+        if not entries:
+            return False
+
+        tile = max(44.0, min(58.0, 50.0 * help_scale))
+        gap = max(10.0, 12.0 * help_scale)
+        label_scale = max(0.92, min(1.18, 1.02 * help_scale))
+        label_h = 8.0 * label_scale + 2.0
+        pad_x = max(8.0, 10.0 * help_scale)
+        pad_y = max(6.0, 8.0 * help_scale)
+        cell_w = tile + pad_x * 2.0
+        cell_h = tile + label_h + pad_y * 2.0 + 8.0
+        total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
+        start_x = px + max(0.0, (pw - total_w) * 0.5)
+        rail_y = icon_band_y + 10.0
+
+        if y < icon_band_y or y > icon_band_y + band_h:
+            return False
+
+        for idx, entry in enumerate(entries):
+            cell_x = start_x + idx * (cell_w + gap)
+            if cell_x <= x <= cell_x + cell_w and rail_y <= y <= rail_y + cell_h:
+                self._help_focus_region = 'icons'
+                self._help_icon_focus_idx = idx
+                label = str(entry.get('label', 'Icon'))
+                description = str(entry.get('description', '')).strip()
+                self.flash_message(f'Help icon: {label}' + (f' // {description}' if description else ''), 1.3)
+                return True
+        return False
 
     def note_help_activity(self) -> None:
         """Reset help auto-hide timer after keyboard interaction."""
@@ -3426,6 +3650,10 @@ void main() {
 
     def toggle_help(self) -> None:
         self._show_help = not self._show_help
+        if self._show_help:
+            self._help_focus_region = 'sections'
+            self._help_focus_idx = 0
+            self._help_icon_focus_idx = 0
         self._help_timer = 60.0 if self._show_help else 0.0
 
     def toggle_flash_messages(self) -> bool:

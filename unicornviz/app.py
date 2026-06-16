@@ -2401,6 +2401,14 @@ void main() {
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
                     if manager_modal_active:
                         continue
+                    if event.button.button == sdl2.SDL_BUTTON_LEFT:
+                        overlays = getattr(self, '_overlays', None)
+                        if overlays is not None and bool(getattr(overlays, 'help_visible', False)):
+                            try:
+                                if bool(overlays.handle_help_mouse_click(float(event.button.x), float(event.button.y))):
+                                    continue
+                            except Exception as exc:
+                                log.warning('Help overlay mouse handling failed: %s', exc)
                     if event.button.button == sdl2.SDL_BUTTON_MIDDLE:
                         if self._postfx_controller is not None:
                             if (self._postfx_controller.is_hue_active
