@@ -26,6 +26,7 @@ This is the canonical map for project documentation.
 - Effect tweakables backlog (2026-06-04): [docs/planning/effect-tweakables-backlog-2026-06-04.md](planning/effect-tweakables-backlog-2026-06-04.md)
 - Feature review remediation plan (2026-06-10): [docs/planning/feature-review-remediation-plan-2026-06-10.md](planning/feature-review-remediation-plan-2026-06-10.md)
 - Multi-head viewport regression tests issue (2026-06-14): [docs/planning/multihead-viewport-regression-tests-issue-2026-06-14.md](planning/multihead-viewport-regression-tests-issue-2026-06-14.md)
+- Help screen additions milestone (2026-06-14): [docs/planning/help-additions-milestone-2026-06-14.md](planning/help-additions-milestone-2026-06-14.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
 - Archived debug and handoff notes: [docs/archive/debug](archive/debug)
