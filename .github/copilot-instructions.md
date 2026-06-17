@@ -273,6 +273,14 @@ out vec2 out_pos;
   or explicitly deferred by the user.
 - Do not silently proceed past known red tests; unresolved failures must be
   called out in commit notes and user updates.
+- **Never implement production code solely to make pre-existing failing tests
+  pass.** If the agent encounters tests it did not write and does not fully
+  understand, it must stop, report the failing test names and file paths to the
+  user, and wait for explicit instruction before touching either the tests or
+  the code they exercise. Guessing at an implementation to clear a red test is
+  strictly forbidden — the tests may represent a planned API, a work-in-progress
+  contract, or a deliberate design decision from another contributor that the
+  agent has no context for.
 
 ## Git Hook Discipline
 
