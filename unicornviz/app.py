@@ -2693,50 +2693,21 @@ void main() {
                         overlays._name_text = self._current_effect.NAME
 
             # Feed modern TAB HUD with current runtime status.
+            # ---------------------------------------------------------------
+            # Gating strategy: the full HUD dict (50+ fields, Spotify string
+            # formatting, session-clock call) is expensive to build every frame.
+            # We split into three tiers:
+            #   A) Always: trivial fps + effect name, already set above.
+            #   B) Always: Spotify snapshot for banner fields + set_overlay_banner.
+            #   C) HUD-visible only: all string formatting + full set_hud_state.
+            # ---------------------------------------------------------------
             fps_now = (1.0 / dt) if dt > 0.0 else 0.0
-            transition_name = self._transition_kind if self._next_effect is not None else 'none'
-            transition_pct = f"{int(max(0.0, min(1.0, self._transition_t)) * 100)}%"
-            audio_src = audio_manager.get_source_label() if audio_manager is not None else 'n/a'
-            # Format reactive values: no trailing 'x', space before '*'
-            if audio_manager is not None:
-                _rv = audio_manager.get_reactivity()
-                react_str = f"{_rv:.1f}{' *' if self._reactivity_randomized else ''}"
-            else:
-                react_str = 'n/a'
-            if self._current_effect is not None and 'speed' in self._current_effect.parameters:
-                _sv = self._current_effect.parameters['speed']
-                speed_str = f"{_sv:.2f}{' *' if self._speed_randomized else ''}"
-            else:
-                speed_str = f"N/A{' *' if self._speed_randomized else ''}"
-            if self._current_effect is not None and 'zoom' in self._current_effect.parameters:
-                _zv = self._current_effect.parameters['zoom']
-                zoom_str = f"{_zv:.2f}{' *' if self._zoom_randomized else ''}"
-            else:
-                zoom_str = f"N/A{' *' if self._zoom_randomized else ''}"
-            scale_str = f'{self._render_scale:.2f}'
-            rec_state = 'OFF'
-            if self._recorder is not None and self._recorder.is_recording:
-                rec_state = 'ON'
-            stream_state = 'OFF'
-            stream_provider = '-'
-            if self._streamer is not None and self._streamer.is_streaming:
-                stream_state = 'LIVE'
-            if self._streamer is not None:
-                stream_provider = str(getattr(self._streamer, 'provider', '-')).upper()
-            advance_elapsed = max(0.0, self._demo_timer)
-            advance_total = max(0.1, self._effect_duration)
-            advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
+
+            # --- Tier B: Spotify snapshot (always, needed for banner) ---
             spotify_visible = 'YES' if self._spotify is not None else 'NO'
-            spotify_auth_visible = 'NO'
-            spotify_auth_status = 'OFF'
             spotify_status = 'OFF'
-            spotify_track = '-'
-            spotify_artist = '-'
-            spotify_album = '-'
-            spotify_length = '--:--'
             spotify_change_counter = 0
-            spotify_prev_artist = '-'
-            spotify_prev_title = '-'
+            spotify_length = '--:--'
             banner_enabled = False
             banner_hold_s = 10.0
             banner_track = '-'
@@ -2744,105 +2715,160 @@ void main() {
             banner_album = '-'
             banner_prev_artist = '-'
             banner_prev_title = '-'
-            spotify_progress = '--:--/--:-- 0%'
+            _spotify_snap: dict | None = None
             if self._spotify is not None:
                 snap_fn = getattr(self._spotify, 'snapshot', None)
                 if callable(snap_fn):
                     try:
-                        spotify = snap_fn()
+                        _spotify_snap = snap_fn()
                     except Exception:
-                        spotify = None
-                    if isinstance(spotify, dict):
-                        available = bool(spotify.get('available', False))
-                        playing = bool(spotify.get('is_playing', False))
-                        raw_status = str(spotify.get('status', '') or '').strip().upper()
+                        _spotify_snap = None
+                    if isinstance(_spotify_snap, dict):
+                        available = bool(_spotify_snap.get('available', False))
+                        playing = bool(_spotify_snap.get('is_playing', False))
+                        raw_status = str(_spotify_snap.get('status', '') or '').strip().upper()
                         if available and raw_status:
                             spotify_status = raw_status
                         elif available:
                             spotify_status = 'PLAYING' if playing else 'PAUSED'
+                        banner_track = str(_spotify_snap.get('title', '') or '').strip() or '-'
+                        banner_artist = str(_spotify_snap.get('artist', '') or '').strip() or '-'
+                        banner_album = str(_spotify_snap.get('album', '') or '').strip() or '-'
+                        banner_prev_artist = str(_spotify_snap.get('previous_artist', '') or '').strip() or '-'
+                        banner_prev_title = str(_spotify_snap.get('previous_title', '') or '').strip() or '-'
+                        spotify_change_counter = int(_spotify_snap.get('change_counter', 0) or 0)
+                        banner_enabled = bool(_spotify_snap.get('now_playing_banner_enabled', False))
+                        banner_hold_s = max(1.0, float(_spotify_snap.get('now_playing_banner_hold_s', 10.0) or 10.0))
+                        dur_b = max(0.0, float(_spotify_snap.get('duration_s', 0.0) or 0.0))
+                        total_b = max(0, int(dur_b))
+                        mm_b, ss_b = divmod(total_b, 60)
+                        hh_b, mm_b = divmod(mm_b, 60)
+                        spotify_length = f'{hh_b:02d}:{mm_b:02d}:{ss_b:02d}' if hh_b > 0 else f'{mm_b:02d}:{ss_b:02d}'
+            current_banner = 'NOW PLAYING: {artist} :: {album} :: {track} :: {length}'.format(
+                artist=banner_artist,
+                album=banner_album,
+                track=banner_track,
+                length=spotify_length,
+            )
+            previous_banner = 'Previous: {artist} :: {track}'.format(
+                artist=banner_prev_artist,
+                track=banner_prev_title,
+            )
+            overlays.set_overlay_banner(
+                banner_enabled and spotify_visible == 'YES' and spotify_status == 'PLAYING',
+                current_banner,
+                previous_banner,
+                banner_hold_s,
+                spotify_change_counter,
+            )
 
-                        def _clip(text: str, limit: int) -> str:
-                            txt = str(text).strip()
-                            if not txt:
-                                return '-'
-                            if len(txt) <= limit:
-                                return txt
-                            return txt[: max(1, limit - 3)].rstrip() + '...'
+            # Playlist sync (cheap, always)
+            self._playlist_mode = playlist.mode
+            self._playlist_index = playlist.index
+            self._playlist_size = len(playlist.effects)
 
-                        banner_track = str(spotify.get('title', '') or '').strip() or '-'
-                        banner_artist = str(spotify.get('artist', '') or '').strip() or '-'
-                        banner_album = str(spotify.get('album', '') or '').strip() or '-'
-                        banner_prev_artist = str(spotify.get('previous_artist', '') or '').strip() or '-'
-                        banner_prev_title = str(spotify.get('previous_title', '') or '').strip() or '-'
-
-                        spotify_track = _clip(str(spotify.get('title', '') or ''), 24)
-                        spotify_artist = _clip(str(spotify.get('artist', '') or ''), 24)
-                        spotify_album = _clip(str(spotify.get('album', '') or ''), 24)
-                        spotify_prev_artist = _clip(str(spotify.get('previous_artist', '') or ''), 24)
-                        spotify_prev_title = _clip(str(spotify.get('previous_title', '') or ''), 24)
-                        spotify_change_counter = int(spotify.get('change_counter', 0) or 0)
-                        banner_enabled = bool(spotify.get('now_playing_banner_enabled', False))
-                        banner_hold_s = max(
-                            1.0,
-                            float(spotify.get('now_playing_banner_hold_s', 10.0) or 10.0),
-                        )
-
-                        pos = max(0.0, float(spotify.get('position_s', 0.0) or 0.0))
-                        dur = max(0.0, float(spotify.get('duration_s', 0.0) or 0.0))
-                        pct = int(round(min(100.0, (pos / dur) * 100.0))) if dur > 0.0 else 0
-
-                        def _fmt_secs(seconds: float) -> str:
-                            total = max(0, int(seconds))
-                            mm, ss = divmod(total, 60)
-                            hh, mm = divmod(mm, 60)
-                            if hh > 0:
-                                return f'{hh:02d}:{mm:02d}:{ss:02d}'
-                            return f'{mm:02d}:{ss:02d}'
-
-                        spotify_length = _fmt_secs(dur)
-                        spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
-                        spotify_auth_visible = 'YES' if bool(spotify.get('web_api_enabled', False)) else 'NO'
-                        auth_status = str(spotify.get('auth_status', '') or '').strip().upper()
-                        token_expires = float(spotify.get('token_expires_in_s', 0.0) or 0.0)
-                        queue_len = int(spotify.get('queue_len', 0) or 0)
-                        if bool(spotify.get('auth_ready', False)):
-                            mins = max(0, int(round(token_expires / 60.0)))
-                            spotify_auth_status = f'READY {mins}M Q{queue_len}'
-                        elif auth_status:
-                            spotify_auth_status = auth_status.replace('_', ' ')
-            slot_label = 'PRESET IDX'
-            preset_slot = '-/-'
-            variant_label = 'VARIANT'
-            variant_slot = '-/-'
-            if self._current_effect is not None:
-                label_text = getattr(self._current_effect, 'current_position_label', '')
-                if isinstance(label_text, str) and label_text.strip():
-                    slot_label = label_text.strip().upper()
-                slot_text = getattr(self._current_effect, 'current_position_text', '')
-                if isinstance(slot_text, str) and slot_text:
-                    preset_slot = slot_text
+            # --- Tier C: Full HUD build (only while TAB HUD is visible) ---
+            if overlays._show_name:
+                transition_name = self._transition_kind if self._next_effect is not None else 'none'
+                transition_pct = f"{int(max(0.0, min(1.0, self._transition_t)) * 100)}%"
+                audio_src = audio_manager.get_source_label() if audio_manager is not None else 'n/a'
+                if audio_manager is not None:
+                    _rv = audio_manager.get_reactivity()
+                    react_str = f"{_rv:.1f}{' *' if self._reactivity_randomized else ''}"
                 else:
-                    cur_idx = getattr(self._current_effect, 'current_index', None)
-                    cur_total = getattr(self._current_effect, 'current_total', None)
-                    if isinstance(cur_idx, int) and isinstance(cur_total, int) and cur_total > 0:
-                        preset_slot = f"{cur_idx + 1}/{cur_total}"
+                    react_str = 'n/a'
+                if self._current_effect is not None and 'speed' in self._current_effect.parameters:
+                    _sv = self._current_effect.parameters['speed']
+                    speed_str = f"{_sv:.2f}{' *' if self._speed_randomized else ''}"
+                else:
+                    speed_str = f"N/A{' *' if self._speed_randomized else ''}"
+                if self._current_effect is not None and 'zoom' in self._current_effect.parameters:
+                    _zv = self._current_effect.parameters['zoom']
+                    zoom_str = f"{_zv:.2f}{' *' if self._zoom_randomized else ''}"
+                else:
+                    zoom_str = f"N/A{' *' if self._zoom_randomized else ''}"
+                scale_str = f'{self._render_scale:.2f}'
+                rec_state = 'ON' if (self._recorder is not None and self._recorder.is_recording) else 'OFF'
+                stream_state = 'LIVE' if (self._streamer is not None and self._streamer.is_streaming) else 'OFF'
+                stream_provider = str(getattr(self._streamer, 'provider', '-')).upper() if self._streamer is not None else '-'
+                advance_elapsed = max(0.0, self._demo_timer)
+                advance_total = max(0.1, self._effect_duration)
+                advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
 
-                vlabel_text = getattr(self._current_effect, 'current_variant_label', '')
-                if isinstance(vlabel_text, str) and vlabel_text.strip():
-                    variant_label = vlabel_text.strip().upper()
-                vslot_text = getattr(self._current_effect, 'current_variant_text', '')
-                if isinstance(vslot_text, str) and vslot_text.strip():
-                    variant_slot = vslot_text.strip()
-            overlays.set_hud_state({
-                'title': 'Unicorn Viz HUD',
-                'session_time': self.vj_api.format_session_clock(),
-                'effect': overlays._name_text,
-                'previous_effect': self._previous_effect_name,
-                'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
-                'transition': transition_name,
-                'transition_t': transition_pct,
-                'fps': f"{fps_now:.1f}",
-                'frame_ms': f"{(dt * 1000.0):.2f}",
+                # Spotify HUD-only fields (clipped strings, progress, auth)
+                spotify_auth_visible = 'NO'
+                spotify_auth_status = 'OFF'
+                spotify_track = '-'
+                spotify_artist = '-'
+                spotify_album = '-'
+                spotify_prev_artist = '-'
+                spotify_prev_title = '-'
+                spotify_progress = '--:--/--:-- 0%'
+                if isinstance(_spotify_snap, dict):
+                    def _clip(text: str, limit: int) -> str:
+                        txt = str(text).strip()
+                        if not txt:
+                            return '-'
+                        return txt if len(txt) <= limit else txt[: max(1, limit - 3)].rstrip() + '...'
+
+                    def _fmt_secs(seconds: float) -> str:
+                        total = max(0, int(seconds))
+                        mm, ss = divmod(total, 60)
+                        hh, mm = divmod(mm, 60)
+                        return f'{hh:02d}:{mm:02d}:{ss:02d}' if hh > 0 else f'{mm:02d}:{ss:02d}'
+
+                    spotify_track = _clip(str(_spotify_snap.get('title', '') or ''), 24)
+                    spotify_artist = _clip(str(_spotify_snap.get('artist', '') or ''), 24)
+                    spotify_album = _clip(str(_spotify_snap.get('album', '') or ''), 24)
+                    spotify_prev_artist = _clip(str(_spotify_snap.get('previous_artist', '') or ''), 24)
+                    spotify_prev_title = _clip(str(_spotify_snap.get('previous_title', '') or ''), 24)
+                    pos = max(0.0, float(_spotify_snap.get('position_s', 0.0) or 0.0))
+                    dur = max(0.0, float(_spotify_snap.get('duration_s', 0.0) or 0.0))
+                    pct = int(round(min(100.0, (pos / dur) * 100.0))) if dur > 0.0 else 0
+                    spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
+                    spotify_auth_visible = 'YES' if bool(_spotify_snap.get('web_api_enabled', False)) else 'NO'
+                    auth_status = str(_spotify_snap.get('auth_status', '') or '').strip().upper()
+                    token_expires = float(_spotify_snap.get('token_expires_in_s', 0.0) or 0.0)
+                    queue_len = int(_spotify_snap.get('queue_len', 0) or 0)
+                    if bool(_spotify_snap.get('auth_ready', False)):
+                        mins = max(0, int(round(token_expires / 60.0)))
+                        spotify_auth_status = f'READY {mins}M Q{queue_len}'
+                    elif auth_status:
+                        spotify_auth_status = auth_status.replace('_', ' ')
+
+                slot_label = 'PRESET IDX'
+                preset_slot = '-/-'
+                variant_label = 'VARIANT'
+                variant_slot = '-/-'
+                if self._current_effect is not None:
+                    label_text = getattr(self._current_effect, 'current_position_label', '')
+                    if isinstance(label_text, str) and label_text.strip():
+                        slot_label = label_text.strip().upper()
+                    slot_text = getattr(self._current_effect, 'current_position_text', '')
+                    if isinstance(slot_text, str) and slot_text:
+                        preset_slot = slot_text
+                    else:
+                        cur_idx = getattr(self._current_effect, 'current_index', None)
+                        cur_total = getattr(self._current_effect, 'current_total', None)
+                        if isinstance(cur_idx, int) and isinstance(cur_total, int) and cur_total > 0:
+                            preset_slot = f"{cur_idx + 1}/{cur_total}"
+                    vlabel_text = getattr(self._current_effect, 'current_variant_label', '')
+                    if isinstance(vlabel_text, str) and vlabel_text.strip():
+                        variant_label = vlabel_text.strip().upper()
+                    vslot_text = getattr(self._current_effect, 'current_variant_text', '')
+                    if isinstance(vslot_text, str) and vslot_text.strip():
+                        variant_slot = vslot_text.strip()
+
+                overlays.set_hud_state({
+                    'title': 'Unicorn Viz HUD',
+                    'session_time': self.vj_api.format_session_clock(),
+                    'effect': overlays._name_text,
+                    'previous_effect': self._previous_effect_name,
+                    'next_effect': self._next_effect.NAME if self._next_effect is not None else '-',
+                    'transition': transition_name,
+                    'transition_t': transition_pct,
+                    'fps': f"{fps_now:.1f}",
+                    'frame_ms': f"{(dt * 1000.0):.2f}",
                 'resolution': f"{self._width}x{self._height}",
                 'render_scale': scale_str,
                 'playlist': f"{playlist.mode.upper()} {playlist.index + 1}/{len(playlist.effects)}",
@@ -2925,27 +2951,22 @@ void main() {
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',
                 'vj_status': self._vj_status_pill,
+                'audio_xruns': (
+                    str(self._audio_manager.get_xrun_count())
+                    if self._audio_manager is not None else '0'
+                ),
             })
-            current_banner = 'NOW PLAYING: {artist} :: {album} :: {track} :: {length}'.format(
-                artist=banner_artist,
-                album=banner_album,
-                track=banner_track,
-                length=spotify_length,
-            )
-            previous_banner = 'Previous: {artist} :: {track}'.format(
-                artist=banner_prev_artist,
-                track=banner_prev_title,
-            )
-            overlays.set_overlay_banner(
-                banner_enabled and spotify_visible == 'YES' and spotify_status == 'PLAYING',
-                current_banner,
-                previous_banner,
-                banner_hold_s,
-                spotify_change_counter,
-            )
-            self._playlist_mode = playlist.mode
-            self._playlist_index = playlist.index
-            self._playlist_size = len(playlist.effects)
+            else:
+                # HUD hidden — minimal update: keep fps, effect name, and live
+                # audio meters current so the display is correct when re-opened.
+                overlays.set_hud_state({
+                    'fps': f"{fps_now:.1f}",
+                    'frame_ms': f"{(dt * 1000.0):.2f}",
+                    'effect': overlays._name_text,
+                    'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
+                    'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
+                    'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
+                })
             if perf_debug_enabled:
                 perf_after_hud = time.perf_counter()
 

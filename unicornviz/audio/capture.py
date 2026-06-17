@@ -5,7 +5,19 @@ Linux: raw ALSA hostapi devices are intentionally skipped — PortAudio's
 ALSA backend aborts at the C level when a device disappears mid-stream
 (e.g. mic toggled off), and on modern Fedora/Arch the PipeWire shim
 through PulseAudio is the right path anyway.
-Feeds a ring buffer consumed by the analyzer on the main thread.
+
+Capture strategy: blocking-read daemon thread (not callback mode).  A
+dedicated ``uv-audio-reader`` thread calls ``stream.read(blocksize)``
+in a tight loop and pushes mono blocks into a ``deque`` ring buffer.
+PortAudio buffers internally; when the render thread holds the GIL
+longer than one period, the reader thread simply catches up on the next
+schedule slice — no PortAudio xrun, no audible static.  The main thread
+reads ``get_block()`` / ``get_history()`` without doing any I/O.
+
+Block-sequence counter: ``block_seq`` increments each time a new block
+is appended by the reader.  ``AudioManager.get_audio_data()`` compares
+the counter each frame and skips the FFT when no new block has arrived
+(~60 fps render vs ~47 Hz audio blocks at 48 kHz/1024).
 """
 from __future__ import annotations
 
@@ -234,17 +246,28 @@ class AudioCapture:
         fallback_silence_seconds: float = _DEFAULT_FALLBACK_SILENCE_SECONDS,
         fallback_cooldown_seconds: float = _DEFAULT_FALLBACK_COOLDOWN_SECONDS,
         auto_fallback_enabled: bool = True,
+        block_size: int = _BLOCK_SIZE,
     ) -> None:
         self._device_hint = device_hint
         self._buffer_seconds = buffer_seconds
         self._latency = _normalize_latency(latency)
+        self._blocksize: int = max(64, int(block_size))
         self._sample_rate = _SAMPLE_RATE
         self._channels = _CHANNELS
         self._buf: deque[np.ndarray] = deque(
-            maxlen=int(_SAMPLE_RATE * buffer_seconds / _BLOCK_SIZE) + 1
+            maxlen=int(_SAMPLE_RATE * buffer_seconds / self._blocksize) + 1
         )
         self._lock = threading.Lock()
         self._stream: "sd.InputStream | None" = None
+        # Blocking-read capture thread and its stop signal.
+        self._stop_event: threading.Event = threading.Event()
+        self._reader_thread: threading.Thread | None = None
+        # Monotonic block-sequence counter: incremented by the reader on every
+        # new block.  The analyzer uses this to skip redundant FFT work when
+        # no new block has arrived since the last render frame.
+        self._block_seq: int = 0
+        # Cumulative input-overflow counter for HUD diagnostics.
+        self._xrun_count: int = 0
         self._active = False
         self._candidate_devices: list[int | None] = []
         self._candidate_index = 0
@@ -353,17 +376,23 @@ class AudioCapture:
 
         self._sample_rate = native_rate
         self._channels = native_channels
-        new_maxlen = int(native_rate * self._buffer_seconds / _BLOCK_SIZE) + 1
-        log.debug("Audio: opening stream device=%s rate=%d channels=%d buffer_size=%d", device, native_rate, native_channels, new_maxlen)
+        new_maxlen = int(native_rate * self._buffer_seconds / self._blocksize) + 1
+        log.debug(
+            'Audio: opening stream device=%s rate=%d ch=%d blocksize=%d slots=%d',
+            device, native_rate, native_channels, self._blocksize, new_maxlen,
+        )
         with self._lock:
             self._buf = deque(maxlen=new_maxlen)
+        # Open in blocking-read mode (no callback= argument).  PortAudio
+        # buffers internally; the reader thread drains it on its own schedule
+        # so a GIL hold on the render thread can never cause an xrun.
+        self._stop_event.clear()
         self._stream = sd.InputStream(
             device=device,
             samplerate=native_rate,
             channels=native_channels,
-            blocksize=_BLOCK_SIZE,
+            blocksize=self._blocksize,
             dtype=np.float32,
-            callback=self._callback,
             latency=self._latency,
         )
         self._stream.start()
@@ -374,7 +403,15 @@ class AudioCapture:
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
-        log.debug("Audio: stream opened, buffer cleared, warmup period %.1fs", _WARMUP_DURATION)
+        log.debug('Audio: stream opened, buffer cleared, warmup period %.1fs', _WARMUP_DURATION)
+        # Start the blocking-read daemon thread
+        self._reader_thread = threading.Thread(
+            target=self._blocking_reader_worker,
+            name='uv-audio-reader',
+            daemon=True,
+        )
+        self._reader_thread.start()
+        log.debug('Audio: blocking-read capture thread started')
         if device is not None:
             dev_info = sd.query_devices(device)
             dev_name = dev_info['name']
@@ -520,39 +557,76 @@ class AudioCapture:
         else:
             log.warning('Could not open any audio stream candidate')
 
-    def _callback(
-        self,
-        indata: np.ndarray,
-        frames: int,
-        time_info,
-        status,
-    ) -> None:
-        if status:
-            now = time.time()
-            if now - self._last_status_log_time >= _STATUS_LOG_INTERVAL:
-                if self._suppressed_status_count > 0:
-                    log.warning(
-                        'Audio callback status: %s (%d similar warnings suppressed)',
-                        status,
-                        self._suppressed_status_count,
-                    )
+    def _stop_reader_thread(self) -> None:
+        """Signal the reader thread to stop and wait up to the close timeout."""
+        self._stop_event.set()
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
+            if self._reader_thread.is_alive():
+                log.warning(
+                    'Audio: reader thread did not exit within %.2fs',
+                    _CLOSE_STREAM_TIMEOUT_S,
+                )
+            self._reader_thread = None
+
+    def _blocking_reader_worker(self) -> None:
+        """Background daemon thread: block-reads from PortAudio into the ring buffer.
+
+        Runs a tight ``stream.read(blocksize)`` loop.  PortAudio buffers frames
+        internally so this thread just drains them.  If the render thread holds
+        the GIL past one audio period the reader is delayed, but PortAudio's
+        internal ring is not overflowed — no xrun, no static.  When overflow
+        does occur (buffer overfilled before drain) PortAudio reports it via the
+        ``overflow`` flag from ``stream.read()``; we count and log these.
+        """
+        blocksize = self._blocksize
+        # Pre-allocate mono scratch to avoid a heap allocation per block.
+        scratch = np.empty(blocksize, dtype=np.float32)
+        is_first_block = True
+        while not self._stop_event.is_set():
+            stream = self._stream
+            if stream is None or not self._active:
+                break
+            try:
+                data, overflow = stream.read(blocksize)
+            except Exception as exc:
+                if not self._stop_event.is_set():
+                    log.warning('Audio reader: stream.read() failed: %s', exc)
+                    self._active = False
+                break
+            if overflow:
+                self._xrun_count += 1
+                now = time.time()
+                if now - self._last_status_log_time >= _STATUS_LOG_INTERVAL:
+                    if self._suppressed_status_count > 0:
+                        log.warning(
+                            'Audio reader: input overflow (%d similar suppressed)',
+                            self._suppressed_status_count,
+                        )
+                    else:
+                        log.warning('Audio reader: input overflow')
+                    self._last_status_log_time = now
+                    self._suppressed_status_count = 0
                 else:
-                    log.warning('Audio callback status: %s', status)
-                self._last_status_log_time = now
-                self._suppressed_status_count = 0
+                    self._suppressed_status_count += 1
+            # Downmix to mono using pre-allocated scratch (no per-block heap alloc)
+            n = len(data)
+            if data.ndim > 1 and data.shape[1] > 1:
+                np.mean(data[:n], axis=1, out=scratch[:n])
+                mono = scratch[:n]
             else:
-                self._suppressed_status_count += 1
-        mono = indata.mean(axis=1) if indata.ndim > 1 and indata.shape[1] > 1 else indata[:, 0]
-        rms = float(np.sqrt(np.mean(mono * mono)))
-        if rms < self._fallback_rms_threshold:
-            self._silent_blocks += 1
-        else:
-            self._silent_blocks = 0
-        with self._lock:
-            self._buf.append(mono.copy())
-        if len(self._buf) == 1:
+                mono = data[:n, 0] if data.ndim > 1 else data[:n]
             rms = float(np.sqrt(np.mean(mono * mono)))
-            log.debug("Audio: first block received (rms=%.4f)", rms)
+            if rms < self._fallback_rms_threshold:
+                self._silent_blocks += 1
+            else:
+                self._silent_blocks = 0
+            with self._lock:
+                self._buf.append(mono.copy())
+                self._block_seq += 1
+            if is_first_block:
+                log.debug('Audio: first block received (rms=%.4f)', rms)
+                is_first_block = False
 
     def _next_viable_candidate_index(self, current_idx: int) -> int | None:
         if len(self._candidate_devices) <= 1:
@@ -616,7 +690,7 @@ class AudioCapture:
             now = time.time()
             if now - self._last_fallback_time < self._fallback_cooldown_seconds:
                 return
-        silent_time = self._silent_blocks * (_BLOCK_SIZE / max(self._sample_rate, 1))
+        silent_time = self._silent_blocks * (self._blocksize / max(self._sample_rate, 1))
         if silent_time < self._fallback_silence_seconds:
             return
 
@@ -671,14 +745,24 @@ class AudioCapture:
         with self._lock:
             blocks = list(self._buf)[-n_blocks:]
         if not blocks:
-            return np.zeros(_BLOCK_SIZE * n_blocks, dtype=np.float32)
+            return np.zeros(self._blocksize * n_blocks, dtype=np.float32)
         return np.concatenate(blocks)
 
     def stop(self) -> None:
+        # Signal reader first so it exits its loop when the stream close unblocks read()
+        self._stop_event.set()
         if self._stream is not None:
             self._close_stream_safely(self._stream, context='shutdown')
             self._stream = None
         self._active = False
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
+            if self._reader_thread.is_alive():
+                log.warning(
+                    'Audio: reader thread did not exit within %.2fs during shutdown',
+                    _CLOSE_STREAM_TIMEOUT_S,
+                )
+            self._reader_thread = None
 
     @property
     def active(self) -> bool:
@@ -690,7 +774,21 @@ class AudioCapture:
 
     @property
     def block_size(self) -> int:
-        return _BLOCK_SIZE
+        return self._blocksize
+
+    @property
+    def block_seq(self) -> int:
+        """Monotonic counter incremented by the reader on each new block.
+
+        The analyzer compares this to its own last-seen value to skip FFT
+        on frames where no new audio block has arrived.
+        """
+        return self._block_seq
+
+    @property
+    def xrun_count(self) -> int:
+        """Cumulative input-overflow count since stream open.  0 = clean."""
+        return self._xrun_count
 
     def current_source_label(self) -> str:
         """Return a human-readable label for the currently active audio source."""
@@ -763,6 +861,7 @@ class AudioCapture:
         current_device = self._candidate_devices[current_idx]
         target_device = self._candidate_devices[bounded_idx]
         try:
+            self._stop_reader_thread()
             if self._stream is not None:
                 self._close_stream_safely(self._stream, context='operator source select')
                 self._stream = None

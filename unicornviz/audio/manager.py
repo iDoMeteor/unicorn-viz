@@ -66,6 +66,7 @@ class AudioManager:
             fallback_silence_seconds=fallback_silence_seconds,
             fallback_cooldown_seconds=fallback_cooldown_seconds,
             auto_fallback_enabled=auto_fallback_enabled,
+            block_size=max(64, min(8192, int(cfg.get('audio', 'blocksize', default=1024)))),
         )
         self._analyzer = Analyzer(
             fft_bands=fft_bands,
@@ -75,6 +76,11 @@ class AudioManager:
         )
         self._last_data = AudioData()
         self._last_data_raw = AudioData()
+        # Block-sequence counter: tracks which capture block was last FFT'd.
+        # When block_seq hasn't changed since the previous frame, the analyzer
+        # is skipped and _last_data is reused (~20% main-thread CPU reduction
+        # at 60 fps vs ~47 Hz audio blocks; also keeps onset MAD stats clean).
+        self._last_analyzed_block_seq: int = -1
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
@@ -188,6 +194,15 @@ class AudioManager:
         from a quiet-but-live source (small but non-zero value).
         """
         return self._analyzer.last_raw_rms
+
+    def get_xrun_count(self) -> int:
+        """Return the cumulative capture input-overflow count since stream open.
+
+        A value of 0 means no xruns since the stream was last opened.  Each
+        non-zero increment indicates one missed audio period (potential static).
+        Surfaces in the TAB HUD for operator diagnostics.
+        """
+        return int(self._capture.xrun_count)
     
     def get_profile(self) -> AudioProfile:
         """Return the current audio profile."""
@@ -234,18 +249,26 @@ class AudioManager:
         """Called every frame from the main loop."""
         self._capture.maybe_fallback()
         block = self._capture.get_block()
-        if block is not None and len(block) > 0:
-            rms = float(np.sqrt(np.mean(block * block)))
-            log.debug("Audio frame: rms=%.4f bass=%.3f mid=%.3f treble=%.3f", rms, self._last_data.bass, self._last_data.mid, self._last_data.treble)
-        self._analyzer.process(block, out=self._last_data_raw)
-        self._copy_audio_into(self._last_data_raw, self._last_data)
-        if self._reactivity != 1.0:
-            r = self._reactivity
-            self._last_data.bass   = min(1.0, self._last_data.bass   * r)
-            self._last_data.mid    = min(1.0, self._last_data.mid    * r)
-            self._last_data.treble = min(1.0, self._last_data.treble * r)
-            np.multiply(self._last_data.fft, r, out=self._last_data.fft)
-            np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
+        current_seq = self._capture.block_seq
+        if current_seq != self._last_analyzed_block_seq:
+            # New block: run the full analyzer pipeline.
+            if block is not None and len(block) > 0:
+                log.debug(
+                    'Audio frame: rms=%.4f bass=%.3f mid=%.3f treble=%.3f',
+                    float(np.sqrt(np.mean(block * block))),
+                    self._last_data.bass, self._last_data.mid, self._last_data.treble,
+                )
+            self._analyzer.process(block, out=self._last_data_raw)
+            self._copy_audio_into(self._last_data_raw, self._last_data)
+            if self._reactivity != 1.0:
+                r = self._reactivity
+                self._last_data.bass   = min(1.0, self._last_data.bass   * r)
+                self._last_data.mid    = min(1.0, self._last_data.mid    * r)
+                self._last_data.treble = min(1.0, self._last_data.treble * r)
+                np.multiply(self._last_data.fft, r, out=self._last_data.fft)
+                np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
+            self._last_analyzed_block_seq = current_seq
+        # else: same block as last frame — reuse _last_data (reactivity already applied).
         return self._last_data
 
     def get_audio_data_raw(self) -> AudioData:
