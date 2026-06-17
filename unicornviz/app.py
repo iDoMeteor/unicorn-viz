@@ -39,6 +39,7 @@ from unicornviz.dropins import (
     load_runtime_capability_class,
     register_runtime_capability,
     unregister_runtime_capability,
+    BANNER_RUNTIME_CAPABILITY,
     CONTROL_ROOM_RUNTIME_CAPABILITY,
     MULTIHEAD_RUNTIME_CAPABILITY,
     POSTFX_RUNTIME_CAPABILITY,
@@ -350,6 +351,15 @@ def _load_postfx_controller_class() -> type:
     except Exception as exc:
         log.warning('PostFxController not available: %s', exc)
         return _NullPostFxController
+
+
+def _load_banner_controller_class() -> type:
+    """Load BannerController directly from the banner-01 drop-in."""
+    try:
+        return load_runtime_capability_class(BANNER_RUNTIME_CAPABILITY)
+    except Exception as exc:
+        log.warning('BannerController not available: %s', exc)
+        raise
 
 
 def _load_screen_burst_controller_class() -> type:
@@ -710,6 +720,22 @@ class App:
     def _subsystems_need_frame_capture(self) -> bool:
         """Return True when any registered subsystem wants preview-frame bytes."""
         return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
+
+    def _render_subsystem_overlays(self, dt: float, width: int, height: int) -> None:
+        """Render optional subsystem overlay layers before HUD composition."""
+        for name, subsystem in list(self._subsystems.items()):
+            renderer = getattr(subsystem, 'render_overlay', None)
+            if not callable(renderer):
+                continue
+            try:
+                renderer(int(width), int(height), float(dt), self._audio)
+            except TypeError:
+                try:
+                    renderer(int(width), int(height), float(dt))
+                except Exception as exc:
+                    log.warning('%s subsystem overlay render failed: %s', name, exc)
+            except Exception as exc:
+                log.warning('%s subsystem overlay render failed: %s', name, exc)
 
     def _update_frame_capture_snapshot(self, frame: bytes | None) -> None:
         """Cache the latest audience-output frame for subsystem preview use."""
@@ -2384,6 +2410,22 @@ void main() {
                 self._streamer.enabled,
                 self._streamer.auto_start,
             )
+
+        if not self._safe_mode:
+            banner_cfg = self.cfg.get('banner', default={}) or {}
+            if not isinstance(banner_cfg, dict):
+                banner_cfg = {}
+            try:
+                banner_cls = _load_banner_controller_class()
+                banner = banner_cls(self, banner_cfg)
+                register_runtime_capability(
+                    self.vj_api,
+                    banner,
+                    BANNER_RUNTIME_CAPABILITY,
+                )
+                log.info('BannerController loaded from drop-in')
+            except Exception as exc:
+                log.warning('BannerController not available: %s', exc)
         self._sync_recording_overlay()
         if self._recorder.enabled and self._recorder.auto_record:
             started, _ = self.start_recording()
@@ -2453,6 +2495,23 @@ void main() {
                             self._postfx_controller.on_ctrl_scroll(dy)
                         else:
                             self._postfx_controller.on_scroll(dy)
+                elif event.type == sdl2.SDL_MOUSEMOTION:
+                    if manager_modal_active:
+                        continue
+                    overlays = getattr(self, '_overlays', None)
+                    if overlays is not None and bool(getattr(overlays, 'help_visible', False)):
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x),
+                                float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                overlays.handle_help_mouse_motion(hit[0], hit[1])
+                            else:
+                                overlays.handle_help_mouse_motion(-1.0, -1.0)
+                        except Exception as exc:
+                            log.warning('Help overlay hover handling failed: %s', exc)
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
                     if manager_modal_active:
                         continue
@@ -2997,10 +3056,12 @@ void main() {
                 self._ctx.screen.use()
                 self._ctx.viewport = (vx, vy, vw, vh)
                 self._normalize_gl_render_state()
+                self._render_subsystem_overlays(dt, vw, vh)
                 overlays.render(dt, include_recording_indicator=False)
             else:
                 overlays.resize(self._width, self._height)
                 self._normalize_gl_render_state()
+                self._render_subsystem_overlays(dt, self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
             stream_frame: bytes | None = None
             need_frame_for_streaming = (

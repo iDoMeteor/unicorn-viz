@@ -202,21 +202,22 @@ Commit sequencing:
 
 ## Icon Asset Plan
 
-1. Start with internal placeholders rendered via existing overlay text/shape pipeline so implementation can proceed immediately.
-2. Replace placeholders with custom themed art once owner provides final assets or confirms generated pack.
-3. Suggested intake format for final assets:
-   - transparent PNG
-   - square source (128x128 or 256x256)
-   - filename slug per icon id
-4. Dedicated asset directory: `assets/icons/help/`
-5. Current id-based filenames:
+1. Help icon source assets are now maintained in bucketed directories:
+   - `assets/icons/help/76px/` for windows narrower than 3840 px
+   - `assets/icons/help/152px/` for windows 3840 px and wider
+2. Loader behavior:
+   - use source PNGs directly (no runtime flip/resample)
+   - `login_out` icon resolves to `login.png` or `logout.png` based on auth state
+3. Current id-based filenames (per bucket):
    - `about.png`
    - `contact.png`
    - `share.png`
-   - `login_out.png`
-   - `settings.png`
-   - `account.png`
    - `shop.png`
    - `dropins.png`
-
-Owner decision needed before final polish pass: provide custom icon pack externally vs. have agent generate first-pass icon set in-repo.
+   - `settings.png`
+   - `account.png`
+   - `login.png`
+   - `logout.png`
+4. Current rail order places auth controls at the right edge:
+   - `... -> settings -> account -> login/logout`
+   - Account is planned to be auth-gated in a follow-up but intentionally remains visible for now.

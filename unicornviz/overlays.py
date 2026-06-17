@@ -652,6 +652,7 @@ class Overlays:
         (
             'Help Usage',
             [
+                ('Tab', 'Toggle section/icon focus'),
                 ('Shift+-', 'Collapse all sections'),
                 ('Shift+=', 'Expand all sections'),
                 ('Arrow keys', 'Move section focus'),
@@ -736,8 +737,10 @@ class Overlays:
         {
             'id': 'about',
             'label': 'DJ UT',
+            'image_id': 'about',
             'glyph': 'UT',
             'description': 'About / links page',
+            'tooltip': 'Learn about DJ Tears & Unicorn-Viz!',
             'accent': (0.98, 0.78, 1.00),
             'action_kind': 'placeholder',
             'message': 'DJ UT info page coming soon',
@@ -745,8 +748,10 @@ class Overlays:
         {
             'id': 'contact',
             'label': 'Contact',
+            'image_id': 'contact',
             'glyph': '@',
             'description': 'Send logs / VJ data / screenshots / recordings',
+            'tooltip': 'Contact the DJ or Support',
             'accent': (0.10, 0.94, 1.00),
             'action_kind': 'placeholder',
             'message': 'Contact flow coming soon',
@@ -754,45 +759,22 @@ class Overlays:
         {
             'id': 'share',
             'label': 'Share',
+            'image_id': 'share',
             'glyph': 'SH',
             'description': 'Open share link flow',
+            'tooltip': 'Love Unicorn-Viz? Please share!!',
             'accent': (0.98, 0.96, 0.72),
             'action_kind': 'url',
             'target': 'https://unicorntears.com',
             'message': 'Opening share page',
         },
         {
-            'id': 'login_out',
-            'label': 'Login/Out',
-            'glyph': 'IN',
-            'description': 'Future auth flow placeholder',
-            'accent': (0.72, 1.00, 0.66),
-            'action_kind': 'placeholder',
-            'message': 'Login/Out coming soon',
-        },
-        {
-            'id': 'settings',
-            'label': 'Settings',
-            'glyph': 'SET',
-            'description': 'Future app settings placeholder',
-            'accent': (1.00, 0.68, 0.28),
-            'action_kind': 'placeholder',
-            'message': 'Settings panel coming soon',
-        },
-        {
-            'id': 'account',
-            'label': 'Account',
-            'glyph': 'AC',
-            'description': 'Future account hub placeholder',
-            'accent': (0.78, 0.38, 1.00),
-            'action_kind': 'placeholder',
-            'message': 'Account panel coming soon',
-        },
-        {
             'id': 'shop',
             'label': 'Shop',
+            'image_id': 'shop',
             'glyph': '$',
             'description': 'Open web store flow',
+            'tooltip': 'Shop Unicorn Tears swag & software!',
             'accent': (0.98, 0.62, 0.22),
             'action_kind': 'placeholder',
             'message': 'Shop link coming soon',
@@ -800,11 +782,49 @@ class Overlays:
         {
             'id': 'dropins',
             'label': 'Drop-ins',
+            'image_id': 'dropins',
             'glyph': 'DI',
             'description': 'ProjectM browser / future in-app purchases',
+            'tooltip': 'Acquire & configure drop-in extensions',
             'accent': (0.66, 0.92, 1.00),
             'action_kind': 'projectm_manager',
             'message': 'Opening drop-ins browser',
+        },
+        {
+            'id': 'settings',
+            'label': 'Settings',
+            'image_id': 'settings',
+            'glyph': 'SET',
+            'description': 'Future app settings placeholder',
+            'tooltip': 'Open settings',
+            'accent': (1.00, 0.68, 0.28),
+            'action_kind': 'placeholder',
+            'message': 'Settings panel coming soon',
+        },
+        # TODO(auth): Show this icon only when the operator is logged in.
+        {
+            'id': 'account',
+            'label': 'Account',
+            'image_id': 'account',
+            'glyph': 'AC',
+            'description': 'Future account hub placeholder',
+            'tooltip': 'Your Account',
+            'accent': (0.78, 0.38, 1.00),
+            'action_kind': 'placeholder',
+            'message': 'Account panel coming soon',
+        },
+        {
+            'id': 'login_out',
+            'label': 'Login/Out',
+            'image_id_logged_out': 'login',
+            'image_id_logged_in': 'logout',
+            'glyph': 'IN',
+            'description': 'Future auth flow placeholder',
+            'tooltip_logged_out': 'Login',
+            'tooltip_logged_in': 'Logout',
+            'accent': (0.72, 1.00, 0.66),
+            'action_kind': 'placeholder',
+            'message': 'Login/Out coming soon',
         },
     ]
 
@@ -956,10 +976,13 @@ class Overlays:
         self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
         self._help_icon_focus_idx: int = 0
+        self._help_icon_hover_idx: int = -1
+        self._help_icon_hover_pos: tuple[float, float] | None = None
         self._pending_help_icon_action: dict[str, str] | None = None
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
         self._help_icon_asset_dir: Path = resolve_path('assets/icons/help')
+        self._help_icon_asset_bucket: str = self._help_icon_bucket_for_width(self._width)
         self._help_icon_textures: dict[str, moderngl.Texture] = {}
 
 
@@ -1027,30 +1050,30 @@ void main() {
             [(self._icon_vbo, "2f 2f", "in_vert", "in_uv")],
         )
 
+    def _help_icon_bucket_for_width(self, width: int) -> str:
+        """Choose the help-icon asset bucket for the current viewport width."""
+        return '152px' if int(width) >= 3840 else '76px'
+
     def _load_help_icon_textures(self) -> None:
-        """Load icon textures from assets/icons/help/<id>.(png|webp|jpg|jpeg)."""
+        """Load icon textures from the selected assets/icons/help bucket."""
         self._help_icon_textures = {}
         if not _PIL_AVAILABLE:
             return
-        if not self._help_icon_asset_dir.exists():
+        asset_dir = self._help_icon_asset_dir / self._help_icon_asset_bucket
+        if not asset_dir.exists():
+            asset_dir = self._help_icon_asset_dir
+        if not asset_dir.exists():
             return
 
         suffixes = ('.png', '.webp', '.jpg', '.jpeg')
-        for entry in self._help_icon_entries():
-            icon_id = str(entry.get('id', '') or '').strip()
-            if not icon_id:
+        for src_path in sorted(asset_dir.iterdir()):
+            if not src_path.is_file() or src_path.suffix.lower() not in suffixes:
                 continue
-            src_path: Path | None = None
-            for suffix in suffixes:
-                candidate = self._help_icon_asset_dir / f'{icon_id}{suffix}'
-                if candidate.exists():
-                    src_path = candidate
-                    break
-            if src_path is None:
+            icon_id = src_path.stem.strip().lower()
+            if not icon_id:
                 continue
             try:
                 img = Image.open(src_path).convert('RGBA')
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
                 tex = self._ctx.texture(img.size, 4, img.tobytes())
                 tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
                 tex.repeat_x = False
@@ -1094,6 +1117,76 @@ void main() {
         self._icon_prog['icon_tex'].value = 0
         self._ctx.enable(moderngl.BLEND)
         self._icon_vao.render(moderngl.TRIANGLES, vertices=6)
+
+    def _help_icon_image_id(self, entry: dict[str, object]) -> str:
+        """Return the active image id for a help icon entry."""
+        icon_id = str(entry.get('id', '') or '').strip().lower()
+        if icon_id == 'login_out':
+            auth_visible = str(self._hud_state.get('spotify_auth_visible', 'NO') or 'NO').strip().upper()
+            auth_status = str(self._hud_state.get('spotify_auth_status', 'OFF') or 'OFF').strip().upper()
+            if auth_visible == 'YES' and auth_status not in {'OFF', '-', ''}:
+                return str(entry.get('image_id_logged_in', 'logout') or 'logout').strip().lower()
+            return str(entry.get('image_id_logged_out', 'login') or 'login').strip().lower()
+        image_id = str(entry.get('image_id', icon_id) or icon_id).strip().lower()
+        return image_id or icon_id
+
+    def _help_icon_tooltip(self, entry: dict[str, object]) -> str:
+        """Return a short tooltip string for a help icon entry."""
+        icon_id = str(entry.get('id', '') or '').strip().lower()
+        if icon_id == 'login_out':
+            auth_visible = str(self._hud_state.get('spotify_auth_visible', 'NO') or 'NO').strip().upper()
+            auth_status = str(self._hud_state.get('spotify_auth_status', 'OFF') or 'OFF').strip().upper()
+            if auth_visible == 'YES' and auth_status not in {'OFF', '-', ''}:
+                return str(entry.get('tooltip_logged_in', 'Logout') or 'Logout').strip()
+            return str(entry.get('tooltip_logged_out', 'Login') or 'Login').strip()
+        tooltip = str(entry.get('tooltip', '') or '').strip()
+        if tooltip:
+            return tooltip
+        return str(entry.get('description', entry.get('label', '')) or '').strip()
+
+    def _help_icon_hit_test(self, x: float, y: float) -> int:
+        """Return the icon index under x/y or -1 when not over an icon."""
+        if not self._show_help:
+            return -1
+        panel_pad = 44.0
+        px = panel_pad
+        py = panel_pad
+        pw = self._width - panel_pad * 2.0
+        ph = self._height - panel_pad * 2.0
+        if x < px or x > px + pw or y < py or y > py + ph:
+            return -1
+
+        res_ratio = min(self._width, self._height) / 1080.0
+        help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
+        icon_band_y = py + 100.0
+        icon_px = 152.0 if self._help_icon_asset_bucket == '152px' else 76.0
+        band_h = max(icon_px + 20.0, 72.0 * help_scale)
+        entries = self._help_icon_entries()
+        if not entries:
+            return -1
+
+        gap = max(14.0, 16.0 * help_scale)
+        cell_w = icon_px
+        cell_h = icon_px
+        total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
+        start_x = round(px + max(0.0, (pw - total_w) * 0.5))
+        rail_y = round(icon_band_y + max(0.0, (band_h - cell_h) * 0.5) - 10.0)
+
+        if y < icon_band_y or y > icon_band_y + band_h:
+            return -1
+
+        for idx, _entry in enumerate(entries):
+            cell_x = round(start_x + idx * (cell_w + gap))
+            if cell_x <= x <= cell_x + cell_w and rail_y <= y <= rail_y + cell_h:
+                return idx
+        return -1
+
+    def handle_help_mouse_motion(self, x: float, y: float) -> bool:
+        """Update hover state for help icon tooltips."""
+        idx = self._help_icon_hit_test(x, y)
+        self._help_icon_hover_idx = idx
+        self._help_icon_hover_pos = (float(x), float(y)) if idx >= 0 else None
+        return idx >= 0
 
     def _draw_rect(
         self,
@@ -3161,6 +3254,12 @@ void main() {
         self._draw_rect(x, y + h - 10.0, w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
 
         self._draw_help_section_content(x, y, w, h, help_scale, content_top_y)
+        entries = self._help_icon_entries()
+        if self._help_icon_hover_idx >= 0 and self._help_icon_hover_idx < len(entries):
+            hover_entry = entries[self._help_icon_hover_idx]
+            tooltip = self._help_icon_tooltip(hover_entry)
+            if tooltip:
+                self._draw_help_icon_tooltip(tooltip, self._help_icon_hover_pos, x, y, w, icon_band_h)
 
     def _render_help_icon_rail(self, x: float, y: float, w: float, help_scale: float) -> float:
         """Draw the centered help icon rail and return its rendered height."""
@@ -3168,22 +3267,20 @@ void main() {
         if not entries:
             return 0.0
 
-        band_h = max(78.0, 72.0 * help_scale)
-        tile = max(37.0, min(50.0, 42.5 * help_scale))
+        icon_px = 152.0 if self._help_icon_asset_bucket == '152px' else 76.0
+        band_h = max(icon_px + 20.0, 72.0 * help_scale)
         gap = max(14.0, 16.0 * help_scale)
-        pad_x = max(8.0, 10.0 * help_scale)
-        pad_y = max(6.0, 8.0 * help_scale)
-        cell_w = tile + pad_x * 2.0
-        cell_h = tile + pad_y * 2.0
+        cell_w = icon_px
+        cell_h = icon_px
 
         total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
-        start_x = x + max(0.0, (w - total_w) * 0.5)
-        rail_y = y + max(0.0, (band_h - cell_h) * 0.5)
+        start_x = round(x + max(0.0, (w - total_w) * 0.5))
+        rail_y = round(y + max(0.0, (band_h - cell_h) * 0.5) - 10.0)
 
-        self._draw_rect(x + 20.0, y + band_h - 4.0, w - 40.0, 2.0, (1.0, 0.70, 0.24, 0.42))
+        self._draw_rect(round(x + 20.0), round(y + band_h - 4.0), round(w - 40.0), 2.0, (1.0, 0.70, 0.24, 0.42))
 
         for idx, entry in enumerate(entries):
-            cell_x = start_x + idx * (cell_w + gap)
+            cell_x = round(start_x + idx * (cell_w + gap))
             accent = self._help_icon_accent(entry)
             is_active = self._help_focus_region == 'icons' and idx == self._help_icon_focus_idx
             pulse = 0.5 + 0.5 * math.sin(self._help_pulse_t * 4.2 + idx * 0.63)
@@ -3193,19 +3290,15 @@ void main() {
             self._draw_rect(cell_x - 2.0, rail_y - 2.0, cell_w + 4.0, cell_h + 4.0, (accent[0], accent[1], accent[2], glow_a))
             self._draw_rect(cell_x, rail_y, cell_w, cell_h, (0.03 + accent[0] * 0.03, 0.05 + accent[1] * 0.05, 0.09 + accent[2] * 0.04, 0.72))
             self._draw_rect(cell_x, rail_y, cell_w, 3.0, (accent[0], accent[1], accent[2], 0.82))
-            self._draw_rect(cell_x + 1.0, rail_y + 1.0, cell_w - 2.0, tile + 2.0, (0.06, 0.08, 0.14, 0.95))
-            self._draw_rect(cell_x + pad_x, rail_y + pad_y, tile, tile, (accent[0], accent[1], accent[2], 0.18 + pulse * 0.10))
-            self._draw_rect(cell_x + pad_x + 1.0, rail_y + pad_y + 1.0, tile - 2.0, tile - 2.0, (0.04, 0.05, 0.10, 0.90))
-            self._draw_rect(cell_x + pad_x, rail_y + pad_y, tile, 4.0, (accent[0], accent[1], accent[2], 0.70))
+            self._draw_rect(cell_x, rail_y + 2.0, cell_w, 4.0, (accent[0], accent[1], accent[2], 0.34 + pulse * 0.12))
             if is_active:
                 self._draw_rect(cell_x - 1.0, rail_y - 1.0, cell_w + 2.0, cell_h + 2.0, (accent[0], accent[1], accent[2], border_a))
 
-            icon_id = str(entry.get('id', '') or '').strip()
+            icon_id = self._help_icon_image_id(entry)
             icon_tex = self._help_icon_textures.get(icon_id)
-            icon_inset = max(2.0, 2.5 * help_scale)
-            icon_x = cell_x + pad_x + icon_inset
-            icon_y = rail_y + pad_y + icon_inset
-            icon_size = max(4.0, tile - icon_inset * 2.0)
+            icon_x = cell_x
+            icon_y = rail_y + 1.0
+            icon_size = icon_px
             if icon_tex is not None:
                 icon_alpha = 1.0 if is_active else 0.94
                 self._draw_icon_texture(icon_tex, icon_x, icon_y, icon_size, icon_size, alpha=icon_alpha)
@@ -3213,10 +3306,38 @@ void main() {
                 glyph = str(entry.get('glyph', ''))[:3].upper()
                 glyph_scale = max(1.18, min(1.68, 1.42 * help_scale))
                 glyph_w = len(glyph) * 8.0 * glyph_scale
-                glyph_x = cell_x + pad_x + (tile - glyph_w) * 0.5
-                glyph_y = rail_y + pad_y + (tile - 8.0 * glyph_scale) * 0.5 + 2.0
+                glyph_x = cell_x + (icon_px - glyph_w) * 0.5
+                glyph_y = rail_y + (icon_px - 8.0 * glyph_scale) * 0.5 + 2.0
                 self._draw_text(glyph, glyph_x, glyph_y, scale=glyph_scale, color=(1.0, 1.0, 1.0, 0.98))
+
         return band_h
+
+    def _draw_help_icon_tooltip(
+        self,
+        tooltip: str,
+        hover_pos: tuple[float, float] | None,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        band_h: float,
+    ) -> None:
+        """Draw a small tooltip bubble for a hovered help icon."""
+        text = str(tooltip or '').strip()
+        if not text:
+            return
+        tip_x = float(hover_pos[0]) + 14.0 if hover_pos is not None else panel_x + panel_w * 0.5 - 120.0
+        tip_y = panel_y + band_h + 8.0
+        scale = 1.48
+        text_w = max(180.0, min(420.0, len(text) * 8.0 * scale + 28.0))
+        box_h = 30.0
+        if tip_x + text_w > panel_x + panel_w - 10.0:
+            tip_x = panel_x + panel_w - text_w - 10.0
+        if tip_x < panel_x + 10.0:
+            tip_x = panel_x + 10.0
+        self._draw_rect(tip_x, tip_y, text_w, box_h, (0.03, 0.05, 0.08, 0.92))
+        self._draw_rect(tip_x, tip_y, text_w, 2.0, (0.10, 0.94, 1.0, 0.72))
+        self._draw_rect(tip_x, tip_y + box_h - 2.0, text_w, 2.0, (0.78, 0.38, 1.0, 0.68))
+        self._draw_text(text, tip_x + 10.0, tip_y + 7.0, scale=scale, color=(0.96, 0.98, 1.0, 0.98))
 
     def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
         """Draw section cards and shortcut map in the help panel content area."""
@@ -3510,45 +3631,18 @@ void main() {
 
     def handle_help_mouse_click(self, x: float, y: float) -> bool:
         """Handle mouse clicks on the help icon rail."""
-        if not self._show_help:
+        idx = self._help_icon_hit_test(x, y)
+        if idx < 0:
             return False
-        panel_pad = 44.0
-        px = panel_pad
-        py = panel_pad
-        pw = self._width - panel_pad * 2.0
-        ph = self._height - panel_pad * 2.0
-        if x < px or x > px + pw or y < py or y > py + ph:
-            return False
-
-        res_ratio = min(self._width, self._height) / 1080.0
-        help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
-        icon_band_y = py + 100.0
-        band_h = max(78.0, 72.0 * help_scale)
         entries = self._help_icon_entries()
         if not entries:
             return False
-
-        tile = max(37.0, min(50.0, 42.5 * help_scale))
-        gap = max(14.0, 16.0 * help_scale)
-        pad_x = max(8.0, 10.0 * help_scale)
-        pad_y = max(6.0, 8.0 * help_scale)
-        cell_w = tile + pad_x * 2.0
-        cell_h = tile + pad_y * 2.0
-        total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
-        start_x = px + max(0.0, (pw - total_w) * 0.5)
-        rail_y = icon_band_y + max(0.0, (band_h - cell_h) * 0.5)
-
-        if y < icon_band_y or y > icon_band_y + band_h:
-            return False
-
-        for idx, entry in enumerate(entries):
-            cell_x = start_x + idx * (cell_w + gap)
-            if cell_x <= x <= cell_x + cell_w and rail_y <= y <= rail_y + cell_h:
-                self._help_focus_region = 'icons'
-                self._help_icon_focus_idx = idx
-                self._queue_help_icon_action(entry)
-                return True
-        return False
+        self._help_focus_region = 'icons'
+        self._help_icon_focus_idx = idx
+        self._help_icon_hover_idx = idx
+        self._help_icon_hover_pos = (float(x), float(y))
+        self._queue_help_icon_action(entries[idx])
+        return True
 
     def _queue_help_icon_action(self, entry: dict[str, object]) -> None:
         """Queue a normalized icon action payload for app-level dispatch."""
@@ -3905,6 +3999,8 @@ void main() {
             self._help_focus_region = 'sections'
             self._help_focus_idx = 0
             self._help_icon_focus_idx = 0
+            self._help_icon_hover_idx = -1
+            self._help_icon_hover_pos = None
         self._help_timer = 60.0 if self._show_help else 0.0
 
     def toggle_flash_messages(self) -> bool:
@@ -3945,6 +4041,10 @@ void main() {
     def resize(self, w: int, h: int) -> None:
         self._width = w
         self._height = h
+        bucket = self._help_icon_bucket_for_width(w)
+        if bucket != self._help_icon_asset_bucket:
+            self._help_icon_asset_bucket = bucket
+            self._load_help_icon_textures()
 
 
     def destroy(self) -> None:

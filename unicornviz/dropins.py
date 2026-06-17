@@ -68,6 +68,14 @@ POSTFX_RUNTIME_CAPABILITY = DropinRuntimeCapability(
     key_handler_attr='handle_key',
 )
 
+BANNER_RUNTIME_CAPABILITY = DropinRuntimeCapability(
+    name='banner',
+    relative_file='banner-01/banner_controller.py',
+    class_symbol='BannerController',
+    subsystem_name='banner',
+    key_handler_attr='handle_key',
+)
+
 
 def _normalise_help_entries(
     raw_entries: Any,

@@ -276,6 +276,15 @@ panel, message toasts) using a bitmap font shader.  Each overlay element has
 an alpha timer so it fades out automatically.  `flash_name()` and
 `flash_message()` are the primary public API.
 
+Help icon art is loaded from `assets/icons/help/76px/` on sub-4K windows and
+`assets/icons/help/152px/` on 4K-or-larger windows.  The loader must use the
+source PNGs directly without vertical flipping or extra resizing; the authored
+orientation is already correct, and the login/logout slot intentionally swaps
+between `login.png` and `logout.png` based on auth state.  Rail ordering keeps
+auth controls on the right edge (`... -> settings -> account -> login/logout`);
+`account` is currently shown unconditionally with an in-code TODO to auth-gate
+it in a follow-up.
+
 ---
 
 ## Writing a New Effect

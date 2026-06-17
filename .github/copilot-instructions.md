@@ -179,6 +179,16 @@ out vec2 out_pos;
 - Downloaded art from 16colo.rs lives in `assets/ansi/acid/` and is committed
   to the repository.  Re-fetch with `tools/fetch_acid_ans.py` if missing.
 
+## Help Icon Assets
+
+- Help icons live in `assets/icons/help/76px/` and `assets/icons/help/152px/`.
+- Use `76px` for windows below 3840 pixels wide and `152px` for 3840-wide or
+  larger displays.
+- Load the source PNGs directly and do not vertically flip or resample them in
+  code; the authored orientation is already correct.
+- The login/logout rail item is stateful and should switch between
+  `login.png` and `logout.png` based on auth state.
+
 ---
 
 ## MIDI Conventions
