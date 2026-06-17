@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-05-24
+Last updated: 2026-06-16
 
 This page tracks canonical documentation coverage for each drop-in.
 
@@ -22,9 +22,10 @@ Complex drop-ins should also include:
 ## Current Coverage
 
 | Drop-in | README | Structured docs | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | alien-invasion-01 | Yes | Not required | Simple effect drop-in |
 | auto-vj-01 | Yes | Yes | Automation subsystem |
+| banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | cyber-war-01 | Yes | Not required | Simple effect drop-in |
 | disco-ball-01 | Yes | Not required | Simple effect drop-in |
@@ -52,6 +53,11 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/auto-vj-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/auto-vj-01/docs/troubleshooting.md)
   - [Training Pack Protocol](planning/auto-vj-training-pack-protocol.md)
+- banner-01
+  - [Operations](../drop-ins/banner-01/docs/operations.md)
+  - [Configuration](../drop-ins/banner-01/docs/configuration.md)
+  - [Integration](../drop-ins/banner-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/banner-01/docs/troubleshooting.md)
 - control-room-01
   - [Planning](planning/drop-in-planning.md)
   - [Operations](../drop-ins/control-room-01/docs/operations.md)
