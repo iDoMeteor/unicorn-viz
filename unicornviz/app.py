@@ -1619,6 +1619,29 @@ void main() {
                 elapsed_seconds=elapsed_seconds,
             )
 
+    def _hud_audio_state_fields(self) -> dict[str, str]:
+        """Return audio meter fields for the HUD state dict.
+
+        Prefers ``_audio_raw`` (unscaled) so the HUD always shows the true
+        signal level regardless of the current reactivity multiplier.  Falls
+        back to ``_audio`` (reactivity-scaled) when raw is unavailable, and
+        to safe zero defaults when both are None.
+        """
+        src = self._audio_raw if self._audio_raw is not None else self._audio
+        if src is None:
+            return {
+                'bass': '0.00', 'mid': '0.00', 'treble': '0.00',
+                'bass_n': '0.50', 'mid_n': '0.50', 'treble_n': '0.50',
+            }
+        return {
+            'bass':    f'{src.bass:.2f}',
+            'mid':     f'{src.mid:.2f}',
+            'treble':  f'{src.treble:.2f}',
+            'bass_n':  f'{src.bass_n:.2f}',
+            'mid_n':   f'{src.mid_n:.2f}',
+            'treble_n': f'{src.treble_n:.2f}',
+        }
+
     def _build_invert_pipeline(self) -> None:
         """Build fullscreen pass that inverts a texture's colors."""
         vert = """
@@ -1755,6 +1778,27 @@ void main() {
             return source
 
         return self._fill_audio_scratch(target, source, scale)
+
+    def _hud_audio_state_fields(self) -> dict[str, str]:
+        """Return HUD-ready audio fields, preferring raw data when available."""
+        audio_hud = self._audio_raw or self._audio
+        if audio_hud is None:
+            return {
+                'bass': '0.00',
+                'mid': '0.00',
+                'treble': '0.00',
+                'bass_n': '0.50',
+                'mid_n': '0.50',
+                'treble_n': '0.50',
+            }
+        return {
+            'bass': f'{audio_hud.bass:.2f}',
+            'mid': f'{audio_hud.mid:.2f}',
+            'treble': f'{audio_hud.treble:.2f}',
+            'bass_n': f'{audio_hud.bass_n:.2f}',
+            'mid_n': f'{audio_hud.mid_n:.2f}',
+            'treble_n': f'{audio_hud.treble_n:.2f}',
+        }
 
     def _build_blend_pipeline(self) -> None:
         """FBO-pair + transition shader used for cross-effect blending."""
@@ -2766,6 +2810,7 @@ void main() {
             self._playlist_mode = playlist.mode
             self._playlist_index = playlist.index
             self._playlist_size = len(playlist.effects)
+            audio_hud_fields = self._hud_audio_state_fields()
 
             # --- Tier C: Full HUD build (only while TAB HUD is visible) ---
             if overlays._show_name:
@@ -2937,12 +2982,7 @@ void main() {
                     if self._postfx_controller is not None else 'N/A'
                 ),
                 'compose_debug': str(getattr(self, '_compose_debug', '-')),
-                'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
-                'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
-                'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
-                'bass_n': f"{self._audio_raw.bass_n:.2f}" if self._audio_raw is not None else '0.50',
-                'mid_n': f"{self._audio_raw.mid_n:.2f}" if self._audio_raw is not None else '0.50',
-                'treble_n': f"{self._audio_raw.treble_n:.2f}" if self._audio_raw is not None else '0.50',
+                **audio_hud_fields,
                 'audio_rms': (
                     f"{self._audio_manager.get_raw_input_rms():.4f}"
                     if self._audio_manager is not None else '0.0000'
@@ -2963,9 +3003,7 @@ void main() {
                     'fps': f"{fps_now:.1f}",
                     'frame_ms': f"{(dt * 1000.0):.2f}",
                     'effect': overlays._name_text,
-                    'bass': f"{self._audio_raw.bass:.2f}" if self._audio_raw is not None else '0.00',
-                    'mid': f"{self._audio_raw.mid:.2f}" if self._audio_raw is not None else '0.00',
-                    'treble': f"{self._audio_raw.treble:.2f}" if self._audio_raw is not None else '0.00',
+                    **audio_hud_fields,
                 })
             if perf_debug_enabled:
                 perf_after_hud = time.perf_counter()

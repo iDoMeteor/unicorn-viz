@@ -94,6 +94,11 @@ class AudioManager:
         self._analysis_thread: threading.Thread | None = None
         # Onset events published by the analysis thread, drained by main thread.
         self._onset_pending: list[OnsetEvent] = []
+        # Audio timestamp of the last published block.  Written under
+        # _analysis_lock by the analysis thread; read by get_audio_time() on the
+        # main thread.  Keeping it here avoids reading analyzer internal state
+        # across thread boundaries without a lock.
+        self._published_audio_time: float = 0.0
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
@@ -200,9 +205,11 @@ class AudioManager:
             # Heavy work: numpy FFT releases the GIL → render thread runs freely.
             self._analyzer.process(block, out=self._back_buf)
             onsets = self._analyzer.drain_onsets()
-            # Atomic publish: swap buffers and accumulate onsets.
+            audio_t = self._analyzer.last_audio_time
+            # Atomic publish: swap buffers, accumulate onsets, update timestamp.
             with self._analysis_lock:
                 self._front_buf, self._back_buf = self._back_buf, self._front_buf
+                self._published_audio_time = audio_t
                 if onsets:
                     self._onset_pending.extend(onsets)
         log.debug('AudioManager: analysis thread exited')
@@ -279,8 +286,13 @@ class AudioManager:
         return f'{self._profile.name} ({self._profile.hud_bpm_range_label()})'
 
     def get_audio_time(self) -> float:
-        """Return analyzer audio-time timestamp of the latest processed block."""
-        return float(self._analyzer.last_audio_time)
+        """Return the audio timestamp of the latest processed block.
+
+        Reads from the lock-protected published value so there is no data race
+        with the analysis thread writing ``last_audio_time`` concurrently.
+        """
+        with self._analysis_lock:
+            return float(self._published_audio_time)
     
     def get_profile_key(self) -> str:
         """Return the short key/name of the current profile (e.g. 'house', 'trance')."""
@@ -355,8 +367,10 @@ class AudioManager:
     def set_expected_bpm(self, bpm: float, confidence: float) -> None:
         """Forward a BPM estimate to the analyzer to tune its refractory gate.
 
-        Called by the auto-vj director after each BeatTracker update.  When
-        confidence is sufficient (>= 0.5) the analyzer will reject onsets
-        faster than ~70 % of the estimated beat period.
+        Called by the auto-vj director after each BeatTracker update.  Acquires
+        ``_analysis_lock`` so the analyzer's refractory-window state is not
+        mutated while the analysis thread is mid-process() reading the same
+        fields.
         """
-        self._analyzer.set_expected_bpm(bpm, confidence)
+        with self._analysis_lock:
+            self._analyzer.set_expected_bpm(bpm, confidence)
