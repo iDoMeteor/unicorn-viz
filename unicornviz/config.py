@@ -81,7 +81,7 @@ _DEFAULTS: dict[str, Any] = {
     },
     "spotify": {
         "now_playing_banner": True,
-        "now_playing_banner_hold_s": 20.0,
+        "now_playing_banner_hold_s": 10.0,
     },
     "playlist": {
         "sequence": [],

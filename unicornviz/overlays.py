@@ -917,6 +917,12 @@ class Overlays:
                 pass
         self._help_timer: float = 0.0
         self._hud_timer: float = 0.0
+        self._banner_timer: float = 0.0
+        self._banner_change_counter: int = -1
+        self._banner_enabled: bool = False
+        self._banner_hold_s: float = 10.0
+        self._banner_current_text: str = ''
+        self._banner_previous_text: str = ''
         self._flash_text: str = ""
         self._flash_timer: float = 0.0
         self._name_text: str = ""
@@ -2092,6 +2098,11 @@ void main() {
 
         if self._show_name and self._name_text and not route_modals_elsewhere:
             self._render_hud()
+
+        if self._banner_timer > 0.0:
+            self._banner_timer = max(0.0, self._banner_timer - dt)
+        if self._banner_enabled and self._banner_timer > 0.0 and not route_modals_elsewhere:
+            self._render_banner()
 
         if include_recording_indicator:
             self._render_recording_indicator()
@@ -3915,6 +3926,100 @@ void main() {
                 pass
         self._flash_text = msg_text
         self._flash_timer = msg_duration
+
+    def set_overlay_banner(
+        self,
+        enabled: bool,
+        current_text: str,
+        previous_text: str,
+        hold_s: float,
+        change_counter: int,
+    ) -> None:
+        """Set banner overlay state (provider-agnostic; used by any subsystem)."""
+        self._banner_enabled = bool(enabled)
+        self._banner_hold_s = max(1.0, float(hold_s))
+        self._banner_current_text = str(current_text).strip()
+        self._banner_previous_text = str(previous_text).strip()
+        counter = int(change_counter)
+        if not self._banner_enabled or not self._banner_current_text:
+            self._banner_timer = 0.0
+            self._banner_change_counter = counter
+            return
+        if counter != self._banner_change_counter:
+            self._banner_change_counter = counter
+            self._banner_timer = self._banner_hold_s + (self._banner_slide_s() * 2.0)
+
+    def _banner_slide_s(self) -> float:
+        """Duration of banner slide animation in seconds."""
+        return 0.35
+
+    def _render_banner(self) -> None:
+        """Render the generic overlay banner (provider-agnostic)."""
+        slide_s = self._banner_slide_s()
+        timer = max(0.0, self._banner_timer)
+        if timer <= 0.0:
+            return
+
+        enter_threshold = self._banner_hold_s + slide_s
+        if timer > enter_threshold:
+            phase = 1.0 - ((timer - enter_threshold) / slide_s)
+        elif timer > slide_s:
+            phase = 1.0
+        else:
+            phase = timer / slide_s
+        phase = max(0.0, min(1.0, phase))
+
+        bar_x = 16.0
+        bar_w = max(320.0, self._width - 32.0)
+        bar_h = 54.0
+        bar_y = -bar_h + phase * (bar_h + 12.0)
+        bg_a = 0.85 * (0.65 + phase * 0.35)
+        edge_a = 0.24 + phase * 0.52
+        accent = (0.10, 0.94, 1.00)
+        glow = (0.78, 0.38, 1.00)
+
+        self._draw_rect(bar_x, bar_y, bar_w, bar_h, (0.03, 0.06, 0.10, bg_a))
+        self._draw_rect(bar_x, bar_y, bar_w, 3.0, (accent[0], accent[1], accent[2], edge_a))
+        self._draw_rect(bar_x, bar_y + bar_h - 3.0, bar_w, 3.0, (glow[0], glow[1], glow[2], edge_a * 0.72))
+        self._draw_rect(bar_x, bar_y, 5.0, bar_h, (accent[0], accent[1], accent[2], 0.60 + phase * 0.24))
+        self._draw_rect(bar_x + bar_w - 5.0, bar_y, 5.0, bar_h, (glow[0], glow[1], glow[2], 0.40 + phase * 0.22))
+
+        title = self._banner_current_text
+        previous = self._banner_previous_text
+        char_w = float(self._glyph_w) * self._font_scale_norm * 1.85
+        left_limit = max(24, int((bar_w * 0.60) / max(1.0, char_w)))
+        right_limit = max(16, int((bar_w * 0.36) / max(1.0, char_w)))
+
+        def _clip(text: str, limit: int) -> str:
+            if len(text) <= limit:
+                return text
+            return text[: max(1, limit - 3)].rstrip() + '...'
+
+        title = _clip(title, left_limit)
+        previous = _clip(previous, right_limit)
+        banner_a = 0.93 * (0.45 + phase * 0.55)
+        banner_y = bar_y + 22.0
+        self._draw_text(title, bar_x + 18.0, banner_y, scale=1.70, color=(0.14, 0.98, 0.94, banner_a))
+        if previous:
+            previous_w = len(previous) * char_w
+            previous_x = bar_x + bar_w - 18.0 - previous_w
+            self._draw_text(previous, previous_x, banner_y, scale=1.70, color=(0.96, 0.86, 1.0, banner_a * 0.96))
+
+        bass = max(0.0, min(1.0, float(self._hud_state.get('bass', '0.00') or '0.0')))
+        mid = max(0.0, min(1.0, float(self._hud_state.get('mid', '0.00') or '0.0')))
+        treble = max(0.0, min(1.0, float(self._hud_state.get('treble', '0.00') or '0.0')))
+        self._draw_audio_reactive_border_bulbs(
+            bar_x,
+            bar_y,
+            bar_w,
+            bar_h,
+            bass,
+            mid,
+            treble,
+            self._hud_t,
+            speed_scale=0.5,
+            size_scale=0.5,
+        )
 
     def _rect_border_point(self, x: float, y: float, w: float, h: float, distance: float) -> tuple[float, float]:
         perim = 2.0 * (w + h)

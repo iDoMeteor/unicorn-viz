@@ -2734,6 +2734,16 @@ void main() {
             spotify_artist = '-'
             spotify_album = '-'
             spotify_length = '--:--'
+            spotify_change_counter = 0
+            spotify_prev_artist = '-'
+            spotify_prev_title = '-'
+            banner_enabled = False
+            banner_hold_s = 10.0
+            banner_track = '-'
+            banner_artist = '-'
+            banner_album = '-'
+            banner_prev_artist = '-'
+            banner_prev_title = '-'
             spotify_progress = '--:--/--:-- 0%'
             if self._spotify is not None:
                 snap_fn = getattr(self._spotify, 'snapshot', None)
@@ -2759,9 +2769,23 @@ void main() {
                                 return txt
                             return txt[: max(1, limit - 3)].rstrip() + '...'
 
+                        banner_track = str(spotify.get('title', '') or '').strip() or '-'
+                        banner_artist = str(spotify.get('artist', '') or '').strip() or '-'
+                        banner_album = str(spotify.get('album', '') or '').strip() or '-'
+                        banner_prev_artist = str(spotify.get('previous_artist', '') or '').strip() or '-'
+                        banner_prev_title = str(spotify.get('previous_title', '') or '').strip() or '-'
+
                         spotify_track = _clip(str(spotify.get('title', '') or ''), 24)
                         spotify_artist = _clip(str(spotify.get('artist', '') or ''), 24)
                         spotify_album = _clip(str(spotify.get('album', '') or ''), 24)
+                        spotify_prev_artist = _clip(str(spotify.get('previous_artist', '') or ''), 24)
+                        spotify_prev_title = _clip(str(spotify.get('previous_title', '') or ''), 24)
+                        spotify_change_counter = int(spotify.get('change_counter', 0) or 0)
+                        banner_enabled = bool(spotify.get('now_playing_banner_enabled', False))
+                        banner_hold_s = max(
+                            1.0,
+                            float(spotify.get('now_playing_banner_hold_s', 10.0) or 10.0),
+                        )
 
                         pos = max(0.0, float(spotify.get('position_s', 0.0) or 0.0))
                         dur = max(0.0, float(spotify.get('duration_s', 0.0) or 0.0))
@@ -2902,6 +2926,23 @@ void main() {
                 'invert': 'ON' if self._invert_colors else 'OFF',
                 'vj_status': self._vj_status_pill,
             })
+            current_banner = 'NOW PLAYING: {artist} :: {album} :: {track} :: {length}'.format(
+                artist=banner_artist,
+                album=banner_album,
+                track=banner_track,
+                length=spotify_length,
+            )
+            previous_banner = 'Previous: {artist} :: {track}'.format(
+                artist=banner_prev_artist,
+                track=banner_prev_title,
+            )
+            overlays.set_overlay_banner(
+                banner_enabled and spotify_visible == 'YES' and spotify_status == 'PLAYING',
+                current_banner,
+                previous_banner,
+                banner_hold_s,
+                spotify_change_counter,
+            )
             self._playlist_mode = playlist.mode
             self._playlist_index = playlist.index
             self._playlist_size = len(playlist.effects)
