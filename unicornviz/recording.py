@@ -2,12 +2,20 @@
 
 This module manages a simple ffmpeg subprocess that accepts raw RGB frames
 from the app and writes H.264 MP4 output. V1 records video only.
+
+Frame writes are decoupled from the render loop via a bounded queue and a
+dedicated writer thread (``uv-rec-writer``).  ``write_frame()`` is
+non-blocking: it puts the bytes into the queue and returns immediately.
+If the queue fills (ffmpeg encoding can't keep up) frames are dropped
+silently rather than stalling the render thread.
 """
 from __future__ import annotations
 
 import logging
+import queue
 import signal
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +54,13 @@ class Recorder:
         self._started_at: float = 0.0
         self._resolved_audio_input: tuple[str, str] | None = None
         self._last_error: str = ''
+        # Async writer state: a bounded queue feeds a daemon thread that drains
+        # frames to ffmpeg's stdin off the render thread.
+        self._frame_queue: queue.Queue[bytes | None] | None = None
+        self._writer_thread: threading.Thread | None = None
+        self._recording_stopping: bool = False
+        # Max frames queued before drops occur.  At 60 fps this is ~270 ms.
+        self._max_queued_frames: int = 16
 
     @property
     def enabled(self) -> bool:
@@ -201,6 +216,15 @@ class Recorder:
             self._current_path = output_path
             self._started_at = time.monotonic()
             self._last_error = ''
+            # Start the async writer thread.
+            self._recording_stopping = False
+            self._frame_queue = queue.Queue(maxsize=self._max_queued_frames)
+            self._writer_thread = threading.Thread(
+                target=self._frame_writer_worker,
+                name='uv-rec-writer',
+                daemon=True,
+            )
+            self._writer_thread.start()
             if self._resolved_audio_input is not None:
                 log.info(
                     'Recording audio source: %s (%s)',
@@ -222,18 +246,47 @@ class Recorder:
             log.error(self._last_error)
             return False
 
+    def _frame_writer_worker(self) -> None:
+        """Daemon thread: drain the frame queue to ffmpeg stdin.
+
+        Runs until it receives the ``None`` sentinel (sent by ``stop()``).
+        All blocking stdin writes happen here, never on the render thread.
+        """
+        while True:
+            try:
+                item = self._frame_queue.get(timeout=1.0)  # type: ignore[union-attr]
+            except queue.Empty:
+                continue
+            if item is None:
+                break  # sentinel: exit cleanly
+            proc = self._process
+            if proc is None or proc.stdin is None:
+                break
+            try:
+                proc.stdin.write(item)
+            except (BrokenPipeError, OSError) as exc:
+                self._last_error = f'Recording write failed: {exc}'
+                log.error(self._last_error)
+                break
+        log.debug('Recording writer thread exited')
+
     def write_frame(self, rgb_bytes: bytes) -> bool:
-        """Write a single raw RGB frame to the recorder."""
-        if not self.is_recording or self._process is None or self._process.stdin is None:
+        """Queue a raw RGB frame for writing to the recorder (non-blocking).
+
+        Returns True when the frame was accepted or dropped (not an error).
+        Returns False when recording is not active.
+        """
+        if not self.is_recording or self._recording_stopping:
+            return False
+        fq = self._frame_queue
+        if fq is None:
             return False
         try:
-            self._process.stdin.write(rgb_bytes)
-            return True
-        except (BrokenPipeError, OSError) as exc:
-            self._last_error = f'Recording write failed: {exc}'
-            log.error(self._last_error)
-            self.stop()
-            return False
+            fq.put_nowait(rgb_bytes)
+        except queue.Full:
+            # Encoder can't keep up; silently drop this frame.
+            pass
+        return True
 
     def stop(self) -> Path | None:
         """Stop the current recording and return the output path, if any."""
@@ -243,6 +296,20 @@ class Recorder:
             return output_path
         log.debug('Stopping recording: %s', output_path)
         try:
+            # Signal writer thread to flush the queue and exit, then close
+            # stdin so ffmpeg sees EOF and starts muxing.  All frames already
+            # in the queue are written before the sentinel is processed.
+            self._recording_stopping = True
+            fq = self._frame_queue
+            if fq is not None:
+                fq.put(None)  # sentinel: writer exits after draining
+            if self._writer_thread is not None:
+                self._writer_thread.join(timeout=5.0)
+                if self._writer_thread.is_alive():
+                    log.warning('Recording writer thread did not exit within 5.0s')
+                self._writer_thread = None
+            self._frame_queue = None
+            # All frames written; close stdin to signal EOF to ffmpeg.
             if process.stdin is not None:
                 process.stdin.close()
             try:

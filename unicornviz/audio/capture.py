@@ -262,9 +262,13 @@ class AudioCapture:
         # Blocking-read capture thread and its stop signal.
         self._stop_event: threading.Event = threading.Event()
         self._reader_thread: threading.Thread | None = None
+        # Event that the reader sets on every new block.  The analysis thread
+        # in AudioManager waits on this instead of polling, so it wakes
+        # immediately when audio arrives and idles with zero CPU when silent.
+        self._new_block_event: threading.Event = threading.Event()
         # Monotonic block-sequence counter: incremented by the reader on every
-        # new block.  The analyzer uses this to skip redundant FFT work when
-        # no new block has arrived since the last render frame.
+        # new block.  get_block_if_new() uses this to return a copy only when
+        # the block has changed since the caller's last call.
         self._block_seq: int = 0
         # Cumulative input-overflow counter for HUD diagnostics.
         self._xrun_count: int = 0
@@ -403,6 +407,7 @@ class AudioCapture:
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
+        self._new_block_event.clear()  # discard stale wake-up from previous stream session
         log.debug('Audio: stream opened, buffer cleared, warmup period %.1fs', _WARMUP_DURATION)
         # Start the blocking-read daemon thread
         self._reader_thread = threading.Thread(
@@ -557,6 +562,42 @@ class AudioCapture:
         else:
             log.warning('Could not open any audio stream candidate')
 
+    def wait_for_new_block(self, timeout_s: float = 0.5) -> bool:
+        """Block until the reader signals a new block or timeout expires.
+
+        Returns True when a new block arrived, False on timeout.  The caller
+        should then call ``get_block_if_new()`` to retrieve it.  Clears the
+        internal event before returning so back-to-back calls are safe.
+
+        Designed for the analysis thread; only one thread should call this.
+        """
+        signalled = self._new_block_event.wait(timeout=timeout_s)
+        if signalled:
+            self._new_block_event.clear()
+        return signalled
+
+    def get_block_if_new(self, last_seq: int) -> tuple[np.ndarray | None, int]:
+        """Return ``(block_copy, current_seq)`` when a new block has arrived.
+
+        Returns ``(None, last_seq)`` when ``block_seq`` has not advanced since
+        the previous call.  The returned array is a copy so the analysis thread
+        may hold it safely across the full FFT pipeline while the reader thread
+        continues appending to the ring buffer.
+        """
+        with self._lock:
+            current_seq = self._block_seq
+            if current_seq == last_seq or not self._buf:
+                return None, last_seq
+            return self._buf[-1].copy(), current_seq
+
+    def signal_new_block(self) -> None:
+        """Force-set the new-block event to unblock a waiting analysis thread.
+
+        Called by AudioManager.stop() so the analysis thread wakes immediately
+        and sees the stop flag instead of waiting up to ``timeout_s`` seconds.
+        """
+        self._new_block_event.set()
+
     def _stop_reader_thread(self) -> None:
         """Signal the reader thread to stop and wait up to the close timeout."""
         self._stop_event.set()
@@ -624,6 +665,7 @@ class AudioCapture:
             with self._lock:
                 self._buf.append(mono.copy())
                 self._block_seq += 1
+            self._new_block_event.set()  # wake analysis thread
             if is_first_block:
                 log.debug('Audio: first block received (rms=%.4f)', rms)
                 is_first_block = False

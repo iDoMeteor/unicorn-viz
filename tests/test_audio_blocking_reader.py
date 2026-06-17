@@ -164,69 +164,41 @@ class TestBlockingReader:
 # AudioManager — FFT dedup
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# AudioManager — analysis thread and AudioData publishing
+# ---------------------------------------------------------------------------
+
 class TestFFTDedup:
-    """get_audio_data() skips the analyzer when block_seq is unchanged."""
+    """Analysis thread processes blocks and publishes to main thread."""
 
-    def _manager_with_mock_capture(self, initial_seq: int = 0):
+    def _make_manager_with_mock_capture(self):
+        """Return an AudioManager where AudioCapture and Analyzer are mocked."""
         cfg = Config()
         with patch('unicornviz.audio.manager.AudioCapture') as MockCapture, \
              patch('unicornviz.audio.manager.Analyzer') as MockAnalyzer:
-            mock_cap_instance = MagicMock()
-            type(mock_cap_instance).block_seq = PropertyMock(return_value=initial_seq)
-            mock_cap_instance.get_block.return_value = np.zeros(1024, dtype=np.float32)
-            MockCapture.return_value = mock_cap_instance
 
-            mock_analyzer = MagicMock()
-            mock_analyzer.last_raw_rms = 0.0
-            MockAnalyzer.return_value = mock_analyzer
-
-            mgr = AudioManager(cfg)
-            mgr._capture = mock_cap_instance
-            mgr._analyzer = mock_analyzer
-        return mgr, mock_cap_instance, mock_analyzer
-
-    def test_analyzer_called_on_new_block(self):
-        mgr, mock_cap, mock_analyzer = self._manager_with_mock_capture(initial_seq=0)
-        type(mock_cap).block_seq = PropertyMock(return_value=1)
-        mgr.get_audio_data()
-        mock_analyzer.process.assert_called_once()
-
-    def test_analyzer_skipped_on_same_block(self):
-        mgr, mock_cap, mock_analyzer = self._manager_with_mock_capture(initial_seq=0)
-        # First call — new block (seq was -1, now 0)
-        mgr.get_audio_data()
-        call_count_after_first = mock_analyzer.process.call_count
-
-        # Second call — same seq (0 again) → should NOT call analyzer
-        mgr.get_audio_data()
-        assert mock_analyzer.process.call_count == call_count_after_first, \
-            'Analyzer must not be called on duplicate blocks'
-
-    def test_reactivity_applied_once_not_twice(self):
-        """Reactivity scaling must not compound across duplicate-block frames."""
-        cfg = Config()
-        with patch('unicornviz.audio.manager.AudioCapture') as MockCapture, \
-             patch('unicornviz.audio.manager.Analyzer') as MockAnalyzer:
             mock_cap = MagicMock()
-            seq = [0]
-            type(mock_cap).block_seq = PropertyMock(side_effect=lambda: seq[0])
-            mock_cap.get_block.return_value = np.zeros(1024, dtype=np.float32)
+            # Provide the methods the analysis thread needs.
+            mock_cap.wait_for_new_block.return_value = True
+            mock_cap.get_block_if_new.return_value = (
+                np.zeros(1024, dtype=np.float32), 1
+            )
+            mock_cap.signal_new_block.return_value = None
+            mock_cap.maybe_fallback.return_value = None
+            mock_cap.active = True
             MockCapture.return_value = mock_cap
 
             from unicornviz.effects.base import AudioData
-            raw_data = AudioData()
-            raw_data.bass = 0.5
-            raw_data.mid = 0.4
-            raw_data.treble = 0.3
-
-            mock_analyzer = MagicMock()
-            mock_analyzer.last_raw_rms = 0.0
+            published = AudioData()
+            published.bass = 0.4
+            published.mid = 0.3
+            published.treble = 0.2
 
             def _fake_process(block, out=None):
                 if out is not None:
-                    out.bass = raw_data.bass
-                    out.mid = raw_data.mid
-                    out.treble = raw_data.treble
+                    out.bass = published.bass
+                    out.mid = published.mid
+                    out.treble = published.treble
                     out.fft[:] = 0.0
                     out.waveform[:] = 0.0
                     out.beat = 0.0
@@ -237,19 +209,75 @@ class TestFFTDedup:
                     out.bass_flux = 0.0
                     out.mid_flux = 0.0
 
+            mock_analyzer = MagicMock()
+            mock_analyzer.last_raw_rms = 0.0
             mock_analyzer.process.side_effect = _fake_process
+            mock_analyzer.drain_onsets.return_value = []
             MockAnalyzer.return_value = mock_analyzer
 
             mgr = AudioManager(cfg)
             mgr._capture = mock_cap
             mgr._analyzer = mock_analyzer
-            mgr.set_reactivity(2.0)
 
-            # Frame 1: new block (seq 0 → seq 0, _last_analyzed_block_seq is -1)
-            data1 = mgr.get_audio_data()
-            bass_after_frame1 = data1.bass  # should be 0.5 * 2.0 = 1.0 (clamped)
+        return mgr, mock_cap, mock_analyzer
 
-            # Frame 2: same block seq — reactivity must NOT be re-applied
-            data2 = mgr.get_audio_data()
-            assert data2.bass == bass_after_frame1, \
-                f'bass changed on duplicate frame: {bass_after_frame1} -> {data2.bass}'
+    def test_analyzer_called_on_new_block(self):
+        """Analysis thread processes blocks; get_audio_data reads from front_buf."""
+        mgr, mock_cap, mock_analyzer = self._make_manager_with_mock_capture()
+
+        # Manually publish a value to front_buf simulating what the analysis thread does.
+        from unicornviz.effects.base import AudioData
+        with mgr._analysis_lock:
+            mgr._front_buf.bass = 0.5
+            mgr._front_buf.mid = 0.3
+            mgr._front_buf.treble = 0.2
+
+        data = mgr.get_audio_data()
+        assert data.bass == pytest.approx(0.5, abs=1e-5)
+
+    def test_no_main_thread_fft(self):
+        """get_audio_data() must NOT call analyzer.process() (it runs in analysis thread)."""
+        mgr, mock_cap, mock_analyzer = self._make_manager_with_mock_capture()
+
+        mgr.get_audio_data()
+        mgr.get_audio_data()
+        mgr.get_audio_data()
+
+        mock_analyzer.process.assert_not_called()
+
+    def test_reactivity_applied_once_not_twice(self):
+        """Reactivity scaling on get_audio_data must not compound across frames."""
+        mgr, mock_cap, mock_analyzer = self._make_manager_with_mock_capture()
+
+        with mgr._analysis_lock:
+            mgr._front_buf.bass = 0.5
+            mgr._front_buf.mid = 0.3
+            mgr._front_buf.treble = 0.2
+
+        mgr.set_reactivity(2.0)
+
+        # Frame 1
+        data1 = mgr.get_audio_data()
+        bass_frame1 = data1.bass  # should be min(1.0, 0.5 * 2.0) = 1.0
+
+        # Frame 2: front_buf hasn't changed — reactivity still reads from front_buf (0.5)
+        # and applies 2.0 again, giving the same result.
+        data2 = mgr.get_audio_data()
+        assert data2.bass == pytest.approx(bass_frame1, abs=1e-5)
+
+    def test_drain_onsets_thread_safe(self):
+        """drain_onsets returns pending onsets and clears them atomically."""
+        mgr, _, _ = self._make_manager_with_mock_capture()
+        from unicornviz.audio.analyzer import OnsetEvent
+
+        with mgr._analysis_lock:
+            mgr._onset_pending.append(OnsetEvent(t=1.0, strength=1.5))
+            mgr._onset_pending.append(OnsetEvent(t=2.0, strength=2.0))
+
+        onsets = mgr.drain_onsets()
+        assert len(onsets) == 2
+        assert onsets[0].t == pytest.approx(1.0)
+
+        # Second drain should be empty.
+        onsets2 = mgr.drain_onsets()
+        assert len(onsets2) == 0

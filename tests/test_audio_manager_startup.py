@@ -18,6 +18,20 @@ class _CaptureBase:
     def current_source_label(self) -> str:
         return 'test-source'
 
+    def signal_new_block(self) -> None:
+        return
+
+    def maybe_fallback(self) -> None:
+        return
+
+    def wait_for_new_block(self, timeout_s: float = 0.5) -> bool:
+        import time
+        time.sleep(min(timeout_s, 0.05))
+        return False  # always timeout so analysis worker loops quietly
+
+    def get_block_if_new(self, last_seq: int):
+        return None, last_seq
+
 
 class _CaptureSlowStart(_CaptureBase):
     def start(self) -> None:
@@ -75,3 +89,5 @@ def test_start_succeeds_for_active_capture() -> None:
     manager._capture = _CaptureActive()
 
     manager.start(timeout_s=0.1)
+    # Stop cleanly so the analysis thread doesn't leak into other tests.
+    manager.stop()

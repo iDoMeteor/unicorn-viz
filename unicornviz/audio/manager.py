@@ -76,11 +76,24 @@ class AudioManager:
         )
         self._last_data = AudioData()
         self._last_data_raw = AudioData()
-        # Block-sequence counter: tracks which capture block was last FFT'd.
-        # When block_seq hasn't changed since the previous frame, the analyzer
-        # is skipped and _last_data is reused (~20% main-thread CPU reduction
-        # at 60 fps vs ~47 Hz audio blocks; also keeps onset MAD stats clean).
-        self._last_analyzed_block_seq: int = -1
+        # P1 — dedicated analysis thread (uv-audio-analyzer).
+        #
+        # The analyzer owns its own daemon thread so numpy FFT computation
+        # never runs on the main render thread and can never hold the GIL
+        # at the same time as the audio capture deadline.
+        #
+        # Double-buffer design:
+        #   _back_buf  — analysis thread writes here
+        #   _front_buf — latest published snapshot; main thread copies from here
+        # The thread swaps them atomically under _analysis_lock after each block.
+        # Main thread holds the lock only for the duration of the copy (~2 KB).
+        self._front_buf: AudioData = AudioData()
+        self._back_buf: AudioData = AudioData()
+        self._analysis_lock: threading.Lock = threading.Lock()
+        self._analysis_stop: threading.Event = threading.Event()
+        self._analysis_thread: threading.Thread | None = None
+        # Onset events published by the analysis thread, drained by main thread.
+        self._onset_pending: list[OnsetEvent] = []
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
@@ -142,8 +155,57 @@ class AudioManager:
             self._capture.current_source_label(),
         )
 
+        # Start the dedicated analysis thread now that capture is live.
+        self._analysis_stop.clear()
+        self._analysis_thread = threading.Thread(
+            target=self._analysis_worker,
+            name='uv-audio-analyzer',
+            daemon=True,
+        )
+        self._analysis_thread.start()
+        log.info('AudioManager: analysis thread started')
+
     def stop(self) -> None:
+        # Signal the analysis thread and unblock its wait immediately.
+        self._analysis_stop.set()
+        self._capture.signal_new_block()
+        if self._analysis_thread is not None:
+            self._analysis_thread.join(timeout=2.0)
+            if self._analysis_thread.is_alive():
+                log.warning('AudioManager: analysis thread did not exit within 2.0s')
+            self._analysis_thread = None
         self._capture.stop()
+
+    def _analysis_worker(self) -> None:
+        """Daemon thread: process audio blocks as they arrive from AudioCapture.
+
+        Calls ``Analyzer.process()`` (which releases the GIL during numpy FFT)
+        into the back buffer, then swaps front↔back under the analysis lock so
+        the main thread always reads a consistent, fully-written snapshot.
+        Onset events are collected under the same lock and drained by the main
+        thread via ``drain_onsets()``.
+        """
+        last_seq: int = -1
+        log.debug('AudioManager: analysis thread running')
+        while not self._analysis_stop.is_set():
+            # Wait for a new block; releases the GIL for up to timeout_s.
+            if not self._capture.wait_for_new_block(timeout_s=0.5):
+                continue  # timeout — check stop flag and loop
+            if self._analysis_stop.is_set():
+                break
+            block, new_seq = self._capture.get_block_if_new(last_seq)
+            if block is None:
+                continue
+            last_seq = new_seq
+            # Heavy work: numpy FFT releases the GIL → render thread runs freely.
+            self._analyzer.process(block, out=self._back_buf)
+            onsets = self._analyzer.drain_onsets()
+            # Atomic publish: swap buffers and accumulate onsets.
+            with self._analysis_lock:
+                self._front_buf, self._back_buf = self._back_buf, self._front_buf
+                if onsets:
+                    self._onset_pending.extend(onsets)
+        log.debug('AudioManager: analysis thread exited')
 
     def get_reactivity(self) -> float:
         """Return current global audio reactivity multiplier."""
@@ -229,7 +291,9 @@ class AudioManager:
         profile = get_profile(name)
         self._profile_key = name
         self._profile = profile
-        self._analyzer.set_profile(profile)
+        # Acquire lock so the analysis thread doesn't process a block mid-switch.
+        with self._analysis_lock:
+            self._analyzer.set_profile(profile)
         lo, hi = profile.preferred_bpm_range()
         log.info(
             'Audio profile changed to: %s [%d-%d BPM, prior mu=%.0f sigma=%.2f]',
@@ -246,29 +310,27 @@ class AudioManager:
         return list_profiles()
 
     def get_audio_data(self) -> AudioData:
-        """Called every frame from the main loop."""
+        """Called every frame from the main loop.
+
+        Copies the latest published analysis snapshot into ``_last_data`` and
+        ``_last_data_raw``, then applies the global reactivity multiplier to
+        ``_last_data``.  The copy is guarded by ``_analysis_lock`` so we always
+        read a fully-written buffer; the lock is released before any arithmetic.
+        No FFT or numpy work happens on the main thread.
+        """
         self._capture.maybe_fallback()
-        block = self._capture.get_block()
-        current_seq = self._capture.block_seq
-        if current_seq != self._last_analyzed_block_seq:
-            # New block: run the full analyzer pipeline.
-            if block is not None and len(block) > 0:
-                log.debug(
-                    'Audio frame: rms=%.4f bass=%.3f mid=%.3f treble=%.3f',
-                    float(np.sqrt(np.mean(block * block))),
-                    self._last_data.bass, self._last_data.mid, self._last_data.treble,
-                )
-            self._analyzer.process(block, out=self._last_data_raw)
-            self._copy_audio_into(self._last_data_raw, self._last_data)
-            if self._reactivity != 1.0:
-                r = self._reactivity
-                self._last_data.bass   = min(1.0, self._last_data.bass   * r)
-                self._last_data.mid    = min(1.0, self._last_data.mid    * r)
-                self._last_data.treble = min(1.0, self._last_data.treble * r)
-                np.multiply(self._last_data.fft, r, out=self._last_data.fft)
-                np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
-            self._last_analyzed_block_seq = current_seq
-        # else: same block as last frame — reuse _last_data (reactivity already applied).
+        # Copy latest published snapshot under the lock (only held for ~2 KB copy).
+        with self._analysis_lock:
+            self._copy_audio_into(self._front_buf, self._last_data_raw)
+            self._copy_audio_into(self._front_buf, self._last_data)
+        # Apply reactivity outside the lock — no shared state involved.
+        if self._reactivity != 1.0:
+            r = self._reactivity
+            self._last_data.bass   = min(1.0, self._last_data.bass   * r)
+            self._last_data.mid    = min(1.0, self._last_data.mid    * r)
+            self._last_data.treble = min(1.0, self._last_data.treble * r)
+            np.multiply(self._last_data.fft, r, out=self._last_data.fft)
+            np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
         return self._last_data
 
     def get_audio_data_raw(self) -> AudioData:
@@ -282,11 +344,13 @@ class AudioManager:
     def drain_onsets(self) -> list[OnsetEvent]:
         """Return and clear all onset events queued in the analyzer.
 
-        The BeatTracker in the auto-vj drop-in calls this each frame instead
-        of reading ``audio.beat``, so no onset is missed on fast frames and
-        none is double-counted on slow ones.
+        Thread-safe: called from the main thread; the analysis thread publishes
+        onsets under the same ``_analysis_lock``.
         """
-        return self._analyzer.drain_onsets()
+        with self._analysis_lock:
+            onsets = list(self._onset_pending)
+            self._onset_pending.clear()
+        return onsets
 
     def set_expected_bpm(self, bpm: float, confidence: float) -> None:
         """Forward a BPM estimate to the analyzer to tune its refractory gate.
