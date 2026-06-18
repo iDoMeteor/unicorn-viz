@@ -104,6 +104,49 @@ Notes:
 - Set `require_startup = true` only for environments where audio availability is
     mandatory and startup should abort on capture failure.
 
+### PipeWire quantum / low-latency operator setup
+
+On Fedora/Arch with PipeWire, the default quantum (hardware period size) is
+usually 1024 samples. Unicorn Viz uses `blocksize = 1024` (default) which
+matches this quantum exactly. **If you see audio xruns or static on loud transients,
+check the following before changing config:**
+
+1. **Verify the PipeWire quantum matches `blocksize`:**
+   ```
+   pw-metadata -n settings 0 clock.force-quantum
+   ```
+   If the quantum differs from `blocksize`, set them to match. For 48 kHz with
+   1024-sample blocks you get ~21 ms latency (the `"high"` latency preset).
+
+2. **Recommended settings for rock-solid operation (default):**
+   ```toml
+   [audio]
+   latency  = "high"    # maps to PortAudio 'high' → ~50 ms buffer
+   blocksize = 1024     # matches PipeWire default quantum
+   ```
+
+3. **Low-latency DJ/performance setup (more xrun-prone on budget hardware):**
+   ```toml
+   [audio]
+   latency  = "low"
+   blocksize = 512      # requires PipeWire quantum = 512
+   ```
+   Force the PipeWire quantum:
+   ```bash
+   pw-metadata -n settings 0 clock.force-quantum 512
+   ```
+   Reset after the session:
+   ```bash
+   pw-metadata -n settings 0 clock.force-quantum 0
+   ```
+
+4. **Diagnosing xruns at runtime:**
+   - Watch `pw-top` for capture-node xruns while Unicorn Viz runs.
+   - In INFO logs look for `Audio callback status: input overflow` — each line
+     is one xrun that could cause audible static.
+   - If xruns appear only on beat drops, increase `blocksize` to `2048` to give
+     PortAudio more buffering headroom.
+
 ---
 
 ## `[midi]`
