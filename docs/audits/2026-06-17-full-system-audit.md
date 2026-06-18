@@ -434,6 +434,7 @@ Concrete, verifiable upgrades to take each grade to A+ ("straight A's" target).
   ([app.py](../../unicornviz/app.py#L2446)) becomes a headless benchmark that
   fails if median frame time exceeds budget on the reference scene. A+ = "16.67 ms
   budget enforced in CI, not just aspirational."
+  **[DEFERRED — requires headless GL context; not practical as a unit test.]**
 
 ### Hotkey / help coverage — B+ → A+
 - Add F6 / Shift+H / `?` to help; confirm drop-in `HELP_ENTRIES` render in the
@@ -441,6 +442,9 @@ Concrete, verifiable upgrades to take each grade to A+ ("straight A's" target).
 - Add a **parity test**: every key dispatched in `hotkeys.py` (and every drop-in
   handler) must have a matching help line, and vice-versa. A+ = "help/handler
   parity is machine-verified, can't drift."
+  **[DONE 2026-06-18 — `tests/test_hotkey_help_audit.py`; soft-audit (warns, never
+  fails) to permit intentional easter-egg / dev hotkeys; hard regression guard
+  on the five confirmed-required keys from the 2026-06-18 audit.]**
 
 ### Code quality / duplication — B+ → A+
 - Extract `_present_back(src, dst)` and a single mirror/candy/normal compositor
@@ -520,7 +524,21 @@ regress silently.
   - P2: 3 new test files — onset-dedup (3 tests), m-family dispatch (6 tests),
     help-overlay parity (7 tests).  97/97 suite green.
   - P2: PipeWire quantum guidance added to docs/configuration.md.
-  Remaining open items: A+ goals (null-contract conformance, frame-budget CI,
-  full hotkey/help parity enforcement).
+  Remaining open items: A+ goals (null-contract conformance, frame-budget CI
+  [deferred], full hotkey/help parity enforcement).
+- **2026-06-18 (continued) — A+ null-contract + soft hotkey/help parity audit:**
+  - A+/B4: null-controller contract conformance tests added
+    (`tests/test_null_controller_contracts.py`); 38 new parametrized tests
+    covering `_NullWebcamSystem` (9 attrs), `_NullRTMPStreamer` (10 attrs),
+    `_NullPostFxController` (15 attrs), plus 3 call-without-raise smoke tests
+    each.  135 passing total.
+  - A+: `tests/test_hotkey_help_audit.py` — soft parity audit (always passes;
+    emits `UserWarning` with full delta table so drift stays visible on every
+    CI run; hard regression guard on 5 confirmed-required help entries).
+  - Frame-budget CI guard deferred (requires headless GL; not practical as unit
+    test).
+  - 136 tests passing.
+  Remaining open items: security CI gate (pip-audit + bandit + Spotify threat
+  model), docs link-checker in CI.
 - Notes: No runtime profiling performed; §2.3 / §9 list the runtime confirmation
   steps. No code changed in this pass — audit/remediation planning only.
