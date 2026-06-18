@@ -656,7 +656,8 @@ class Overlays:
                 ('Shift+-', 'Collapse all sections'),
                 ('Shift+=', 'Expand all sections'),
                 ('Arrow keys', 'Move section focus'),
-                ('H', 'Notifications on/off'),
+                ('H / ?', 'Toggle help overlay'),
+                ('Shift+H', 'Notifications on/off'),
                 ('Enter', 'Toggle focused section'),
                 ('0 - 9', 'Toggle section 1-10'),
             ],
@@ -693,6 +694,7 @@ class Overlays:
             [
                 ('[ / ]', 'Reactivity -/+'),
                 ('{ / }', 'Reactivity MIN / MAX'),
+                ('F6', 'Speed random ON / OFF'),
                 ('F7', 'Reactivity random ON / OFF'),
                 ('g', 'Reactivity reset'),
                 (', / .', 'Res scale down / up'),
