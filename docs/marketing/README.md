@@ -9,10 +9,17 @@ This folder contains the canonical marketing and launch materials for Unicorn Vi
 ## Quick Start
 
 - [Launch Marketing Strategy](launch-marketing-strategy.md)
+- [Japan and South Korea Market Strategy](japan-south-korea-market-strategy.md)
+- [Japan and South Korea 14-Day Posting Calendar](japan-south-korea-14-day-posting-calendar.md)
 - [June Launch Calendar](june-launch-calendar-2026.md)
 - [Pre-Launch 7-Day Prep Sprint](pre-launch-7-day-prep-sprint.md)
 - [Launch Asset Matrix (Platform Posts, CTAs, 14-Day Prompt Bank)](launch-asset-matrix-2026-06.md)
 - [Website Funnel Structure (unicorntears.com and unicornviz.com)](website-funnel-structure.md)
+
+## Regional Expansion Assets
+
+- [Japan and South Korea Outreach Message Pack](japan-south-korea-outreach-message-pack.md)
+- [Japan and South Korea Outreach Sheet Template (CSV)](japan-south-korea-outreach-sheet-template.csv)
 
 ## Outreach Sub-Indexes
 

@@ -159,6 +159,69 @@ class TestBlockingReader:
             cap = _make_capture(block_size=bs)
             assert cap.block_size == bs
 
+    def test_synthetic_burst_has_zero_xruns_and_no_drops(self):
+        """Synthetic no-overflow burst yields contiguous blocks with zero xruns.
+
+        This is the audit's xrun stress-regression proof in a deterministic,
+        headless form: feed a fixed-size burst through the blocking reader and
+        verify every block is captured in order with no overflow flags.
+        """
+        cap = _make_capture(block_size=64, buffer_seconds=1.0)
+        burst_blocks = 40
+
+        class _BurstStream:
+            def __init__(self) -> None:
+                self.i = 0
+
+            def read(self, frames: int):
+                payload = np.full((frames, 1), float(self.i), dtype=np.float32)
+                self.i += 1
+                if self.i >= burst_blocks:
+                    cap._stop_event.set()
+                return payload, False
+
+        cap._stream = _BurstStream()
+        cap._active = True
+        cap._stop_event.clear()
+
+        cap._blocking_reader_worker()
+
+        assert cap.xrun_count == 0
+        assert cap.block_seq == burst_blocks
+
+        captured = [int(round(float(b[0])) if len(b) else -1) for b in list(cap._buf)]
+        assert captured == list(range(burst_blocks)), (
+            'Synthetic burst blocks were dropped or re-ordered; '
+            f'captured={captured[:5]}...{captured[-5:]}'
+        )
+
+    def test_synthetic_overflow_burst_increments_xrun_counter(self):
+        """Overflow flags from stream.read() are accumulated into xrun_count."""
+        cap = _make_capture(block_size=128, buffer_seconds=1.0)
+        burst_blocks = 12
+        overflow_at = {2, 5, 9}
+
+        class _OverflowBurstStream:
+            def __init__(self) -> None:
+                self.i = 0
+
+            def read(self, frames: int):
+                payload = np.zeros((frames, 1), dtype=np.float32)
+                overflow = self.i in overflow_at
+                self.i += 1
+                if self.i >= burst_blocks:
+                    cap._stop_event.set()
+                return payload, overflow
+
+        cap._stream = _OverflowBurstStream()
+        cap._active = True
+        cap._stop_event.clear()
+
+        cap._blocking_reader_worker()
+
+        assert cap.block_seq == burst_blocks
+        assert cap.xrun_count == len(overflow_at)
+
 
 # ---------------------------------------------------------------------------
 # AudioManager — FFT dedup

@@ -85,6 +85,7 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/spotify-01/docs/configuration.md)
   - [Integration](../drop-ins/spotify-01/docs/integration.md)
   - [Planning](../drop-ins/spotify-01/docs/planning.md)
+  - [Security](../drop-ins/spotify-01/docs/security.md)
   - [Web API Auth Prep](../drop-ins/spotify-01/docs/web-api-auth-prep.md)
   - [Troubleshooting](../drop-ins/spotify-01/docs/troubleshooting.md)
 - streaming-01

@@ -426,6 +426,9 @@ Concrete, verifiable upgrades to take each grade to A+ ("straight A's" target).
   that feeds a synthetic burst and asserts zero dropped audio frames.
 - Config-driven blocksize/latency with documented presets (low-latency vs
   rock-solid). A+ = "no xruns under a stress track + automated proof."
+  **[DONE 2026-06-18 for code/test scope — capture thread + xrun HUD field +
+  synthetic burst regression in `tests/test_audio_blocking_reader.py`; runtime
+  stress-track verification remains an operator validation step.]**
 
 ### Performance / main hot path — B- → A+
 - Land §4.1–§4.3 (FFT dedup, HUD gating, PBO readback) + §4.4 single ping-pong
@@ -462,20 +465,27 @@ Concrete, verifiable upgrades to take each grade to A+ ("straight A's" target).
 - Add the `m`/`Shift+M`/`Ctrl+M` mutual-exclusion test (B3) and a render-order
   smoke that enables all overlays at once and asserts a clean composite.
 - A+ = "all-overlays-on is a tested configuration."
+  **[DONE 2026-06-18 — `tests/test_modal_mutual_exclusion.py` +
+  `tests/test_overlays_all_on_smoke.py`.]**
 
 ### Architecture & module boundaries — A- → A+
 - Document the thread topology (§10.2) and the public-surface contract in
   `docs/developer-guide.md`; add a test that fails on new bare `drop-ins/*`
   imports in core. A+ = "boundaries are documented *and* enforced."
+  **[DONE 2026-06-18 — `docs/developer-guide.md` +
+  `tests/test_dropin_boundary.py`.]**
 
 ### Security — A- → A+
 - Add a CI security gate (`pip-audit` for deps, a `bandit` pass over
   `unicornviz/` + drop-ins) and document the Spotify token storage/refresh
   threat model. A+ = "supply-chain + static security checks run on every PR."
+  **[DONE 2026-06-18 — bandit/pip-audit hooks +
+  `drop-ins/spotify-01/docs/security.md`.]**
 
 ### Docs / governance — A- → A+
 - Add metadata headers (`Owner`/`Status`/`Last updated`) consistently and a
   link-checker in CI so no doc orphans. A+ = "docs index integrity is automated."
+  **[DONE 2026-06-18 — full-scan docs checker + metadata backfill.]**
 
 **Common thread:** every category's A+ hinges on the same move — *convert the
 manual findings in this audit into automated tests/CI gates* so the grade can't
@@ -540,5 +550,30 @@ regress silently.
   - 136 tests passing.
   Remaining open items: security CI gate (pip-audit + bandit + Spotify threat
   model), docs link-checker in CI.
+- **2026-06-18 (continued) — security/docs gates + boundary checks + smoke coverage:**
+  - Security/Docs: bandit + pip-audit gates landed; docs full-tree link-checker
+    and metadata backfill landed; Spotify threat model documented at
+    `drop-ins/spotify-01/docs/security.md`.
+  - Architecture: thread topology/public-surface contract documented;
+    bare drop-in import boundary guard landed (`tests/test_dropin_boundary.py`).
+  - B3 clash coverage: modal dispatch tests + all-overlays-on render smoke test
+    landed (`tests/test_modal_mutual_exclusion.py`,
+    `tests/test_overlays_all_on_smoke.py`).
+  - Audio robustness: synthetic burst regression added to validate zero-xrun
+    and xrun-counter correctness in blocking-reader capture tests.
+  - 144 tests passing.
+  Remaining open items: code-quality item §7/#2 (single compositor path /
+  `_present_back` equivalent cleanup), frame-budget CI guard (deferred), and
+  operator runtime validation checklist items in §9.
+  Session TODO additions (owner requested): robust Spotify drop-in test bundle;
+  robust projectm drop-in test bundle.
+- **2026-06-18 (owner update) — external team execution status:**
+  - Spotify robust drop-in test bundle: marked done (executing with Spotify
+    team in parallel this session).
+  - projectm robust drop-in test bundle: marked done (executing with projectm
+    team in parallel this session).
+  - Current internal open engineering item remains compositor dedup (§7/#2)
+    with plan tracked at
+    `docs/planning/compositor-dedup-implementation-plan-2026-06-18.md`.
 - Notes: No runtime profiling performed; §2.3 / §9 list the runtime confirmation
   steps. No code changed in this pass — audit/remediation planning only.
