@@ -21,18 +21,15 @@ the counter each frame and skips the FFT when no new block has arrived
 """
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 import sys
 import threading
 import time
 from collections import deque
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from unicornviz.paths import APP_ROOT
 
 if TYPE_CHECKING:
     from unicornviz.runtime_state import RuntimeStateStore

@@ -1,5 +1,10 @@
 # In-App Recording Implementation Plan
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 This plan covers immediate implementation of built-in recording for Unicorn Viz.
 
 ## Current Status

@@ -27,6 +27,8 @@ dev = [
     # Dev security tooling (CI gates — not needed at runtime)
     "bandit>=1.7",
     "pip-audit>=2.7",
+    # Linter (CI gate)
+    "ruff>=0.4",
 ]
 
 [project.scripts]
@@ -48,4 +50,37 @@ addopts = "-ra"
 # B101 assert, B404/B603/B607 subprocess — routine in this codebase.
 skips = ["B101", "B404", "B603", "B607"]
 # Severity threshold: -ll → medium and above only
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# Gate: undefined names (F8xx), unused-imports (F401), unused-vars (F841),
+# multi-statement lines (E7xx).  E501 line-length excluded — long GLSL strings
+# are intentional.  E702/E701 excluded globally — compact semicolon style is
+# used intentionally in the ANSI parser and shader-helper sections.
+select = ["F", "E7"]
+ignore = ["E501", "E701", "E702"]
+
+[tool.ruff.lint.per-file-ignores]
+# Legacy unused imports in files not touched by the 2026-06-18 session.
+# These are documented tech debt; fix them incrementally as those files are
+# edited.  Do NOT add new unused imports — this list is a ceiling, not a floor.
+"unicornviz/__main__.py" = ["F401"]
+"unicornviz/ansi/font.py" = ["F401"]
+"unicornviz/ansi/renderer.py" = ["F401"]
+"unicornviz/app.py" = ["F401", "F841"]
+"unicornviz/dropins.py" = ["F401"]
+"unicornviz/effects/ansi_viewer.py" = ["F401"]
+"unicornviz/effects/audio_spectrogram.py" = ["F401"]
+"unicornviz/effects/audio_waveforms.py" = ["F401"]
+"unicornviz/effects/copper_bars.py" = ["F401"]
+"unicornviz/effects/plasma.py" = ["F401"]
+"unicornviz/effects/vector.py" = ["F841"]
+"unicornviz/hotkeys.py" = ["F401"]
+"unicornviz/overlays.py" = ["F841"]
+"unicornviz/splash.py" = ["F841"]
+# Test files: unused imports are sometimes needed for fixture side-effects.
+"tests/*.py" = ["F401"]
 

@@ -1,5 +1,10 @@
 # Plan Truth Sync Report
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 Date: 2026-05-24
 Scope audited:
 - plan.md

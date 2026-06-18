@@ -1,5 +1,10 @@
 # Unicorn Viz - Pre-Release Feature Review and Version Tracker
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 Date baseline: 2026-05-23  
 Process: multi-day full-system review  
 Primary goal: one canonical checklist for everything (effects, drop-ins, help menu, startup/runtime modes, and system behaviors) so no context switching between documents is required.

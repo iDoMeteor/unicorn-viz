@@ -19,6 +19,12 @@ repos:
         language: system
         files: ^(unicornviz/|drop-ins/).+\.py$
         pass_filenames: true
+      - id: ruff
+        name: ruff
+        entry: .venv/bin/ruff check unicornviz/ tests/
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: bandit
         name: bandit
         entry: .venv/bin/bandit -r unicornviz/ drop-ins/ -ll -q

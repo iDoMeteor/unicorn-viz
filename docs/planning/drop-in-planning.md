@@ -1,5 +1,10 @@
 # Drop-In Planning
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 ## Control Room Follow-Ups
 
 ### Control Room Manager Track (2026-06-05)

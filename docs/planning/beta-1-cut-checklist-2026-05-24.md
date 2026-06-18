@@ -1,5 +1,10 @@
 # Unicorn Viz Beta-1 Cut Checklist (Primary + Drop-ins)
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 Date: 2026-05-24
 Scope: Primary repo plus all drop-in submodule repos
 Purpose: Final top-10 execution list before first officially tagged pre-release beta

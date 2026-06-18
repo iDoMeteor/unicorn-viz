@@ -1,5 +1,10 @@
 # Auto VJ Breakdown / Impact / Climax Plan + Report
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 ## Objective
 
 Improve Auto VJ musical intelligence so it can reliably detect and react to:

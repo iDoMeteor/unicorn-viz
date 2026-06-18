@@ -1,5 +1,10 @@
 # Audit Response Plan
 
+Owner: Studio Documentation
+Status: archive
+Last updated: 2026-06-18
+
+
 This file turns the findings in:
 - `docs/archive/legacy-root-audits/2026-05-09-code-audit.md`
 - `docs/archive/legacy-root-audits/2026-05-09-feature-enhancements.md`

@@ -20,9 +20,10 @@ Last updated: 2026-06-18
 6. [Registering Help Hotkeys via HELP_ENTRIES](#registering-help-hotkeys-via-help_entries)
 7. [GLSL Conventions](#glsl-conventions)
 8. [Data Flow Diagram](#data-flow-diagram)
-9. [Test Strategy](#test-strategy)
-10. [Adding Platform Support](#adding-platform-support)
-11. [Release Checklist](#release-checklist)
+9. [Thread Topology & Module Boundary Contract](#thread-topology--module-boundary-contract)
+10. [Test Strategy](#test-strategy)
+11. [Adding Platform Support](#adding-platform-support)
+12. [Release Checklist](#release-checklist)
 
 ---
 
@@ -678,7 +679,102 @@ Exit codes:
 
 ---
 
-## Test Strategy
+## Thread Topology & Module Boundary Contract
+
+### Thread map (as of 2026-06-18)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ MAIN THREAD  (SDL2 event loop + GL + effect pipeline)               │
+│                                                                     │
+│  SDL_PollEvent ─► HotkeyHandler ─► App actions                     │
+│  AudioManager.get_audio_data()  → AudioData snapshot (read-only)   │
+│  effect.update(dt, audio)  ──► effect.render()                     │
+│  Overlays.render(dt)                                                │
+│  SDL_GL_SwapWindow                                                  │
+│                                                                     │
+│  ┌─ Recording write queue ──────────────────────────────────────┐  │
+│  │  uv-rec-writer  (daemon thread)                              │  │
+│  │  Drains a queue[bytes] written by the main thread each frame │  │
+│  │  Writes to disk via ffmpeg stdin pipe; never touches GL.     │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ uv-audio-reader  (daemon thread — AudioCapture)                     │
+│                                                                     │
+│  sounddevice.InputStream.read()  blocking-read loop                │
+│  → mono-mixes stereo, writes mono PCM block to _block_queue        │
+│  → increments block_seq (atomic int) on each new block             │
+│  → fires _new_block_event (threading.Event)                        │
+│  → tracks xrun_count for operator diagnostics                      │
+│  GIL is released during the native read(); audio never competes    │
+│  with the render loop for Python bytecode execution.               │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ uv-audio-analyzer  (daemon thread — AudioManager)                  │
+│                                                                     │
+│  Waits on _new_block_event; skips if block_seq unchanged (dedup).  │
+│  Runs FFT → spectral flux → beat detection on the new block.       │
+│  Double-buffers result: writes to back AudioData, then atomically  │
+│  swaps front ↔ back (lock held only during pointer swap, not FFT). │
+│  Appends onset events to a thread-safe queue for main-thread drain. │
+│  Never touches moderngl or SDL objects.                            │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ rtmidi callback thread  (MidiManager — optional)                   │
+│                                                                     │
+│  Fires on MIDI hardware events (note on/off, CC).                  │
+│  Only appends to a queue or writes through a lock — never touches  │
+│  moderngl objects or Python data structures without synchronization.│
+│  Main thread drains the queue each frame in HotkeyHandler.handle().│
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Thread-safety rules
+
+| Rule | Rationale |
+|------|-----------|
+| moderngl objects are **main-thread-only** | No GL context on audio/MIDI threads |
+| `AudioData` snapshots are **read-only** once published | Prevents races with in-flight renders |
+| MIDI callbacks **only write to queues** | rtmidi fires on its own thread |
+| `RuntimeStateStore` uses `threading.RLock` for all reads/writes | Safe from any thread |
+| Recording bytes are passed via `queue.Queue` | Writer thread never reads GL state |
+
+### Module boundary contract
+
+The `unicornviz/` core package must **never hard-import a drop-in**.  All
+drop-in symbols are loaded at runtime via `unicornviz.dropins.load_dropin_symbol()`
+which uses `importlib.util.spec_from_file_location`.  This is enforced by
+`tests/test_dropin_boundary.py`.
+
+```
+unicornviz/app.py
+  └── unicornviz/dropins.py   ← ONLY file allowed to reference drop-in paths
+        └── importlib.util.spec_from_file_location()
+              └── drop-ins/<name>/<module>.py   (loaded at runtime, optional)
+```
+
+Every drop-in integration in `app.py` follows this pattern:
+
+```python
+def _load_foo_class():
+    return load_dropin_symbol('drop-ins/foo-01/foo.py', 'FooController')
+
+try:
+    FooController = _load_foo_class()
+except Exception:
+    FooController = None  # app starts normally without the drop-in
+```
+
+Null/fallback controller classes are required for every optional drop-in so
+that `app.py` can instantiate a no-op object without branching on `None` in
+the hot path.  Null contracts are enforced by `tests/test_null_controller_contracts.py`.
+
+---
+
 
 The project uses pytest with a baseline suite under `tests/`.
 
