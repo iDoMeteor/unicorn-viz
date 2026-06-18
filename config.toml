@@ -16,7 +16,7 @@ transition = "shuffle"
 
 [audio]
 reactivity = 1.0
-latency = "medium"
+latency = "low"
 profile = "house"
 
 [ansi]

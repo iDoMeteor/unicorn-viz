@@ -497,6 +497,8 @@ class App:
         )
         self._audio: AudioData | None = None
         self._audio_raw: AudioData | None = None
+        self._last_frame_fps: float = 0.0
+        self._last_frame_ms: float = 0.0
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
         self._overlays: Overlays | None = None
@@ -1779,25 +1781,58 @@ void main() {
 
         return self._fill_audio_scratch(target, source, scale)
 
-    def _hud_audio_state_fields(self) -> dict[str, str]:
-        """Return HUD-ready audio fields, preferring raw data when available."""
-        audio_hud = self._audio_raw or self._audio
-        if audio_hud is None:
-            return {
-                'bass': '0.00',
-                'mid': '0.00',
-                'treble': '0.00',
-                'bass_n': '0.50',
-                'mid_n': '0.50',
-                'treble_n': '0.50',
-            }
+    def _system_monitor_audio_snapshot(self) -> dict[str, float]:
+        """Return live monitor audio/frame metrics independent of HUD payload."""
+        src = self._audio_raw if self._audio_raw is not None else self._audio
+        if src is None:
+            bass = 0.0
+            mid = 0.0
+            treble = 0.0
+            bass_n = 0.5
+            mid_n = 0.5
+            treble_n = 0.5
+        else:
+            bass = float(src.bass)
+            mid = float(src.mid)
+            treble = float(src.treble)
+            bass_n = float(src.bass_n)
+            mid_n = float(src.mid_n)
+            treble_n = float(src.treble_n)
+
         return {
-            'bass': f'{audio_hud.bass:.2f}',
-            'mid': f'{audio_hud.mid:.2f}',
-            'treble': f'{audio_hud.treble:.2f}',
-            'bass_n': f'{audio_hud.bass_n:.2f}',
-            'mid_n': f'{audio_hud.mid_n:.2f}',
-            'treble_n': f'{audio_hud.treble_n:.2f}',
+            'fps': float(self._last_frame_fps),
+            'frame_ms': float(self._last_frame_ms),
+            'bass': bass,
+            'mid': mid,
+            'treble': treble,
+            'bass_n': bass_n,
+            'mid_n': mid_n,
+            'treble_n': treble_n,
+        }
+
+    def _system_monitor_tweakables_snapshot(self) -> dict[str, float | None]:
+        """Return live tweakable values for the system monitor modal."""
+        reactivity = 1.0
+        if self._audio_manager is not None:
+            reactivity = float(self._audio_manager.get_reactivity())
+
+        speed: float | None = None
+        zoom: float | None = None
+        effect = self._current_effect
+        if effect is not None:
+            try:
+                if 'speed' in effect.parameters:
+                    speed = float(effect.parameters['speed'])
+                if 'zoom' in effect.parameters:
+                    zoom = float(effect.parameters['zoom'])
+            except Exception:
+                # Keep monitor render path resilient if an effect mutates parameters unexpectedly.
+                pass
+
+        return {
+            'reactivity': reactivity,
+            'speed': speed,
+            'zoom': zoom,
         }
 
     def _build_blend_pipeline(self) -> None:
@@ -2142,7 +2177,7 @@ void main() {
 
         # Subsystems (audio starts before splash so splash can react to music)
         log.info('Startup: initializing audio subsystem')
-        audio_manager = AudioManager(self.cfg)
+        audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
         audio_start_timeout_s = float(self.cfg.get('audio', 'start_timeout_s', default=4.0))
         audio_start_retries = int(self.cfg.get('audio', 'start_retries', default=2))
         audio_start_backoff_s = float(
@@ -2306,6 +2341,12 @@ void main() {
         )
         self._overlays = overlays
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
+        overlays.set_system_monitor_audio_provider(
+            self._system_monitor_audio_snapshot
+        )
+        overlays.set_system_monitor_tweakables_provider(
+            self._system_monitor_tweakables_snapshot
+        )
 
         dynamic_help: list[tuple[str, str, str]] = []
         for effect_cls in effects:
@@ -2498,6 +2539,8 @@ void main() {
             now = time.perf_counter()
             dt = min(now - prev_time, 0.1)  # cap at 100 ms to avoid spiral
             prev_time = now
+            self._last_frame_fps = (1.0 / dt) if dt > 0.0 else 0.0
+            self._last_frame_ms = dt * 1000.0
             manager_modal_active = self._projectm_manager_modal_active
 
             # Poll events
@@ -2999,11 +3042,14 @@ void main() {
             else:
                 # HUD hidden — minimal update: keep fps, effect name, and live
                 # audio meters current so the display is correct when re-opened.
+                audio_hud = self._audio_raw if self._audio_raw is not None else self._audio
                 overlays.set_hud_state({
                     'fps': f"{fps_now:.1f}",
                     'frame_ms': f"{(dt * 1000.0):.2f}",
                     'effect': overlays._name_text,
-                    **audio_hud_fields,
+                    'bass': f"{audio_hud.bass:.2f}" if audio_hud is not None else '0.00',
+                    'mid': f"{audio_hud.mid:.2f}" if audio_hud is not None else '0.00',
+                    'treble': f"{audio_hud.treble:.2f}" if audio_hud is not None else '0.00',
                 })
             if perf_debug_enabled:
                 perf_after_hud = time.perf_counter()
@@ -3848,16 +3894,16 @@ void main() {
     def toggle_fullscreen(self) -> None:
         self._fullscreen = not self._fullscreen
         if self._is_span_mode(self._display_mode):
-            sdl2.SDL_SetWindowBordered(
-                self._window,
-                sdl2.SDL_FALSE if self._fullscreen else sdl2.SDL_TRUE,
-            )
             if self._fullscreen:
                 x, y, w, h = self._all_display_bounds()
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_FALSE)
             else:
                 x, y = self._window_position_for_display(self._display_index)
                 w = int(self.cfg.get('window', 'width', default=1920))
                 h = int(self.cfg.get('window', 'height', default=1080))
+                sdl2.SDL_SetWindowFullscreen(self._window, 0)
+                sdl2.SDL_SetWindowBordered(self._window, sdl2.SDL_TRUE)
             sdl2.SDL_SetWindowPosition(self._window, x, y)
             sdl2.SDL_SetWindowSize(self._window, w, h)
         else:

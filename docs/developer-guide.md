@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-15
+Last updated: 2026-06-18
 
 ## Contents
 
@@ -159,6 +159,64 @@ unicorn-viz/
 | `set_webcam_brightness()/set_webcam_contrast()` | Webcam image-control setters |
 | `set_webcam_flip_horizontal()/set_webcam_flip_vertical()` | Webcam flip-control setters |
 | `get_runtime_state()/set_runtime_state()` | Shared global runtime-state read/write helpers |
+
+### Runtime State
+
+All mutable state that should survive a restart is persisted through a single
+shared `RuntimeStateStore` at `runtime/global_state.json`.  The store is
+JSON-backed, atomic-write (write-to-`.tmp` then `os.replace()`), and
+thread-safe via `threading.RLock`.
+
+**API surface for drop-ins** — always go through `VJApi`:
+
+```python
+# Read (dotted path, with safe default)
+value = vj_api.get_runtime_state('banner.scroll_speed', default=80.0)
+
+# Write (persists immediately)
+vj_api.set_runtime_state('banner.scroll_speed', 95.0)
+```
+
+**Namespace conventions**
+
+| Namespace prefix | Owner |
+|-----------------|-------|
+| `audio.*` | core `AudioCapture` — selected and viable audio source keys |
+| `banner.*` | drop-in `banner-01` — text, speed, alpha, font, flags |
+| `webcam.*` | drop-in `webcam-01` — camera selection, per-camera settings |
+| `multihead.*` | drop-in `control-room-01` — monitor editor exclude list |
+
+**State isolation rules**
+
+- Core code reads and writes via `App.get_runtime_state()` /
+  `App.set_runtime_state()`.
+- Drop-ins must use `vj_api.get_runtime_state()` / `vj_api.set_runtime_state()`
+  — never construct their own `RuntimeStateStore` instance.
+- Each drop-in must use its own top-level namespace key (e.g. `banner.*`,
+  `webcam.*`) and must never read or write another drop-in's keys.
+- **ProjectM is explicitly exempt**: `projectm-01` manages its own state in
+  `runtime/projectm/` and `dark_excluded.txt` under its own directory.  Do not
+  attempt to move these into the global store.
+- **Spotify is explicitly exempt**: the token file `runtime/spotify-pro-token.json`
+  is a credential and must never be co-mingled with runtime/UI state.
+
+**Gitignore rules**
+
+The `runtime/` directory is gitignored at the repo root and in every drop-in
+that generates runtime files.  Do not commit `global_state.json` or any other
+runtime state file.  Per-machine state is local-only by design.
+
+**Transient runtime state that is NOT persisted** (lives only in memory):
+
+- AutoVJ session decisions — written to `logs/autovj-*.jsonl` as append-only
+  telemetry; never needs to survive a restart.
+- Effect `self.parameters` — reset to defaults on each effect switch by design.
+- Grand Finale phase state — intentionally transient.
+- Keystroke log — append-only diagnostic log.
+
+**Backup / restore**: copy `runtime/global_state.json` to back up all operator
+preferences in one file.  On a fresh machine, drop it back into `runtime/`
+before launching.
 
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen

@@ -13,4 +13,5 @@ recordings/
 screenshots/
 runtime/
 build/
+# Audio source selection state (now in runtime/global_state.json)
 .audio_source_state.json

@@ -29,9 +29,13 @@ import threading
 import time
 from collections import deque
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from unicornviz.paths import APP_ROOT
+
+if TYPE_CHECKING:
+    from unicornviz.runtime_state import RuntimeStateStore
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +56,6 @@ _CLOSE_STREAM_TIMEOUT_S = 1.0
 _DEFAULT_FALLBACK_RMS_THRESHOLD = 0.0015
 _DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
 _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
-_DEFAULT_SOURCE_STATE_PATH = APP_ROOT / '.audio_source_state.json'
 
 
 def _normalize_latency(latency: str | float) -> str | float:
@@ -247,6 +250,7 @@ class AudioCapture:
         fallback_cooldown_seconds: float = _DEFAULT_FALLBACK_COOLDOWN_SECONDS,
         auto_fallback_enabled: bool = True,
         block_size: int = _BLOCK_SIZE,
+        state_store: RuntimeStateStore | None = None,
     ) -> None:
         self._device_hint = device_hint
         self._buffer_seconds = buffer_seconds
@@ -286,16 +290,17 @@ class AudioCapture:
         self._auto_fallback_enabled = bool(auto_fallback_enabled)
         self._prefer_default_input = bool(prefer_default_input)
         self._last_fallback_time = 0.0
-        self._state_path: Path = _DEFAULT_SOURCE_STATE_PATH
+        self._state_store = state_store
         self._selected_source_key: str | None = None
         self._viable_source_keys: set[str] = set()
         self._load_source_state()
 
     def _load_source_state(self) -> None:
+        """Load audio source preferences from runtime state store or skip if none."""
+        if self._state_store is None:
+            return
         try:
-            if not self._state_path.exists():
-                return
-            payload = json.loads(self._state_path.read_text(encoding='utf-8'))
+            payload = self._state_store.get('audio', default={})
             if not isinstance(payload, dict):
                 return
             selected = payload.get('selected_source_key')
@@ -310,15 +315,15 @@ class AudioCapture:
             log.debug('Audio source state load skipped: %s', exc)
 
     def _save_source_state(self) -> None:
+        """Save audio source preferences to runtime state store or skip if none."""
+        if self._state_store is None:
+            return
         try:
             payload = {
                 'selected_source_key': self._selected_source_key or '',
                 'viable_source_keys': sorted(self._viable_source_keys),
             }
-            self._state_path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True),
-                encoding='utf-8',
-            )
+            self._state_store.set('audio', payload)
         except Exception as exc:
             log.warning('Audio source state save failed: %s', exc)
 

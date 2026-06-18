@@ -903,6 +903,12 @@ class Overlays:
         self._sysmon_prev_io_t: float | None = None
         self._sysmon_prev_disk_bytes: float | None = None
         self._sysmon_prev_net_bytes: float | None = None
+        self._system_monitor_audio_provider: (
+            Callable[[], dict[str, float]] | None
+        ) = None
+        self._system_monitor_tweakables_provider: (
+            Callable[[], dict[str, float | None]] | None
+        ) = None
         if _PSUTIL_AVAILABLE:
             try:
                 psutil.cpu_percent(interval=None)
@@ -2910,14 +2916,17 @@ void main() {
             except Exception:
                 return float(default)
 
-        fps = _num('fps', 0.0)
-        frame_ms = _num('frame_ms', 0.0)
-        bass = _num('bass', 0.0)
-        mid = _num('mid', 0.0)
-        treble = _num('treble', 0.0)
-        react = _num('reactivity', 1.0)
-        speed = _num('speed', 1.0)
-        zoom = _num('render_scale', 1.0)
+        (
+            fps,
+            frame_ms,
+            bass,
+            mid,
+            treble,
+            bass_bar,
+            mid_bar,
+            treble_bar,
+        ) = self._system_monitor_audio_metrics(_num)
+        react, speed, zoom = self._system_monitor_tweakables(_num)
 
         # Left: metrics bars.
         left_x = px + 20.0
@@ -2938,9 +2947,9 @@ void main() {
 
         _metric_row(0, 'FPS', fps, 120.0, (0.22, 1.00, 0.58))
         _metric_row(1, 'FRAME MS', max(0.0, 33.0 - frame_ms), 33.0, (0.16, 0.86, 1.00))
-        _metric_row(2, 'BASS', bass, 1.2, (1.00, 0.45, 0.18))
-        _metric_row(3, 'MID', mid, 1.2, (0.98, 0.76, 0.22))
-        _metric_row(4, 'TREBLE', treble, 1.2, (0.76, 0.95, 1.00))
+        _metric_row(2, 'BASS', bass_bar, 1.2, (1.00, 0.45, 0.18))
+        _metric_row(3, 'MID', mid_bar, 1.2, (0.98, 0.76, 0.22))
+        _metric_row(4, 'TREBLE', treble_bar, 1.2, (0.76, 0.95, 1.00))
 
         # Right: control panel with faux knobs/sliders.
         right_x = px + panel_w * 0.56
@@ -2970,7 +2979,7 @@ void main() {
         knob_y = right_y + 240.0
         knob_r = 26.0
         knob_gap = 110.0
-        labels = [('GAIN', bass), ('PULSE', mid), ('SHINE', treble)]
+        labels = [('GAIN', bass_bar), ('PULSE', mid_bar), ('SHINE', treble_bar)]
         for i, (label, raw) in enumerate(labels):
             cx = right_x + 30.0 + i * knob_gap
             cy = knob_y
@@ -3019,6 +3028,88 @@ void main() {
         self._draw_text('TELEMETRY LINK STABLE  //  NO SIGNAL CLIP DETECTED',
                         px + 20.0, py + panel_h - 28.0, scale=1.8,
                         color=(0.56, 0.68, 0.80, 0.82))
+
+    def _system_monitor_audio_metrics(
+        self,
+        num_reader: Callable[[str, float], float],
+    ) -> tuple[float, float, float, float, float, float, float, float]:
+        """Resolve monitor frame/BMT metrics from runtime provider with HUD fallback."""
+        fps = num_reader('fps', 0.0)
+        frame_ms = num_reader('frame_ms', 0.0)
+        bass = num_reader('bass', 0.0)
+        mid = num_reader('mid', 0.0)
+        treble = num_reader('treble', 0.0)
+        bass_n = num_reader('bass_n', 0.5)
+        mid_n = num_reader('mid_n', 0.5)
+        treble_n = num_reader('treble_n', 0.5)
+
+        provider = self._system_monitor_audio_provider
+        if not callable(provider):
+            return fps, frame_ms, bass, mid, treble, bass_n, mid_n, treble_n
+
+        try:
+            values = provider()
+        except Exception as exc:
+            log.debug('System monitor audio provider failed: %s', exc)
+            return fps, frame_ms, bass, mid, treble, bass_n, mid_n, treble_n
+
+        if not isinstance(values, dict):
+            return fps, frame_ms, bass, mid, treble, bass_n, mid_n, treble_n
+
+        def _override(name: str, current: float) -> float:
+            raw = values.get(name)
+            if raw is None:
+                return current
+            try:
+                return float(raw)
+            except Exception:
+                return current
+
+        fps = _override('fps', fps)
+        frame_ms = _override('frame_ms', frame_ms)
+        bass = _override('bass', bass)
+        mid = _override('mid', mid)
+        treble = _override('treble', treble)
+        bass_n = _override('bass_n', bass_n)
+        mid_n = _override('mid_n', mid_n)
+        treble_n = _override('treble_n', treble_n)
+        return fps, frame_ms, bass, mid, treble, bass_n, mid_n, treble_n
+
+    def _system_monitor_tweakables(
+        self,
+        num_reader: Callable[[str, float], float],
+    ) -> tuple[float, float, float]:
+        """Resolve monitor tweakables from runtime provider with HUD fallback."""
+        react = num_reader('reactivity', 1.0)
+        speed = num_reader('speed', 1.0)
+        zoom = num_reader('zoom', 1.0)
+
+        provider = self._system_monitor_tweakables_provider
+        if not callable(provider):
+            return react, speed, zoom
+
+        try:
+            values = provider()
+        except Exception as exc:
+            log.debug('System monitor tweakables provider failed: %s', exc)
+            return react, speed, zoom
+
+        if not isinstance(values, dict):
+            return react, speed, zoom
+
+        def _override(name: str, current: float) -> float:
+            raw = values.get(name)
+            if raw is None:
+                return current
+            try:
+                return float(raw)
+            except Exception:
+                return current
+
+        react = _override('reactivity', react)
+        speed = _override('speed', speed)
+        zoom = _override('zoom', zoom)
+        return react, speed, zoom
 
 
     def _sample_system_telemetry(self) -> None:
@@ -4097,6 +4188,20 @@ void main() {
     def set_hud_state(self, state: dict[str, str]) -> None:
         """Update the live HUD payload rendered by TAB overlay."""
         self._hud_state.update(state)
+
+    def set_system_monitor_audio_provider(
+        self,
+        provider: Callable[[], dict[str, float]] | None,
+    ) -> None:
+        """Set optional runtime provider for monitor frame/audio values."""
+        self._system_monitor_audio_provider = provider
+
+    def set_system_monitor_tweakables_provider(
+        self,
+        provider: Callable[[], dict[str, float | None]] | None,
+    ) -> None:
+        """Set optional runtime provider for monitor tweakable values."""
+        self._system_monitor_tweakables_provider = provider
 
     def toggle_help(self) -> None:
         self._show_help = not self._show_help

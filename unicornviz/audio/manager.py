@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -15,11 +16,18 @@ from unicornviz.audio.analyzer import Analyzer, OnsetEvent  # noqa: F401 (OnsetE
 from unicornviz.audio.profiles import AudioProfile, get_profile, list_profiles
 from unicornviz.config import Config
 
+if TYPE_CHECKING:
+    from unicornviz.runtime_state import RuntimeStateStore
+
 log = logging.getLogger(__name__)
 
 
 class AudioManager:
-    def __init__(self, cfg: Config) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        state_store: RuntimeStateStore | None = None,
+    ) -> None:
         device_hint = cfg.get("audio", "device", default="")
         fft_bands = cfg.get("audio", "fft_bands", default=512)
         buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
@@ -67,6 +75,7 @@ class AudioManager:
             fallback_cooldown_seconds=fallback_cooldown_seconds,
             auto_fallback_enabled=auto_fallback_enabled,
             block_size=max(64, min(8192, int(cfg.get('audio', 'blocksize', default=1024)))),
+            state_store=state_store,
         )
         self._analyzer = Analyzer(
             fft_bands=fft_bands,
