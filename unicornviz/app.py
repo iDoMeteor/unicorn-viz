@@ -1693,6 +1693,22 @@ void main() {
         self._invert_prog["tex"].value = 0
         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
 
+    def _blit_fbo_b_to_fbo_a(self, w: int, h: int, *, clear: bool = True) -> None:
+        """Blit fbo_b's color attachment back into fbo_a via the present shader.
+
+        Used throughout the composite pipeline after rendering a pass into fbo_b
+        so the result becomes the new fbo_a base for subsequent overlay passes.
+        Pass ``clear=False`` when fbo_a's previous content must not be discarded
+        (e.g. late-stage overlay composition where fbo_a may still be needed).
+        """
+        self._fbo_a.use()
+        self._ctx.viewport = (0, 0, w, h)
+        if clear:
+            self._ctx.clear(0.0, 0.0, 0.0, 1.0)
+        self._fbo_b.color_attachments[0].use(location=0)
+        self._present_prog['tex'].value = 0
+        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+
     def _present_from_tex(self, tex: moderngl.Texture) -> None:
         """Render a texture to screen without post-processing."""
         self._compose_debug = f'{self._tex_debug_name(tex)}->screen'
@@ -3109,21 +3125,13 @@ void main() {
                         self._fbo_b.use()
                         self._ctx.viewport = (0, 0, self._render_width, self._render_height)
                         self._rainbow_nova.render(self._fbo_a.color_attachments[0])
-                        self._fbo_a.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
                     else:
                         if candy_mode_active:
                             self._fbo_b.use()
                             self._ctx.viewport = (0, 0, self._render_width, self._render_height)
                             self._rainbow_nova.render(self._fbo_a.color_attachments[0])
-                            self._fbo_a.use()
-                            self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                            self._fbo_b.color_attachments[0].use(location=0)
-                            self._present_prog['tex'].value = 0
-                            self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                            self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
                         else:
                             self._ctx.screen.use()
                             self._ctx.viewport = (0, 0, self._width, self._height)
@@ -3137,11 +3145,7 @@ void main() {
                         self._fbo_b,
                         self._render_width, self._render_height,
                     )
-                    self._fbo_a.use()
-                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    self._fbo_b.color_attachments[0].use(location=0)
-                    self._present_prog['tex'].value = 0
-                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
                 else:
                     if candy_mode_active:
                         self._fbo_b.use()
@@ -3151,11 +3155,7 @@ void main() {
                             self._fbo_b,
                             self._render_width, self._render_height,
                         )
-                        self._fbo_a.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
                     else:
                         self._ctx.screen.use()
                         self._ctx.viewport = (0, 0, self._width, self._height)
@@ -3185,11 +3185,7 @@ void main() {
                         self._fbo_b.use()
                         self._ctx.viewport = (0, 0, self._render_width, self._render_height)
                         self._candy_frame.render(self._fbo_a.color_attachments[0])
-                        self._fbo_a.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
                     else:
                         self._ctx.screen.use()
                         self._ctx.viewport = (0, 0, self._width, self._height)
@@ -3540,12 +3536,7 @@ void main() {
                         self._invert_prog['tex'].value = 0
                         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
                         # Now blit fbo_b back into fbo_a as the compose target.
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                     if burst_active:
                         # Burst into fbo_b, copy back into fbo_a
                         scale, angle = self._burst_transform()
@@ -3558,12 +3549,7 @@ void main() {
                         self._burst_prog['uScale'].value = scale
                         self._burst_vao.render(moderngl.TRIANGLE_STRIP)
                         # Now blit fbo_b back into fbo_a as the compose target.
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                     if postfx_active:
                         # Post FX into fbo_b, then copy back into fbo_a.
                         audio = self._audio or AudioData()
@@ -3576,12 +3562,7 @@ void main() {
                             float(audio.treble),
                             float(audio.beat),
                         )
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                     # Leave fbo_a bound at logical viewport so webcam/HUD compose
                     # into the same target. Tile-blit happens at end of frame.
                     self._fbo_a.use()
@@ -3595,12 +3576,7 @@ void main() {
                         self._fbo_a.color_attachments[0].use(location=0)
                         self._invert_prog['tex'].value = 0
                         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
                         self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
@@ -3616,12 +3592,7 @@ void main() {
                         self._burst_prog['uAngle'].value = angle
                         self._burst_prog['uScale'].value = scale
                         self._burst_vao.render(moderngl.TRIANGLE_STRIP)
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
                         self._present_burst_from_tex(self._fbo_a.color_attachments[0])
@@ -3636,12 +3607,7 @@ void main() {
                         float(audio.treble),
                         float(audio.beat),
                     )
-                    self._fbo_a.use()
-                    ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    ctx.clear(0.0, 0.0, 0.0, 1.0)
-                    self._fbo_b.color_attachments[0].use(location=0)
-                    self._present_prog['tex'].value = 0
-                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                     self._present_from_tex(self._fbo_b.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
@@ -3701,12 +3667,7 @@ void main() {
                             float(audio.treble),
                             float(audio.beat),
                         )
-                        self._fbo_a.use()
-                        ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        ctx.clear(0.0, 0.0, 0.0, 1.0)
-                        self._fbo_b.color_attachments[0].use(location=0)
-                        self._present_prog['tex'].value = 0
-                        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                         self._present_from_tex(self._fbo_b.color_attachments[0])
                     else:
                         self._present_from_tex(self._fbo_a.color_attachments[0])
@@ -3787,12 +3748,7 @@ void main() {
                         float(audio.treble),
                         float(audio.beat),
                     )
-                    self._fbo_a.use()
-                    ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    ctx.clear(0.0, 0.0, 0.0, 1.0)
-                    self._fbo_b.color_attachments[0].use(location=0)
-                    self._present_prog['tex'].value = 0
-                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
                     self._present_from_tex(self._fbo_b.color_attachments[0])
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
