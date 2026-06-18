@@ -503,5 +503,24 @@ regress silently.
   - tests/test_audio_blocking_reader.py: 8 new regression tests (all green,
     65/65 total suite passing).
   Next: P1 items (analysis thread, PBO async readback, F6 help entry).
+- **B2 resolved (moot):** The "dead compute" for the first-block RMS log
+  (B2) was pre-existing only in the callback-mode code.  The P0 blocking-reader
+  rewrite made the RMS computation essential for `_silent_blocks` fallback
+  tracking — no code change needed.
+- **2026-06-18 — P1 + state-consolidation + P2 + P3 completed:**
+  - P1: analysis thread (double-buffer publish, onset drain), async recording
+    write queue (uv-rec-writer), F6/Shift+H/? added to help overlay.
+  - P1: PBO double-buffered streaming readback; null multihead recording
+    path fixed (was returning empty bytes).
+  - State: audio source and banner state consolidated to global
+    `runtime/global_state.json`; legacy `.audio_source_state.json` and
+    `logs/banner-state.json` removed.
+  - P2: `_blit_fbo_b_to_fbo_a()` helper extracted, eliminating 9 duplicate
+    FBO ping-pong blit blocks.
+  - P2: 3 new test files — onset-dedup (3 tests), m-family dispatch (6 tests),
+    help-overlay parity (7 tests).  97/97 suite green.
+  - P2: PipeWire quantum guidance added to docs/configuration.md.
+  Remaining open items: A+ goals (null-contract conformance, frame-budget CI,
+  full hotkey/help parity enforcement).
 - Notes: No runtime profiling performed; §2.3 / §9 list the runtime confirmation
   steps. No code changed in this pass — audit/remediation planning only.
