@@ -24,6 +24,9 @@ dev = [
     "pre-commit>=3.7",
     # Local hook test runner
     "pytest>=8.0",
+    # Dev security tooling (CI gates — not needed at runtime)
+    "bandit>=1.7",
+    "pip-audit>=2.7",
 ]
 
 [project.scripts]
@@ -38,3 +41,11 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-ra"
+
+[tool.bandit]
+# Report Medium and High severity only (skips low-noise assertions / subprocess
+# boilerplate in test helpers and GLSL tooling).
+# B101 assert, B404/B603/B607 subprocess — routine in this codebase.
+skips = ["B101", "B404", "B603", "B607"]
+# Severity threshold: -ll → medium and above only
+

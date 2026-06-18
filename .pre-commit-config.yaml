@@ -19,3 +19,15 @@ repos:
         language: system
         files: ^(unicornviz/|drop-ins/).+\.py$
         pass_filenames: true
+      - id: bandit
+        name: bandit
+        entry: .venv/bin/bandit -r unicornviz/ drop-ins/ -ll -q
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pip-audit
+        name: pip-audit
+        entry: .venv/bin/pip-audit -r requirements.txt -q
+        language: system
+        pass_filenames: false
+        stages: [manual]

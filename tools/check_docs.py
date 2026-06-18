@@ -71,9 +71,32 @@ def _check_links(path: Path, text: str) -> list[str]:
     return errs
 
 
+def _all_doc_files() -> list[Path]:
+    """Return all markdown files in docs/, drop-ins/*/docs/, and root-level docs."""
+    roots = [
+        ROOT / 'docs',
+        ROOT / 'REFERENCE.md',
+        ROOT / 'README.md',
+    ]
+    found: list[Path] = []
+    for r in roots:
+        if r.is_file():
+            found.append(r)
+        elif r.is_dir():
+            found.extend(sorted(r.rglob('*.md')))
+    for dropin_docs in sorted((ROOT / 'drop-ins').glob('*/docs')):
+        found.extend(sorted(dropin_docs.rglob('*.md')))
+    return found
+
+
 def main(argv: list[str]) -> int:
     warn_only = '--warn-only' in argv
-    files = [Path(a).resolve() for a in argv if a.endswith('.md')]
+    full_scan = '--full' in argv
+
+    if full_scan:
+        files = [f.resolve() for f in _all_doc_files()]
+    else:
+        files = [Path(a).resolve() for a in argv if a.endswith('.md')]
     errors: list[str] = []
 
     for abs_path in files:
@@ -97,7 +120,9 @@ def main(argv: list[str]) -> int:
                 '(Owner, Status, Last updated in first 40 lines)'
             )
 
-        errors.extend(_check_links(rel_path, text))
+        # Archive docs intentionally contain links to moved/deleted files.
+        if not rel_path.as_posix().startswith('docs/archive/'):
+            errors.extend(_check_links(rel_path, text))
 
     if errors:
         if warn_only:
