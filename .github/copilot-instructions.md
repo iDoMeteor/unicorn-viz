@@ -213,6 +213,20 @@ out vec2 out_pos;
 - Do not log MIDI note data at INFO level or above (may contain sensitive
   controller identifiers).
 
+## Security Findings (bandit / pip-audit)
+
+- **Never automatically remediate bandit or pip-audit findings** without
+  explicit owner instruction.  When findings are present, report them clearly
+  (tool name, finding ID, file/line, severity, brief description) and stop.
+- Do not add `# nosec` annotations, upgrade packages, or refactor code to
+  suppress a finding until the owner has reviewed it and explicitly approved
+  the remediation approach.
+- If a finding is a false positive, say so and explain why — do not silently
+  annotate it away.
+- For `pip-audit` CVEs, report the affected package, CVE ID, fixed version, and
+  whether upgrading it would break any pinned constraints in `requirements.txt`.
+  Let the owner decide whether and when to upgrade.
+
 ## Spotify Web API Rules
 
 - Refer to Spotify's OpenAPI spec for endpoint paths, parameters, and field
