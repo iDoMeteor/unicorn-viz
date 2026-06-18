@@ -140,7 +140,7 @@ class _NullMultiHeadController:
         return
 
     def read_shared_frame(self, ctx: moderngl.Context, width: int, height: int) -> bytes:
-        return b''
+        return ctx.screen.read(components=4, alignment=1)
 
     def has_mirror_outputs(self) -> bool:
         return False
@@ -522,6 +522,12 @@ class App:
         self._burst_vbo: moderngl.Buffer | None = None
         self._burst_controller = _NullScreenBurstController()
         self._invert_colors = False
+        # Double-buffered PBOs for async streaming/recording frame readback.
+        # Frame N: issue read_into(pbo_write); Frame N+1: read pbo_read (DMA done).
+        self._stream_pbos: list[moderngl.Buffer] = []
+        self._stream_pbo_size: int = 0
+        self._stream_pbo_index: int = 0
+        self._stream_pbo_primed: bool = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         # In mirror_all the SDL window spans all displays, while effects/HUD
@@ -1186,6 +1192,11 @@ class App:
 
     def _release_readback_pbos(self) -> None:
         self._multihead.release_readback_pbos()
+        for pbo in self._stream_pbos:
+            pbo.release()
+        self._stream_pbos = []
+        self._stream_pbo_size = 0
+        self._stream_pbo_primed = False
 
     def _ensure_readback_pbos(self, size: int) -> None:
         if self._ctx is None:
@@ -4567,18 +4578,44 @@ void main() {
             self._sync_recording_overlay()
 
     def _read_streaming_frame(self) -> bytes | None:
-        """Read one RGB24 frame for RTMP streaming.
+        """Read one RGB24 frame for RTMP streaming using double-buffered PBOs.
 
-        In mirror mode this returns the logical composed frame (from `_fbo_a`)
-        so we stream the unmodified single canvas, not the tiled multi-head
-        desktop composition.
+        Issues the current-frame readback into the write PBO immediately (the
+        GPU DMA starts now), then returns the *previous* frame's bytes from the
+        read PBO (whose DMA completed during the last swap + render).  The
+        result is one frame of latency but zero pipeline stall on the hot path.
+
+        Falls back to direct synchronous read if the PBO path fails.
         """
         if self._ctx is None:
             return None
         mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
-        if mirror_mode_active and self._fbo_a is not None:
-            return self._fbo_a.read(components=3, alignment=1)
-        return self._ctx.screen.read(components=3, alignment=1)
+        source = self._fbo_a if (mirror_mode_active and self._fbo_a is not None) else self._ctx.screen
+        size = self._width * self._height * 3  # RGB24
+        # Ensure PBOs exist and are correctly sized.
+        if len(self._stream_pbos) != 2 or self._stream_pbo_size != size:
+            for pbo in self._stream_pbos:
+                pbo.release()
+            self._stream_pbos = [self._ctx.buffer(reserve=size), self._ctx.buffer(reserve=size)]
+            self._stream_pbo_size = size
+            self._stream_pbo_index = 0
+            self._stream_pbo_primed = False
+        write_idx = self._stream_pbo_index
+        read_idx = 1 - write_idx
+        try:
+            source.read_into(self._stream_pbos[write_idx], components=3, alignment=1)
+            frame: bytes | None = None
+            if self._stream_pbo_primed:
+                frame = self._stream_pbos[read_idx].read()
+            else:
+                self._stream_pbo_primed = True
+            self._stream_pbo_index = read_idx
+            return frame
+        except Exception as exc:
+            log.warning('Streaming PBO readback failed, using direct read: %s', exc)
+            self._stream_pbo_primed = False
+            self._stream_pbo_index = 0
+            return source.read(components=3, alignment=1)
 
     def read_screenshot_frame(self) -> tuple[bytes, int, int] | None:
         """Read an RGB24 screenshot frame from the current drawable surface.
