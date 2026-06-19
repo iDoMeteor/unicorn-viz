@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 
 _AUTO_VJ_PATH = Path(__file__).resolve().parents[1] / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py'
@@ -96,3 +97,38 @@ def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
     assert rows[0]['spotify_track_id'] == 'spotify:track:test123'
     assert rows[0]['spotify_title'] == 'Moonwalk'
     assert rows[0]['spotify_artist'] == 'DJ Test'
+
+
+def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> None:
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass=0.30,
+        mid=0.20,
+        treble=0.10,
+        bpm=126.0,
+    )
+    spotify = {
+        'track_id': 'spotify:track:test123',
+        'title': 'Moonwalk',
+        'artist': 'DJ Test',
+        'album': 'Test EP',
+        'status': 'playing',
+        'is_playing': True,
+        'duration_s': 180.0,
+        'position_s': 90.0,
+        'progress': 0.5,
+    }
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    audio_manager = SimpleNamespace(
+        get_profile_key=lambda: 'normie',
+        get_profile=lambda: SimpleNamespace(name='Normie'),
+        get_profile_bpm_range=lambda: (90, 130),
+    )
+    grid = SimpleNamespace(bpm=126.0, confidence=0.70)
+
+    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+
+    assert row['analysis_status'] == 'ok'
+    assert row['bpm'] == 126.0
+    assert row['bpm_confidence'] == 0.70
+    assert row['danceability'] == pytest.approx(0.205)
