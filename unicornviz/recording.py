@@ -249,15 +249,17 @@ class Recorder:
     def _frame_writer_worker(self) -> None:
         """Daemon thread: drain the frame queue to ffmpeg stdin.
 
-        Runs until it receives the ``None`` sentinel (sent by ``stop()``).
+        Runs until recording stops and the queue drains, or until ffmpeg fails.
         All blocking stdin writes happen here, never on the render thread.
         """
         while True:
             try:
                 item = self._frame_queue.get(timeout=1.0)  # type: ignore[union-attr]
             except queue.Empty:
+                if self._recording_stopping:
+                    break
                 continue
-            if item is None:
+            if self._recording_stopping and item is None:
                 break  # sentinel: exit cleanly
             proc = self._process
             if proc is None or proc.stdin is None:
@@ -265,8 +267,9 @@ class Recorder:
             try:
                 proc.stdin.write(item)
             except (BrokenPipeError, OSError) as exc:
-                self._last_error = f'Recording write failed: {exc}'
-                log.error(self._last_error)
+                if not self._recording_stopping:
+                    self._last_error = f'Recording write failed: {exc}'
+                    log.error(self._last_error)
                 break
         log.debug('Recording writer thread exited')
 
@@ -296,24 +299,17 @@ class Recorder:
             return output_path
         log.debug('Stopping recording: %s', output_path)
         try:
-            # Signal writer thread to flush the queue and exit, then close
-            # stdin so ffmpeg sees EOF and starts muxing.  All frames already
-            # in the queue are written before the sentinel is processed.
             self._recording_stopping = True
-            fq = self._frame_queue
-            if fq is not None:
-                fq.put(None)  # sentinel: writer exits after draining
             if self._writer_thread is not None:
                 self._writer_thread.join(timeout=5.0)
                 if self._writer_thread.is_alive():
                     log.warning('Recording writer thread did not exit within 5.0s')
                 self._writer_thread = None
             self._frame_queue = None
-            # All frames written; close stdin to signal EOF to ffmpeg.
             if process.stdin is not None:
                 process.stdin.close()
             try:
-                return_code = process.wait(timeout=3.0 if self._capture_audio else 10.0)
+                return_code = process.wait(timeout=10.0)
             except subprocess.TimeoutExpired:
                 log.debug('Recording stop timed out; sending SIGINT to ffmpeg for graceful finalize')
                 process.send_signal(signal.SIGINT)

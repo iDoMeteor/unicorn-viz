@@ -29,6 +29,8 @@ This is the canonical map for project documentation.
 - Help screen additions milestone (2026-06-14): [docs/planning/help-additions-milestone-2026-06-14.md](planning/help-additions-milestone-2026-06-14.md)
 - Global atomic state unification (2026-06-18): [docs/planning/global-state-unification-2026-06-18.md](planning/global-state-unification-2026-06-18.md)
 - Compositor dedup implementation plan (2026-06-18): [docs/planning/compositor-dedup-implementation-plan-2026-06-18.md](planning/compositor-dedup-implementation-plan-2026-06-18.md)
+- Deferred work register (2026-06-18): [docs/planning/deferred-work-2026-06-18.md](planning/deferred-work-2026-06-18.md)
+- Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-06-17): [docs/audits/2026-06-17-full-system-audit.md](audits/2026-06-17-full-system-audit.md)

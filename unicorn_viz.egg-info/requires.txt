@@ -6,3 +6,10 @@ scipy>=1.12
 sounddevice>=0.4.6
 python-rtmidi>=1.5
 Pillow>=10.0
+
+[dev]
+pre-commit>=3.7
+pytest>=8.0
+bandit>=1.7
+pip-audit>=2.7
+ruff>=0.4

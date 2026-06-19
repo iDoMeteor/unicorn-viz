@@ -1,8 +1,8 @@
 # Unicorn Viz — Full System Audit (2026-06-17)
 
 Owner: owner + Copilot
-Status: Active
-Last updated: 2026-06-17
+Status: Complete (with explicit deferred items tracked)
+Last updated: 2026-06-18
 
 Scope: whole-system microscope pass — architecture, audio pipeline (priority:
 intermittent static on audio hits), drop-in clashes & independence, hotkey/help
@@ -30,8 +30,8 @@ listed where a measurement is required.
 | Security | A- | No shell-injection / eval; PKCE Spotify; bounded subprocess probes. |
 | Docs / governance | A- | Canonical indexing in place; this report linked from `docs/README.md`. |
 
-**Overall: B+ (release-capable, with one high-priority audio reliability fix and
-three high-value performance fixes outstanding).**
+**Overall: B+ at audit time; remediation/A+ upgrade batch completed on
+2026-06-18 with explicit deferred tracking for frame-budget CI benchmarking.**
 
 The single most important finding is in §2: the audio static is best explained
 by **GIL-deadline starvation of the PortAudio capture callback** during
@@ -574,6 +574,21 @@ regress silently.
     team in parallel this session).
   - Current internal open engineering item remains compositor dedup (§7/#2)
     with plan tracked at
+    `docs/planning/compositor-dedup-implementation-plan-2026-06-18.md`.
+- **2026-06-18 (Fedora runtime hardening) — streaming readback stability:**
+  - Observed runtime warning/crash path on Fedora 44 GNOME during streaming:
+    PBO map failure (`cannot map the buffer`) followed by process segfault.
+  - Hardened `_read_streaming_frame()` in `unicornviz/app.py`:
+    first PBO failure now permanently disables PBO for the session, releases
+    readback buffers, and uses guarded direct read fallback.
+  - Added double-guarded error handling so a direct-read failure no longer
+    cascades into repeated PBO retries on each frame.
+- **2026-06-18 (owner closeout) — remediation status set to complete:**
+  - Audit remediation and A+ upgrade batch marked complete for this cycle.
+  - Explicit deferred item retained: frame-budget CI guard, tracked in
+    `docs/planning/deferred-work-2026-06-18.md` (DW-001).
+  - Next planned engineering batch retained: compositor dedup/present-path
+    refactor tracked in
     `docs/planning/compositor-dedup-implementation-plan-2026-06-18.md`.
 - Notes: No runtime profiling performed; §2.3 / §9 list the runtime confirmation
   steps. No code changed in this pass — audit/remediation planning only.

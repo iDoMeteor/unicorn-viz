@@ -11,3 +11,9 @@ Requires-Dist: scipy>=1.12
 Requires-Dist: sounddevice>=0.4.6
 Requires-Dist: python-rtmidi>=1.5
 Requires-Dist: Pillow>=10.0
+Provides-Extra: dev
+Requires-Dist: pre-commit>=3.7; extra == "dev"
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: bandit>=1.7; extra == "dev"
+Requires-Dist: pip-audit>=2.7; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"

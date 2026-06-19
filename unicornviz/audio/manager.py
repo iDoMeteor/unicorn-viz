@@ -227,6 +227,14 @@ class AudioManager:
         """Return current global audio reactivity multiplier."""
         return float(self._reactivity)
 
+    def get_profile_name(self) -> str:
+        """Return the active audio profile display name."""
+        return str(self._profile.name)
+
+    def get_profile_key(self) -> str:
+        """Return the active audio profile key."""
+        return str(self._profile_key)
+
     def set_reactivity(self, value: float) -> float:
         """Set current global reactivity, clamped to a safe range."""
         self._reactivity = max(0.1, min(5.0, float(value)))
@@ -303,10 +311,6 @@ class AudioManager:
         with self._analysis_lock:
             return float(self._published_audio_time)
     
-    def get_profile_key(self) -> str:
-        """Return the short key/name of the current profile (e.g. 'house', 'trance')."""
-        return self._profile_key
-    
     def set_profile(self, name: str) -> AudioProfile:
         """Switch to a named audio profile and update analyzer."""
         profile = get_profile(name)
@@ -357,6 +361,19 @@ class AudioManager:
     def get_audio_data_raw(self) -> AudioData:
         """Return latest unscaled analyzer snapshot for detection/telemetry."""
         return self._last_data_raw
+
+    def get_recent_pcm_window(self, duration_s: float = 10.0) -> tuple[np.ndarray, int] | None:
+        """Return a recent mono PCM window and its sample rate for stream analysis."""
+
+        if not self._capture.active:
+            return None
+        sample_rate = int(self._capture.sample_rate)
+        block_size = max(1, int(self._capture.block_size))
+        blocks = max(1, int(np.ceil(max(0.5, float(duration_s)) * sample_rate / block_size)))
+        pcm = self._capture.get_history(blocks)
+        if pcm.size == 0:
+            return None
+        return pcm.astype(np.float32, copy=False), sample_rate
 
     # ------------------------------------------------------------------
     # P1 / P3 — onset stream forwarding

@@ -116,6 +116,8 @@ now_playing_banner = true
 now_playing_banner_hold_s = 10.0
 # Optional path to local Spotify audio-features JSON map keyed by track id.
 # features_file = "assets/audio/spotify_features.json"
+# Optional live corpus sink for runtime training rows.
+# live_corpus_file = "assets/training/corpus/live-corpus.jsonl"
 
 [spotify.web_api]
 enabled = false
@@ -174,6 +176,20 @@ beat_tracker_engine = "v2"   # v2 (default) | legacy
 profile = "normie"   # chill | normie | raver | user
 auto_profile_enabled = false
 log_decisions = false
+
+# Training corpus capture settings
+# ────────────────────────────────────────────────────────────────────────────
+# Per-track corpus (one row per track, deduped, for ridge regression)
+# live_training_enabled = false
+# live_training_corpus_path = "assets/training/corpus/live-autovj.jsonl"
+# live_training_min_interval_s = 10.0
+#
+# Sequence corpus (per-beat heartbeat + event keyframes, for policy learning)
+# sequence_training_enabled = false
+# sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
+# sequence_training_window_s = 2.0                # analysis window (~1 bar)
+# sequence_training_heartbeat_interval_s = 1.0    # fallback when BPM unavailable
+
 # Optional v2 analysis mode: short rolling beat-position map used for
 # downbeat confidence gating and large tempo-lane shift validation.
 # analysis_mode_enabled = true

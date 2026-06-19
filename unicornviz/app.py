@@ -528,6 +528,9 @@ class App:
         self._stream_pbo_size: int = 0
         self._stream_pbo_index: int = 0
         self._stream_pbo_primed: bool = False
+        # If a driver/context cannot map PBOs reliably, permanently fall back
+        # to direct read for the current session to avoid repeated map failures.
+        self._stream_pbo_disabled: bool = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         # In mirror_all the SDL window spans all displays, while effects/HUD
@@ -1197,6 +1200,8 @@ class App:
         self._stream_pbos = []
         self._stream_pbo_size = 0
         self._stream_pbo_primed = False
+        self._stream_pbo_index = 0
+        self._stream_pbo_disabled = False
 
     def _ensure_readback_pbos(self, size: int) -> None:
         if self._ctx is None:
@@ -1836,6 +1841,68 @@ void main() {
             'mid_n': mid_n,
             'treble_n': treble_n,
         }
+
+    def build_live_corpus_sample(self) -> dict[str, Any]:
+        """Return a compact merged VJ snapshot for the Spotify live corpus sink."""
+
+        src = self._audio_raw if self._audio_raw is not None else self._audio
+        effect_name = self._current_effect.NAME if self._current_effect is not None else '-'
+        effect_label = getattr(self._overlays, '_name_text', effect_name) if self._overlays is not None else effect_name
+        audio_source = self._audio_manager.get_source_label() if self._audio_manager is not None else 'n/a'
+        audio_profile = self._audio_manager.get_profile_name() if self._audio_manager is not None else 'n/a'
+        audio_snapshot = self._system_monitor_audio_snapshot()
+        fft_peak = 0.0
+        fft_mean = 0.0
+        fft_peak_bin = -1
+        waveform_peak = 0.0
+        waveform_rms = 0.0
+        waveform_mean_abs = 0.0
+        if src is not None:
+            fft = np.asarray(src.fft, dtype=np.float32)
+            waveform = np.asarray(src.waveform, dtype=np.float32)
+            if fft.size > 0:
+                fft_peak_bin = int(np.argmax(fft))
+                fft_peak = float(np.max(fft))
+                fft_mean = float(np.mean(fft))
+            if waveform.size > 0:
+                waveform_peak = float(np.max(np.abs(waveform)))
+                waveform_rms = float(np.sqrt(np.mean(np.square(waveform), dtype=np.float64)))
+                waveform_mean_abs = float(np.mean(np.abs(waveform)))
+        return {
+            'vj_effect': effect_name,
+            'vj_effect_label': effect_label,
+            'vj_previous_effect': self._previous_effect_name,
+            'vj_playlist_mode': self._playlist_mode,
+            'vj_playlist_index': self._playlist_index,
+            'vj_playlist_size': self._playlist_size,
+            'vj_fps': self._last_frame_fps,
+            'vj_frame_ms': self._last_frame_ms,
+            'vj_audio_source': audio_source,
+            'vj_audio_profile': audio_profile,
+            'vj_audio_bass': audio_snapshot['bass'],
+            'vj_audio_mid': audio_snapshot['mid'],
+            'vj_audio_treble': audio_snapshot['treble'],
+            'vj_audio_bass_n': audio_snapshot['bass_n'],
+            'vj_audio_mid_n': audio_snapshot['mid_n'],
+            'vj_audio_treble_n': audio_snapshot['treble_n'],
+            'vj_audio_bpm': float(src.bpm) if src is not None else 120.0,
+            'vj_audio_beat': float(src.beat) if src is not None else 0.0,
+            'vj_audio_bass_flux': float(src.bass_flux) if src is not None else 0.0,
+            'vj_audio_mid_flux': float(src.mid_flux) if src is not None else 0.0,
+            'vj_audio_fft_peak': fft_peak,
+            'vj_audio_fft_mean': fft_mean,
+            'vj_audio_fft_peak_bin': fft_peak_bin,
+            'vj_audio_waveform_peak': waveform_peak,
+            'vj_audio_waveform_rms': waveform_rms,
+            'vj_audio_waveform_mean_abs': waveform_mean_abs,
+        }
+
+    def get_live_audio_window(self, duration_s: float = 10.0) -> tuple[np.ndarray, int] | None:
+        """Return a recent mono PCM window for live stream analysis."""
+
+        if self._audio_manager is None:
+            return None
+        return self._audio_manager.get_recent_pcm_window(duration_s=duration_s)
 
     def _system_monitor_tweakables_snapshot(self) -> dict[str, float | None]:
         """Return live tweakable values for the system monitor modal."""
@@ -3216,6 +3283,9 @@ void main() {
                 self._normalize_gl_render_state()
                 self._render_subsystem_overlays(dt, self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
+            if self._recorder is not None and self._recorder.is_recording:
+                self._capture_recording_frame()
+
             stream_frame: bytes | None = None
             need_frame_for_streaming = (
                 self._streamer is not None and self._streamer.is_streaming
@@ -3245,19 +3315,6 @@ void main() {
                 self._update_frame_capture_snapshot(stream_frame)
             elif not need_frame_for_subsystems:
                 self._update_frame_capture_snapshot(None)
-            need_frame_for_recording = (
-                self._recorder is not None and self._recorder.is_recording
-            )
-            need_frame_for_mirror = False  # legacy path; GL-native handles mirror.
-            shared_frame: bytes | None = None
-            if need_frame_for_recording or need_frame_for_mirror:
-                try:
-                    shared_frame = self._read_shared_frame()
-                except Exception as exc:
-                    log.error('Frame readback failed: %s', exc)
-                    shared_frame = None
-            if need_frame_for_recording and shared_frame is not None:
-                self._write_recording_frame(shared_frame)
             if need_frame_for_streaming and stream_frame is not None:
                 if not self._streamer.write_frame(stream_frame):
                     log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
@@ -3272,8 +3329,6 @@ void main() {
                 overlays.resize(self._width, self._height)
                 self._normalize_gl_render_state()
                 overlays.render_live_recording_indicator()
-            if need_frame_for_mirror and shared_frame is not None:
-                self._present_mirror_outputs(shared_frame)
             if perf_debug_enabled:
                 perf_before_swap = time.perf_counter()
 
@@ -4519,7 +4574,10 @@ void main() {
         if self._ctx is None or self._recorder is None or not self._recorder.is_recording:
             return
         try:
-            frame = self._ctx.screen.read(components=3, alignment=1)
+            screenshot = self.read_screenshot_frame()
+            if screenshot is None:
+                return
+            frame, _width, _height = screenshot
             self._write_recording_frame(frame)
         except Exception as exc:
             log.error('Recording capture failed: %s', exc)
@@ -4548,6 +4606,13 @@ void main() {
         mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         source = self._fbo_a if (mirror_mode_active and self._fbo_a is not None) else self._ctx.screen
         size = self._width * self._height * 3  # RGB24
+        if self._stream_pbo_disabled:
+            try:
+                return source.read(components=3, alignment=1)
+            except Exception as exc:
+                log.error('Streaming direct read failed: %s', exc)
+                return None
+
         # Ensure PBOs exist and are correctly sized.
         if len(self._stream_pbos) != 2 or self._stream_pbo_size != size:
             for pbo in self._stream_pbos:
@@ -4556,6 +4621,7 @@ void main() {
             self._stream_pbo_size = size
             self._stream_pbo_index = 0
             self._stream_pbo_primed = False
+
         write_idx = self._stream_pbo_index
         read_idx = 1 - write_idx
         try:
@@ -4568,10 +4634,22 @@ void main() {
             self._stream_pbo_index = read_idx
             return frame
         except Exception as exc:
-            log.warning('Streaming PBO readback failed, using direct read: %s', exc)
+            log.warning(
+                'Streaming PBO readback failed, disabling PBO for this session: %s',
+                exc,
+            )
+            for pbo in self._stream_pbos:
+                pbo.release()
+            self._stream_pbos = []
+            self._stream_pbo_size = 0
             self._stream_pbo_primed = False
             self._stream_pbo_index = 0
-            return source.read(components=3, alignment=1)
+            self._stream_pbo_disabled = True
+            try:
+                return source.read(components=3, alignment=1)
+            except Exception as read_exc:
+                log.error('Streaming direct read after PBO failure also failed: %s', read_exc)
+                return None
 
     def read_screenshot_frame(self) -> tuple[bytes, int, int] | None:
         """Read an RGB24 screenshot frame from the current drawable surface.
