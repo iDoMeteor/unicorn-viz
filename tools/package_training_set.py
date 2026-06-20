@@ -63,17 +63,36 @@ def _prompt_playlist_name() -> str:
         return slug
 
 
-def _infer_playlist_name_from_corpus(seq_rows: list[dict]) -> str | None:
-    """Return a slugified set name inferred from spotify_playlist_name in corpus rows.
+def _infer_playlist_name_from_logs(logs_dir: Path) -> str | None:
+    """Return a slugified set name inferred from autovj decision logs.
 
-    Scans all rows for the most common non-empty spotify_playlist_name value
-    and returns its slug.  Returns None if the field is absent from all rows.
+    Scans JSONL files under logs_dir for entries written by the engine when
+    a Spotify playlist context is first resolved (action == 'playlist_context').
+    Returns the most common playlist name found, slugified.  Returns None if
+    no playlist_context entries are present.
     """
     counts: dict[str, int] = {}
-    for row in seq_rows:
-        name = row.get('spotify_playlist_name')
-        if name and isinstance(name, str) and name.strip():
-            counts[name.strip()] = counts.get(name.strip(), 0) + 1
+    for log_path in sorted(logs_dir.rglob('*.jsonl')):
+        try:
+            with log_path.open('r', encoding='utf-8') as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(entry, dict):
+                        continue
+                    if entry.get('action') == 'playlist_context':
+                        name = entry.get('name', '')
+                        if name and isinstance(name, str):
+                            name = name.strip()
+                            if name:
+                                counts[name] = counts.get(name, 0) + 1
+        except Exception:
+            continue
     if not counts:
         return None
     best = max(counts, key=lambda k: counts[k])
@@ -243,7 +262,8 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
     beat_lock_pct = (100.0 * beat_locked / len(seq_rows)) if seq_rows else 0.0
 
     events = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
-    profiles = Counter(r.get('audio_profile_key') for r in seq_rows if r.get('audio_profile_key'))
+    audio_profiles = Counter(r.get('audio_profile_key') for r in seq_rows if r.get('audio_profile_key'))
+    vj_profiles = Counter(r.get('vj_profile') for r in seq_rows if r.get('vj_profile'))
 
     mode_transitions = int(events.get('mode_transition', 0))
     drop_fires = int(events.get('drop_fire', 0))
@@ -251,9 +271,13 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
     lock_rating = _score_lock_quality(beat_lock_pct, _safe_median(conf_values))
     director_rating = _score_director_quality(mode_transitions, drop_fires, impact_fires)
 
-    profile_lines = ['- `n/a`: `0`']
-    if profiles:
-        profile_lines = [f'- `{key}`: `{count}`' for key, count in profiles.most_common(6)]
+    audio_profile_lines = ['- `n/a`: `0`']
+    if audio_profiles:
+        audio_profile_lines = [f'- `{key}`: `{count}`' for key, count in audio_profiles.most_common(6)]
+
+    vj_profile_lines = ['- `n/a`: `0`']
+    if vj_profiles:
+        vj_profile_lines = [f'- `{key}`: `{count}`' for key, count in vj_profiles.most_common()]
 
     lines = [
         '# Auto VJ Training Scorecard',
@@ -288,11 +312,15 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
         f'- Mode transitions: `{mode_transitions}`',
         f'- Drop fires: `{drop_fires}`',
         f'- Impact fires: `{impact_fires}`',
-        f'- Profile switches: `{int(events.get("profile_switch", 0))}`',
+        f'- VJ profile switches: `{int(events.get("profile_switch", 0))}`',
         '',
-        '## Profile Mix',
+        '## Audio Profile Mix',
         '',
-        *profile_lines,
+        *audio_profile_lines,
+        '',
+        '## VJ Mood Profile Mix',
+        '',
+        *vj_profile_lines,
         '',
         '## Ratings',
         '',
@@ -466,7 +494,10 @@ def _compute_local_scores(seq_rows: list[dict], duration_min: float) -> dict:
     churn = int(all_events.get('bpm_lock_gained', 0)) + int(all_events.get('bpm_lock_lost', 0))
     churn_per_hr = churn / duration_hr
 
-    det_stability = _score_1_to_5(churn_per_hr, [15, 40, 80, 150], higher_is_better=False)
+    # Thresholds calibrated from observed real-world sessions (2026-06-20):
+    # best session ~130/hr, typical good 250-350/hr, typical house 600-850/hr,
+    # pre-fix era 3000+/hr.
+    det_stability = _score_1_to_5(churn_per_hr, [150, 350, 650, 1000], higher_is_better=False)
     det_responsiveness = _score_1_to_5(lock_coverage_pct, [70, 50, 35, 20])
 
     # ── Recommender ───────────────────────────────────────────────────────────
@@ -1257,11 +1288,10 @@ def main() -> int:
     if not set_name and args.playlist_name:
         set_name = _slugify_playlist_name(args.playlist_name)
     if not set_name:
-        inferred_rows = _load_jsonl_rows(seq_src)
-        inferred = _infer_playlist_name_from_corpus(inferred_rows)
+        inferred = _infer_playlist_name_from_logs(logs_dir)
         if inferred:
             set_name = inferred
-            print(f'Playlist name inferred from corpus: {set_name}')
+            print(f'Playlist name inferred from session log: {set_name}')
     if not set_name and not args.no_prompt:
         set_name = _prompt_playlist_name()
 
