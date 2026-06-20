@@ -62,11 +62,11 @@ Current thresholds (mirrored in packager `_BPM_LOCK_CONFIDENCE_FLOOR`):
 
 | Constant | Value | Meaning |
 | -------- | ----- | ------- |
-| `_BPM_LOCK_CONFIDENCE` | `0.52` | Confidence must reach this to **gain** lock |
+| `_BPM_LOCK_CONFIDENCE` | `0.55` | Confidence must reach this to **gain** lock |
 | `_BPM_LOCK_RELEASE_CONFIDENCE` | `0.28` | Lock held until confidence drops **below** this |
 | `_BPM_LOCK_CONFIDENCE_FLOOR` (packager) | `0.45` | Rows counted as "locked" in scorecard / LLM payload |
 
-The hysteresis band (0.28–0.52) spans the natural equilibrium at 0.375 so the
+The hysteresis band (0.28–0.55) spans the natural equilibrium at 0.375 so the
 gate is stable during steady-state cruise.
 
 **Do not narrow the band below ~0.20 width** — the natural 0.375 equilibrium
@@ -202,6 +202,8 @@ the raver→normie oscillation.
 | 2026-06-20 | `tactus_preference_ratio = 0.42` (global) | 0.75× fold mapped 120 → 90 BPM for house; removed in same session |
 | 2026-06-20 | `chill` preset `mode_entry_min_confidence = 0.50` | Too high for chillstep confidence distribution; lowered to 0.38 |
 | 2026-06-20 | `auto_profile_raver_min_bpm = 128.0` | Peak_time material at ~127.7 BPM always triggered normie; lowered to 126.0 |
+| 2026-06-20 | `_BPM_LOCK_CONFIDENCE = 0.52` | house/c churn 612/hr with conf median 0.500 — oscillating across gain threshold; raised to 0.55 |
+| 2026-06-20 | house `bpm_prior_sigma = 0.20` | Too peaked; depressed confidence on tracks at 120 or 128 BPM when prior is 124; widened to 0.35 |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 
 ---
@@ -209,4 +211,4 @@ the raver→normie oscillation.
 ## Open Questions
 
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
-- Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (closer to the 0.52 lock threshold).
+- Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).

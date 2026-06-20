@@ -107,7 +107,10 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.75,
         bpm_prior_mu=124.0,
-        bpm_prior_sigma=0.20,
+        # 2026-06-20: house BPM spans 120-128; sigma=0.20 was too peaked and
+        # depressed confidence on tracks at the edges of the range.  Widened
+        # to 0.35 to flatten the prior across the full 8-BPM span.
+        bpm_prior_sigma=0.35,
         bpm_hint_min=120.0,
         bpm_hint_max=128.0,
     ),
