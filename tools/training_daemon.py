@@ -1,9 +1,9 @@
 """Unicorn Viz background training daemon.
 
 Sets up an isolated audio + display environment (PipeWire null sink + Xvfb),
-launches spotifyd and unicorn-viz headlessly, then auto-packages the session
-corpus when unicorn-viz exits.  Run from the *main* repo root; point --app-dir
-at the separate training deploy of unicorn-viz.
+launches the Spotify desktop app and unicorn-viz headlessly, then
+auto-packages the session corpus when unicorn-viz exits.  Run from the *main*
+repo root; point --app-dir at the separate training deploy of unicorn-viz.
 
 Usage::
 
@@ -12,22 +12,26 @@ Usage::
         --app-dir /path/to/unicorn-viz-training
 
 Prerequisites:
-  * Xvfb   — sudo dnf install xorg-x11-server-Xvfb
-  * spotifyd — ~/.local/bin/spotifyd (download from GitHub releases v0.4.2+)
-  * pactl   — ships with PipeWire on Fedora/Arch
-  * A spotifyd config file (default: ~/.config/unicorn-training/spotifyd.conf)
-    pointing at a Spotify Premium account.  Copy tools/spotifyd.conf.template
-    and fill in credentials.
+  * Xvfb    — sudo dnf install xorg-x11-server-Xvfb
+  * Spotify  — snap (already installed) or flatpak; must be logged in
+  * pactl    — ships with PipeWire on Fedora/Arch
 
 What the daemon does:
   1. Creates a PipeWire null sink (``unicorn-training`` by default).
   2. Starts Xvfb on DISPLAY :99.
-  3. Starts spotifyd, routing its audio to the null sink.
+  3. Launches the Spotify desktop app headlessly, routing audio to the null sink.
+     Spotify still appears as a Connect device — control it from your phone or
+     any other Spotify client.  Crossfade and auto-mix work as configured in
+     your Spotify account settings.
   4. Launches unicorn-viz from ``--app-dir`` with Mesa software rendering,
      capturing audio from the null sink monitor via ``--audio-device``.
   5. After unicorn-viz exits, runs ``package_training_set.py`` to archive the
      session corpus into the next available bucket.
-  6. Cleans up Xvfb, spotifyd, and the null sink on exit.
+  6. Cleans up Xvfb, Spotify, and the null sink on exit.
+
+Note: Spotify must be logged in before running the daemon headlessly.  If this
+is the first run on the machine, launch Spotify normally once, log in, then
+close it before starting the daemon.
 """
 
 from __future__ import annotations
@@ -54,8 +58,9 @@ _PACKAGER = Path(__file__).resolve().parent / 'package_training_set.py'
 # How long to wait for Xvfb display to become available.
 _XVFB_READY_TIMEOUT_S = 10.0
 
-# How long to let spotifyd initialise before launching unicorn-viz.
-_SPOTIFYD_WARMUP_S = 3.0
+# How long to let Spotify initialise and establish a Connect session before
+# launching unicorn-viz.  Spotify is an Electron app and takes a few seconds.
+_SPOTIFY_WARMUP_S = 8.0
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +98,7 @@ def _require(cmd: str) -> str:
     """Return full path to *cmd* or abort with a clear error."""
     path = shutil.which(cmd)
     if path is None:
-        sys.exit(f'ERROR: {cmd!r} not found in PATH.  See daemon docstring for install instructions.')
+        sys.exit(f'ERROR: {cmd!r} not found in PATH.')
     return path
 
 
@@ -187,7 +192,6 @@ def _wait_xvfb(display: str, timeout: float = _XVFB_READY_TIMEOUT_S) -> None:
                 _LOG.info('Xvfb on %s is ready', display)
                 return
         else:
-            # Fall back to checking the lock file.
             num = display.lstrip(':')
             if Path(f'/tmp/.X{num}-lock').exists():
                 time.sleep(0.5)
@@ -198,19 +202,24 @@ def _wait_xvfb(display: str, timeout: float = _XVFB_READY_TIMEOUT_S) -> None:
 
 
 # ---------------------------------------------------------------------------
-# spotifyd
+# Spotify
 # ---------------------------------------------------------------------------
 
-def _start_spotifyd(config_path: Path, sink_name: str) -> subprocess.Popen:
-    spotifyd_bin = _require('spotifyd')
-    if not config_path.exists():
-        sys.exit(
-            f'ERROR: spotifyd config not found at {config_path}\n'
-            f'Copy tools/spotifyd.conf.template → {config_path} and fill in credentials.'
-        )
+def _start_spotify(display: str, sink_name: str) -> subprocess.Popen:
+    """Launch the Spotify desktop app headlessly under *display*.
+
+    Passes ``--no-zygote --disable-gpu`` to suppress GPU/sandbox noise that
+    is harmless under a virtual framebuffer.  Audio is routed to *sink_name*
+    via ``PULSE_SINK``, which libpulse (inside the Electron app) respects
+    through PipeWire's PulseAudio compat layer.
+    """
+    spotify_bin = _require('spotify')
     return _start(
-        [spotifyd_bin, '--no-daemon', '--config-path', str(config_path)],
-        env={'PULSE_SINK': sink_name},
+        [spotify_bin, '--no-zygote', '--disable-gpu'],
+        env={
+            'DISPLAY': display,
+            'PULSE_SINK': sink_name,
+        },
     )
 
 
@@ -226,10 +235,7 @@ def _start_unicornviz(
 ) -> subprocess.Popen:
     python_bin = _require('python3')
     cmd = [python_bin, '-m', 'unicornviz', '--audio-device', sink_name]
-    if windowed:
-        cmd.append('--windowed')
-    else:
-        cmd.append('--fullscreen')
+    cmd.append('--windowed' if windowed else '--fullscreen')
     return _start(
         cmd,
         cwd=app_dir,
@@ -246,31 +252,21 @@ def _start_unicornviz(
 # Packager
 # ---------------------------------------------------------------------------
 
-def _run_packager(
-    app_dir: Path,
-    set_name: str,
-    session_notes: str,
-) -> int:
+def _run_packager(app_dir: Path, set_name: str, session_notes: str) -> int:
     python_bin = _require('python3')
-    # The packager resolves paths relative to its own repo root (two levels up
-    # from tools/).  Run it from the training deploy so it picks up corpus files
+    # Run the packager from the training deploy so it picks up corpus files
     # under app_dir/assets/training/.
     packager_in_deploy = app_dir / 'tools' / 'package_training_set.py'
     if not packager_in_deploy.exists():
         _LOG.warning('packager not found at %s; falling back to %s', packager_in_deploy, _PACKAGER)
         packager_in_deploy = _PACKAGER
 
-    cmd = [
-        python_bin, str(packager_in_deploy),
-        '--no-prompt',
-        '--set-name', set_name,
-    ]
+    cmd = [python_bin, str(packager_in_deploy), '--no-prompt', '--set-name', set_name]
     if session_notes:
         cmd += ['--session-notes', session_notes]
 
     _LOG.info('running packager: %s', shlex.join(cmd))
-    result = subprocess.run(cmd, cwd=str(app_dir))
-    return result.returncode
+    return subprocess.run(cmd, cwd=str(app_dir)).returncode
 
 
 # ---------------------------------------------------------------------------
@@ -283,13 +279,11 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '--playlist-name', required=True,
-        metavar='TEXT',
+        '--playlist-name', required=True, metavar='TEXT',
         help='Spotify playlist name — used to build the set directory name.',
     )
     parser.add_argument(
-        '--app-dir', required=True, type=Path,
-        metavar='PATH',
+        '--app-dir', required=True, type=Path, metavar='PATH',
         help='Path to the unicorn-viz training deploy (separate from this dev repo).',
     )
     parser.add_argument(
@@ -301,14 +295,7 @@ def _parse_args() -> argparse.Namespace:
         help='PipeWire null sink name for audio isolation.',
     )
     parser.add_argument(
-        '--spotifyd-config',
-        default=str(Path.home() / '.config' / 'unicorn-training' / 'spotifyd.conf'),
-        metavar='PATH',
-        help='Path to spotifyd config file.',
-    )
-    parser.add_argument(
-        '--session-notes', default='',
-        metavar='TEXT',
+        '--session-notes', default='', metavar='TEXT',
         help='Notes to record in the session log (passed to the packager).',
     )
     parser.add_argument(
@@ -317,12 +304,11 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--dry-run', action='store_true',
-        help='Set up infrastructure (sink, Xvfb, spotifyd) but skip unicorn-viz and packager.',
+        help='Set up infrastructure (sink, Xvfb, Spotify) but skip unicorn-viz and packager.',
     )
     parser.add_argument(
-        '--spotifyd-warmup', type=float, default=_SPOTIFYD_WARMUP_S,
-        metavar='SECONDS',
-        help='Seconds to wait for spotifyd to connect before launching unicorn-viz.',
+        '--spotify-warmup', type=float, default=_SPOTIFY_WARMUP_S, metavar='SECONDS',
+        help='Seconds to wait for Spotify to start before launching unicorn-viz.',
     )
     return parser.parse_args()
 
@@ -335,18 +321,15 @@ def main() -> int:
     if not app_dir.is_dir():
         sys.exit(f'ERROR: --app-dir does not exist: {app_dir}')
 
-    spotifyd_config = Path(args.spotifyd_config).expanduser()
     set_name = _set_name(args.playlist_name)
     _LOG.info('set name: %s', set_name)
     _LOG.info('app dir:  %s', app_dir)
 
     # ---- null sink ----------------------------------------------------------
-    module_id: int | None = None
     try:
         module_id = _create_null_sink(args.sink_name)
     except subprocess.CalledProcessError as exc:
         sys.exit(f'ERROR: could not create null sink: {exc.stderr}')
-
     _cleanup_fns.append(lambda mid=module_id: _unload_null_sink(mid))
 
     # ---- Xvfb ---------------------------------------------------------------
@@ -354,13 +337,14 @@ def main() -> int:
     _cleanup_fns.append(lambda p=xvfb_proc: _kill_proc(p, 'Xvfb'))
     _wait_xvfb(args.display)
 
-    # ---- spotifyd -----------------------------------------------------------
-    spotifyd_proc = _start_spotifyd(spotifyd_config, args.sink_name)
-    _cleanup_fns.append(lambda p=spotifyd_proc: _kill_proc(p, 'spotifyd'))
+    # ---- Spotify ------------------------------------------------------------
+    spotify_proc = _start_spotify(args.display, args.sink_name)
+    _cleanup_fns.append(lambda p=spotify_proc: _kill_proc(p, 'Spotify'))
 
-    print(f'\nspotifyd started.  Open Spotify on any device and select "{args.sink_name}" as the output.')
-    print(f'Waiting {args.spotifyd_warmup:.0f}s for spotifyd to connect…')
-    time.sleep(args.spotifyd_warmup)
+    print(f'\nSpotify started.  Select this machine as your Spotify Connect device, ')
+    print(f'start your playlist with crossfade enabled, then come back here.')
+    print(f'Waiting {args.spotify_warmup:.0f}s for Spotify to initialise…')
+    time.sleep(args.spotify_warmup)
 
     if args.dry_run:
         print('\n--dry-run: infrastructure is running.  Press Ctrl+C to tear down.')
@@ -381,8 +365,7 @@ def main() -> int:
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
-        exit_code = uviz_proc.poll()
-        _LOG.info('unicorn-viz exited (code %s)', exit_code)
+        _LOG.info('unicorn-viz exited (code %s)', uviz_proc.poll())
 
     # ---- package session ----------------------------------------------------
     print('\nPackaging session corpus…')
