@@ -526,6 +526,54 @@ not in this runtime repository.
 
 ---
 
+## Architecture Decision Records (ADRs)
+
+Two living ADR documents track the *why* behind key numeric values and design
+choices.  **Agents must update the relevant ADR in the same commit whenever
+they touch any of the listed triggers.**
+
+### `docs/adr/vj-system.md` — beat detection & profile architecture
+
+Update this file when changing:
+
+- Any constant in `beat_grid.py`: `_V2_COHERENCE_WINDOW`, `_V2_PHASE_TOL`,
+  `_BPM_LOCK_CONFIDENCE`, `_BPM_LOCK_RELEASE_CONFIDENCE`, `_SPOTIFYD_WARMUP_S`
+  or any similar threshold / window size.
+- `tactus_preference_ratio`, `tempo_hold_s`, `phase_tolerance`, or any other
+  `[auto_vj]` BPM-detector key in `config.toml`.
+- The `set_profile()` method in either tracker class (what the profile applies).
+- Adding, removing, or changing any `AudioProfile` in `unicornviz/audio/profiles.py`
+  (especially `bpm_prior_mu`, `bpm_prior_sigma`, `bpm_hint_min`, `bpm_hint_max`).
+- The choice between BeatTracker v1 and v2 as the active engine.
+- The Schmidt trigger gain / release thresholds in `auto_vj.py`.
+- The distinction between audio profiles and VJ mood profiles, if the system changes.
+
+### `docs/adr/training-model.md` — training pipeline & model tuning
+
+Update this file when changing:
+
+- `_BPM_LOCK_CONFIDENCE_FLOOR` in `tools/package_training_set.py` (must stay
+  in sync with Schmidt trigger thresholds in `auto_vj.py`).
+- Any scorecard metric formula: `_score_lock_quality`, `_score_director_quality`,
+  or the `beat_lock` coverage calculation.
+- The LLM scoring pipeline: provider order, model IDs, prompt rubric, or
+  JSON extraction logic in `_score_detector_with_llm`.
+- The packaging workflow in `tools/package_training_set.py`: what gets moved,
+  naming conventions, or `--session-notes` / `--no-prompt` behaviour.
+- The headless training daemon (`tools/training_daemon.py`): infrastructure
+  choices, audio routing, or session directory naming.
+- The genre / audio profile protocol for training sessions.
+- Baseline quality targets or the tuning protocol sequence.
+- Any decision that is reverted — add a row to the Superseded Decisions table.
+
+### ADR update format
+
+When adding a new entry, append to the relevant section (or Superseded table).
+Include the date, the specific value or decision, and the reason.  Do not
+rewrite history — old decisions stay in the Superseded table with a reason.
+
+---
+
 ## VJ Training
 
 - Every packaged Auto VJ training bucket under `assets/training/sets/<set>/<bucket>/`
