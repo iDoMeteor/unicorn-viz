@@ -18,7 +18,7 @@ _SPEC.loader.exec_module(_MOD)
 
 _build_detector_payload = _MOD._build_detector_payload
 _song_key = _MOD._song_key
-_score_detector_with_llm = _MOD._score_detector_with_llm
+_run_llm_scoring = _MOD._run_llm_scoring
 _detect_llm_provider = _MOD._detect_llm_provider
 _score_lock_quality = _MOD._score_lock_quality
 _BPM_LOCK_CONFIDENCE_FLOOR = _MOD._BPM_LOCK_CONFIDENCE_FLOOR
@@ -102,25 +102,29 @@ def test_build_detector_payload_set_description_included() -> None:
     assert payload['set_description'] == 'House night baseline run.'
 
 
-# ---- _score_detector_with_llm skip / idempotent paths ----------------------
+# ---- _run_llm_scoring skip / idempotent paths -------------------------------
 
 
-def test_score_detector_skip_flag(tmp_path: Path) -> None:
-    result = _score_detector_with_llm(
-        tmp_path, [], 'set-a', 'a', skip=True
-    )
+def test_run_llm_scoring_skip_flag(tmp_path: Path) -> None:
+    result = _run_llm_scoring(tmp_path, [], 'set-a', 'a', skip=True)
     assert result is None
-    assert not (tmp_path / 'detector_score.json').exists()
+    assert not (tmp_path / 'session_score.json').exists()
 
 
-def test_score_detector_returns_existing_without_api_call(tmp_path: Path) -> None:
-    existing = tmp_path / 'detector_score.json'
-    existing.write_text('{}', encoding='utf-8')
+def test_run_llm_scoring_returns_existing_without_api_call(tmp_path: Path) -> None:
+    existing = tmp_path / 'session_score.json'
+    existing.write_text('{"detector": {}, "director": {}}', encoding='utf-8')
     with patch.object(_MOD, '_call_llm', side_effect=AssertionError('should not be called')):
-        result = _score_detector_with_llm(
-            tmp_path, [], 'set-a', 'a', force_regen=False
-        )
-    assert result == existing
+        result = _run_llm_scoring(tmp_path, [], 'set-a', 'a', force_regen=False)
+    assert result == {'detector': {}, 'director': {}}
+
+
+def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path) -> None:
+    rows = [_make_seq_row()]
+    with patch.dict('os.environ', {'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': ''}, clear=False):
+        result = _run_llm_scoring(tmp_path, rows, 'set-a', 'a')
+    assert result is None
+    assert not (tmp_path / 'session_score.json').exists()
 
 
 # ---- _score_lock_quality ----------------------------------------------------
@@ -143,11 +147,3 @@ def test_score_lock_quality_rating_scale() -> None:
     assert _score_lock_quality(30.0, 0.35) == 3
     assert _score_lock_quality(12.0, 0.20) == 2
     assert _score_lock_quality(0.0, 0.50) == 1
-
-
-def test_score_detector_skips_gracefully_with_no_api_key(tmp_path: Path) -> None:
-    rows = [_make_seq_row()]
-    with patch.dict('os.environ', {'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': ''}, clear=False):
-        result = _score_detector_with_llm(tmp_path, rows, 'set-a', 'a')
-    assert result is None
-    assert not (tmp_path / 'detector_score.json').exists()

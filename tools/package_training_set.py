@@ -314,6 +314,209 @@ def _build_essentia_summary(per_song: list[dict]) -> dict | None:
     }
 
 
+def _compute_duration_min(seq_rows: list[dict]) -> float | None:
+    """Derive session duration in minutes from sequence corpus timestamps."""
+    times = [
+        r.get('analysis_generated_at')
+        for r in seq_rows
+        if isinstance(r.get('analysis_generated_at'), str)
+    ]
+    if len(times) < 2:
+        return None
+    start_dt = _parse_ts(min(times))
+    end_dt = _parse_ts(max(times))
+    if not start_dt or not end_dt:
+        return None
+    return (end_dt - start_dt).total_seconds() / 60.0
+
+
+def _score_1_to_5(value: float, thresholds: list[float], *, higher_is_better: bool = True) -> int:
+    """Map a metric to a 1-5 score against ordered thresholds (5 = best).
+
+    Pass thresholds in any order; they are sorted internally by direction.
+    """
+    ordered = sorted(thresholds, reverse=higher_is_better)
+    for score, threshold in zip(range(5, 0, -1), ordered):
+        if higher_is_better and value >= threshold:
+            return score
+        if not higher_is_better and value <= threshold:
+            return score
+    return 1
+
+
+def _extract_director_events(seq_rows: list[dict], max_events: int = 50) -> list[dict]:
+    """Return a uniformly-sampled list of director keyframe events for LLM scoring."""
+    wanted = {'mode_transition', 'drop_fire', 'impact_fire'}
+    all_events = [r for r in seq_rows if r.get('event_type') in wanted]
+    if len(all_events) > max_events:
+        step = len(all_events) / max_events
+        all_events = [all_events[int(i * step)] for i in range(max_events)]
+    compact = []
+    for r in all_events:
+        evt = r.get('event_type', '')
+        entry: dict = {
+            'event_type': evt,
+            't': r.get('analysis_generated_at', ''),
+            'bpm_confidence': round(float(r['bpm_confidence']), 3)
+            if isinstance(r.get('bpm_confidence'), (int, float)) else None,
+            'danceability': round(float(r['danceability']), 3)
+            if isinstance(r.get('danceability'), (int, float)) else None,
+            'crest_factor': round(float(r['crest_factor']), 2)
+            if isinstance(r.get('crest_factor'), (int, float)) else None,
+            'rms': round(float(r['rms']), 4)
+            if isinstance(r.get('rms'), (int, float)) else None,
+        }
+        if evt == 'mode_transition':
+            entry['from_mode'] = r.get('mode', '')
+            entry['to_mode'] = r.get('new_mode', r.get('vj_mode', ''))
+            entry['reason'] = r.get('reason', '')
+        else:
+            entry['in_mode'] = r.get('mode', r.get('vj_mode', ''))
+        # Strip falsy values for compactness
+        entry = {k: v for k, v in entry.items() if v is not None and v != ''}
+        compact.append(entry)
+    return compact
+
+
+def _build_director_payload(
+    seq_rows: list[dict],
+    duration_min: float | None,
+    set_id: str,
+    bucket_id: str,
+) -> dict:
+    """Build compact director scoring payload for the LLM."""
+    all_events: Counter = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
+    hb_rows = [r for r in seq_rows if not r.get('event_type')]
+    total_hb = len(hb_rows) or 1
+
+    mode_counter: Counter = Counter()
+    prof_counter: Counter = Counter()
+    for r in hb_rows:
+        mode = r.get('vj_mode') or r.get('mode', '')
+        if mode:
+            mode_counter[mode] += 1
+        profile = r.get('vj_profile') or r.get('profile', '')
+        if profile:
+            prof_counter[profile] += 1
+
+    mode_dist = {k: round(100.0 * v / total_hb, 1) for k, v in mode_counter.most_common()}
+    return {
+        'set_id': set_id,
+        'bucket_id': bucket_id,
+        'duration_min': round(duration_min, 1) if duration_min is not None else None,
+        'stats': {
+            'mode_transitions': int(all_events.get('mode_transition', 0)),
+            'drop_fires': int(all_events.get('drop_fire', 0)),
+            'impact_fires': int(all_events.get('impact_fire', 0)),
+            'profile_switches': int(all_events.get('profile_switch', 0)),
+            'mode_distribution_pct': mode_dist,
+            'profile_distribution': dict(prof_counter.most_common()),
+        },
+        'events': _extract_director_events(seq_rows),
+    }
+
+
+def _compute_local_scores(seq_rows: list[dict], duration_min: float) -> dict:
+    """Formula-based 1-5 scores for detector, recommender, and director subsystems.
+
+    Quality dimensions for detector and director are left as None — filled by LLM.
+    """
+    duration_hr = max(duration_min / 60.0, 1.0 / 60.0)
+    all_events: Counter = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
+    hb_rows = [r for r in seq_rows if not r.get('event_type')]
+    total_hb = len(hb_rows) or 1
+
+    # ── Detector ──────────────────────────────────────────────────────────────
+    locked = sum(
+        1 for r in hb_rows
+        if float(r.get('bpm_confidence', 0.0) or 0.0) >= _BPM_LOCK_CONFIDENCE_FLOOR
+    )
+    lock_coverage_pct = 100.0 * locked / total_hb
+    churn = int(all_events.get('bpm_lock_gained', 0)) + int(all_events.get('bpm_lock_lost', 0))
+    churn_per_hr = churn / duration_hr
+
+    det_stability = _score_1_to_5(churn_per_hr, [15, 40, 80, 150], higher_is_better=False)
+    det_responsiveness = _score_1_to_5(lock_coverage_pct, [70, 50, 35, 20])
+
+    # ── Recommender ───────────────────────────────────────────────────────────
+    profile_switches = int(all_events.get('profile_switch', 0))
+    switches_per_hr = profile_switches / duration_hr
+
+    switch_rows = [r for r in seq_rows if r.get('event_type') == 'profile_switch']
+    # Profile after each switch — field name varies between corpus versions
+    switch_profs = [
+        r.get('to') or r.get('new_mode') or r.get('vj_profile') or r.get('profile', '')
+        for r in switch_rows
+    ]
+    reversals = sum(1 for i in range(2, len(switch_profs)) if switch_profs[i] == switch_profs[i - 2])
+    reversal_rate = reversals / max(len(switch_profs), 1)
+
+    reco_coverage = (
+        100.0 * sum(1 for r in hb_rows if r.get('recommended_profile_key')) / total_hb
+    )
+
+    rec_stability = _score_1_to_5(switches_per_hr, [5, 15, 30, 60], higher_is_better=False)
+    rec_quality = _score_1_to_5(1.0 - reversal_rate, [0.9, 0.7, 0.5, 0.3])
+    rec_responsiveness = _score_1_to_5(reco_coverage, [80, 60, 40, 20])
+
+    # ── Director ──────────────────────────────────────────────────────────────
+    mode_counter: Counter = Counter()
+    for r in hb_rows:
+        mode = r.get('vj_mode') or r.get('mode', '')
+        if mode:
+            mode_counter[mode] += 1
+    passive_count = (
+        mode_counter.get('CRUISE', 0)
+        + mode_counter.get('CRUISE_SPOTIFY', 0)
+        + mode_counter.get('sequential', 0)
+    )
+    cruise_frac = passive_count / total_hb
+    mode_diversity = len([k for k, v in mode_counter.items() if v > 0])
+
+    drops = int(all_events.get('drop_fire', 0))
+    impacts = int(all_events.get('impact_fire', 0))
+    drop_rate_per_10min = (drops + impacts) / max(duration_min, 1.0) * 10.0
+
+    mode_transitions = int(all_events.get('mode_transition', 0))
+    transition_rate_per_min = mode_transitions / max(duration_min, 1.0)
+
+    dir_stability = _score_1_to_5(transition_rate_per_min, [0.5, 1.0, 2.0, 4.0], higher_is_better=False)
+    dir_responsiveness = _score_1_to_5(drop_rate_per_10min, [3.0, 1.5, 0.5, 0.1])
+
+    return {
+        'detector': {
+            'stability': det_stability,
+            'responsiveness': det_responsiveness,
+            'quality': None,
+            '_meta': {
+                'churn_per_hr': round(churn_per_hr, 1),
+                'lock_coverage_pct': round(lock_coverage_pct, 1),
+            },
+        },
+        'recommender': {
+            'stability': rec_stability,
+            'responsiveness': rec_responsiveness,
+            'quality': rec_quality,
+            '_meta': {
+                'switches_per_hr': round(switches_per_hr, 1),
+                'reversal_rate_pct': round(100.0 * reversal_rate, 1),
+                'reco_coverage_pct': round(reco_coverage, 1),
+            },
+        },
+        'director': {
+            'stability': dir_stability,
+            'responsiveness': dir_responsiveness,
+            'quality': None,
+            '_meta': {
+                'transition_rate_per_min': round(transition_rate_per_min, 2),
+                'drop_rate_per_10min': round(drop_rate_per_10min, 2),
+                'cruise_frac_pct': round(100.0 * cruise_frac, 1),
+                'mode_diversity': mode_diversity,
+            },
+        },
+    }
+
+
 def _build_detector_payload(
     seq_rows: list[dict],
     set_id: str,
@@ -452,64 +655,109 @@ def _detect_llm_provider() -> tuple[str | None, str | None]:
     return None, None
 
 
-def _build_scoring_prompt(payload: dict) -> str:
-    """Build the LLM scoring prompt from the detector payload."""
+def _build_combined_prompt(detector_payload: dict, director_payload: dict) -> str:
+    """Build a single LLM prompt that scores the BPM detector and VJ director together."""
     essentia_note = (
-        'No Essentia reference data is available; score external_agreement as null and include a caveat.'
-        if not payload.get('essentia_available')
-        else 'Essentia reference data is included in the payload under essentia_summary.'
+        'No Essentia reference BPM data is available; score external_agreement as null.'
+        if not detector_payload.get('essentia_available')
+        else 'Essentia reference BPM data is included in the detector payload.'
     )
     desc_note = ''
-    if payload.get('set_description'):
-        desc_note = f'\n\nSet description (operator context):\n{payload["set_description"]}\n'
-    payload_copy = {k: v for k, v in payload.items() if k != 'set_description'}
-    payload_json = json.dumps(payload_copy, indent=2, ensure_ascii=False)
+    if detector_payload.get('set_description'):
+        desc_note = f'\n\nSet description (operator context):\n{detector_payload["set_description"]}\n'
+    det_copy = {k: v for k, v in detector_payload.items() if k != 'set_description'}
+    det_json = json.dumps(det_copy, indent=2, ensure_ascii=False)
+    dir_json = json.dumps(director_payload, indent=2, ensure_ascii=False)
 
-    return f"""You are an expert in music beat detection systems evaluating BPM detector performance during a live VJ session.
+    return f"""You are evaluating an automated live VJ system built on a real-time BPM detector and \
+a rule-based VJ director. Score both subsystems from the session data below.{desc_note}
 
-Score the detector on five dimensions (0-5 integer each):
+━━━━━━━━━━━━━━━━━ PART 1 — BPM DETECTOR ━━━━━━━━━━━━━━━━━
 
-1. lock_stability: Persistence of beat lock, low churn, coherent lock behavior.
-2. tempo_plausibility: BPM continuity and realistic transitions between tempos.
+Score on five dimensions (0-5 integer each):
+1. lock_stability: Persistence of beat lock, low churn, coherent behavior.
+2. tempo_plausibility: BPM continuity and realistic transitions.
 3. confidence_reliability: Agreement between confidence values and actual lock behavior.
-4. musical_alignment: Beat grid behavior matching expected musical phrasing/structure.
+4. musical_alignment: Beat grid behavior matching musical phrasing/structure.
 5. external_agreement: Alignment with Essentia reference estimates where provided.
 
-Scoring guide: 5=excellent, 4=good, 3=acceptable, 2=poor, 1=very poor, 0=complete failure.
+Scoring guide: 5=excellent, 4=good, 3=acceptable, 2=poor, 1=very poor, 0=failure.
+{essentia_note}
 
-{essentia_note}{desc_note}
+Detector data:
+{det_json}
 
-Session data:
-{payload_json}
+━━━━━━━━━━━━━━━━━ PART 2 — VJ DIRECTOR ━━━━━━━━━━━━━━━━━━
 
-Return ONLY a valid JSON object — no markdown, no prose — with this exact schema:
+The director watches audio energy and the BPM detector to trigger visual transitions
+(build → drop → impact). The events list shows audio signals at each director action.
+
+Key fields per event:
+- bpm_confidence: how solidly the detector was locked when the action fired
+- danceability: Essentia danceability [0-1], good proxy for beat strength
+- crest_factor: peak/RMS ratio; high values indicate transient-heavy moments (drops)
+- reason (mode_transition): sustained_rise or sustained_fall (energy going up or down)
+
+Score on four dimensions (0-5 integer each):
+1. build_quality: Are build entries (sustained_rise) triggered at genuinely rising energy \
+(improving danceability/crest_factor)? Or do they reverse quickly to breakdown?
+2. drop_quality: Are drops/impacts fired at appropriately high-energy moments \
+(high crest_factor/danceability), not just any random moment?
+3. energy_coherence: Do the audio signals at each transition justify that director action overall?
+4. opportunity_usage: Does the director act on high-energy windows, or are there many \
+sustained_rise→sustained_fall reversals without ever reaching a drop?
+
+Director data:
+{dir_json}
+
+━━━━━━━━━━━━━━━━━━━ RESPONSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY valid JSON — no markdown, no prose — matching this schema exactly:
 {{
-  "scores": {{
-    "lock_stability": <integer 0-5>,
-    "tempo_plausibility": <integer 0-5>,
-    "confidence_reliability": <integer 0-5>,
-    "musical_alignment": <integer 0-5>,
-    "external_agreement": <integer 0-5 or null>
+  "detector": {{
+    "scores": {{
+      "lock_stability": <int 0-5>,
+      "tempo_plausibility": <int 0-5>,
+      "confidence_reliability": <int 0-5>,
+      "musical_alignment": <int 0-5>,
+      "external_agreement": <int 0-5 or null>
+    }},
+    "overall": <float, weighted average excluding null dimensions>,
+    "per_song": [
+      {{
+        "key": "<song key from detector payload>",
+        "display": "<Title – Artist>",
+        "lock_coverage_pct": <float>,
+        "assessment": "<2-sentence evaluation>"
+      }}
+    ],
+    "rationale": {{
+      "lock_stability": "<explanation>",
+      "tempo_plausibility": "<explanation>",
+      "confidence_reliability": "<explanation>",
+      "musical_alignment": "<explanation>",
+      "external_agreement": "<explanation or No Essentia data>"
+    }},
+    "caveats": ["<caveat strings>"]
   }},
-  "overall": <float 0.0-5.0, weighted average excluding null dimensions>,
-  "per_song": [
-    {{
-      "key": "<song key from payload>",
-      "display": "<Title \\u2013 Artist>",
-      "lock_coverage_pct": <float>,
-      "assessment": "<2-3 sentence evaluation>"
+  "director": {{
+    "scores": {{
+      "build_quality": <int 0-5>,
+      "drop_quality": <int 0-5>,
+      "energy_coherence": <int 0-5>,
+      "opportunity_usage": <int 0-5>
+    }},
+    "overall": <float, average of the four dimensions>,
+    "rationale": {{
+      "build_quality": "<explanation>",
+      "drop_quality": "<explanation>",
+      "energy_coherence": "<explanation>",
+      "opportunity_usage": "<explanation>"
     }}
-  ],
-  "rationale": {{
-    "lock_stability": "<explanation>",
-    "tempo_plausibility": "<explanation>",
-    "confidence_reliability": "<explanation>",
-    "musical_alignment": "<explanation>",
-    "external_agreement": "<explanation or 'No Essentia data available'>"
   }},
-  "caveats": ["<caveat strings>"],
   "scored_at": "<ISO 8601 UTC timestamp>"
-}}"""
+}}\
+"""
 
 
 def _extract_json(text: str) -> dict:
@@ -560,35 +808,103 @@ def _call_llm(provider: str, api_key: str, prompt: str) -> str:
     raise ValueError(f'Unknown LLM provider: {provider}')
 
 
-def _print_llm_score_summary(score: dict) -> None:
-    """Print a compact LLM detector score summary to stdout after packaging."""
-    overall = score.get('overall')
-    scores = score.get('scores', {})
-    per_song = score.get('per_song', [])
-    provider = score.get('provider', 'llm')
+def _print_combined_score_table(
+    local_scores: dict,
+    llm_data: dict | None,
+    set_id: str,
+    bucket_id: str,
+) -> None:
+    """Print the combined 3-column scoring table (detector / recommender / director)."""
+    W = 72
+    sep = '━' * W
 
-    dim_order = [
-        'lock_stability',
-        'tempo_plausibility',
-        'confidence_reliability',
-        'musical_alignment',
-        'external_agreement',
-    ]
+    llm_det = (llm_data or {}).get('detector', {})
+    llm_dir = (llm_data or {}).get('director', {})
+    llm_det_scores = llm_det.get('scores', {})
+    llm_dir_scores = llm_dir.get('scores', {})
 
-    print('-' * 60)
-    print(f'LLM Detector Score  (provider: {provider})')
+    def _avg_dims(scores: dict, keys: list[str]) -> float | None:
+        vals = [float(scores[k]) for k in keys if isinstance(scores.get(k), (int, float))]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    # Quality: musical judgement dims only (stability/responsiveness are handled locally)
+    det_quality = _avg_dims(llm_det_scores, ['tempo_plausibility', 'musical_alignment'])
+    dir_quality = _avg_dims(
+        llm_dir_scores, ['build_quality', 'drop_quality', 'energy_coherence', 'opportunity_usage']
+    )
+
+    ld = local_scores.get('detector', {})
+    lr = local_scores.get('recommender', {})
+    li = local_scores.get('director', {})
+
+    def _fmt(v: int | float | None) -> str:
+        return f'{int(round(v)):1d}/5' if isinstance(v, (int, float)) else ' n/a'
+
+    def _row(label: str, det: object, rec: object, drv: object) -> str:
+        return f'  {label:<24}{_fmt(det):>7}   {_fmt(rec):>11}   {_fmt(drv):>8}'
+
+    def _col_avg(*vals: int | float | None) -> float | None:
+        present = [v for v in vals if v is not None]
+        return round(sum(present) / len(present), 1) if present else None
+
+    det_overall = _col_avg(ld.get('stability'), ld.get('responsiveness'), det_quality)
+    rec_overall = _col_avg(lr.get('stability'), lr.get('responsiveness'), lr.get('quality'))
+    dir_overall = _col_avg(li.get('stability'), li.get('responsiveness'), dir_quality)
+    grand_vals = [v for v in (det_overall, rec_overall, dir_overall) if v is not None]
+    grand_total = round(sum(grand_vals) / len(grand_vals), 1) if grand_vals else None
+
+    provider = (llm_data or {}).get('provider', '')
+    llm_tag = f' (llm: {provider})' if provider else ' (local only)'
+
+    print(sep)
+    print(f'Auto VJ Session Score — {set_id} / {bucket_id}')
+    print(sep)
     print()
-    overall_str = f'{overall:.2f} / 5.0' if isinstance(overall, (int, float)) else 'n/a'
-    print(f'  Overall:  {overall_str}')
+    print(f'  {"":24}{"DETECTOR":>7}   {"RECOMMENDER":>11}   {"DIRECTOR":>8}')
     print()
-    print('  Dimensions:')
-    for dim in dim_order:
-        val = scores.get(dim)
-        val_str = str(val) if val is not None else 'n/a'
-        print(f'    {dim:<30} {val_str}')
+    print(_row('Stability  (local)', ld.get('stability'), lr.get('stability'), li.get('stability')))
+    print(_row('Responsiveness (local)', ld.get('responsiveness'), lr.get('responsiveness'), li.get('responsiveness')))
+    q_label = f'Quality{llm_tag[:18]}'
+    print(_row(q_label, det_quality, lr.get('quality'), dir_quality))
+    print()
+    print(f'  {"─" * (W - 2)}')
+    print(_row('Overall', det_overall, rec_overall, dir_overall))
+    if grand_total is not None:
+        print(f'\n  Grand total  {grand_total:.1f} / 5.0')
+    print()
+    print(sep)
+    print()
 
+    # LLM dimension breakdowns
+    if llm_data:
+        if llm_det_scores:
+            print('  Detector (LLM):')
+            for dim in ['lock_stability', 'tempo_plausibility', 'confidence_reliability',
+                        'musical_alignment', 'external_agreement']:
+                val = llm_det_scores.get(dim)
+                note = (llm_det.get('rationale') or {}).get(dim, '')[:68]
+                print(f'    {dim:<30} {str(val) if val is not None else "n/a":>3}   {note}')
+            print()
+
+        if llm_dir_scores:
+            print('  Director (LLM):')
+            for dim in ['build_quality', 'drop_quality', 'energy_coherence', 'opportunity_usage']:
+                val = llm_dir_scores.get(dim)
+                note = (llm_dir.get('rationale') or {}).get(dim, '')[:68]
+                print(f'    {dim:<30} {str(val) if val is not None else "n/a":>3}   {note}')
+            print()
+
+    # Local metadata
+    print('  Local metrics:')
+    for label, meta_key in [('Detector', 'detector'), ('Recommender', 'recommender'), ('Director', 'director')]:
+        meta = local_scores.get(meta_key, {}).get('_meta', {})
+        parts = ', '.join(f'{k}={v}' for k, v in meta.items())
+        print(f'    {label:<12} {parts}')
+    print()
+
+    # Per-song lock coverage from detector
+    per_song = llm_det.get('per_song', [])
     if per_song:
-        print()
         has_essentia = any(s.get('essentia_bpm') for s in per_song)
         header = '  Per-song lock coverage' + ('  [essentia delta]' if has_essentia else '') + ':'
         print(header)
@@ -599,7 +915,7 @@ def _print_llm_score_summary(score: dict) -> None:
             delta = song.get('essentia_bpm_delta')
             delta_str = f'  Δ{delta:+.1f} BPM' if delta is not None else ''
             print(f'    {cov_str}{delta_str}  {display}')
-    print()
+        print()
 
 
 def _format_detector_score_md(score: dict, set_id: str, bucket_id: str) -> str:
@@ -670,6 +986,53 @@ def _format_detector_score_md(score: dict, set_id: str, bucket_id: str) -> str:
     return '\n'.join(lines) + '\n'
 
 
+def _format_director_score_md(score: dict, set_id: str, bucket_id: str) -> str:
+    """Render director_score.md from a parsed director score dict."""
+    scores = score.get('scores', {})
+    overall = score.get('overall', 'n/a')
+    rationale = score.get('rationale', {})
+    provider = score.get('provider', 'llm')
+    scored_at = score.get('scored_at', 'n/a')
+
+    def _s(v: object) -> str:
+        return 'n/a' if v is None else str(v)
+
+    lines: list[str] = [
+        '# Auto VJ Director Score',
+        '',
+        f'Owner: auto-generated by tools/package_training_set.py ({provider})',
+        'Status: generated',
+        f'Last updated: {datetime.date.today().isoformat()}',
+        '',
+        f'- Set: `{set_id}`',
+        f'- Bucket: `{bucket_id}`',
+        f'- Scored at: `{scored_at}`',
+        f'- Provider: `{provider}`',
+        '',
+        '## Dimension Scores',
+        '',
+        '| Dimension | Score |',
+        '|---|---|',
+        f'| Build Quality | {_s(scores.get("build_quality"))} / 5 |',
+        f'| Drop Quality | {_s(scores.get("drop_quality"))} / 5 |',
+        f'| Energy Coherence | {_s(scores.get("energy_coherence"))} / 5 |',
+        f'| Opportunity Usage | {_s(scores.get("opportunity_usage"))} / 5 |',
+        f'| **Overall** | **{_s(overall)} / 5** |',
+        '',
+        '## Rationale',
+        '',
+    ]
+    for key, label in [
+        ('build_quality', 'Build Quality'),
+        ('drop_quality', 'Drop Quality'),
+        ('energy_coherence', 'Energy Coherence'),
+        ('opportunity_usage', 'Opportunity Usage'),
+    ]:
+        lines.extend([f'### {label}', '', _s(rationale.get(key)), ''])
+
+    return '\n'.join(lines) + '\n'
+
+
 def _generate_set_description_once(root: Path, set_dir: Path, bucket_dir: Path) -> tuple[str, Path, str]:
     """Generate one set-level TRAINING_SET_DESCRIPTION.md, skipping if it already exists."""
     import subprocess
@@ -706,70 +1069,96 @@ def _generate_set_description_once(root: Path, set_dir: Path, bucket_dir: Path) 
     return 'generated', description_path, f'mode={mode}\n{(completed.stdout or "").strip()}'
 
 
-def _score_detector_with_llm(
+def _run_llm_scoring(
     bucket_dir: Path,
     seq_rows: list[dict],
     set_id: str,
     bucket_id: str,
+    duration_min: float | None = None,
     set_description: str | None = None,
     live_rows: list[dict] | None = None,
     skip: bool = False,
     force_regen: bool = False,
-) -> Path | None:
-    """Run LLM detector scoring and write detector_score.{json,md} to bucket_dir.
+) -> dict | None:
+    """Run combined LLM scoring for detector + director; write all score files.
 
-    Returns the path to detector_score.json on success, None on skip or failure.
-    Packaging always continues regardless of outcome.
+    Writes session_score.json (combined), detector_score.{json,md}, and
+    director_score.{json,md} to bucket_dir.  Returns the parsed LLM response
+    dict on success, None on skip or failure.  Packaging always continues.
     """
     if skip:
-        print('LLM detector scoring skipped (--skip-llm-scoring).')
+        print('LLM scoring skipped (--skip-llm-scoring).')
         return None
 
-    json_path = bucket_dir / 'detector_score.json'
-    if json_path.exists() and not force_regen:
-        print(f'detector_score.json already exists; use --force-regen-detector-score to overwrite.')
-        return json_path
+    session_json_path = bucket_dir / 'session_score.json'
+    if session_json_path.exists() and not force_regen:
+        print('session_score.json already exists; use --force-regen-detector-score to overwrite.')
+        try:
+            return json.loads(session_json_path.read_text(encoding='utf-8'))
+        except Exception:
+            return None
 
     if not seq_rows:
-        _LOG.warning('LLM detector scoring skipped: sequence corpus is empty.')
+        _LOG.warning('LLM scoring skipped: sequence corpus is empty.')
         return None
 
     provider, api_key = _detect_llm_provider()
     if provider is None:
-        _LOG.warning(
-            'LLM detector scoring skipped: no OPENAI_API_KEY or ANTHROPIC_API_KEY in environment.'
-        )
+        _LOG.warning('LLM scoring skipped: no OPENAI_API_KEY or ANTHROPIC_API_KEY in environment.')
         return None
 
-    print(f'Running LLM detector scoring via {provider}...')
-    payload = _build_detector_payload(seq_rows, set_id, bucket_id, set_description, live_rows=live_rows)
-    prompt = _build_scoring_prompt(payload)
+    print(f'Running combined LLM scoring via {provider}...')
+    detector_payload = _build_detector_payload(
+        seq_rows, set_id, bucket_id, set_description, live_rows=live_rows
+    )
+    director_payload = _build_director_payload(seq_rows, duration_min, set_id, bucket_id)
+    prompt = _build_combined_prompt(detector_payload, director_payload)
 
     try:
         response_text = _call_llm(provider, api_key, prompt)
-        score = _extract_json(response_text)
+        llm_data = _extract_json(response_text)
     except Exception as exc:
-        _LOG.warning('LLM detector scoring failed (%s: %s). Packaging continues.', type(exc).__name__, exc)
+        _LOG.warning('LLM scoring failed (%s: %s). Packaging continues.', type(exc).__name__, exc)
         return None
 
-    # Restore display fields from our payload — LLMs occasionally corrupt non-ASCII
-    # separators (e.g. U+2013 en-dash → U+0013 DC3) when echoing them back.
-    _key_to_display = {s['key']: s['display'] for s in payload.get('per_song', [])}
-    for entry in score.get('per_song', []):
+    # Restore display names — LLMs occasionally corrupt non-ASCII separators.
+    _key_to_display = {s['key']: s['display'] for s in detector_payload.get('per_song', [])}
+    for entry in llm_data.get('detector', {}).get('per_song', []):
         key = entry.get('key', '')
         if key in _key_to_display:
             entry['display'] = _key_to_display[key]
 
-    score.setdefault('scored_at', datetime.datetime.now(datetime.timezone.utc).isoformat())
-    score['set_id'] = set_id
-    score['bucket_id'] = bucket_id
-    score['provider'] = provider
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    llm_data.setdefault('scored_at', now_iso)
+    llm_data['set_id'] = set_id
+    llm_data['bucket_id'] = bucket_id
+    llm_data['provider'] = provider
 
-    json_path.write_text(json.dumps(score, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
-    md_path = bucket_dir / 'detector_score.md'
-    md_path.write_text(_format_detector_score_md(score, set_id, bucket_id), encoding='utf-8')
-    print(f'Detector score: {json_path}')
-    return json_path
+    # ── Write session_score.json (combined) ───────────────────────────────────
+    session_json_path.write_text(json.dumps(llm_data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    # ── Write detector_score.{json,md} (backwards-compat format) ─────────────
+    det_score = dict(llm_data.get('detector', {}))
+    det_score.update({'set_id': set_id, 'bucket_id': bucket_id, 'provider': provider,
+                      'scored_at': llm_data.get('scored_at', now_iso)})
+    det_json_path = bucket_dir / 'detector_score.json'
+    det_json_path.write_text(json.dumps(det_score, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (bucket_dir / 'detector_score.md').write_text(
+        _format_detector_score_md(det_score, set_id, bucket_id), encoding='utf-8'
+    )
+
+    # ── Write director_score.{json,md} ────────────────────────────────────────
+    dir_score = dict(llm_data.get('director', {}))
+    dir_score.update({'set_id': set_id, 'bucket_id': bucket_id, 'provider': provider,
+                      'scored_at': llm_data.get('scored_at', now_iso)})
+    dir_json_path = bucket_dir / 'director_score.json'
+    dir_json_path.write_text(json.dumps(dir_score, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (bucket_dir / 'director_score.md').write_text(
+        _format_director_score_md(dir_score, set_id, bucket_id), encoding='utf-8'
+    )
+
+    print(f'Session score: {session_json_path}')
+    return llm_data
 
 
 def _parse_args() -> argparse.Namespace:
@@ -796,7 +1185,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--force-regen-detector-score',
         action='store_true',
-        help='Re-run LLM scoring even if detector_score.json already exists in the bucket.',
+        help='Re-run LLM scoring even if session_score.json / detector_score.json already exist.',
     )
     parser.add_argument(
         '--session-notes',
@@ -902,11 +1291,15 @@ def main() -> int:
 
     seq_rows = _load_jsonl_rows(moved_seq)
     live_rows_for_scoring = _load_jsonl_rows(moved_live) if moved_live else []
-    llm_score_path = _score_detector_with_llm(
+    duration_min = _compute_duration_min(seq_rows)
+    local_scores = _compute_local_scores(seq_rows, duration_min or 1.0)
+
+    llm_data = _run_llm_scoring(
         bucket_dir,
         seq_rows,
         set_dir.name,
         bucket_dir.name,
+        duration_min=duration_min,
         set_description=set_description,
         live_rows=live_rows_for_scoring,
         skip=args.skip_llm_scoring,
@@ -914,15 +1307,10 @@ def main() -> int:
     )
 
     detector_llm_score: float | None = None
-    llm_data: dict | None = None
-    if llm_score_path is not None:
-        try:
-            llm_data = json.loads(llm_score_path.read_text(encoding='utf-8'))
-            overall = llm_data.get('overall')
-            if isinstance(overall, (int, float)):
-                detector_llm_score = float(overall)
-        except Exception:
-            pass
+    if llm_data is not None:
+        det_overall = llm_data.get('detector', {}).get('overall')
+        if isinstance(det_overall, (int, float)):
+            detector_llm_score = float(det_overall)
 
     session_log_path = _append_session_log(
         training_root,
@@ -960,8 +1348,7 @@ def main() -> int:
     print('\n' + '-' * 60)
     print(scorecard_path.read_text(encoding='utf-8'))
 
-    if llm_data:
-        _print_llm_score_summary(llm_data)
+    _print_combined_score_table(local_scores, llm_data, set_dir.name, bucket_dir.name)
 
     return 0
 
