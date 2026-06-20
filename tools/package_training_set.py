@@ -298,13 +298,39 @@ def _percentile(sorted_values: list[float], p: float) -> float | None:
     return sorted_values[lo] * (1.0 - frac) + sorted_values[hi] * frac
 
 
+def _build_essentia_summary(per_song: list[dict]) -> dict | None:
+    """Summarise Essentia reference BPMs across all songs with data."""
+    deltas = [s['essentia_bpm_delta'] for s in per_song
+              if s.get('essentia_bpm_delta') is not None]
+    if not deltas:
+        return None
+    abs_deltas = [abs(d) for d in deltas]
+    return {
+        'songs_with_data': len(deltas),
+        'mean_abs_delta_bpm': round(sum(abs_deltas) / len(abs_deltas), 3),
+        'max_abs_delta_bpm': round(max(abs_deltas), 3),
+        'within_2bpm_pct': round(100.0 * sum(1 for d in abs_deltas if d < 2.0) / len(abs_deltas), 1),
+        'within_5bpm_pct': round(100.0 * sum(1 for d in abs_deltas if d < 5.0) / len(abs_deltas), 1),
+    }
+
+
 def _build_detector_payload(
     seq_rows: list[dict],
     set_id: str,
     bucket_id: str,
     set_description: str | None = None,
+    live_rows: list[dict] | None = None,
 ) -> dict:
     """Build a structured payload describing detector behaviour for LLM scoring."""
+    # Build lookup from per-song key → live corpus row (contains Essentia BPM).
+    # Live corpus keys track_id / spotify_track_id use the bare URI; sequence
+    # corpus _song_key() prefixes it with "id:", so we normalise to match.
+    live_by_key: dict[str, dict] = {}
+    for row in (live_rows or []):
+        tid = row.get('track_id', '') or row.get('spotify_track_id', '')
+        if tid:
+            live_by_key[f'id:{tid}'] = row
+
     songs: dict[str, list[dict]] = {}
     for row in seq_rows:
         key = _song_key(row)
@@ -319,7 +345,8 @@ def _build_detector_payload(
         sample = rows[0]
         title = sample.get('spotify_title', '')
         artist = sample.get('spotify_artist', '')
-        per_song.append({
+
+        entry: dict = {
             'key': key,
             'display': f'{title} – {artist}' if (title or artist) else key,
             'row_count': len(rows),
@@ -330,7 +357,17 @@ def _build_detector_payload(
             'lock_coverage_pct': round(100.0 * locked / len(rows), 1),
             'lock_gained': int(evts.get('bpm_lock_gained', 0)),
             'lock_lost': int(evts.get('bpm_lock_lost', 0)),
-        })
+        }
+
+        live = live_by_key.get(key, {})
+        essentia_bpm = float(live.get('bpm', 0.0) or 0.0)
+        if essentia_bpm > 0.0:
+            det_bpm = entry['bpm_median']
+            entry['essentia_bpm'] = round(essentia_bpm, 3)
+            entry['essentia_bpm_confidence'] = round(float(live.get('bpm_confidence', 0.0) or 0.0), 4)
+            entry['essentia_bpm_delta'] = round(det_bpm - essentia_bpm, 3) if det_bpm is not None else None
+
+        per_song.append(entry)
 
     all_bpms = sorted(float(r['bpm']) for r in seq_rows if isinstance(r.get('bpm'), (int, float)))
     all_confs = [float(r['bpm_confidence']) for r in seq_rows if isinstance(r.get('bpm_confidence'), (int, float))]
@@ -398,7 +435,8 @@ def _build_detector_payload(
             'lock_lost_total': int(all_events.get('bpm_lock_lost', 0)),
             'transitions_by_5min_window': lock_by_window,
         },
-        'essentia_available': False,
+        'essentia_available': any(s.get('essentia_bpm', 0.0) > 0.0 for s in per_song),
+        'essentia_summary': _build_essentia_summary(per_song),
         'per_song': per_song,
     }
 
@@ -522,6 +560,48 @@ def _call_llm(provider: str, api_key: str, prompt: str) -> str:
     raise ValueError(f'Unknown LLM provider: {provider}')
 
 
+def _print_llm_score_summary(score: dict) -> None:
+    """Print a compact LLM detector score summary to stdout after packaging."""
+    overall = score.get('overall')
+    scores = score.get('scores', {})
+    per_song = score.get('per_song', [])
+    provider = score.get('provider', 'llm')
+
+    dim_order = [
+        'lock_stability',
+        'tempo_plausibility',
+        'confidence_reliability',
+        'musical_alignment',
+        'external_agreement',
+    ]
+
+    print('-' * 60)
+    print(f'LLM Detector Score  (provider: {provider})')
+    print()
+    overall_str = f'{overall:.2f} / 5.0' if isinstance(overall, (int, float)) else 'n/a'
+    print(f'  Overall:  {overall_str}')
+    print()
+    print('  Dimensions:')
+    for dim in dim_order:
+        val = scores.get(dim)
+        val_str = str(val) if val is not None else 'n/a'
+        print(f'    {dim:<30} {val_str}')
+
+    if per_song:
+        print()
+        has_essentia = any(s.get('essentia_bpm') for s in per_song)
+        header = '  Per-song lock coverage' + ('  [essentia delta]' if has_essentia else '') + ':'
+        print(header)
+        for song in per_song:
+            cov = song.get('lock_coverage_pct')
+            display = song.get('display', song.get('key', '?'))
+            cov_str = f'{cov:5.1f}%' if isinstance(cov, (int, float)) else '   n/a'
+            delta = song.get('essentia_bpm_delta')
+            delta_str = f'  Δ{delta:+.1f} BPM' if delta is not None else ''
+            print(f'    {cov_str}{delta_str}  {display}')
+    print()
+
+
 def _format_detector_score_md(score: dict, set_id: str, bucket_id: str) -> str:
     """Render detector_score.md from a parsed score dict."""
     scores = score.get('scores', {})
@@ -632,6 +712,7 @@ def _score_detector_with_llm(
     set_id: str,
     bucket_id: str,
     set_description: str | None = None,
+    live_rows: list[dict] | None = None,
     skip: bool = False,
     force_regen: bool = False,
 ) -> Path | None:
@@ -661,7 +742,7 @@ def _score_detector_with_llm(
         return None
 
     print(f'Running LLM detector scoring via {provider}...')
-    payload = _build_detector_payload(seq_rows, set_id, bucket_id, set_description)
+    payload = _build_detector_payload(seq_rows, set_id, bucket_id, set_description, live_rows=live_rows)
     prompt = _build_scoring_prompt(payload)
 
     try:
@@ -820,17 +901,20 @@ def main() -> int:
             print(f'Warning: --set-description file not found: {desc_path}')
 
     seq_rows = _load_jsonl_rows(moved_seq)
+    live_rows_for_scoring = _load_jsonl_rows(moved_live) if moved_live else []
     llm_score_path = _score_detector_with_llm(
         bucket_dir,
         seq_rows,
         set_dir.name,
         bucket_dir.name,
         set_description=set_description,
+        live_rows=live_rows_for_scoring,
         skip=args.skip_llm_scoring,
         force_regen=args.force_regen_detector_score,
     )
 
     detector_llm_score: float | None = None
+    llm_data: dict | None = None
     if llm_score_path is not None:
         try:
             llm_data = json.loads(llm_score_path.read_text(encoding='utf-8'))
@@ -875,6 +959,10 @@ def main() -> int:
 
     print('\n' + '-' * 60)
     print(scorecard_path.read_text(encoding='utf-8'))
+
+    if llm_data:
+        _print_llm_score_summary(llm_data)
+
     return 0
 
 

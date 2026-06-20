@@ -17,7 +17,7 @@ transition = "shuffle"
 [audio]
 reactivity = 1.0
 latency = "low"
-profile = "house"
+profile = "chillstep"
 
 [ansi]
 ansi_dir_auto = "assets/ansi/acid"
