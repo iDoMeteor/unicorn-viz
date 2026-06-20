@@ -15,3 +15,5 @@ runtime/
 build/
 # Audio source selection state (now in runtime/global_state.json)
 .audio_source_state.json
+# Local API keys — see .env.example for variable names
+.env
