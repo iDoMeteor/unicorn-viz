@@ -139,11 +139,44 @@ These systems are independent.  Audio profile ≠ VJ mood.
 
 ---
 
+## Chill Profile — Confidence Thresholds (2026-06-20)
+
+**Decision: lowered `mode_entry_min_confidence` from 0.50 → 0.38 in the `chill` preset**
+
+Chillstep training data (mix-02, 43 min) showed the director completely dormant:
+0 drops, 0 impacts, 1 mode transition.  Analysis of the autovj decision log:
+
+- BPM confidence median: 0.406 (structural equilibrium, same as house)
+- Ticks with confidence ≥ 0.50 (old gate): **16.8%**
+- Ticks with confidence ≥ 0.38 (new gate): **37.7%**
+- `drop_score > 0.55` moments: 328 / 2,597 ticks — energy WAS reaching threshold
+
+The 0.50 gate meant the director could almost never enter BUILD mode even when
+audio energy was high enough for a drop.  0.38 sits just above the 0.375
+structural equilibrium, matching how the chillstep confidence actually behaves.
+
+Changed in the `chill` preset simultaneously:
+
+| Key | Old | New | Reason |
+| --- | --- | --- | ------ |
+| `mode_entry_min_confidence` | 0.50 | 0.38 | Primary gate blocking BUILD entry |
+| `drop_min_downbeat_confidence` | 0.42 | 0.34 | Aligned with new entry threshold |
+| `impact_min_downbeat_confidence` | 0.42 | 0.34 | Aligned with new entry threshold |
+| `climax_min_downbeat_confidence` | 0.42 | 0.34 | Aligned with new entry threshold |
+| `drop_timeout_score_floor` | 0.62 | 0.50 | Allow timeout-triggered drops at moderate score |
+| `impact_timeout_score_floor` | 0.58 | 0.48 | Allow timeout-triggered impacts at moderate score |
+
+`drop_energy_threshold` stays at 0.55 — the score reaches it ~12.6% of ticks,
+which should yield ~3–8 drops per 43-minute chillstep session.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
 | ---- | -------- | -------------------- |
 | 2026-06-20 | `tactus_preference_ratio = 0.42` (global) | 0.75× fold mapped 120 → 90 BPM for house; removed in same session |
+| 2026-06-20 | `chill` preset `mode_entry_min_confidence = 0.50` | Too high for chillstep confidence distribution; lowered to 0.38 |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 
 ---
