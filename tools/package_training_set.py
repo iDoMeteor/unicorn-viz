@@ -714,6 +714,12 @@ def _parse_args() -> argparse.Namespace:
         action='store_true',
         help='Re-run LLM scoring even if detector_score.json already exists in the bucket.',
     )
+    parser.add_argument(
+        '--session-notes',
+        default='',
+        metavar='TEXT',
+        help='Session notes to record (skips interactive prompt; use with --no-prompt).',
+    )
     return parser.parse_args()
 
 
@@ -798,8 +804,8 @@ def main() -> int:
         moved_seq,
     )
     session_date = datetime.date.today().isoformat()
-    session_notes = ''
-    if not args.no_prompt:
+    session_notes = args.session_notes or ''
+    if not args.no_prompt and not session_notes:
         session_notes = _prompt_optional_text('Session notes for the training log (optional)')
 
     set_description: str | None = None
