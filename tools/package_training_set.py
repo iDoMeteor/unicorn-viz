@@ -63,6 +63,23 @@ def _prompt_playlist_name() -> str:
         return slug
 
 
+def _infer_playlist_name_from_corpus(seq_rows: list[dict]) -> str | None:
+    """Return a slugified set name inferred from spotify_playlist_name in corpus rows.
+
+    Scans all rows for the most common non-empty spotify_playlist_name value
+    and returns its slug.  Returns None if the field is absent from all rows.
+    """
+    counts: dict[str, int] = {}
+    for row in seq_rows:
+        name = row.get('spotify_playlist_name')
+        if name and isinstance(name, str) and name.strip():
+            counts[name.strip()] = counts.get(name.strip(), 0) + 1
+    if not counts:
+        return None
+    best = max(counts, key=lambda k: counts[k])
+    return _slugify_playlist_name(best)
+
+
 def _prompt_optional_text(question: str) -> str:
     return input(f'{question}: ').strip()
 
@@ -1227,11 +1244,24 @@ def main() -> int:
 
     sets_root.mkdir(parents=True, exist_ok=True)
 
+    live_src = _pick_latest(corpus_dir, ['live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl'])
+    seq_src = _pick_latest(corpus_dir, ['sequence-corpus*.jsonl', 'sequence*.jsonl'])
+    if live_src is None or seq_src is None:
+        print('Could not find both live and sequence corpus files in assets/training/corpus.')
+        return 1
+
     # Resolve set directory: --set-name wins, then --playlist-name (auto-slugified),
-    # then interactive prompt, then fall back to most-recently-modified set.
+    # then auto-inferred from spotify_playlist_name in corpus, then interactive
+    # prompt, then fall back to most-recently-modified set.
     set_name: str | None = args.set_name
     if not set_name and args.playlist_name:
         set_name = _slugify_playlist_name(args.playlist_name)
+    if not set_name:
+        inferred_rows = _load_jsonl_rows(seq_src)
+        inferred = _infer_playlist_name_from_corpus(inferred_rows)
+        if inferred:
+            set_name = inferred
+            print(f'Playlist name inferred from corpus: {set_name}')
     if not set_name and not args.no_prompt:
         set_name = _prompt_playlist_name()
 
@@ -1246,12 +1276,6 @@ def main() -> int:
 
     bucket_dir = _next_bucket_dir(set_dir)
     bucket_dir.mkdir(parents=True, exist_ok=False)
-
-    live_src = _pick_latest(corpus_dir, ['live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl'])
-    seq_src = _pick_latest(corpus_dir, ['sequence-corpus*.jsonl', 'sequence*.jsonl'])
-    if live_src is None or seq_src is None:
-        print('Could not find both live and sequence corpus files in assets/training/corpus.')
-        return 1
 
     moved: list[Path] = []
     moved_live = _move_file(live_src, bucket_dir)
