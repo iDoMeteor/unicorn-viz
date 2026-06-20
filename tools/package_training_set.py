@@ -167,14 +167,16 @@ def _append_session_log(
     lock_rating: int,
     director_rating: int,
     notes: str,
+    detector_llm_score: float | None = None,
 ) -> Path:
     session_log_path = training_root / 'SESSION_TRAINING_LOG.md'
     style_tag = _infer_style_tag(set_dir)
     note_text = notes if notes else 'auto-generated packaging entry'
+    llm_field = f' | detector_llm={detector_llm_score:.1f}/5' if detector_llm_score is not None else ''
     entry = (
         f'{session_date} | session={set_dir.name}/{bucket_dir.name} '
         f'| style={style_tag} | lock={lock_rating}/5 '
-        f'| director={director_rating}/5 | notes={note_text}'
+        f'| director={director_rating}/5{llm_field} | notes={note_text}'
     )
     with session_log_path.open('a', encoding='utf-8') as handle:
         if session_log_path.stat().st_size > 0:
@@ -581,6 +583,42 @@ def _format_detector_score_md(score: dict, set_id: str, bucket_id: str) -> str:
     return '\n'.join(lines) + '\n'
 
 
+def _generate_set_description_once(root: Path, set_dir: Path, bucket_dir: Path) -> tuple[str, Path, str]:
+    """Generate one set-level TRAINING_SET_DESCRIPTION.md, skipping if it already exists."""
+    import subprocess
+    import sys
+
+    description_path = set_dir / 'TRAINING_SET_DESCRIPTION.md'
+    if description_path.exists():
+        return 'skipped', description_path, 'already exists'
+
+    script_path = root / 'tools' / 'generate_training_set_description.py'
+    if not script_path.exists():
+        return 'skipped', description_path, f'generator not found: {script_path}'
+
+    style_tag = _infer_style_tag(set_dir)
+    cmd = [
+        sys.executable,
+        str(script_path),
+        '--set-name', set_dir.name,
+        '--bucket', bucket_dir.name,
+        '--output-path', str(description_path),
+        '--playlist-context', style_tag,
+    ]
+    mode = 'local'
+    if os.environ.get('OPENAI_API_KEY', '').strip():
+        cmd.append('--use-llm')
+        mode = 'llm'
+
+    try:
+        completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or '').strip()
+        return 'failed', description_path, detail or 'generator command failed'
+
+    return 'generated', description_path, f'mode={mode}\n{(completed.stdout or "").strip()}'
+
+
 def _score_detector_with_llm(
     bucket_dir: Path,
     seq_rows: list[dict],
@@ -731,15 +769,6 @@ def main() -> int:
     session_notes = ''
     if not args.no_prompt:
         session_notes = _prompt_optional_text('Session notes for the training log (optional)')
-    session_log_path = _append_session_log(
-        training_root,
-        set_dir,
-        bucket_dir,
-        session_date,
-        lock_rating,
-        director_rating,
-        session_notes,
-    )
 
     set_description: str | None = None
     if args.set_description:
@@ -750,7 +779,7 @@ def main() -> int:
             print(f'Warning: --set-description file not found: {desc_path}')
 
     seq_rows = _load_jsonl_rows(moved_seq)
-    _score_detector_with_llm(
+    llm_score_path = _score_detector_with_llm(
         bucket_dir,
         seq_rows,
         set_dir.name,
@@ -760,15 +789,44 @@ def main() -> int:
         force_regen=args.force_regen_detector_score,
     )
 
+    detector_llm_score: float | None = None
+    if llm_score_path is not None:
+        try:
+            llm_data = json.loads(llm_score_path.read_text(encoding='utf-8'))
+            overall = llm_data.get('overall')
+            if isinstance(overall, (int, float)):
+                detector_llm_score = float(overall)
+        except Exception:
+            pass
+
+    session_log_path = _append_session_log(
+        training_root,
+        set_dir,
+        bucket_dir,
+        session_date,
+        lock_rating,
+        director_rating,
+        session_notes,
+        detector_llm_score=detector_llm_score,
+    )
+
+    desc_status, desc_path_out, desc_detail = _generate_set_description_once(root, set_dir, bucket_dir)
+
     print(f'Set directory: {set_dir}')
     print(f'Bucket: {bucket_dir.name}')
     print(f'Scorecard: {scorecard_path}')
     print(f'Session log: {session_log_path}')
+    if desc_status == 'generated':
+        print(f'Set description: {desc_path_out} (generated)')
+    elif desc_status == 'skipped':
+        print(f'Set description: {desc_path_out} (skipped — {desc_detail})')
+    else:
+        print(f'Set description: failed — {desc_detail}')
     print('Moved files:')
     for path in moved:
         print(f'  - {path}')
     if not session_logs:
-        print('No logs/autovj-*.jsonl files were found to move.')
+        print('No log files were found to move.')
 
     print('\n' + '-' * 60)
     print(scorecard_path.read_text(encoding='utf-8'))
