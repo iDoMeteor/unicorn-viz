@@ -234,6 +234,26 @@ auto_profile_raver_min_bpm = 128.0
 # profile_auto_reco_confirm_wins = 3
 log_decisions = true
 detector_log_interval_s = 1.0
+
+# BPM tracker tuning (v2 ACF engine)
+# tempo_hold_s: how long to hold the current BPM estimate after a confident
+#   update before allowing a large tempo jump.  Longer values bridge crossfade
+#   transitions — the default 6.0 s lets noise from overlapping tracks re-open
+#   the lock before the new track stabilises.
+tempo_hold_s = 10.0
+# tactus_preference_ratio: how aggressively the ACF engine folds high-BPM
+#   estimates down toward the musical pulse.  Lower = more aggressive fold.
+#   Default 0.55 is tuned for house/techno; 0.42 helps downtempo material
+#   where the detector can lock onto hi-hat subdivisions at double-time.
+tactus_preference_ratio = 0.42
+
+# Audio profile for chillstep/downtempo sessions — uncomment to activate.
+# Set [audio] profile = "chillstep" before recording downtempo training sets
+# so the beat tracker uses a 90 BPM prior (78-108 BPM range) instead of the
+# default house prior (124 BPM), preventing double-time detection.
+# Remember to restore profile = "house" for house/techno sessions.
+# [audio]
+# profile = "chillstep"
 # With auto_profile_enabled = false, explicit tuning keys below create manual
 # USER mode layered over the selected base preset.
 # show_duration_min    = 90    # optional full-set duration in minutes
@@ -272,7 +292,7 @@ detector_log_interval_s = 1.0
 # pingpong_auto_max_swaps = 10
 # log_decisions         = true        # write JSONL decision log per session
 #postfx_cruise_interval_s = 25
-postfx_cruise_slots = [1,2,3,7,9]
+postfx_cruise_slots = [1,2,3,4,5,6,7,8,9]
 #postfx_drop_duration_s = 5
 live_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"

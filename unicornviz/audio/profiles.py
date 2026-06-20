@@ -563,6 +563,35 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=84.0,
         bpm_hint_max=116.0,
     ),
+    "chillstep": AudioProfile(
+        name="Chillstep / Downtempo",
+        description=(
+            "Slow electronic groove: sub-bass kick, atmospheric pads, "
+            "and soft hi-hats at 75-110 BPM"
+        ),
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        mid_weight=1.05,
+        treble_weight=0.85,
+        beat_threshold=1.35,
+        smoothing=0.16,
+        curve="warm",
+        # Chillstep: soft kick + pads at 78-108 BPM. Onset emphasis is
+        # conservative — over-weighting bass can fire on pad swells and
+        # confuse the ACF; mid emphasis helps detect the snare/clap on 2+4.
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.4,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=90.0,
+        bpm_prior_sigma=0.45,
+        bpm_hint_min=78.0,
+        bpm_hint_max=108.0,
+    ),
     "pop": AudioProfile(
         name="Pop",
         description="Radio-friendly balance with slight treble emphasis",
