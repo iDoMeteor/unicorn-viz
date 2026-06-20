@@ -37,16 +37,30 @@ def _prompt_yes_no(question: str) -> bool:
         print('Please answer y or n.')
 
 
-def _prompt_set_name() -> str:
+def _slugify_playlist_name(name: str) -> str:
+    """Convert a human-readable playlist name to a filesystem-safe slug.
+
+    "45 Minute Chillstep Mix" → "45-minute-chillstep-mix"
+    """
+    import re
+    slug = name.lower().strip()
+    slug = re.sub(r'[^a-z0-9]+', '-', slug)
+    return slug.strip('-')
+
+
+def _prompt_playlist_name() -> str:
+    """Prompt for a playlist name and return a slugified directory name."""
     while True:
-        raw = input('New set directory name: ').strip()
+        raw = input('Playlist name: ').strip()
         if not raw:
-            print('Directory name cannot be empty.')
+            print('Playlist name cannot be empty.')
             continue
-        if '/' in raw or '\\' in raw or raw in {'.', '..'}:
-            print('Use a simple directory name without path separators.')
+        slug = _slugify_playlist_name(raw)
+        if not slug:
+            print('Could not derive a valid directory name from that input.')
             continue
-        return raw
+        print(f'  → set directory: {slug}')
+        return slug
 
 
 def _prompt_optional_text(question: str) -> str:
@@ -1164,13 +1178,19 @@ def _run_llm_scoring(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        '--playlist-name',
+        metavar='NAME',
+        help='Playlist name (human-readable); auto-slugified into the set directory name. '
+             'Creates the directory if it does not exist, otherwise appends the next bucket.',
+    )
+    parser.add_argument(
         '--set-name',
-        help='Optional set directory name under assets/training/sets.',
+        help='Set directory name under assets/training/sets (exact slug; overrides --playlist-name).',
     )
     parser.add_argument(
         '--no-prompt',
         action='store_true',
-        help='Disable prompts; requires --set-name when no set exists.',
+        help='Disable prompts; requires --playlist-name or --set-name when no set exists.',
     )
     parser.add_argument(
         '--skip-llm-scoring',
@@ -1207,23 +1227,21 @@ def main() -> int:
 
     sets_root.mkdir(parents=True, exist_ok=True)
 
-    create_new = False
-    set_name = args.set_name
-    if set_name:
-        create_new = True
-    elif not args.no_prompt:
-        create_new = _prompt_yes_no('Create a new set directory?')
-        if create_new:
-            set_name = _prompt_set_name()
+    # Resolve set directory: --set-name wins, then --playlist-name (auto-slugified),
+    # then interactive prompt, then fall back to most-recently-modified set.
+    set_name: str | None = args.set_name
+    if not set_name and args.playlist_name:
+        set_name = _slugify_playlist_name(args.playlist_name)
+    if not set_name and not args.no_prompt:
+        set_name = _prompt_playlist_name()
 
-    if create_new:
-        assert set_name is not None
+    if set_name:
         set_dir = sets_root / set_name
         set_dir.mkdir(parents=True, exist_ok=True)
     else:
         set_dir = _latest_set_dir(sets_root)
         if set_dir is None:
-            print('No set directory exists yet. Re-run and create one first.')
+            print('No set directory exists yet. Pass --playlist-name to create one.')
             return 1
 
     bucket_dir = _next_bucket_dir(set_dir)
