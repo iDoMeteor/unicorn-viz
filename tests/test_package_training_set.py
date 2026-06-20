@@ -20,6 +20,8 @@ _build_detector_payload = _MOD._build_detector_payload
 _song_key = _MOD._song_key
 _score_detector_with_llm = _MOD._score_detector_with_llm
 _detect_llm_provider = _MOD._detect_llm_provider
+_score_lock_quality = _MOD._score_lock_quality
+_BPM_LOCK_CONFIDENCE_FLOOR = _MOD._BPM_LOCK_CONFIDENCE_FLOOR
 
 
 def _make_seq_row(
@@ -119,6 +121,28 @@ def test_score_detector_returns_existing_without_api_call(tmp_path: Path) -> Non
             tmp_path, [], 'set-a', 'a', force_regen=False
         )
     assert result == existing
+
+
+# ---- _score_lock_quality ----------------------------------------------------
+
+
+def test_score_lock_quality_uses_confidence_not_beat_index() -> None:
+    """Lock quality must be driven by bpm_confidence, not the broken beat_index field."""
+    # Rows where beat_index is -1 (always) but confidence is >= floor → should get real rating.
+    rows_high_conf = [_make_seq_row(confidence=0.72, beat_index=-1) for _ in range(10)]
+    rows_low_conf = [_make_seq_row(confidence=0.20, beat_index=-1) for _ in range(10)]
+    payload_high = _build_detector_payload(rows_high_conf, 'set-a', 'a')
+    payload_low = _build_detector_payload(rows_low_conf, 'set-a', 'a')
+    assert payload_high['beat_lock']['coverage_pct'] == pytest.approx(100.0)
+    assert payload_low['beat_lock']['coverage_pct'] == pytest.approx(0.0)
+
+
+def test_score_lock_quality_rating_scale() -> None:
+    assert _score_lock_quality(75.0, 0.65) == 5
+    assert _score_lock_quality(50.0, 0.50) == 4
+    assert _score_lock_quality(30.0, 0.35) == 3
+    assert _score_lock_quality(12.0, 0.20) == 2
+    assert _score_lock_quality(0.0, 0.50) == 1
 
 
 def test_score_detector_skips_gracefully_with_no_api_key(tmp_path: Path) -> None:

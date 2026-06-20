@@ -205,7 +205,10 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
 
     bpm_values = [float(v) for v in (r.get('bpm') for r in seq_rows) if isinstance(v, (int, float))]
     conf_values = [float(v) for v in (r.get('bpm_confidence') for r in seq_rows) if isinstance(v, (int, float))]
-    beat_locked = sum(1 for r in seq_rows if isinstance(r.get('beat_index'), int) and int(r.get('beat_index')) >= 0)
+    beat_locked = sum(
+        1 for r in seq_rows
+        if float(r.get('bpm_confidence', 0.0) or 0.0) >= _BPM_LOCK_CONFIDENCE_FLOOR
+    )
     beat_lock_pct = (100.0 * beat_locked / len(seq_rows)) if seq_rows else 0.0
 
     events = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
@@ -246,7 +249,7 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
         f'- BPM median: `{_safe_median(bpm_values):.3f}`' if _safe_median(bpm_values) is not None else '- BPM median: `n/a`',
         f'- BPM range: `{min(bpm_values):.3f} .. {max(bpm_values):.3f}`' if bpm_values else '- BPM range: `n/a`',
         f'- BPM confidence median: `{_safe_median(conf_values):.3f}`' if _safe_median(conf_values) is not None else '- BPM confidence median: `n/a`',
-        f'- Beat lock index coverage (`beat_index >= 0`): `{beat_lock_pct:.1f}%`',
+        f'- Beat lock coverage (confidence ≥ {_BPM_LOCK_CONFIDENCE_FLOOR}): `{beat_lock_pct:.1f}%`',
         f'- Lock event churn: `{int(events.get("bpm_lock_gained", 0))} lock gained`, `{int(events.get("bpm_lock_lost", 0))} lock lost`',
         '',
         '## Director Activity',

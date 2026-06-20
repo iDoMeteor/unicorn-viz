@@ -243,9 +243,11 @@ detector_log_interval_s = 1.0
 tempo_hold_s = 10.0
 # tactus_preference_ratio: how aggressively the ACF engine folds high-BPM
 #   estimates down toward the musical pulse.  Lower = more aggressive fold.
-#   Default 0.55 is tuned for house/techno; 0.42 helps downtempo material
-#   where the detector can lock onto hi-hat subdivisions at double-time.
-tactus_preference_ratio = 0.42
+#   Default 0.55; do NOT lower below ~0.50 for house/techno — the 0.75x fold
+#   factor maps 120 BPM → 90 BPM and dominates the BPM histogram at 0.42.
+#   For downtempo material use the chillstep audio profile + bpm_hint_max
+#   instead of lowering this ratio globally.
+# tactus_preference_ratio = 0.55   # (default; uncomment only to override)
 
 # Audio profile for chillstep/downtempo sessions — uncomment to activate.
 # Set [audio] profile = "chillstep" before recording downtempo training sets
