@@ -79,7 +79,7 @@ Aliases:
 | `device`         | str    | `""`    | Device name substring (empty = auto-detect PipeWire monitor) |
 | `fft_bands`      | int    | `512`   | Number of FFT frequency bins                                 |
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
-| `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal` |
+| `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `chillstep`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal`. Sets BPM prior and (for some profiles) caps the ACF search range via `bpm_hint_min`/`bpm_hint_max`. |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
 | `prefer_default_input` | bool | `true` | When true, startup prioritizes the current OS default input among candidates; when false, ranked monitor/app sources are preferred first. |
 | `require_startup` | bool | `false` | If true, Unicorn Viz exits when audio startup fails after retries. If false, startup continues without active audio and the visualizer runs in degraded mode. |
@@ -94,6 +94,12 @@ Aliases:
 | `silence_rms_span`  | float | `0.045`  | RMS range above the floor over which the spectrum scales 0→1 |
 
 Notes:
+- **`audio.profile` is the BPM detector profile — not to be confused with the
+    Auto VJ _mood_ (chill/normie/raver).** Audio profiles control the beat
+    tracker's BPM prior and search range; VJ moods control the director's
+    visual intensity and transition style. They are independent. Change the
+    audio profile with `Alt+A` / `Alt+Shift+A` in-app, or set it in
+    `config.toml` before a training session.
 - `audio.latency` accepts `"low"` / `"medium"` / `"high"` labels or a numeric
     value in seconds. `"medium"` is normalized internally to a stable numeric
     midpoint for PortAudio compatibility.
