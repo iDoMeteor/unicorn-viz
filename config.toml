@@ -274,11 +274,11 @@ detector_log_interval_s = 1.0
 #postfx_cruise_interval_s = 25
 postfx_cruise_slots = [1,2,3,7,9]
 #postfx_drop_duration_s = 5
-live_training_enabled = true
+live_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 
 # Sequence corpus training (musical-time per-beat heartbeat + event keyframes)
-sequence_training_enabled = true
+sequence_training_enabled = false
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # sequence_training_window_s = 2.0
 # sequence_training_heartbeat_interval_s = 1.0

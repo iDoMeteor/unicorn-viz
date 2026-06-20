@@ -9,12 +9,16 @@ from unicornviz.midi import MidiEvent
 class _VJApi:
     def __init__(self) -> None:
         self.marked: list[str] = []
+        self._handlers: list[tuple[str, object]] = []
 
     def mark_user_action(self, kind: str) -> None:
         self.marked.append(kind)
 
+    def register_key_handler(self, name: str, handler) -> None:
+        self._handlers.append((name, handler))
+
     def key_handler_items(self):
-        return []
+        return list(self._handlers)
 
     def unregister_key_handler(self, _name: str) -> None:
         return
@@ -259,6 +263,22 @@ def test_audio_selector_t_toggles_viable_tag() -> None:
     assert app.audio_source_viable_toggled == 1
     assert overlays.audio_viable_flags == [True, False]
     assert 'Viable source toggled: device-1' in overlays.messages
+
+
+def test_ctrl_t_dispatches_registered_auto_vj_handler() -> None:
+    handler, app, overlays = _handler()
+    calls: list[tuple[int, int]] = []
+
+    def _auto_vj_handler(sym: int, mod: int):
+        calls.append((sym, mod))
+        return 'TRAINERS * ON'
+
+    app.vj_api.register_key_handler('auto_vj', _auto_vj_handler)
+
+    handler.handle(sdl2.SDLK_t, sdl2.KMOD_CTRL)
+
+    assert calls == [(sdl2.SDLK_t, sdl2.KMOD_CTRL)]
+    assert overlays.messages == ['TRAINERS * ON']
 
 
 def test_midi_note_is_queued_until_main_thread_dispatch() -> None:

@@ -87,7 +87,8 @@ def test_sync_corpus_from_logs_populates_rows_with_spotify_metadata() -> None:
         assert report['tracks_synced'] == 1
         assert report['tracks_unresolved'] == 0
 
-        rows = [json.loads(line) for line in corpus_path.read_text(encoding='utf-8').splitlines() if line.strip()]
+        actual_corpus = Path(report['corpus'])
+        rows = [json.loads(line) for line in actual_corpus.read_text(encoding='utf-8').splitlines() if line.strip()]
         assert len(rows) == 1
         row = rows[0]
         assert row['spotify_track_id'] == 'spotify:track:test123'

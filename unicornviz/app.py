@@ -2917,7 +2917,7 @@ void main() {
                         banner_album = str(_spotify_snap.get('album', '') or '').strip() or '-'
                         banner_prev_artist = str(_spotify_snap.get('previous_artist', '') or '').strip() or '-'
                         banner_prev_title = str(_spotify_snap.get('previous_title', '') or '').strip() or '-'
-                        spotify_change_counter = int(_spotify_snap.get('change_counter', 0) or 0)
+                        spotify_change_counter = int(_spotify_snap.get('banner_change_counter', 0) or 0)
                         banner_enabled = bool(_spotify_snap.get('now_playing_banner_enabled', False))
                         banner_hold_s = max(1.0, float(_spotify_snap.get('now_playing_banner_hold_s', 10.0) or 10.0))
                         dur_b = max(0.0, float(_spotify_snap.get('duration_s', 0.0) or 0.0))
@@ -3041,6 +3041,12 @@ void main() {
                     if isinstance(vslot_text, str) and vslot_text.strip():
                         variant_slot = vslot_text.strip()
 
+                auto_vj_badge = ''
+                if self._auto_vj is not None:
+                    badge_getter = getattr(self._auto_vj, 'training_badge', None)
+                    if callable(badge_getter):
+                        auto_vj_badge = str(badge_getter() or '')
+
                 overlays.set_hud_state({
                     'title': 'Unicorn Viz HUD',
                     'session_time': self.vj_api.format_session_clock(),
@@ -3077,6 +3083,8 @@ void main() {
                     if self._auto_vj is not None
                     else '-'
                 ),
+                'auto_vj_label': 'AUTO VJ',
+                'auto_vj_training_badge': auto_vj_badge,
                 'auto_vj_mood': (
                     getattr(self._auto_vj, 'hud_mood_label', '-')
                     if self._auto_vj is not None
@@ -3144,6 +3152,10 @@ void main() {
                     'bass': f"{audio_hud.bass:.2f}" if audio_hud is not None else '0.00',
                     'mid': f"{audio_hud.mid:.2f}" if audio_hud is not None else '0.00',
                     'treble': f"{audio_hud.treble:.2f}" if audio_hud is not None else '0.00',
+                    'auto_vj_label': 'AUTO VJ',
+                    'auto_vj_training_badge': (
+                        self._auto_vj.training_badge() if self._auto_vj is not None else ''
+                    ),
                 })
             if perf_debug_enabled:
                 perf_after_hud = time.perf_counter()

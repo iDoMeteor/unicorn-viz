@@ -8,6 +8,7 @@ JSONL corpus that downstream training steps can label and fit against.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,15 @@ from training_lib import (
     utc_now_iso,
     write_jsonl,
 )
+
+
+def _timestamped_path(path: Path) -> Path:
+    """Append a UTC timestamp to the output filename before writing."""
+
+    stamp = datetime.datetime.now(datetime.UTC).strftime('%Y%m%dT%H%M%SZ')
+    suffix = path.suffix
+    stem = path.name[:-len(suffix)] if suffix else path.name
+    return path.with_name(f'{stem}-{stamp}{suffix}')
 
 
 def _parse_args() -> argparse.Namespace:
@@ -86,9 +96,10 @@ def main() -> int:
 
     args = _parse_args()
     rows = _build_rows(args)
-    count = write_jsonl(rows, args.out)
+    output_path = _timestamped_path(args.out)
+    count = write_jsonl(rows, output_path)
     summary = {
-        'output': str(args.out),
+        'output': str(output_path),
         'rows': count,
         'source_inputs': list(args.inputs),
         'manifest': str(args.manifest) if args.manifest else None,

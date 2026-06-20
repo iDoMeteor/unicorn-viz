@@ -12,6 +12,7 @@ as the audio-analysis source.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import time
 from pathlib import Path
@@ -32,6 +33,15 @@ from training_lib import (
 
 _DEFAULT_LOG_DIR = Path('logs')
 _DEFAULT_CORPUS = Path('assets/training/corpus/latest-corpus.jsonl')
+
+
+def _timestamped_path(path: Path) -> Path:
+    """Append a UTC timestamp to the output filename before writing."""
+
+    stamp = datetime.datetime.now(datetime.UTC).strftime('%Y%m%dT%H%M%SZ')
+    suffix = path.suffix
+    stem = path.name[:-len(suffix)] if suffix else path.name
+    return path.with_name(f'{stem}-{stamp}{suffix}')
 
 
 def _parse_args() -> argparse.Namespace:
@@ -239,6 +249,7 @@ def main() -> int:
     """Entry point for the log-driven corpus sync CLI."""
 
     args = _parse_args()
+    args.corpus = _timestamped_path(args.corpus)
     if args.watch:
         try:
             while True:

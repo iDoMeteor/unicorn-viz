@@ -33,6 +33,7 @@ This is the canonical map for project documentation.
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
+  - Full system audit (2026-06-19): [docs/audits/2026-06-19-full-system-audit.md](audits/2026-06-19-full-system-audit.md)
   - Full system audit (2026-06-17): [docs/audits/2026-06-17-full-system-audit.md](audits/2026-06-17-full-system-audit.md)
 - Archived debug and handoff notes: [docs/archive/debug](archive/debug)
   - Audio startup regression + validation hardening (2026-06-04): [docs/archive/debug/audio-startup-regression-2026-06-04.md](archive/debug/audio-startup-regression-2026-06-04.md)
