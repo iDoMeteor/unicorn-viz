@@ -587,10 +587,16 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.5,
         onset_mid_emphasis=1.4,
         onset_treble_emphasis=1.0,
-        bpm_prior_mu=90.0,
-        bpm_prior_sigma=0.45,
+        # 2026-06-20: mix-03 Essentia comparison showed the ACF locking at ~94
+        # BPM on three tracks Essentia placed at 103-106 BPM (Before Dawn,
+        # Snow on the Sahara, Leaving).  Raising prior_mu from 90→95 shifts the
+        # Gaussian pull toward the observed session median (94 BPM) and reduces
+        # the chance the ACF settles on a sub-beat.  Sigma widened 0.45→0.50
+        # so tracks genuinely at 105+ BPM can compete against the prior.
+        bpm_prior_mu=95.0,
+        bpm_prior_sigma=0.50,
         bpm_hint_min=78.0,
-        bpm_hint_max=108.0,
+        bpm_hint_max=112.0,
     ),
     "pop": AudioProfile(
         name="Pop",
