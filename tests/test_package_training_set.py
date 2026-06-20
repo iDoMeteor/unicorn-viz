@@ -81,8 +81,8 @@ def test_build_detector_payload_fallback_key_when_no_track_id() -> None:
 
 
 def test_build_detector_payload_lock_coverage() -> None:
-    locked_rows = [_make_seq_row(beat_index=i) for i in range(5)]
-    unlocked_rows = [_make_seq_row(beat_index=-1) for _ in range(5)]
+    locked_rows = [_make_seq_row(confidence=0.72) for _ in range(5)]
+    unlocked_rows = [_make_seq_row(confidence=0.20) for _ in range(5)]
     payload = _build_detector_payload(locked_rows + unlocked_rows, 'set-a', 'a')
     assert payload['beat_lock']['coverage_pct'] == pytest.approx(50.0)
 

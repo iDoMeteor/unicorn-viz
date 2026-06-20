@@ -22,6 +22,10 @@ from statistics import median
 
 _LOG = logging.getLogger('package_training_set')
 
+# Mirrors AutoVJController._BPM_LOCK_CONFIDENCE in auto_vj.py.
+# A sequence row is considered "beat-locked" when bpm_confidence >= this floor.
+_BPM_LOCK_CONFIDENCE_FLOOR = 0.45
+
 
 def _prompt_yes_no(question: str) -> bool:
     while True:
@@ -307,7 +311,7 @@ def _build_detector_payload(
     for key, rows in songs.items():
         bpms = [float(r['bpm']) for r in rows if isinstance(r.get('bpm'), (int, float))]
         confs = [float(r['bpm_confidence']) for r in rows if isinstance(r.get('bpm_confidence'), (int, float))]
-        locked = sum(1 for r in rows if isinstance(r.get('beat_index'), int) and r['beat_index'] >= 0)
+        locked = sum(1 for r in rows if float(r.get('bpm_confidence', 0.0) or 0.0) >= _BPM_LOCK_CONFIDENCE_FLOOR)
         evts = Counter(r.get('event_type') for r in rows if r.get('event_type'))
         sample = rows[0]
         title = sample.get('spotify_title', '')
@@ -327,7 +331,7 @@ def _build_detector_payload(
 
     all_bpms = sorted(float(r['bpm']) for r in seq_rows if isinstance(r.get('bpm'), (int, float)))
     all_confs = [float(r['bpm_confidence']) for r in seq_rows if isinstance(r.get('bpm_confidence'), (int, float))]
-    all_locked = sum(1 for r in seq_rows if isinstance(r.get('beat_index'), int) and r.get('beat_index', -1) >= 0)
+    all_locked = sum(1 for r in seq_rows if float(r.get('bpm_confidence', 0.0) or 0.0) >= _BPM_LOCK_CONFIDENCE_FLOOR)
     all_events = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
 
     conf_low = sum(1 for c in all_confs if c < 0.3)
@@ -663,6 +667,14 @@ def _score_detector_with_llm(
     except Exception as exc:
         _LOG.warning('LLM detector scoring failed (%s: %s). Packaging continues.', type(exc).__name__, exc)
         return None
+
+    # Restore display fields from our payload — LLMs occasionally corrupt non-ASCII
+    # separators (e.g. U+2013 en-dash → U+0013 DC3) when echoing them back.
+    _key_to_display = {s['key']: s['display'] for s in payload.get('per_song', [])}
+    for entry in score.get('per_song', []):
+        key = entry.get('key', '')
+        if key in _key_to_display:
+            entry['display'] = _key_to_display[key]
 
     score.setdefault('scored_at', datetime.datetime.now(datetime.timezone.utc).isoformat())
     score['set_id'] = set_id
