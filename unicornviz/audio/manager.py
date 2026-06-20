@@ -189,6 +189,17 @@ class AudioManager:
                 log.warning('AudioManager: analysis thread did not exit within 2.0s')
             self._analysis_thread = None
         self._capture.stop()
+        # Pa_Terminate() must be called after all streams are closed and before
+        # Python's GC runs.  Without it the PortAudio ALSA host-API thread can
+        # still be inside PaAlsaStream_WaitForFrames() when cffi callback objects
+        # are collected, causing SIGSEGV.  The import is guarded so the no-audio
+        # path is unaffected.
+        try:
+            import sounddevice as _sd  # noqa: PLC0415
+            _sd.terminate()
+            log.debug('AudioManager: sounddevice.terminate() called')
+        except Exception as exc:
+            log.debug('AudioManager: sounddevice.terminate() skipped: %s', exc)
 
     def _analysis_worker(self) -> None:
         """Daemon thread: process audio blocks as they arrive from AudioCapture.
