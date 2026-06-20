@@ -42,6 +42,7 @@ def test_hud_audio_state_fields_prefers_raw_audio_snapshot() -> None:
         'bass_n': '0.74',
         'mid_n': '0.75',
         'treble_n': '0.76',
+        'audio_beat': '0.000',
     }
 
 
@@ -68,6 +69,7 @@ def test_hud_audio_state_fields_falls_back_to_processed_audio() -> None:
         'bass_n': '0.51',
         'mid_n': '0.61',
         'treble_n': '0.71',
+        'audio_beat': '0.000',
     }
 
 
@@ -86,4 +88,5 @@ def test_hud_audio_state_fields_defaults_when_audio_unavailable() -> None:
         'bass_n': '0.50',
         'mid_n': '0.50',
         'treble_n': '0.50',
+        'audio_beat': '0.000',
     }

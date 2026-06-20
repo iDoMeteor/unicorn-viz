@@ -346,6 +346,23 @@ out vec2 out_pos;
 
 ---
 
+## Agent Autonomy — Tool Execution
+
+The agent does **not** need to ask permission before:
+
+- Running any GNU coreutils, shell utilities, or POSIX tools (grep, find, ls,
+  awk, sed, cat, diff, wc, etc.)
+- Running Python scripts, test suites, or one-off diagnostic commands
+  (`python -m pytest`, `python -c "..."`, etc.)
+- Reading files, listing directories, or inspecting git status/log/diff
+
+Permission **is required** before any action that deletes, destroys, or
+irreversibly overwrites data — including `rm`, `git reset --hard`, force-push,
+dropping tables, overwriting committed history, or any destructive shell
+invocation.
+
+---
+
 ## What the Agent Should NOT Do
 
 - Do not add error handling for situations that cannot occur (e.g., checking

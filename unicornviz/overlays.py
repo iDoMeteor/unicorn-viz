@@ -974,6 +974,7 @@ class Overlays:
             'bass': '0.00',
             'mid': '0.00',
             'treble': '0.00',
+            'audio_beat': '0.000',
             'display_mode': 'single',
             'display_index': '0',
             'invert': 'OFF',
@@ -997,6 +998,10 @@ class Overlays:
         self._pending_help_icon_action: dict[str, str] | None = None
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
+        # Live PCM waveform fed each frame from the audio pipeline.
+        # Used to render the Spotify progress-bar waveform visualization.
+        self._live_waveform: np.ndarray | None = None
+        self._spotify_beat_decay: float = 0.0
         self._help_icon_asset_dir: Path = resolve_path('assets/icons/help')
         self._help_icon_asset_bucket: str = self._help_icon_bucket_for_width(self._width)
         self._help_icon_textures: dict[str, moderngl.Texture] = {}
@@ -1610,7 +1615,7 @@ void main() {
         panel_w = min(1050.0, self._width * 0.93)
         lh = 28.0
         spotify_visible = str(self._hud_state.get('spotify_visible', 'NO')).upper() == 'YES'
-        row0_offset = 248.0 if spotify_visible else 188.0
+        row0_offset = 264.0 if spotify_visible else 188.0
         row_text_h = 8.0 * 2.05 + 4.0
 
         # ── animation clocks ─────────────────────────────────────────────
@@ -1863,10 +1868,10 @@ void main() {
         band_x = x + 8.0
         band_y = y + 104.0
         band_w = panel_w - 16.0
-        band_h = 140.0 if spotify_visible else 80.0
+        band_h = 156.0 if spotify_visible else 80.0
 
         # Spotify sub-pane (between title/timer header and main data panes).
-        spotify_h = 56.0 if spotify_visible else 0.0
+        spotify_h = 72.0 if spotify_visible else 0.0
         spotify_y = band_y
         spotify_status = str(self._hud_state.get('spotify_status', 'OFF'))
         spotify_track = str(self._hud_state.get('spotify_track', '-'))
@@ -1950,14 +1955,64 @@ void main() {
                 except Exception:
                     pct = 0.0
             pct = max(0.0, min(100.0, pct))
+
             rail_pad = 12.0
             rail_x = band_x + rail_pad
             rail_y = spotify_y + 40.0
             rail_w = band_w - rail_pad * 2.0
-            rail_h = 6.0
-            fill_w = rail_w * (pct / 100.0)
-            self._draw_rect(rail_x, rail_y, rail_w, rail_h, (0.12, 0.24, 0.22, 0.85))
-            self._draw_rect(rail_x, rail_y, fill_w, rail_h, (accent[0], accent[1], accent[2], 0.95))
+            rail_h = 26.0
+            rail_center_y = rail_y + rail_h * 0.5
+
+            # Waveform mode: live PCM waveform fed by app.py each frame.
+            # Gate: auto-vj must have live BPM and a waveform must be available.
+            _wf_bpm = _fv('auto_vj_bpm')
+            wf = self._live_waveform
+            waveform_mode = (
+                _wf_bpm > 0.0
+                and wf is not None
+                and len(wf) > 0
+            )
+
+            if waveform_mode:
+                _beat = _fv('audio_beat')
+                # Leaky-peak beat glow: snaps up on beat, decays between frames.
+                self._spotify_beat_decay = max(
+                    self._spotify_beat_decay * 0.80,
+                    min(1.0, _beat * 1.5),
+                )
+                beat_g = self._spotify_beat_decay
+
+                _N = 128
+                col_w = rail_w / _N
+                fill_col = min(_N - 1, int(pct / 100.0 * _N))
+                wf_len = len(wf)
+
+                # Dim full-rail background + thin center guide line so the
+                # unplayed portion is visible as a faint track-length marker.
+                self._draw_rect(rail_x, rail_y, rail_w, rail_h, (0.05, 0.10, 0.08, 0.55))
+                self._draw_rect(rail_x, rail_center_y - 0.5, rail_w, 1.0, (0.22, 0.42, 0.30, 0.55))
+
+                # Waveform bars for the played portion.
+                # Each column samples the current live waveform at a proportional
+                # index; the whole waveform is always visible, growing rightward.
+                for _ci in range(fill_col + 1):
+                    _wi = int(_ci / max(1, fill_col) * (wf_len - 1))
+                    _sample = abs(float(wf[_wi]))  # already peak-normalised to [0, 1]
+                    _bar_h = max(2.0, _sample * rail_h * 0.92)
+                    _bar_y = rail_center_y - _bar_h * 0.5
+                    _cx = rail_x + _ci * col_w
+                    # Uniform brightness from amplitude + beat — no hue shift,
+                    # so the accent color never drifts yellow.
+                    _bright = 0.45 + _sample * 0.55 + beat_g * 0.12
+                    _r = min(1.0, accent[0] * _bright)
+                    _g = min(1.0, accent[1] * _bright)
+                    _b = min(1.0, accent[2] * _bright)
+                    _a = 0.80 + beat_g * 0.15
+                    self._draw_rect(_cx, _bar_y, max(1.0, col_w - 0.4), _bar_h, (_r, _g, _b, _a))
+            else:
+                fill_w = rail_w * (pct / 100.0)
+                self._draw_rect(rail_x, rail_y, rail_w, rail_h, (0.12, 0.24, 0.22, 0.85))
+                self._draw_rect(rail_x, rail_y, fill_w, rail_h, (accent[0], accent[1], accent[2], 0.95))
 
         # ── layer 7: data zone separator ─────────────────────────────────
         self._draw_rect(x, data_zone_y - 4.0, panel_w, 1.0, (0.10, 0.94, 1.0, 0.24))
@@ -4198,6 +4253,10 @@ void main() {
     def set_hud_state(self, state: dict[str, str]) -> None:
         """Update the live HUD payload rendered by TAB overlay."""
         self._hud_state.update(state)
+
+    def set_audio_waveform(self, wf: np.ndarray | None) -> None:
+        """Store the current PCM waveform for the Spotify progress-bar visualization."""
+        self._live_waveform = wf
 
     def set_system_monitor_audio_provider(
         self,

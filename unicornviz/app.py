@@ -1650,6 +1650,7 @@ void main() {
             return {
                 'bass': '0.00', 'mid': '0.00', 'treble': '0.00',
                 'bass_n': '0.50', 'mid_n': '0.50', 'treble_n': '0.50',
+                'audio_beat': '0.000',
             }
         return {
             'bass':    f'{src.bass:.2f}',
@@ -1658,6 +1659,7 @@ void main() {
             'bass_n':  f'{src.bass_n:.2f}',
             'mid_n':   f'{src.mid_n:.2f}',
             'treble_n': f'{src.treble_n:.2f}',
+            'audio_beat': f'{src.beat:.3f}',
         }
 
     def _build_invert_pipeline(self) -> None:
@@ -3159,6 +3161,11 @@ void main() {
                 })
             if perf_debug_enabled:
                 perf_after_hud = time.perf_counter()
+
+            _wf_audio = self._audio_raw if self._audio_raw is not None else self._audio
+            overlays.set_audio_waveform(
+                _wf_audio.waveform if _wf_audio is not None else None
+            )
 
             # Render
             self._render(dt)
