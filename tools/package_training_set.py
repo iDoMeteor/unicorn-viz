@@ -772,6 +772,26 @@ def main() -> int:
         shutil.move(str(log_path), str(dest))
         moved.append(dest)
 
+    # Move screenshots and recordings into named subdirectories of the bucket.
+    for src_dir_name in ('screenshots', 'recordings'):
+        src_dir = root / src_dir_name
+        if not src_dir.is_dir():
+            continue
+        media_files = sorted(
+            [p for p in src_dir.rglob('*') if p.is_file()],
+            key=lambda p: p.stat().st_mtime,
+        )
+        if not media_files:
+            continue
+        dest_subdir = bucket_dir / src_dir_name
+        dest_subdir.mkdir(exist_ok=True)
+        for media_path in media_files:
+            dest = dest_subdir / media_path.name
+            if dest.exists():
+                raise FileExistsError(f'destination already exists: {dest}')
+            shutil.move(str(media_path), str(dest))
+            moved.append(dest)
+
     scorecard_path, lock_rating, director_rating = _write_scorecard(
         bucket_dir,
         moved_live,
@@ -839,6 +859,10 @@ def main() -> int:
         print(f'  - {path}')
     if not session_logs:
         print('No log files were found to move.')
+    for src_dir_name in ('screenshots', 'recordings'):
+        count = sum(1 for p in moved if p.parent.name == src_dir_name)
+        if count:
+            print(f'{count} {src_dir_name} moved to {bucket_dir / src_dir_name}')
 
     print('\n' + '-' * 60)
     print(scorecard_path.read_text(encoding='utf-8'))
