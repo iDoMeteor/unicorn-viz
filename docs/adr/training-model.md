@@ -176,6 +176,29 @@ Do not stack parameter changes before confirming the first one.
 
 ---
 
+## Local Detector Stability Scoring
+
+`_compute_local_scores()` scores BPM lock churn as a 1–5 stability dimension:
+
+```python
+det_stability = _score_1_to_5(churn_per_hr, [150, 350, 650, 1000], higher_is_better=False)
+```
+
+| Score | Churn/hr | Observed baseline |
+| ----- | -------- | ----------------- |
+| 5 | ≤ 150 | house/a (2026-06-20, ambient misprofile) ~130 |
+| 4 | ≤ 350 | chillstep sessions 246–311 |
+| 3 | ≤ 650 | house/c (2026-06-20, crossfade ON) 612 |
+| 2 | ≤ 1000 | house/b (2026-06-20) 849 |
+| 1 | > 1000 | pre-fix era sessions 3000–3700 |
+
+**Previous thresholds `[15, 40, 80, 150]` were orders-of-magnitude too tight** —
+every real session scored 1/5.  Recalibrated 2026-06-20 against 12 packaged
+sessions.  Update these when the Schmidt trigger or beat-tracker v2 is retuned
+substantially.
+
+---
+
 ## Baseline Quality Targets (house, June 2026)
 
 These targets represent the floor for proceeding to the 50-session automated run:
@@ -198,6 +221,8 @@ Update targets as the detector improves.
 | 2026-06-20 | `spotifyd` as Spotify receiver in daemon | No crossfade/automix; replaced with Spotify desktop app same session |
 | 2026-06-20 | `beat_index >= 0` as lock coverage metric | `beat_index` property does not exist in v2 tracker; always returned -1 |
 | 2026-06-20 | `tactus_preference_ratio = 0.42` globally | Caused 0.75× fold (120→90 BPM) for house; BPM median fell from 122 to 98 |
+| 2026-06-20 | Detector stability thresholds `[15, 40, 80, 150]` churn/hr | All real sessions exceeded 150/hr; replaced with `[150, 350, 650, 1000]` |
+| 2026-06-20 | `spotify_playlist_name` in every corpus row | Per-row overhead for one-time data; replaced with single `playlist_context` entry in autovj decision log |
 
 ---
 
