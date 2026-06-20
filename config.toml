@@ -209,7 +209,7 @@ beat_tracker_engine = "v2"
 #profile = "normie"          # chill | normie | raver | user (unset => normie preset)
 auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
 auto_profile_chill_max_bpm = 105.0
-auto_profile_raver_min_bpm = 128.0
+auto_profile_raver_min_bpm = 126.0
 #auto_profile_min_confidence = 0.45
 #auto_profile_switch_cooldown_s = 20.0
 # Runtime beat-prior sync stability (helps avoid BPM lock wobble when profile key thrashes)
@@ -241,6 +241,12 @@ detector_log_interval_s = 1.0
 #   transitions — the default 6.0 s lets noise from overlapping tracks re-open
 #   the lock before the new track stabilises.
 tempo_hold_s = 10.0
+# silence_reset_s: seconds with no detected onsets before the detector resets
+#   bpm/confidence to 0.  Default 2.0 is too short for Spotify crossfades — the
+#   crossfade window (5–12 s) can produce a gap long enough to blow away the
+#   tempo hold.  15 s bridges the longest crossfade without masking a genuine
+#   pause between DJ sets.
+silence_reset_s = 15.0
 # tactus_preference_ratio: how aggressively the ACF engine folds high-BPM
 #   estimates down toward the musical pulse.  Lower = more aggressive fold.
 #   Default 0.55; do NOT lower below ~0.50 for house/techno — the 0.75x fold

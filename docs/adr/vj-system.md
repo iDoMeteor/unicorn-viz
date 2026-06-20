@@ -97,14 +97,21 @@ per-profile `tactus_preference_ratio` if that API is added — not globally.
 
 ## Tempo Hold
 
-**Decision: `tempo_hold_s = 10.0`**
+**Decision: `tempo_hold_s = 10.0`, `silence_reset_s = 15.0`**
 
 Spotify crossfade overlaps last 5–12 s of a track with the incoming track.
 During this window, the incoming track's onset pattern conflicts with the
 current BPM estimate.  A 10 s hold bridges the overlap so the departing
 track's tempo is maintained until the new track stabilises.
 
-Default engine value: 6.0 s.  Overridden in `[auto_vj]` to 10.0.
+Default engine `tempo_hold_s`: 6.0 s.  Overridden in `[auto_vj]` to 10.0.
+
+`silence_reset_s` (2026-06-20): `_reset_tempo_lock()` fires after this many
+seconds with no detected onsets, zeroing `bpm` and `confidence`.  Default 2.0 s
+was shorter than a typical Spotify crossfade gap, causing 53% of peak_time
+sequence rows to show `bpm=0.0` mid-session.  Raised to 15.0 s in `config.toml`
+so the detector holds its tempo through the full crossfade window without
+resetting.
 
 ---
 
@@ -171,12 +178,30 @@ which should yield ~3–8 drops per 43-minute chillstep session.
 
 ---
 
+## Auto-Profile Raver Threshold
+
+**Decision: `auto_profile_raver_min_bpm = 126.0`**
+
+Peak_time playlist material was consistently detected at ~127.7 BPM.  With
+the threshold at 128.0, every track at that BPM triggered normie instead of
+raver, causing the director to run the wrong intensity profile for the entire
+set.  Lowered to 126.0 (2026-06-20) to give 2 BPM headroom below typical
+peak_time material while still clearly separating raver (>126) from the
+normie midrange (105–126).
+
+History: was 125.0 originally, raised to 128.0 on 2026-06-20 during initial
+tuning, then immediately reverted to 126.0 when peak_time session logs showed
+the raver→normie oscillation.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
 | ---- | -------- | -------------------- |
 | 2026-06-20 | `tactus_preference_ratio = 0.42` (global) | 0.75× fold mapped 120 → 90 BPM for house; removed in same session |
 | 2026-06-20 | `chill` preset `mode_entry_min_confidence = 0.50` | Too high for chillstep confidence distribution; lowered to 0.38 |
+| 2026-06-20 | `auto_profile_raver_min_bpm = 128.0` | Peak_time material at ~127.7 BPM always triggered normie; lowered to 126.0 |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 
 ---
@@ -185,4 +210,3 @@ which should yield ~3–8 drops per 43-minute chillstep session.
 
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (closer to the 0.52 lock threshold).
-- Essentia BPM cross-validation not yet wired into the scoring pipeline.
