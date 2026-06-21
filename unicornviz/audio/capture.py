@@ -793,12 +793,21 @@ class AudioCapture:
         return np.concatenate(blocks)
 
     def stop(self) -> None:
-        # Signal reader first so it exits its loop when the stream close unblocks read()
+        # Set stop flag before abort so the reader's except branch stays silent.
         self._stop_event.set()
-        if self._stream is not None:
-            self._close_stream_safely(self._stream, context='shutdown')
-            self._stream = None
         self._active = False
+        stream = self._stream
+        self._stream = None
+        if stream is not None:
+            # Abort synchronously to unblock any in-progress stream.read() call
+            # immediately.  The reader thread catches the resulting exception,
+            # sees _stop_event set, and breaks without logging.  Only then do we
+            # run the full stop/close sequence — with no reader racing the ALSA
+            # buffer, PortAudio cleans up silently.
+            try:
+                stream.abort()
+            except Exception:
+                pass
         if self._reader_thread is not None:
             self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
             if self._reader_thread.is_alive():
@@ -807,6 +816,8 @@ class AudioCapture:
                     _CLOSE_STREAM_TIMEOUT_S,
                 )
             self._reader_thread = None
+        if stream is not None:
+            self._close_stream_safely(stream, context='shutdown')
 
     @property
     def active(self) -> bool:
