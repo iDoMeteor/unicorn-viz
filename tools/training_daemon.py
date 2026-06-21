@@ -333,7 +333,7 @@ def _parse_args() -> argparse.Namespace:
         help='Run unicorn-viz in a window instead of fullscreen.',
     )
     parser.add_argument(
-        '--device-name', default='Unicorn Training',
+        '--device-name', default='VJ 01',
         help='Name shown in Spotify Connect device list.',
     )
     parser.add_argument(
