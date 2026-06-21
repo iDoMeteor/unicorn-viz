@@ -216,10 +216,12 @@ auto_profile_raver_min_bpm = 126.0
 # the ACF BPM estimate fluctuates near the 105 BPM chill/normie boundary.
 auto_profile_hold_s = 8.0
 # Minimum gap between successive VJ mood profile auto-switches (seconds).
-# Default was 20; raised to 60 — with 8 s hold the effective minimum cycle
-# is already 8 s, so 60 s cooldown prevents back-to-back switches on each
-# confidence fluctuation.
-auto_profile_switch_cooldown_s = 60.0
+# Default was 20; raised to 60; raised again to 120 (2026-06-20) — crossfade-off
+# hard cuts drop confidence to zero briefly, which was causing ~23 mood switches
+# per 43-min chillstep session.  BPM is also now clamped to the active audio
+# profile's hint range before the mood decision, so detector blips above the
+# range (e.g. 125 BPM during a gap in a chillstep set) no longer flip to normie.
+auto_profile_switch_cooldown_s = 120.0
 # Runtime beat-prior sync stability (helps avoid BPM lock wobble when profile key thrashes)
 #audio_profile_sync_hold_s = 12.0
 #audio_profile_sync_min_confidence = 0.35

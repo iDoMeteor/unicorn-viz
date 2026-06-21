@@ -14,12 +14,13 @@ touching `drop-ins/auto-vj-01/beat_grid.py`, `unicornviz/audio/profiles.py`,
 
 ## Beat Detector Engine
 
-**Decision: BeatTracker v2 (ACF + phase-locked oscillator)**
+Decision: BeatTracker v2 (ACF + phase-locked oscillator)
 
 Selected over v1 (spectral flux IOI tracker) because ACF is robust to onset
 density variation and doesn't conflate hi-hat events with kick events.
 
 Key algorithm properties:
+
 - 100 Hz envelope ring (800 samples, 8 s history)
 - ACF run every 8 frames (~7.5 Hz updates)
 - Gaussian BPM prior in log2-tempo space suppresses octave confusion
@@ -33,7 +34,7 @@ available as fallback but is not tuned for current genre targets.
 
 ## Confidence Model
 
-**Decision: phase coherence over 32-onset rolling window**
+Decision: phase coherence over 32-onset rolling window
 
 `_V2_COHERENCE_WINDOW = 32` — values are multiples of 1/32 = 0.03125.
 
@@ -52,7 +53,7 @@ peak ratio is secondary; phase coherence is primary.
 
 ## Lock State Management
 
-**Decision: Schmidt trigger (hysteresis gate) for BPM lock events**
+Decision: Schmidt trigger (hysteresis gate) for BPM lock events
 
 Rationale: a single threshold caused ~1,350 lock-gained / lock-lost events per
 session when confidence hovered around the boundary.  The Schmidt trigger
@@ -76,7 +77,7 @@ sits inside the band by design.
 
 ## Tactus Preference Ratio
 
-**Decision: keep `tactus_preference_ratio` ≥ 0.50 for house/techno material**
+Decision: keep `tactus_preference_ratio` ≥ 0.50 for house/techno material
 
 The ACF tactus descent checks fold factors `(0.5, 2/3, 0.75)`.  At ratio 0.42:
 
@@ -97,7 +98,7 @@ per-profile `tactus_preference_ratio` if that API is added — not globally.
 
 ## Tempo Hold
 
-**Decision: `tempo_hold_s = 10.0`, `silence_reset_s = 15.0`**
+Decision: `tempo_hold_s = 10.0`, `silence_reset_s = 15.0`
 
 Spotify crossfade overlaps last 5–12 s of a track with the incoming track.
 During this window, the incoming track's onset pattern conflicts with the
@@ -117,7 +118,7 @@ resetting.
 
 ## Audio Profile System
 
-**Decision: two independent profile systems — do not conflate them**
+Decision: two independent profile systems — do not conflate them
 
 ### 1. Audio profiles (BPM detector)
 
@@ -148,7 +149,7 @@ These systems are independent.  Audio profile ≠ VJ mood.
 
 ## Chill Profile — Confidence Thresholds (2026-06-20)
 
-**Decision: lowered `mode_entry_min_confidence` from 0.50 → 0.38 in the `chill` preset**
+Decision: lowered `mode_entry_min_confidence` from 0.50 → 0.38 in the `chill` preset
 
 Chillstep training data (mix-02, 43 min) showed the director completely dormant:
 0 drops, 0 impacts, 1 mode transition.  Analysis of the autovj decision log:
@@ -180,7 +181,7 @@ which should yield ~3–8 drops per 43-minute chillstep session.
 
 ## Auto-Profile Raver Threshold
 
-**Decision: `auto_profile_raver_min_bpm = 126.0`**
+Decision: `auto_profile_raver_min_bpm = 126.0`
 
 Peak_time playlist material was consistently detected at ~127.7 BPM.  With
 the threshold at 128.0, every track at that BPM triggered normie instead of
@@ -195,6 +196,21 @@ the raver→normie oscillation.
 
 ---
 
+## VJ Mood — BPM Hint Clamping (2026-06-20)
+
+Decision: clamp BPM to active audio profile's `bpm_hint_max` before mood selection
+
+`_maybe_auto_switch_profile()` now reads `audio_manager.get_profile_bpm_range()`
+and clamps the incoming BPM to that range's upper bound before calling
+`_desired_auto_profile()`.
+
+Motivation: crossfade-off hard cuts caused the detector to briefly read 125 BPM
+during a chillstep gap (profile range 78–108).  That blip mapped to `normie`,
+triggered a mood switch, and the chill preset was lost for the next full cooldown
+period.  Clamping to 108 keeps the mood in `chill` while the detector re-locks.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
@@ -204,6 +220,7 @@ the raver→normie oscillation.
 | 2026-06-20 | `auto_profile_raver_min_bpm = 128.0` | Peak_time material at ~127.7 BPM always triggered normie; lowered to 126.0 |
 | 2026-06-20 | `_BPM_LOCK_CONFIDENCE = 0.52` | house/c churn 612/hr with conf median 0.500 — oscillating across gain threshold; raised to 0.55 |
 | 2026-06-20 | house `bpm_prior_sigma = 0.20` | Too peaked; depressed confidence on tracks at 120 or 128 BPM when prior is 124; widened to 0.35 |
+| 2026-06-20 | `auto_profile_switch_cooldown_s = 60.0` | Chillstep crossfade-off: 23 switches/43 min; raised to 120 s |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 
 ---
