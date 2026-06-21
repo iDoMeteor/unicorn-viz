@@ -31,7 +31,7 @@ UI/Control: banner-01, control-room-01
 
 System: multi-head-01, postfx-01
 
-Integration: spotify-01, spotify-pro-01, streaming-01
+Integration: spotify-01, streaming-01
 
 ---
 
