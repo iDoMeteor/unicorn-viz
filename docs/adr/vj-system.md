@@ -198,6 +198,39 @@ the raver→normie oscillation.
 
 ---
 
+## Recommender → Tracker Profile Apply (no immediate push)
+
+Decision: `_maybe_apply_recommended_audio_profile()` must **not** call
+`_grid.set_profile()` directly; the BPM tracker update is deferred to
+`_sync_grid_audio_profile()` with its existing 12 s hold + 0.35 confidence
+gate.
+
+Previously the apply function pushed the new AudioProfile to the tracker
+immediately after the audio manager accepted it.  This caused a "20 BPM hot"
+regression: switching from chillstep to house shifted the tracker's Gaussian
+prior from mu≈85 to mu≈125, dragging a correctly locked 105 BPM reading up
+to ~125 before any track-tempo evidence had been observed.
+
+The audio manager profile switch still happens immediately (affects spectral
+feature expectations and VJ mood logic).  Only the tracker prior update is
+deferred so the tracker keeps its correct reading while accumulating evidence
+that the new profile is stable.  (2026-06-21)
+
+---
+
+## `tempo_fit` neutral default when no BPM detected
+
+Decision: `tempo_fit = 0.0` (not `-3.0`) when no BPM samples exist in the
+scoring window.
+
+The penalty `−3.0` made all profiles equally bad when BPM was not yet locked,
+causing erratic recommender scores and keeping scores stuck near 0 in the HUD
+during the warmup phase.  Neutral (0.0) skips the tempo term when there is no
+evidence, letting band-fit / spectral signals drive early profile selection.
+The tempo term contributes as soon as BPM evidence accumulates.  (2026-06-21)
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
