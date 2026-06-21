@@ -31,6 +31,7 @@ This is the canonical map for project documentation.
 - Compositor dedup implementation plan (2026-06-18): [docs/planning/compositor-dedup-implementation-plan-2026-06-18.md](planning/compositor-dedup-implementation-plan-2026-06-18.md)
 - Deferred work register (2026-06-18): [docs/planning/deferred-work-2026-06-18.md](planning/deferred-work-2026-06-18.md)
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
+- Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-06-19): [docs/audits/2026-06-19-full-system-audit.md](audits/2026-06-19-full-system-audit.md)
