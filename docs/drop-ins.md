@@ -36,6 +36,7 @@ Complex drop-ins should also include:
 | hacker-terminal-01 | Yes | Not required | Simple effect drop-in |
 | images-01 | Yes | Not required | Media effect drop-in |
 | multi-head-01 | Yes | Yes | Display subsystem |
+| osc-bridge-01 | Yes | Yes | OSC control-surface subsystem |
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
 | sims-01 | Yes | Not required | Media/effect drop-in |
@@ -87,6 +88,11 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/multi-head-01/docs/configuration.md)
   - [Integration](../drop-ins/multi-head-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/multi-head-01/docs/troubleshooting.md)
+- osc-bridge-01
+  - [Operations](../drop-ins/osc-bridge-01/docs/operations.md)
+  - [Configuration](../drop-ins/osc-bridge-01/docs/configuration.md)
+  - [Integration](../drop-ins/osc-bridge-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/osc-bridge-01/docs/troubleshooting.md)
 - postfx-01
   - [Operations](../drop-ins/postfx-01/docs/operations.md)
   - [Configuration](../drop-ins/postfx-01/docs/configuration.md)

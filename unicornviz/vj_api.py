@@ -999,6 +999,39 @@ class VJApi:
         effect.parameters['zoom'] = max(lo, min(hi, float(value)))
         return float(effect.parameters['zoom'])
 
+    def get_effect_parameters(self) -> dict[str, float]:
+        """Return a copy of the current effect's tweakable parameters.
+
+        Public surface for control surfaces (OSC bridge, control room) to
+        enumerate live parameters without reaching into the current effect.
+        """
+        effect = self._app._current_effect  # noqa: SLF001
+        if effect is None:
+            return {}
+        params = getattr(effect, 'parameters', None)
+        return dict(params) if isinstance(params, dict) else {}
+
+    def set_effect_parameter(self, name: str, value: float) -> float | None:
+        """Set a named tweakable parameter on the current effect.
+
+        Returns the new value, or ``None`` when the effect has no such
+        parameter.  ``speed`` and ``zoom`` route through their dedicated setters
+        to preserve phase-continuity / configured clamping; all other named
+        parameters are assigned directly.
+        """
+        effect = self._app._current_effect  # noqa: SLF001
+        if effect is None:
+            return None
+        params = getattr(effect, 'parameters', None)
+        if not isinstance(params, dict) or name not in params:
+            return None
+        if name == 'speed':
+            return self.set_speed(value)
+        if name == 'zoom':
+            return self.set_zoom(value)
+        params[name] = float(value)
+        return float(params[name])
+
     def set_invert(self, enabled: bool) -> bool:
         enabled = bool(enabled)
         if bool(self._app._invert_colors) != enabled:  # noqa: SLF001

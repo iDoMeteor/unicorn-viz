@@ -217,6 +217,14 @@ def _load_beat_flash_controller_class() -> type:
     )
 
 
+def _load_osc_bridge_controller_class() -> type:
+    """Load OscBridgeController from the osc-bridge-01 drop-in."""
+    return load_dropin_symbol(
+        'osc-bridge-01/osc_bridge_controller.py',
+        'OscBridgeController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -264,6 +272,7 @@ class App:
         self._auto_vj = None
         self._spotify = None
         self._audio_out = None
+        self._osc_bridge = None
         self._grand_finale = None
         self._control_room = None
         self._control_room_creating: bool = False
@@ -2429,6 +2438,23 @@ void main() {
                     self._audio_out = None
                     log.warning('AudioOutController not available: %s', exc)
 
+            # OSC control-surface bridge (optional drop-in).
+            osc_cfg = self.cfg.get('osc', default={}) or {}
+            if not isinstance(osc_cfg, dict):
+                osc_cfg = {}
+            if bool(osc_cfg.get('enabled', False)):
+                try:
+                    osc_cls = _load_osc_bridge_controller_class()
+                    self._osc_bridge = osc_cls(self, osc_cfg)
+                    self.vj_api.register_subsystem('osc', self._osc_bridge)
+                    key_handler = getattr(self._osc_bridge, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('osc', key_handler)
+                    log.info('OscBridgeController loaded from drop-in')
+                except Exception as exc:
+                    self._osc_bridge = None
+                    log.warning('OscBridgeController not available: %s', exc)
+
             # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
             try:
                 auto_vj_cls = _load_auto_vj_controller_class()
@@ -2684,6 +2710,12 @@ void main() {
                     self._beat_flash.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('BeatFlashController update failed: %s', exc)
+
+            if self._osc_bridge is not None:
+                try:
+                    self._osc_bridge.update(dt, self._audio or AudioData())
+                except Exception as exc:
+                    log.warning('OscBridgeController update failed: %s', exc)
 
             if self._auto_vj is not None and not manager_modal_active:
                 try:

@@ -74,3 +74,6 @@
 [submodule "drop-ins/beat-flash-01"]
 	path = drop-ins/beat-flash-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-beat-flash-01.git
+[submodule "drop-ins/osc-bridge-01"]
+	path = drop-ins/osc-bridge-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-osc-bridge-01.git

@@ -589,3 +589,16 @@ beat_division = 1            # flash every Nth beat
 mode = "full"                # full | edge | pulse
 color = [1.0, 1.0, 1.0]      # flash colour (RGB 0–1)
 beat_threshold = 0.45        # beat rising-edge trigger threshold
+
+# ── osc-bridge-01 — OSC control surface (TouchOSC / Ableton / Max) ───────────
+# Exposes runtime tweakables over OSC. Inbound server runs on a daemon thread;
+# actions execute on the main thread once per frame. Disabled by default.
+# Bind host = "0.0.0.0" only on trusted networks (OSC is unauthenticated).
+# Address scheme is documented in drop-ins/osc-bridge-01/README.md.
+[osc]
+enabled = false
+host = "127.0.0.1"          # inbound bind address
+port = 9000                 # inbound UDP port
+feedback = false            # publish /uv/state/bpm and /uv/state/beat
+send_host = "127.0.0.1"     # outbound feedback host
+send_port = 9001            # outbound feedback port
