@@ -130,10 +130,10 @@ scopes = [
 	"playlist-read-collaborative",
 ]
 token_store = "runtime/spotify-token.json"
-poll_interval_s = 1.5
+poll_interval_s = 3.0
 http_timeout_s = 1.0
-queue_poll_every_n = 3
-playlist_poll_every_n = 8
+queue_poll_every_n = 2
+playlist_poll_every_n = 10
 resolve_queue = true
 resolve_playlist_context = true
 # NOTE: local PKCE auth intentionally does not store a client secret here.

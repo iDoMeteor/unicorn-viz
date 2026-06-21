@@ -61,6 +61,15 @@ class AudioProfile:
     bpm_hint_min: float | None = None
     bpm_hint_max: float | None = None
 
+    # Spectral features for the profile recommender.  Set to None to skip
+    # scoring on that dimension (safe for profiles without calibrated values).
+    # spectral_centroid_mu: frequency-weighted mean of spectrum (Hz) — "brightness"
+    # zcr_mu: zero-crossing rate per sample — correlates with harshness/noise content
+    # onset_density_mu: expected onset events per second (with kick-biased weighting)
+    spectral_centroid_mu: float | None = None
+    zcr_mu: float | None = None
+    onset_density_mu: float | None = None
+
     def preferred_bpm_range(self) -> tuple[int, int]:
         """Return a concise user-facing BPM sweet-spot range.
 
@@ -113,6 +122,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.35,
         bpm_hint_min=120.0,
         bpm_hint_max=128.0,
+        spectral_centroid_mu=1500.0,
+        zcr_mu=0.060,
+        onset_density_mu=2.5,
     ),
     "tech_house": AudioProfile(
         name="Tech House",
@@ -136,6 +148,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.16,
         bpm_hint_min=122.0,
         bpm_hint_max=130.0,
+        spectral_centroid_mu=1700.0,
+        zcr_mu=0.065,
+        onset_density_mu=2.8,
     ),
     "peak_time": AudioProfile(
         name="Peak-Time",
@@ -159,6 +174,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.24,
         bpm_hint_min=126.0,
         bpm_hint_max=136.0,
+        spectral_centroid_mu=2000.0,
+        zcr_mu=0.072,
+        onset_density_mu=3.2,
     ),
     "trance": AudioProfile(
         name="Trance",
@@ -184,6 +202,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.20,
         bpm_hint_min=134.0,
         bpm_hint_max=142.0,
+        spectral_centroid_mu=2200.0,
+        zcr_mu=0.080,
+        onset_density_mu=3.5,
     ),
     "psytrance": AudioProfile(
         name="Psytrance",
@@ -207,6 +228,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.16,
         bpm_hint_min=140.0,
         bpm_hint_max=149.0,
+        spectral_centroid_mu=2500.0,
+        zcr_mu=0.090,
+        onset_density_mu=4.0,
     ),
     "electronic": AudioProfile(
         name="Electronic",
@@ -231,6 +255,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.35,
         bpm_hint_min=118.0,
         bpm_hint_max=132.0,
+        spectral_centroid_mu=1600.0,
+        zcr_mu=0.065,
+        onset_density_mu=2.5,
     ),
     "hardgroove": AudioProfile(
         name="Hardgroove",
@@ -254,6 +281,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.18,
         bpm_hint_min=132.0,
         bpm_hint_max=140.0,
+        spectral_centroid_mu=1800.0,
+        zcr_mu=0.068,
+        onset_density_mu=3.2,
     ),
     "uk_garage": AudioProfile(
         name="UK Garage",
@@ -277,6 +307,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.20,
         bpm_hint_min=128.0,
         bpm_hint_max=136.0,
+        spectral_centroid_mu=1700.0,
+        zcr_mu=0.068,
+        onset_density_mu=2.8,
     ),
     "breaks": AudioProfile(
         name="Breaks",
@@ -300,6 +333,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.28,
         bpm_hint_min=132.0,
         bpm_hint_max=145.0,
+        spectral_centroid_mu=1900.0,
+        zcr_mu=0.075,
+        onset_density_mu=3.5,
     ),
     "hard_techno": AudioProfile(
         name="Hard Techno",
@@ -323,6 +359,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.22,
         bpm_hint_min=142.0,
         bpm_hint_max=154.0,
+        spectral_centroid_mu=2000.0,
+        zcr_mu=0.075,
+        onset_density_mu=3.5,
     ),
     "rock": AudioProfile(
         name="Rock",
@@ -347,6 +386,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.28,
         bpm_hint_min=110.0,
         bpm_hint_max=138.0,
+        spectral_centroid_mu=2500.0,
+        zcr_mu=0.110,
+        onset_density_mu=3.0,
     ),
     "metal": AudioProfile(
         name="Metal / Extreme",
@@ -371,6 +413,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.24,
         bpm_hint_min=134.0,
         bpm_hint_max=170.0,
+        spectral_centroid_mu=3500.0,
+        zcr_mu=0.165,
+        onset_density_mu=5.5,
     ),
     "fire_dj": AudioProfile(
         name="Fire DJ",
@@ -399,6 +444,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.32,
         bpm_hint_min=132.0,
         bpm_hint_max=170.0,
+        spectral_centroid_mu=2100.0,
+        zcr_mu=0.076,
+        onset_density_mu=3.8,
     ),
     "drum_and_bass": AudioProfile(
         name="Drum & Bass",
@@ -422,6 +470,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.18,
         bpm_hint_min=168.0,
         bpm_hint_max=178.0,
+        spectral_centroid_mu=2200.0,
+        zcr_mu=0.085,
+        onset_density_mu=4.5,
     ),
     "rap": AudioProfile(
         name="Rap / Hip-Hop",
@@ -446,6 +497,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.80,
         bpm_prior_mu=88.0,
         bpm_prior_sigma=0.30,
+        spectral_centroid_mu=1600.0,
+        zcr_mu=0.060,
+        onset_density_mu=2.0,
     ),
     "hyphy": AudioProfile(
         name="Hyphy",
@@ -469,6 +523,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.80,
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.25,
+        spectral_centroid_mu=1800.0,
+        zcr_mu=0.068,
+        onset_density_mu=2.5,
     ),
     "r&b": AudioProfile(
         name="R&B / Soul",
@@ -491,6 +548,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.7,
         bpm_prior_mu=85.0,
         bpm_prior_sigma=0.30,
+        spectral_centroid_mu=1400.0,
+        zcr_mu=0.052,
+        onset_density_mu=1.8,
     ),
     "generic": AudioProfile(
         name="Generic",
@@ -516,6 +576,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.55,
         bpm_hint_min=108.0,
         bpm_hint_max=132.0,
+        spectral_centroid_mu=1600.0,
+        zcr_mu=0.065,
+        onset_density_mu=2.5,
     ),
     "classical": AudioProfile(
         name="Classical / Orchestral",
@@ -538,6 +601,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=1.0,
         bpm_prior_mu=110.0,
         bpm_prior_sigma=0.50,
+        spectral_centroid_mu=2000.0,
+        zcr_mu=0.068,
+        onset_density_mu=0.5,
     ),
     "ambient": AudioProfile(
         name="Ambient / Chillout",
@@ -565,6 +631,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.60,
         bpm_hint_min=84.0,
         bpm_hint_max=116.0,
+        spectral_centroid_mu=800.0,
+        zcr_mu=0.030,
+        onset_density_mu=0.4,
     ),
     "chillstep": AudioProfile(
         name="Chillstep / Downtempo",
@@ -600,6 +669,9 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.50,
         bpm_hint_min=78.0,
         bpm_hint_max=112.0,
+        spectral_centroid_mu=900.0,
+        zcr_mu=0.040,
+        onset_density_mu=1.5,
     ),
     "pop": AudioProfile(
         name="Pop",
@@ -622,6 +694,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.8,
         bpm_prior_mu=110.0,
         bpm_prior_sigma=0.30,
+        spectral_centroid_mu=1800.0,
+        zcr_mu=0.072,
+        onset_density_mu=2.5,
     ),
 }
 

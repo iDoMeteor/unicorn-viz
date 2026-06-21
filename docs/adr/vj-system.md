@@ -196,19 +196,6 @@ the raver→normie oscillation.
 
 ---
 
-## VJ Mood — BPM Hint Clamping (2026-06-20)
-
-Decision: clamp BPM to active audio profile's `bpm_hint_max` before mood selection
-
-`_maybe_auto_switch_profile()` now reads `audio_manager.get_profile_bpm_range()`
-and clamps the incoming BPM to that range's upper bound before calling
-`_desired_auto_profile()`.
-
-Motivation: crossfade-off hard cuts caused the detector to briefly read 125 BPM
-during a chillstep gap (profile range 78–108).  That blip mapped to `normie`,
-triggered a mood switch, and the chill preset was lost for the next full cooldown
-period.  Clamping to 108 keeps the mood in `chill` while the detector re-locks.
-
 ---
 
 ## Superseded Decisions
@@ -221,6 +208,7 @@ period.  Clamping to 108 keeps the mood in `chill` while the detector re-locks.
 | 2026-06-20 | `_BPM_LOCK_CONFIDENCE = 0.52` | house/c churn 612/hr with conf median 0.500 — oscillating across gain threshold; raised to 0.55 |
 | 2026-06-20 | house `bpm_prior_sigma = 0.20` | Too peaked; depressed confidence on tracks at 120 or 128 BPM when prior is 124; widened to 0.35 |
 | 2026-06-20 | `auto_profile_switch_cooldown_s = 60.0` | Chillstep crossfade-off: 23 switches/43 min; raised to 120 s |
+| 2026-06-21 | BPM hint-range clamp in `_maybe_auto_switch_profile()` | Clamping BPM to `bpm_hint_max` prevented mood from ever escaping chill when playing wrong-genre playlist (peak-time at 127 BPM clamped to 108 → stuck in chill forever); the 120 s cooldown alone is sufficient protection against crossfade-off blips |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 
 ---
