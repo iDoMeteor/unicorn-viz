@@ -2792,7 +2792,7 @@ void main() {
                         label = display_name if display_name else 'authenticated'
                         spotify_auth_status = f'{label} active'
                     elif auth_status in ('needs_auth', 'not_configured', ''):
-                        spotify_auth_status = 'Sh+M to auth'
+                        spotify_auth_status = 'Ctrl+Alt+S to auth'
                     else:
                         spotify_auth_status = auth_status.replace('_', ' ')
 

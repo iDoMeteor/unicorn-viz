@@ -649,7 +649,7 @@ class Overlays:
             'streaming_provider': '-',
             'spotify_visible': 'NO',
             'spotify_auth_visible': 'NO',
-            'spotify_auth_status': 'Sh+M to auth',
+            'spotify_auth_status': 'Ctrl+Alt+S to auth',
             'spotify_status': 'OFF',
             'spotify_track': '-',
             'spotify_artist': '-',
