@@ -67,25 +67,57 @@ after phase_tol or coherence window changes.
 
 ---
 
-## LLM Detector Scoring
+## LLM Scoring Pipeline
 
-**Decision: GPT-4o primary, claude-opus-4-8 fallback**
+**Decision: GPT-4o primary, claude-opus-4-8 fallback; three subsystems scored in one prompt**
 
-Detection order: `OPENAI_API_KEY` → `ANTHROPIC_API_KEY`.  Scores 5 dimensions:
+Detection order: `OPENAI_API_KEY` → `ANTHROPIC_API_KEY`.
+
+### Detector (PART 1)
+
+Scores 5 dimensions:
 
 1. `lock_stability` — persistence of beat lock, low churn
 2. `tempo_plausibility` — BPM range believable for genre
 3. `confidence_reliability` — confidence correlates with actual lock behaviour
 4. `musical_alignment` — beat grid aligns with perceived musical structure
-5. `external_agreement` — (not yet wired; requires Essentia reference data)
-
-**Unicode fix (2026-06-20):** GPT-4o was returning en-dashes (U+2013) in
-display names as DC3 control characters (U+0013).  The packager now restores
-display fields from the original payload after JSON extraction, keyed by song
-`key`, before writing `detector_score.json`.
+5. `external_agreement` — alignment with Essentia reference BPM (null if unavailable)
 
 Per-song `lock_coverage_pct` in the LLM payload uses the same
 `_BPM_LOCK_CONFIDENCE_FLOOR = 0.45` threshold as the scorecard.
+
+### Recommender (PART 2) — added 2026-06-20
+
+Scores 4 dimensions:
+
+1. `profile_accuracy` — recommended profiles match actual music genre/tempo
+2. `switch_timing` — profile switches happen at sensible BPM/energy transitions
+3. `hint_integration` — active profile's BPM hint range aligns with detected BPM
+4. `mismatch_management` — rate of recommendation ≠ active profile is reasonable
+
+Payload contains: `stats` (switch count, mismatch_pct, hint_alignment_pct,
+recommended vs actual distribution) and `switch_history` (up to 30 switches with
+BPM/confidence context and what was being recommended at each switch point).
+
+Output: `recommender_score.{json,md}` written alongside `detector_score.*` and
+`director_score.*`.
+
+LLM quality score for recommender replaces the local reversal-rate formula in
+the score table when available.
+
+### Director (PART 3)
+
+Scores 4 dimensions:
+
+1. `build_quality` — build entries triggered at genuinely rising energy
+2. `drop_quality` — drops/impacts fired at high-energy moments
+3. `energy_coherence` — audio signals justify each director action
+4. `opportunity_usage` — director acts on high-energy windows
+
+Unicode fix (2026-06-20): GPT-4o was returning en-dashes (U+2013) in
+display names as DC3 control characters (U+0013).  The packager now restores
+display fields from the original payload after JSON extraction, keyed by song
+`key`, before writing `detector_score.json`.
 
 ---
 

@@ -264,6 +264,7 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
     events = Counter(r.get('event_type') for r in seq_rows if r.get('event_type'))
     audio_profiles = Counter(r.get('audio_profile_key') for r in seq_rows if r.get('audio_profile_key'))
     vj_profiles = Counter(r.get('vj_profile') for r in seq_rows if r.get('vj_profile'))
+    vj_modes = Counter(r.get('vj_mode') for r in seq_rows if r.get('vj_mode'))
 
     mode_transitions = int(events.get('mode_transition', 0))
     drop_fires = int(events.get('drop_fire', 0))
@@ -278,6 +279,18 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
     vj_profile_lines = ['- `n/a`: `0`']
     if vj_profiles:
         vj_profile_lines = [f'- `{key}`: `{count}`' for key, count in vj_profiles.most_common()]
+
+    total_mode_rows = sum(vj_modes.values()) or 1
+    mode_order = ['CRUISE', 'BUILD', 'DROP', 'IMPACT', 'CLIMAX', 'BREAKDOWN']
+    vj_mode_lines = ['- `n/a`: `0`']
+    if vj_modes:
+        vj_mode_lines = [
+            f'- `{mode}`: `{vj_modes.get(mode, 0)}` ({vj_modes.get(mode, 0) / total_mode_rows * 100:.1f}%)'
+            for mode in mode_order if vj_modes.get(mode, 0) > 0
+        ]
+        other_modes = {k: v for k, v in vj_modes.items() if k not in mode_order}
+        for mode, count in sorted(other_modes.items()):
+            vj_mode_lines.append(f'- `{mode}`: `{count}` ({count / total_mode_rows * 100:.1f}%)')
 
     lines = [
         '# Auto VJ Training Scorecard',
@@ -321,6 +334,10 @@ def _write_scorecard(bucket_dir: Path, live_path: Path, seq_path: Path) -> tuple
         '## VJ Mood Profile Mix',
         '',
         *vj_profile_lines,
+        '',
+        '## VJ Mode Distribution',
+        '',
+        *vj_mode_lines,
         '',
         '## Ratings',
         '',
@@ -706,6 +723,76 @@ def _build_detector_payload(
     }
 
 
+def _build_recommender_payload(
+    seq_rows: list[dict],
+    duration_min: float | None,
+    set_id: str,
+    bucket_id: str,
+) -> dict:
+    """Build compact recommender scoring payload for the LLM."""
+    hb_rows = [r for r in seq_rows if not r.get('event_type')]
+    total_hb = len(hb_rows) or 1
+    switch_rows = [r for r in seq_rows if r.get('event_type') == 'profile_switch']
+
+    # Distribution of recommended vs actual audio profiles
+    recommended_dist: Counter = Counter(
+        r.get('recommended_profile_key') for r in hb_rows if r.get('recommended_profile_key')
+    )
+    actual_dist: Counter = Counter(
+        r.get('audio_profile_key') for r in hb_rows if r.get('audio_profile_key')
+    )
+
+    # Mismatch: rows where the recommendation differed from the active profile
+    mismatch_rows = [
+        r for r in hb_rows
+        if r.get('recommended_profile_key')
+        and r.get('recommended_profile_key') != r.get('audio_profile_key')
+    ]
+    mismatch_pct = round(100.0 * len(mismatch_rows) / total_hb, 1)
+
+    # BPM hint alignment: how often detected BPM was inside the active profile's range
+    in_range = 0
+    range_applicable = 0
+    for r in hb_rows:
+        bpm = r.get('bpm')
+        bpm_min = r.get('audio_profile_bpm_min')
+        bpm_max = r.get('audio_profile_bpm_max')
+        if isinstance(bpm, (int, float)) and bpm > 0 and isinstance(bpm_min, (int, float)) and isinstance(bpm_max, (int, float)):
+            range_applicable += 1
+            if bpm_min <= bpm <= bpm_max:
+                in_range += 1
+    hint_alignment_pct = round(100.0 * in_range / range_applicable, 1) if range_applicable else None
+
+    # Profile switch history (compact)
+    switch_history = []
+    for r in switch_rows[:30]:
+        entry: dict = {
+            't': r.get('analysis_generated_at', ''),
+            'from_profile': r.get('profile', r.get('audio_profile_key', '')),
+            'to_profile': r.get('new_profile', r.get('profile_preset', '')),
+            'bpm': round(float(r['bpm']), 1) if isinstance(r.get('bpm'), (int, float)) else None,
+            'bpm_confidence': round(float(r['bpm_confidence']), 3) if isinstance(r.get('bpm_confidence'), (int, float)) else None,
+            'recommended_at_switch': r.get('recommended_profile_key'),
+            'recommended_score': round(float(r['recommended_profile_score']), 3) if isinstance(r.get('recommended_profile_score'), (int, float)) else None,
+        }
+        entry = {k: v for k, v in entry.items() if v is not None and v != ''}
+        switch_history.append(entry)
+
+    return {
+        'set_id': set_id,
+        'bucket_id': bucket_id,
+        'duration_min': round(duration_min, 1) if duration_min is not None else None,
+        'stats': {
+            'profile_switches': len(switch_rows),
+            'mismatch_pct': mismatch_pct,
+            'hint_alignment_pct': hint_alignment_pct,
+            'recommended_profile_distribution': dict(recommended_dist.most_common()),
+            'actual_profile_distribution': dict(actual_dist.most_common()),
+        },
+        'switch_history': switch_history,
+    }
+
+
 def _detect_llm_provider() -> tuple[str | None, str | None]:
     """Return (provider, api_key) for the first available LLM API key."""
     openai_key = os.environ.get('OPENAI_API_KEY', '').strip()
@@ -717,8 +804,12 @@ def _detect_llm_provider() -> tuple[str | None, str | None]:
     return None, None
 
 
-def _build_combined_prompt(detector_payload: dict, director_payload: dict) -> str:
-    """Build a single LLM prompt that scores the BPM detector and VJ director together."""
+def _build_combined_prompt(
+    detector_payload: dict,
+    director_payload: dict,
+    recommender_payload: dict | None = None,
+) -> str:
+    """Build a single LLM prompt that scores the BPM detector, recommender, and VJ director."""
     essentia_note = (
         'No Essentia reference BPM data is available; score external_agreement as null.'
         if not detector_payload.get('essentia_available')
@@ -730,9 +821,11 @@ def _build_combined_prompt(detector_payload: dict, director_payload: dict) -> st
     det_copy = {k: v for k, v in detector_payload.items() if k != 'set_description'}
     det_json = json.dumps(det_copy, indent=2, ensure_ascii=False)
     dir_json = json.dumps(director_payload, indent=2, ensure_ascii=False)
+    rec_json = json.dumps(recommender_payload, indent=2, ensure_ascii=False) if recommender_payload else 'null'
 
-    return f"""You are evaluating an automated live VJ system built on a real-time BPM detector and \
-a rule-based VJ director. Score both subsystems from the session data below.{desc_note}
+    return f"""You are evaluating an automated live VJ system built on a real-time BPM detector, \
+an audio profile recommender, and a rule-based VJ director. Score all three subsystems from the \
+session data below.{desc_note}
 
 ━━━━━━━━━━━━━━━━━ PART 1 — BPM DETECTOR ━━━━━━━━━━━━━━━━━
 
@@ -749,7 +842,32 @@ Scoring guide: 5=excellent, 4=good, 3=acceptable, 2=poor, 1=very poor, 0=failure
 Detector data:
 {det_json}
 
-━━━━━━━━━━━━━━━━━ PART 2 — VJ DIRECTOR ━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━ PART 2 — AUDIO PROFILE RECOMMENDER ━━━━
+
+The recommender watches audio features and BPM to suggest the best matching audio profile
+(e.g. house, chillstep, trance). The operator can override at any time; a "mismatch" means
+the suggestion differed from the active profile. High mismatch can be correct (operator
+curating) or a sign the recommender is confused about the genre.
+
+Key stats:
+- mismatch_pct: % of time the recommendation differed from the active profile
+- hint_alignment_pct: % of time the detected BPM was inside the active profile's BPM range
+- switch_history: each profile switch with BPM context and what was recommended at that moment
+
+Score on four dimensions (0-5 integer each):
+1. profile_accuracy: Are the recommended profiles matching the actual music genre/tempo? \
+   (house at 125 BPM → recommending house = correct)
+2. switch_timing: Are profile switches happening at sensible BPM/energy transitions, \
+   not arbitrary mid-song moments?
+3. hint_integration: Is the active profile's BPM range well-aligned with detected BPM? \
+   Low alignment means the profile's hint range is wrong for this playlist.
+4. mismatch_management: When recommendation ≠ active, is the mismatch rate reasonable \
+   (operator was right to override, or system correctly identified genre drift)?
+
+Recommender data:
+{rec_json}
+
+━━━━━━━━━━━━━━━━━ PART 3 — VJ DIRECTOR ━━━━━━━━━━━━━━━━━━
 
 The director watches audio energy and the BPM detector to trigger visual transitions
 (build → drop → impact). The events list shows audio signals at each director action.
@@ -801,6 +919,21 @@ Return ONLY valid JSON — no markdown, no prose — matching this schema exactl
       "external_agreement": "<explanation or No Essentia data>"
     }},
     "caveats": ["<caveat strings>"]
+  }},
+  "recommender": {{
+    "scores": {{
+      "profile_accuracy": <int 0-5>,
+      "switch_timing": <int 0-5>,
+      "hint_integration": <int 0-5>,
+      "mismatch_management": <int 0-5>
+    }},
+    "overall": <float, average of the four dimensions>,
+    "rationale": {{
+      "profile_accuracy": "<explanation>",
+      "switch_timing": "<explanation>",
+      "hint_integration": "<explanation>",
+      "mismatch_management": "<explanation>"
+    }}
   }},
   "director": {{
     "scores": {{
@@ -881,8 +1014,10 @@ def _print_combined_score_table(
     sep = '━' * W
 
     llm_det = (llm_data or {}).get('detector', {})
+    llm_rec = (llm_data or {}).get('recommender', {})
     llm_dir = (llm_data or {}).get('director', {})
     llm_det_scores = llm_det.get('scores', {})
+    llm_rec_scores = llm_rec.get('scores', {})
     llm_dir_scores = llm_dir.get('scores', {})
 
     def _avg_dims(scores: dict, keys: list[str]) -> float | None:
@@ -891,6 +1026,9 @@ def _print_combined_score_table(
 
     # Quality: musical judgement dims only (stability/responsiveness are handled locally)
     det_quality = _avg_dims(llm_det_scores, ['tempo_plausibility', 'musical_alignment'])
+    rec_quality_llm = _avg_dims(
+        llm_rec_scores, ['profile_accuracy', 'switch_timing', 'hint_integration', 'mismatch_management']
+    )
     dir_quality = _avg_dims(
         llm_dir_scores, ['build_quality', 'drop_quality', 'energy_coherence', 'opportunity_usage']
     )
@@ -909,8 +1047,11 @@ def _print_combined_score_table(
         present = [v for v in vals if v is not None]
         return round(sum(present) / len(present), 1) if present else None
 
+    # Use LLM quality for recommender if available, fall back to local formula quality
+    rec_quality_final = rec_quality_llm if rec_quality_llm is not None else lr.get('quality')
+
     det_overall = _col_avg(ld.get('stability'), ld.get('responsiveness'), det_quality)
-    rec_overall = _col_avg(lr.get('stability'), lr.get('responsiveness'), lr.get('quality'))
+    rec_overall = _col_avg(lr.get('stability'), lr.get('responsiveness'), rec_quality_final)
     dir_overall = _col_avg(li.get('stability'), li.get('responsiveness'), dir_quality)
     grand_vals = [v for v in (det_overall, rec_overall, dir_overall) if v is not None]
     grand_total = round(sum(grand_vals) / len(grand_vals), 1) if grand_vals else None
@@ -927,7 +1068,7 @@ def _print_combined_score_table(
     print(_row('Stability  (local)', ld.get('stability'), lr.get('stability'), li.get('stability')))
     print(_row('Responsiveness (local)', ld.get('responsiveness'), lr.get('responsiveness'), li.get('responsiveness')))
     q_label = f'Quality{llm_tag[:18]}'
-    print(_row(q_label, det_quality, lr.get('quality'), dir_quality))
+    print(_row(q_label, det_quality, rec_quality_final, dir_quality))
     print()
     print(f'  {"─" * (W - 2)}')
     print(_row('Overall', det_overall, rec_overall, dir_overall))
@@ -945,6 +1086,14 @@ def _print_combined_score_table(
                         'musical_alignment', 'external_agreement']:
                 val = llm_det_scores.get(dim)
                 note = (llm_det.get('rationale') or {}).get(dim, '')[:68]
+                print(f'    {dim:<30} {str(val) if val is not None else "n/a":>3}   {note}')
+            print()
+
+        if llm_rec_scores:
+            print('  Recommender (LLM):')
+            for dim in ['profile_accuracy', 'switch_timing', 'hint_integration', 'mismatch_management']:
+                val = llm_rec_scores.get(dim)
+                note = (llm_rec.get('rationale') or {}).get(dim, '')[:68]
                 print(f'    {dim:<30} {str(val) if val is not None else "n/a":>3}   {note}')
             print()
 
@@ -1095,6 +1244,53 @@ def _format_director_score_md(score: dict, set_id: str, bucket_id: str) -> str:
     return '\n'.join(lines) + '\n'
 
 
+def _format_recommender_score_md(score: dict, set_id: str, bucket_id: str) -> str:
+    """Render recommender_score.md from a parsed recommender score dict."""
+    scores = score.get('scores', {})
+    overall = score.get('overall', 'n/a')
+    rationale = score.get('rationale', {})
+    provider = score.get('provider', 'llm')
+    scored_at = score.get('scored_at', 'n/a')
+
+    def _s(v: object) -> str:
+        return 'n/a' if v is None else str(v)
+
+    lines: list[str] = [
+        '# Auto VJ Recommender Score',
+        '',
+        f'Owner: auto-generated by tools/package_training_set.py ({provider})',
+        'Status: generated',
+        f'Last updated: {datetime.date.today().isoformat()}',
+        '',
+        f'- Set: `{set_id}`',
+        f'- Bucket: `{bucket_id}`',
+        f'- Scored at: `{scored_at}`',
+        f'- Provider: `{provider}`',
+        '',
+        '## Dimension Scores',
+        '',
+        '| Dimension | Score |',
+        '|---|---|',
+        f'| Profile Accuracy | {_s(scores.get("profile_accuracy"))} / 5 |',
+        f'| Switch Timing | {_s(scores.get("switch_timing"))} / 5 |',
+        f'| Hint Integration | {_s(scores.get("hint_integration"))} / 5 |',
+        f'| Mismatch Management | {_s(scores.get("mismatch_management"))} / 5 |',
+        f'| **Overall** | **{_s(overall)} / 5** |',
+        '',
+        '## Rationale',
+        '',
+    ]
+    for key, label in [
+        ('profile_accuracy', 'Profile Accuracy'),
+        ('switch_timing', 'Switch Timing'),
+        ('hint_integration', 'Hint Integration'),
+        ('mismatch_management', 'Mismatch Management'),
+    ]:
+        lines.extend([f'### {label}', '', _s(rationale.get(key)), ''])
+
+    return '\n'.join(lines) + '\n'
+
+
 def _generate_set_description_once(root: Path, set_dir: Path, bucket_dir: Path) -> tuple[str, Path, str]:
     """Generate one set-level TRAINING_SET_DESCRIPTION.md, skipping if it already exists."""
     import subprocess
@@ -1174,7 +1370,8 @@ def _run_llm_scoring(
         seq_rows, set_id, bucket_id, set_description, live_rows=live_rows
     )
     director_payload = _build_director_payload(seq_rows, duration_min, set_id, bucket_id)
-    prompt = _build_combined_prompt(detector_payload, director_payload)
+    recommender_payload = _build_recommender_payload(seq_rows, duration_min, set_id, bucket_id)
+    prompt = _build_combined_prompt(detector_payload, director_payload, recommender_payload)
 
     try:
         response_text = _call_llm(provider, api_key, prompt)
@@ -1207,6 +1404,16 @@ def _run_llm_scoring(
     det_json_path.write_text(json.dumps(det_score, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     (bucket_dir / 'detector_score.md').write_text(
         _format_detector_score_md(det_score, set_id, bucket_id), encoding='utf-8'
+    )
+
+    # ── Write recommender_score.{json,md} ────────────────────────────────────
+    rec_score = dict(llm_data.get('recommender', {}))
+    rec_score.update({'set_id': set_id, 'bucket_id': bucket_id, 'provider': provider,
+                      'scored_at': llm_data.get('scored_at', now_iso)})
+    rec_json_path = bucket_dir / 'recommender_score.json'
+    rec_json_path.write_text(json.dumps(rec_score, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    (bucket_dir / 'recommender_score.md').write_text(
+        _format_recommender_score_md(rec_score, set_id, bucket_id), encoding='utf-8'
     )
 
     # ── Write director_score.{json,md} ────────────────────────────────────────
