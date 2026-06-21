@@ -252,7 +252,7 @@ def _start_unicornviz(
 # Packager
 # ---------------------------------------------------------------------------
 
-def _run_packager(app_dir: Path, set_name: str, session_notes: str) -> int:
+def _run_packager(app_dir: Path, set_name: str | None, session_notes: str) -> int:
     python_bin = _require('python3')
     # Run the packager from the training deploy so it picks up corpus files
     # under app_dir/assets/training/.
@@ -261,7 +261,11 @@ def _run_packager(app_dir: Path, set_name: str, session_notes: str) -> int:
         _LOG.warning('packager not found at %s; falling back to %s', packager_in_deploy, _PACKAGER)
         packager_in_deploy = _PACKAGER
 
-    cmd = [python_bin, str(packager_in_deploy), '--no-prompt', '--set-name', set_name]
+    cmd = [python_bin, str(packager_in_deploy), '--no-prompt']
+    if set_name:
+        cmd += ['--set-name', set_name]
+    # When set_name is absent the packager auto-discovers the playlist name
+    # from playlist_context / playlist_detected marks in the session logs.
     if session_notes:
         cmd += ['--session-notes', session_notes]
 
@@ -279,8 +283,10 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '--playlist-name', required=True, metavar='TEXT',
-        help='Spotify playlist name — used to build the set directory name.',
+        '--playlist-name', default='', metavar='TEXT',
+        help='Spotify playlist name — slugified into the set directory name.  '
+             'If omitted, the packager auto-discovers the name from playlist '
+             'marks in the session logs.',
     )
     parser.add_argument(
         '--app-dir', required=True, type=Path, metavar='PATH',
@@ -321,8 +327,8 @@ def main() -> int:
     if not app_dir.is_dir():
         sys.exit(f'ERROR: --app-dir does not exist: {app_dir}')
 
-    set_name = _set_name(args.playlist_name)
-    _LOG.info('set name: %s', set_name)
+    set_name = _set_name(args.playlist_name) if args.playlist_name.strip() else None
+    _LOG.info('set name: %s', set_name or '(auto-discover from corpus)')
     _LOG.info('app dir:  %s', app_dir)
 
     # ---- null sink ----------------------------------------------------------
@@ -356,7 +362,7 @@ def main() -> int:
         return 0
 
     # ---- unicorn-viz --------------------------------------------------------
-    print(f'\nLaunching unicorn-viz (set: {set_name}) …')
+    print(f'\nLaunching unicorn-viz (set: {set_name or "auto"}) …')
     uviz_proc = _start_unicornviz(app_dir, args.display, args.sink_name, args.windowed)
     _cleanup_fns.append(lambda p=uviz_proc: _kill_proc(p, 'unicorn-viz'))
 

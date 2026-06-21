@@ -63,13 +63,16 @@ def _prompt_playlist_name() -> str:
         return slug
 
 
+_PLAYLIST_ACTIONS = frozenset({'playlist_context', 'playlist_detected'})
+
+
 def _infer_playlist_name_from_logs(logs_dir: Path) -> str | None:
     """Return a slugified set name inferred from autovj decision logs.
 
-    Scans JSONL files under logs_dir for entries written by the engine when
-    a Spotify playlist context is first resolved (action == 'playlist_context').
-    Returns the most common playlist name found, slugified.  Returns None if
-    no playlist_context entries are present.
+    Scans JSONL files under logs_dir for entries written by the engine when a
+    Spotify playlist is detected (action in {'playlist_context',
+    'playlist_detected'}).  Returns the most common playlist name found,
+    slugified.  Returns None if no such entries are present.
     """
     counts: dict[str, int] = {}
     for log_path in sorted(logs_dir.rglob('*.jsonl')):
@@ -85,7 +88,7 @@ def _infer_playlist_name_from_logs(logs_dir: Path) -> str | None:
                         continue
                     if not isinstance(entry, dict):
                         continue
-                    if entry.get('action') == 'playlist_context':
+                    if entry.get('action') in _PLAYLIST_ACTIONS:
                         name = entry.get('name', '')
                         if name and isinstance(name, str):
                             name = name.strip()

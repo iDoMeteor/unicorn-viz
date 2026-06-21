@@ -2786,13 +2786,14 @@ void main() {
                     pct = int(round(min(100.0, (pos / dur) * 100.0))) if dur > 0.0 else 0
                     spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
                     spotify_auth_visible = 'YES' if bool(_spotify_snap.get('web_api_enabled', False)) else 'NO'
-                    auth_status = str(_spotify_snap.get('auth_status', '') or '').strip().upper()
-                    token_expires = float(_spotify_snap.get('token_expires_in_s', 0.0) or 0.0)
-                    queue_len = int(_spotify_snap.get('queue_len', 0) or 0)
+                    auth_status = str(_spotify_snap.get('auth_status', '') or '').strip()
+                    display_name = str(_spotify_snap.get('display_name', '') or '').strip()
                     if bool(_spotify_snap.get('auth_ready', False)):
-                        mins = max(0, int(round(token_expires / 60.0)))
-                        spotify_auth_status = f'READY {mins}M Q{queue_len}'
-                    elif auth_status:
+                        label = display_name if display_name else 'authenticated'
+                        spotify_auth_status = f'{label} active'
+                    elif auth_status in ('needs_auth', 'not_configured', ''):
+                        spotify_auth_status = 'Sh+M to auth'
+                    else:
                         spotify_auth_status = auth_status.replace('_', ' ')
 
                 slot_label = 'PRESET IDX'
