@@ -28,6 +28,7 @@ Complex drop-ins should also include:
 | auto-vj-01 | Yes | Yes | Automation subsystem |
 | banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
+| color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
 | cyber-war-01 | Yes | Not required | Simple effect drop-in |
 | disco-ball-01 | Yes | Not required | Simple effect drop-in |
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
@@ -63,6 +64,11 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/banner-01/docs/configuration.md)
   - [Integration](../drop-ins/banner-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/banner-01/docs/troubleshooting.md)
+- color-grade-01
+  - [Operations](../drop-ins/color-grade-01/docs/operations.md)
+  - [Configuration](../drop-ins/color-grade-01/docs/configuration.md)
+  - [Integration](../drop-ins/color-grade-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/color-grade-01/docs/troubleshooting.md)
 - control-room-01
   - [Planning](planning/drop-in-planning.md)
   - [Operations](../drop-ins/control-room-01/docs/operations.md)

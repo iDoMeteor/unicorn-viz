@@ -563,3 +563,14 @@ music_loop = true
 beat_trigger = false
 # beat_sfx = "clap"         # SFX name (filename stem) to fire on beat; blank = random
 beat_min_interval_s = 0.18
+
+# ── color-grade-01 — global colour-grade / LUT post pass ─────────────────────
+# A persistent post-FX pass (after postfx) applying a procedural "look" or an
+# Adobe .cube 3D LUT to the whole frame, blended by intensity. Disabled by
+# default. Built-in looks: Neutral, Teal & Orange, Warm Sunset, Cool Night,
+# Noir, Vibrant Pop, Faded Film, Cyberpunk.
+[color_grade]
+enabled = false
+intensity = 0.85            # 0–1 blend against the ungraded frame
+default_grade = "random"    # built-in look name, LUT file stem, or "random"
+# lut_dir = "assets/luts"   # optional dir of Adobe .cube 3D LUTs

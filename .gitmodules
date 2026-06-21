@@ -68,3 +68,6 @@
 [submodule "drop-ins/audio-out-01"]
 	path = drop-ins/audio-out-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-audio-out-01.git
+[submodule "drop-ins/color-grade-01"]
+	path = drop-ins/color-grade-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-color-grade-01.git

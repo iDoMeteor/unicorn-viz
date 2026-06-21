@@ -201,6 +201,14 @@ def _load_audio_out_controller_class() -> type:
     )
 
 
+def _load_color_grade_controller_class() -> type:
+    """Load ColorGradeController from the color-grade-01 drop-in."""
+    return load_dropin_symbol(
+        'color-grade-01/color_grade_controller.py',
+        'ColorGradeController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -239,6 +247,7 @@ class App:
         self._webcam_cycle_interval: float = 0.0
         self._webcam_system = None
         self._postfx_controller = None
+        self._color_grade = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
         self._unicorn_tears: Any = None
@@ -1254,6 +1263,29 @@ class App:
                 )
                 log.info('PostFxController loaded from drop-in')
 
+            # Global colour-grade / LUT post pass (optional drop-in). Runs in the
+            # global post chain after postfx; degrades to None when absent.
+            color_grade_cfg = self.cfg.get('color_grade', default={}) or {}
+            if not isinstance(color_grade_cfg, dict):
+                color_grade_cfg = {}
+            try:
+                color_grade_cls = _load_color_grade_controller_class()
+                self._color_grade = color_grade_cls(
+                    self._ctx,
+                    self._render_width,
+                    self._render_height,
+                    color_grade_cfg,
+                )
+                self._color_grade.set_vj_api(self.vj_api)
+                self.vj_api.register_subsystem('color_grade', self._color_grade)
+                key_handler = getattr(self._color_grade, 'handle_key', None)
+                if callable(key_handler):
+                    self.vj_api.register_key_handler('color_grade', key_handler)
+                log.info('ColorGradeController loaded from drop-in')
+            except Exception as exc:
+                self._color_grade = None
+                log.warning('ColorGradeController not available: %s', exc)
+
             # System-level screen burst timing/transform controller (optional).
             try:
                 burst_cls = _load_screen_burst_controller_class()
@@ -1499,6 +1531,45 @@ void main() {
         self._fbo_b.color_attachments[0].use(location=0)
         self._present_prog['tex'].value = 0
         self._present_vao.render(moderngl.TRIANGLE_STRIP)
+
+    def _active_post_chain(self) -> list:
+        """Return the ordered list of active global post-FX controllers.
+
+        Order is postfx → colour-grade (→ beat-flash, added by that drop-in).
+        Each entry exposes the shared ``apply(src_tex, dst_fbo, dt, bass, mid,
+        treble, beat)`` contract and an ``is_active()`` predicate.
+        """
+        chain: list = []
+        pf = self._postfx_controller
+        if pf is not None and pf.is_active():
+            chain.append(pf)
+        cg = self._color_grade
+        if cg is not None and cg.is_active():
+            chain.append(cg)
+        return chain
+
+    def _apply_post_chain(self, dt: float) -> None:
+        """Run the active global post-FX chain in place over fbo_a.
+
+        Each active pass renders fbo_a → fbo_b and is blitted back into fbo_a,
+        so the chained result always ends in fbo_a regardless of pass count.
+        """
+        audio = self._audio or AudioData()
+        bass = float(audio.bass)
+        mid = float(audio.mid)
+        treble = float(audio.treble)
+        beat = float(audio.beat)
+        for ctrl in self._active_post_chain():
+            ctrl.apply(
+                self._fbo_a.color_attachments[0],
+                self._fbo_b,
+                dt,
+                bass,
+                mid,
+                treble,
+                beat,
+            )
+            self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
 
     def _present_from_tex(self, tex: moderngl.Texture) -> None:
         """Render a texture to screen without post-processing."""
@@ -3256,6 +3327,9 @@ void main() {
         if self._postfx_controller is not None:
             self._postfx_controller.destroy()
             self._postfx_controller = None
+        if self._color_grade is not None:
+            self._color_grade.destroy()
+            self._color_grade = None
         if self._current_effect:
             self._current_effect.destroy()
         if self._next_effect:
@@ -3388,17 +3462,17 @@ void main() {
             and self._grand_finale.overlay_active
             and not manager_modal_active
         )
-        postfx_active = (
-            self._postfx_controller is not None
-            and self._postfx_controller.is_active()
-            and not manager_modal_active
+        # Any active global post-FX pass (postfx, colour-grade, …) routes the
+        # frame through the fbo_a/fbo_b chain and is applied via _apply_post_chain.
+        post_chain_active = (
+            not manager_modal_active and bool(self._active_post_chain())
         )
         # Advance burst timer
         if burst_active:
             self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or postfx_active or nova_active or candy_active or finale_overlay_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or post_chain_active or nova_active or candy_active or finale_overlay_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -3432,19 +3506,9 @@ void main() {
                         self._burst_vao.render(moderngl.TRIANGLE_STRIP)
                         # Now blit fbo_b back into fbo_a as the compose target.
                         self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
-                    if postfx_active:
-                        # Post FX into fbo_b, then copy back into fbo_a.
-                        audio = self._audio or AudioData()
-                        self._postfx_controller.apply(
-                            self._fbo_a.color_attachments[0],
-                            self._fbo_b,
-                            dt,
-                            float(audio.bass),
-                            float(audio.mid),
-                            float(audio.treble),
-                            float(audio.beat),
-                        )
-                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
+                    if post_chain_active:
+                        # Global post chain into fbo_b, copied back into fbo_a.
+                        self._apply_post_chain(dt)
                     # Leave fbo_a bound at logical viewport so webcam/HUD compose
                     # into the same target. Tile-blit happens at end of frame.
                     self._fbo_a.use()
@@ -3478,19 +3542,9 @@ void main() {
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
                         self._present_burst_from_tex(self._fbo_a.color_attachments[0])
-                elif postfx_active:
-                    audio = self._audio or AudioData()
-                    self._postfx_controller.apply(
-                        self._fbo_a.color_attachments[0],
-                        self._fbo_b,
-                        dt,
-                        float(audio.bass),
-                        float(audio.mid),
-                        float(audio.treble),
-                        float(audio.beat),
-                    )
-                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
-                    self._present_from_tex(self._fbo_b.color_attachments[0])
+                elif post_chain_active:
+                    self._apply_post_chain(dt)
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
                     self._present_from_tex(self._fbo_a.color_attachments[0])
             else:
@@ -3525,7 +3579,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999 or postfx_active or nova_active or candy_active or finale_overlay_active:
+                if mirror_mode or self._render_scale < 0.999 or post_chain_active or nova_active or candy_active or finale_overlay_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -3538,19 +3592,9 @@ void main() {
                         # Leave fbo_a bound; tile-blit at end of frame.
                         self._fbo_a.use()
                         ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    elif postfx_active:
-                        audio = self._audio or AudioData()
-                        self._postfx_controller.apply(
-                            self._fbo_a.color_attachments[0],
-                            self._fbo_b,
-                            dt,
-                            float(audio.bass),
-                            float(audio.mid),
-                            float(audio.treble),
-                            float(audio.beat),
-                        )
-                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
-                        self._present_from_tex(self._fbo_b.color_attachments[0])
+                    elif post_chain_active:
+                        self._apply_post_chain(dt)
+                        self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
@@ -3585,7 +3629,7 @@ void main() {
 
                 # Transition composite — to mirror compose FBO if mirror,
                 # fbo_a when postfx is active, else directly to screen.
-                if mirror_mode or postfx_active:
+                if mirror_mode or post_chain_active:
                     composite_fbo = (
                         self._make_or_get_mirror_composite_fbo()
                         if mirror_mode
@@ -3619,19 +3663,9 @@ void main() {
                     self._mirror_composite_fbo.color_attachments[0].use(location=0)
                     self._present_prog['tex'].value = 0
                     self._present_vao.render(moderngl.TRIANGLE_STRIP)
-                elif postfx_active:
-                    audio = self._audio or AudioData()
-                    self._postfx_controller.apply(
-                        self._fbo_a.color_attachments[0],
-                        self._fbo_b,
-                        dt,
-                        float(audio.bass),
-                        float(audio.mid),
-                        float(audio.treble),
-                        float(audio.beat),
-                    )
-                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
-                    self._present_from_tex(self._fbo_b.color_attachments[0])
+                elif post_chain_active:
+                    self._apply_post_chain(dt)
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
         """Lazy-create a single FBO used to compose mirror transitions."""
