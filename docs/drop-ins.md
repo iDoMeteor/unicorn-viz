@@ -35,6 +35,7 @@ Complex drop-ins should also include:
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
 | hacker-terminal-01 | Yes | Not required | Simple effect drop-in |
 | images-01 | Yes | Not required | Media effect drop-in |
+| lyrics-01 | Yes | Yes | Synced lyrics overlay subsystem (LRCLIB) |
 | multi-head-01 | Yes | Yes | Display subsystem |
 | osc-bridge-01 | Yes | Yes | OSC control-surface subsystem |
 | postfx-01 | Yes | Yes | Post-processing subsystem |
@@ -83,6 +84,11 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
   - [Test Matrix](../drop-ins/control-room-01/docs/test-matrix.md)
   - [Troubleshooting](../drop-ins/control-room-01/docs/troubleshooting.md)
+- lyrics-01
+  - [Operations](../drop-ins/lyrics-01/docs/operations.md)
+  - [Configuration](../drop-ins/lyrics-01/docs/configuration.md)
+  - [Integration](../drop-ins/lyrics-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/lyrics-01/docs/troubleshooting.md)
 - multi-head-01
   - [Operations](../drop-ins/multi-head-01/docs/operations.md)
   - [Configuration](../drop-ins/multi-head-01/docs/configuration.md)

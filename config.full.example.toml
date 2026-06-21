@@ -602,3 +602,17 @@ port = 9000                 # inbound UDP port
 feedback = false            # publish /uv/state/bpm and /uv/state/beat
 send_host = "127.0.0.1"     # outbound feedback host
 send_port = 9001            # outbound feedback port
+
+# ── lyrics-01 — synced lyrics overlay (LRCLIB) ───────────────────────────────
+# Time-synced lyrics for the current track, sourced from LRCLIB (NOT Spotify;
+# Spotify has no public lyrics API). Now-playing is read from the spotify
+# subsystem if present, else playerctl/MPRIS. Disabled by default.
+[lyrics]
+enabled = false
+offset_ms = 0               # sync nudge; positive shows lines earlier
+font_px = 40
+max_lines = 1
+poll_interval_s = 0.5
+cache_dir = "runtime/lyrics"
+player = "spotify"          # playerctl player for the MPRIS fallback
+provider = "lrclib"         # only LRCLIB is supported

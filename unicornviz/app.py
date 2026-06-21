@@ -225,6 +225,14 @@ def _load_osc_bridge_controller_class() -> type:
     )
 
 
+def _load_lyrics_controller_class() -> type:
+    """Load LyricsController from the lyrics-01 drop-in."""
+    return load_dropin_symbol(
+        'lyrics-01/lyrics_controller.py',
+        'LyricsController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -273,6 +281,7 @@ class App:
         self._spotify = None
         self._audio_out = None
         self._osc_bridge = None
+        self._lyrics = None
         self._grand_finale = None
         self._control_room = None
         self._control_room_creating: bool = False
@@ -2455,6 +2464,24 @@ void main() {
                     self._osc_bridge = None
                     log.warning('OscBridgeController not available: %s', exc)
 
+            # Synced lyrics overlay (optional drop-in; LRCLIB-sourced).
+            lyrics_cfg = self.cfg.get('lyrics', default={}) or {}
+            if not isinstance(lyrics_cfg, dict):
+                lyrics_cfg = {}
+            if bool(lyrics_cfg.get('enabled', False)):
+                try:
+                    lyrics_cls = _load_lyrics_controller_class()
+                    self._lyrics = lyrics_cls(self, lyrics_cfg)
+                    self._lyrics.set_vj_api(self.vj_api)
+                    self.vj_api.register_subsystem('lyrics', self._lyrics)
+                    key_handler = getattr(self._lyrics, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('lyrics', key_handler)
+                    log.info('LyricsController loaded from drop-in')
+                except Exception as exc:
+                    self._lyrics = None
+                    log.warning('LyricsController not available: %s', exc)
+
             # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
             try:
                 auto_vj_cls = _load_auto_vj_controller_class()
@@ -2716,6 +2743,12 @@ void main() {
                     self._osc_bridge.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('OscBridgeController update failed: %s', exc)
+
+            if self._lyrics is not None:
+                try:
+                    self._lyrics.update(dt, self._audio or AudioData())
+                except Exception as exc:
+                    log.warning('LyricsController update failed: %s', exc)
 
             if self._auto_vj is not None and not manager_modal_active:
                 try:
