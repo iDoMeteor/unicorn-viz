@@ -574,3 +574,18 @@ enabled = false
 intensity = 0.85            # 0–1 blend against the ungraded frame
 default_grade = "random"    # built-in look name, LUT file stem, or "random"
 # lut_dir = "assets/luts"   # optional dir of Adobe .cube 3D LUTs
+
+# ── beat-flash-01 — BPM-locked strobe with photosensitivity safety governor ──
+# Flashes the frame on detected beats (drawn last, on top of any colour grade).
+# Disabled by default. ALL limits are hard-capped by the runtime governor:
+# max_hz <= 3.0 (WCAG/ITU general-flash threshold), max_brightness <= 0.8,
+# and flashes never overlap. These ceilings cannot be raised via config/OSC/MIDI.
+[beat_flash]
+enabled = false
+max_hz = 3.0                 # hard-capped at 3.0
+max_brightness = 0.5         # hard-capped at 0.8
+flash_duration = 0.12        # seconds; clamped below the min inter-flash interval
+beat_division = 1            # flash every Nth beat
+mode = "full"                # full | edge | pulse
+color = [1.0, 1.0, 1.0]      # flash colour (RGB 0–1)
+beat_threshold = 0.45        # beat rising-edge trigger threshold

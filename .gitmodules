@@ -71,3 +71,6 @@
 [submodule "drop-ins/color-grade-01"]
 	path = drop-ins/color-grade-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-color-grade-01.git
+[submodule "drop-ins/beat-flash-01"]
+	path = drop-ins/beat-flash-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-beat-flash-01.git

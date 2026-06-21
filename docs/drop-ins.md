@@ -27,6 +27,7 @@ Complex drop-ins should also include:
 | audio-out-01 | Yes | Yes | Audio output / SFX-injection subsystem |
 | auto-vj-01 | Yes | Yes | Automation subsystem |
 | banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
+| beat-flash-01 | Yes | Yes | BPM-locked strobe (safety-governed) post subsystem |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
 | cyber-war-01 | Yes | Not required | Simple effect drop-in |
@@ -64,6 +65,11 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/banner-01/docs/configuration.md)
   - [Integration](../drop-ins/banner-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/banner-01/docs/troubleshooting.md)
+- beat-flash-01
+  - [Operations](../drop-ins/beat-flash-01/docs/operations.md)
+  - [Configuration](../drop-ins/beat-flash-01/docs/configuration.md)
+  - [Integration](../drop-ins/beat-flash-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/beat-flash-01/docs/troubleshooting.md)
 - color-grade-01
   - [Operations](../drop-ins/color-grade-01/docs/operations.md)
   - [Configuration](../drop-ins/color-grade-01/docs/configuration.md)

@@ -209,6 +209,14 @@ def _load_color_grade_controller_class() -> type:
     )
 
 
+def _load_beat_flash_controller_class() -> type:
+    """Load BeatFlashController from the beat-flash-01 drop-in."""
+    return load_dropin_symbol(
+        'beat-flash-01/beat_flash_controller.py',
+        'BeatFlashController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -248,6 +256,7 @@ class App:
         self._webcam_system = None
         self._postfx_controller = None
         self._color_grade = None
+        self._beat_flash = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
         self._unicorn_tears: Any = None
@@ -1286,6 +1295,28 @@ class App:
                 self._color_grade = None
                 log.warning('ColorGradeController not available: %s', exc)
 
+            # BPM-locked strobe / flash post pass with safety governor (optional).
+            beat_flash_cfg = self.cfg.get('beat_flash', default={}) or {}
+            if not isinstance(beat_flash_cfg, dict):
+                beat_flash_cfg = {}
+            try:
+                beat_flash_cls = _load_beat_flash_controller_class()
+                self._beat_flash = beat_flash_cls(
+                    self._ctx,
+                    self._render_width,
+                    self._render_height,
+                    beat_flash_cfg,
+                )
+                self._beat_flash.set_vj_api(self.vj_api)
+                self.vj_api.register_subsystem('beat_flash', self._beat_flash)
+                key_handler = getattr(self._beat_flash, 'handle_key', None)
+                if callable(key_handler):
+                    self.vj_api.register_key_handler('beat_flash', key_handler)
+                log.info('BeatFlashController loaded from drop-in')
+            except Exception as exc:
+                self._beat_flash = None
+                log.warning('BeatFlashController not available: %s', exc)
+
             # System-level screen burst timing/transform controller (optional).
             try:
                 burst_cls = _load_screen_burst_controller_class()
@@ -1546,6 +1577,9 @@ void main() {
         cg = self._color_grade
         if cg is not None and cg.is_active():
             chain.append(cg)
+        bf = self._beat_flash
+        if bf is not None and bf.is_active():
+            chain.append(bf)
         return chain
 
     def _apply_post_chain(self, dt: float) -> None:
@@ -2645,6 +2679,12 @@ void main() {
                 except Exception as exc:
                     log.warning('AudioOutController update failed: %s', exc)
 
+            if self._beat_flash is not None:
+                try:
+                    self._beat_flash.update(dt, self._audio or AudioData())
+                except Exception as exc:
+                    log.warning('BeatFlashController update failed: %s', exc)
+
             if self._auto_vj is not None and not manager_modal_active:
                 try:
                     self._auto_vj.update(dt, self._audio_raw or self._audio)
@@ -3330,6 +3370,9 @@ void main() {
         if self._color_grade is not None:
             self._color_grade.destroy()
             self._color_grade = None
+        if self._beat_flash is not None:
+            self._beat_flash.destroy()
+            self._beat_flash = None
         if self._current_effect:
             self._current_effect.destroy()
         if self._next_effect:
