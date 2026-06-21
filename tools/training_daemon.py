@@ -1,37 +1,38 @@
 """Unicorn Viz background training daemon.
 
 Sets up an isolated audio + display environment (PipeWire null sink + Xvfb),
-launches the Spotify desktop app and unicorn-viz headlessly, then
+launches a headless Spotify Connect daemon (spotifyd) and unicorn-viz, then
 auto-packages the session corpus when unicorn-viz exits.  Run from the *main*
 repo root; point --app-dir at the separate training deploy of unicorn-viz.
 
 Usage::
 
     python tools/training_daemon.py \\
-        --playlist-name "45 minute chillstep mix" \\
         --app-dir /path/to/unicorn-viz-training
 
 Prerequisites:
-  * Xvfb    — sudo dnf install xorg-x11-server-Xvfb
-  * Spotify  — snap (already installed) or flatpak; must be logged in
+  * spotifyd — https://github.com/Spotifyd/spotifyd  (pip: n/a; install via
+               cargo, dnf copr, or pre-built binary).  Preferred over the
+               Spotify GUI app because it has no single-instance lock and
+               needs no display.
+  * Xvfb    — sudo dnf install xorg-x11-server-Xvfb  (needed for unicorn-viz)
   * pactl    — ships with PipeWire on Fedora/Arch
 
 What the daemon does:
   1. Creates a PipeWire null sink (``unicorn-training`` by default).
-  2. Starts Xvfb on DISPLAY :99.
-  3. Launches the Spotify desktop app headlessly, routing audio to the null sink.
-     Spotify still appears as a Connect device — control it from your phone or
-     any other Spotify client.  Crossfade and auto-mix work as configured in
-     your Spotify account settings.
+  2. Starts Xvfb on DISPLAY :99 for unicorn-viz (Mesa software renderer).
+  3. Starts spotifyd routing audio to the null sink.  spotifyd appears as a
+     Spotify Connect device — open Spotify on your phone, pick the device,
+     start your playlist with crossfade enabled.  spotifyd authenticates
+     automatically on first connection (Zeroconf); no credentials file needed.
+     Falls back to the Spotify GUI app if spotifyd is not in PATH (requires
+     closing any running Spotify instance first to avoid the lock conflict).
   4. Launches unicorn-viz from ``--app-dir`` with Mesa software rendering,
      capturing audio from the null sink monitor via ``--audio-device``.
   5. After unicorn-viz exits, runs ``package_training_set.py`` to archive the
-     session corpus into the next available bucket.
-  6. Cleans up Xvfb, Spotify, and the null sink on exit.
-
-Note: Spotify must be logged in before running the daemon headlessly.  If this
-is the first run on the machine, launch Spotify normally once, log in, then
-close it before starting the daemon.
+     session corpus into the next available bucket.  The set directory is named
+     from the playlist detected in the session logs (no manual name needed).
+  6. Cleans up spotifyd/Spotify, Xvfb, and the null sink on exit.
 """
 
 from __future__ import annotations
@@ -202,16 +203,39 @@ def _wait_xvfb(display: str, timeout: float = _XVFB_READY_TIMEOUT_S) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Spotify
+# Spotify audio source — spotifyd (preferred) or GUI Spotify (fallback)
 # ---------------------------------------------------------------------------
 
-def _start_spotify(display: str, sink_name: str) -> subprocess.Popen:
-    """Launch the Spotify desktop app headlessly under *display*.
+def _start_spotifyd(sink_name: str, device_name: str, cache_dir: Path) -> subprocess.Popen:
+    """Start spotifyd routing audio to *sink_name* via PipeWire/PulseAudio.
 
-    Passes ``--no-zygote --disable-gpu`` to suppress GPU/sandbox noise that
-    is harmless under a virtual framebuffer.  Audio is routed to *sink_name*
-    via ``PULSE_SINK``, which libpulse (inside the Electron app) respects
-    through PipeWire's PulseAudio compat layer.
+    spotifyd appears as a Spotify Connect device named *device_name*.  It
+    authenticates automatically via Zeroconf when the user connects from the
+    Spotify app on their phone — no credential file needed.
+
+    ``--no-daemon`` keeps it in the foreground so the daemon process can
+    manage its lifecycle and clean it up on exit.
+    """
+    spotifyd_bin = _require('spotifyd')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return _start([
+        spotifyd_bin,
+        '--no-daemon',
+        '--backend', 'pulseaudio',
+        '--device', sink_name,
+        '--device-name', device_name,
+        '--cache-path', str(cache_dir),
+        '--zeroconf-port', '2020',
+        '--device-type', 'computer',
+    ])
+
+
+def _start_spotify_gui(display: str, sink_name: str) -> subprocess.Popen:
+    """Fallback: launch the Spotify desktop GUI headlessly under *display*.
+
+    Requires that no other Spotify instance is running (single-instance lock).
+    Passes ``--no-zygote --disable-gpu`` to suppress GPU/sandbox noise inside
+    Xvfb.  Audio is routed to *sink_name* via ``PULSE_SINK``.
     """
     spotify_bin = _require('spotify')
     return _start(
@@ -309,12 +333,21 @@ def _parse_args() -> argparse.Namespace:
         help='Run unicorn-viz in a window instead of fullscreen.',
     )
     parser.add_argument(
+        '--device-name', default='Unicorn Training',
+        help='Name shown in Spotify Connect device list.',
+    )
+    parser.add_argument(
         '--dry-run', action='store_true',
-        help='Set up infrastructure (sink, Xvfb, Spotify) but skip unicorn-viz and packager.',
+        help='Set up infrastructure (sink, Xvfb, spotifyd) but skip unicorn-viz and packager.',
     )
     parser.add_argument(
         '--spotify-warmup', type=float, default=_SPOTIFY_WARMUP_S, metavar='SECONDS',
-        help='Seconds to wait for Spotify to start before launching unicorn-viz.',
+        help='Seconds to wait for spotifyd to start before launching unicorn-viz.',
+    )
+    parser.add_argument(
+        '--use-spotify-gui', action='store_true',
+        help='Use the Spotify desktop app instead of spotifyd (requires closing '
+             'any running Spotify instance first to avoid the single-instance lock).',
     )
     return parser.parse_args()
 
@@ -343,13 +376,23 @@ def main() -> int:
     _cleanup_fns.append(lambda p=xvfb_proc: _kill_proc(p, 'Xvfb'))
     _wait_xvfb(args.display)
 
-    # ---- Spotify ------------------------------------------------------------
-    spotify_proc = _start_spotify(args.display, args.sink_name)
-    _cleanup_fns.append(lambda p=spotify_proc: _kill_proc(p, 'Spotify'))
+    # ---- Spotify audio source -----------------------------------------------
+    spotifyd_bin = shutil.which('spotifyd')
+    if not args.use_spotify_gui and spotifyd_bin:
+        cache_dir = Path.home() / '.cache' / 'spotifyd-training'
+        spotify_proc = _start_spotifyd(args.sink_name, args.device_name, cache_dir)
+        spotify_label = f'spotifyd ({args.device_name})'
+    else:
+        if not args.use_spotify_gui:
+            _LOG.warning('spotifyd not found in PATH; falling back to Spotify GUI app')
+        spotify_proc = _start_spotify_gui(args.display, args.sink_name)
+        spotify_label = 'Spotify GUI'
+    _cleanup_fns.append(lambda p=spotify_proc: _kill_proc(p, spotify_label))
 
-    print(f'\nSpotify started.  Select this machine as your Spotify Connect device, ')
-    print(f'start your playlist with crossfade enabled, then come back here.')
-    print(f'Waiting {args.spotify_warmup:.0f}s for Spotify to initialise…')
+    print(f'\n{spotify_label} started.')
+    print(f'Open Spotify on your phone → Devices → "{args.device_name}"')
+    print(f'Start your playlist with crossfade enabled, then come back here.')
+    print(f'Waiting {args.spotify_warmup:.0f}s for spotifyd to initialise…')
     time.sleep(args.spotify_warmup)
 
     if args.dry_run:
