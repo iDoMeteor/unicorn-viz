@@ -24,6 +24,7 @@ Complex drop-ins should also include:
 | Drop-in | README | Structured docs | Notes |
 | --- | --- | --- | --- |
 | alien-invasion-01 | Yes | Not required | Simple effect drop-in |
+| audio-out-01 | Yes | Yes | Audio output / SFX-injection subsystem |
 | auto-vj-01 | Yes | Yes | Automation subsystem |
 | banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
@@ -46,6 +47,11 @@ Complex drop-ins should also include:
 
 ## Structured Docs Links (Complex Drop-ins)
 
+- audio-out-01
+  - [Operations](../drop-ins/audio-out-01/docs/operations.md)
+  - [Configuration](../drop-ins/audio-out-01/docs/configuration.md)
+  - [Integration](../drop-ins/audio-out-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/audio-out-01/docs/troubleshooting.md)
 - auto-vj-01
   - [Operations](../drop-ins/auto-vj-01/docs/operations.md)
   - [Configuration](../drop-ins/auto-vj-01/docs/configuration.md)

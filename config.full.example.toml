@@ -534,3 +534,32 @@ zoom = 1.0
 # postfx_pingpong_decay = 0.68           # per-swap multiplier; lower = faster
 # postfx_pingpong_min_interval_s = 0.12  # floor (s) — finale fires at this point
 # postfx_pingpong_trigger_chance = 0.40
+
+# ── audio-out-01 — audio playback / SFX injection with DJ-deck FX ────────────
+# App-owned audio OUTPUT path (separate from the audio capture pipeline). Plays
+# an optional looping music bed plus one-shot "folley" SFX through a live filter
+# + EQ + reverb chain. Disabled by default; nothing is played unless enabled.
+[audio_out]
+enabled = false
+# device = "default"        # output device name/index; omit for system default
+samplerate = 44100
+blocksize = 1024
+master_gain = 0.9           # 0.0–1.5 output trim
+smoothing = 0.15            # 0–1 per-block parameter glide (higher = snappier)
+# Filter + 3-band EQ start values (all real-time tweakable via hotkeys/OSC):
+hpf_hz = 20.0               # high-pass cutoff (20 = open/bypassed)
+lpf_hz = 20000.0            # low-pass cutoff (>=Nyquist = open/bypassed)
+eq_low_db = 0.0             # low-shelf gain  (-18..+18 dB)
+eq_mid_db = 0.0             # mid-peak gain   (-18..+18 dB)
+eq_high_db = 0.0            # high-shelf gain (-18..+18 dB)
+reverb_room = 0.7           # 0–1 room size (comb feedback)
+reverb_wet = 0.0            # 0–1 wet mix (0 = dry/bypassed)
+# Folley / one-shot SFX:
+sfx_dir = "assets/audio/sfx"  # dir of .wav/.flac/.ogg samples (relative to app root)
+max_voices = 16
+# music_file = "assets/audio/loop.wav"  # optional looping music bed
+music_loop = true
+# Beat-synced folley triggering:
+beat_trigger = false
+# beat_sfx = "clap"         # SFX name (filename stem) to fire on beat; blank = random
+beat_min_interval_s = 0.18

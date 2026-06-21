@@ -8,6 +8,7 @@ python-rtmidi>=1.5
 Pillow>=10.0
 psutil>=5.9
 opencv-python-headless>=4.9   # camera overlay + WebcamOverlay effect
+soundfile>=0.12               # audio-out-01 drop-in: load music bed + folley SFX
 # Optional — required only for LLM detector scoring in tools/package_training_set.py.
 # Install whichever provider you have an API key for.
 openai>=1.30                  # set OPENAI_API_KEY in environment

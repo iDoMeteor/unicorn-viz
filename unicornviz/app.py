@@ -193,6 +193,14 @@ def _load_spotify_controller_class() -> type:
     )
 
 
+def _load_audio_out_controller_class() -> type:
+    """Load AudioOutController from the audio-out-01 drop-in."""
+    return load_dropin_symbol(
+        'audio-out-01/audio_out_controller.py',
+        'AudioOutController',
+    )
+
+
 def _load_grand_finale_class() -> type:
     """Load GrandFinaleController from the grand-finale-01 drop-in."""
     return load_dropin_symbol(
@@ -237,6 +245,7 @@ class App:
         self._candy_frame = None
         self._auto_vj = None
         self._spotify = None
+        self._audio_out = None
         self._grand_finale = None
         self._control_room = None
         self._control_room_creating: bool = False
@@ -2298,6 +2307,23 @@ void main() {
                     self._spotify = None
                     log.warning('SpotifyController not available: %s', exc)
 
+            # Audio output / SFX-injection controller (optional drop-in).
+            audio_out_cfg = self.cfg.get('audio_out', default={}) or {}
+            if not isinstance(audio_out_cfg, dict):
+                audio_out_cfg = {}
+            if bool(audio_out_cfg.get('enabled', False)):
+                try:
+                    audio_out_cls = _load_audio_out_controller_class()
+                    self._audio_out = audio_out_cls(self, audio_out_cfg)
+                    self.vj_api.register_subsystem('audio_out', self._audio_out)
+                    key_handler = getattr(self._audio_out, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('audio_out', key_handler)
+                    log.info('AudioOutController loaded from drop-in')
+                except Exception as exc:
+                    self._audio_out = None
+                    log.warning('AudioOutController not available: %s', exc)
+
             # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
             try:
                 auto_vj_cls = _load_auto_vj_controller_class()
@@ -2541,6 +2567,12 @@ void main() {
             self._audio_raw = audio_manager.get_audio_data_raw()
             if perf_debug_enabled:
                 perf_after_audio = time.perf_counter()
+
+            if self._audio_out is not None:
+                try:
+                    self._audio_out.update(dt, self._audio or AudioData())
+                except Exception as exc:
+                    log.warning('AudioOutController update failed: %s', exc)
 
             if self._auto_vj is not None and not manager_modal_active:
                 try:
