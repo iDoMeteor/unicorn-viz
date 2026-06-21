@@ -733,6 +733,7 @@ def _build_recommender_payload(
     hb_rows = [r for r in seq_rows if not r.get('event_type')]
     total_hb = len(hb_rows) or 1
     switch_rows = [r for r in seq_rows if r.get('event_type') == 'profile_switch']
+    reco_event_rows = [r for r in seq_rows if r.get('event_type') == 'profile_recommendation']
 
     # Distribution of recommended vs actual audio profiles
     recommended_dist: Counter = Counter(
@@ -763,6 +764,44 @@ def _build_recommender_payload(
                 in_range += 1
     hint_alignment_pct = round(100.0 * in_range / range_applicable, 1) if range_applicable else None
 
+    # Spectral feature summary from profile_recommendation events.
+    # These carry mean_zcr, mean_centroid, onset_density logged per eval window.
+    spectral_summary: dict = {}
+    if reco_event_rows:
+        def _mean(rows: list[dict], key: str) -> float | None:
+            vals = [float(r[key]) for r in rows if isinstance(r.get(key), (int, float))]
+            return round(sum(vals) / len(vals), 4) if vals else None
+
+        spectral_summary['overall'] = {
+            'mean_zcr': _mean(reco_event_rows, 'mean_zcr'),
+            'mean_centroid_hz': _mean(reco_event_rows, 'mean_centroid'),
+            'onset_density_per_s': _mean(reco_event_rows, 'onset_density'),
+            'n_eval_windows': len(reco_event_rows),
+        }
+
+        # Per-recommended-profile spectral breakdown
+        per_profile: dict[str, dict] = {}
+        for row in reco_event_rows:
+            prof_key = str(row.get('recommended_profile_key') or '').strip()
+            if not prof_key:
+                continue
+            bucket = per_profile.setdefault(prof_key, {'zcr': [], 'centroid': [], 'onset': []})
+            if isinstance(row.get('mean_zcr'), (int, float)):
+                bucket['zcr'].append(float(row['mean_zcr']))
+            if isinstance(row.get('mean_centroid'), (int, float)):
+                bucket['centroid'].append(float(row['mean_centroid']))
+            if isinstance(row.get('onset_density'), (int, float)):
+                bucket['onset'].append(float(row['onset_density']))
+        spectral_summary['per_recommended_profile'] = {
+            k: {
+                'mean_zcr': round(sum(v['zcr']) / len(v['zcr']), 4) if v['zcr'] else None,
+                'mean_centroid_hz': round(sum(v['centroid']) / len(v['centroid']), 1) if v['centroid'] else None,
+                'onset_density_per_s': round(sum(v['onset']) / len(v['onset']), 2) if v['onset'] else None,
+                'n_windows': max(len(v['zcr']), len(v['centroid']), len(v['onset'])),
+            }
+            for k, v in sorted(per_profile.items())
+        }
+
     # Profile switch history (compact)
     switch_history = []
     for r in switch_rows[:30]:
@@ -778,7 +817,7 @@ def _build_recommender_payload(
         entry = {k: v for k, v in entry.items() if v is not None and v != ''}
         switch_history.append(entry)
 
-    return {
+    payload: dict = {
         'set_id': set_id,
         'bucket_id': bucket_id,
         'duration_min': round(duration_min, 1) if duration_min is not None else None,
@@ -791,6 +830,9 @@ def _build_recommender_payload(
         },
         'switch_history': switch_history,
     }
+    if spectral_summary:
+        payload['spectral_features'] = spectral_summary
+    return payload
 
 
 def _detect_llm_provider() -> tuple[str | None, str | None]:
@@ -890,6 +932,54 @@ sustained_rise→sustained_fall reversals without ever reaching a drop?
 Director data:
 {dir_json}
 
+━━━━━━━━━━━━━━━━━ PART 4 — TUNING RECOMMENDATIONS ━━━━━━━
+
+Using all the data above, identify the highest-leverage tuning opportunities.
+
+The recommender uses these scoring weights (current values):
+  tempo_fit × 2.0, band_fit × 1.2, lock_rate × 2.5, mean_conf × 1.8,
+  mean_dconf × 1.2, centroid_fit × 0.8, zcr_fit × 0.6, onset_fit × 0.7
+
+Each fit metric is a Gaussian match against the profile's expected mu:
+  - centroid_fit: spectral centroid Hz vs spectral_centroid_mu
+  - zcr_fit: zero crossing rate vs zcr_mu
+  - onset_fit: onset events/s vs onset_density_mu
+
+Current profile expected values (from code — what we're scoring against):
+  ambient:      centroid=800 Hz, zcr=0.030, onset=0.4/s
+  chillstep:    centroid=900 Hz, zcr=0.040, onset=1.5/s
+  lofi:         centroid=1100 Hz, zcr=0.045, onset=1.0/s
+  jazz:         centroid=1300 Hz, zcr=0.050, onset=1.2/s
+  classical:    centroid=1000 Hz, zcr=0.030, onset=0.5/s
+  house:        centroid=1500 Hz, zcr=0.060, onset=2.5/s
+  deep_house:   centroid=1200 Hz, zcr=0.050, onset=2.0/s
+  tech_house:   centroid=1700 Hz, zcr=0.065, onset=2.8/s
+  minimal:      centroid=1400 Hz, zcr=0.055, onset=1.8/s
+  melodic:      centroid=1600 Hz, zcr=0.062, onset=2.2/s
+  progressive:  centroid=1800 Hz, zcr=0.070, onset=3.0/s
+  peak_time:    centroid=2000 Hz, zcr=0.072, onset=3.2/s
+  trance:       centroid=2200 Hz, zcr=0.080, onset=3.5/s
+  uplifting:    centroid=2300 Hz, zcr=0.085, onset=3.8/s
+  psytrance:    centroid=2500 Hz, zcr=0.090, onset=4.0/s
+  hardstyle:    centroid=2800 Hz, zcr=0.110, onset=4.8/s
+  drum_and_bass: centroid=2200 Hz, zcr=0.085, onset=4.5/s
+  breakbeat:    centroid=2000 Hz, zcr=0.080, onset=4.0/s
+  hip_hop:      centroid=1200 Hz, zcr=0.055, onset=2.0/s
+  reggae:       centroid=1100 Hz, zcr=0.045, onset=1.5/s
+  metal:        centroid=3500 Hz, zcr=0.165, onset=5.5/s
+  industrial:   centroid=3000 Hz, zcr=0.140, onset=5.0/s
+
+From the spectral_features section of the recommender data, compare the observed
+mean_centroid_hz, mean_zcr, and onset_density_per_s for each recommended profile
+against the expected values above. For profiles where observed ≠ expected:
+- If the difference is >30%, recommend a calibration adjustment
+- Propose the corrected mu value (round centroid to nearest 50 Hz, zcr to 3 dp, onset to 1 dp)
+
+Also assess whether the current weight distribution (tempo 2.0, band 1.2, centroid 0.8, \
+zcr 0.6, onset 0.7) is well-balanced given this session. If a feature consistently \
+correlated with correct recommendations but has a low weight, flag it for upweighting. \
+If a weight is high but the feature was noisy or uncorrelated, flag for downweighting.
+
 ━━━━━━━━━━━━━━━━━━━ RESPONSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Return ONLY valid JSON — no markdown, no prose — matching this schema exactly:
@@ -949,6 +1039,28 @@ Return ONLY valid JSON — no markdown, no prose — matching this schema exactl
       "energy_coherence": "<explanation>",
       "opportunity_usage": "<explanation>"
     }}
+  }},
+  "tuning": {{
+    "spectral_calibrations": [
+      {{
+        "profile_key": "<profile name>",
+        "field": "spectral_centroid_mu | zcr_mu | onset_density_mu",
+        "current_value": <number>,
+        "observed_value": <number>,
+        "recommended_value": <number>,
+        "rationale": "<1-sentence explanation>"
+      }}
+    ],
+    "weight_recommendations": [
+      {{
+        "weight": "tempo_fit | band_fit | lock_rate | mean_conf | mean_dconf | centroid_fit | zcr_fit | onset_fit",
+        "current_coefficient": <float>,
+        "recommended_coefficient": <float>,
+        "rationale": "<1-sentence explanation>"
+      }}
+    ],
+    "top_issues": ["<key problem observed that affected recommender accuracy>"],
+    "overall_assessment": "<2-3 sentence summary of tuning priorities for this session>"
   }},
   "scored_at": "<ISO 8601 UTC timestamp>"
 }}\
@@ -1291,6 +1403,76 @@ def _format_recommender_score_md(score: dict, set_id: str, bucket_id: str) -> st
     return '\n'.join(lines) + '\n'
 
 
+def _format_tuning_recommendations_md(tuning: dict, set_id: str, bucket_id: str, scored_at: str, provider: str) -> str:
+    """Render tuning_recommendations.md from a parsed tuning dict."""
+
+    def _s(v: object) -> str:
+        return 'n/a' if v is None else str(v)
+
+    lines: list[str] = [
+        '# Auto VJ Tuning Recommendations',
+        '',
+        f'Owner: auto-generated by tools/package_training_set.py ({provider})',
+        'Status: generated',
+        f'Last updated: {datetime.date.today().isoformat()}',
+        '',
+        f'- Set: `{set_id}`',
+        f'- Bucket: `{bucket_id}`',
+        f'- Scored at: `{scored_at}`',
+        f'- Provider: `{provider}`',
+        '',
+        '## Overall Assessment',
+        '',
+        tuning.get('overall_assessment', 'n/a'),
+        '',
+    ]
+
+    top_issues = tuning.get('top_issues', [])
+    if top_issues:
+        lines += ['## Top Issues', '']
+        for issue in top_issues:
+            lines.append(f'- {issue}')
+        lines.append('')
+
+    calibrations = tuning.get('spectral_calibrations', [])
+    if calibrations:
+        lines += [
+            '## Spectral Profile Calibrations',
+            '',
+            '| Profile | Field | Current | Observed | Recommended | Rationale |',
+            '|---|---|---|---|---|---|',
+        ]
+        for c in calibrations:
+            lines.append(
+                f'| {_s(c.get("profile_key"))} '
+                f'| {_s(c.get("field"))} '
+                f'| {_s(c.get("current_value"))} '
+                f'| {_s(c.get("observed_value"))} '
+                f'| {_s(c.get("recommended_value"))} '
+                f'| {_s(c.get("rationale"))} |'
+            )
+        lines.append('')
+
+    weight_recs = tuning.get('weight_recommendations', [])
+    if weight_recs:
+        lines += [
+            '## Weight Recommendations',
+            '',
+            '| Weight | Current | Recommended | Rationale |',
+            '|---|---|---|---|',
+        ]
+        for w in weight_recs:
+            lines.append(
+                f'| {_s(w.get("weight"))} '
+                f'| {_s(w.get("current_coefficient"))} '
+                f'| {_s(w.get("recommended_coefficient"))} '
+                f'| {_s(w.get("rationale"))} |'
+            )
+        lines.append('')
+
+    return '\n'.join(lines) + '\n'
+
+
 def _generate_set_description_once(root: Path, set_dir: Path, bucket_dir: Path) -> tuple[str, Path, str]:
     """Generate one set-level TRAINING_SET_DESCRIPTION.md, skipping if it already exists."""
     import subprocess
@@ -1340,9 +1522,10 @@ def _run_llm_scoring(
 ) -> dict | None:
     """Run combined LLM scoring for detector + director; write all score files.
 
-    Writes session_score.json (combined), detector_score.{json,md}, and
-    director_score.{json,md} to bucket_dir.  Returns the parsed LLM response
-    dict on success, None on skip or failure.  Packaging always continues.
+    Writes session_score.json (combined), detector_score.{json,md},
+    director_score.{json,md}, recommender_score.{json,md}, and
+    tuning_recommendations.{json,md} to bucket_dir.  Returns the parsed LLM
+    response dict on success, None on skip or failure.  Packaging always continues.
     """
     if skip:
         print('LLM scoring skipped (--skip-llm-scoring).')
@@ -1425,6 +1608,23 @@ def _run_llm_scoring(
     (bucket_dir / 'director_score.md').write_text(
         _format_director_score_md(dir_score, set_id, bucket_id), encoding='utf-8'
     )
+
+    # ── Write tuning_recommendations.{json,md} ────────────────────────────────
+    tuning_data = llm_data.get('tuning', {})
+    if tuning_data:
+        tuning_out = dict(tuning_data)
+        tuning_out.update({'set_id': set_id, 'bucket_id': bucket_id, 'provider': provider,
+                           'scored_at': llm_data.get('scored_at', now_iso)})
+        tuning_json_path = bucket_dir / 'tuning_recommendations.json'
+        tuning_json_path.write_text(json.dumps(tuning_out, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+        (bucket_dir / 'tuning_recommendations.md').write_text(
+            _format_tuning_recommendations_md(
+                tuning_out, set_id, bucket_id,
+                scored_at=llm_data.get('scored_at', now_iso),
+                provider=provider,
+            ),
+            encoding='utf-8',
+        )
 
     print(f'Session score: {session_json_path}')
     return llm_data

@@ -130,11 +130,10 @@ scopes = [
 	"playlist-read-collaborative",
 ]
 token_store = "runtime/spotify-token.json"
-poll_interval_s = 3.0
+poll_interval_s = 3.0        # used when playerctl unavailable (Windows); fallback otherwise
+poll_fallback_s = 60.0       # slow health-check interval when playerctl is handling track detection
 http_timeout_s = 1.0
-queue_poll_every_n = 2
-playlist_poll_every_n = 10
-resolve_queue = true
+resolve_queue = false        # queue BPM pre-fetch use case removed; enable if you want queue length display
 resolve_playlist_context = true
 # NOTE: local PKCE auth intentionally does not store a client secret here.
 
