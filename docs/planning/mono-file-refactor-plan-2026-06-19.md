@@ -1,11 +1,32 @@
 # Mono-File Refactoring Plan — 2026-06-19
 
 Owner: owner + Claude Sonnet 4.6
-Status: Draft / report only — no code written yet
-Last updated: 2026-06-19
+Status: In progress — Items A & B shipped; Items C & D on hold (owner, 2026-06-20)
+Last updated: 2026-06-20
 
 Scope: Low-hanging-fruit, safety-first extractions from the three largest source
 files. No behavioral changes proposed; all items are pure moves or method splits.
+
+---
+
+## Progress
+
+| Item | Status | Notes |
+|------|--------|-------|
+| **A** — null controllers → `_null_controllers.py` | ✅ **Done** (commit `524c5e5`, 2026-06-20) | Byte-identical move; re-exported from `app.py`. |
+| **B** — CTAOverlay → `cta_overlay.py` | ✅ **Done** (commit `524c5e5`, 2026-06-20) | Byte-identical move; re-exported from `overlays.py`. |
+| **C** — `App._init_subsystems()` split | ⏸ **On hold** (owner, 2026-06-20) | Medium risk; touches live `run()` control flow. Resume on a branch. |
+| **D** — `App._build_hud_state()` split | ⏸ **On hold** (owner, 2026-06-20) | Medium risk; do with or after C. Resume on a branch. |
+
+Regression coverage for A & B landed in
+`tests/test_module_extraction_boundary.py` (6 tests: canonical home, re-export
+identity, CTA default codepoints, font-builder placement, no circular import).
+
+**Realized savings from A & B:** `app.py` 4,891 → 4,666; `overlays.py`
+4,500 → 4,184. Full suite green at 199 tests.
+
+When picking C & D back up, start from §2 (Item C / Item D) and follow the
+branch + careful-test-pass guidance in §4.
 
 ---
 
@@ -62,7 +83,7 @@ overlay. The major render methods:
 
 ## 2) Proposed Extractions (Safest First)
 
-### Item A — `unicornviz/_null_controllers.py` (recommended: do first)
+### Item A — `unicornviz/_null_controllers.py` ✅ DONE (commit `524c5e5`)
 
 **What:** Move the 5 null controller classes from `app.py` (lines 83–313, ~231 lines)
 to a new `unicornviz/_null_controllers.py` file.
@@ -92,7 +113,7 @@ They exist only as drop-in fallbacks. The only coupling is:
 
 ---
 
-### Item B — `unicornviz/cta_overlay.py` (recommended: do second)
+### Item B — `unicornviz/cta_overlay.py` ✅ DONE (commit `524c5e5`)
 
 **What:** Move `CTAOverlay` class from `overlays.py` (lines 326–629, ~303 lines)
 to a new `unicornviz/cta_overlay.py` file.
@@ -119,9 +140,18 @@ whether it stays in `overlays.py` (and is imported by `cta_overlay.py`) or moves
 to `cta_overlay.py` (and is imported back). Either way works; the font texture
 builder is purely functional with no side effects.
 
+**As shipped:** `CTAOverlay` does not actually use `_build_font_texture()` (it
+builds its own PIL textures), so the font builder and `_FONT_8X8` stayed in
+`overlays.py` where `Overlays` uses them. Only `CTAOverlay` + the `_CTA_SLOTS` /
+`_CTA_SHOW_DURATION` defaults moved; all three are re-exported from `overlays.py`.
+
 ---
 
-### Item C — `App._init_subsystems()` method split (medium, do after A)
+### Item C — `App._init_subsystems()` method split ⏸ ON HOLD (owner, 2026-06-20)
+
+> **On hold by owner (2026-06-20).** A & B shipped; C is deferred for now.
+> When resumed, do it on a dedicated branch with a careful full-suite pass —
+> it edits live `run()` control flow, unlike the pure moves in A & B.
 
 **What:** Extract the subsystem init block from `run()` (lines 2270–2631, ~361 lines)
 into a private method `App._init_subsystems()`.
@@ -168,7 +198,10 @@ but much more approachable).
 
 ---
 
-### Item D — `App._build_hud_state()` method split (medium, do after C)
+### Item D — `App._build_hud_state()` method split ⏸ ON HOLD (owner, 2026-06-20)
+
+> **On hold by owner (2026-06-20).** Do with or after Item C, on the same
+> branch. Same caveat: this edits live `run()` loop body.
 
 **What:** Extract the 3-tier HUD build block from `run()`'s main loop
 (lines 2879–3165, ~286 lines) into `App._build_hud_state(dt, fps_now, overlays)`.
@@ -204,19 +237,20 @@ fruit" pass:
 
 ## 4) Suggested Order of Execution
 
-1. **A** — null controllers → `_null_controllers.py` (pure move, zero risk, confirms the test suite stays green)
-2. **B** — CTAOverlay → `cta_overlay.py` (pure move, zero risk, confirms tests)
+1. ✅ **A** — null controllers → `_null_controllers.py` (done, commit `524c5e5`)
+2. ✅ **B** — CTAOverlay → `cta_overlay.py` (done, commit `524c5e5`)
 3. After A+B: optionally move loaders to `dropins.py` — the null-class circular-import
    risk is now resolved because loaders would import from `_null_controllers.py`
-4. **C** — `_init_subsystems()` (medium: do on a branch with careful test pass)
-5. **D** — `_build_hud_state()` (medium: do on same branch as C or a follow-up)
+   (not started)
+4. ⏸ **C** — `_init_subsystems()` (on hold; medium: do on a branch with careful test pass)
+5. ⏸ **D** — `_build_hud_state()` (on hold; medium: do on same branch as C or a follow-up)
 
-After A+B the files will be roughly:
+A+B realized (measured post-commit):
 
 | File | Before | After A+B |
 |------|--------|-----------|
-| `app.py` | 4,891 | ~4,350 |
-| `overlays.py` | 4,500 | ~4,197 |
+| `app.py` | 4,891 | 4,666 |
+| `overlays.py` | 4,500 | 4,184 |
 
 After A+B+C+D, `app.py` approaches ~3,700 lines with `run()` at ~900 lines —
 a meaningful improvement in navigability with no behavioral change.
@@ -225,8 +259,10 @@ a meaningful improvement in navigability with no behavioral change.
 
 ## 5) Regression Checklist (for any item above)
 
-- `pytest tests/ -q` stays 170/170 green (currently 1 red unrelated to this work).
-- `tests/test_null_controller_contracts.py` — 38 parametrized null-contract tests
+- `pytest tests/ -q` stays fully green (199 passing as of the A+B commit).
+- `tests/test_module_extraction_boundary.py` — pins A+B invariants (re-export
+  identity, CTA default codepoints, font-builder placement, no circular import).
+- `tests/test_null_controller_contracts.py` — parametrized null-contract tests
   continue to pass with imports from `unicornviz.app` (re-exported names).
 - `tests/test_dropin_boundary.py` — bare-import boundary test stays green.
 - Manual smoke: app starts, audio selector opens, help overlay renders, HUD tab

@@ -1,12 +1,17 @@
 # Unicorn Viz — Cross-Platform Installer Plan
 
-**Owner:** Installers team
-**Status:** Draft (final-beta hardening)
-**Last updated:** 2026-05-25
+**Owner:** Solo maintainer (one-person studio)
+**Status:** Active — driving toward five gold-star installers
+**Last updated:** 2026-06-21
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
 **Documentation pipeline planning:** `docs/planning/documentation-cicd-pipeline-plan.md`
+
+> **Read this first:** §0.5 defines what "gold star" means and scores every
+> channel against today's code. §16 is the authoritative, solo-friendly,
+> free-tooling phased roadmap that supersedes the original §14 milestone
+> sketch. §17 is the money ledger (what is free vs. what costs).
 
 ---
 
@@ -37,6 +42,55 @@
   (Homebrew convention: the GitHub repo must be named `homebrew-<tap>`, and
   users type `brew tap djunicorntears/unicornviz`). See §11.
 - **Mobile (Android/iOS):** **not** in v1 scope.
+
+## 0.5 Gold-Star Bar & Honest Scorecard (2026-06-21)
+
+"Five gold-star installers for all platforms" needs a definition we can grade
+against, otherwise it is a vibe. Here is the rubric. Each channel earns stars
+**cumulatively** — you cannot claim ★4 until ★1–★3 hold.
+
+### 0.5.1 The rubric (applies to every channel)
+
+| Stars | Bar | What it proves |
+|-------|-----|----------------|
+| ★ | **Exists & builds.** A repeatable command/CI job produces the artifact. | We can ship *something*. |
+| ★★ | **Works clean-room.** Installs on a fresh machine with **no dev tools**, app launches, and a menu / Start-menu / Dock entry with our unicorn icon appears. | A real first-time user succeeds. |
+| ★★★ | **Self-contained & tidy.** Bundles its own Python runtime (`python-build-standalone`), pollutes no system interpreter, ships a **curated payload** (no `.git`/`.venv`/`logs`/`recordings`/dev scratch), preserves the user's `config.toml` on upgrade, and uninstalls cleanly. | It behaves like a real product, not a clone. |
+| ★★★★ | **Automated & verified.** Built on tag in CI, checksums published, and a **nightly clean-container/VM install smoke** asserts `unicorn-viz --help` works. No human in the build loop. | Releases are boring and trustworthy. |
+| ★★★★★ | **Trusted & discoverable.** Signed/notarized **or** shipped with a documented, low-friction trust path where signing costs money; published to the platform's native channel (vanity URL / Flathub / Snap Store / Homebrew); README badge + install docs live. | Strangers install it without fear or instructions. |
+
+**Solo-dev escape hatch for ★5:** code-signing certs and notarization cost real
+money (see §17). A channel may bank ★5 with an **unsigned artifact** *provided*
+the trust path is one documented, copy-pasteable step (e.g. macOS right-click-open
++ `xattr` one-liner) and the signing step is already wired in CI behind a secret
+gate (per §10) so flipping it on is a one-day job the day a cert lands. This keeps
+"no paying for anything" from blocking the gold star.
+
+### 0.5.2 Where each channel stands today
+
+Graded against the actual code in this repo on 2026-06-21, not against intent.
+
+| Channel | Today | Gap to next star |
+|---|---|---|
+| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★ | Bundle `python-build-standalone` (still uses system `python3`); ship the full canonical `.desktop` (§7) + icon size ladder; add `set -Eeuo pipefail` + `ERR` trap; **★4:** shellcheck gate + nightly real-container install smoke (currently dry-run only); **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
+| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★ | Build inside per-distro containers with a bundled relocatable runtime (today's venv links the CI host's Python → ABI/relocatability risk); **strip drop-ins** (currently copied in, violates core-only decision §0); add `config.toml` conffile + `postinst`/`prerm`; **★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
+| **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
+| **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
+| **Flatpak** (`packaging/flatpak/…yml`) | ★ | Won't pass Flathub today (network `pip install`, `--filesystem=home`, pulseaudio). Pin pip deps offline via `flatpak-pip-generator`, build native wheels in-sandbox, tighten `finish-args` (pipewire + xdg dirs, drop `home`/`network`), add `metainfo.xml` + desktop + icons; **★4:** `flatpak-builder` CI + `flatpak run … --help` smoke; **★5:** Flathub submission (free; needs app-id claim). |
+| **Snap** (`packaging/snap/snapcraft.yaml`) | ★ | `core24`, **strict** confinement + precise plugs (§5.2), `desktop-launch` wrapper + `meta/gui`; **★4:** `snapcore/action-build` CI + `snap install`/`--help` smoke; **★5:** Snap Store publish (free; needs name registration). |
+
+**Cross-cutting blockers that gate stars on multiple channels at once:**
+
+1. **`python-build-standalone` bundling** is a locked decision (§0) but exists in
+   **zero** installers. It is the single biggest lever: it unlocks ★3 for the
+   one-liner, native packages, Windows, and macOS simultaneously. Do it once as a
+   shared helper (§16 Phase 0) and four channels move up together.
+2. **Curated payload staging** — Windows currently ships the whole repo;
+   macOS will need the same staging. Build one shared stager.
+3. **Drop-in dependency system (§6)** — `dropin.toml` + `unicorn-viz dropins`
+   CLI are unbuilt. Not required for core-installer gold stars, but required
+   before the "official drop-in pack" UX and before drop-ins can be promised to
+   install cleanly on any channel. Sequenced last (§16 Phase 7).
 
 ## 1. Current Implementation Snapshot
 
@@ -1085,6 +1139,13 @@ not a separate cleanup pass.
 
 ## 14. Milestones
 
+> **Superseded by §16 (2026-06-21).** This table is kept for history. It assumed
+> an "installers team" and channel-at-a-time delivery. The active plan is the
+> solo-dev, foundation-first roadmap in §16, which front-loads the shared
+> `python-build-standalone` runtime and payload work so multiple channels reach
+> ★3 together. Read §16 for current sequencing; treat the table below as the
+> original sketch.
+
 | Milestone | Scope                                                              | Exit criteria                                    |
 |-----------|--------------------------------------------------------------------|--------------------------------------------------|
 | **M1** — Bash installer    | §3 only                                          | `curl … \| bash` works on Ubuntu 22.04/24.04, Debian 12, Fedora 40/41, Arch; nightly smoke green |
@@ -1137,3 +1198,214 @@ clean, reviewable history.
   - `io.unicornviz.UnicornViz` app ID on Flathub.
   - `djunicorntears/homebrew-unicornviz` GitHub repository.
 - Decide macOS minimum version (Q7 above).
+
+---
+
+## 16. Solo-Dev Phased Roadmap to Five Gold Stars (2026-06-21)
+
+This is the authoritative plan. It replaces the §14 milestone sketch. Design
+constraints, stated plainly:
+
+- **One person.** No parallel "teams." Phases are sequential and each ends in a
+  shippable, reviewable PR (or small stack), per the repo's commit conventions.
+- **No budget except, maybe, store/signing fees.** Every tool below is free on
+  public-repo GitHub Actions (`ubuntu-latest`, `windows-2022`, `macos-14` are all
+  free for public repos), plus free OSS packagers (`fpm`, Inno Setup, `briefcase`,
+  `flatpak-builder`, `snapcraft`). The only spend is itemized in §17 and every
+  paid item is deferrable behind the unsigned-but-documented escape hatch (§0.5.1).
+- **Foundation first.** The two cross-cutting levers (bundled runtime + curated
+  payload) are built once in Phase 0 so four channels climb to ★3 together.
+- **Ship the cheapest reach first.** The Linux one-liner is already ★3 and reaches
+  the widest audience for the least work, so it leads. Windows is the most users
+  but the biggest rework, so it follows the runtime/payload foundation.
+
+### Sequencing at a glance
+
+| Phase | Outcome | Channels moved | Rough effort |
+|-------|---------|----------------|--------------|
+| **P0 — Foundations** | Shared `python-build-standalone` fetcher + curated payload stager + CI hardening (shellcheck, real smoke harness) | unblocks ★3 for one-liner, deb/rpm, Windows, macOS | Medium |
+| **P1 — Linux one-liner → ★5** | Bundled runtime, full `.desktop`, GPG sig, nightly smoke, vanity URL | one-liner | Small |
+| **P2 — Native deb/rpm → ★5** | Relocatable bundled runtime, core-only, conffile, matrix, signed | deb, rpm | Medium |
+| **P3 — Windows → ★5** | Curated payload + embedded Python + ffmpeg, real installer, CI smoke, signing gated | Windows | Large |
+| **P4 — macOS → ★5** | briefcase universal2 dmg, Homebrew cask, Gatekeeper docs | macOS | Large |
+| **P5 — Flatpak → ★5** | Offline pip, tight sandbox, metainfo, Flathub | Flatpak | Medium |
+| **P6 — Snap → ★5** | core24, strict confinement, desktop, Snap Store | Snap | Medium |
+| **P7 — Drop-in system + polish** | `dropin.toml` + `unicorn-viz dropins` CLI, official pack, docs sweep, v1.0 tag | all | Large |
+
+### Phase 0 — Foundations (do these once, everything else depends on them)
+
+1. **`tools/packaging/fetch_runtime.sh`** — downloads and verifies the correct
+   `python-build-standalone` build for a given OS/arch (Linux x86_64/arm64,
+   Windows x64, macOS universal2). One helper, consumed by P1–P4. Pin the release
+   tag + SHA in the script; no "latest" floating.
+2. **`tools/packaging/stage_payload.sh`** — produces a curated payload dir
+   (`unicornviz/`, `assets/`, `config.full.example.toml`, `README.md`, `LICENSE`)
+   with an explicit allowlist so `.git`, `.venv`, `logs/`, `recordings/`,
+   `screenshots/`, `docs/`, and drop-in dev scratch can **never** leak into a
+   shipped artifact. Windows/macOS/native all call it.
+3. **CI hardening (free):**
+   - Add `shellcheck install.sh tools/install/*.sh tools/packaging/*.sh` as a
+     blocking step (currently only `bash -n` runs).
+   - Convert `installer-smoke.yml` from `workflow_dispatch` dry-runs into a real
+     **nightly** (`schedule:`) job that installs into clean containers
+     (`ubuntu:24.04`, `fedora:41`, `archlinux:latest`) and asserts
+     `unicorn-viz --help`. This is the ★4 gate for every Linux channel.
+4. **Decide the runtime story for the one-liner:** bundling `python-build-standalone`
+   means the bash installer stops needing a system `python3` at all. Confirm this
+   is desired for the one-liner too (the §0 decision says yes everywhere); if the
+   owner prefers system Python for the *clone-local dev* path, keep
+   `tools/install_linux.sh` on system Python and only bundle for the public
+   `install.sh`.
+
+**Exit criteria:** `fetch_runtime.sh` and `stage_payload.sh` exist with unit-ish
+smoke tests; shellcheck + nightly real-install smoke are green on `master`.
+
+### Phase 1 — Linux one-liner → ★5 (smallest lift, widest reach)
+
+- Adopt `fetch_runtime.sh`: install into `<prefix>/runtime` and build the venv
+  from the bundled interpreter; drop the hard `python3` requirement.
+- Replace the trimmed `.desktop` in `lib.sh` with the canonical entry from §7
+  (`GenericName`, `Keywords`, `StartupWMClass`, full `Categories`) and install the
+  icon size ladder (48–512) generated at install time.
+- Harden the scripts: `set -Eeuo pipefail` + an `ERR` trap that prints the failing
+  command/line (install.sh currently uses `set -euo pipefail` with only a cleanup
+  trap).
+- **★4:** the Phase 0 nightly container smoke covers this.
+- **★5:** owner generates the `release@unicornviz.io` GPG key; CI signs
+  `SHA256SUMS` → `SHA256SUMS.asc` and publishes `install.sh.asc`; wire
+  `get.unicornviz.io` → raw `install.sh` (owner DNS action, free-ish — see §17).
+
+### Phase 2 — Native `.deb` / `.rpm` → ★5
+
+- Build **inside per-distro containers** (matrix: `ubuntu:22.04`, `ubuntu:24.04`,
+  `debian:12` → deb; `fedora:40`, `fedora:41` → rpm) so the bundled runtime and
+  any compiled wheels match the target ABI. Today both run on whatever Python the
+  runner host has, which is the relocatability risk called out in §0.5.2.
+- Use the bundled `python-build-standalone` runtime instead of a host-linked venv;
+  rewrite `venv/bin/*` shebangs to the final `/opt/unicorn-viz/...` path (§4.2).
+- **Strip drop-ins** from the package (build_native.sh currently `cp -a drop-ins`
+  — that contradicts the core-only decision in §0/§6).
+- Ship `config.toml` as a dpkg/rpm **conffile** at `/etc/unicorn-viz/`; add
+  `postinst` (`update-desktop-database`, `gtk-update-icon-cache`) and `prerm`
+  (remove our symlink only if it still points at us).
+- **★4:** nightly `apt install ./*.deb` / `dnf install ./*.rpm` smoke in clean
+  containers.
+- **★5:** `dpkg-sig` (deb) and `rpm --addsign` (rpm) with the same GPG key from P1.
+  (APT/DNF GitHub-Pages repos remain a post-v1 nicety, §4.4.)
+
+### Phase 3 — Windows → ★5 (biggest rework; most users)
+
+- **Kill the anti-pattern.** Delete the blanket `Source: "{#RepoRoot}\*"` copy and
+  the postinstall network pip install. Replace with: `stage_payload.sh` output +
+  `fetch_runtime.sh` embedded Python 3.11 + a bundled static ffmpeg, all staged at
+  build time on `windows-2022` CI, then `ISCC.exe /DAppVersion=${VERSION}`.
+- Real integration: Start-menu + optional desktop/taskbar shortcuts, PATH registry
+  entry with the `NeedsAddPath` guard, proper uninstaller, `AppUserModelID` set in
+  `app.py` for correct taskbar icon grouping (§8.5).
+- Produce `UnicornViz-Portable-${VERSION}.zip` from the same payload.
+- Move `tools/install_windows*.{bat,ps1}` + the GUI scripts under
+  `tools/dev/windows/` and mark them developer-only; end users never see them.
+- **★4:** CI builds the `.exe` and runs a silent-install (`/SILENT`) smoke that
+  launches the Start-menu target with `--help`.
+- **★5 (no cert yet):** wire the `signtool` step behind a `WINDOWS_CERT` secret
+  gate (§10) — until a cert is bought, CI builds **unsigned** + prints a loud WARN,
+  and the README documents the one-click SmartScreen "More info → Run anyway"
+  path. Buy an OV cert post-revenue to flip it on (§17).
+
+### Phase 4 — macOS → ★5 (currently nonexistent; unsigned v1)
+
+- Stand up `briefcase` (BeeWare) as the bundler; `py2app` fallback if
+  `python-rtmidi`/`moderngl` resist. Universal2 (arm64 + x86_64) so one `.dmg`
+  covers Apple Silicon + Intel.
+- Embed `python-build-standalone` universal2 via `fetch_runtime.sh`; generate
+  `.icns` from `assets/icons/unicorn-viz.png`; set Info.plist usage strings
+  (`NSMicrophoneUsageDescription`, `NSCameraUsageDescription`).
+- Audit `unicornviz/app.py` + drop-ins for Linux-only `os.environ`/PipeWire
+  assumptions before the first build (§11.6).
+- **★4:** `macos-14` CI build produces the `.dmg` + a launch-`--help` smoke.
+- **★5 (unsigned escape hatch):** Homebrew **cask** in
+  `djunicorntears/homebrew-unicornviz` (free; auto-bumped by CI) + README
+  Gatekeeper block (right-click-open + `xattr -dr com.apple.quarantine`). Wire
+  `codesign`/`notarytool` behind the Apple-cert secret gate now; turn it on when
+  the $99/yr Apple Developer Program is purchased post-revenue (§17).
+
+### Phase 5 — Flatpak → ★5
+
+- Generate `python3-requirements.json` from `requirements.txt` via
+  `flatpak-pip-generator` and commit it (Flathub forbids network during build);
+  add native-wheel build deps (`libffi`, `alsa-lib`, `portaudio`) as `modules:`.
+- Tighten `finish-args`: drop `--filesystem=home` and `--share=network`, switch
+  `--socket=pulseaudio` → `--socket=pipewire`, add `xdg-music:ro`/`xdg-videos:ro`/
+  `xdg-pictures:ro` + `xdg-config/unicorn-viz:create`, `--device=dri`
+  (+`--device=input` for MIDI). Base runtime `24.08`.
+- Add `io.unicornviz.UnicornViz.metainfo.xml` + `.desktop` + icon ladder under
+  `packaging/flatpak/data/`.
+- **★4:** `bilelmoussaoui/flatpak-github-actions/flatpak-builder@v6` CI build +
+  `flatpak run … --help` smoke.
+- **★5:** Flathub submission PR (free; **owner must claim the
+  `io.unicornviz.UnicornViz` app-id** first — §0 action item).
+
+### Phase 6 — Snap → ★5
+
+- `base: core24`, move `devmode` → **strict** with explicit plugs (`opengl`,
+  `wayland`, `x11`, `audio-record`, `audio-playback`, `alsa`, `removable-media`,
+  `raw-usb` for MIDI), `grade: stable`.
+- Add a `desktop-launch` wrapper + `meta/gui/unicorn-viz.{png,desktop}` for menu
+  integration.
+- **★4:** `snapcore/action-build@v1` CI + `snap install`/`--help` smoke.
+- **★5:** `snapcraft upload --release=stable` (free; **owner must register the
+  `unicorn-viz` snap name** first — §0 action item).
+
+### Phase 7 — Drop-in dependency system + polish (close out v1.0)
+
+- Build §6 for real: `dropin.toml` in every `drop-ins/*`, the
+  `unicorn-viz dropins {list,check,install,doctor}` CLI, `tools/lint_dropin.py`,
+  and boot-time gating that surfaces missing-dep warnings in the `H` overlay.
+- Define `packaging/dropins/official-bundle.toml` + the optional per-platform
+  "install official drop-in pack" affordance (§6.5).
+- Docs sweep (§13): rewrite README install section with the one-liner, download
+  links, and Flathub/Snap badges; update `user-guide.md` and `configuration.md`
+  for per-install `config.toml` locations. Tag **v1.0**.
+
+### Definition of done for "five gold stars, all platforms"
+
+All six channels (one-liner, deb/rpm counted together as "native", Windows,
+macOS, Flatpak, Snap) sit at ★4 minimum with a documented, owner-gated path to
+★5, and at least the four desktop channels with zero signing cost
+(one-liner, deb/rpm, Flatpak, Snap) are at a full ★5. Windows + macOS bank ★5
+via the unsigned-but-documented escape hatch until certs are funded.
+
+---
+
+## 17. Money Ledger — Free vs. Paid (2026-06-21)
+
+The brief is "we're doing everything ourselves and not paying for anything except
+maybe store submissions." Here is exactly what that buys and what it doesn't.
+
+### Free (use these; the whole roadmap runs on them)
+
+| Item | Notes |
+|------|-------|
+| GitHub Actions CI | `ubuntu-latest`, `windows-2022`, `macos-14` all free for **public** repos. The canonical release repo must be public to keep this free. |
+| `fpm`, Inno Setup, `briefcase`, `flatpak-builder`, `snapcraft` | All OSS / free for our use. |
+| `python-build-standalone` | Free, redistributable (PSF/BSD-family). |
+| Flathub submission & hosting | Free. Needs the app-id claimed (owner action, no fee). |
+| Snap Store publishing | Free. Needs the snap name registered (owner action, no fee). |
+| Homebrew tap (`homebrew-unicornviz`) | Free; just a public GitHub repo. |
+| GPG signing (deb/rpm/checksums) | Free; owner generates one key. |
+| GitHub Pages (future APT/DNF repos) | Free. |
+
+### Paid (all deferrable; ship unsigned + documented until funded)
+
+| Item | Cost | Blocks | Workaround until paid |
+|------|------|--------|-----------------------|
+| Apple Developer Program | **$99/yr** | macOS notarization (silent Gatekeeper pass) | Unsigned `.dmg` + README right-click-open + `xattr` one-liner (§11.4). macOS still reaches ★5 via the escape hatch. |
+| Windows code-signing cert (OV) | **~$200–400/yr** | SmartScreen-clean `.exe` | Unsigned `.exe` + documented "More info → Run anyway" (§10). Windows still reaches ★5 via the escape hatch. EV cert is a later upgrade. |
+| `unicornviz.io` domain | **~$12/yr** | `get.unicornviz.io` vanity URL only | Use the raw `raw.githubusercontent.com/.../install.sh` URL; vanity is cosmetic. |
+| Microsoft Store dev account | **$19 one-time** | MSIX Store listing | Out of v1 scope (§8.6, v1.2). Not needed for the `.exe`. |
+
+**Bottom line:** the entire five-star roadmap can ship for **$0** using the
+unsigned escape hatch on Windows/macOS. The first dollar worth spending, once
+there is revenue, is the **Apple $99/yr** (best trust-per-dollar — it removes the
+scariest first-run wall), then a **Windows OV cert**. A domain is optional polish.
+No payment is on the critical path to "five gold stars."
