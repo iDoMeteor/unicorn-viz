@@ -1295,45 +1295,53 @@ class App:
             color_grade_cfg = self.cfg.get('color_grade', default={}) or {}
             if not isinstance(color_grade_cfg, dict):
                 color_grade_cfg = {}
-            try:
-                color_grade_cls = _load_color_grade_controller_class()
-                self._color_grade = color_grade_cls(
-                    self._ctx,
-                    self._render_width,
-                    self._render_height,
-                    color_grade_cfg,
-                )
-                self._color_grade.set_vj_api(self.vj_api)
-                self.vj_api.register_subsystem('color_grade', self._color_grade)
-                key_handler = getattr(self._color_grade, 'handle_key', None)
-                if callable(key_handler):
-                    self.vj_api.register_key_handler('color_grade', key_handler)
-                log.info('ColorGradeController loaded from drop-in')
-            except Exception as exc:
+            if not bool(color_grade_cfg.get('enabled', True)):
                 self._color_grade = None
-                log.warning('ColorGradeController not available: %s', exc)
+                log.info('ColorGradeController disabled by config')
+            else:
+                try:
+                    color_grade_cls = _load_color_grade_controller_class()
+                    self._color_grade = color_grade_cls(
+                        self._ctx,
+                        self._render_width,
+                        self._render_height,
+                        color_grade_cfg,
+                    )
+                    self._color_grade.set_vj_api(self.vj_api)
+                    self.vj_api.register_subsystem('color_grade', self._color_grade)
+                    key_handler = getattr(self._color_grade, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('color_grade', key_handler)
+                    log.info('ColorGradeController loaded from drop-in')
+                except Exception as exc:
+                    self._color_grade = None
+                    log.warning('ColorGradeController not available: %s', exc)
 
             # BPM-locked strobe / flash post pass with safety governor (optional).
             beat_flash_cfg = self.cfg.get('beat_flash', default={}) or {}
             if not isinstance(beat_flash_cfg, dict):
                 beat_flash_cfg = {}
-            try:
-                beat_flash_cls = _load_beat_flash_controller_class()
-                self._beat_flash = beat_flash_cls(
-                    self._ctx,
-                    self._render_width,
-                    self._render_height,
-                    beat_flash_cfg,
-                )
-                self._beat_flash.set_vj_api(self.vj_api)
-                self.vj_api.register_subsystem('beat_flash', self._beat_flash)
-                key_handler = getattr(self._beat_flash, 'handle_key', None)
-                if callable(key_handler):
-                    self.vj_api.register_key_handler('beat_flash', key_handler)
-                log.info('BeatFlashController loaded from drop-in')
-            except Exception as exc:
+            if not bool(beat_flash_cfg.get('enabled', True)):
                 self._beat_flash = None
-                log.warning('BeatFlashController not available: %s', exc)
+                log.info('BeatFlashController disabled by config')
+            else:
+                try:
+                    beat_flash_cls = _load_beat_flash_controller_class()
+                    self._beat_flash = beat_flash_cls(
+                        self._ctx,
+                        self._render_width,
+                        self._render_height,
+                        beat_flash_cfg,
+                    )
+                    self._beat_flash.set_vj_api(self.vj_api)
+                    self.vj_api.register_subsystem('beat_flash', self._beat_flash)
+                    key_handler = getattr(self._beat_flash, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('beat_flash', key_handler)
+                    log.info('BeatFlashController loaded from drop-in')
+                except Exception as exc:
+                    self._beat_flash = None
+                    log.warning('BeatFlashController not available: %s', exc)
 
             # System-level screen burst timing/transform controller (optional).
             try:
@@ -2434,7 +2442,7 @@ void main() {
             audio_out_cfg = self.cfg.get('audio_out', default={}) or {}
             if not isinstance(audio_out_cfg, dict):
                 audio_out_cfg = {}
-            if bool(audio_out_cfg.get('enabled', False)):
+            if bool(audio_out_cfg.get('enabled', True)):
                 try:
                     audio_out_cls = _load_audio_out_controller_class()
                     self._audio_out = audio_out_cls(self, audio_out_cfg)
@@ -2451,7 +2459,7 @@ void main() {
             osc_cfg = self.cfg.get('osc', default={}) or {}
             if not isinstance(osc_cfg, dict):
                 osc_cfg = {}
-            if bool(osc_cfg.get('enabled', False)):
+            if bool(osc_cfg.get('enabled', True)):
                 try:
                     osc_cls = _load_osc_bridge_controller_class()
                     self._osc_bridge = osc_cls(self, osc_cfg)
@@ -2468,7 +2476,7 @@ void main() {
             lyrics_cfg = self.cfg.get('lyrics', default={}) or {}
             if not isinstance(lyrics_cfg, dict):
                 lyrics_cfg = {}
-            if bool(lyrics_cfg.get('enabled', False)):
+            if bool(lyrics_cfg.get('enabled', True)):
                 try:
                     lyrics_cls = _load_lyrics_controller_class()
                     self._lyrics = lyrics_cls(self, lyrics_cfg)

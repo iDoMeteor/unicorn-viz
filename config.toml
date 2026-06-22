@@ -190,6 +190,42 @@ outer_fill_mix = 0.84
 seed = 0
 
 # ---------------------------------------------------------------------------
+# Synced lyrics overlay  (drop-ins/lyrics-01)
+# Loaded by default (enabled); start_enabled=false keeps the overlay hidden
+# until toggled with Ctrl+Shift+Alt+Y.  Lyrics are sourced from LRCLIB.
+# ---------------------------------------------------------------------------
+[lyrics]
+enabled = true
+start_enabled = false
+# offset_ms = 0
+# font_px = 40
+# max_lines = 1
+# poll_interval_s = 0.5
+
+# ---------------------------------------------------------------------------
+# Other new post / control drop-ins (all loaded by default; whether they are
+# *active* at boot is controlled by start_enabled).  Uncomment to override.
+# See config.full.example.toml for the full key list.
+# ---------------------------------------------------------------------------
+# [color_grade]
+# start_enabled = true       # passive grade on at boot; Ctrl+Shift+Alt+L toggles
+# intensity = 0.85
+# default_grade = "random"   # or a look name, e.g. "Neon Rave"
+#
+# [beat_flash]
+# start_enabled = false      # OFF by default (photosensitivity); Ctrl+Shift+Alt+B
+# max_hz = 3.0               # hard-capped at 3 Hz regardless of this value
+# max_brightness = 0.7       # hard-capped at 0.8 regardless of this value
+#
+# [audio_out]
+# start_enabled = false      # engine loaded but silent until Ctrl+Shift+Alt+O
+#
+# [osc]
+# start_enabled = false      # UDP server bound only after Ctrl+Shift+Alt+9
+# host = "127.0.0.1"
+# port = 9000
+
+# ---------------------------------------------------------------------------
 # Grand Finale controller  (drop-ins/grand-finale-01)
 # End-of-set sequencer triggered by Ctrl+Alt+F or Auto VJ timed finale.
 # ---------------------------------------------------------------------------

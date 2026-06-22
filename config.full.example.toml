@@ -535,12 +535,20 @@ zoom = 1.0
 # postfx_pingpong_min_interval_s = 0.12  # floor (s) — finale fires at this point
 # postfx_pingpong_trigger_chance = 0.40
 
+# Drop-in activation model (applies to the sections below):
+#   enabled        — load the drop-in at all (default true: "drop it in and go").
+#   start_enabled  — whether the feature is *active* at boot. Defaults are safe:
+#                    only color_grade starts on; audio_out/beat_flash/osc/lyrics
+#                    load ready-but-idle and are switched on by their hotkey.
+
 # ── audio-out-01 — audio playback / SFX injection with DJ-deck FX ────────────
 # App-owned audio OUTPUT path (separate from the audio capture pipeline). Plays
 # an optional looping music bed plus one-shot "folley" SFX through a live filter
-# + EQ + reverb chain. Disabled by default; nothing is played unless enabled.
+# + EQ + reverb chain. Loaded by default but silent until start_enabled / the
+# Ctrl+Shift+Alt+O hotkey opens the output stream.
 [audio_out]
-enabled = false
+enabled = true
+start_enabled = false       # engine stays silent until toggled on
 # device = "default"        # output device name/index; omit for system default
 samplerate = 44100
 blocksize = 1024
@@ -566,24 +574,28 @@ beat_min_interval_s = 0.18
 
 # ── color-grade-01 — global colour-grade / LUT post pass ─────────────────────
 # A persistent post-FX pass (after postfx) applying a procedural "look" or an
-# Adobe .cube 3D LUT to the whole frame, blended by intensity. Disabled by
-# default. Built-in looks: Neutral, Teal & Orange, Warm Sunset, Cool Night,
-# Noir, Vibrant Pop, Faded Film, Cyberpunk.
+# Adobe .cube 3D LUT to the whole frame, blended by intensity. Loaded and active
+# by default (a passive aesthetic pass). Built-in looks: Neutral, Teal & Orange,
+# Warm Sunset, Cool Night, Noir, Vibrant Pop, Faded Film, Cyberpunk, Neon Rave,
+# Acid Wash. Drop Adobe .cube files in assets/luts/ to add more.
 [color_grade]
-enabled = false
+enabled = true
+start_enabled = true        # passive grade applied at boot; Ctrl+Shift+Alt+L off
 intensity = 0.85            # 0–1 blend against the ungraded frame
 default_grade = "random"    # built-in look name, LUT file stem, or "random"
-# lut_dir = "assets/luts"   # optional dir of Adobe .cube 3D LUTs
+# lut_dir = "assets/luts"   # optional dir of Adobe .cube 3D LUTs (this is the default)
 
 # ── beat-flash-01 — BPM-locked strobe with photosensitivity safety governor ──
 # Flashes the frame on detected beats (drawn last, on top of any colour grade).
-# Disabled by default. ALL limits are hard-capped by the runtime governor:
-# max_hz <= 3.0 (WCAG/ITU general-flash threshold), max_brightness <= 0.8,
-# and flashes never overlap. These ceilings cannot be raised via config/OSC/MIDI.
+# Loaded by default but start_enabled stays FALSE for photosensitivity safety —
+# the operator opts in with Ctrl+Shift+Alt+B. ALL limits are hard-capped by the
+# runtime governor: max_hz <= 3.0 (WCAG/ITU general-flash threshold),
+# max_brightness <= 0.8, flashes never overlap. Ceilings can't be raised here.
 [beat_flash]
-enabled = false
+enabled = true
+start_enabled = false        # OFF at boot (photosensitivity); opt in via hotkey
 max_hz = 3.0                 # hard-capped at 3.0
-max_brightness = 0.5         # hard-capped at 0.8
+max_brightness = 0.7         # hard-capped at 0.8
 flash_duration = 0.12        # seconds; clamped below the min inter-flash interval
 beat_division = 1            # flash every Nth beat
 mode = "full"                # full | edge | pulse
@@ -592,11 +604,13 @@ beat_threshold = 0.45        # beat rising-edge trigger threshold
 
 # ── osc-bridge-01 — OSC control surface (TouchOSC / Ableton / Max) ───────────
 # Exposes runtime tweakables over OSC. Inbound server runs on a daemon thread;
-# actions execute on the main thread once per frame. Disabled by default.
+# actions execute on the main thread once per frame. Loaded by default but the
+# UDP server is not bound until start_enabled / the Ctrl+Shift+Alt+9 hotkey.
 # Bind host = "0.0.0.0" only on trusted networks (OSC is unauthenticated).
 # Address scheme is documented in drop-ins/osc-bridge-01/README.md.
 [osc]
-enabled = false
+enabled = true
+start_enabled = false       # server stays unbound until toggled on
 host = "127.0.0.1"          # inbound bind address
 port = 9000                 # inbound UDP port
 feedback = false            # publish /uv/state/bpm and /uv/state/beat
@@ -606,9 +620,11 @@ send_port = 9001            # outbound feedback port
 # ── lyrics-01 — synced lyrics overlay (LRCLIB) ───────────────────────────────
 # Time-synced lyrics for the current track, sourced from LRCLIB (NOT Spotify;
 # Spotify has no public lyrics API). Now-playing is read from the spotify
-# subsystem if present, else playerctl/MPRIS. Disabled by default.
+# subsystem if present, else playerctl/MPRIS. Loaded by default; the overlay
+# stays hidden until start_enabled / the Ctrl+Shift+Alt+Y hotkey.
 [lyrics]
-enabled = false
+enabled = true
+start_enabled = false       # overlay hidden until toggled on
 offset_ms = 0               # sync nudge; positive shows lines earlier
 font_px = 40
 max_lines = 1
