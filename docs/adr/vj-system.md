@@ -231,6 +231,36 @@ The tempo term contributes as soon as BPM evidence accumulates.  (2026-06-21)
 
 ---
 
+## BPM Jump Guard — `lock_band_pct` (2026-06-28)
+
+Decision: raised `lock_band_pct` default from `0.12` → `0.16`
+
+**Problem:** The jump guard in `_estimate_tempo_acf()` computes:
+
+```python
+jump_limit = max(lock_band_min, bpm * lock_band_pct)   # lock_band_min = 10.0
+if abs(best_bpm - self._bpm) > jump_limit and acf_conf < large_jump_confidence:
+    return  # block the update
+```
+
+At a false-locked 148 BPM EMA, `lock_band_pct = 0.12` yields `jump_limit = max(10, 148×0.12) = 17.76`.
+A 20 BPM correction (148 → 128) exceeds this limit, so the guard fires unless
+`acf_conf >= large_jump_confidence (0.72)` — a very strict threshold rarely met on real-world audio.
+The `candidate_history` spread guard (3 consecutive ACF frames within 4 BPM) is the correct primary
+stability mechanism; `large_jump_confidence` is a secondary check that was over-constraining legitimate
+corrections.
+
+**Fix:** `lock_band_pct = 0.16` → `jump_limit = max(10, 148×0.16) = 23.7`, which covers the full
+20 BPM lane-change without requiring the high-confidence gate.  The `candidate_history` guard (3
+frames, spread < 4.0 BPM) remains the primary protection against single-frame ACF noise jumping the
+EMA.
+
+**Observed symptom:** Detector locked ~20 BPM hot and stayed there for multiple songs because
+`max_bpm_step = 3.0` caps how fast the EMA moves per block when the update is not fully blocked —
+but here the update returned early, so `self._bpm` never moved at all.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

@@ -805,6 +805,32 @@ def _build_recommender_payload(
             for k, v in sorted(per_profile.items())
         }
 
+    # Director signal summaries from heartbeat rows.
+    # spectral_flux and kick_regularity are logged every heartbeat by
+    # _sequence_director_fields() since the 2026-06-28 director enrichment.
+    if hb_rows:
+        def _hmean(key: str) -> float | None:
+            vals = [float(r[key]) for r in hb_rows if isinstance(r.get(key), (int, float))]
+            return round(sum(vals) / len(vals), 4) if vals else None
+
+        kr_per_profile: dict[str, list[float]] = {}
+        for _r in hb_rows:
+            _pk = str(_r.get('recommended_profile_key') or '').strip()
+            _kr = _r.get('kick_regularity')
+            if _pk and isinstance(_kr, (int, float)):
+                kr_per_profile.setdefault(_pk, []).append(float(_kr))
+
+        director_signals: dict = {
+            'mean_spectral_flux': _hmean('spectral_flux'),
+            'mean_kick_regularity': _hmean('kick_regularity'),
+        }
+        if kr_per_profile:
+            director_signals['kick_regularity_per_recommended_profile'] = {
+                k: round(sum(v) / len(v), 3)
+                for k, v in sorted(kr_per_profile.items())
+            }
+        payload['director_signals'] = director_signals
+
     # Profile switch history (compact)
     switch_history = []
     for r in switch_rows[:30]:
@@ -898,6 +924,17 @@ Key stats:
 - mismatch_pct: % of time the recommendation differed from the active profile
 - hint_alignment_pct: % of time the detected BPM was inside the active profile's BPM range
 - switch_history: each profile switch with BPM context and what was recommended at that moment
+- director_signals.mean_spectral_flux: session-mean broad-spectrum flux (positive energy delta, 0-1 scale)
+- director_signals.mean_kick_regularity: session-mean sub-band kick regularity (0=irregular, 1=metronomic 4-on-the-floor)
+- director_signals.kick_regularity_per_recommended_profile: per-profile mean kick regularity
+
+The recommender uses three additional signals introduced in 2026-06-28:
+- spectral_shape_fit (weight 1.0): cosine similarity of live 64-band perceptual spectrum against a \
+per-profile expected spectral fingerprint — primary tone-color match
+- kick_regularity_fit (weight 0.5): sub-band (31–99 Hz) kick energy regularity confirms or penalises \
+profiles requiring four-on-the-floor patterns
+- top_cand_fit (weight 0.4): best Gaussian BPM match across the ACF top-3 tempo candidates — \
+stabilises scoring when the dominant ACF peak is noisy
 
 Score on four dimensions (0-5 integer each):
 1. profile_accuracy: Are the recommended profiles matching the actual music genre/tempo? \
@@ -922,6 +959,14 @@ Key fields per event:
 - danceability: Essentia danceability [0-1], good proxy for beat strength
 - crest_factor: peak/RMS ratio; high values indicate transient-heavy moments (drops)
 - reason (mode_transition): sustained_rise or sustained_fall (energy going up or down)
+- spectral_flux: broad-spectrum positive energy delta (now integrated into drop_score alongside \
+energy slope and crest factor — a high-flux moment indicates a genuine percussive drop, not just a \
+sustained energy rise)
+- kick_regularity: sub-band (31–99 Hz) kick energy regularity over the last 16 beats at the moment \
+of the event (≥0.60 confirms a four-on-the-floor build; a drop from ≥0.60 to <0.30 triggers an \
+early breakdown detection at 82% of normal energy threshold)
+- beat_phase: position within the beat cycle (0.0–1.0) when this event fired — CRUISE effect swaps \
+are gated to near-downbeat positions (<0.18 or >0.82) for musically-aligned transitions
 
 Score on four dimensions (0-5 integer each):
 1. build_quality: Are build entries (sustained_rise) triggered at genuinely rising energy \
@@ -941,7 +986,8 @@ Using all the data above, identify the highest-leverage tuning opportunities.
 
 The recommender uses these scoring weights (current values):
   tempo_fit × 2.0, band_fit × 1.2, lock_rate × 2.5, mean_conf × 1.8,
-  mean_dconf × 1.2, centroid_fit × 0.8, zcr_fit × 0.6, onset_fit × 0.7
+  mean_dconf × 1.2, centroid_fit × 0.8, zcr_fit × 0.6, onset_fit × 0.7,
+  spectral_shape_fit × 1.0, kick_regularity_fit × 0.5, top_cand_fit × 0.4
 
 Each fit metric is a Gaussian match against the profile's expected mu:
   - centroid_fit: spectral centroid Hz vs spectral_centroid_mu
@@ -979,9 +1025,12 @@ against the expected values above. For profiles where observed ≠ expected:
 - Propose the corrected mu value (round centroid to nearest 50 Hz, zcr to 3 dp, onset to 1 dp)
 
 Also assess whether the current weight distribution (tempo 2.0, band 1.2, centroid 0.8, \
-zcr 0.6, onset 0.7) is well-balanced given this session. If a feature consistently \
-correlated with correct recommendations but has a low weight, flag it for upweighting. \
-If a weight is high but the feature was noisy or uncorrelated, flag for downweighting.
+zcr 0.6, onset 0.7, spectral_shape_fit 1.0, kick_regularity_fit 0.5, top_cand_fit 0.4) is \
+well-balanced given this session. If a feature consistently correlated with correct \
+recommendations but has a low weight, flag it for upweighting. If a weight is high but \
+the feature was noisy or uncorrelated, flag for downweighting. The director_signals section \
+in the recommender payload includes session-level mean_spectral_flux and mean_kick_regularity — \
+use these to assess whether kick_regularity_fit is load-bearing for the music in this session.
 
 ━━━━━━━━━━━━━━━━━━━ RESPONSE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1056,7 +1105,7 @@ Return ONLY valid JSON — no markdown, no prose — matching this schema exactl
     ],
     "weight_recommendations": [
       {{
-        "weight": "tempo_fit | band_fit | lock_rate | mean_conf | mean_dconf | centroid_fit | zcr_fit | onset_fit",
+        "weight": "tempo_fit | band_fit | lock_rate | mean_conf | mean_dconf | centroid_fit | zcr_fit | onset_fit | spectral_shape_fit | kick_regularity_fit | top_cand_fit",
         "current_coefficient": <float>,
         "recommended_coefficient": <float>,
         "rationale": "<1-sentence explanation>"
