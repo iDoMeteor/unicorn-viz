@@ -253,38 +253,8 @@ void main() {
 
 _N_BARS = 64
 _N_WAVE = 512
-
-# Frequency mapping constants.
-# AudioCapture defaults to a 48 kHz stream and Analyzer runs an rfft with
-# n=1024 (fft_bands * 2), so each FFT bin spans sample_rate / n_fft Hz.
-# Bin i covers approximately i * 46.875 Hz at 48 kHz.
-_FFT_BINS = 512
-_FFT_NFFT = 1024
-_SAMPLE_RATE_ASSUMED = 48000
-_BIN_HZ = _SAMPLE_RATE_ASSUMED / _FFT_NFFT  # ~46.875 Hz/bin
-_F_MIN = 30.0     # Hz; below this is mostly DC/sub-bass rumble
-_F_MAX = 16000.0  # Hz; covers full musical range without wasting bars on hiss
-
-
-def _build_log_band_edges(
-    n_bars: int,
-    n_fft_bins: int,
-    bin_hz: float,
-    f_min: float,
-    f_max: float,
-) -> np.ndarray:
-    """Build log-spaced FFT bin edges so each EQ bar covers a perceptual band."""
-    edges = np.logspace(np.log10(f_min), np.log10(f_max), n_bars + 1)
-    bin_idx = np.clip(
-        np.round(edges / bin_hz).astype(np.int32),
-        1,
-        n_fft_bins - 1,
-    )
-    # Force monotonic increase so each bar gets at least one bin.
-    for i in range(1, len(bin_idx)):
-        if bin_idx[i] <= bin_idx[i - 1]:
-            bin_idx[i] = bin_idx[i - 1] + 1
-    return np.clip(bin_idx, 0, n_fft_bins)
+_F_MIN = 30.0     # Hz — must match Analyzer._PERC_F_MIN
+_F_MAX = 16000.0  # Hz — must match Analyzer._PERC_F_MAX
 
 
 def _bar_colour(i: int, n: int) -> tuple[float, float, float]:
@@ -365,18 +335,12 @@ class AudioSpectrum(BaseEffect):
         self._wave_work_buf: np.ndarray = np.zeros((_N_WAVE, 2), dtype=np.float32)
         self._wave_work_buf[:, 0] = self._wave_xs
 
-        # Log-spaced band edges: each EQ bar covers [edges[i], edges[i+1]) bins.
-        self._band_edges = _build_log_band_edges(
-            _N_BARS, _FFT_BINS, _BIN_HZ, _F_MIN, _F_MAX,
-        )
-        # Mild pink-noise compensation so a flat spectrum looks roughly even
-        # across the whole bar range. Computed from band centres so it does
-        # not depend on per-frame audio.
-        center_freqs = np.sqrt(
-            (self._band_edges[:-1] * _BIN_HZ).clip(min=_F_MIN)
-            * (self._band_edges[1:] * _BIN_HZ).clip(min=_F_MIN)
-        )
-        self._band_gain = (center_freqs / _F_MIN).astype(np.float32) ** 0.35
+        # Visual pink-noise perceptual gain — applied on top of audio.bands
+        # (which is already normalized and shared from the Analyzer).
+        # Computed from log-spaced Hz centres; no dependency on FFT bin layout.
+        edges_hz = np.logspace(np.log10(_F_MIN), np.log10(_F_MAX), _N_BARS + 1)
+        center_freqs = np.sqrt(edges_hz[:-1] * edges_hz[1:]).astype(np.float32)
+        self._band_gain = (center_freqs / _F_MIN) ** 0.35
 
     def update(self, dt: float, audio: AudioData) -> None:
         super().update(dt, audio)
@@ -384,18 +348,10 @@ class AudioSpectrum(BaseEffect):
         self._mid    = audio.mid
         self._treble = audio.treble
 
-        if audio.fft is not None and len(audio.fft) >= self._band_edges[-1]:
-            src = audio.fft
-            for i in range(_N_BARS):
-                lo = int(self._band_edges[i])
-                hi = int(self._band_edges[i + 1])
-                if hi <= lo:
-                    hi = lo + 1
-                # Mean of bins in band, weighted by mild pink-noise gain.
-                self._fft[i] = float(src[lo:hi].mean()) * self._band_gain[i]
-            np.clip(self._fft, 0.0, 1.0, out=self._fft)
-        else:
-            self._fft.fill(0.0)
+        # audio.bands is the shared 64-band perceptual spectrum computed once
+        # per frame by the Analyzer. Apply visual pink-noise gain for display.
+        np.multiply(audio.bands, self._band_gain, out=self._fft)
+        np.clip(self._fft, 0.0, 1.0, out=self._fft)
 
         # Smooth + peak hold
         self._smooth *= 0.8

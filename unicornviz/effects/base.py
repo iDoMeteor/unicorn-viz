@@ -78,7 +78,8 @@ class AudioData:
 
     __slots__ = ("fft", "waveform", "bass", "mid", "treble",
                  "bass_n", "mid_n", "treble_n",
-                 "beat", "bpm", "bass_flux", "mid_flux")
+                 "beat", "bpm", "bass_flux", "mid_flux",
+                 "bands", "spectral_flux")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -97,6 +98,12 @@ class AudioData:
         self.bpm: float = 120.0
         self.bass_flux: float = 0.0
         self.mid_flux: float = 0.0
+        # 64 log-spaced perceptual bands (30 Hz – 16 kHz, raw, no visual gain).
+        # Computed once per frame in the Analyzer; shared by effects and auto-VJ.
+        self.bands: np.ndarray = np.zeros(64, dtype=np.float32)
+        # Overall gated spectral flux scalar from the Analyzer (same value used
+        # for onset detection, exposed here for recommender / corpus logging).
+        self.spectral_flux: float = 0.0
 
 
 class BaseEffect(ABC):

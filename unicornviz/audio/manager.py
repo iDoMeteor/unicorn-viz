@@ -122,8 +122,10 @@ class AudioManager:
         target.bpm = source.bpm
         target.bass_flux = source.bass_flux
         target.mid_flux = source.mid_flux
+        target.spectral_flux = source.spectral_flux
         target.fft[:] = source.fft
         target.waveform[:] = source.waveform
+        target.bands[:] = source.bands
 
     def start(self, timeout_s: float | None = None) -> None:
         """Start audio capture and require an active capture source.

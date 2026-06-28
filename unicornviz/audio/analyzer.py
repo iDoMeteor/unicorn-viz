@@ -35,6 +35,12 @@ log = logging.getLogger(__name__)
 _FFT_BANDS = 512
 _SMOOTHING = 0.75          # exponential smoothing coefficient
 _ASSUMED_SAMPLE_RATE = 48000
+
+# 64 log-spaced perceptual bands shared across all consumers (effects + auto-VJ).
+# Matches audio_spectrum.py exactly: 30 Hz – 16 kHz, 64 bands, raw (no visual gain).
+_PERC_N_BANDS = 64
+_PERC_F_MIN = 30.0
+_PERC_F_MAX = 16_000.0
 _BASS_HZ = (40.0, 180.0)
 _LOW_MID_HZ = (180.0, 700.0)
 _MID_HZ = (700.0, 3200.0)
@@ -139,6 +145,17 @@ class Analyzer:
         # Wave 3.1 — scratch buffers to avoid per-frame heap allocation
         self._spectrum_work: np.ndarray = np.zeros(fft_bands, dtype=np.float32)
         self._windowed_buf: np.ndarray = np.zeros(1024, dtype=np.float32)
+
+        # 64-band perceptual bucketing (shared with audio_spectrum.py consumers).
+        # Edges are bin indices into the 512-bin FFT output; precomputed once.
+        edges_hz = np.logspace(
+            np.log10(_PERC_F_MIN), np.log10(_PERC_F_MAX), _PERC_N_BANDS + 1,
+        )
+        bin_hz = _ASSUMED_SAMPLE_RATE / max(1, fft_bands * 2)
+        self._perc_edges: np.ndarray = np.clip(
+            np.round(edges_hz / bin_hz).astype(int), 0, fft_bands - 1,
+        )
+        self._perc_work: np.ndarray = np.zeros(_PERC_N_BANDS, dtype=np.float32)
 
         self._setup_frequency_bands()
 
@@ -364,6 +381,22 @@ class Analyzer:
         self._smoothed *= _SMOOTHING
         self._smoothed += spectrum * (1.0 - _SMOOTHING)
         data.fft[:] = self._smoothed
+
+        # 64-band perceptual spectrum (raw, no visual gain) — bucket smoothed
+        # FFT bins into log-spaced bands and normalize to [0, 1].
+        edges = self._perc_edges
+        for i in range(_PERC_N_BANDS):
+            lo, hi = int(edges[i]), int(edges[i + 1])
+            self._perc_work[i] = self._smoothed[lo:hi + 1].mean() if hi > lo else self._smoothed[lo]
+        peak_perc = self._perc_work.max()
+        if peak_perc > 1e-6:
+            np.multiply(self._perc_work, 1.0 / peak_perc, out=self._perc_work)
+        else:
+            self._perc_work.fill(0.0)
+        data.bands[:] = self._perc_work
+
+        # Expose gated flux scalar for recommender / corpus use.
+        data.spectral_flux = flux
 
         # Waveform (last 512 samples normalised)
         wlen = min(512, len(pcm))
