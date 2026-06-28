@@ -66,3 +66,33 @@ Re-entry trigger:
 
 - Resume when recording/screenshot parity defects recur or when compositor
   dedup refactor milestones make insertion low-risk.
+
+### DW-003 — Raver Mood Preset Split (raver / unicorn raver / mosh monster)
+
+Status: deferred 2026-06-28
+
+What is deferred:
+
+- Split the current `raver` mood preset (BPM ≥ 126) into three named presets:
+  - `raver` — progressive house, tech house, peak-time techno (126–142 BPM, shorter breakdowns)
+  - `unicorn raver` — trance, uplifting trance, melodic techno (136–142 BPM, long epic arcs)
+  - `mosh monster` — psytrance, hardstyle, DnB, metal, industrial (144+ BPM, aggressive short breaks)
+- Auto-selection must be audio-profile-aware, not BPM-only, because trance (138 BPM)
+  and peak-time techno (135 BPM) overlap in BPM range but need different visual presets.
+  Routing: `recommended_profile_key → mood_preset` lookup table driven by the recommender.
+- HUD display, hotkey cycling (Ctrl+J), config.toml keys, and ADR all need updating.
+
+Why deferred:
+
+- The timing fixes applied 2026-06-28 (breakdown_max_s 10→80, build_max_s 20→55) already
+  address the correctness gap for trance. Remaining benefit is aesthetic differentiation
+  (sparkly melodic vs brutal relentless).
+- Auto-selection routing requires coupling the recommender output to mood-preset selection —
+  moderate architectural lift best done in a dedicated session.
+- Benefit is real but polish-tier, not broken-behavior repair.
+
+Re-entry trigger:
+
+- Resume after a few sessions with the 2026-06-28 timing tuning in place so the
+  remaining aesthetic gap can be felt concretely before values are locked in.
+  Estimated effort: 1.5–2 sessions.

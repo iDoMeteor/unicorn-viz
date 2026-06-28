@@ -3094,6 +3094,11 @@ void main() {
                     if self._auto_vj is not None
                     else '--'
                 ),
+                'auto_vj_bpm_conf': (
+                    getattr(self._auto_vj, 'hud_bpm_confidence_label', '--')
+                    if self._auto_vj is not None
+                    else '--'
+                ),
                 'auto_vj_action_in': (
                     getattr(self._auto_vj, 'hud_action_in_label', '--')
                     if self._auto_vj is not None

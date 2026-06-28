@@ -1759,10 +1759,11 @@ void main() {
         if len(genre) > 18:
             genre = genre[:15] + '...'
         bpm = str(self._hud_state.get('auto_vj_bpm', '--'))
+        bpm_conf = str(self._hud_state.get('auto_vj_bpm_conf', '--'))
         action_in = str(self._hud_state.get('auto_vj_action_in', '--'))
 
         line1 = f'{auto_vj_label} | MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre:<18}'
-        line2 = f'BPM: {bpm:>3} | ACTION IN: {action_in:<4}'
+        line2 = f'BPM: {bpm:>3} ({bpm_conf}) | ACTION IN: {action_in:<4}'
         char_w = float(self._glyph_w) * self._font_scale_norm * 1.9
         line1_w = len(line1) * char_w
         line2_w = len(line2) * char_w
