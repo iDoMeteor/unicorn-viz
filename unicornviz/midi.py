@@ -85,208 +85,16 @@ _NOTE_MAP_DEFAULT: dict[int, str] = {
     69: 'fullscreen',    # A4
 }
 
-_APC_PRESET_NAME = 'akai_apc_mini_mk2'
-_APC_MODEL_TOKEN = 'apc mini mk2'
-
-
 # ---------------------------------------------------------------------------
 # Named device presets
+# Drop-ins extend this at startup via MidiManager.register_preset().
 # ---------------------------------------------------------------------------
 
 BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
-    # Akai APC mini mk2
-    # Notes port: 8x8 pad grid (notes 0-63, row 0 bottom = notes 0-7,
-    #             row 7 top = notes 56-63), scene launch buttons (notes 112-119)
-    # Control port: track faders 1-8 (CC 48-55), master fader (CC 56)
-    # Default mapping covers full performance surface:
-    # - Grid 0-63: transport, display, postfx triggers, selectors, contextual nav
-    # - Track buttons 100-107: contextual nav + selector shortcuts
-    # - Scene buttons 112-119: high-priority show controls
-    # Connect to "APC mini mk2 Notes" for pad triggers (device = "notes").
-    # Connect to "APC mini mk2 Control" for fader CCs (device = "control").
-    'akai_apc_mini_mk2': {
-        'cc_map': {
-            # Track faders 1-8 (Control port only)
-            48: 'speed',
-            49: 'intensity',
-            50: 'zoom',
-            51: 'reactivity',
-            52: 'glow',
-            53: 'crt',
-            54: 'volume',
-            55: 'pan',
-            # Master fader
-            56: 'volume',
-        },
-        'note_map': {
-            # Row 7 (top): transport + show globals
-            56: 'next',
-            57: 'prev',
-            58: 'random',
-            59: 'pause',
-            60: 'fullscreen',
-            61: 'audio_toggle',
-            62: 'ansi',
-            63: 'projectm_manager',
-
-            # Row 6
-            48: 'display_single',
-            49: 'display_span_included',
-            50: 'display_span_all',
-            51: 'display_mirror_included',
-            52: 'display_mirror_all',
-            53: 'help',
-            54: 'hud',
-            55: 'screenshot',
-
-            # Row 5: PostFX quick-hits
-            40: 'postfx_1',
-            41: 'postfx_2',
-            42: 'postfx_3',
-            43: 'postfx_4',
-            44: 'postfx_5',
-            45: 'postfx_6',
-            46: 'postfx_7',
-            47: 'postfx_8',
-
-            # Row 4
-            32: 'postfx_9',
-            33: 'postfx_10',
-            34: 'grand_finale',
-            35: 'grand_finale_abort',
-            36: 'control_room',
-            37: 'system_monitor',
-            38: 'audio_selector',
-            39: 'midi_selector',
-
-            # Row 3: contextual navigation strip
-            24: 'context_left',
-            25: 'context_right',
-            26: 'context_up',
-            27: 'context_down',
-            28: 'context_select',
-            29: 'context_back',
-            30: 'replay_splash',
-            31: 'controller_help',
-
-            # Row 2
-            16: 'speed_random',
-            17: 'reactivity_random',
-            18: 'zoom_random',
-            19: 'eq',
-            20: 'audio_toggle',
-            21: 'ansi',
-            22: 'random',
-            23: 'pause',
-
-            # Row 1
-            8: 'next',
-            9: 'prev',
-            10: 'fullscreen',
-            11: 'projectm_manager',
-            12: 'display_single',
-            13: 'audio_selector',
-            14: 'midi_selector',
-            15: 'help',
-
-            # Row 0 (bottom)
-            0: 'context_left',
-            1: 'context_right',
-            2: 'context_up',
-            3: 'context_down',
-            4: 'context_select',
-            5: 'context_back',
-            6: 'postfx_1',
-            7: 'postfx_10',
-
-            # Bottom track buttons (100-107): context slots 1..8
-            100: 'context_slot_1',
-            101: 'context_slot_2',
-            102: 'context_slot_3',
-            103: 'context_slot_4',
-            104: 'context_slot_5',
-            105: 'context_slot_6',
-            106: 'context_slot_7',
-            107: 'context_slot_8',
-
-            # Scene launch buttons (112-119): mirrored context slots 1..8
-            112: 'context_slot_1',
-            113: 'context_slot_2',
-            114: 'context_slot_3',
-            115: 'context_slot_4',
-            116: 'context_slot_5',
-            117: 'context_slot_6',
-            118: 'context_slot_7',
-            119: 'context_slot_8',
-        },
-    },
-
-    # Akai MPK Mini MK2 / MK3
-    # Knobs K1-K8 → CC 70-77 (factory default program)
-    # Pad bank A  → notes 36-43 (C2-B2)
-    # Pad bank B  → notes 44-51 (C3-B3)
-    'akai_mpk_mini': {
-        'cc_map': {
-            70: 'speed',
-            71: 'intensity',
-            72: 'glow',
-            73: 'crt',
-            74: 'zoom',
-            75: 'volume',
-            76: 'pan',
-            77: 'reactivity',
-        },
-        'note_map': {
-            # Pad bank A
-            36: 'next',
-            37: 'prev',
-            38: 'random',
-            39: 'pause',
-            40: 'fullscreen',
-            41: 'audio_toggle',
-            42: 'eq',
-            43: 'ansi',
-            # Pad bank B (mirrors bank A — useful when bank A is held)
-            44: 'next',
-            45: 'prev',
-            46: 'random',
-            47: 'pause',
-            48: 'fullscreen',
-            49: 'audio_toggle',
-            50: 'eq',
-            51: 'ansi',
-        },
-    },
-
-    # Novation LaunchControl XL factory template 1
-    # Send knobs (top row) → CC 13-20, bottom row → CC 29-36, pads → notes 41-56
-    'novation_launchcontrol': {
-        'cc_map': {
-            13: 'speed',
-            14: 'intensity',
-            15: 'glow',
-            16: 'crt',
-            17: 'zoom',
-            18: 'volume',
-            19: 'pan',
-            20: 'reactivity',
-            # Original default single-row mapping kept as bonus
-            74: 'speed',
-            71: 'intensity',
-            91: 'glow',
-            93: 'crt',
-        },
-        'note_map': {
-            41: 'next',
-            42: 'prev',
-            43: 'random',
-            44: 'pause',
-            57: 'fullscreen',
-            58: 'audio_toggle',
-        },
-    },
-
-    # Generic / unknown device — same as built-in defaults
+    # Generic / unknown device — same as built-in defaults.
+    # Device-specific presets (APC mini mk2, MPK Mini, Novation LaunchControl)
+    # are registered at startup by the midi-controllers-01 drop-in via
+    # MidiManager.register_preset().
     'generic': {
         'cc_map': dict(_CC_MAP_DEFAULT),
         'note_map': dict(_NOTE_MAP_DEFAULT),
@@ -317,7 +125,38 @@ class MidiManager:
     2. Named preset from ``BUILTIN_PRESETS`` (if ``preset`` is given)
     3. Per-entry overrides from ``cc_map_override`` / ``note_map_override``
        (sourced from ``[midi.cc_map]`` / ``[midi.note_map]`` in config.toml)
+
+    Drop-ins extend ``BUILTIN_PRESETS`` via :meth:`register_preset` and
+    enable dual-port auto-bind via :meth:`register_dual_port_model`.
     """
+
+    # preset_name → model substring that triggers dual-port auto-bind.
+    _dual_port_registry: 'dict[str, str]' = {}
+
+    @classmethod
+    def register_preset(
+        cls,
+        name: str,
+        mapping: dict[str, dict[int, str]],
+    ) -> None:
+        """Register a named preset so it can be selected via ``config.toml``.
+
+        Call this before ``MidiManager.__init__`` (typically from a drop-in
+        initialiser).  Silently overwrites any existing preset of the same name.
+        """
+        BUILTIN_PRESETS[name] = mapping
+        log.debug('MIDI: registered preset %r', name)
+
+    @classmethod
+    def register_dual_port_model(cls, preset_name: str, model_token: str) -> None:
+        """Register a model token that enables dual-port auto-bind for a preset.
+
+        When ``preset_name`` is active, ``_resolve_target_indices`` will scan
+        available ports for ``model_token`` (case-insensitive substring) and
+        open both the Notes and Control ports automatically.
+        """
+        cls._dual_port_registry[preset_name] = model_token.lower()
+        log.debug('MIDI: registered dual-port token %r for preset %r', model_token, preset_name)
 
     def __init__(
         self,
@@ -449,24 +288,23 @@ class MidiManager:
             if hint_norm and hint_norm in cls._normalize_port_name(name)
         ]
 
-        if preset != _APC_PRESET_NAME:
+        model_token = cls._dual_port_registry.get(preset, '')
+        if not model_token:
             return matches[:1]
 
-        apc_model = [
+        # Dual-port auto-bind: find all ports matching the registered model token.
+        model_ports = [
             i for i, name in enumerate(ports)
-            if _APC_MODEL_TOKEN in cls._normalize_port_name(name)
+            if model_token in cls._normalize_port_name(name)
         ]
-        if not apc_model:
+        if not model_ports:
             return matches[:1]
 
-        # Respect explicit non-APC hints even when APC preset is selected.
-        if matches and not any(i in apc_model for i in matches):
+        # Respect an explicit hint pointing at a non-model device.
+        if matches and not any(i in model_ports for i in matches):
             return matches[:1]
 
-        # For APC, bind the model as a pair even when the hint points at just
-        # one side (Notes or Control).
-        candidates = list(apc_model)
-
+        candidates = list(model_ports)
         notes = [
             i for i in candidates
             if 'notes' in cls._normalize_port_name(ports[i]) or ' note' in cls._normalize_port_name(ports[i])
@@ -479,7 +317,6 @@ class MidiManager:
         if control and control[0] not in chosen:
             chosen.append(control[0])
 
-        # Fall back to up to two model ports when labels are unfamiliar.
         for idx in candidates:
             if len(chosen) >= 2:
                 break

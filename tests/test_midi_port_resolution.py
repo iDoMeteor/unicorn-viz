@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from unicornviz.midi import MidiManager
+
+# Register drop-in presets and dual-port tokens, mirroring what app.py does at runtime.
+_DROPIN = Path(__file__).parent.parent / 'drop-ins' / 'midi-controllers-01'
+sys.path.insert(0, str(_DROPIN))
+from controller_presets import register_all  # noqa: E402
+
+register_all(MidiManager, None)
 
 
 def test_generic_preset_selects_first_hint_match() -> None:

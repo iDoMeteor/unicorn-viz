@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from unicornviz.midi import BUILTIN_PRESETS
+import sys
+from pathlib import Path
+
+from unicornviz.midi import BUILTIN_PRESETS, MidiManager
+
+# Register device presets from the drop-in, mirroring what app.py does at runtime.
+_DROPIN = Path(__file__).parent.parent / 'drop-ins' / 'midi-controllers-01'
+sys.path.insert(0, str(_DROPIN))
+from controller_presets import register_all  # noqa: E402  (after sys.path manipulation)
+
+register_all(MidiManager, None)
 
 
 def test_apc_preset_maps_entire_grid() -> None:

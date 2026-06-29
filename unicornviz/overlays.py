@@ -561,6 +561,7 @@ class Overlays:
         self._show_midi = False
         self._show_system_monitor_modal = False
         self._show_controller_help_modal = False
+        self._controller_help_renderer: 'Callable[[Overlays], None] | None' = None
         self._show_projectm_manager = False
         self._show_webcam_editor_modal = False
         self._audio_sources: list[str] = []
@@ -1082,7 +1083,13 @@ void main() {
         return px, py, pw, ph, W, H
 
     def _render_controller_help_modal(self) -> None:
-        """Draw a controller-focused mapping modal (APC mini mk2 first target)."""
+        """Draw the controller help modal via the registered renderer (if any)."""
+        if self._controller_help_renderer is None:
+            return
+        self._controller_help_renderer(self)
+
+    def _render_controller_help_modal_builtin(self) -> None:
+        """Built-in APC mini mk2 modal — used internally when drop-in absent."""
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.7)
 
@@ -3994,6 +4001,94 @@ void main() {
 
     def toggle_controller_help_modal(self) -> None:
         self._show_controller_help_modal = not self._show_controller_help_modal
+
+    def register_controller_help_renderer(
+        self, fn: 'Callable[[Overlays], None] | None',
+    ) -> None:
+        """Register a callable that draws the controller help modal.
+
+        The callable receives this ``Overlays`` instance and must use the
+        public ``draw_*`` / ``begin_panel`` methods to render its content.
+        Pass ``None`` to remove a previously registered renderer.
+        """
+        self._controller_help_renderer = fn
+
+    # ------------------------------------------------------------------
+    # Public drawing API — for use by drop-in renderers
+    # ------------------------------------------------------------------
+
+    def draw_rect(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        color: tuple[float, float, float, float],
+    ) -> None:
+        """Draw a solid-color axis-aligned rectangle in screen pixels."""
+        self._draw_rect(x, y, w, h, color)
+
+    def draw_text(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        scale: float = 2.0,
+        color: tuple[float, float, float, float] = (1.0, 1.0, 0.0, 1.0),
+    ) -> None:
+        """Draw CP437 bitmap text at ``(x, y)`` in screen pixels."""
+        self._draw_text(text, x, y, scale, color)
+
+    def draw_modal_underlay(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        alpha: float,
+        pad: float = 0.0,
+    ) -> None:
+        """Draw a semi-transparent black underlay behind a panel region."""
+        self._draw_modal_underlay(x, y, w, h, alpha, pad)
+
+    def begin_panel(
+        self,
+        frac_w: float,
+        max_w: float,
+        frac_h: float,
+        max_h: float,
+        underlay_alpha: float = 0.58,
+        underlay_pad: float = 10.0,
+    ) -> tuple[float, float, float, float, float, float]:
+        """Compute centred panel geometry, draw underlay, return (px, py, pw, ph, W, H)."""
+        return self._begin_panel(frac_w, max_w, frac_h, max_h, underlay_alpha, underlay_pad)
+
+    def draw_audio_reactive_border_bulbs(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        bass: float,
+        mid: float,
+        treble: float,
+        t: float,
+        *,
+        speed_scale: float = 1.0,
+        size_scale: float = 1.0,
+    ) -> None:
+        """Draw two animated neon orbs that travel the perimeter of a rect."""
+        self._draw_audio_reactive_border_bulbs(x, y, w, h, bass, mid, treble, t, speed_scale=speed_scale, size_scale=size_scale)
+
+    @property
+    def hud_t(self) -> float:
+        """Current HUD animation clock in seconds."""
+        return self._hud_t
+
+    @property
+    def hud_audio_state(self) -> dict[str, str]:
+        """Latest HUD audio payload (bass, mid, treble, bpm …)."""
+        return self._hud_state
 
     def toggle_projectm_manager(self) -> None:
         self._show_projectm_manager = not self._show_projectm_manager

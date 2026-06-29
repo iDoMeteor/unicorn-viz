@@ -89,3 +89,6 @@
 [submodule "drop-ins/training-kit-01"]
 	path = drop-ins/training-kit-01
 	url = git@github.com:iDoMeteor/unicorn-viz-training-kit-01.git
+[submodule "drop-ins/midi-controllers-01"]
+	path = drop-ins/midi-controllers-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-midi-controllers-01.git

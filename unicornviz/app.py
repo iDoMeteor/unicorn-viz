@@ -2314,6 +2314,18 @@ void main() {
         # presenting black frames to mirror outputs.
         self._create_mirror_outputs()
 
+        # midi-controllers-01: register device presets before MidiManager is constructed
+        # so the preset lookup in MidiManager.__init__ picks them up.
+        _mc_register_all = None
+        try:
+            _mc_register_all = load_dropin_symbol(
+                'midi-controllers-01/controller_presets.py', 'register_all',
+            )
+            _mc_register_all(MidiManager, None)
+        except Exception as _exc:
+            log.debug('midi-controllers-01 preset registration skipped: %s', _exc)
+            _mc_register_all = None
+
         midi_device_hint = self.cfg.get('midi', 'device', default='')
         midi_preset = self.cfg.get('midi', 'preset', default='')
         _raw_cc = self.cfg.get('midi', 'cc_map', default={}) or {}
@@ -2376,6 +2388,14 @@ void main() {
             modal_gate=self.control_room_flash_gate_active,
         )
         self._overlays = overlays
+
+        # midi-controllers-01: register help-modal renderer now that Overlays is ready.
+        if _mc_register_all is not None:
+            try:
+                _mc_register_all(None, overlays)
+            except Exception as _exc:
+                log.debug('midi-controllers-01 renderer registration failed: %s', _exc)
+
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
         overlays.set_system_monitor_audio_provider(
             self._system_monitor_audio_snapshot
