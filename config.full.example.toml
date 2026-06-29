@@ -340,6 +340,13 @@ palette = 0.0
 # random_speed_min = 0.75
 # random_speed_max = 1.25
 
+[effects.BlackHoleCathedral]
+speed = 1.0
+# hue / petals / spin are randomised per run; uncomment to pin a look:
+# hue = 0.6          # 0-1 stained-glass palette offset
+# petals = 12        # rose-window fold count (8/10/12/16/20)
+# spin = 1.0         # rotation direction (+1 / -1)
+
 [effects.SineScroller]
 speed = 1.5
 amplitude = 0.18
