@@ -17,3 +17,7 @@ build/
 .audio_source_state.json
 # Local API keys — see .env.example for variable names
 .env
+# Licensed external USD asset packs (e.g. NVIDIA Omniverse EULA — do not
+# redistribute). Curate packs locally; see assets/sims/README.md for placement.
+assets/sims/*/
+!assets/sims/README.md

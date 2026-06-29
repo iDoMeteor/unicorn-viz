@@ -360,6 +360,15 @@ camera_energy = 1.0
 # Multi-source directories (comma-separated). Useful for public robotics
 # training datasets exported as .usda/.usdc/.usdz:
 # scene_dirs = "drop-ins/sims-01/scenes,assets/robotics-usd,assets/sims"
+# --- Skinned/animated USD characters (UsdSkel rigs, e.g. NVIDIA Reallusion) ---
+# skel_animate = true        # bake + play the rig's skeletal animation
+# skel_frames = 48           # frames baked across the clip (higher = smoother,
+#                            #   more memory/CPU at load; 24-60 is a good range)
+# skel_speed = 1.0           # animation playback rate multiplier
+# skel_pose_time = 0.0       # static pose timecode when skel_animate = false
+# face_audio_react = false   # drive name-matched facial blendshapes from audio
+#                            #   (jaw/mouth → bass). No-op on packs whose
+#                            #   blendshapes ship without semantic names.
 
 [effects.ProjectMEffect]
 speed = 1.0
