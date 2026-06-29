@@ -80,3 +80,6 @@
 [submodule "drop-ins/lyrics-01"]
 	path = drop-ins/lyrics-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-lyrics-01.git
+[submodule "drop-ins/media-01"]
+	path = drop-ins/media-01
+	url = git@github.com:iDoMeteor/unicorn-viz-media-01.git

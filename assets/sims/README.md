@@ -43,6 +43,23 @@ assets/sims/
     Worker/Worker.usd
 ```
 
+## Open-source robots (MuJoCo Menagerie)
+
+`drop-ins/sims-01/tools/fetch_robots.py` downloads robots from the **Apache-2.0**
+[MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie),
+converts their MJCF + OBJ meshes to USD with gently-sweeping joints, and writes
+them to `assets/sims/robots-menagerie/` (git-ignored) plus a `CREDITS.txt`:
+
+```bash
+python drop-ins/sims-01/tools/fetch_robots.py   # needs network + OpenUSD
+```
+
+Ships two by default — `universal_robots_ur5e` (arm) and `unitree_go2`
+(quadruped). They're real, higher-res meshes (~360-420k verts), so at the
+default 48-frame bake each uses a few hundred MB of RAM; lower
+`[effects.SimShowcase] skel_frames` (e.g. 24) if memory is tight. Add more by
+editing the `_MODELS` list (Franka, Spot, ANYmal, Unitree G1/H1, Shadow Hand, …).
+
 ## Loader support
 
 Skinned/animated character rigs are handled by the reusable USD loader in

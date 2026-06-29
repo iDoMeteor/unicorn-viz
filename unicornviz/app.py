@@ -193,6 +193,14 @@ def _load_spotify_controller_class() -> type:
     )
 
 
+def _load_media_controller_class() -> type:
+    """Load MediaController from the media-01 drop-in."""
+    return load_dropin_symbol(
+        'media-01/media_controller.py',
+        'MediaController',
+    )
+
+
 def _load_audio_out_controller_class() -> type:
     """Load AudioOutController from the audio-out-01 drop-in."""
     return load_dropin_symbol(
@@ -279,6 +287,7 @@ class App:
         self._candy_frame = None
         self._auto_vj = None
         self._spotify = None
+        self._media: Any = None
         self._audio_out = None
         self._osc_bridge = None
         self._lyrics = None
@@ -2438,6 +2447,26 @@ void main() {
                     self._spotify = None
                     log.warning('SpotifyController not available: %s', exc)
 
+            # Local media player controller (optional drop-in).
+            media_cfg = self.cfg.get('media', default={}) or {}
+            if not isinstance(media_cfg, dict):
+                media_cfg = {}
+            if bool(media_cfg.get('enabled', False)):
+                try:
+                    media_cls = _load_media_controller_class()
+                    self._media = media_cls(self, media_cfg)
+                    if bool(getattr(self._media, 'enabled', False)):
+                        self.vj_api.register_subsystem('media', self._media)
+                        key_handler = getattr(self._media, 'handle_key', None)
+                        if callable(key_handler):
+                            self.vj_api.register_key_handler('media', key_handler)
+                        log.info('MediaController loaded from drop-in')
+                    else:
+                        self._media = None
+                except Exception as exc:
+                    self._media = None
+                    log.warning('MediaController not available: %s', exc)
+
             # Audio output / SFX-injection controller (optional drop-in).
             audio_out_cfg = self.cfg.get('audio_out', default={}) or {}
             if not isinstance(audio_out_cfg, dict):
@@ -2877,8 +2906,23 @@ void main() {
             # ---------------------------------------------------------------
             fps_now = (1.0 / dt) if dt > 0.0 else 0.0
 
-            # --- Tier B: Spotify snapshot (always, needed for banner) ---
-            spotify_visible = 'YES' if self._spotify is not None else 'NO'
+            # --- Tier B: now-playing snapshot (always, needed for banner) ---
+            # Source priority: media-01 when actively playing, else spotify-01.
+            # Both expose the same snapshot() dict shape so no format changes below.
+            _active_np_source = None
+            if self._media is not None:
+                _media_snap_fn = getattr(self._media, 'snapshot', None)
+                if callable(_media_snap_fn):
+                    try:
+                        _ms = _media_snap_fn()
+                        if isinstance(_ms, dict) and bool(_ms.get('is_playing', False)):
+                            _active_np_source = self._media
+                    except Exception:
+                        pass
+            if _active_np_source is None and self._spotify is not None:
+                _active_np_source = self._spotify
+
+            spotify_visible = 'YES' if _active_np_source is not None else 'NO'
             spotify_status = 'OFF'
             spotify_change_counter = 0
             spotify_length = '--:--'
@@ -2890,8 +2934,8 @@ void main() {
             banner_prev_artist = '-'
             banner_prev_title = '-'
             _spotify_snap: dict | None = None
-            if self._spotify is not None:
-                snap_fn = getattr(self._spotify, 'snapshot', None)
+            if _active_np_source is not None:
+                snap_fn = getattr(_active_np_source, 'snapshot', None)
                 if callable(snap_fn):
                     try:
                         _spotify_snap = snap_fn()
