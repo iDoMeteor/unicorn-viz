@@ -368,6 +368,8 @@ camera_distance = 0.8      # <1 pulls the camera in (larger subject); 1.0 = lega
 # skel_frames = 48           # frames baked across the clip (higher = smoother,
 #                            #   more memory/CPU at load; 24-60 is a good range)
 # skel_speed = 1.0           # animation playback rate multiplier
+# motions_per_character = 1  # dynamic motion clips loaded per character (each a
+#                            #   scene); >1 = more variety, more load/memory
 # skel_pose_time = 0.0       # static pose timecode when skel_animate = false
 # face_audio_react = false   # drive name-matched facial blendshapes from audio
 #                            #   (jaw/mouth → bass). No-op on packs whose
