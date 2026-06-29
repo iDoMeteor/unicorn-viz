@@ -354,6 +354,8 @@ dwell_min = 7.0            # min seconds a scene stays up
 dwell_max = 20.0           # max seconds; each scene picks a random dwell in range
 camera_energy = 1.0
 camera_distance = 0.8      # <1 pulls the camera in (larger subject); 1.0 = legacy
+transition = "fade"        # "fade" (dip-to-black between sims) or "cut" (hard)
+transition_s = 0.6         # total fade duration in seconds (out + in)
 # random_speed_min = 0.80
 # random_speed_max = 1.20
 # random_reactivity_min = 0.80
