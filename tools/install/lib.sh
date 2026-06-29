@@ -2,19 +2,36 @@
 
 # Shared installer helpers for Unicorn Viz Linux installation flows.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 UV_REPO_OWNER="djunicorntears"
 UV_REPO_NAME="unicorn-viz"
+# UV_DEFAULT_PREFIX / UV_DEFAULT_CHANNEL are read by scripts that source this
+# library (install.sh), so shellcheck cannot see their use from here.
+# shellcheck disable=SC2034
 UV_DEFAULT_PREFIX="${HOME}/.local/share/unicorn-viz"
+# shellcheck disable=SC2034
 UV_DEFAULT_CHANNEL="stable"
 UV_DISTRO_FAMILY=""
 UV_DISTRO_ID=""
 UV_DISTRO_LIKE=""
 UV_DRY_RUN=0
 
+# Directory containing this library. When sourced from a clone this resolves to
+# tools/install/; when sourced from a curl-bootstrapped temp file the sibling
+# packaging/ scripts won't be found locally and are fetched from the repo raw URL.
+UV_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 uv_log() {
   echo "[unicorn-viz] $*"
+}
+
+# Print the failing command and line on any unhandled error. Sourcing scripts
+# opt in with:  trap 'uv_err_trap "$LINENO" "$BASH_COMMAND"' ERR
+uv_err_trap() {
+  local line="$1"
+  local cmd="$2"
+  echo "[unicorn-viz] ERROR: command failed (line ${line}): ${cmd}" >&2
 }
 
 uv_warn() {
@@ -146,12 +163,63 @@ uv_install_system_deps() {
   esac
 }
 
+# Provision a bundled python-build-standalone runtime into <runtime_root> and
+# echo the path to its python interpreter. Locates tools/packaging/fetch_runtime.sh
+# from the clone; if absent (curl-bootstrapped install), fetches it from the repo.
+uv_provision_runtime() {
+  local runtime_root="$1"
+  local fetch_script="${UV_LIB_DIR}/../packaging/fetch_runtime.sh"
+  local tmp_fetch=""
+
+  if [[ ! -f "$fetch_script" ]]; then
+    tmp_fetch="$(mktemp)"
+    uv_fetch_to_file \
+      "https://raw.githubusercontent.com/${UV_REPO_OWNER}/${UV_REPO_NAME}/main/tools/packaging/fetch_runtime.sh" \
+      "$tmp_fetch"
+    fetch_script="$tmp_fetch"
+  fi
+
+  if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
+    # Diagnostics to stderr; only the interpreter path goes to stdout so the
+    # caller's command substitution captures a clean single line.
+    uv_log "dry-run: would provision bundled runtime into ${runtime_root}/python" >&2
+    echo "${runtime_root}/python/bin/python3"
+    [[ -n "$tmp_fetch" ]] && rm -f "$tmp_fetch"
+    return 0
+  fi
+
+  local python_path
+  python_path="$(bash "$fetch_script" --dest "$runtime_root" --os linux)"
+  [[ -n "$tmp_fetch" ]] && rm -f "$tmp_fetch"
+
+  if [[ -z "$python_path" ]]; then
+    uv_die "Runtime provisioning did not return an interpreter path."
+  fi
+  echo "$python_path"
+}
+
+# Provision the bundled runtime, then build the venv and install the app with it.
+# Pass UV_SYSTEM_PYTHON=<bin> to skip bundling and use a system interpreter.
+uv_install_runtime_and_app() {
+  local install_root="$1"
+  local source_dir="$2"
+  local python_path
+
+  if [[ -n "${UV_SYSTEM_PYTHON:-}" ]]; then
+    uv_log "Using system Python: ${UV_SYSTEM_PYTHON} (bundled runtime skipped)"
+    python_path="${UV_SYSTEM_PYTHON}"
+  else
+    uv_log "Provisioning bundled Python runtime"
+    python_path="$(uv_provision_runtime "${install_root}/runtime")"
+  fi
+
+  uv_create_venv_and_install "$python_path" "${install_root}/venv" "$source_dir"
+}
+
 uv_create_venv_and_install() {
   local python_bin="$1"
   local venv_dir="$2"
   local source_dir="$3"
-
-  uv_require_cmd "$python_bin"
 
   if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
     uv_log "dry-run: would create venv at ${venv_dir}"
@@ -159,6 +227,8 @@ uv_create_venv_and_install() {
     uv_log "dry-run: would install the project from ${source_dir}"
     return 0
   fi
+
+  uv_require_cmd "$python_bin"
 
   uv_run "$python_bin" -m venv "$venv_dir"
   uv_run "$venv_dir/bin/pip" install --upgrade pip wheel
@@ -199,12 +269,15 @@ uv_install_desktop_entry() {
 Version=1.0
 Type=Application
 Name=Unicorn Viz
-Comment=Audio-reactive demoscene visualizer
-Exec=${symlink_path}
+GenericName=Audio-Reactive Visualizer
+Comment=Fullscreen OpenGL demoscene visualizer with audio and MIDI control
+Exec=${symlink_path} %U
 Icon=unicorn-viz
 Terminal=false
-Categories=AudioVideo;Graphics;
+Categories=AudioVideo;Audio;Graphics;Player;
+Keywords=visualizer;demoscene;vj;audio;midi;ansi;
 StartupNotify=true
+StartupWMClass=unicorn-viz
 EOF
   fi
 

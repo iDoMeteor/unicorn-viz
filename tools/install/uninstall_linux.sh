@@ -15,6 +15,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --dry-run)
+      # UV_DRY_RUN is read by lib.sh's uv_run; cross-file use is invisible here.
+      # shellcheck disable=SC2034
       UV_DRY_RUN=1
       shift
       ;;

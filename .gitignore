@@ -3,6 +3,7 @@
 *.pyc
 *.swp
 .venv/
+.venv-runtime/
 __pycache__/
 logs/
 notes.md

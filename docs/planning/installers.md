@@ -72,7 +72,7 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 
 | Channel | Today | Gap to next star |
 |---|---|---|
-| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★ | Bundle `python-build-standalone` (still uses system `python3`); ship the full canonical `.desktop` (§7) + icon size ladder; add `set -Eeuo pipefail` + `ERR` trap; **★4:** shellcheck gate + nightly real-container install smoke (currently dry-run only); **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
+| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★ (climbing) | **Done 2026-06-21:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); ships the full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; shellcheck gate in smoke CI. **Remaining for ★4:** icon size ladder; nightly **real-container** install smoke (still dry-run only). **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
 | **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★ | Build inside per-distro containers with a bundled relocatable runtime (today's venv links the CI host's Python → ABI/relocatability risk); **strip drop-ins** (currently copied in, violates core-only decision §0); add `config.toml` conffile + `postinst`/`prerm`; **★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
 | **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
@@ -81,10 +81,11 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 
 **Cross-cutting blockers that gate stars on multiple channels at once:**
 
-1. **`python-build-standalone` bundling** is a locked decision (§0) but exists in
-   **zero** installers. It is the single biggest lever: it unlocks ★3 for the
-   one-liner, native packages, Windows, and macOS simultaneously. Do it once as a
-   shared helper (§16 Phase 0) and four channels move up together.
+1. **`python-build-standalone` bundling** is a locked decision (§0). The shared
+   helper now exists (`tools/packaging/fetch_runtime.sh`, landed 2026-06-21) and
+   is wired into both Linux bash installers. It is the single biggest lever: it
+   unlocks ★3 for the one-liner (done), native packages, Windows, and macOS. The
+   native/Windows/macOS channels still need to adopt it (Phases 2–4).
 2. **Curated payload staging** — Windows currently ships the whole repo;
    macOS will need the same staging. Build one shared stager.
 3. **Drop-in dependency system (§6)** — `dropin.toml` + `unicorn-viz dropins`
@@ -1219,6 +1220,32 @@ constraints, stated plainly:
   the widest audience for the least work, so it leads. Windows is the most users
   but the biggest rework, so it follows the runtime/payload foundation.
 
+### Progress log
+
+- **2026-06-21 — Bundling system + Linux low-hanging fruit landed.**
+  - `tools/packaging/fetch_runtime.sh`: the shared "bundling system." Downloads a
+    pinned `python-build-standalone` interpreter (CPython 3.11.10, PBS `20241016`),
+    verifies it against the upstream `.sha256` sidecar, extracts it, and prints the
+    interpreter path. Autodetects or accepts `--os`/`--arch` (Linux/macOS/Windows
+    × x86_64/aarch64/universal2) so Phases 2–4 can reuse it unchanged. Pin is
+    env-overridable (`UV_PBS_RELEASE`, `UV_PBS_PYVER`) and **must be re-confirmed
+    against upstream before each release** (a wrong pin 404s loudly).
+  - `tools/install/lib.sh`: added `uv_provision_runtime` + `uv_install_runtime_and_app`
+    (locates `fetch_runtime.sh` in a clone, or curl-bootstraps it for the
+    `curl | bash` path); `set -Eeuo pipefail` + `uv_err_trap`; upgraded the
+    `.desktop` to the canonical entry (§7) with `GenericName`/`Keywords`/
+    `StartupWMClass`/full `Categories`.
+  - `install.sh` and `tools/install_linux.sh`: **bundled runtime is now the
+    default** for both (the dev-clone installer too, per owner decision). Added
+    `--system-python` to opt out. Dev clone puts the runtime in `.venv-runtime/`
+    (gitignored) and still builds `.venv/` so `run.sh` is unchanged.
+  - `installer-smoke.yml`: added a `shellcheck` gate and bundled/`--system-python`
+    dry-run coverage.
+  - Verified end-to-end: `fetch_runtime.sh` downloads + checksum-verifies + extracts
+    a working CPython 3.11.10 that builds a venv; all installer dry-runs pass.
+- **Still open from Phase 0:** `stage_payload.sh` (curated payload stager);
+  convert smoke from dry-run to a **nightly real-container install** test.
+
 ### Sequencing at a glance
 
 | Phase | Outcome | Channels moved | Rough effort |
@@ -1234,43 +1261,45 @@ constraints, stated plainly:
 
 ### Phase 0 — Foundations (do these once, everything else depends on them)
 
-1. **`tools/packaging/fetch_runtime.sh`** — downloads and verifies the correct
-   `python-build-standalone` build for a given OS/arch (Linux x86_64/arm64,
-   Windows x64, macOS universal2). One helper, consumed by P1–P4. Pin the release
-   tag + SHA in the script; no "latest" floating.
+1. **`tools/packaging/fetch_runtime.sh`** — ✅ **Done (2026-06-21).** Downloads and
+   checksum-verifies the correct `python-build-standalone` build for a given
+   OS/arch (Linux x86_64/arm64, Windows x64, macOS universal2/arm64/x86_64). One
+   helper, consumed by P1–P4. Release tag + version are pinned (env-overridable),
+   not floating; download is verified against the upstream `.sha256` sidecar.
 2. **`tools/packaging/stage_payload.sh`** — produces a curated payload dir
    (`unicornviz/`, `assets/`, `config.full.example.toml`, `README.md`, `LICENSE`)
    with an explicit allowlist so `.git`, `.venv`, `logs/`, `recordings/`,
    `screenshots/`, `docs/`, and drop-in dev scratch can **never** leak into a
    shipped artifact. Windows/macOS/native all call it.
 3. **CI hardening (free):**
-   - Add `shellcheck install.sh tools/install/*.sh tools/packaging/*.sh` as a
-     blocking step (currently only `bash -n` runs).
-   - Convert `installer-smoke.yml` from `workflow_dispatch` dry-runs into a real
-     **nightly** (`schedule:`) job that installs into clean containers
-     (`ubuntu:24.04`, `fedora:41`, `archlinux:latest`) and asserts
+   - ✅ **Done:** `shellcheck` gate added to `installer-smoke.yml` over
+     `install.sh`, `tools/install/*.sh`, and `tools/packaging/fetch_runtime.sh`.
+   - **Still open:** convert `installer-smoke.yml` from `workflow_dispatch`
+     dry-runs into a real **nightly** (`schedule:`) job that installs into clean
+     containers (`ubuntu:24.04`, `fedora:41`, `archlinux:latest`) and asserts
      `unicorn-viz --help`. This is the ★4 gate for every Linux channel.
-4. **Decide the runtime story for the one-liner:** bundling `python-build-standalone`
-   means the bash installer stops needing a system `python3` at all. Confirm this
-   is desired for the one-liner too (the §0 decision says yes everywhere); if the
-   owner prefers system Python for the *clone-local dev* path, keep
-   `tools/install_linux.sh` on system Python and only bundle for the public
-   `install.sh`.
+4. **Runtime story for the one-liner:** ✅ **Resolved (2026-06-21).** Both the
+   public `install.sh` **and** the clone-local `tools/install_linux.sh` default to
+   the bundled `python-build-standalone` runtime (owner decision). `--system-python`
+   opts out for contributors who want their own interpreter.
 
 **Exit criteria:** `fetch_runtime.sh` and `stage_payload.sh` exist with unit-ish
 smoke tests; shellcheck + nightly real-install smoke are green on `master`.
 
 ### Phase 1 — Linux one-liner → ★5 (smallest lift, widest reach)
 
-- Adopt `fetch_runtime.sh`: install into `<prefix>/runtime` and build the venv
-  from the bundled interpreter; drop the hard `python3` requirement.
-- Replace the trimmed `.desktop` in `lib.sh` with the canonical entry from §7
-  (`GenericName`, `Keywords`, `StartupWMClass`, full `Categories`) and install the
-  icon size ladder (48–512) generated at install time.
-- Harden the scripts: `set -Eeuo pipefail` + an `ERR` trap that prints the failing
-  command/line (install.sh currently uses `set -euo pipefail` with only a cleanup
-  trap).
-- **★4:** the Phase 0 nightly container smoke covers this.
+- ✅ **Done (2026-06-21):** adopted `fetch_runtime.sh` — installs into
+  `<prefix>/runtime` and builds the venv from the bundled interpreter; the hard
+  `python3` requirement is dropped (system Python only via `--system-python`).
+- ✅ **Done (2026-06-21):** replaced the trimmed `.desktop` in `lib.sh` with the
+  canonical §7 entry (`GenericName`, `Keywords`, `StartupWMClass`, full
+  `Categories`).
+- ✅ **Done (2026-06-21):** `set -Eeuo pipefail` + an `ERR` trap (`uv_err_trap`)
+  that prints the failing command/line, across `install.sh`, `lib.sh`, and
+  `tools/install_linux.sh`.
+- **Still open:** generate + install the icon size ladder (48–512) at install
+  time (needs ImageMagick best-effort, fall back to the single 256px icon).
+- **★4:** the Phase 0 nightly container smoke covers this (still to be built).
 - **★5:** owner generates the `release@unicornviz.io` GPG key; CI signs
   `SHA256SUMS` → `SHA256SUMS.asc` and publishes `install.sh.asc`; wire
   `get.unicornviz.io` → raw `install.sh` (owner DNS action, free-ish — see §17).

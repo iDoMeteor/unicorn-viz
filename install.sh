@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_PATH="${SCRIPT_DIR}/tools/install/lib.sh"
 
 if [[ -f "$LIB_PATH" ]]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090,SC1091
   source "$LIB_PATH"
 elif [[ -f "${PWD}/tools/install/lib.sh" ]]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090,SC1091
   source "${PWD}/tools/install/lib.sh"
 else
   BOOTSTRAP_LIB="$(mktemp)"
@@ -27,6 +27,9 @@ else
   source "$BOOTSTRAP_LIB"
 fi
 
+# Print the failing command/line on any unhandled error (helper from lib.sh).
+trap 'uv_err_trap "$LINENO" "$BASH_COMMAND"' ERR
+
 PREFIX="${UV_DEFAULT_PREFIX}"
 PYTHON_BIN="python3"
 CHANNEL="${UV_DEFAULT_CHANNEL}"
@@ -34,6 +37,7 @@ VERSION=""
 NO_DEPS=0
 NO_DESKTOP=0
 UNINSTALL=0
+SYSTEM_PYTHON=0
 
 cleanup() {
   if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR}" ]]; then
@@ -52,9 +56,14 @@ Unicorn Viz Linux installer
 Usage:
   ./install.sh [options]
 
+By default a self-contained Python runtime is bundled into <prefix>/runtime so
+the install never depends on the system interpreter. Use --system-python to opt
+out and build the venv from a system Python instead.
+
 Options:
   --prefix <dir>            Install prefix (default: ~/.local/share/unicorn-viz)
-  --python <bin>            Python executable to use (default: python3)
+  --system-python           Use a system Python instead of the bundled runtime
+  --python <bin>            System Python to use with --system-python (default: python3)
   --version <vX.Y.Z|X.Y.Z>  Install specific version tag
   --channel <stable|prerelease>
                             Release channel when --version is not given
@@ -76,6 +85,10 @@ parse_args() {
       --python)
         PYTHON_BIN="$2"
         shift 2
+        ;;
+      --system-python)
+        SYSTEM_PYTHON=1
+        shift
         ;;
       --version)
         VERSION="$2"
@@ -191,10 +204,16 @@ run_install() {
     return
   fi
 
+  if [[ "$SYSTEM_PYTHON" -eq 1 ]]; then
+    export UV_SYSTEM_PYTHON="$PYTHON_BIN"
+  fi
+
   if [[ "${UV_DRY_RUN:-0}" -eq 1 ]]; then
     local dry_version="${VERSION:-latest ${CHANNEL}}"
+    local runtime_note="bundled Python runtime"
+    [[ "$SYSTEM_PYTHON" -eq 1 ]] && runtime_note="system Python ${PYTHON_BIN}"
     uv_log "dry-run: would install ${dry_version} into ${PREFIX}"
-    uv_log "dry-run: would install system dependencies, download release assets, create the venv, and install desktop integration"
+    uv_log "dry-run: would install system dependencies, download release assets, provision the ${runtime_note}, create the venv, and install desktop integration"
     return
   fi
 
@@ -217,7 +236,7 @@ run_install() {
   uv_run mkdir -p "$PREFIX"
   uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
 
-  uv_create_venv_and_install "$PYTHON_BIN" "$PREFIX/venv" "$SRC_DIR"
+  uv_install_runtime_and_app "$PREFIX" "$SRC_DIR"
 
   if [[ "$NO_DESKTOP" -eq 0 ]]; then
     uv_log "Installing desktop/menu entry"

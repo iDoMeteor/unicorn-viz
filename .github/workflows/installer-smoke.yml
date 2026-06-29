@@ -16,17 +16,39 @@ jobs:
 
       - name: Validate shell syntax
         run: |
-          bash -n install.sh tools/install/lib.sh tools/install/uninstall_linux.sh tools/install_linux.sh
+          bash -n install.sh \
+            tools/install/lib.sh \
+            tools/install/uninstall_linux.sh \
+            tools/install_linux.sh \
+            tools/packaging/fetch_runtime.sh \
+            tools/packaging/build_native.sh
 
-      - name: Smoke test dev installer dry-run
+      - name: Lint installer scripts (shellcheck)
+        run: |
+          shellcheck install.sh \
+            tools/install/lib.sh \
+            tools/install/uninstall_linux.sh \
+            tools/install_linux.sh \
+            tools/packaging/fetch_runtime.sh
+
+      - name: Smoke test dev installer dry-run (bundled runtime)
         run: |
           chmod +x tools/install_linux.sh
-          ./tools/install_linux.sh --dry-run --no-deps --python python3
+          ./tools/install_linux.sh --dry-run --no-deps
+
+      - name: Smoke test dev installer dry-run (system python)
+        run: |
+          ./tools/install_linux.sh --dry-run --no-deps --system-python --python python3
 
       - name: Smoke test release installer dry-run
         run: |
           chmod +x install.sh
           ./install.sh --dry-run --version 0.1.0 --no-deps
+
+      - name: Smoke test runtime fetcher help
+        run: |
+          chmod +x tools/packaging/fetch_runtime.sh
+          ./tools/packaging/fetch_runtime.sh --help
 
       - name: Smoke test uninstall helper dry-run
         run: |
