@@ -353,6 +353,7 @@ mix_time = 14.0             # legacy; superseded by dwell_min/dwell_max below
 dwell_min = 7.0            # min seconds a scene stays up
 dwell_max = 20.0           # max seconds; each scene picks a random dwell in range
 camera_energy = 1.0
+camera_distance = 0.8      # <1 pulls the camera in (larger subject); 1.0 = legacy
 # random_speed_min = 0.80
 # random_speed_max = 1.20
 # random_reactivity_min = 0.80
