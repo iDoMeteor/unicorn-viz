@@ -965,13 +965,23 @@ class VJApi:
         new_speed = max(0.05, min(10.0, float(value)))
         # Intentional exception: when Auto VJ is actively running in the
         # raver profile, preserve the old discontinuous slew look on purpose.
-        # Everywhere else we keep continuity-correct time.
+        # Lower-third raver BPM (126-138: prog house, early trance) gets the
+        # scramble only 1-in-3 calls — enough chaos without overwhelming slower
+        # material.  Mid (138-155) and fast (155+) raver run it every time.
         auto_vj = getattr(self._app, '_auto_vj', None)  # noqa: SLF001
-        raver_scramble = bool(
+        raver_scramble = False
+        if (
             auto_vj is not None
             and bool(getattr(auto_vj, 'enabled', False))
             and str(getattr(auto_vj, '_profile', '')).lower() == 'raver'
-        )
+        ):
+            import random
+            _grid = getattr(auto_vj, '_grid', None)
+            _bpm = float(getattr(_grid, 'bpm', 0.0) or 0.0) if _grid is not None else 0.0
+            if _bpm >= 138.0:
+                raver_scramble = True
+            else:
+                raver_scramble = random.random() < (1.0 / 3.0)
         # Keep shader phase continuous for effects that use
         # t = iTime * (bias + scale * iSpeed).
         # Defaults match the common t = iTime * iSpeed case.
