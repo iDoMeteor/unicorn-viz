@@ -349,7 +349,9 @@ font_scale = 4.0
 
 [effects.SimShowcase]
 speed = 1.0
-mix_time = 14.0
+mix_time = 14.0             # legacy; superseded by dwell_min/dwell_max below
+dwell_min = 7.0            # min seconds a scene stays up
+dwell_max = 20.0           # max seconds; each scene picks a random dwell in range
 camera_energy = 1.0
 # random_speed_min = 0.80
 # random_speed_max = 1.20
