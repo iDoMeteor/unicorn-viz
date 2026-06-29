@@ -56,6 +56,19 @@ uv_require_cmd() {
   command -v "$cmd" >/dev/null 2>&1 || uv_die "Required command not found: $cmd"
 }
 
+# Run a command with root privileges. Uses sudo when not already root; runs
+# directly when root (e.g. inside CI containers that have no sudo). Respects
+# UV_DRY_RUN via uv_run.
+uv_sudo() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    uv_run "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    uv_run sudo "$@"
+  else
+    uv_die "This step needs root, but you are not root and sudo is unavailable: $*"
+  fi
+}
+
 uv_fetch_to_file() {
   local url="$1"
   local output="$2"
@@ -130,8 +143,8 @@ uv_install_system_deps() {
 
   case "${UV_DISTRO_FAMILY}" in
     apt)
-      uv_run sudo apt-get update
-      uv_run sudo apt-get install -y \
+      uv_sudo apt-get update
+      uv_sudo apt-get install -y \
         "${python_bin}" "${python_bin}-venv" "${python_bin}-dev" \
         libsdl2-dev libgl1-mesa-dev libffi-dev \
         libpipewire-0.3-dev libasound2-dev \
@@ -139,7 +152,7 @@ uv_install_system_deps() {
         ffmpeg git curl
       ;;
     dnf)
-      uv_run sudo dnf install -y \
+      uv_sudo dnf install -y \
         "${python_bin}" "${python_bin}-devel" gcc-c++ make \
         SDL2-devel mesa-libGL-devel libffi-devel \
         pipewire-devel alsa-lib-devel \
@@ -147,13 +160,13 @@ uv_install_system_deps() {
         git curl
       # ffmpeg is available via RPM Fusion (rpmfusion-free) on Fedora 38+.
       # Enable it with: dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-      if ! uv_run sudo dnf install -y ffmpeg; then
+      if ! uv_sudo dnf install -y ffmpeg; then
         uv_warn "ffmpeg not found. Enable RPM Fusion for recording support:"
         uv_warn "  dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-\$(rpm -E %fedora).noarch.rpm"
       fi
       ;;
     pacman)
-      uv_run sudo pacman -Sy --noconfirm \
+      uv_sudo pacman -Sy --noconfirm \
         python python-pip sdl2 mesa libffi pipewire alsa-lib \
         portaudio libsndfile ffmpeg git curl
       ;;

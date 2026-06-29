@@ -2,7 +2,7 @@
 
 **Owner:** Solo maintainer (one-person studio)
 **Status:** Active — driving toward five gold-star installers
-**Last updated:** 2026-06-21
+**Last updated:** 2026-06-29
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -72,7 +72,7 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 
 | Channel | Today | Gap to next star |
 |---|---|---|
-| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★ (climbing) | **Done 2026-06-21:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); ships the full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; shellcheck gate in smoke CI. **Remaining for ★4:** icon size ladder; nightly **real-container** install smoke (still dry-run only). **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
+| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Remaining:** validate the **release path** (tag → tarball → checksum) against a real release; icon size ladder. **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
 | **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★ | Build inside per-distro containers with a bundled relocatable runtime (today's venv links the CI host's Python → ABI/relocatability risk); **strip drop-ins** (currently copied in, violates core-only decision §0); add `config.toml` conffile + `postinst`/`prerm`; **★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
 | **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
@@ -86,8 +86,10 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
    is wired into both Linux bash installers. It is the single biggest lever: it
    unlocks ★3 for the one-liner (done), native packages, Windows, and macOS. The
    native/Windows/macOS channels still need to adopt it (Phases 2–4).
-2. **Curated payload staging** — Windows currently ships the whole repo;
-   macOS will need the same staging. Build one shared stager.
+2. **Curated payload staging** — ✅ done. `tools/packaging/stage_payload.sh`
+   (landed 2026-06-29) produces an allowlisted core payload (no `.git`/`.venv`/
+   `logs`/`docs`/`drop-ins`/licensed sims packs) with a leak guard. Windows,
+   macOS, and native packaging stage from it so none can ship the whole repo.
 3. **Drop-in dependency system (§6)** — `dropin.toml` + `unicorn-viz dropins`
    CLI are unbuilt. Not required for core-installer gold stars, but required
    before the "official drop-in pack" UX and before drop-ins can be promised to
@@ -1243,8 +1245,28 @@ constraints, stated plainly:
     dry-run coverage.
   - Verified end-to-end: `fetch_runtime.sh` downloads + checksum-verifies + extracts
     a working CPython 3.11.10 that builds a venv; all installer dry-runs pass.
-- **Still open from Phase 0:** `stage_payload.sh` (curated payload stager);
-  convert smoke from dry-run to a **nightly real-container install** test.
+- **2026-06-29 — Phase 0 foundations completed.**
+  - `tools/packaging/stage_payload.sh`: the curated payload stager. Allowlist copy
+    of `unicornviz/`, `assets/`, `config.full.example.toml`, `requirements.txt`,
+    `pyproject.toml`, `README.md` (+ `LICENSE` when present); excludes bytecode,
+    `.DS_Store`, and **all licensed `assets/sims/` packs** (keeps the placement
+    README); fails loudly if a required member is missing or if a forbidden tree
+    (`.git`, `.venv`, `logs`, `docs`, `drop-ins`, `tests`, `build`, …) or a sims
+    pack subdir leaks in. Verified: a dev-tree run drops 115M → 44M and the leak
+    guards hold.
+  - `lib.sh`: added `uv_sudo` (runs directly as root, else via sudo, else dies) so
+    the real-install smoke works in root CI containers; `uv_install_system_deps`
+    now routes every privileged call through it.
+  - `installer-smoke.yml`: now runs **nightly** (`schedule:`). The fast job adds a
+    `stage_payload.sh` smoke (asserts no `.git`/`drop-ins`/`docs` leak); a new
+    `real-install` matrix does a **full clean-container install** of
+    `tools/install_linux.sh` (bundled runtime + system deps) on `ubuntu:24.04`,
+    `fedora:41`, and `archlinux:latest`, then asserts `unicorn-viz --help`. This
+    is the ★4 install gate for the Linux channels.
+- **Still open (validation):** the **release path** (`install.sh` resolving a real
+  GitHub release → tarball → checksum) is still only dry-run-tested because no
+  release exists yet; validate it against a one-off test release. Also: add a
+  `LICENSE` file (MIT is declared in `pyproject.toml` but no license text ships).
 
 ### Sequencing at a glance
 
@@ -1266,18 +1288,22 @@ constraints, stated plainly:
    OS/arch (Linux x86_64/arm64, Windows x64, macOS universal2/arm64/x86_64). One
    helper, consumed by P1–P4. Release tag + version are pinned (env-overridable),
    not floating; download is verified against the upstream `.sha256` sidecar.
-2. **`tools/packaging/stage_payload.sh`** — produces a curated payload dir
-   (`unicornviz/`, `assets/`, `config.full.example.toml`, `README.md`, `LICENSE`)
+2. **`tools/packaging/stage_payload.sh`** — ✅ **Done (2026-06-29).** Produces a
+   curated payload dir (`unicornviz/`, `assets/`, `config.full.example.toml`,
+   `requirements.txt`, `pyproject.toml`, `README.md`, + `LICENSE` when present)
    with an explicit allowlist so `.git`, `.venv`, `logs/`, `recordings/`,
-   `screenshots/`, `docs/`, and drop-in dev scratch can **never** leak into a
-   shipped artifact. Windows/macOS/native all call it.
+   `screenshots/`, `docs/`, `drop-ins/`, and licensed sims packs can **never**
+   leak into a shipped artifact (enforced by post-stage leak guards).
+   Windows/macOS/native will all call it.
 3. **CI hardening (free):**
-   - ✅ **Done:** `shellcheck` gate added to `installer-smoke.yml` over
-     `install.sh`, `tools/install/*.sh`, and `tools/packaging/fetch_runtime.sh`.
-   - **Still open:** convert `installer-smoke.yml` from `workflow_dispatch`
-     dry-runs into a real **nightly** (`schedule:`) job that installs into clean
+   - ✅ **Done (2026-06-21):** `shellcheck` gate added to `installer-smoke.yml`
+     over `install.sh`, `tools/install/*.sh`, and the packaging scripts.
+   - ✅ **Done (2026-06-29):** `installer-smoke.yml` now runs **nightly**
+     (`schedule:`) with a `real-install` matrix that installs into clean
      containers (`ubuntu:24.04`, `fedora:41`, `archlinux:latest`) and asserts
-     `unicorn-viz --help`. This is the ★4 gate for every Linux channel.
+     `unicorn-viz --help`. The ★4 install gate for the Linux channels. The
+     **release-path** install (`install.sh` against a tagged release) still needs
+     a one-off validation once a test release exists.
 4. **Runtime story for the one-liner:** ✅ **Resolved (2026-06-21).** Both the
    public `install.sh` **and** the clone-local `tools/install_linux.sh` default to
    the bundled `python-build-standalone` runtime (owner decision). `--system-python`

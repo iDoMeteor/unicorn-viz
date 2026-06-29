@@ -1,14 +1,17 @@
 name: Installer Smoke
 
 on:
+  schedule:
+    # Nightly at 07:00 UTC.
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  linux-installer-smoke:
-    name: Smoke Test Linux Installer Scripts
+  lint-and-dry-run:
+    name: Lint + dry-run installer scripts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,6 +24,7 @@ jobs:
             tools/install/uninstall_linux.sh \
             tools/install_linux.sh \
             tools/packaging/fetch_runtime.sh \
+            tools/packaging/stage_payload.sh \
             tools/packaging/build_native.sh
 
       - name: Lint installer scripts (shellcheck)
@@ -29,7 +33,19 @@ jobs:
             tools/install/lib.sh \
             tools/install/uninstall_linux.sh \
             tools/install_linux.sh \
-            tools/packaging/fetch_runtime.sh
+            tools/packaging/fetch_runtime.sh \
+            tools/packaging/stage_payload.sh
+
+      - name: Smoke test payload stager
+        run: |
+          chmod +x tools/packaging/stage_payload.sh
+          ./tools/packaging/stage_payload.sh --dest /tmp/uv-payload
+          test -d /tmp/uv-payload/unicornviz
+          test -f /tmp/uv-payload/pyproject.toml
+          test -f /tmp/uv-payload/requirements.txt
+          test ! -e /tmp/uv-payload/.git
+          test ! -e /tmp/uv-payload/drop-ins
+          test ! -e /tmp/uv-payload/docs
 
       - name: Smoke test dev installer dry-run (bundled runtime)
         run: |
@@ -54,3 +70,34 @@ jobs:
         run: |
           chmod +x tools/install/uninstall_linux.sh
           ./tools/install/uninstall_linux.sh --dry-run --prefix /tmp/unicorn-viz-smoke
+
+  real-install:
+    name: Real install (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            bootstrap: apt-get update && apt-get install -y git curl ca-certificates sudo tar
+          - image: fedora:41
+            bootstrap: dnf install -y git curl ca-certificates sudo tar
+          - image: archlinux:latest
+            bootstrap: pacman -Sy --noconfirm git curl ca-certificates tar
+    steps:
+      - name: Bootstrap checkout prerequisites
+        run: ${{ matrix.bootstrap }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Real install with bundled runtime
+        run: |
+          chmod +x tools/install_linux.sh
+          ./tools/install_linux.sh
+
+      - name: Assert app entrypoint works headlessly
+        run: |
+          ./.venv/bin/unicorn-viz --help
