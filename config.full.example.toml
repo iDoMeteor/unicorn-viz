@@ -357,6 +357,7 @@ camera_distance = 0.8      # <1 pulls the camera in (larger subject); 1.0 = lega
 transition = "fade"        # "fade" (dip-to-black between sims) or "cut" (hard)
 transition_s = 0.6         # total fade duration in seconds (out + in)
 dance = 1.0                # audio-reactive bounce/hop/sway intensity (0=off, >1=wilder)
+preload = true             # pre-bake scenes in the background during the splash
 # random_speed_min = 0.80
 # random_speed_max = 1.20
 # random_reactivity_min = 0.80

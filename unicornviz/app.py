@@ -2269,6 +2269,16 @@ void main() {
                     _cls.prefetch_async(_img_cfg)
                 break
 
+        # Pre-bake Sim Showcase USD scenes (skinning / rigid frames) in the
+        # background so the first time it activates it doesn't hitch. CPU-only;
+        # the GL upload still happens lazily on activation.
+        for _cls in _pre_effects:
+            if getattr(_cls, 'NAME', '') == 'Sim Showcase' and hasattr(_cls, 'prewarm_async'):
+                _sim_cfg = self.cfg.get('effects', 'SimShowcase', default={}) or {}
+                if bool(_sim_cfg.get('preload', True)):
+                    _cls.prewarm_async(_sim_cfg)
+                break
+
         # Splash screen — shown before any effect loads
         splash_path = str(resolve_path(self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")))
         splash_duration_audio = _SPLASH_TOTAL_DURATION
