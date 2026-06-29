@@ -201,6 +201,14 @@ def _load_media_controller_class() -> type:
     )
 
 
+def _load_chat_controller_class() -> type:
+    """Load ChatController from the chat-01 drop-in."""
+    return load_dropin_symbol(
+        'chat-01/chat_controller.py',
+        'ChatController',
+    )
+
+
 def _load_audio_out_controller_class() -> type:
     """Load AudioOutController from the audio-out-01 drop-in."""
     return load_dropin_symbol(
@@ -288,6 +296,7 @@ class App:
         self._auto_vj = None
         self._spotify = None
         self._media: Any = None
+        self._chat: Any = None
         self._audio_out = None
         self._osc_bridge = None
         self._lyrics = None
@@ -2466,6 +2475,26 @@ void main() {
                 except Exception as exc:
                     self._media = None
                     log.warning('MediaController not available: %s', exc)
+
+            # Live chat overlay controller (optional drop-in).
+            chat_cfg = self.cfg.get('chat', default={}) or {}
+            if not isinstance(chat_cfg, dict):
+                chat_cfg = {}
+            if bool(chat_cfg.get('enabled', False)):
+                try:
+                    chat_cls = _load_chat_controller_class()
+                    self._chat = chat_cls(self, chat_cfg)
+                    if bool(getattr(self._chat, 'enabled', False)):
+                        self.vj_api.register_subsystem('chat', self._chat)
+                        key_handler = getattr(self._chat, 'handle_key', None)
+                        if callable(key_handler):
+                            self.vj_api.register_key_handler('chat', key_handler)
+                        log.info('ChatController loaded from drop-in')
+                    else:
+                        self._chat = None
+                except Exception as exc:
+                    self._chat = None
+                    log.warning('ChatController not available: %s', exc)
 
             # Audio output / SFX-injection controller (optional drop-in).
             audio_out_cfg = self.cfg.get('audio_out', default={}) or {}

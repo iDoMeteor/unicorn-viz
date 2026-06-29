@@ -163,6 +163,33 @@ resolve_playlist_context = true
 # now_playing_banner_delay_s = 2.0  # delay before banner fires on track change
 # crossfade_ms = 0                  # reserved — cross-fade support coming in a future release
 
+# ---------------------------------------------------------------------------
+# Live chat overlay (drop-ins/chat-01)
+# Connects to an AWS API Gateway WebSocket backend and renders incoming chat
+# messages as an animated GL overlay.  Also see drop-ins/chat-01/web/ for the
+# React/Next.js ChatWidget component used on the website.
+#
+# Deploy the backend once:
+#   cd drop-ins/chat-01/backend && sam build && sam deploy --guided
+# Then paste the printed WebSocketUrl below.
+#
+# Hotkeys:
+#   Ctrl+Alt+T    — Toggle overlay on / off
+#   Ctrl+Alt+[    — Cycle position forward (bottom→left→top→right→…)
+#   Ctrl+Alt+]    — Cycle position backward
+# ---------------------------------------------------------------------------
+# [chat]
+# enabled = false
+# websocket_url = ""           # wss://YOUR-API-ID.execute-api.REGION.amazonaws.com/prod
+# username = "VJ"              # display name shown in chat for messages you send
+# position = "bottom"          # top | bottom | left | right
+# visible = true
+# glitter = 0.7                # sparkle intensity 0-1
+# pulse = 0.5                  # brightness pulse intensity 0-1
+# text_scale = 2.0             # glyph scale multiplier
+# scroll_speed = 60.0          # pixels/second for top/bottom ticker
+# message_lifetime_s = 60.0   # seconds a message stays visible in dock mode
+
 # Optional CTA ownership (F9) moved to streaming drop-in.
 [streaming.cta]
 enabled = true
