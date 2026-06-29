@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from unicornviz.overlays import Overlays
     from unicornviz.audio.manager import AudioManager
     from unicornviz.midi import MidiManager, MidiEvent
-    from unicornviz.keystroke_log import KeystrokeLogger
 
 log = logging.getLogger(__name__)
 

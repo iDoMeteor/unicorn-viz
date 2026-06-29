@@ -54,7 +54,6 @@ from unicornviz.dropins import (
 from unicornviz.paths import resolve_path
 from unicornviz.runtime_state import RuntimeStateStore
 from unicornviz.vj_api import VJApi
-from unicornviz.keystroke_log import KeystrokeLogger
 
 log = logging.getLogger(__name__)
 
@@ -190,6 +189,14 @@ def _load_spotify_controller_class() -> type:
     return load_dropin_symbol(
         'spotify-01/spotify_controller.py',
         'SpotifyController',
+    )
+
+
+def _load_keystroke_logger_class() -> type:
+    """Load KeystrokeLogger from the training-kit-01 drop-in."""
+    return load_dropin_symbol(
+        'training-kit-01/keystroke_logger.py',
+        'KeystrokeLogger',
     )
 
 
@@ -2412,7 +2419,13 @@ void main() {
             )
         ks_cfg = self.cfg.get('keystrokes', default={}) or {}
         keystroke_log_enabled = bool(ks_cfg.get('enabled', False)) if isinstance(ks_cfg, dict) else False
-        self._keystroke_logger = KeystrokeLogger(keystroke_log_enabled)
+        self._keystroke_logger = None
+        if keystroke_log_enabled:
+            try:
+                ks_cls = _load_keystroke_logger_class()
+                self._keystroke_logger = ks_cls(True)
+            except Exception as exc:
+                log.warning('KeystrokeLogger not available (training-kit-01 absent?): %s', exc)
 
         hotkeys = HotkeyHandler(
             app=self,
