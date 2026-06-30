@@ -170,7 +170,7 @@ class Kaleidoscope(BaseEffect):
         'Particle Storm',
         'Plasma',
         'Prism Lattice',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Starfield',
         'Tunnel',
         'Van Gogh',

@@ -168,7 +168,7 @@ class Tunnel(BaseEffect):
         'Metaballs',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Starfield',
         'Van Gogh',
         'Tron Grid',

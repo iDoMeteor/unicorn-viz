@@ -77,7 +77,7 @@ ProjectM Presets · Texture Showcase.
 ## Current State
 
 ### Core effects (29)
-Visuals: alien_biome, ansi_viewer, breakout, cosmos, cube_3d, crystal_pyramids, escher, dali, fractal_zoom, kaleidoscope, metaballs, particle_storm, plasma, psychedelic, sine_scroller, starfield, tunnel, van_gogh, vector
+Visuals: alien_biome, ansi_viewer, breakout, cosmos, cube_3d, rainbow_trance, escher, dali, fractal_zoom, kaleidoscope, metaballs, particle_storm, plasma, psychedelic, audio_sine, starfield, tunnel, van_gogh, vector
 
 Audio-reactive: audio_spectrogram, audio_spectrum, audio_tracks, audio_waveforms
 

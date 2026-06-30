@@ -111,7 +111,7 @@ unicorn-viz/
 │       ├── audio_spectrum.py  → Audio Spectrum
 │       ├── copper_bars.py     → Copper Bars
 │       ├── cosmos.py          → Cosmos
-│       ├── crystal_pyramids.py→ Crystal Pyramids
+│       ├── rainbow_trance.py→ Rainbow Trance
 │       ├── cube_3d.py         → 3D Cube
 │       ├── dali.py            → Dali
 │       ├── escher.py          → Escher
@@ -120,7 +120,7 @@ unicorn-viz/
 │       ├── metaballs.py       → Metaballs
 │       ├── particle_storm.py  → Particle Storm
 │       ├── plasma.py          → Plasma
-│       ├── sine_scroller.py   → Sine Scroller 2.0
+│       ├── audio_sine.py   → Sine Scroller 2.0
 │       ├── starfield.py       → Starfield
 │       ├── system_monitor.py  → System Monitor
 │       ├── tunnel.py          → Tunnel

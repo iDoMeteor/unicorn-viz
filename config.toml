@@ -29,7 +29,7 @@ start_effect = "Audio Spectrum"
 scale_when_framed = true
 # candy_frame_disallow = true
 
-[effects.SineScroller]
+[effects.AudioSine]
 chaos_snap = 0.2
 
 [midi]
@@ -389,7 +389,7 @@ silence_reset_s = 15.0
 # allow_overlays        = true         # rainbow nova / screen burst / dancing unicorn
 # allow_tweakables      = true         # reactivity / speed / zoom
 # pingpong_a            = "Tron Grid"
-#pingpong_b            = "Crystal Pyramids"
+#pingpong_b            = "Rainbow Trance"
 # pingpong_beats        = 4
 # pingpong_auto_enabled = true         # auto-enter ping-pong only makes sense in raver mode
 # pingpong_auto_bpm_min = 138.0        # require a fast locked groove before triggering

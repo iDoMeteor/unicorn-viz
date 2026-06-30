@@ -347,7 +347,7 @@ speed = 1.0
 # petals = 12        # rose-window fold count (8/10/12/16/20)
 # spin = 1.0         # rotation direction (+1 / -1)
 
-[effects.SineScroller]
+[effects.AudioSine]
 speed = 1.5
 amplitude = 0.18
 font_scale = 4.0
@@ -437,7 +437,7 @@ speed = 1.0
 # random_speed_min = 0.75
 # random_speed_max = 1.25
 
-[effects.CrystalPyramids]
+[effects.RainbowTrance]
 speed = 1.0
 # random_speed_min = 0.70
 # random_speed_max = 1.30

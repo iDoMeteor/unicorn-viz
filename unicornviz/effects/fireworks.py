@@ -227,7 +227,7 @@ class Fireworks(BaseEffect):
         'Particle Storm',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Tron Grid',
         'Kaleidoscope',

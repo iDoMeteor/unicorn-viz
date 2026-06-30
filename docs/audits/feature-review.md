@@ -420,7 +420,7 @@ Per-effect one-shot checklist:
 - [x] Copper Bars (copper_bars) | Rating Before: 8/5 | Rating After: N/A
    Operator review (2026-06-03, shortcut 3): Visual quality 8/5; Audio response PASS; Performance single/span/mirror PASS; Ping-pong friends mapping PASS; Startup variance PASS; Parameter sanity PASS; Hotkey sanity PASS; Fixes needed: none noted. Notes: "pretty cool... nothing super special but still very fun." Operator supplied score points `1) 8`, `2) (blank)`, `3) 8`; all other checklist items passed.
 - [ ] Cosmos (cosmos) | Rating Before: ___/5 | Rating After: ___/5
-- [ ] Crystal Pyramids (crystal_pyramids) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Rainbow Trance (rainbow_trance) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Dali (dali) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Escher (escher) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Curtains (fire) | Rating Before: ___/5 | Rating After: ___/5
@@ -433,7 +433,7 @@ Per-effect one-shot checklist:
 - [ ] Plasma (plasma) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Psychedelic (psychedelic) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Raymarcher (raymarcher) | Rating Before: ___/5 | Rating After: ___/5
-- [ ] Sine Scroller 2.0 (sine_scroller) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Sine Scroller 2.0 (audio_sine) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Starfield (starfield) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] System Monitor (system_monitor) - startup variance EXEMPT | Rating Before: ___/5 | Rating After: ___/5
 - [ ] Tunnel (tunnel) | Rating Before: ___/5 | Rating After: ___/5
@@ -613,7 +613,7 @@ Format:
 - Psychedelic (`psychedelic`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Solid newer pass; zoom control requested.
 
-- Sine Scroller 2.0 (`sine_scroller`): Rating 6 | Visual 5 | Audio 9 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority done
+- Sine Scroller 2.0 (`audio_sine`): Rating 6 | Visual 5 | Audio 9 | Single pass | Span pass | Mirror pass | Friends pass | Startup fail | Hotkey pass | Priority done
    - Notes: Concept still good, but operator requests a full 3.0 rewrite toward modern neon/lazer visual identity.
 
 - Starfield (`starfield`): Rating 7 | Visual 7 | Audio 7 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done

@@ -35,7 +35,7 @@ These are closest to complete and should be the first implementation batch.
 
 - Kaleidoscope (`unicornviz/effects/kaleidoscope.py`) — missing `reactivity`
 - Metaballs (`unicornviz/effects/metaballs.py`) — missing `reactivity`
-- Sine Scroller (`unicornviz/effects/sine_scroller.py`) — missing `zoom`
+- Sine Scroller (`unicornviz/effects/audio_sine.py`) — missing `zoom`
 - Disco Ball (`drop-ins/disco-ball-01/disco_ball.py`) — missing `reactivity`
 - Prism Storm (`drop-ins/textures-01/prism_storm.py`) — missing `reactivity`
 - Tron Grid (`drop-ins/tron-grid-01/tron_grid.py`) — missing `reactivity`
@@ -46,7 +46,7 @@ These are closest to complete and should be the first implementation batch.
 - ANSI Viewer (`unicornviz/effects/ansi_viewer.py`) — missing `zoom`, `reactivity`
 - Copper Bars (`unicornviz/effects/copper_bars.py`) — missing `zoom`, `reactivity`
 - Cosmos (`unicornviz/effects/cosmos.py`) — missing `zoom`, `reactivity`
-- Crystal Pyramids (`unicornviz/effects/crystal_pyramids.py`) — missing `zoom`, `reactivity`
+- Rainbow Trance (`unicornviz/effects/rainbow_trance.py`) — missing `zoom`, `reactivity`
 - Cube 3D (`unicornviz/effects/cube_3d.py`) — missing `zoom`, `reactivity`
 - Dali (`unicornviz/effects/dali.py`) — missing `zoom`, `reactivity`
 - Escher (`unicornviz/effects/escher.py`) — missing `zoom`, `reactivity`

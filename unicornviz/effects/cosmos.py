@@ -125,7 +125,7 @@ class Cosmos(BaseEffect):
         'Plasma',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Unicorn Tears',
         'Van Gogh',

@@ -92,7 +92,7 @@ Recommendation (medium effort): move analysis to the audio worker thread and
 publish a lock-free snapshot. This decouples FFT cost from frame budget.
 
 ### 1.8 Heavy fragment shaders without resolution divisor
-- `crystal_pyramids`, `raymarcher`, `fire` (sim is at 256-ish), `unicorn_tears`,
+- `rainbow_trance`, `raymarcher`, `fire` (sim is at 256-ish), `unicorn_tears`,
   `particle_storm` are GPU-heavy at 1080p+; only `fire` decouples sim from
   display.
 

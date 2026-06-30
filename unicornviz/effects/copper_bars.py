@@ -118,7 +118,7 @@ class CopperBars(BaseEffect):
     AUTHOR = "unicorn-viz"
     TAGS = ["classic", "amiga", "audio"]
     PING_PONG_FRIENDS = [
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Plasma',
         'Vector',
         'Escher',

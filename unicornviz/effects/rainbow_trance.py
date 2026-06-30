@@ -1,5 +1,5 @@
 """
-Crystal Pyramids — prismatic pyramid field with rainbow sky rays,
+Rainbow Trance — prismatic pyramid field with rainbow sky rays,
 floating diamonds, and molten-gold desert glow.
 
 Audio reactivity:
@@ -210,10 +210,10 @@ void main() {
 """
 
 
-class CrystalPyramids(BaseEffect):
+class RainbowTrance(BaseEffect):
     """Prismatic crystal pyramids with rainbow rays, diamonds, and molten gold."""
 
-    NAME = "Crystal Pyramids"
+    NAME = "Rainbow Trance"
     AUTHOR = "unicorn-viz"
     TAGS = ["futuristic", "audio", "mythic", "crystal"]
     SPEED_TIME_BIAS = 0.42
@@ -225,7 +225,7 @@ class CrystalPyramids(BaseEffect):
         'Fireworks',
         'Hexy Stars',
         'Plasma',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Unicorn Tears',
         'Van Gogh',

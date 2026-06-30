@@ -552,7 +552,7 @@ python -m unicornviz --log-level DEBUG
 | Audio Spectrum    | `AudioSpectrum`     | audio, visualizer              | FFT bars + oscilloscope (mode 0/1/2), key `E`        |
 | Copper Bars       | `CopperBars`        | classic, amiga, audio          | Amiga-style oscillating colour bars                  |
 | Cosmos            | `Cosmos`            | space, audio                   | Deep-space nebula and stellar drift                  |
-| Crystal Pyramids  | `CrystalPyramids`   | futuristic, audio, crystal     | Audio-reactive crystalline pyramids                  |
+| Rainbow Trance  | `RainbowTrance`   | futuristic, audio, crystal     | Audio-reactive crystalline pyramids                  |
 | 3D Cube           | `Cube3D`            | classic, 3d, audio             | Rotating wireframe cube                              |
 | Curtains          | `Curtains`          | classic, audio                 | Multi-colour oscillating curtain waves               |
 | Dali              | `Dali`              | art, surreal, audio            | Melting-clock surrealist scene                       |
@@ -563,7 +563,7 @@ python -m unicornviz --log-level DEBUG
 | Metaballs         | `Metaballs`         | futuristic, audio              | GLSL SDF metaball field                              |
 | Particle Storm    | `ParticleStorm`     | futuristic, particles, audio   | 100k GPU particles, curl noise, transform feedback   |
 | Plasma            | `Plasma`            | classic, audio                 | Sin/cos colour-field with palette drift              |
-| Sine Scroller 2.0 | `SineScroller`      | classic, audio                 | Multi-sine bouncing text with rainbow colours        |
+| Sine Scroller 2.0 | `AudioSine`      | classic, audio                 | Multi-sine bouncing text with rainbow colours        |
 | Starfield         | `Starfield`         | classic, audio                 | 3D warp-speed star tunnel                            |
 | System Monitor    | `SystemMonitor`     | diagnostic, hud, system        | Live CPU/RAM/GPU/audio performance graphs            |
 | Tunnel            | `Tunnel`            | classic, audio                 | Texture-mapped rotating tunnel with depth scroll     |

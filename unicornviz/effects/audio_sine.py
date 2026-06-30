@@ -1,4 +1,4 @@
-"""Sine Scroller 3.1 - textless neon wave lasers with crossing squash.
+"""Audio Sine - textless neon wave lasers with crossing squash.
 
 This effect keeps the signature crossing-driven vertical contract/expand motion,
 but drops retro glyph scrolling entirely in favor of high-energy neon ribbons,
@@ -147,8 +147,8 @@ void main() {
 """
 
 
-class SineScroller(BaseEffect):
-    NAME = 'Sine Scroller 3.1'
+class AudioSine(BaseEffect):
+    NAME = 'Audio Sine'
     AUTHOR = 'unicorn-viz'
     TAGS = ['classic', 'audio', 'futuristic', 'neon', 'lasers']
     PING_PONG_FRIENDS = [

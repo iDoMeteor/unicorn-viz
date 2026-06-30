@@ -202,7 +202,7 @@ class Breakout(BaseEffect):
         'Plasma',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Starfield',
         'Tunnel',
         'Unicorn Tears',

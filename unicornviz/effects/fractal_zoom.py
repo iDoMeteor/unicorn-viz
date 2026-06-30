@@ -145,7 +145,7 @@ class FractalZoom(BaseEffect):
         'Hexy Stars',
         'Plasma',
         'Prism Lattice',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Tron Grid',
         'Hacker Terminal',

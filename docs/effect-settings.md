@@ -86,10 +86,10 @@ glow = 1.0
 speed = 1.0
 ```
 
-### `CrystalPyramids` (`Crystal Pyramids`)
+### `RainbowTrance` (`Rainbow Trance`)
 
 ```toml
-[effects.CrystalPyramids]
+[effects.RainbowTrance]
 speed = 1.0
 ```
 
@@ -186,10 +186,10 @@ speed = 1.0
 palette = 0.0
 ```
 
-### `SineScroller` (`Sine Scroller 2.0`)
+### `AudioSine` (`Sine Scroller 2.0`)
 
 ```toml
-[effects.SineScroller]
+[effects.AudioSine]
 speed      = 1.5
 amplitude  = 0.18
 font_scale = 4.0

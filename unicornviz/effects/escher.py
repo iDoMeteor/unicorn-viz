@@ -106,7 +106,7 @@ class Escher(BaseEffect):
         'Particle Storm',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Wavey Gravy',
         'Tron Grid',

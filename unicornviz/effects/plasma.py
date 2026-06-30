@@ -69,7 +69,7 @@ class Plasma(BaseEffect):
         'Metaballs',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Tunnel',
         'Van Gogh',
         'Wavey Gravy',

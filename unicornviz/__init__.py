@@ -21,7 +21,7 @@ unicornviz/
         metaballs.py    GLSL SDF metaball field
         particle_storm.py  100k GPU particles, transform-feedback ping-pong
         plasma.py       Classic sin/cos colour-field plasma
-        sine_scroller.py  Multi-sine bouncing text scroller
+        audio_sine.py  Multi-sine bouncing text scroller
         starfield.py    3-D warp-speed star tunnel
         tunnel.py       Texture-mapped rotating tunnel
 

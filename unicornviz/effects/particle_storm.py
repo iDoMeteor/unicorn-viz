@@ -183,7 +183,7 @@ class ParticleStorm(BaseEffect):
     AUTHOR = "unicorn-viz"
     TAGS   = ["futuristic", "audio", "particles"]
     PING_PONG_FRIENDS = [
-        'Crystal Pyramids',
+        'Rainbow Trance',
         'Tunnel',
         'Copper Bars',
         'Escher',
@@ -193,7 +193,7 @@ class ParticleStorm(BaseEffect):
         'Plasma',
         'Prism Lattice',
         'Psychedelic',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Starfield',
         'Van Gogh',
         'Wavey Gravy',

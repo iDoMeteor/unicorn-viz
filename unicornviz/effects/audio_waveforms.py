@@ -133,7 +133,7 @@ class AudioWaveforms(BaseEffect):
         'Audio Spectrum',
         'Audio Spectrogram',
         'Audio Tracks',
-        'Sine Scroller 3.1',
+        'Audio Sine',
         'Unicorn Tears',
     ]
 
