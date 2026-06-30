@@ -95,3 +95,9 @@
 [submodule "drop-ins/psychedelic-01"]
 	path = drop-ins/psychedelic-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-psychedelic-01.git
+[submodule "drop-ins/games-01"]
+	path = drop-ins/games-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-games-01.git
+[submodule "drop-ins/particles-01"]
+	path = drop-ins/particles-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-particles-01.git
