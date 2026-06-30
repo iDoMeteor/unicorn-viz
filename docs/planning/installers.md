@@ -2,7 +2,7 @@
 
 **Owner:** Solo maintainer (one-person studio)
 **Status:** Active — driving toward five gold-star installers
-**Last updated:** 2026-06-29
+**Last updated:** 2026-06-30
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -73,7 +73,7 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 | Channel | Today | Gap to next star |
 |---|---|---|
 | **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Remaining:** validate the **release path** (tag → tarball → checksum) against a real release; icon size ladder. **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
-| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★ | Build inside per-distro containers with a bundled relocatable runtime (today's venv links the CI host's Python → ABI/relocatability risk); **strip drop-ins** (currently copied in, violates core-only decision §0); add `config.toml` conffile + `postinst`/`prerm`; **★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
+| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★ (climbing) | **Done 2026-06-30:** reworked to stage via `stage_payload.sh` (**drop-ins now stripped**), bundle a relocatable `fetch_runtime.sh` interpreter with shebangs rewritten to `/opt` (verified: 0 staging-path leaks), install only core deps into it, ship `unicornviz/`+`assets/` as siblings so `APP_ROOT` resolves and **assets are found** (fixed a real bug — see progress log), `postinst`/`postrm` cache refresh, MIT + C-lib-only deps. A real `.rpm` builds + inspects clean. **Remaining for ★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **the `config.toml` conffile is intentionally deferred** pending distribution cleanup of config. **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
 | **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
 | **Flatpak** (`packaging/flatpak/…yml`) | ★ | Won't pass Flathub today (network `pip install`, `--filesystem=home`, pulseaudio). Pin pip deps offline via `flatpak-pip-generator`, build native wheels in-sandbox, tighten `finish-args` (pipewire + xdg dirs, drop `home`/`network`), add `metainfo.xml` + desktop + icons; **★4:** `flatpak-builder` CI + `flatpak run … --help` smoke; **★5:** Flathub submission (free; needs app-id claim). |
@@ -84,8 +84,8 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 1. **`python-build-standalone` bundling** is a locked decision (§0). The shared
    helper now exists (`tools/packaging/fetch_runtime.sh`, landed 2026-06-21) and
    is wired into both Linux bash installers. It is the single biggest lever: it
-   unlocks ★3 for the one-liner (done), native packages, Windows, and macOS. The
-   native/Windows/macOS channels still need to adopt it (Phases 2–4).
+   unlocks ★3 for the one-liner (done), native packages (done 2026-06-30),
+   Windows, and macOS. Windows and macOS still need to adopt it (Phases 3–4).
 2. **Curated payload staging** — ✅ done. `tools/packaging/stage_payload.sh`
    (landed 2026-06-29) produces an allowlisted core payload (no `.git`/`.venv`/
    `logs`/`docs`/`drop-ins`/licensed sims packs) with a leak guard. Windows,
@@ -1224,6 +1224,38 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-06-30 — Phase 2 native packaging reworked + a real asset bug fixed.**
+  - **Asset-resolution bug (found & fixed).** `unicornviz.paths.APP_ROOT` is
+    `Path(__file__).resolve().parents[1]` — the parent of the package dir. A normal
+    (non-editable) `pip install` puts the package in site-packages, so `APP_ROOT`
+    became site-packages and `assets/` (shipped as a sibling of the package) was
+    **not found at runtime**. The dev `.venv` is an *editable* install, which hid
+    this, and `--help` can't trip it. Verified the failure with a clean install.
+    Fix: `paths.py` now honors a `UNICORNVIZ_APP_ROOT` env override (default
+    behavior unchanged when unset); both the native wrapper and the one-liner's
+    launcher export it so assets resolve to the install prefix. Added
+    `tests/test_paths_app_root.py`; full suite green (206 passed).
+  - **`build_native.sh` reworked.** Stages via `stage_payload.sh` (drop-ins +
+    licensed sims packs gone); bundles a relocatable `fetch_runtime.sh` interpreter
+    and installs **only core deps** into it (not the project); ships the
+    `unicornviz/` package and `assets/` as siblings under `INSTALL_ROOT` (default
+    `/opt/unicorn-viz`);
+    rewrites runtime shebangs from the staging path to the install path; `/usr/bin`
+    wrapper sets `UNICORNVIZ_APP_ROOT` + `PYTHONPATH` and runs the bundled
+    interpreter via `-m unicornviz`; `postinst`/`postrm` refresh desktop + icon
+    caches. New `--install-root` and `--no-package` (stage-only) flags enable a
+    local relocation test. **Verified on Fedora:** built a real
+    `unicorn-viz-0.1.0-1.x86_64.rpm` (MIT, C-lib-only deps, no Python dep, no
+    drop-ins, no `/etc` conffile); a relocated staging tree resolves `APP_ROOT`
+    and finds assets; runtime shebangs point at `/opt` with 0 staging-path leaks.
+  - **The `config.toml` conffile is the stopping point.** It is *not* shipped as a
+    dpkg/rpm conffile yet — config is being cleaned up for distribution by a
+    separate effort. `config.full.example.toml` ships as documentation in the
+    interim; the conffile + `--config-files` wiring lands once distribution-ready
+    config exists.
+  - `installer-smoke.yml`: `build_native.sh` added to the shellcheck gate.
+    `release-installers.yml`: rpm job now installs `curl`/`tar` (for the runtime
+    download) instead of system Python.
 - **2026-06-21 — Bundling system + Linux low-hanging fruit landed.**
   - `tools/packaging/fetch_runtime.sh`: the shared "bundling system." Downloads a
     pinned `python-build-standalone` interpreter (CPython 3.11.10, PBS `20241016`),
@@ -1332,19 +1364,26 @@ smoke tests; shellcheck + nightly real-install smoke are green on `master`.
 
 ### Phase 2 — Native `.deb` / `.rpm` → ★5
 
-- Build **inside per-distro containers** (matrix: `ubuntu:22.04`, `ubuntu:24.04`,
-  `debian:12` → deb; `fedora:40`, `fedora:41` → rpm) so the bundled runtime and
-  any compiled wheels match the target ABI. Today both run on whatever Python the
-  runner host has, which is the relocatability risk called out in §0.5.2.
-- Use the bundled `python-build-standalone` runtime instead of a host-linked venv;
-  rewrite `venv/bin/*` shebangs to the final `/opt/unicorn-viz/...` path (§4.2).
-- **Strip drop-ins** from the package (build_native.sh currently `cp -a drop-ins`
-  — that contradicts the core-only decision in §0/§6).
-- Ship `config.toml` as a dpkg/rpm **conffile** at `/etc/unicorn-viz/`; add
-  `postinst` (`update-desktop-database`, `gtk-update-icon-cache`) and `prerm`
-  (remove our symlink only if it still points at us).
-- **★4:** nightly `apt install ./*.deb` / `dnf install ./*.rpm` smoke in clean
-  containers.
+- ✅ **Done (2026-06-30):** use the bundled `python-build-standalone` runtime
+  instead of a host-linked venv; runtime shebangs rewritten from the staging path
+  to the final `/opt/unicorn-viz/...` path (verified 0 leaks). Deps install into
+  the bundled interpreter; the app ships as source + assets siblings and runs via
+  `-m unicornviz` with `UNICORNVIZ_APP_ROOT` set (fixes asset resolution).
+- ✅ **Done (2026-06-30):** **drop-ins stripped** (now staged via
+  `stage_payload.sh`, which excludes them and the licensed sims packs).
+- ✅ **Done (2026-06-30):** `postinst`/`postrm` refresh desktop + icon caches.
+  (No symlink to clean up anymore — `/usr/bin/unicorn-viz` is a package-owned
+  wrapper that fpm removes on uninstall.)
+- ⛔ **Stopping point — `config.toml` conffile DEFERRED.** Shipping `config.toml`
+  as a dpkg/rpm conffile at `/etc/unicorn-viz/` (with fpm `--config-files` so
+  upgrades preserve edits) is **blocked on the config being cleaned up for
+  distribution** by a separate effort. Until then, `config.full.example.toml`
+  ships as documentation under `/usr/share/doc/unicorn-viz/`.
+- **Still open for ★4:** build **inside per-distro containers** (matrix:
+  `ubuntu:22.04`/`24.04`, `debian:12` → deb; `fedora:40`/`41` → rpm) and add a
+  nightly `apt install ./*.deb` / `dnf install ./*.rpm` smoke in clean containers.
+  (The runtime is downloaded per-arch, so the host distro matters less than before,
+  but matrix coverage still validates the C-lib dependency names.)
 - **★5:** `dpkg-sig` (deb) and `rpm --addsign` (rpm) with the same GPG key from P1.
   (APT/DNF GitHub-Pages repos remain a post-v1 nicety, §4.4.)
 

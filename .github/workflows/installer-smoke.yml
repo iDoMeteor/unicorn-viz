@@ -34,7 +34,8 @@ jobs:
             tools/install/uninstall_linux.sh \
             tools/install_linux.sh \
             tools/packaging/fetch_runtime.sh \
-            tools/packaging/stage_payload.sh
+            tools/packaging/stage_payload.sh \
+            tools/packaging/build_native.sh
 
       - name: Smoke test payload stager
         run: |

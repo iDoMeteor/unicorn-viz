@@ -17,10 +17,28 @@ Usage::
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-# Two levels up from this file: unicornviz/paths.py → unicornviz/ → project root
-APP_ROOT: Path = Path(__file__).resolve().parents[1]
+
+def _resolve_app_root() -> Path:
+    """Return the app root, honoring the ``UNICORNVIZ_APP_ROOT`` override.
+
+    Packaged installs place the ``unicornviz`` package inside a bundled runtime's
+    site-packages, separate from the shipped ``assets/`` tree, so the default
+    "two levels up from this file" would point at site-packages instead of the
+    install prefix.  Such installers export ``UNICORNVIZ_APP_ROOT`` to pin asset
+    resolution to the prefix that actually contains ``assets/``.  When unset
+    (development / source checkouts) the root is the directory two levels up from
+    this file: ``unicornviz/paths.py`` → ``unicornviz/`` → project root.
+    """
+    override = os.environ.get('UNICORNVIZ_APP_ROOT')
+    if override:
+        return Path(override).resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+APP_ROOT: Path = _resolve_app_root()
 
 
 def resolve_path(rel_path: str | Path) -> Path:

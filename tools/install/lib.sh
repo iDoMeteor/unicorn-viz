@@ -255,7 +255,6 @@ uv_install_desktop_entry() {
   local app_dir="${HOME}/.local/share/applications"
   local icon_dir="${HOME}/.local/share/icons/hicolor/256x256/apps"
   local bin_dir="${HOME}/.local/bin"
-  local launcher_path="${prefix}/venv/bin/unicorn-viz"
   local symlink_path="${bin_dir}/unicorn-viz"
   local desktop_file="${app_dir}/unicorn-viz.desktop"
   local icon_target="${icon_dir}/unicorn-viz.png"
@@ -269,10 +268,23 @@ uv_install_desktop_entry() {
     uv_run cp "$source_icon" "$icon_target"
   fi
 
-  if [[ -L "$symlink_path" || -e "$symlink_path" ]]; then
-    uv_run rm -f "$symlink_path"
+  # Launcher is a wrapper (not a bare symlink) so it can export
+  # UNICORNVIZ_APP_ROOT, which makes the app resolve assets under <prefix>/assets
+  # even though the package is pip-installed into the venv's site-packages.
+  if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
+    uv_log "dry-run: write launcher ${symlink_path}"
+  else
+    if [[ -L "$symlink_path" || -e "$symlink_path" ]]; then
+      rm -f "$symlink_path"
+    fi
+    cat >"$symlink_path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export UNICORNVIZ_APP_ROOT="${prefix}"
+exec "${prefix}/venv/bin/unicorn-viz" "\$@"
+EOF
+    chmod +x "$symlink_path"
   fi
-  uv_run ln -s "$launcher_path" "$symlink_path"
 
   if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
     uv_log "dry-run: write ${desktop_file}"
