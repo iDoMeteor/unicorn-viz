@@ -24,7 +24,6 @@ import sdl2
 import sdl2.ext
 
 from unicornviz.config import Config
-from unicornviz.effects.ansi_viewer import ANSIViewer
 from unicornviz.effects.base import AudioData, BaseEffect
 from unicornviz.effects.registry import get_effects
 from unicornviz.audio.manager import AudioManager
@@ -2851,8 +2850,12 @@ void main() {
                     and self._next_effect is None and self._auto_advance
                     and self._effect_lock is None):
                 allow_advance = True
-                if isinstance(self._current_effect, ANSIViewer):
-                    allow_advance = self._current_effect.reached_bottom
+                # Duck-typed: ANSI-style effects gate auto-advance until their
+                # content has scrolled to the bottom (no core import of the
+                # effect class, so it can live in a drop-in pack).
+                _reached = getattr(self._current_effect, 'reached_bottom', None)
+                if _reached is not None:
+                    allow_advance = bool(_reached)
 
                 self._demo_timer += dt
                 if self._demo_timer >= self._effect_duration and allow_advance:
@@ -2990,10 +2993,12 @@ void main() {
                 perf_after_effect_update = time.perf_counter()
 
             # Keep persistent name overlay in sync with the active effect.
-            # ANSIViewer shows the current art title; all other effects show NAME.
+            # Duck-typed: an effect exposing `current_title` (ANSI art viewer)
+            # shows that; all other effects show NAME.
             if self._current_effect is not None:
-                if isinstance(self._current_effect, ANSIViewer):
-                    overlays._name_text = self._current_effect.current_title
+                _art_title = getattr(self._current_effect, 'current_title', None)
+                if _art_title is not None:
+                    overlays._name_text = _art_title
                 else:
                     current_label = getattr(self._current_effect, 'current_label', '')
                     if isinstance(current_label, str) and current_label:

@@ -77,7 +77,7 @@ ProjectM Presets · Texture Showcase.
 ## Current State
 
 ### Core effects (29)
-Visuals: alien_biome, ansi_viewer, breakout, cosmos, cube_3d, rainbow_trance, escher, dali, fractal_zoom, kaleidoscope, metaballs, particle_storm, plasma, psychedelic, audio_sine, starfield, tunnel, van_gogh, vector
+Visuals: wavey_gravy, ansi_viewer, breakout, cosmos, cube_3d, rainbow_trance, escher, dali, fractal_zoom, kaleidoscope, metaballs, particle_storm, plasma, psychedelic, audio_sine, starfield, tunnel, van_gogh, vector
 
 Audio-reactive: audio_spectrogram, audio_spectrum, audio_tracks, audio_waveforms
 
@@ -112,7 +112,7 @@ Move all core effects + all effect drop-ins into a single drop-in submodule.
 drop-ins/effects-bulk-01/
 ├── effects/
 │   ├── core/          # Move unicornviz/effects/* here
-│   │   ├── alien_biome.py
+│   │   ├── wavey_gravy.py
 │   │   ├── audio_spectrum.py
 │   │   └── ...
 │   ├── alien_invasion/
@@ -173,7 +173,7 @@ Integrate alien-invasion-01, candy-frame-01, … videos-01 directly into `unicor
 ### Structure
 ```
 unicornviz/effects/
-├── alien_biome.py           # Existing core effects
+├── wavey_gravy.py           # Existing core effects
 ├── audio_spectrum.py
 ├── van_gogh.py
 ├── ...

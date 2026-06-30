@@ -1,5 +1,5 @@
 """
-Alien Biome — pulsating organic landscape with bioluminescent veins.
+Wavey Gravy — pulsating organic landscape with bioluminescent veins.
 
 Audio reactivity:
 - bass: bloom intensity and terrain wobble
@@ -91,7 +91,7 @@ void main() {
 """
 
 
-class AlienBiome(BaseEffect):
+class WaveyGravy(BaseEffect):
     NAME = "Wavey Gravy"
     AUTHOR = "unicorn-viz"
     TAGS = ["sci-fi", "audio", "shader"]

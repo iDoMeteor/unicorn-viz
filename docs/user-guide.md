@@ -565,7 +565,7 @@ python -m unicornviz --log-level DEBUG
 | Plasma            | `Plasma`            | classic, audio                 | Sin/cos colour-field with palette drift              |
 | Sine Scroller 2.0 | `AudioSine`      | classic, audio                 | Multi-sine bouncing text with rainbow colours        |
 | Starfield         | `Starfield`         | classic, audio                 | 3D warp-speed star tunnel                            |
-| System Monitor    | `SystemMonitor`     | diagnostic, hud, system        | Live CPU/RAM/GPU/audio performance graphs            |
+| System Monitor    | `HexyStars`     | diagnostic, hud, system        | Live CPU/RAM/GPU/audio performance graphs            |
 | Tunnel            | `Tunnel`            | classic, audio                 | Texture-mapped rotating tunnel with depth scroll     |
 | Van Gogh          | `VanGogh`           | art, audio                     | Post-impressionist flowing brush-stroke field        |
 | Wavey Gravy       | `WaveyGravy`        | psychedelic, audio             | Psychedelic waving sine-noise field                  |

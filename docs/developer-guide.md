@@ -106,7 +106,7 @@ unicorn-viz/
 │   └── effects/
 │       ├── base.py            BaseEffect ABC + AudioData
 │       ├── registry.py        Auto-discovery of effect subclasses
-│       ├── alien_biome.py     → Wavey Gravy
+│       ├── wavey_gravy.py     → Wavey Gravy
 │       ├── ansi_viewer.py     → ANSI Viewer
 │       ├── audio_spectrum.py  → Audio Spectrum
 │       ├── copper_bars.py     → Copper Bars

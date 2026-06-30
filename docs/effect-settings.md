@@ -47,10 +47,10 @@ zoom = 1.8
 
 ## Built-in Effects
 
-### `AlienBiome` (`Wavey Gravy`)
+### `WaveyGravy` (`Wavey Gravy`)
 
 ```toml
-[effects.AlienBiome]
+[effects.WaveyGravy]
 speed = 1.0
 ```
 
@@ -203,10 +203,10 @@ speed = 0.5
 warp  = 0.0
 ```
 
-### `SystemMonitor` (`System Monitor`)
+### `HexyStars` (`System Monitor`)
 
 ```toml
-[effects.SystemMonitor]
+[effects.HexyStars]
 speed = 1.0
 ```
 

@@ -42,7 +42,7 @@ These are closest to complete and should be the first implementation batch.
 
 ## Medium-Lift Backlog
 
-- Alien Biome (`unicornviz/effects/alien_biome.py`) — missing `zoom`, `reactivity`
+- Wavey Gravy (`unicornviz/effects/wavey_gravy.py`) — missing `zoom`, `reactivity`
 - ANSI Viewer (`unicornviz/effects/ansi_viewer.py`) — missing `zoom`, `reactivity`
 - Copper Bars (`unicornviz/effects/copper_bars.py`) — missing `zoom`, `reactivity`
 - Cosmos (`unicornviz/effects/cosmos.py`) — missing `zoom`, `reactivity`

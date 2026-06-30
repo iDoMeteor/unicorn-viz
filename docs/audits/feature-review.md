@@ -413,7 +413,7 @@ Per-effect one-shot checklist:
 
 - [x] 3D Cube (cube_3d) | Rating Before: 5/5 | Rating After: N/A (operator: "no need")
    Operator review (2026-06-03, shortcut 1): Visual quality 5/5; Audio response 9/5 (operator-entered); Performance single/span/mirror 5/5; Ping-pong friends PASS; Startup variance PASS; Parameter sanity FAIL (reactivity and zoom appeared non-responsive); Hotkey sanity PASS; Fixes needed: P2 only. Notes: baseline felt 4/5 but "super retro" pushed final to 5/5.
-- [ ] Wavey Gravy (alien_biome) | Rating Before: ___/5 | Rating After: ___/5
+- [ ] Wavey Gravy (wavey_gravy) | Rating Before: ___/5 | Rating After: ___/5
 - [ ] ANSI Viewer (ansi_viewer) | Rating Before: ___/5 | Rating After: ___/5
 - [x] Audio Spectrum (audio_spectrum) - startup variance EXEMPT | Rating Before: 8/5 | Rating After: N/A
    Operator review (2026-06-03): Visual quality 8/5; Audio response PASS; Performance single PASS; Performance span PASS; Performance mirror N/A (not scored); Ping-pong friends mapping UNSURE; Startup variance N/A (EXEMPT); Parameter sanity note: max reactivity should be 1.2; Hotkey sanity PASS. Notes: bars/squares should have more life. Fixes needed: all P0.
@@ -631,7 +631,7 @@ Format:
 - Vector (`vector`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority done
    - Notes: Requested enhancement: pulsing beads/racers traveling along vector paths.
 
-- Wavey Gravy (`alien_biome`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
+- Wavey Gravy (`wavey_gravy`): Rating 8 | Visual 8 | Audio 8 | Single pass | Span pass | Mirror pass | Friends pass | Startup pass | Hotkey pass | Priority none
    - Notes: Remove lingering references to former name.
 
 #### Drop-in visual effects
