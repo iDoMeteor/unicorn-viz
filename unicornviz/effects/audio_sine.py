@@ -160,7 +160,7 @@ class AudioSine(BaseEffect):
         'Hexy Stars',
         'Metaballs',
         'Plasma',
-        'Prism Lattice',
+        'Wormhole',
         'Psychedelic',
         'Tunnel',
         'Van Gogh',

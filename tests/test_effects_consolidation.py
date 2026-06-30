@@ -1,0 +1,159 @@
+"""Regression suite for the effects-consolidation (Option B category packs).
+
+Guards the entire reorganization: audio analyzers stay core, every other
+procedural visual lives in its category pack (or stays isolated), the renames
+stuck everywhere, and no PING_PONG_FRIENDS reference dangles. GL-free — uses the
+registry + source-file inspection only.
+"""
+from __future__ import annotations
+
+import inspect
+from collections import Counter
+from pathlib import Path
+
+import pytest
+
+from unicornviz.effects.registry import get_effects
+
+_REPO = Path(__file__).resolve().parents[1]
+
+# --- Expected taxonomy (the settled consolidation map) -----------------------
+CORE_NAMES = {
+    'Audio Spectrum', 'Audio Spectrogram', 'Audio Tracks', 'Audio Waveforms',
+    'Audio Centroid', 'Audio Sine',
+}
+PACK_NAMES = {
+    'psychedelic-01': {'Plasma', 'Kaleidoscope', 'Psychedelic'},
+    'games-01': {'Breakout'},
+    'particles-01': {'Starfield', 'Fireworks', 'Particle Storm'},
+    'retro-01': {'Copper Bars', 'ANSI Viewer', 'Fractal Zoom', 'Escher', 'Dali', 'Van Gogh'},
+    'feature-01': {'Hexy Stars', 'Rainbow Trance', 'Metaballs'},
+    'vector-01': {'3D Cube', 'Vector', 'Disco Ball'},
+    'cosmic-01': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion'},
+    'tech-01': {'Tron Grid', 'Cyber War', 'Hacker Terminal', 'Hacker Terminal 2.0'},
+    'immersive-01': {'Tunnel', 'Wormhole'},
+    'holiday-01': {'America 250'},
+}
+ISOLATED_NAMES = {
+    'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Showcase',
+    'Sim Showcase', 'Unicorn Tears',
+}
+OLD_NAMES = {'Sine Scroller 3.1', 'Crystal Pyramids', 'Prism Lattice'}
+OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
+               'SystemMonitor', 'AlienBiome'}
+# Grand Finale is a system sequence, not a playlist effect, so it is an allowed
+# (intentional) ping-pong-friend target that won't resolve to a discovered effect.
+ALLOWED_PPF_ORPHANS = {'Grand Finale'}
+EXPECTED_TOTAL = 42
+
+
+@pytest.fixture(scope='module')
+def effects():
+    return list(get_effects())
+
+
+def _by_name(effects):
+    return {e.NAME: e for e in effects}
+
+
+def _src(cls) -> str:
+    return inspect.getfile(cls)
+
+
+def test_total_effect_count(effects):
+    assert len(effects) == EXPECTED_TOTAL
+
+
+def test_no_duplicate_names(effects):
+    dups = [n for n, k in Counter(e.NAME for e in effects).items() if k > 1]
+    assert not dups, f'duplicate effect NAMEs: {dups}'
+
+
+def test_no_duplicate_classes(effects):
+    dups = [n for n, k in Counter(e.__name__ for e in effects).items() if k > 1]
+    assert not dups, f'duplicate effect class names: {dups}'
+
+
+def test_all_effects_have_name(effects):
+    for e in effects:
+        assert isinstance(e.NAME, str) and e.NAME, f'{e.__name__} has no NAME'
+
+
+def test_renamed_effects_present(effects):
+    names = {e.NAME for e in effects}
+    for nm in ('Audio Sine', 'Rainbow Trance', 'Wormhole', 'Hexy Stars', 'Wavey Gravy'):
+        assert nm in names, f'missing renamed effect: {nm}'
+
+
+def test_old_names_gone(effects):
+    present = {e.NAME for e in effects} & OLD_NAMES
+    assert not present, f'old display NAMEs still present: {present}'
+
+
+def test_old_classes_gone(effects):
+    present = {e.__name__ for e in effects} & OLD_CLASSES
+    assert not present, f'old class names still present: {present}'
+
+
+def test_core_contains_only_audio_analyzers(effects):
+    core = {e.NAME for e in effects if '/unicornviz/effects/' in _src(e)}
+    assert core == CORE_NAMES, (
+        f'core composition drifted: unexpected={core - CORE_NAMES} '
+        f'missing={CORE_NAMES - core}')
+
+
+def test_pack_composition(effects):
+    bn = _by_name(effects)
+    for pack, names in PACK_NAMES.items():
+        for nm in names:
+            assert nm in bn, f'{nm} not discovered (expected in {pack})'
+            src = _src(bn[nm])
+            assert f'/drop-ins/{pack}/' in src, \
+                f'{nm} expected in {pack}, found at {src}'
+
+
+def test_isolated_effects_present_and_sourced(effects):
+    bn = _by_name(effects)
+    for nm in ISOLATED_NAMES:
+        assert nm in bn, f'isolated effect missing: {nm}'
+        assert '/drop-ins/' in _src(bn[nm]), f'{nm} not sourced from a drop-in'
+
+
+def test_no_stale_ppf_references(effects):
+    bad = {}
+    for e in effects:
+        stale = [f for f in (getattr(e, 'PING_PONG_FRIENDS', []) or []) if f in OLD_NAMES]
+        if stale:
+            bad[e.NAME] = stale
+    assert not bad, f'effects still reference old PPF names: {bad}'
+
+
+def test_ppf_orphans_limited(effects):
+    names = {e.NAME for e in effects}
+    orphans = {f for e in effects
+               for f in (getattr(e, 'PING_PONG_FRIENDS', []) or []) if f not in names}
+    unexpected = orphans - ALLOWED_PPF_ORPHANS
+    assert not unexpected, f'unexpected ping-pong-friend orphans: {unexpected}'
+
+
+def test_core_does_not_import_pack_effects():
+    app = (_REPO / 'unicornviz' / 'app.py').read_text()
+    for mod in ('ansi_viewer', 'plasma', 'kaleidoscope', 'tunnel', 'cube_3d',
+                'vector', 'cosmos', 'black_hole_cathedral', 'system_monitor',
+                'alien_biome'):
+        assert f'effects.{mod} import' not in app and f'effects import {mod}' not in app, \
+            f'core (app.py) still hard-imports pack effect module: {mod}'
+
+
+def test_every_pack_is_a_submodule():
+    gitmodules = (_REPO / '.gitmodules').read_text()
+    for pack in PACK_NAMES:
+        assert f'drop-ins/{pack}' in gitmodules, f'{pack} not registered as a submodule'
+
+
+def test_absorbed_dropins_removed():
+    gitmodules = (_REPO / '.gitmodules').read_text()
+    for old in ('disco-ball-01', 'alien-invasion-01', 'tron-grid-01',
+                'cyber-war-01', 'hacker-terminal-01', 'america-250-01'):
+        assert f'drop-ins/{old}' not in gitmodules, \
+            f'absorbed drop-in {old} should no longer be a submodule'
