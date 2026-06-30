@@ -1,10 +1,78 @@
 ---
 Owner: System Architecture
-Status: draft
-Last updated: 2026-06-16
+Status: Option B (category/set packs) SELECTED 2026-06-30 — plan settling
+Last updated: 2026-06-30
 ---
 
 # Effects Consolidation Analysis
+
+> **2026-06-30 — selected approach.** Option B below (category & set-based
+> packs) is the chosen direction, superseding the earlier Option A
+> (`effects-bulk-01`). Audio-analysis effects stay in core; every other
+> procedural visual moves into a themed pack drop-in. Set packs ("numbered
+> grab-bag" packs) are deferred. See **Option B — Category Packs (SELECTED)**.
+
+---
+
+## Option B — Category Packs (SELECTED 2026-06-30)
+
+### Core — stays in `unicornviz/effects/`
+Audio analysis + sine: **Audio Spectrum, Audio Spectrogram, Audio Tracks,
+Audio Waveforms, Audio Centroid**, and **Sine Scroller 3.1 → rename "Audio
+Sine"**. (System Monitor remains a system-exempt effect.)
+
+### Isolated drop-ins — unchanged, stay one-per-repo
+Unicorn Tears · Image Showcase · Video Showcase · Sim Showcase ·
+ProjectM Presets · Texture Showcase.
+
+### Category packs — each = one private repo + submodule, multiple effects
+
+| Pack | Effects (→ rename) |
+| --- | --- |
+| **vector** | 3D Cube · Disco Ball · Vector |
+| **retro** | Copper Bars · ANSI Viewer · Fractal Zoom · Escher · Dali · Van Gogh |
+| **games** | Breakout |
+| **cosmic** | Cosmos · Black Hole Cathedral · Alien Invasion · Wavey Gravy |
+| **tech** | Tron Grid · Cyber War · Hacker Terminal · Hacker Terminal 2.0 |
+| **feature** | Hexy Stars · Crystal Pyramids → **"Rainbow Trance"** · Metaballs |
+| **immersive** | Prism Lattice → **"Wormhole"** · Tunnel |
+| **psychedelic** | Plasma · Kaleidoscope · Psychedelic |
+| **particles** | Starfield · Fireworks · Particle Storm |
+| **holiday** | America 250 *(more seasonal/event effects to come)* |
+
+### Renames (3)
+- Sine Scroller 3.1 → **Audio Sine** (core)
+- Crystal Pyramids → **Rainbow Trance** (feature pack)
+- Prism Lattice → **Wormhole** (immersive pack)
+
+### Open items to settle before execution
+1. **Rename scope** — display `NAME` only (lowest risk; config `[effects.<Class>]`
+   sections stay valid since they key on the class name), or also rename the
+   class + file? Recommend display-NAME-only now; class/file rename optional.
+2. **Pack repos** — confirm each pack is its own private repo + submodule per the
+   Drop-In Source Policy (loader already globs `drop-ins/*/*.py`, so multi-effect
+   packs work). Absorbed one-effect repos (alien-invasion-01, cyber-war-01,
+   disco-ball-01, hacker-terminal-01, tron-grid-01, textures-01[Prism]) get their
+   effect moved into the pack and the old repo archived/removed as a submodule.
+
+### Ripple effects to handle during migration
+- **`PING_PONG_FRIENDS`** lists reference effects by display `NAME` across many
+  files — every rename (Audio Sine, Rainbow Trance, Wormhole) must update those.
+- **Config**: `[playlist] start_effect` and any `[effects.<Class>]` sections;
+  `[dropins] exclude` can now disable a whole pack at once.
+- **Help/HUD** name references; **tests** that assert on old display names.
+- **Tag normalization** (do alongside): unify `scifi`/`sci-fi`/`space`/`cosmic`,
+  drop the low-signal `audio` and inconsistent `drop-in` tags, and add a single
+  canonical `category` tag per pack.
+
+### Phasing (deferred specifics)
+- Set packs ("numbered grab-bag" packs) deferred per owner.
+- Execution order TBD; recommend taking ONE pack end-to-end first as the
+  template (repo + submodule + move effects + update refs + tests), then repeat.
+
+---
+
+## Original analysis (2026-06-16)
 
 ## Current State
 
