@@ -277,6 +277,11 @@ class App:
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
         self._paused = False
         self._projectm_manager_modal_active = False
+        # Generic effect lock: when set to an effect's display NAME, the system
+        # stays on that effect (ProjectM-only mode). Switch attempts to other
+        # effects are redirected into a variation of the locked effect (e.g. a
+        # ProjectM preset advance) so automation keeps the show moving.
+        self._effect_lock: str | None = None
         self._auto_advance = bool(self.cfg.get('demo', 'auto_advance', default=True))  # Toggle with hotkey T
         self._ctrl_held = False
         self._ctx: moderngl.Context | None = None
@@ -2109,6 +2114,23 @@ void main() {
                 getattr(cls, 'NAME', getattr(cls, '__name__', str(cls))),
             )
             return
+        lock = self._effect_lock
+        if lock is not None and getattr(cls, 'NAME', None) != lock:
+            # Locked to one effect (e.g. ProjectM-only mode): don't leave it.
+            # Redirect the swap intent into a variation of the locked effect so
+            # automation/auto-advance keep things fresh without switching away
+            # (for ProjectM that means advancing to the next preset).
+            cur = self._current_effect
+            vary = getattr(cur, 'next_preset', None) if cur is not None else None
+            if callable(vary):
+                try:
+                    vary()
+                except Exception:
+                    log.debug('Locked-effect variation failed', exc_info=True)
+            else:
+                log.debug('Effect switch blocked by lock (%s): %s', lock,
+                          getattr(cls, 'NAME', cls))
+            return
         # Invert does not carry through transitions.
         self._invert_colors = False
         if self._current_effect is not None:
@@ -2632,6 +2654,16 @@ void main() {
 
         # Load first effect
         self._current_effect = self._instantiate(playlist.current())
+        # Optional: start locked in ProjectM-only mode.
+        _pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
+        if isinstance(_pm_cfg, dict) and bool(_pm_cfg.get('only_mode', False)):
+            _pm_cls = self.vj_api.find_effect('ProjectMEffect', 'ProjectM Presets')
+            if _pm_cls is not None:
+                if type(self._current_effect).__name__ != 'ProjectMEffect':
+                    self._current_effect.destroy()
+                    self._current_effect = self._instantiate(_pm_cls)
+                self._effect_lock = 'ProjectM Presets'
+                log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
         stream_cls = _NullRTMPStreamer if self._safe_mode else _load_rtmp_streamer_class()
         stream_cfg = self.cfg.get('streaming', default={}) or {}
@@ -2814,8 +2846,10 @@ void main() {
             if perf_debug_enabled:
                 perf_after_midi = time.perf_counter()
 
-            # Auto-playlist advance
-            if not manager_modal_active and not self._paused and self._next_effect is None and self._auto_advance:
+            # Auto-playlist advance (suppressed while locked to one effect)
+            if (not manager_modal_active and not self._paused
+                    and self._next_effect is None and self._auto_advance
+                    and self._effect_lock is None):
                 allow_advance = True
                 if isinstance(self._current_effect, ANSIViewer):
                     allow_advance = self._current_effect.reached_bottom
@@ -4770,6 +4804,36 @@ void main() {
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)
+
+    @property
+    def effect_lock(self) -> str | None:
+        """Display NAME of the locked effect, or None when not locked."""
+        return self._effect_lock
+
+    def lock_effect(self, name: str) -> None:
+        """Pin the system to the effect with display NAME *name* (generic;
+        the effects browser reuses this). Does not itself switch effects."""
+        self._effect_lock = str(name) if name else None
+
+    def unlock_effect(self) -> None:
+        """Clear any effect lock."""
+        self._effect_lock = None
+
+    def toggle_projectm_only(self) -> tuple[bool, str]:
+        """Toggle ProjectM-only mode. On: switch to ProjectM and lock there.
+        Off: unlock and advance to the next effect immediately."""
+        if self._effect_lock is not None:
+            self._effect_lock = None
+            self._demo_timer = 0.0
+            if self._playlist is not None:
+                self._switch_effect(self._playlist.advance())
+            return False, 'ProjectM-only OFF'
+        cls = self.vj_api.find_effect('ProjectMEffect', 'ProjectM Presets')
+        if cls is None:
+            return False, 'ProjectM not available'
+        self._switch_effect(cls)
+        self._effect_lock = 'ProjectM Presets'
+        return True, 'ProjectM-only ON'
 
     def _mark_user_action(self, kind: str = 'generic') -> None:
         """Mark recent user input so automation can temporarily yield control."""

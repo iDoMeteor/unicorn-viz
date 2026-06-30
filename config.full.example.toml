@@ -388,6 +388,7 @@ preload = true             # pre-bake scenes in the background during the splash
 
 [effects.ProjectMEffect]
 speed = 1.0
+# only_mode = false        # start locked in ProjectM-only mode (toggle: Ctrl+L)
 preset_duration = 20.0
 smooth_transition = true
 lock_preset = false

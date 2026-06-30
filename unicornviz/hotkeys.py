@@ -1102,6 +1102,11 @@ class HotkeyHandler:
             else:
                 o.toggle_system_monitor_modal()
 
+        elif sym == sdl2.SDLK_l and (mod & sdl2.KMOD_CTRL):
+            # Ctrl+L — toggle ProjectM-only mode (lock the system to ProjectM).
+            _on, msg = a.toggle_projectm_only()
+            o.flash_message(msg, 1.6)
+
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect
             # Toggle is global — persists even when current effect lacks 'speed'.

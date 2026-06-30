@@ -1,8 +1,18 @@
 # ProjectM-Only Mode + Effects Browser — Design Examination
 
 Owner: Effects
-Status: proposed (examination; awaiting method selection)
+Status: ProjectM-only mode IMPLEMENTED (Method A); effects browser still todo-soon
 Last updated: 2026-06-30
+
+> **Implemented 2026-06-30 (Method A).** Generic effect-lock at `_switch_effect`
+> (`App._effect_lock`, exposed via `vj_api.lock_effect/unlock_effect/effect_lock`).
+> Toggle: **Ctrl+L** (`App.toggle_projectm_only`) — on = switch to ProjectM +
+> lock; off = unlock + advance to next effect immediately (owner decision #3).
+> Auto-advance is suppressed while locked. A blocked switch redirects into a
+> locked-effect variation (ProjectM `next_preset`), so Auto VJ keeps running its
+> normal cadence but expresses it through pM presets (owner decision #2) with no
+> Auto VJ code changes. Startup lock via `[effects.ProjectMEffect] only_mode`.
+> Tests in `tests/test_hotkeys_projectm_only.py`.
 
 Two related items:
 

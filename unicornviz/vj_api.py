@@ -243,6 +243,24 @@ class VJApi:
                 return True
         return False
 
+    def lock_effect(self, name: str) -> None:
+        """Pin the system to the effect with display NAME *name* (ProjectM-only
+        mode / future effects-browser 'pin'). Does not itself switch effects."""
+        self._app.lock_effect(name)
+
+    def unlock_effect(self) -> None:
+        """Clear any effect lock so normal rotation resumes."""
+        self._app.unlock_effect()
+
+    @property
+    def effect_lock(self) -> 'str | None':
+        """Display NAME of the locked effect, or None when not locked."""
+        return self._app.effect_lock
+
+    def toggle_projectm_only(self) -> tuple[bool, str]:
+        """Toggle ProjectM-only mode; returns (is_on, status message)."""
+        return self._app.toggle_projectm_only()
+
     def find_effect(self, class_name: str, display_name: str | None = None) -> type | None:
         """Return the effect class matching *class_name* or (optionally) *display_name*.
 
