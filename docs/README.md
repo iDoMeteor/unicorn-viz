@@ -14,6 +14,7 @@ This is the canonical map for project documentation.
 - [Developer Guide](developer-guide.md)
 - [Testing Guide](testing.md)
 - [Drop-in Documentation Registry](drop-ins.md)
+- [Security Policy](../SECURITY.md)
 - [Marketing](marketing/README.md)
 
 ## Working Documentation
@@ -33,6 +34,7 @@ This is the canonical map for project documentation.
 - Deferred work register (2026-06-18): [docs/planning/deferred-work-2026-06-18.md](planning/deferred-work-2026-06-18.md)
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
 - Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
+- ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-06-19): [docs/audits/2026-06-19-full-system-audit.md](audits/2026-06-19-full-system-audit.md)
