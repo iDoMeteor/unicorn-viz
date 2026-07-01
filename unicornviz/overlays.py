@@ -593,6 +593,8 @@ class Overlays:
         self._context_menu_y = 0.0
         self._context_menu_hover = -1
         self._context_menu_expanded: set[int] = set()
+        self._context_menu_anim = 0.0  # 0 = hidden, 1 = fully open (unroll ease)
+        self._context_menu_fading = False  # animating closed
         self._context_menu_row_rects: list[tuple[float, float, float, float, int]] = []
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
@@ -1923,12 +1925,34 @@ void main() {
         self._context_menu_y = float(y)
         self._context_menu_hover = -1
         self._context_menu_expanded = set()
+        self._context_menu_anim = 0.0
+        self._context_menu_fading = False
         self._context_menu_open = bool(self._context_menu_entries)
 
     def close_context_menu(self) -> None:
-        """Dismiss the context menu."""
+        """Dismiss the context menu (animates closed, then stops rendering)."""
+        if self._context_menu_open:
+            self._context_menu_fading = True  # keep rendering while it rolls up
         self._context_menu_open = False
         self._context_menu_hover = -1
+
+    def tick_context_menu(self, dt: float) -> None:
+        """Advance the open/close unroll animation toward its target."""
+        if not (self._context_menu_open or self._context_menu_fading):
+            return
+        target = 1.0 if self._context_menu_open else 0.0
+        rate = float(dt) / 0.13  # ~130 ms open/close
+        if self._context_menu_anim < target:
+            self._context_menu_anim = min(target, self._context_menu_anim + rate)
+        elif self._context_menu_anim > target:
+            self._context_menu_anim = max(target, self._context_menu_anim - rate)
+        if self._context_menu_fading and self._context_menu_anim <= 0.001:
+            self._context_menu_fading = False
+
+    @property
+    def context_menu_visible(self) -> bool:
+        """True while the menu should render (open or animating closed)."""
+        return self._context_menu_open or self._context_menu_fading
 
     _CONTEXT_MENU_ROW_SCALE = 2.1
     _CONTEXT_MENU_HINT_SCALE = 1.7
@@ -2043,25 +2067,40 @@ void main() {
             return -2
         return -2
 
+    def _context_menu_hover_glow(self, x: float, y: float, w: float, h: float, t: float) -> None:
+        """Draw a pulsing glossy glow highlight behind a hovered menu row."""
+        gp = 0.6 + 0.4 * math.sin(t * 5.0)
+        self._draw_rect(x + 3.0, y, w - 6.0, h, (0.10, 0.28, 0.60, 0.55))
+        self._draw_rect(x + 3.0, y, w - 6.0, h, (0.18, 0.45, 0.90, 0.22 * gp))
+        # glossy top-edge highlight + bright left accent bar
+        self._draw_rect(x + 3.0, y, w - 6.0, max(1.0, h * 0.28), (0.35, 0.7, 1.0, 0.18 * gp))
+        self._draw_rect(x + 3.0, y, 3.0, h, (0.45, 0.95, 1.0, 0.72 + 0.28 * gp))
+
     def _render_context_menu(self) -> None:
-        """Draw the accordion context menu panel and its currently-visible rows."""
-        if not self._context_menu_open or not self._context_menu_entries:
+        """Draw the accordion context menu with open/close unroll + hover glow."""
+        if not self.context_menu_visible or not self._context_menu_entries:
             return
         layout = self._context_menu_layout()
         x0, y0 = float(layout['x']), float(layout['y'])
-        w, h = float(layout['w']), float(layout['h'])
+        w, full_h = float(layout['w']), float(layout['h'])
         t = self._hud_t
         pulse = 0.55 + 0.45 * math.sin(t * 2.6)
 
-        self._draw_rect(x0, y0, w, h, (0.04, 0.05, 0.12, 0.97))
+        # Open/close "unroll": the panel grows/shrinks vertically (smoothstep).
+        a = max(0.0, min(1.0, self._context_menu_anim))
+        ease = a * a * (3.0 - 2.0 * a)
+        vis_h = max(4.0, full_h * ease)
+        reveal_bottom = y0 + vis_h
+
+        self._draw_rect(x0, y0, w, vis_h, (0.04, 0.05, 0.12, 0.97))
         bw = 2.0
         c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
         self._draw_rect(x0, y0, w, bw, c_border)
-        self._draw_rect(x0, y0 + h - bw, w, bw, c_border)
-        self._draw_rect(x0, y0, bw, h, c_border)
-        self._draw_rect(x0 + w - bw, y0, bw, h, c_border)
+        self._draw_rect(x0, reveal_bottom - bw, w, bw, c_border)
+        self._draw_rect(x0, y0, bw, vis_h, c_border)
+        self._draw_rect(x0 + w - bw, y0, bw, vis_h, c_border)
 
-        # Audio-reactive "sprite" bulbs chasing the border (as on other modals).
+        # Audio-reactive "sprite" bulbs chasing the (animating) border.
         def _fv(key: str) -> float:
             try:
                 return float(self._hud_state.get(key, '0.0') or 0.0)
@@ -2069,7 +2108,7 @@ void main() {
                 return 0.0
 
         self._draw_audio_reactive_border_bulbs(
-            x0, y0, w, h, _fv('bass'), _fv('mid'), _fv('treble'), t,
+            x0, y0, w, vis_h, _fv('bass'), _fv('mid'), _fv('treble'), t,
             speed_scale=0.5, size_scale=0.5,
         )
 
@@ -2078,9 +2117,12 @@ void main() {
         hint_char_w = float(self._glyph_w) * self._font_scale_norm * hint_scale
 
         for row in layout['rows']:  # type: ignore[union-attr]
-            entry = self._context_menu_entries[int(row['index'])]
             ry = float(row['y'])
             rh = float(row['h'])
+            # Only draw rows already revealed by the unroll.
+            if ry + rh > reveal_bottom + 1.0:
+                continue
+            entry = self._context_menu_entries[int(row['index'])]
             label = str(entry.get('label', ''))
             hovered = self._context_menu_hover == int(row['index'])
 
@@ -2090,19 +2132,19 @@ void main() {
                     self._draw_rect(x0 + 10, ry + rh * 0.5, w - 20, 1.0, (0.3, 0.4, 0.6, 0.5))
                     continue
                 if hovered:
-                    self._draw_rect(x0 + 4, ry, w - 8, rh, (0.08, 0.20, 0.45, 0.75))
+                    self._context_menu_hover_glow(x0, ry, w, rh, t)
                 # ASCII disclosure marker ('v' open / '>' collapsed) — the font
                 # atlas is ASCII-only, so no unicode arrows.
                 marker = 'v' if row['expanded'] else '>'
-                hcol = (0.65, 0.85, 1.0, 1.0) if hovered else (0.55, 0.75, 1.0, 0.9)
+                hcol = (0.9, 0.98, 1.0, 1.0) if hovered else (0.55, 0.75, 1.0, 0.9)
                 self._draw_text(f'{marker} {label.upper()}', x0 + 12, ry + 5, scale=hint_scale, color=hcol)
                 continue
 
             selectable = bool(row['selectable'])
             if hovered and selectable:
-                self._draw_rect(x0 + 4, ry, w - 8, rh, (0.10, 0.25, 0.55, 0.85))
+                self._context_menu_hover_glow(x0, ry, w, rh, t)
             if hovered and selectable:
-                tcol = (1.0, 0.92, 0.2, 1.0)
+                tcol = (1.0, 0.97, 0.55, 1.0)
             elif selectable:
                 tcol = (0.78, 0.86, 1.0, 0.92)
             else:
@@ -2224,8 +2266,9 @@ void main() {
         if self._show_midi and not route_modals_elsewhere:
             self._render_midi_selector()
 
-        # Context menu floats above everything else.
-        if self._context_menu_open and not route_modals_elsewhere:
+        # Context menu floats above everything else (with open/close unroll).
+        self.tick_context_menu(dt)
+        if self.context_menu_visible and not route_modals_elsewhere:
             self._render_context_menu()
 
     # ------------------------------------------------------------------

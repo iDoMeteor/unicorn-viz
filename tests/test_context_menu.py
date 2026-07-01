@@ -166,6 +166,8 @@ def _bare_overlays() -> Overlays:
     ov._context_menu_y = 0.0
     ov._context_menu_hover = -1
     ov._context_menu_expanded = set()
+    ov._context_menu_anim = 0.0
+    ov._context_menu_fading = False
     # Minimal font/geometry state the layout math reads.
     ov._glyph_w = 13
     ov._glyph_h = 18
@@ -292,12 +294,59 @@ def test_render_draws_audio_reactive_sprite_border() -> None:
     ov._hud_t = 0.0
     ov._hud_state = {'bass': '0.5', 'mid': '0.3', 'treble': '0.2'}
     ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    ov._context_menu_anim = 1.0
     bulb_calls: list[tuple] = []
     ov._draw_rect = lambda *a, **k: None
     ov._draw_text = lambda *a, **k: None
     ov._draw_audio_reactive_border_bulbs = lambda *a, **k: bulb_calls.append(a)
     ov._render_context_menu()
     assert len(bulb_calls) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Open/close animation + hover glow
+# --------------------------------------------------------------------------- #
+
+def test_open_then_tick_advances_animation() -> None:
+    ov = _bare_overlays()
+    ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    assert ov._context_menu_anim == 0.0
+    for _ in range(10):
+        ov.tick_context_menu(1.0 / 60.0)
+    assert ov._context_menu_anim == 1.0
+    assert ov.context_menu_visible is True
+
+
+def test_close_fades_out_then_stops_rendering() -> None:
+    ov = _bare_overlays()
+    ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    ov._context_menu_anim = 1.0
+    ov.close_context_menu()
+    # Still visible (animating closed) but no longer interactive.
+    assert ov.context_menu_open is False
+    assert ov._context_menu_fading is True
+    assert ov.context_menu_visible is True
+    for _ in range(20):
+        ov.tick_context_menu(1.0 / 60.0)
+    assert ov._context_menu_fading is False
+    assert ov.context_menu_visible is False
+
+
+def test_hover_draws_glow_on_hovered_row() -> None:
+    ov = _bare_overlays()
+    ov._hud_t = 0.0
+    ov._hud_state = {}
+    ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    ov._context_menu_expanded.add(0)
+    ov._context_menu_anim = 1.0
+    ov._context_menu_hover = 1  # Effects Browser item
+    glow_calls: list[tuple] = []
+    ov._draw_rect = lambda *a, **k: None
+    ov._draw_text = lambda *a, **k: None
+    ov._draw_audio_reactive_border_bulbs = lambda *a, **k: None
+    ov._context_menu_hover_glow = lambda *a, **k: glow_calls.append(a)
+    ov._render_context_menu()
+    assert len(glow_calls) == 1
 
 
 def test_dropin_help_entries_reads_dynamic_registry() -> None:
