@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import sdl2
 
+from unicornviz.catalog_browser import PANE_CATEGORIES, PANE_LIST
 from unicornviz.paths import resolve_path
 
 if TYPE_CHECKING:
@@ -164,6 +165,7 @@ class HotkeyHandler:
         self._projectm_preview_committed_path: str = ''
         self._projectm_preview_dirty: bool = False
         self._projectm_search_mode: bool = False
+        self._effects_browser_search_mode: bool = False
         self._pending_midi_events: deque[MidiEvent] = deque()
         self._midi_lock = threading.Lock()
 
@@ -260,6 +262,8 @@ class HotkeyHandler:
     def _active_midi_context(self) -> str:
         """Resolve the current MIDI context for slot-dispatch actions."""
         o = self._overlays
+        if bool(getattr(o, 'effects_browser_visible', False)):
+            return 'effects_browser'
         if bool(getattr(o, 'webcam_editor_modal_visible', False)):
             return 'webcam_editor'
         if bool(getattr(o, 'projectm_manager_visible', False)):
@@ -768,6 +772,84 @@ class HotkeyHandler:
                 return
             # Any other key falls through to ESC check below.
 
+        if getattr(o, 'effects_browser_visible', False):
+            b = o.effects_browser
+            if self._effects_browser_search_mode:
+                if sym == sdl2.SDLK_ESCAPE:
+                    self._effects_browser_search_mode = False
+                    b.set_search_mode(False)
+                    return
+                if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                    self._effects_browser_search_mode = False
+                    b.set_search_mode(False)
+                    a.effects_browser_mark_nav()
+                    return
+                if (mod & sdl2.KMOD_CTRL) and sym == sdl2.SDLK_BACKSPACE:
+                    b.clear_search_query()
+                    a.effects_browser_mark_nav()
+                    return
+                if sym == sdl2.SDLK_BACKSPACE:
+                    q = b.search_query
+                    if q:
+                        b.set_search_query(q[:-1])
+                        a.effects_browser_mark_nav()
+                    return
+                ch = _projectm_search_char()
+                if ch:
+                    b.set_search_query(b.search_query + ch)
+                    a.effects_browser_mark_nav()
+                return
+
+            if sym == sdl2.SDLK_ESCAPE or (sym == sdl2.SDLK_b and (mod & sdl2.KMOD_CTRL)):
+                a.close_effects_browser(commit=False)
+                return
+            if sym == sdl2.SDLK_SLASH and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI | sdl2.KMOD_SHIFT)):
+                self._effects_browser_search_mode = True
+                b.set_search_mode(True)
+                o.flash_message('Effects search: type to filter', 1.2)
+                return
+            if sym == sdl2.SDLK_TAB:
+                b.toggle_focus_pane()
+                return
+            if sym == sdl2.SDLK_LEFT:
+                b.set_focus_pane(PANE_CATEGORIES)
+                b.move_category(-1)
+                a.effects_browser_mark_nav()
+                return
+            if sym == sdl2.SDLK_RIGHT:
+                b.set_focus_pane(PANE_CATEGORIES)
+                b.move_category(1)
+                a.effects_browser_mark_nav()
+                return
+            if sym == sdl2.SDLK_UP:
+                if b.focus_pane() == PANE_CATEGORIES:
+                    b.move_category(-1)
+                else:
+                    b.set_focus_pane(PANE_LIST)
+                    b.move_selection(-1)
+                a.effects_browser_mark_nav()
+                return
+            if sym == sdl2.SDLK_DOWN:
+                if b.focus_pane() == PANE_CATEGORIES:
+                    b.move_category(1)
+                else:
+                    b.set_focus_pane(PANE_LIST)
+                    b.move_selection(1)
+                a.effects_browser_mark_nav()
+                return
+            if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                name = a.effects_browser_commit()
+                if name:
+                    o.flash_message(f'Effect: {name}', 1.4)
+                return
+            if sym == sdl2.SDLK_p and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
+                name = a.effects_browser_pin()
+                if name:
+                    o.flash_message(f'Pinned: {name}', 1.6)
+                return
+            # Swallow all other keys while the browser is open.
+            return
+
         if getattr(o, 'projectm_manager_visible', False):
             manager_effect = _sync_projectm_manager()
             if manager_effect is None:
@@ -1058,6 +1140,10 @@ class HotkeyHandler:
                 viable_flags = a.get_audio_source_viable_flags()
                 o.set_audio_sources(sources, current_idx, viable_flags)
                 o.toggle_audio_selector()
+
+        elif sym == sdl2.SDLK_b:
+            if mod & sdl2.KMOD_CTRL:
+                a.open_effects_browser()
 
         elif sym == sdl2.SDLK_m:
             if mod & sdl2.KMOD_CTRL:

@@ -276,6 +276,11 @@ class App:
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
         self._paused = False
         self._projectm_manager_modal_active = False
+        # Effects browser modal (keyboard + mouse, debounced live preview).
+        self._effects_browser_active = False
+        self._eb_origin_effect: Type[BaseEffect] | None = None
+        self._eb_previewed_name: str = ''
+        self._eb_last_nav_monotonic: float = 0.0
         # Generic effect lock: when set to an effect's display NAME, the system
         # stays on that effect (ProjectM-only mode). Switch attempts to other
         # effects are redirected into a variation of the locked effect (e.g. a
@@ -2737,6 +2742,7 @@ void main() {
             self._last_frame_fps = (1.0 / dt) if dt > 0.0 else 0.0
             self._last_frame_ms = dt * 1000.0
             manager_modal_active = self._projectm_manager_modal_active
+            eb_active = self._effects_browser_active
 
             # Poll events
             event = sdl2.SDL_Event()
@@ -2770,6 +2776,11 @@ void main() {
                         self._set_cursor_visible(self._cursor_should_be_visible())
                 elif event.type == sdl2.SDL_MOUSEWHEEL:
                     dy = int(event.wheel.y)
+                    if eb_active:
+                        if dy != 0:
+                            self._overlays.effects_browser.move_selection(-dy)
+                            self.effects_browser_mark_nav()
+                        continue
                     if manager_modal_active:
                         continue
                     if dy != 0 and self._postfx_controller is not None:
@@ -2778,6 +2789,18 @@ void main() {
                         else:
                             self._postfx_controller.on_scroll(dy)
                 elif event.type == sdl2.SDL_MOUSEMOTION:
+                    if eb_active:
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x),
+                                float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None and self._overlays.handle_effects_browser_mouse_motion(hit[0], hit[1]):
+                                self.effects_browser_mark_nav()
+                        except Exception as exc:
+                            log.warning('Effects browser hover handling failed: %s', exc)
+                        continue
                     if manager_modal_active:
                         continue
                     overlays = getattr(self, '_overlays', None)
@@ -2795,6 +2818,23 @@ void main() {
                         except Exception as exc:
                             log.warning('Help overlay hover handling failed: %s', exc)
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
+                    if eb_active:
+                        if event.button.button == sdl2.SDL_BUTTON_LEFT:
+                            try:
+                                hit = self._overlay_mouse_coords(
+                                    float(event.button.x),
+                                    float(event.button.y),
+                                    self._primary_display_viewport(),
+                                )
+                                if hit is not None:
+                                    result = self._overlays.handle_effects_browser_mouse_click(hit[0], hit[1])
+                                    if result == 1:
+                                        self.effects_browser_mark_nav()
+                                    elif result == 2:
+                                        self.effects_browser_commit()
+                            except Exception as exc:
+                                log.warning('Effects browser click handling failed: %s', exc)
+                        continue
                     if manager_modal_active:
                         continue
                     if event.button.button == sdl2.SDL_BUTTON_LEFT:
@@ -2845,8 +2885,11 @@ void main() {
             if perf_debug_enabled:
                 perf_after_midi = time.perf_counter()
 
+            # Debounced live preview while the effects browser is open.
+            self.tick_effects_browser_preview()
+
             # Auto-playlist advance (suppressed while locked to one effect)
-            if (not manager_modal_active and not self._paused
+            if (not manager_modal_active and not eb_active and not self._paused
                     and self._next_effect is None and self._auto_advance
                     and self._effect_lock is None):
                 allow_advance = True
@@ -4823,6 +4866,119 @@ void main() {
     def unlock_effect(self) -> None:
         """Clear any effect lock."""
         self._effect_lock = None
+
+    # -- Effects browser -----------------------------------------------------
+
+    @property
+    def effects_browser_active(self) -> bool:
+        """Return whether the effects browser modal is open."""
+        return self._effects_browser_active
+
+    def _effects_browser_entries(self) -> list[dict[str, object]]:
+        """Build browser rows from the shared registry catalog helper."""
+        from unicornviz.effects.registry import browser_entries
+
+        return [
+            {
+                'display_name': e.name,
+                'category_key': e.category,
+                'pack_name': e.pack,
+                'tags': list(e.tags),
+                'cls': e.cls,
+            }
+            for e in browser_entries()
+        ]
+
+    def open_effects_browser(self) -> None:
+        """Open the effects browser and select the current effect."""
+        o = self._overlays
+        current = self.current_effect_name
+        o.set_effects_browser_entries(self._effects_browser_entries(), current)
+        b = o.effects_browser
+        b.set_search_mode(False)
+        b.clear_search_query()
+        b.set_category_index(0)
+        for i, row in enumerate(b.filtered()):
+            if row.get('display_name') == current:
+                b.set_selected_index(i)
+                break
+        self._eb_origin_effect = (
+            type(self._current_effect) if self._current_effect is not None else None
+        )
+        self._eb_previewed_name = current
+        self._eb_last_nav_monotonic = 0.0
+        if not o.effects_browser_visible:
+            o.toggle_effects_browser()
+        self._effects_browser_active = True
+
+    def close_effects_browser(self, commit: bool) -> None:
+        """Close the browser. When ``commit`` is False, revert to the pre-open
+        effect (undoing any live preview)."""
+        o = self._overlays
+        if not commit and self._eb_origin_effect is not None:
+            current_cls = (
+                type(self._current_effect) if self._current_effect is not None else None
+            )
+            if current_cls is not self._eb_origin_effect:
+                self._switch_effect(self._eb_origin_effect)
+        if o.effects_browser_visible:
+            o.toggle_effects_browser()
+        b = o.effects_browser
+        b.set_search_mode(False)
+        b.clear_search_query()
+        self._effects_browser_active = False
+        self._eb_origin_effect = None
+        self._eb_previewed_name = ''
+        self._eb_last_nav_monotonic = 0.0
+
+    def effects_browser_mark_nav(self) -> None:
+        """(Re)arm the debounced live preview after any navigation."""
+        self._eb_last_nav_monotonic = time.monotonic()
+
+    def effects_browser_commit(self) -> str | None:
+        """Switch to the selected effect and close. Returns its display NAME."""
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            self.close_effects_browser(commit=True)
+            return None
+        cls = entry.get('cls')
+        name = str(entry.get('display_name', ''))
+        if cls is not None and type(self._current_effect) is not cls:
+            self._switch_effect(cls)  # type: ignore[arg-type]
+        self.close_effects_browser(commit=True)
+        return name
+
+    def effects_browser_pin(self) -> str | None:
+        """Switch to the selected effect, lock there, and close."""
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        cls = entry.get('cls')
+        name = str(entry.get('display_name', ''))
+        if cls is not None:
+            if type(self._current_effect) is not cls:
+                self._switch_effect(cls)  # type: ignore[arg-type]
+            self._effect_lock = name
+        self.close_effects_browser(commit=True)
+        return name
+
+    def tick_effects_browser_preview(self) -> None:
+        """Debounced live preview: switch to the selection after ~250 ms idle."""
+        if not self._effects_browser_active or self._eb_last_nav_monotonic <= 0.0:
+            return
+        if (time.monotonic() - self._eb_last_nav_monotonic) < 0.25:
+            return
+        self._eb_last_nav_monotonic = 0.0
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return
+        name = str(entry.get('display_name', ''))
+        if name == self._eb_previewed_name:
+            return
+        cls = entry.get('cls')
+        if cls is not None and type(self._current_effect) is not cls:
+            self._switch_effect(cls)  # type: ignore[arg-type]
+            self._eb_previewed_name = name
 
     def toggle_projectm_only(self) -> tuple[bool, str]:
         """Toggle ProjectM-only mode. On: switch to ProjectM and lock there.

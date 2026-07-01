@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Callable
 import moderngl
 import numpy as np
 
+from unicornviz.catalog_browser import CatalogBrowser, PANE_CATEGORIES, PANE_LIST
 from unicornviz.cta_overlay import CTAOverlay, _CTA_SHOW_DURATION, _CTA_SLOTS
 from unicornviz.paths import resolve_path
 
@@ -419,6 +420,7 @@ class Overlays:
                 ('m', 'System monitor modal'),
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
+                ('Ctrl+B', 'Effects browser (search/filter/preview/pin all effects)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('Ctrl+Alt+K', 'Webcam editor modal'),
                 ('Ctrl+Alt+H', 'Controller help modal (APC slot map)'),
@@ -579,6 +581,13 @@ class Overlays:
         self._projectm_focus_pane: int = 1
         self._projectm_current_path: str = ''
         self._projectm_search_query: str = ''
+        # Effects browser (keyboard + mouse) — driven by the shared model.
+        self._show_effects_browser = False
+        self._effects_browser = CatalogBrowser()
+        self._effects_browser_current: str = ''
+        # Mouse hit-regions rebuilt each render: (x, y, w, h, index).
+        self._eb_cat_rects: list[tuple[float, float, float, float, int]] = []
+        self._eb_row_rects: list[tuple[float, float, float, float, int]] = []
         self._webcam_editor_devices: list[dict[str, object]] = []
         self._webcam_editor_selected_idx: int = 0
         self._webcam_editor_state: dict[str, object] = {
@@ -1885,7 +1894,9 @@ void main() {
             self._render_help()
 
         active_modal_type = ''
-        if self._show_projectm_manager:
+        if self._show_effects_browser:
+            active_modal_type = 'effects_browser'
+        elif self._show_projectm_manager:
             active_modal_type = 'projectm_manager'
         elif self._show_system_monitor_modal:
             active_modal_type = 'system_monitor'
@@ -1913,6 +1924,9 @@ void main() {
                     route_modals_elsewhere,
                 )
             self._modal_route_debug_last = route_state
+
+        if self._show_effects_browser and not route_modals_elsewhere:
+            self._render_effects_browser()
 
         if self._show_projectm_manager and not route_modals_elsewhere:
             self._render_projectm_manager()
@@ -2415,6 +2429,203 @@ void main() {
             return None
         idx = max(0, min(self._projectm_preset_idx, len(entries) - 1))
         return entries[idx]
+
+    # -- Effects browser (shared CatalogBrowser model) --------------------
+
+    @property
+    def effects_browser(self) -> CatalogBrowser:
+        """Return the shared browser model that drives the effects modal."""
+        return self._effects_browser
+
+    @property
+    def effects_browser_visible(self) -> bool:
+        """Return whether the effects browser modal is open."""
+        return self._show_effects_browser
+
+    def toggle_effects_browser(self) -> None:
+        """Toggle the effects browser modal."""
+        self._show_effects_browser = not self._show_effects_browser
+
+    def set_effects_browser_entries(
+        self,
+        entries: list[dict[str, object]],
+        current_name: str,
+    ) -> None:
+        """Populate the effects browser catalog and mark the current effect."""
+        self._effects_browser.set_entries(entries)
+        self._effects_browser_current = str(current_name or '')
+
+    @staticmethod
+    def _eb_hit(
+        rects: list[tuple[float, float, float, float, int]],
+        x: float,
+        y: float,
+    ) -> int | None:
+        for rx, ry, rw, rh, idx in rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                return idx
+        return None
+
+    def handle_effects_browser_mouse_motion(self, x: float, y: float) -> bool:
+        """Hover-highlight the row under the cursor. Returns True if over a row."""
+        if not self._show_effects_browser:
+            return False
+        idx = self._eb_hit(self._eb_row_rects, x, y)
+        if idx is not None:
+            self._effects_browser.set_focus_pane(PANE_LIST)
+            self._effects_browser.set_selected_index(idx)
+            return True
+        return False
+
+    def handle_effects_browser_mouse_click(self, x: float, y: float) -> int:
+        """Route a click. Returns 0 miss, 1 category selected, 2 row chosen."""
+        if not self._show_effects_browser:
+            return 0
+        cidx = self._eb_hit(self._eb_cat_rects, x, y)
+        if cidx is not None:
+            self._effects_browser.set_focus_pane(PANE_CATEGORIES)
+            self._effects_browser.set_category_index(cidx)
+            return 1
+        ridx = self._eb_hit(self._eb_row_rects, x, y)
+        if ridx is not None:
+            self._effects_browser.set_focus_pane(PANE_LIST)
+            self._effects_browser.set_selected_index(ridx)
+            return 2
+        return 0
+
+    def _render_effects_browser(self) -> None:
+        """Draw the effects browser modal (categories + searchable effect list)."""
+        b = self._effects_browser
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.4)
+        self._eb_cat_rects = []
+        self._eb_row_rects = []
+
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.90, 1320.0)
+        panel_h = min(H * 0.86, 860.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+        left_w = max(260.0, panel_w * 0.28)
+        right_w = panel_w - left_w - 28.0
+        left_x = px + 14.0
+        right_x = left_x + left_w + 14.0
+        content_y = py + 86.0
+        content_h = panel_h - 164.0
+        footer_y = py + panel_h - 56.0
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.05, 0.03, 0.10, 0.96))
+        border = (0.85 * pulse, 0.30 * pulse, 1.0 * pulse, 0.92)
+        bw = 2.0
+        self._draw_rect(px, py, panel_w, bw, border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, border)
+        self._draw_rect(px, py, bw, panel_h, border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, border)
+
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(
+            px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5
+        )
+
+        self._draw_text(
+            'EFFECTS BROWSER', px + 18.0, py + 14.0, scale=3.5,
+            color=(0.86, 0.52 + 0.20 * pulse, 1.0, 1.0),
+        )
+        _, total_total = b.category_stats('(all)')
+        shown = len(b.filtered())
+        self._draw_text(
+            f'Showing {shown}/{total_total} effects', px + 18.0, py + 48.0,
+            scale=2.2, color=(0.62, 0.85, 1.0, 0.88),
+        )
+        query = b.search_query
+        query_display = query if query else '(none)'
+        if len(query_display) > 52:
+            query_display = '...' + query_display[-49:]
+        search_col = (1.0, 0.92, 0.35, 0.95) if b.search_mode else (0.86, 0.90, 1.0, 0.88)
+        self._draw_text(
+            f'Search: {query_display}', px + 18.0, py + 70.0, scale=1.9, color=search_col
+        )
+
+        self._draw_rect(left_x, content_y, left_w, content_h, (0.08, 0.04, 0.13, 0.82))
+        self._draw_rect(right_x, content_y, right_w, content_h, (0.07, 0.03, 0.12, 0.82))
+        left_border = (1.0, 0.62, 0.20, 0.70 if b.focus_pane() == PANE_CATEGORIES else 0.32)
+        right_border = (0.72, 0.30, 1.0, 0.70 if b.focus_pane() == PANE_LIST else 0.32)
+        self._draw_rect(left_x, content_y, left_w, 2.0, left_border)
+        self._draw_rect(right_x, content_y, right_w, 2.0, right_border)
+        self._draw_text('CATEGORIES', left_x + 12.0, content_y + 10.0, scale=2.4, color=(1.0, 0.88, 0.56, 0.96))
+        self._draw_text('EFFECTS', right_x + 12.0, content_y + 10.0, scale=2.4, color=(0.88, 0.80, 1.0, 0.96))
+
+        row_h = 28.0
+        cats = b.categories()
+        cat_idx = b.category_index()
+        cat_start_y = content_y + 48.0
+        visible_cat_rows = max(1, int((content_h - 60.0) // row_h))
+        cat_top = max(0, cat_idx - visible_cat_rows + 1) if cat_idx >= visible_cat_rows else 0
+        for local_idx, category in enumerate(cats[cat_top:cat_top + visible_cat_rows]):
+            idx = cat_top + local_idx
+            ry = cat_start_y + local_idx * row_h
+            matches, _ = b.category_stats(category)
+            label = f'{category} [{matches}]'
+            if idx == cat_idx:
+                self._draw_rect(left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, (0.25, 0.18, 0.06, 0.90))
+                self._draw_text(f'> {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.92, 0.22, 1.0))
+            else:
+                self._draw_text(f'  {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(0.84, 0.86, 0.94, 0.84))
+            self._eb_cat_rects.append((left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, idx))
+
+        rows = b.filtered()
+        sel_idx = b.selected_index()
+        row_start_y = content_y + 48.0
+        visible_rows = max(1, int((content_h - 138.0) // row_h))
+        row_top = max(0, sel_idx - visible_rows + 1) if sel_idx >= visible_rows else 0
+        for local_idx, entry in enumerate(rows[row_top:row_top + visible_rows]):
+            idx = row_top + local_idx
+            ry = row_start_y + local_idx * row_h
+            name = str(entry.get('display_name', ''))
+            is_current = name == self._effects_browser_current
+            prefix = '*' if is_current else ' '
+            label = f'{prefix} {name[:44]}'
+            if idx == sel_idx:
+                self._draw_rect(right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, (0.20, 0.08, 0.42, 0.90))
+                self._draw_text(f'> {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.94, 0.40, 1.0))
+            else:
+                color = (0.66, 0.90, 1.0, 0.95) if is_current else (0.86, 0.86, 0.94, 0.88)
+                self._draw_text(f'  {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=color)
+            tags = list(entry.get('tags', []) or [])[1:4]  # skip the category tag
+            if tags:
+                tag_text = ' '.join(f'#{tg}' for tg in tags)
+                self._draw_text(
+                    tag_text, right_x + right_w - 14.0 - 8.4 * len(tag_text), ry + 5.0,
+                    scale=1.5, color=(0.55, 0.62, 0.78, 0.80),
+                )
+            self._eb_row_rects.append((right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, idx))
+
+        details_y = content_y + content_h - 76.0
+        self._draw_rect(right_x + 8.0, details_y, right_w - 16.0, 64.0, (0.10, 0.05, 0.18, 0.86))
+        selected = b.selected_entry()
+        if selected is None:
+            self._draw_text('No effects match the current filter.', right_x + 18.0, details_y + 14.0, scale=2.1, color=(0.88, 0.88, 0.92, 0.88))
+        else:
+            pack_name = str(selected.get('pack_name', '-'))
+            category_key = str(selected.get('category_key', '(uncategorized)'))
+            tag_str = ', '.join(str(x) for x in (selected.get('tags', []) or []))
+            self._draw_text(
+                f'Pack: {pack_name}    Category: {category_key}', right_x + 18.0,
+                details_y + 10.0, scale=1.85, color=(0.72, 0.80, 1.0, 0.92),
+            )
+            self._draw_text(
+                f'Tags: {tag_str[:96]}', right_x + 18.0, details_y + 34.0,
+                scale=1.55, color=(0.80, 0.84, 0.92, 0.88),
+            )
+
+        self._draw_text(
+            'Tab: pane    Up/Down: browse + live-preview    Enter/Click: go    '
+            'P: pin    /: search    Esc: close',
+            px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
+        )
 
     def _render_projectm_manager(self) -> None:
         """Draw the projectM preset manager modal."""

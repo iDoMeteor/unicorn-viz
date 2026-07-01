@@ -50,6 +50,7 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._banner_enabled = True
 
     # Enable all modal overlays at once.
+    o._show_effects_browser = True
     o._show_projectm_manager = True
     o._show_system_monitor_modal = True
     o._show_controller_help_modal = True
@@ -64,6 +65,7 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._render_banner = lambda: calls.append('banner')
     o._render_recording_indicator = lambda: calls.append('recording')
     o._render_help = lambda: calls.append('help')
+    o._render_effects_browser = lambda: calls.append('effects_browser')
     o._render_projectm_manager = lambda: calls.append('projectm_manager')
     o._render_system_monitor_modal = lambda: calls.append('system_monitor')
     o._render_controller_help_modal = lambda: calls.append('controller_help')
@@ -89,6 +91,7 @@ def test_render_all_overlays_enabled_smoke() -> None:
         'recording',
         'cta',
         'help',
+        'effects_browser',
         'projectm_manager',
         'system_monitor',
         'controller_help',
@@ -101,6 +104,7 @@ def test_render_all_overlays_enabled_smoke() -> None:
 
     # Render order contract for modal stack (stable for compositing expectations).
     modal_order = [
+        'effects_browser',
         'projectm_manager',
         'system_monitor',
         'controller_help',
