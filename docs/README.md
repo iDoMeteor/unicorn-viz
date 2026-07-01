@@ -38,6 +38,7 @@ This is the canonical map for project documentation.
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
+  - Full system audit (2026-07-01): [docs/audits/2026-07-01-full-system-audit.md](audits/2026-07-01-full-system-audit.md)
   - Full system audit (2026-06-19): [docs/audits/2026-06-19-full-system-audit.md](audits/2026-06-19-full-system-audit.md)
   - Full system audit (2026-06-17): [docs/audits/2026-06-17-full-system-audit.md](audits/2026-06-17-full-system-audit.md)
 - Archived debug and handoff notes: [docs/archive/debug](archive/debug)
