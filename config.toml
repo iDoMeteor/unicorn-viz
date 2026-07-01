@@ -165,22 +165,18 @@ resolve_playlist_context = true
 
 # ---------------------------------------------------------------------------
 # Live chat overlay (drop-ins/chat-01)
-# Connects to an AWS API Gateway WebSocket backend and renders incoming chat
-# messages as an animated GL overlay.  Also see drop-ins/chat-01/web/ for the
-# React/Next.js ChatWidget component used on the website.
-#
-# Deploy the backend once:
-#   cd drop-ins/chat-01/backend && sam build && sam deploy --guided
-# Then paste the printed WebSocketUrl below.
+# Powered by Ably Realtime.  Get a free API key at https://app.ably.io
+# Also see drop-ins/chat-01/web/ChatWidget.tsx for the React component.
 #
 # Hotkeys:
-#   Ctrl+Alt+T    — Toggle overlay on / off
-#   Ctrl+Alt+[    — Cycle position forward (bottom→left→top→right→…)
-#   Ctrl+Alt+]    — Cycle position backward
+#   C             — Toggle overlay on / off
+#   Ctrl+C        — Cycle position forward (bottom→left→top→right→…)
+#   KP 1-9 / .   — Set position (compass layout) / hide
 # ---------------------------------------------------------------------------
 [chat]
 enabled = true
-websocket_url = ""           # wss://YOUR-API-ID.execute-api.REGION.amazonaws.com/prod
+ably_api_key = ""            # YOUR_APP_ID.KEY_ID:KEY_SECRET from app.ably.io
+channel = "unicornviz-chat"  # must match channelName in ChatWidget
 username = "VJ"              # display name shown in chat for messages you send
 position = "bottom"          # top | bottom | left | right
 visible = true
