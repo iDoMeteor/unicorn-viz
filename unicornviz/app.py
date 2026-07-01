@@ -53,6 +53,7 @@ from unicornviz.dropins import (
 from unicornviz.paths import resolve_path
 from unicornviz.runtime_state import RuntimeStateStore
 from unicornviz.presets import ShowPresetStore
+from unicornviz.config_profiles import ConfigProfileStore
 from unicornviz.vj_api import VJApi
 
 log = logging.getLogger(__name__)
@@ -445,6 +446,15 @@ class App:
         }
         preset_path = self.cfg.get('presets', 'path', default='runtime/presets.json')
         self._preset_store = ShowPresetStore(str(preset_path))
+        # Configuration profiles (per-effect parameter overrides). Distinct from
+        # show presets; see docs/planning/configuration-editor-plan.md.
+        profile_path = self.cfg.get(
+            'config_profiles', 'path', default='runtime/config_profiles.json'
+        )
+        self._config_profile_store = ConfigProfileStore(str(profile_path))
+        # Live per-effect parameter overrides merged over config.toml at
+        # instantiation: {ClassName: {param: value}}.
+        self._effect_config_overrides: dict[str, dict[str, float]] = {}
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -2250,6 +2260,87 @@ void main() {
             self._hotkeys.handle(sym, mod)
 
     # ------------------------------------------------------------------ #
+    # Configuration profiles (per-effect parameter overrides)              #
+    # ------------------------------------------------------------------ #
+
+    def config_profile_names(self) -> list[str]:
+        """Return saved configuration-profile names."""
+        return self._config_profile_store.names()
+
+    def effect_class_names(self) -> list[str]:
+        """Return class names of all registered effects (for the editor list)."""
+        return [cls.__name__ for cls in get_effects()]
+
+    def current_effect_class_name(self) -> str | None:
+        """Return the active effect's class name, or None."""
+        eff = self._current_effect
+        return type(eff).__name__ if eff is not None else None
+
+    def effect_parameters(self, class_name: str) -> dict[str, float]:
+        """Return the tunable parameters for an effect class.
+
+        For the active effect this reads the live instance; otherwise it merges
+        the ``config.toml`` values with any active profile override.
+        """
+        eff = self._current_effect
+        if eff is not None and type(eff).__name__ == class_name:
+            return {str(k): float(v) for k, v in eff.parameters.items()}
+        params: dict[str, float] = {}
+        base = self.cfg.get('effects', class_name, default={})
+        if isinstance(base, dict):
+            for k, v in base.items():
+                if isinstance(v, (int, float)):
+                    params[str(k)] = float(v)
+        params.update(self._effect_config_overrides.get(class_name, {}))
+        return params
+
+    def set_effect_parameter(self, class_name: str, name: str, value: float) -> None:
+        """Set a per-effect parameter override, live-applying to the active effect."""
+        self._effect_config_overrides.setdefault(str(class_name), {})[str(name)] = float(value)
+        eff = self._current_effect
+        if eff is not None and type(eff).__name__ == class_name and str(name) in eff.parameters:
+            eff.parameters[str(name)] = float(value)
+
+    def clear_effect_overrides(self, class_name: str) -> None:
+        """Drop overrides for one effect (reverts to config.toml + randomized)."""
+        self._effect_config_overrides.pop(str(class_name), None)
+
+    def config_overrides_snapshot(self) -> dict[str, dict[str, float]]:
+        """Return a deep-ish copy of the current per-effect overrides."""
+        return {k: dict(v) for k, v in self._effect_config_overrides.items()}
+
+    def save_config_profile(self, name: str) -> None:
+        """Persist the current effect overrides as a named configuration profile."""
+        self._config_profile_store.save(name, {'effects': self.config_overrides_snapshot()})
+
+    def load_config_profile(self, name: str) -> bool:
+        """Load a configuration profile and apply its effect overrides live."""
+        payload = self._config_profile_store.get(name)
+        if payload is None:
+            return False
+        effects = payload.get('effects', {}) if isinstance(payload, dict) else {}
+        new_overrides: dict[str, dict[str, float]] = {}
+        if isinstance(effects, dict):
+            for cls_name, params in effects.items():
+                if isinstance(params, dict):
+                    new_overrides[str(cls_name)] = {
+                        str(k): float(v)
+                        for k, v in params.items()
+                        if isinstance(v, (int, float))
+                    }
+        self._effect_config_overrides = new_overrides
+        eff = self._current_effect
+        if eff is not None:
+            for k, v in self._effect_config_overrides.get(type(eff).__name__, {}).items():
+                if k in eff.parameters:
+                    eff.parameters[k] = float(v)
+        return True
+
+    def delete_config_profile(self, name: str) -> bool:
+        """Delete a named configuration profile."""
+        return self._config_profile_store.delete(name)
+
+    # ------------------------------------------------------------------ #
     # Effect management                                                    #
     # ------------------------------------------------------------------ #
 
@@ -2262,6 +2353,11 @@ void main() {
         effect_cfg = self.cfg.get("effects", cls.__name__, default={})
         if not isinstance(effect_cfg, dict):
             effect_cfg = {}
+        # Layer active configuration-profile overrides on top of config.toml so
+        # operator-tuned parameters pin over the effect's randomized defaults.
+        override = self._effect_config_overrides.get(cls.__name__)
+        if override:
+            effect_cfg = {**effect_cfg, **override}
         # Inject top-level [ansi] config into ANSIViewer so it finds the art dir
         if cls.__name__ == "ANSIViewer":
             ansi_dir = self.cfg.get(

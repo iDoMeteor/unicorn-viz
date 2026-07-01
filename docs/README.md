@@ -32,6 +32,7 @@ This is the canonical map for project documentation.
 - Global atomic state unification (2026-06-18): [docs/planning/global-state-unification-2026-06-18.md](planning/global-state-unification-2026-06-18.md)
 - Compositor dedup implementation plan (2026-06-18): [docs/planning/compositor-dedup-implementation-plan-2026-06-18.md](planning/compositor-dedup-implementation-plan-2026-06-18.md)
 - Deferred work register (2026-06-18): [docs/planning/deferred-work-2026-06-18.md](planning/deferred-work-2026-06-18.md)
+- Configuration editor plan (2026-07-01): [docs/planning/configuration-editor-plan.md](planning/configuration-editor-plan.md)
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
 - Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
 - ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
