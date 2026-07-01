@@ -2600,14 +2600,22 @@ void main() {
             idx = row_top + local_idx
             ry = row_start_y + local_idx * row_h
             name = str(entry.get('display_name', ''))
+            enabled = bool(entry.get('enabled', True))
             is_current = name == self._effects_browser_current
             prefix = '*' if is_current else ' '
-            label = f'{prefix} {name[:44]}'
+            suffix = '' if enabled else '  [off]'
+            label = f'{prefix} {name[:40]}{suffix}'
             if idx == sel_idx:
                 self._draw_rect(right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, (0.20, 0.08, 0.42, 0.90))
-                self._draw_text(f'> {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.94, 0.40, 1.0))
+                sel_color = (1.0, 0.94, 0.40, 1.0) if enabled else (0.96, 0.62, 0.56, 1.0)
+                self._draw_text(f'> {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=sel_color)
             else:
-                color = (0.66, 0.90, 1.0, 0.95) if is_current else (0.86, 0.86, 0.94, 0.88)
+                if not enabled:
+                    color = (0.60, 0.44, 0.50, 0.66)
+                elif is_current:
+                    color = (0.66, 0.90, 1.0, 0.95)
+                else:
+                    color = (0.86, 0.86, 0.94, 0.88)
                 self._draw_text(f'  {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=color)
             tags = list(entry.get('tags', []) or [])[1:4]  # skip the category tag
             if tags:
@@ -2640,9 +2648,15 @@ void main() {
             pack_name = str(selected.get('pack_name', '-'))
             category_key = str(selected.get('category_key', '(uncategorized)'))
             tag_str = ', '.join(str(x) for x in (selected.get('tags', []) or []))
+            enabled = bool(selected.get('enabled', True))
+            state_col = (0.52, 0.92, 0.60, 0.95) if enabled else (0.96, 0.58, 0.52, 0.95)
             self._draw_text(
                 f'Pack: {pack_name}   Cat: {category_key}', text_x,
                 details_y + 10.0, scale=1.7, color=(0.72, 0.80, 1.0, 0.92),
+            )
+            self._draw_text(
+                f'[{"ENABLED" if enabled else "DISABLED"}]', text_x + right_w - 260.0,
+                details_y + 10.0, scale=1.7, color=state_col,
             )
             self._draw_text(
                 f'Tags: {tag_str[:64]}', text_x, details_y + 34.0,
@@ -2650,7 +2664,7 @@ void main() {
             )
 
         self._draw_text(
-            'Left/Right: pane    Up/Down: browse (live preview)    Enter/Click: go    '
+            'Left/Right: pane   Up/Down: browse   Enter/Click: go   Space: on/off   '
             'P: pin    /: search    Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )

@@ -103,6 +103,16 @@ class _App:
         self._overlay.toggle_effects_browser()
         return name
 
+    def effects_browser_toggle_enabled(self):
+        entry = self._overlay.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        name = entry['display_name']
+        new_enabled = not bool(entry.get('enabled', True))
+        entry['enabled'] = new_enabled
+        self.calls.append(('toggle_enabled', (name, new_enabled)))
+        return f'{name}: {"enabled" if new_enabled else "disabled"}'
+
 
 class _Audio:
     def list_profiles(self):
@@ -207,6 +217,17 @@ def test_p_pins_selection():
     handler.handle(sdl2.SDLK_p, 0)
     assert ('pin', 'Plasma') in app.calls
     assert not overlay.effects_browser_visible
+
+
+def test_space_toggles_enabled():
+    handler, app, overlay = _setup()
+    overlay.effects_browser_visible = True
+    handler.handle(sdl2.SDLK_SPACE, 0)  # toggle selected (Plasma) off
+    assert ('toggle_enabled', ('Plasma', False)) in app.calls
+    assert overlay.effects_browser.selected_entry()['enabled'] is False
+    handler.handle(sdl2.SDLK_SPACE, 0)  # toggle back on
+    assert ('toggle_enabled', ('Plasma', True)) in app.calls
+    assert overlay.effects_browser_visible  # stays open
 
 
 def test_escape_closes_without_commit():

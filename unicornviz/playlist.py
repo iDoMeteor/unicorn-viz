@@ -49,6 +49,10 @@ class Playlist:
         self._shuffle_cycle: list[int] = []
         self._shuffle_pos: int = 0
         self._shuffle_recent: deque[int] = deque(maxlen=3)
+        # Display NAMEs (or class names) excluded from auto-rotation. Manual
+        # jumps via go_index() still reach a disabled effect; advance/prev/random
+        # skip them. Persisted globally by the app.
+        self._disabled: set[str] = set()
 
         # Find starting index by NAME attribute (display name) or class name
         self._index = 0
@@ -60,9 +64,27 @@ class Playlist:
 
         self._reset_shuffle_cycle(avoid_index=self._index)
 
+    def set_disabled(self, names: 'set[str] | list[str] | None') -> None:
+        """Set the effects excluded from auto-rotation (by display/class name)."""
+        self._disabled = {str(n) for n in (names or [])}
+        if self._mode == "random":
+            self._reset_shuffle_cycle(avoid_index=self._index)
+
+    def _is_enabled(self, idx: int) -> bool:
+        cls = self._effects[idx]
+        return cls.NAME not in self._disabled and cls.__name__ not in self._disabled
+
+    def _enabled_indices(self) -> list[int]:
+        return [i for i in range(len(self._effects)) if self._is_enabled(i)]
+
     def _reset_shuffle_cycle(self, avoid_index: int | None = None) -> None:
-        """Build a shuffled traversal order covering all effects exactly once."""
-        self._shuffle_cycle = list(range(len(self._effects)))
+        """Build a shuffled traversal order over the enabled effects.
+
+        Falls back to all effects if every effect is disabled so rotation never
+        deadlocks on an empty cycle.
+        """
+        enabled = self._enabled_indices()
+        self._shuffle_cycle = enabled if enabled else list(range(len(self._effects)))
         random.shuffle(self._shuffle_cycle)
 
         blocked: set[int] = set(self._shuffle_recent)
@@ -88,15 +110,26 @@ class Playlist:
     def current(self) -> Type[BaseEffect]:
         return self._effects[self._index]
 
+    def _step_to_enabled(self, direction: int) -> None:
+        """Move ``_index`` to the next enabled effect in ``direction`` (+1/-1).
+
+        No-op when nothing is enabled so the current effect stays put.
+        """
+        n = len(self._effects)
+        for step in range(1, n + 1):
+            cand = (self._index + direction * step) % n
+            if self._is_enabled(cand):
+                self._index = cand
+                return
+
     def advance(self) -> Type[BaseEffect]:
         if self._mode == "random":
             return self._advance_shuffle()
-        else:
-            self._index = (self._index + 1) % len(self._effects)
+        self._step_to_enabled(1)
         return self._effects[self._index]
 
     def go_prev(self) -> Type[BaseEffect]:
-        self._index = (self._index - 1) % len(self._effects)
+        self._step_to_enabled(-1)
         if self._mode == "random":
             self._shuffle_recent.append(self._index)
             self._reset_shuffle_cycle(avoid_index=self._index)

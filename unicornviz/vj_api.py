@@ -337,8 +337,17 @@ class VJApi:
         except Exception:
             return None
 
+    def is_effect_enabled(self, name: str) -> bool:
+        """Return whether an effect (by display or class name) is rotation-enabled."""
+        return self._app.effect_enabled(name)
+
+    def enabled_effect_classes(self) -> list[type]:
+        """Return effect classes the operator has not disabled from rotation."""
+        return [cls for cls in get_effects() if self._app.effect_enabled(cls.NAME)]
+
     def goto_random_effect(self, tags: list[str] | None = None, exclude_current: bool = True) -> str | None:
-        effects = list(get_effects())
+        # Only auto-select effects the operator has left enabled.
+        effects = self.enabled_effect_classes()
         if exclude_current and self._app._current_effect is not None:  # noqa: SLF001
             cur_name = self._app._current_effect.__class__.__name__  # noqa: SLF001
             effects = [cls for cls in effects if cls.__name__ != cur_name]

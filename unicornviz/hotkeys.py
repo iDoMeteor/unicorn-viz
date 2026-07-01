@@ -846,6 +846,11 @@ class HotkeyHandler:
                 if name:
                     o.flash_message(f'Pinned: {name}', 1.6)
                 return
+            if sym == sdl2.SDLK_SPACE:
+                msg = a.effects_browser_toggle_enabled()
+                if msg:
+                    o.flash_message(msg, 1.2)
+                return
             # Swallow all other keys while the browser is open.
             return
 

@@ -426,6 +426,10 @@ class App:
             default='runtime/global_state.json',
         )
         self._runtime_state = RuntimeStateStore(str(runtime_state_path))
+        # Effects the operator has disabled from auto-rotation (persisted).
+        self._disabled_effects: set[str] = {
+            str(n) for n in (self._runtime_state.get('effects.disabled', []) or [])
+        }
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -2423,6 +2427,7 @@ void main() {
                 break
 
         playlist = Playlist(effects, self.cfg)
+        playlist.set_disabled(self._disabled_effects)
         self._playlist = playlist
         self._playlist_mode = playlist.mode
         self._playlist_index = playlist.index
@@ -4886,6 +4891,24 @@ void main() {
         """Clear any effect lock."""
         self._effect_lock = None
 
+    # -- Effect enable/disable (persisted, excluded from auto-rotation) -------
+
+    def effect_enabled(self, name: str) -> bool:
+        """Return whether the effect (display or class name) is rotation-enabled."""
+        return str(name) not in self._disabled_effects
+
+    def set_effect_enabled(self, name: str, enabled: bool) -> None:
+        """Enable/disable an effect for auto-rotation and persist the choice."""
+        name = str(name)
+        if enabled:
+            self._disabled_effects.discard(name)
+        else:
+            self._disabled_effects.add(name)
+        self._runtime_state.set('effects.disabled', sorted(self._disabled_effects))
+        self._runtime_state.save()
+        if self._playlist is not None:
+            self._playlist.set_disabled(self._disabled_effects)
+
     # -- Effects browser -----------------------------------------------------
 
     @property
@@ -4904,6 +4927,7 @@ void main() {
                 'pack_name': e.pack,
                 'tags': list(e.tags),
                 'cls': e.cls,
+                'enabled': self.effect_enabled(e.name),
             }
             for e in browser_entries()
         ]
@@ -4973,6 +4997,17 @@ void main() {
             self._effect_lock = name
         self.close_effects_browser(commit=True)
         return name
+
+    def effects_browser_toggle_enabled(self) -> str | None:
+        """Toggle the selected effect's rotation-enabled state and persist it."""
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        name = str(entry.get('display_name', ''))
+        new_enabled = not bool(entry.get('enabled', True))
+        entry['enabled'] = new_enabled  # live update in the shared model dict
+        self.set_effect_enabled(name, new_enabled)
+        return f'{name}: {"enabled" if new_enabled else "disabled"}'
 
     def tick_effects_browser_preview(self) -> None:
         """Debounced thumbnail rebuild: after ~250 ms idle on a new selection,
