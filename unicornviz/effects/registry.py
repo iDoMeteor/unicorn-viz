@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Type
 
@@ -27,6 +28,59 @@ from unicornviz.effects.base import BaseEffect
 from unicornviz.dropins import discover_dropin_effect_classes
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserEntry:
+    """One row of the effect catalog, shared by every effect-browsing surface.
+
+    Both the full-screen effects browser modal and the control-room effect list
+    consume this so they never drift.  ``category`` is the effect's canonical
+    first tag (the normalized category tag); ``pack`` is ``'core'`` or the
+    drop-in directory name the effect lives in.
+    """
+
+    name: str
+    cls: Type[BaseEffect]
+    pack: str
+    category: str
+    tags: tuple[str, ...]
+
+
+def _pack_of(cls: Type[BaseEffect]) -> str:
+    """Return ``'core'`` or the drop-in directory name that defines ``cls``."""
+    try:
+        src = inspect.getfile(cls)
+    except (TypeError, OSError):
+        return 'core'
+    if '/unicornviz/effects/' in src:
+        return 'core'
+    if '/drop-ins/' in src:
+        return src.split('/drop-ins/')[1].split('/')[0]
+    return 'core'
+
+
+def browser_entries() -> list[BrowserEntry]:
+    """Return the effect catalog as browser rows, sorted like ``get_effects()``.
+
+    The category is the effect's first (canonical) tag, falling back to its pack
+    when an effect declares no tags.
+    """
+    entries: list[BrowserEntry] = []
+    for cls in get_effects():
+        tags = tuple(getattr(cls, 'TAGS', ()) or ())
+        pack = _pack_of(cls)
+        category = tags[0] if tags else pack
+        entries.append(
+            BrowserEntry(
+                name=cls.NAME,
+                cls=cls,
+                pack=pack,
+                category=category,
+                tags=tags,
+            )
+        )
+    return entries
 
 # Ordered list of effect classes (loaded at import time)
 _registry: list[Type[BaseEffect]] = []
