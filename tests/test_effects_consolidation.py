@@ -46,6 +46,23 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
 EXPECTED_TOTAL = 43
 
+# --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
+# Every effect carries exactly one canonical category tag as its FIRST tag:
+# core analyzers -> 'analyzer'; each pack -> its theme; media showcases ->
+# 'media'. Two standalones keep their own descriptors as the category:
+# projectm -> 'projectm', unicorn-tears -> 'psychedelic'.
+EXPECTED_CATEGORY = {
+    'psychedelic-01': 'psychedelic', 'games-01': 'games', 'particles-01': 'particles',
+    'retro-01': 'retro', 'feature-01': 'feature', 'vector-01': 'vector',
+    'cosmic-01': 'cosmic', 'tech-01': 'tech', 'immersive-01': 'immersive',
+    'holiday-01': 'holiday', 'images-01': 'media', 'videos-01': 'media',
+    'textures-01': 'media', 'sims-01': 'media', 'projectm-01': 'projectm',
+    'unicorn-tears-01': 'psychedelic',
+}
+CORE_CATEGORY = 'analyzer'
+# Tags retired during normalization: redundant, structural, or misspelled.
+BANNED_TAGS = {'audio', 'drop-in', 'scifi', 'space'}
+
 
 @pytest.fixture(scope='module')
 def effects():
@@ -157,3 +174,27 @@ def test_absorbed_dropins_removed():
                 'cyber-war-01', 'hacker-terminal-01', 'america-250-01'):
         assert f'drop-ins/{old}' not in gitmodules, \
             f'absorbed drop-in {old} should no longer be a submodule'
+
+
+def test_no_banned_tags(effects):
+    bad = {e.NAME: sorted(set(e.TAGS) & BANNED_TAGS)
+           for e in effects if set(getattr(e, 'TAGS', []) or []) & BANNED_TAGS}
+    assert not bad, f'effects still carry retired tags: {bad}'
+
+
+def _pack_of(cls) -> str:
+    src = _src(cls)
+    if '/unicornviz/effects/' in src:
+        return 'core'
+    return src.split('/drop-ins/')[1].split('/')[0]
+
+
+def test_every_effect_leads_with_its_category_tag(effects):
+    for e in effects:
+        tags = list(getattr(e, 'TAGS', []) or [])
+        assert tags, f'{e.NAME} has no tags'
+        pack = _pack_of(e)
+        want = CORE_CATEGORY if pack == 'core' else EXPECTED_CATEGORY.get(pack)
+        assert want is not None, f'no expected category mapping for pack {pack}'
+        assert tags[0] == want, \
+            f'{e.NAME} ({pack}) should lead with {want!r}, got {tags!r}'

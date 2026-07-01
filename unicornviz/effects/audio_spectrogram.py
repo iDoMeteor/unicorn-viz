@@ -121,7 +121,7 @@ class AudioSpectrogram(BaseEffect):
 
     NAME = 'Audio Spectrogram'
     AUTHOR = 'unicorn-viz'
-    TAGS = ['audio', 'visualizer', 'spectrogram']
+    TAGS = ['analyzer', 'visualizer', 'spectrogram']
     PING_PONG_FRIENDS = [
         'Audio Spectrum',
         'Audio Tracks',

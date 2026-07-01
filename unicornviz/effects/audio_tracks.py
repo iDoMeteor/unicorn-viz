@@ -137,7 +137,7 @@ class AudioTracks(BaseEffect):
 
     NAME = 'Audio Tracks'
     AUTHOR = 'unicorn-viz'
-    TAGS = ['audio', 'visualizer', 'timeline']
+    TAGS = ['analyzer', 'visualizer', 'timeline']
     PING_PONG_FRIENDS = [
         'Audio Spectrum',
         'Audio Spectrogram',
