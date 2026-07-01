@@ -31,7 +31,7 @@ PACK_NAMES = {
     'vector-01': {'3D Cube', 'Vector', 'Disco Ball'},
     'cosmic-01': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion'},
     'tech-01': {'Tron Grid', 'Cyber War', 'Hacker Terminal', 'Hacker Terminal 2.0'},
-    'immersive-01': {'Tunnel', 'Wormhole'},
+    'immersive-01': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
     'holiday-01': {'America 250'},
 }
 ISOLATED_NAMES = {
@@ -44,7 +44,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 42
+EXPECTED_TOTAL = 43
 
 
 @pytest.fixture(scope='module')

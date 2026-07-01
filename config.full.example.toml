@@ -347,6 +347,17 @@ speed = 1.0
 # petals = 12        # rose-window fold count (8/10/12/16/20)
 # spin = 1.0         # rotation direction (+1 / -1)
 
+[effects.CathedralOfBass]
+speed = 1.0          # corridor fly-through speed
+intensity = 1.0      # master chaos (scale for chill -> rave)
+shake_gain = 1.0     # beat/bass camera-shake strength (room shake)
+fog = 0.5            # corridor haze / depth falloff
+shockwave = 1.0      # beat shockwave ring strength
+bloom = 0.6          # bright-lift bloom amount
+# hue / twist are randomised per run; uncomment to pin a look:
+# hue = 0.6
+# twist = 0.2
+
 [effects.AudioSine]
 speed = 1.5
 amplitude = 0.18
