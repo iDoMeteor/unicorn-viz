@@ -216,7 +216,7 @@ class AudioCentroid(BaseEffect):
 
     NAME   = 'Audio Centroid'
     AUTHOR = 'unicorn-viz'
-    TAGS = ['analyzer', 'spectrum', 'futuristic', 'reactive']
+    TAGS = ['analyzer', 'spectrum', 'reactive']
 
     def _init(self) -> None:
         self.parameters = {

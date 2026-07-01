@@ -147,8 +147,8 @@ Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 ## Features
 
 ### Visual Effects
-- **20+ built-in GPU-accelerated shaders** — classic (plasma, fire, tunnel, starfield), surreal (dali, escher), 3D (cube, metaballs, vector), particle-based (particle storm), text (sine scroller 2.0), and more
-- **14 drop-in effects** (tested and working; currently private repositories) — alien invasion, cyber war, disco ball, hacker terminal, texture showcase, tron grid, unicorn tears, webcam overlay, and more
+- **43 audio-reactive GPU effects** — a lean audio-analysis core (spectrum, spectrogram, waveforms, centroid) plus themed **category packs**: psychedelic (plasma, kaleidoscope), retro (copper bars, ANSI viewer, fractal zoom, dali, escher, van gogh), particles (starfield, fireworks, particle storm), vector (3D cube, vector, disco ball), cosmic (cosmos, black hole cathedral, alien invasion), tech (tron grid, cyber war, hacker terminal), immersive (tunnel, wormhole, cathedral of bass), and more
+- **Standalone drop-in effects** — image / video / texture showcases, USD sim showcase, ProjectM Milkdrop preset host, unicorn tears; plus a system-wide webcam overlay (all tested and working; currently private repositories)
 - **Audio reactivity** — all effects respond to bass/mid/treble/beat in real time via FFT analysis
 - **Effect startup randomization** — every effect produces a visually distinct appearance each activation; parameters like palette, speed, intensity, zoom vary automatically to prevent repetition
 
@@ -379,8 +379,8 @@ the live hotkey overlay (the single source of truth). See
 | Audio Spectrogram | analyzer, visualizer, spectrogram | Reactive scrolling frequency-history heatmap |
 | Audio Tracks | analyzer, visualizer, timeline | DAW-style horizontal scrolling track lanes |
 | Audio Waveforms | analyzer, visualizer, oscilloscope | Multi-style oscilloscope visualizer |
-| Audio Centroid | analyzer, spectrum, futuristic, reactive | Spectral-brightness (centroid) visualizer |
-| Audio Sine | analyzer, classic, futuristic, neon, lasers | Textless neon wave-lasers with crossing squash |
+| Audio Centroid | analyzer, spectrum, reactive | Spectral-brightness (centroid) visualizer |
+| Audio Sine | analyzer, neon, lasers | Textless neon wave-lasers with crossing squash |
 
 **`psychedelic-01`:**
 
@@ -394,9 +394,9 @@ the live hotkey overlay (the single source of truth). See
 
 | Effect | Tags | Description |
 |--------|------|-------------|
-| Starfield | particles, classic, futuristic | Cinematic multi-layer star field with warp-speed mode |
+| Starfield | particles, classic | Cinematic multi-layer star field with warp-speed mode |
 | Fireworks | particles, classic, celebration | Cinematic night-sky pyrotechnic display |
-| Particle Storm | particles, futuristic | GPU transform-feedback particle system |
+| Particle Storm | particles | GPU transform-feedback particle system |
 
 **`retro-01`:**
 
@@ -404,7 +404,7 @@ the live hotkey overlay (the single source of truth). See
 |--------|------|-------------|
 | Copper Bars | retro, classic, amiga | Amiga-style horizontal raster/colour bars |
 | ANSI Viewer | retro, ansi, classic | Scrolling CP437 `.ANS` art with CRT phosphor shader |
-| Fractal Zoom | retro, futuristic, psychedelic | Deep Mandelbrot voyage with nebula interior shading |
+| Fractal Zoom | retro, psychedelic | Deep Mandelbrot voyage with nebula interior shading |
 | Escher | retro, art, optical | Impossible-style tiling corridor illusion |
 | Dali | retro, art, surreal | Surreal melting forms and mirage-like distortions |
 | Van Gogh | retro, art, shader | Painterly swirling night-sky brushstroke field |
@@ -413,8 +413,8 @@ the live hotkey overlay (the single source of truth). See
 
 | Effect | Tags | Description |
 |--------|------|-------------|
-| Hexy Stars | feature, futuristic, stars, hex | Reactive pulsing hex/octa star field |
-| Rainbow Trance | feature, futuristic, mythic, crystal | Prismatic pyramid field with rainbow sky rays |
+| Hexy Stars | feature, stars, hex | Reactive pulsing hex/octa star field |
+| Rainbow Trance | feature, mythic, crystal | Prismatic pyramid field with rainbow sky rays |
 | Metaballs | feature, classic | GLSL SDF orbs that attract and repel |
 
 **`vector-01`:**
@@ -439,7 +439,7 @@ the live hotkey overlay (the single source of truth). See
 | Effect | Tags | Description |
 |--------|------|-------------|
 | Tron Grid | tech, tron, laser, grid, raymarching, neon, sci-fi | First-person laser-grid corridor; bass scales grid, beats trigger shockwaves |
-| Cyber War | tech, futuristic, network, cyberpunk | Real-time digital battle-map with AI node attacks |
+| Cyber War | tech, network, cyberpunk | Real-time digital battle-map with AI node attacks |
 | Hacker Terminal | tech, cyberpunk, glitch | Animated shell/log streams with audio-reactive glitch |
 | Hacker Terminal 2.0 | tech, cyberpunk, glitch, text | Real CP437 scrolling text streams with glitch transitions |
 
@@ -447,7 +447,7 @@ the live hotkey overlay (the single source of truth). See
 
 | Effect | Tags | Description |
 |--------|------|-------------|
-| Tunnel | immersive, classic, futuristic | Fully procedural infinite rotating tunnel |
+| Tunnel | immersive, classic | Fully procedural infinite rotating tunnel |
 | Wormhole | immersive, crystal, prism, lattice | Refractive prism-lattice flight down a shifting light corridor |
 | Cathedral of Bass | immersive, bass, shader, raver, cathedral | Layered, room-shaking flight down an infinite nave |
 
@@ -455,7 +455,7 @@ the live hotkey overlay (the single source of truth). See
 
 | Effect | Tags | Description |
 |--------|------|-------------|
-| Breakout | games, classic, futuristic, arcade | Audio-reactive arcade brick-breaker |
+| Breakout | games, arcade | Audio-reactive arcade brick-breaker |
 
 **`holiday-01`:**
 
@@ -472,7 +472,7 @@ the live hotkey overlay (the single source of truth). See
 | Texture Showcase | `textures-01` | media, textures, modern | Ken Burns pan/zoom with reactive colour grade and beat fade |
 | Sim Showcase | `sims-01` | media, 3d, usd, simulation | USD scene carousel with camera orbits (robotics/galaxy scenes) |
 | ProjectM Presets | `projectm-01` | projectm, milkdrop | libprojectM Milkdrop preset host with 1000+ community presets |
-| Unicorn Tears | `unicorn-tears-01` | psychedelic, futuristic | Prismatic iridescent teardrops falling through a star-field |
+| Unicorn Tears | `unicorn-tears-01` | psychedelic | Prismatic iridescent teardrops falling through a star-field |
 
 **System & overlay drop-ins (not playlist effects):**
 

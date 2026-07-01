@@ -150,7 +150,7 @@ void main() {
 class AudioSine(BaseEffect):
     NAME = 'Audio Sine'
     AUTHOR = 'unicorn-viz'
-    TAGS = ['analyzer', 'classic', 'futuristic', 'neon', 'lasers']
+    TAGS = ['analyzer', 'neon', 'lasers']
     PING_PONG_FRIENDS = [
         'Copper Bars',
         'Audio Spectrum',

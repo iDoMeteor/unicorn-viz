@@ -60,8 +60,10 @@ EXPECTED_CATEGORY = {
     'unicorn-tears-01': 'psychedelic',
 }
 CORE_CATEGORY = 'analyzer'
-# Tags retired during normalization: redundant, structural, or misspelled.
-BANNED_TAGS = {'audio', 'drop-in', 'scifi', 'space'}
+# Tags retired during normalization: redundant, structural, misspelled, or (in
+# the case of 'futuristic') a vague vibe tag that contradicted 'classic'. Note
+# 'classic' is deliberately kept as a demoscene-heritage descriptor.
+BANNED_TAGS = {'audio', 'drop-in', 'scifi', 'space', 'futuristic'}
 
 
 @pytest.fixture(scope='module')
