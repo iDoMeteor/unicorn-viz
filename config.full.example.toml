@@ -479,6 +479,13 @@ zoom = 1.0
 # random_zoom_min = 0.70
 # random_zoom_max = 1.30
 
+# [effects.ThreatMatrix]           # tech-01: war-room IDS threat map
+# speed = 1.0                      # global animation rate
+# intensity = 1.0                  # master sector-glow intensity
+# shake_gain = 1.0                 # beat/bass room-shake amount
+# rain = 1.0                       # matrix-rain background density
+# breach = 1.0                     # beat breach-wave strength
+
 [effects.DiscoBall]
 speed = 1.0
 rotation_speed = 1.0

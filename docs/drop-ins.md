@@ -47,7 +47,7 @@ Complex drop-ins should also include:
 | sims-01 | Yes | Not required | Media/effect drop-in |
 | spotify-01 | Yes | Yes | Spotify metadata subsystem |
 | streaming-01 | Yes | Yes | Streaming subsystem |
-| tech-01 | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0 |
+| tech-01 | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0, Threat Matrix |
 | textures-01 | Yes | Not required | Media effect drop-in |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |

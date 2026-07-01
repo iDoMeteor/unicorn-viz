@@ -442,6 +442,7 @@ the live hotkey overlay (the single source of truth). See
 | Cyber War | tech, network, cyberpunk | Real-time digital battle-map with AI node attacks |
 | Hacker Terminal | tech, cyberpunk, glitch | Animated shell/log streams with audio-reactive glitch |
 | Hacker Terminal 2.0 | tech, cyberpunk, glitch, text | Real CP437 scrolling text streams with glitch transitions |
+| Threat Matrix | tech, cyberpunk, hacker, network, matrix | War-room IDS threat map: sector heat grid, trace-route packets, radar sweep, beat-driven breach waves |
 
 **`immersive-01`:**
 
