@@ -842,9 +842,9 @@ class HotkeyHandler:
                     o.flash_message(f'Effect: {name}', 1.4)
                 return
             if sym == sdl2.SDLK_p and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
-                name = a.effects_browser_pin()
-                if name:
-                    o.flash_message(f'Pinned: {name}', 1.6)
+                msg = a.effects_browser_pin()
+                if msg:
+                    o.flash_message(msg, 1.6)
                 return
             if sym == sdl2.SDLK_SPACE:
                 msg = a.effects_browser_toggle_enabled()

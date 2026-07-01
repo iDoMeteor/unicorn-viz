@@ -581,6 +581,7 @@ class Overlays:
         self._show_effects_browser = False
         self._effects_browser = CatalogBrowser()
         self._effects_browser_current: str = ''
+        self._effects_browser_pinned: str = ''
         self._eb_thumb_tex: 'moderngl.Texture | None' = None
         # Mouse hit-regions rebuilt each render: (x, y, w, h, index).
         self._eb_cat_rects: list[tuple[float, float, float, float, int]] = []
@@ -2413,6 +2414,10 @@ void main() {
         """Set the live-preview texture drawn in the effects browser (or None)."""
         self._eb_thumb_tex = tex
 
+    def set_effects_browser_pinned(self, name: str) -> None:
+        """Set the display NAME of the currently pinned effect ('' for none)."""
+        self._effects_browser_pinned = str(name or '')
+
     @staticmethod
     def _eb_hit(
         rects: list[tuple[float, float, float, float, int]],
@@ -2602,9 +2607,14 @@ void main() {
             name = str(entry.get('display_name', ''))
             enabled = bool(entry.get('enabled', True))
             is_current = name == self._effects_browser_current
+            is_pinned = name != '' and name == self._effects_browser_pinned
             prefix = '*' if is_current else ' '
-            suffix = '' if enabled else '  [off]'
-            label = f'{prefix} {name[:40]}{suffix}'
+            suffix = ''
+            if is_pinned:
+                suffix += '  [pin]'
+            if not enabled:
+                suffix += '  [off]'
+            label = f'{prefix} {name[:38]}{suffix}'
             if idx == sel_idx:
                 self._draw_rect(right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, (0.20, 0.08, 0.42, 0.90))
                 sel_color = (1.0, 0.94, 0.40, 1.0) if enabled else (0.96, 0.62, 0.56, 1.0)
@@ -2665,7 +2675,7 @@ void main() {
 
         self._draw_text(
             'Left/Right: pane   Up/Down: browse   Enter/Click: go   Space: on/off   '
-            'P: pin    /: search    Esc: close',
+            'P: pin/unpin   /: search   Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )
 

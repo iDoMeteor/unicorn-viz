@@ -74,6 +74,7 @@ class _App:
         self._keystroke_logger = None
         self._midi_manager = None
         self._overlay = overlay
+        self.pinned: str = ''
         self.calls: list[tuple[str, object]] = []
 
     def open_effects_browser(self) -> None:
@@ -98,10 +99,16 @@ class _App:
 
     def effects_browser_pin(self):
         entry = self._overlay.effects_browser.selected_entry()
-        name = entry['display_name'] if entry else None
+        if entry is None:
+            return None
+        name = entry['display_name']
+        if self.pinned == name:
+            self.pinned = ''
+            self.calls.append(('unpin', name))
+            return f'{name}: unpinned'
+        self.pinned = name
         self.calls.append(('pin', name))
-        self._overlay.toggle_effects_browser()
-        return name
+        return f'{name}: pinned'
 
     def effects_browser_toggle_enabled(self):
         entry = self._overlay.effects_browser.selected_entry()
@@ -211,12 +218,16 @@ def test_enter_commits_selection():
     assert not overlay.effects_browser_visible
 
 
-def test_p_pins_selection():
+def test_p_toggles_pin_and_keeps_browser_open():
     handler, app, overlay = _setup()
     overlay.effects_browser_visible = True
-    handler.handle(sdl2.SDLK_p, 0)
+    handler.handle(sdl2.SDLK_p, 0)          # pin Plasma
     assert ('pin', 'Plasma') in app.calls
-    assert not overlay.effects_browser_visible
+    assert app.pinned == 'Plasma'
+    assert overlay.effects_browser_visible  # stays open
+    handler.handle(sdl2.SDLK_p, 0)          # P again -> unpin
+    assert ('unpin', 'Plasma') in app.calls
+    assert app.pinned == ''
 
 
 def test_space_toggles_enabled():

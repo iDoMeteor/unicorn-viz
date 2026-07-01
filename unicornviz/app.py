@@ -4371,6 +4371,12 @@ void main() {
         if projectm_cls is None:
             return None
 
+        # Opening the manager is an explicit ProjectM request: a pin/lock on a
+        # non-ProjectM effect must not block the switch, or Ctrl+M would silently
+        # fail while an effect is pinned.
+        if self._effect_lock is not None and self._effect_lock != 'ProjectM Presets':
+            self.unlock_effect()
+
         log.info('ProjectM manager: switching to ProjectM Presets from %s', self.current_effect_name or '(none)')
         self.goto_effect(projectm_cls)
 
@@ -4945,6 +4951,7 @@ void main() {
             if row.get('display_name') == current:
                 b.set_selected_index(i)
                 break
+        o.set_effects_browser_pinned(self._effect_lock or '')
         self._eb_last_nav_monotonic = 0.0
         if not o.effects_browser_visible:
             o.toggle_effects_browser()
@@ -4985,18 +4992,26 @@ void main() {
         return name
 
     def effects_browser_pin(self) -> str | None:
-        """Switch to the selected effect, lock there, and close."""
+        """Toggle pinning the selected effect. Pinning switches to it and locks
+        the system there; pinning the already-pinned effect unpins it. The
+        browser stays open so pins can be managed while browsing."""
         entry = self._overlays.effects_browser.selected_entry()
         if entry is None:
             return None
         cls = entry.get('cls')
         name = str(entry.get('display_name', ''))
-        if cls is not None:
-            if type(self._current_effect) is not cls:
-                self._switch_effect(cls)  # type: ignore[arg-type]
-            self._effect_lock = name
-        self.close_effects_browser(commit=True)
-        return name
+        if self._effect_lock == name:
+            self.unlock_effect()
+            self._overlays.set_effects_browser_pinned('')
+            return f'{name}: unpinned'
+        # Clear any existing lock first so the switch to the new pin target is
+        # not blocked by the old lock, then switch and lock onto the new effect.
+        self._effect_lock = None
+        if cls is not None and type(self._current_effect) is not cls:
+            self._switch_effect(cls)  # type: ignore[arg-type]
+        self._effect_lock = name
+        self._overlays.set_effects_browser_pinned(name)
+        return f'{name}: pinned'
 
     def effects_browser_toggle_enabled(self) -> str | None:
         """Toggle the selected effect's rotation-enabled state and persist it."""
