@@ -574,13 +574,9 @@ class Overlays:
         self._midi_ports: list[str] = []
         self._midi_current_port: str = ''
         self._midi_selected_idx: int = 0   # 0 = "None (disable)"
-        self._projectm_entries: list[dict[str, object]] = []
-        self._projectm_categories: list[str] = ['(all)']
-        self._projectm_category_idx: int = 0
-        self._projectm_preset_idx: int = 0
-        self._projectm_focus_pane: int = 1
+        self._projectm_browser = CatalogBrowser()
+        self._projectm_browser.set_focus_pane(PANE_LIST)
         self._projectm_current_path: str = ''
-        self._projectm_search_query: str = ''
         # Effects browser (keyboard + mouse) — driven by the shared model.
         self._show_effects_browser = False
         self._effects_browser = CatalogBrowser()
@@ -2286,50 +2282,16 @@ void main() {
         current_path: str,
     ) -> None:
         """Populate the projectM manager browser with catalog entries."""
-        self._projectm_entries = list(entries)
+        self._projectm_browser.set_entries(entries)
         self._projectm_current_path = str(current_path or '')
-        categories = {'(all)'}
-        for entry in self._projectm_entries:
-            category_key = str(entry.get('category_key', '') or '(uncategorized)')
-            categories.add(category_key)
-        ordered = ['(all)'] + sorted(
-            (cat for cat in categories if cat != '(all)'),
-            key=lambda text: text.lower(),
-        )
-        self._projectm_categories = ordered
-        self._projectm_category_idx = max(0, min(self._projectm_category_idx, len(self._projectm_categories) - 1))
         self._sync_projectm_preset_selection()
 
     def _projectm_filtered_entries(self) -> list[dict[str, object]]:
-        category = self.get_projectm_selected_category()
-        query = self._projectm_search_query.strip().lower()
-
-        def _category_ok(entry: dict[str, object]) -> bool:
-            if category == '(all)':
-                return True
-            return str(entry.get('category_key', '')) == category
-
-        def _query_ok(entry: dict[str, object]) -> bool:
-            if not query:
-                return True
-            haystack = ' '.join(
-                [
-                    str(entry.get('display_name', '')),
-                    str(entry.get('pack_name', '')),
-                    str(entry.get('category_key', '')),
-                    ' '.join(str(t) for t in (entry.get('tags', []) or [])),
-                ]
-            ).lower()
-            return query in haystack
-
-        return [
-            entry for entry in self._projectm_entries
-            if _category_ok(entry) and _query_ok(entry)
-        ]
+        return self._projectm_browser.filtered()
 
     def set_projectm_search_query(self, query: str) -> None:
         """Set the ProjectM manager text filter and keep selection coherent."""
-        self._projectm_search_query = str(query)
+        self._projectm_browser.set_search_query(query)
         self._sync_projectm_preset_selection()
 
     def clear_projectm_search_query(self) -> None:
@@ -2339,96 +2301,81 @@ void main() {
     @property
     def projectm_search_query(self) -> str:
         """Return current ProjectM manager text filter."""
-        return self._projectm_search_query
+        return self._projectm_browser.search_query
 
     def _projectm_category_stats(self, category: str) -> tuple[int, int]:
-        entries = self._projectm_entries if category == '(all)' else [
-            entry for entry in self._projectm_entries
-            if str(entry.get('category_key', '')) == category
-        ]
-        total = len(entries)
-        enabled = sum(1 for entry in entries if bool(entry.get('enabled', False)))
+        # ProjectM-specific: count *enabled* presets, not generic query matches.
+        total = 0
+        enabled = 0
+        for entry in self._projectm_browser.entries():
+            key = str(entry.get('category_key', '') or '(uncategorized)')
+            if category != '(all)' and key != category:
+                continue
+            total += 1
+            if bool(entry.get('enabled', False)):
+                enabled += 1
         return enabled, total
 
     def _sync_projectm_preset_selection(self) -> None:
-        entries = self._projectm_filtered_entries()
-        if not entries:
-            self._projectm_preset_idx = 0
-            return
-        for idx, entry in enumerate(entries):
+        rows = self._projectm_browser.filtered()
+        for idx, entry in enumerate(rows):
             if str(entry.get('path', '')) == self._projectm_current_path:
-                self._projectm_preset_idx = idx
+                self._projectm_browser.set_selected_index(idx)
                 return
-        self._projectm_preset_idx = max(0, min(self._projectm_preset_idx, len(entries) - 1))
+        # No current-path match: re-clamp the existing selection to the filter.
+        self._projectm_browser.set_selected_index(self._projectm_browser.selected_index())
 
     def move_projectm_category_selection(self, delta: int) -> None:
         """Move the projectM category cursor by delta rows (wraps)."""
-        total = max(1, len(self._projectm_categories))
-        self._projectm_category_idx = (self._projectm_category_idx + delta) % total
+        self._projectm_browser.move_category(delta)
         self._sync_projectm_preset_selection()
 
     def move_projectm_preset_selection(self, delta: int) -> None:
-        """Move the projectM preset cursor by delta rows (wraps)."""
-        entries = self._projectm_filtered_entries()
-        total = max(1, len(entries))
-        self._projectm_preset_idx = (self._projectm_preset_idx + delta) % total
+        """Move the projectM preset cursor by delta rows."""
+        self._projectm_browser.move_selection(delta)
 
     def move_projectm_focus(self, delta: int) -> None:
         """Switch projectM manager focus between category and preset panes."""
-        self._projectm_focus_pane = (self._projectm_focus_pane + delta) % 2
+        if int(delta) % 2 != 0:
+            self._projectm_browser.toggle_focus_pane()
 
     def set_projectm_focus_pane(self, pane: int) -> int:
         """Set active ProjectM manager pane (0=category, 1=preset)."""
-        self._projectm_focus_pane = 1 if int(pane) > 0 else 0
-        return self._projectm_focus_pane
+        return self._projectm_browser.set_focus_pane(pane)
 
     def set_projectm_category_index(self, index: int) -> int:
         """Set ProjectM category selection index and sync dependent preset index."""
-        total = max(1, len(self._projectm_categories))
-        self._projectm_category_idx = max(0, min(int(index), total - 1))
+        result = self._projectm_browser.set_category_index(index)
         self._sync_projectm_preset_selection()
-        return self._projectm_category_idx
+        return result
 
     def get_projectm_category_index(self) -> int:
         """Return current ProjectM category selection index."""
-        total = max(1, len(self._projectm_categories))
-        return max(0, min(self._projectm_category_idx, total - 1))
+        return self._projectm_browser.category_index()
 
     def set_projectm_preset_index(self, index: int) -> int:
         """Set ProjectM preset selection index for current category/search filter."""
-        entries = self._projectm_filtered_entries()
-        total = max(1, len(entries))
-        self._projectm_preset_idx = max(0, min(int(index), total - 1))
-        return self._projectm_preset_idx
+        return self._projectm_browser.set_selected_index(index)
 
     def get_projectm_preset_index(self) -> int:
         """Return current ProjectM preset selection index."""
-        entries = self._projectm_filtered_entries()
-        total = max(1, len(entries))
-        return max(0, min(self._projectm_preset_idx, total - 1))
+        return self._projectm_browser.selected_index()
 
     def projectm_categories(self) -> list[str]:
         """Return ProjectM category labels in current manager ordering."""
-        return list(self._projectm_categories)
+        return self._projectm_browser.categories()
 
     def projectm_filtered_presets(self) -> list[dict[str, object]]:
         """Return filtered ProjectM preset rows for current category/search state."""
-        return list(self._projectm_filtered_entries())
+        return list(self._projectm_browser.filtered())
 
     def get_projectm_selected_category(self) -> str:
         """Return the currently highlighted category key."""
-        if not self._projectm_categories:
-            return '(all)'
-        idx = max(0, min(self._projectm_category_idx, len(self._projectm_categories) - 1))
-        return self._projectm_categories[idx]
+        return self._projectm_browser.selected_category()
 
     def get_projectm_selected_preset(self) -> dict[str, object] | None:
         """Return the currently highlighted preset entry for the active filter."""
-        entries = self._projectm_filtered_entries()
-        if not entries:
-            return None
-        idx = max(0, min(self._projectm_preset_idx, len(entries) - 1))
-        return entries[idx]
+        return self._projectm_browser.selected_entry()
 
     # -- Effects browser (shared CatalogBrowser model) --------------------
 
@@ -2674,7 +2621,7 @@ void main() {
             scale=2.2,
             color=(0.52, 0.85, 0.58, 0.88),
         )
-        query = self._projectm_search_query
+        query = self._projectm_browser.search_query
         query_display = query if query else '(none)'
         if len(query_display) > 52:
             query_display = '...' + query_display[-49:]
@@ -2689,8 +2636,13 @@ void main() {
         self._draw_rect(left_x, content_y, left_w, content_h, (0.04, 0.08, 0.13, 0.82))
         self._draw_rect(right_x, content_y, right_w, content_h, (0.03, 0.07, 0.12, 0.82))
 
-        left_border = (1.0, 0.62, 0.20, 0.70 if self._projectm_focus_pane == 0 else 0.32)
-        right_border = (0.14, 0.90, 1.0, 0.70 if self._projectm_focus_pane == 1 else 0.32)
+        focus_pane = self._projectm_browser.focus_pane()
+        categories = self._projectm_browser.categories()
+        cat_idx = self._projectm_browser.category_index()
+        preset_idx = self._projectm_browser.selected_index()
+
+        left_border = (1.0, 0.62, 0.20, 0.70 if focus_pane == 0 else 0.32)
+        right_border = (0.14, 0.90, 1.0, 0.70 if focus_pane == 1 else 0.32)
         self._draw_rect(left_x, content_y, left_w, 2.0, left_border)
         self._draw_rect(right_x, content_y, right_w, 2.0, right_border)
 
@@ -2701,13 +2653,13 @@ void main() {
         cat_start_y = content_y + 48.0
         visible_cat_rows = max(1, int((content_h - 60.0) // row_h))
         cat_top = 0
-        if self._projectm_category_idx >= visible_cat_rows:
-            cat_top = self._projectm_category_idx - visible_cat_rows + 1
+        if cat_idx >= visible_cat_rows:
+            cat_top = cat_idx - visible_cat_rows + 1
 
-        for local_idx, category in enumerate(self._projectm_categories[cat_top:cat_top + visible_cat_rows]):
+        for local_idx, category in enumerate(categories[cat_top:cat_top + visible_cat_rows]):
             idx = cat_top + local_idx
             ry = cat_start_y + local_idx * row_h
-            is_sel = idx == self._projectm_category_idx
+            is_sel = idx == cat_idx
             enabled_count, total_count = self._projectm_category_stats(category)
             label = f'{category} [{enabled_count}/{total_count}]'
             if is_sel:
@@ -2720,14 +2672,14 @@ void main() {
         preset_start_y = content_y + 48.0
         preset_visible_rows = max(1, int((content_h - 138.0) // row_h))
         preset_top = 0
-        if self._projectm_preset_idx >= preset_visible_rows:
-            preset_top = self._projectm_preset_idx - preset_visible_rows + 1
+        if preset_idx >= preset_visible_rows:
+            preset_top = preset_idx - preset_visible_rows + 1
 
         visible_rows = preset_entries[preset_top:preset_top + preset_visible_rows]
         for local_idx, entry in enumerate(visible_rows):
             idx = preset_top + local_idx
             ry = preset_start_y + local_idx * row_h
-            is_sel = idx == self._projectm_preset_idx
+            is_sel = idx == preset_idx
             path = str(entry.get('path', ''))
             is_current = path == self._projectm_current_path
             enabled = bool(entry.get('enabled', False))
@@ -3787,12 +3739,12 @@ void main() {
             return {
                 'type': 'projectm_manager',
                 'title': 'PROJECTM PRESET MANAGER',
-                'search_query': self._projectm_search_query,
+                'search_query': self._projectm_browser.search_query,
                 'category': self.get_projectm_selected_category(),
                 'categories': self.projectm_categories(),
                 'category_index': int(self.get_projectm_category_index()),
                 'preset_index': int(self.get_projectm_preset_index()),
-                'focus_pane': int(self._projectm_focus_pane),
+                'focus_pane': int(self._projectm_browser.focus_pane()),
                 'entries': [
                     {
                         'display_name': str(entry.get('display_name', '')),
@@ -3880,7 +3832,7 @@ void main() {
 
     @property
     def projectm_manager_focus_pane(self) -> int:
-        return self._projectm_focus_pane
+        return self._projectm_browser.focus_pane()
 
     @property
     def flash_messages_enabled(self) -> bool:

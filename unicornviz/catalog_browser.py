@@ -74,6 +74,14 @@ class CatalogBrowser:
         self._category_idx = max(0, min(self._category_idx, len(self._categories) - 1))
         self._clamp_selection()
 
+    def entries(self) -> list[dict[str, Any]]:
+        """Return a shallow copy of the full, unfiltered entry list.
+
+        Useful for consumer-specific aggregate stats (e.g. counting enabled
+        presets per category) that the generic filter does not express.
+        """
+        return list(self._entries)
+
     # -- filtering ------------------------------------------------------------
 
     def filtered(self) -> list[dict[str, Any]]:
