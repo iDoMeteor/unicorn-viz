@@ -1,8 +1,9 @@
 # ProjectM-Only Mode + Effects Browser — Design Examination
 
 Owner: Effects
-Status: ProjectM-only mode IMPLEMENTED (Method A); effects browser still todo-soon
-Last updated: 2026-06-30
+Status: ProjectM-only mode IMPLEMENTED (Method A); effects browser NEXT — all
+prerequisites complete (unified discovery, lock primitive, normalized tags)
+Last updated: 2026-07-01
 
 > **Implemented 2026-06-30 (Method A).** Generic effect-lock at `_switch_effect`
 > (`App._effect_lock`, exposed via `vj_api.lock_effect/unlock_effect/effect_lock`).
@@ -132,13 +133,89 @@ auto-advance suppressed). ~half a focused session.
 
 ---
 
-## 4. Effects browser / loader  — `[todo soon]`
+## 4. Effects browser / loader  — `[next — prep complete]`
 
-A ProjectM-manager-style browser for **system effects + drop-in effects**:
-search/filter by name/tag, preview, enable/disable, and jump-to/pin (reusing the
-Method-A `lock_effect` primitive). Mirrors `drop-ins/projectm-01`'s preset
-manager UX but over `registry.get_effects()` + `discover_dropin_effect_classes()`.
+A ProjectM-manager-style, full-screen modal browser for **all effects** (core
+analyzers + every category pack + standalone drop-ins): search/filter by
+name/tag/category, jump-to, and pin (reusing the Method-A `lock_effect`
+primitive). Mirrors `drop-ins/projectm-01`'s preset-manager UX but over
+`registry.get_effects()`.
 
-Deferred per owner. Captured here and in the main plan's todo list so it is not
-lost. Natural follow-on once the generic effect-lock lands (the browser's
-"pin/lock" action is the same primitive).
+**Input: keyboard *and* mouse (owner requirement).** Full keyboard nav
+(arrows/Tab/`/`-search/Enter/Esc) *and* full mouse support (hover-highlight,
+click-to-select, click category tabs, scroll-wheel, click search box). And it
+should be **premium/polished** — smooth, live-previewing, thumbnail-rich.
+
+### Prerequisites — DONE
+
+- **Unified discovery.** `registry.get_effects()` already merges core +
+  `discover_dropin_effect_classes()`; one flat list of 43 effect classes.
+- **Generic effect-lock.** `App.lock_effect/unlock_effect/effect_lock` (Method A,
+  §1–3) is the "pin" action — already landed and test-covered.
+- **Normalized tags (2026-07-01).** Every effect now carries a canonical
+  category-first tag plus clean descriptors (no `audio`/`drop-in`/`futuristic`
+  noise). This is what makes the browser's category tabs + tag search coherent —
+  it was the gating prep for this feature.
+
+### Template — the projectM preset manager (all in core)
+
+The pM manager is the exact pattern to mirror; it already lives in core, not the
+drop-in:
+
+- **`overlays.py`** — `_render_projectm_manager()` (~161 lines), entry store +
+  filtering (`set_projectm_manager_entries`, `_projectm_filtered_entries` — which
+  already filters on `display_name` / `pack_name` / `category_key` / **`tags`**),
+  category tabs, `_projectm_search_query`, selection sync.
+- **`hotkeys.py`** — the `projectm_manager` key context (up/down/left/right =
+  nav + category, `/` = search, Return = commit, Tab = focus, Esc = close) and
+  the `_sync_projectm_manager()` catalog-build + preview/commit/revert flow.
+- **`app.py`** — `_projectm_manager_modal_active` (blocks `_switch_effect`, gates
+  auto-advance), `set_projectm_manager_modal_active`, `open_projectm_manager`.
+
+Mouse comes from the **control-room** pattern (`_HitRegion` hotspots +
+click/hover hit-testing); the new modal fuses both input styles.
+
+### Catalog mapping (effects → browser entries)
+
+`registry.get_effects()` → entries of `{display_name: NAME, pack_name: <pack or
+'core'>, category_key: <category>, tags: TAGS, cls: <class>}`. Category is
+derivable from the effect's source path (pack dir) or its first (category) tag;
+recommend a small `registry` helper so control-room and the modal share one
+catalog source.
+
+### Where it lives — CORE (no new drop-in)
+
+Unlike recent work, this is a core feature: it browses the core registry, uses
+the core `lock_effect` primitive, and renders through core `overlays.py`. No new
+private repo / submodule.
+
+### Existing related surface — reconcile, don't duplicate
+
+`drop-ins/control-room-01` already has a **mouse-driven, embedded** effect list
+(`_draw_effect_browser`: name + up-to-3 tag chips + click-to-activate, no
+search). The new modal is the **searchable, keyboard-and-mouse** surface. Both
+should read the same catalog helper and use `lock_effect` so they never diverge.
+
+### Open design decisions (owner)
+
+1. **Modal code: generalize vs clone.** The pM manager is ~90% generic. Either
+   (a) extract a shared `_render_catalog_browser` both consumers use (DRY, but
+   edits the working pM modal — risk), or (b) clone into `_render_effects_browser`
+   plus an `effects_browser` hotkey context, sharing only the pure filter helpers
+   (isolated, safe, ~200 lines duplicated). Leaning **(b) clone-first** per the
+   "don't refactor working code" rule, with a later consolidation once both are
+   proven.
+2. **Preview behavior.** pM previews presets live (cheap, same effect). Here a
+   "preview" is a full effect switch (GL destroy/init) — heavier. For the
+   "premium" feel, target **debounced live preview** (switch after ~250 ms of no
+   keyboard/mouse movement) with commit-on-Enter/click, so hovering feels live
+   without GL thrash.
+3. **Thumbnails (the "pimp" factor).** Static list first, then per-effect preview
+   tiles — either lazily rendered live thumbnails (render each effect to a small
+   FBO on demand) or cached screenshots. Live-FBO tiles look best but cost the
+   most; a cached-thumbnail cache dir is the pragmatic middle.
+4. **v1 scope.** Search/filter/jump/pin + keyboard&mouse. Enable/disable-from-
+   rotation (touches playlist + `[dropins] exclude` persistence) and thumbnail
+   tiles are **v2**.
+5. **Trigger surface.** A global open hotkey (added to `HELP_TEXT`), e.g.
+   `Ctrl+B` "Browse effects", plus a control-room button.
