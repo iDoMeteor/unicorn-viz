@@ -178,15 +178,15 @@ resolve_playlist_context = true
 #   Ctrl+Alt+[    — Cycle position forward (bottom→left→top→right→…)
 #   Ctrl+Alt+]    — Cycle position backward
 # ---------------------------------------------------------------------------
-# [chat]
-# enabled = false
-# websocket_url = ""           # wss://YOUR-API-ID.execute-api.REGION.amazonaws.com/prod
-# username = "VJ"              # display name shown in chat for messages you send
-# position = "bottom"          # top | bottom | left | right
-# visible = true
-# glitter = 0.7                # sparkle intensity 0-1
-# pulse = 0.5                  # brightness pulse intensity 0-1
-# text_scale = 2.0             # glyph scale multiplier
+[chat]
+enabled = true
+websocket_url = ""           # wss://YOUR-API-ID.execute-api.REGION.amazonaws.com/prod
+username = "VJ"              # display name shown in chat for messages you send
+position = "bottom"          # top | bottom | left | right
+visible = true
+glitter = 0.7                # sparkle intensity 0-1
+pulse = 0.5                  # brightness pulse intensity 0-1
+text_scale = 2.0             # glyph scale multiplier
 # scroll_speed = 60.0          # pixels/second for top/bottom ticker
 # message_lifetime_s = 60.0   # seconds a message stays visible in dock mode
 
