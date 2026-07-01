@@ -816,13 +816,9 @@ class HotkeyHandler:
                 return
             if sym == sdl2.SDLK_LEFT:
                 b.set_focus_pane(PANE_CATEGORIES)
-                b.move_category(-1)
-                a.effects_browser_mark_nav()
                 return
             if sym == sdl2.SDLK_RIGHT:
-                b.set_focus_pane(PANE_CATEGORIES)
-                b.move_category(1)
-                a.effects_browser_mark_nav()
+                b.set_focus_pane(PANE_LIST)
                 return
             if sym == sdl2.SDLK_UP:
                 if b.focus_pane() == PANE_CATEGORIES:

@@ -2451,6 +2451,59 @@ void main() {
             return 2
         return 0
 
+    def _draw_modal_frame_decor(
+        self, x: float, y: float, w: float, h: float, pulse: float
+    ) -> None:
+        """Draw HUD-style corner accents, crosshair arms, and side tick marks
+        around a modal panel — the same decorator language as the status HUD."""
+        orange = (1.0, 0.58, 0.12)
+        teal = (0.10, 0.94, 1.0)
+        violet = (0.78, 0.38, 1.0)
+        # Corner accent blocks (orange).
+        csz = 14.0
+        ca = 0.65 + pulse * 0.30
+        for cx, cy in (
+            (x - 1.0, y - 1.0),
+            (x + w - csz + 1.0, y - 1.0),
+            (x - 1.0, y + h - csz + 1.0),
+            (x + w - csz + 1.0, y + h - csz + 1.0),
+        ):
+            self._draw_rect(cx, cy, csz, csz, (*orange, ca))
+        # Inner teal corner squares.
+        ic = 6.0
+        ica = 0.52 + pulse * 0.32
+        for cx, cy in (
+            (x + 2.0, y + 2.0),
+            (x + w - ic - 2.0, y + 2.0),
+            (x + 2.0, y + h - ic - 2.0),
+            (x + w - ic - 2.0, y + h - ic - 2.0),
+        ):
+            self._draw_rect(cx, cy, ic, ic, (*teal, ica))
+        # Crosshair arms extending inward from each corner.
+        arm_len = 40.0
+        arm = (*orange, 0.28 + pulse * 0.20)
+        self._draw_rect(x + csz, y + 1.0, arm_len, 1.0, arm)
+        self._draw_rect(x + 1.0, y + csz, 1.0, arm_len, arm)
+        self._draw_rect(x + w - csz - arm_len, y + 1.0, arm_len, 1.0, arm)
+        self._draw_rect(x + w - 2.0, y + csz, 1.0, arm_len, arm)
+        self._draw_rect(x + csz, y + h - 2.0, arm_len, 1.0, arm)
+        self._draw_rect(x + 1.0, y + h - csz - arm_len, 1.0, arm_len, arm)
+        self._draw_rect(x + w - csz - arm_len, y + h - 2.0, arm_len, 1.0, arm)
+        self._draw_rect(x + w - 2.0, y + h - csz - arm_len, 1.0, arm_len, arm)
+        # Side tick marks (3 per edge; inner halves are covered by content panes).
+        tick_colors = (
+            (*teal, 0.52 + pulse * 0.24),
+            (*orange, 0.52 + pulse * 0.24),
+            (*violet, 0.52 + pulse * 0.24),
+        )
+        for edge_x in (x + 6.0, x + w - 24.0):
+            for tp, tc in zip((0.28, 0.5, 0.72), tick_colors):
+                ty = y + tp * h
+                faint = (tc[0], tc[1], tc[2], tc[3] * 0.4)
+                self._draw_rect(edge_x, ty - 1.0, 18.0, 1.0, faint)
+                self._draw_rect(edge_x, ty, 18.0, 3.0, tc)
+                self._draw_rect(edge_x, ty + 3.0, 18.0, 1.0, faint)
+
     def _render_effects_browser(self) -> None:
         """Draw the effects browser modal (categories + searchable effect list)."""
         b = self._effects_browser
@@ -2466,7 +2519,7 @@ void main() {
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
         left_w = max(260.0, panel_w * 0.28)
-        right_w = panel_w - left_w - 28.0
+        right_w = panel_w - left_w - 42.0
         left_x = px + 14.0
         right_x = left_x + left_w + 14.0
         content_y = py + 86.0
@@ -2506,6 +2559,10 @@ void main() {
         self._draw_text(
             f'Search: {query_display}', px + 18.0, py + 70.0, scale=1.9, color=search_col
         )
+
+        # HUD-style frame decorators (corner accents + arms + side ticks). Drawn
+        # before the content panes so their inner halves are cleanly overdrawn.
+        self._draw_modal_frame_decor(px, py, panel_w, panel_h, pulse)
 
         self._draw_rect(left_x, content_y, left_w, content_h, (0.08, 0.04, 0.13, 0.82))
         self._draw_rect(right_x, content_y, right_w, content_h, (0.07, 0.03, 0.12, 0.82))
@@ -2593,7 +2650,7 @@ void main() {
             )
 
         self._draw_text(
-            'Tab: pane    Up/Down: browse + live-preview    Enter/Click: go    '
+            'Left/Right: pane    Up/Down: browse (live preview)    Enter/Click: go    '
             'P: pin    /: search    Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )
@@ -2610,7 +2667,7 @@ void main() {
         px = (W - panel_w) * 0.5
         py = (H - panel_h) * 0.5
         left_w = max(260.0, panel_w * 0.28)
-        right_w = panel_w - left_w - 28.0
+        right_w = panel_w - left_w - 42.0
         left_x = px + 14.0
         right_x = left_x + left_w + 14.0
         content_y = py + 86.0

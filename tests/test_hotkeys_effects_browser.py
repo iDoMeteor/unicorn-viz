@@ -156,16 +156,25 @@ def test_context_resolver_reports_effects_browser():
     assert handler._active_midi_context() == 'effects_browser'
 
 
-def test_arrows_move_selection_and_category():
+def test_arrows_navigate_and_left_right_switch_panes():
+    from unicornviz.catalog_browser import PANE_CATEGORIES, PANE_LIST
+
     handler, _app, overlay = _setup()
     overlay.effects_browser_visible = True
     b = overlay.effects_browser
+    # Down/Up move the effect selection within the list pane.
     handler.handle(sdl2.SDLK_DOWN, 0)
     assert b.selected_index() == 1
     handler.handle(sdl2.SDLK_UP, 0)
     assert b.selected_index() == 0
-    # Left/Right switch the category tab (wraps).
+    # Left focuses the categories pane; Right focuses the effects pane.
+    handler.handle(sdl2.SDLK_LEFT, 0)
+    assert b.focus_pane() == PANE_CATEGORIES
     handler.handle(sdl2.SDLK_RIGHT, 0)
+    assert b.focus_pane() == PANE_LIST
+    # With categories focused, Up/Down move the category tab.
+    handler.handle(sdl2.SDLK_LEFT, 0)
+    handler.handle(sdl2.SDLK_DOWN, 0)
     assert b.selected_category() != '(all)'
 
 
