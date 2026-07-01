@@ -58,6 +58,10 @@ log = logging.getLogger(__name__)
 
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
+
+# Effects browser live-preview thumbnail resolution (16:9).
+_EB_THUMB_W = 480
+_EB_THUMB_H = 270
 _SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
 _SPLASH_REPLAY_COOLDOWN_S = 1.25
 _TRANSITION_MODE_MAP = {
@@ -276,11 +280,15 @@ class App:
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
         self._paused = False
         self._projectm_manager_modal_active = False
-        # Effects browser modal (keyboard + mouse, debounced live preview).
+        # Effects browser modal (keyboard + mouse, debounced thumbnail preview).
         self._effects_browser_active = False
-        self._eb_origin_effect: Type[BaseEffect] | None = None
-        self._eb_previewed_name: str = ''
         self._eb_last_nav_monotonic: float = 0.0
+        # Live thumbnail preview: the selected effect is instantiated at a small
+        # size and rendered to its own FBO — the active on-screen effect is never
+        # touched. Committing (Enter/click) is what actually switches effects.
+        self._eb_thumb_fbo: moderngl.Framebuffer | None = None
+        self._eb_thumb_effect: BaseEffect | None = None
+        self._eb_thumb_name: str = ''
         # Generic effect lock: when set to an effect's display NAME, the system
         # stays on that effect (ProjectM-only mode). Switch attempts to other
         # effects are redirected into a variation of the locked effect (e.g. a
@@ -2074,6 +2082,7 @@ void main() {
             'controller_help_modal_visible',
             'projectm_manager_visible',
             'webcam_editor_modal_visible',
+            'effects_browser_visible',
         )
         for name in visibility_flags:
             if bool(getattr(overlays, name, False)):
@@ -2097,7 +2106,12 @@ void main() {
     # Effect management                                                    #
     # ------------------------------------------------------------------ #
 
-    def _instantiate(self, cls: Type[BaseEffect]) -> BaseEffect:
+    def _instantiate(
+        self,
+        cls: Type[BaseEffect],
+        width: int | None = None,
+        height: int | None = None,
+    ) -> BaseEffect:
         effect_cfg = self.cfg.get("effects", cls.__name__, default={})
         if not isinstance(effect_cfg, dict):
             effect_cfg = {}
@@ -2108,7 +2122,9 @@ void main() {
                 default=self.cfg.get("ansi", "ansi_dir", default="assets/ansi"),
             )
             effect_cfg = {"ansi_dir": str(resolve_path(ansi_dir)), **effect_cfg}
-        return cls(self._ctx, self._width, self._height, effect_cfg)
+        w = self._width if width is None else int(width)
+        h = self._height if height is None else int(height)
+        return cls(self._ctx, w, h, effect_cfg)
 
     def _switch_effect(self, cls: Type[BaseEffect]) -> None:
         """Begin transition to a new effect."""
@@ -3480,6 +3496,9 @@ void main() {
                     self._ctx.viewport = (0, 0, self._width, self._height)
                     _cel_render(self._width, self._height)
             self._sync_recording_overlay()
+            # Render the effects-browser live preview into its offscreen FBO
+            # (restores the default framebuffer) before the overlay pass draws it.
+            self.render_effects_browser_thumbnail(dt)
             primary_overlay_view = self._primary_display_viewport()
             if mirror_mode_active:
                 # Compose stage finished into _fbo_a; tile-blit first.
@@ -4902,37 +4921,30 @@ void main() {
             if row.get('display_name') == current:
                 b.set_selected_index(i)
                 break
-        self._eb_origin_effect = (
-            type(self._current_effect) if self._current_effect is not None else None
-        )
-        self._eb_previewed_name = current
         self._eb_last_nav_monotonic = 0.0
         if not o.effects_browser_visible:
             o.toggle_effects_browser()
         self._effects_browser_active = True
+        self._eb_rebuild_thumb()  # build the initial preview immediately
 
     def close_effects_browser(self, commit: bool) -> None:
-        """Close the browser. When ``commit`` is False, revert to the pre-open
-        effect (undoing any live preview)."""
+        """Close the browser. The active effect is untouched by preview, so
+        closing only tears down the thumbnail and modal state (``commit`` is
+        accepted for call-site symmetry with the commit/pin actions)."""
+        del commit  # preview never changed the active effect; nothing to revert
         o = self._overlays
-        if not commit and self._eb_origin_effect is not None:
-            current_cls = (
-                type(self._current_effect) if self._current_effect is not None else None
-            )
-            if current_cls is not self._eb_origin_effect:
-                self._switch_effect(self._eb_origin_effect)
         if o.effects_browser_visible:
             o.toggle_effects_browser()
         b = o.effects_browser
         b.set_search_mode(False)
         b.clear_search_query()
         self._effects_browser_active = False
-        self._eb_origin_effect = None
-        self._eb_previewed_name = ''
         self._eb_last_nav_monotonic = 0.0
+        self._eb_destroy_thumb_effect()
+        o.set_effects_browser_thumbnail(None)
 
     def effects_browser_mark_nav(self) -> None:
-        """(Re)arm the debounced live preview after any navigation."""
+        """(Re)arm the debounced thumbnail rebuild after any navigation."""
         self._eb_last_nav_monotonic = time.monotonic()
 
     def effects_browser_commit(self) -> str | None:
@@ -4963,22 +4975,82 @@ void main() {
         return name
 
     def tick_effects_browser_preview(self) -> None:
-        """Debounced live preview: switch to the selection after ~250 ms idle."""
+        """Debounced thumbnail rebuild: after ~250 ms idle on a new selection,
+        (re)instantiate the selected effect into the preview FBO. The active
+        on-screen effect is never changed."""
         if not self._effects_browser_active or self._eb_last_nav_monotonic <= 0.0:
             return
         if (time.monotonic() - self._eb_last_nav_monotonic) < 0.25:
             return
         self._eb_last_nav_monotonic = 0.0
+        self._eb_rebuild_thumb()
+
+    # -- Effects browser thumbnail preview (offscreen FBO) -------------------
+
+    def _ensure_eb_thumb_fbo(self) -> moderngl.Framebuffer:
+        """Lazily allocate the small offscreen FBO used for effect previews."""
+        if self._eb_thumb_fbo is None:
+            tex = self._ctx.texture((_EB_THUMB_W, _EB_THUMB_H), 4)
+            tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            self._eb_thumb_fbo = self._ctx.framebuffer(color_attachments=[tex])
+        return self._eb_thumb_fbo
+
+    def _eb_destroy_thumb_effect(self) -> None:
+        """Release the current preview effect instance, if any."""
+        if self._eb_thumb_effect is not None:
+            try:
+                self._eb_thumb_effect.destroy()
+            except Exception:
+                log.debug('Effects browser thumbnail destroy failed', exc_info=True)
+            self._eb_thumb_effect = None
+        self._eb_thumb_name = ''
+
+    def _eb_rebuild_thumb(self) -> None:
+        """Instantiate the selected effect at thumbnail size for live preview."""
+        if not self._effects_browser_active:
+            return
         entry = self._overlays.effects_browser.selected_entry()
         if entry is None:
+            self._eb_destroy_thumb_effect()
             return
         name = str(entry.get('display_name', ''))
-        if name == self._eb_previewed_name:
+        if name == self._eb_thumb_name and self._eb_thumb_effect is not None:
             return
         cls = entry.get('cls')
-        if cls is not None and type(self._current_effect) is not cls:
-            self._switch_effect(cls)  # type: ignore[arg-type]
-            self._eb_previewed_name = name
+        self._eb_destroy_thumb_effect()
+        if cls is None:
+            return
+        try:
+            self._eb_thumb_effect = self._instantiate(cls, _EB_THUMB_W, _EB_THUMB_H)  # type: ignore[arg-type]
+            self._eb_thumb_name = name
+        except Exception:
+            log.debug('Effects browser thumbnail init failed for %s', name, exc_info=True)
+            self._eb_thumb_effect = None
+            self._eb_thumb_name = ''
+
+    def render_effects_browser_thumbnail(self, dt: float) -> None:
+        """Update+render the preview effect into its offscreen FBO and hand the
+        texture to the overlay. Restores the default framebuffer before return
+        so the overlay pass draws to the screen as usual."""
+        if not self._effects_browser_active or self._eb_thumb_effect is None:
+            self._overlays.set_effects_browser_thumbnail(None)
+            return
+        fbo = self._ensure_eb_thumb_fbo()
+        audio = self._audio or AudioData()
+        try:
+            self._eb_thumb_effect.update(dt, audio)
+            fbo.use()
+            self._ctx.viewport = (0, 0, _EB_THUMB_W, _EB_THUMB_H)
+            self._ctx.clear(0.02, 0.02, 0.05, 1.0)
+            self._eb_thumb_effect.render()
+            self._overlays.set_effects_browser_thumbnail(fbo.color_attachments[0])
+        except Exception:
+            log.debug('Effects browser thumbnail render failed', exc_info=True)
+            self._eb_destroy_thumb_effect()
+            self._overlays.set_effects_browser_thumbnail(None)
+        finally:
+            self._ctx.screen.use()
+            self._ctx.viewport = (0, 0, int(self._width), int(self._height))
 
     def toggle_projectm_only(self) -> tuple[bool, str]:
         """Toggle ProjectM-only mode. On: switch to ProjectM and lock there.

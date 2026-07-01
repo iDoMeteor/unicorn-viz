@@ -581,6 +581,7 @@ class Overlays:
         self._show_effects_browser = False
         self._effects_browser = CatalogBrowser()
         self._effects_browser_current: str = ''
+        self._eb_thumb_tex: 'moderngl.Texture | None' = None
         # Mouse hit-regions rebuilt each render: (x, y, w, h, index).
         self._eb_cat_rects: list[tuple[float, float, float, float, int]] = []
         self._eb_row_rects: list[tuple[float, float, float, float, int]] = []
@@ -810,8 +811,13 @@ void main() {
         h: float,
         *,
         alpha: float = 1.0,
+        flip_v: bool = False,
     ) -> None:
-        """Draw an RGBA icon texture in screen pixels."""
+        """Draw an RGBA texture in screen pixels.
+
+        Set ``flip_v`` for bottom-up sources such as FBO colour attachments so
+        the image is not drawn upside down.
+        """
         def px(px_val: float) -> float:
             return (px_val / self._width) * 2.0 - 1.0
 
@@ -822,13 +828,14 @@ void main() {
         x1 = px(x + w)
         y0 = py(y)
         y1 = py(y + h)
+        vt, vb = (1.0, 0.0) if flip_v else (0.0, 1.0)
         verts = np.array([
-            x0, y0, 0.0, 0.0,
-            x1, y0, 1.0, 0.0,
-            x0, y1, 0.0, 1.0,
-            x1, y0, 1.0, 0.0,
-            x1, y1, 1.0, 1.0,
-            x0, y1, 0.0, 1.0,
+            x0, y0, 0.0, vt,
+            x1, y0, 1.0, vt,
+            x0, y1, 0.0, vb,
+            x1, y0, 1.0, vt,
+            x1, y1, 1.0, vb,
+            x0, y1, 0.0, vb,
         ], dtype=np.float32)
         self._icon_vbo.write(verts)
         self._icon_prog['icon_alpha'].value = float(max(0.0, min(1.0, alpha)))
@@ -2402,6 +2409,10 @@ void main() {
         self._effects_browser.set_entries(entries)
         self._effects_browser_current = str(current_name or '')
 
+    def set_effects_browser_thumbnail(self, tex: 'moderngl.Texture | None') -> None:
+        """Set the live-preview texture drawn in the effects browser (or None)."""
+        self._eb_thumb_tex = tex
+
     @staticmethod
     def _eb_hit(
         rects: list[tuple[float, float, float, float, int]],
@@ -2553,19 +2564,32 @@ void main() {
         details_y = content_y + content_h - 76.0
         self._draw_rect(right_x + 8.0, details_y, right_w - 16.0, 64.0, (0.10, 0.05, 0.18, 0.86))
         selected = b.selected_entry()
+
+        # Live preview thumbnail (rendered offscreen by the app into an FBO).
+        tile_h = 60.0
+        tile_w = tile_h * 16.0 / 9.0
+        tile_x = right_x + 14.0
+        tile_y = details_y + 2.0
+        if self._eb_thumb_tex is not None and selected is not None:
+            self._draw_rect(tile_x - 1.0, tile_y - 1.0, tile_w + 2.0, tile_h + 2.0, (0.72, 0.30, 1.0, 0.65))
+            self._draw_icon_texture(self._eb_thumb_tex, tile_x, tile_y, tile_w, tile_h, flip_v=True)
+        else:
+            self._draw_rect(tile_x, tile_y, tile_w, tile_h, (0.03, 0.02, 0.06, 0.9))
+        text_x = tile_x + tile_w + 14.0
+
         if selected is None:
-            self._draw_text('No effects match the current filter.', right_x + 18.0, details_y + 14.0, scale=2.1, color=(0.88, 0.88, 0.92, 0.88))
+            self._draw_text('No effects match the current filter.', text_x, details_y + 14.0, scale=2.0, color=(0.88, 0.88, 0.92, 0.88))
         else:
             pack_name = str(selected.get('pack_name', '-'))
             category_key = str(selected.get('category_key', '(uncategorized)'))
             tag_str = ', '.join(str(x) for x in (selected.get('tags', []) or []))
             self._draw_text(
-                f'Pack: {pack_name}    Category: {category_key}', right_x + 18.0,
-                details_y + 10.0, scale=1.85, color=(0.72, 0.80, 1.0, 0.92),
+                f'Pack: {pack_name}   Cat: {category_key}', text_x,
+                details_y + 10.0, scale=1.7, color=(0.72, 0.80, 1.0, 0.92),
             )
             self._draw_text(
-                f'Tags: {tag_str[:96]}', right_x + 18.0, details_y + 34.0,
-                scale=1.55, color=(0.80, 0.84, 0.92, 0.88),
+                f'Tags: {tag_str[:64]}', text_x, details_y + 34.0,
+                scale=1.5, color=(0.80, 0.84, 0.92, 0.88),
             )
 
         self._draw_text(
