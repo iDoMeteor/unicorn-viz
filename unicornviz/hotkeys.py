@@ -559,17 +559,26 @@ class HotkeyHandler:
                         return
 
         # Registered drop-in key handlers.
-        for _name, _handler in a.vj_api.key_handler_items():
-            try:
-                _result = _handler(sym, mod)
-            except Exception:
-                log.exception('Key handler %r raised; unregistering', _name)
-                a.vj_api.unregister_key_handler(_name)
-                continue
-            if _result is not False:
-                if isinstance(_result, str) and _result:
-                    o.flash_message(_result, 2.0)
-                return
+        # Skip drop-in dispatch while any text-entry mode is active so that
+        # character keys (bare/shift) reach the modal handler instead of
+        # accidentally firing a drop-in hotkey (e.g. C toggling chat mid-search).
+        _user_typing = (
+            self._effects_browser_search_mode
+            or self._projectm_search_mode
+            or (getattr(o, 'presets_visible', False) and getattr(o, 'presets_name_mode', False))
+        )
+        if not _user_typing:
+            for _name, _handler in a.vj_api.key_handler_items():
+                try:
+                    _result = _handler(sym, mod)
+                except Exception:
+                    log.exception('Key handler %r raised; unregistering', _name)
+                    a.vj_api.unregister_key_handler(_name)
+                    continue
+                if _result is not False:
+                    if isinstance(_result, str) and _result:
+                        o.flash_message(_result, 2.0)
+                    return
 
         # Help overlay interaction mode: section expand/collapse and focus nav.
         if getattr(o, 'help_visible', False):
