@@ -800,7 +800,10 @@ class HotkeyHandler:
                     a.effects_browser_mark_nav()
                 return
 
-            if sym == sdl2.SDLK_ESCAPE or (sym == sdl2.SDLK_b and (mod & sdl2.KMOD_CTRL)):
+            if sym == sdl2.SDLK_ESCAPE or (
+                sym == sdl2.SDLK_b
+                and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT | sdl2.KMOD_ALT | sdl2.KMOD_GUI))
+            ):
                 a.close_effects_browser(commit=False)
                 return
             if sym == sdl2.SDLK_SLASH and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI | sdl2.KMOD_SHIFT)):
@@ -1142,7 +1145,7 @@ class HotkeyHandler:
                 o.toggle_audio_selector()
 
         elif sym == sdl2.SDLK_b:
-            if mod & sdl2.KMOD_CTRL:
+            if not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
                 a.open_effects_browser()
 
         elif sym == sdl2.SDLK_m:

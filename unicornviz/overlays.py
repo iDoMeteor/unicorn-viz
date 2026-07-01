@@ -420,7 +420,7 @@ class Overlays:
                 ('m', 'System monitor modal'),
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
-                ('Ctrl+B', 'Effects browser (search/filter/preview/pin all effects)'),
+                ('B', 'Effects browser (search/filter/preview/pin all effects)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('Ctrl+Alt+K', 'Webcam editor modal'),
                 ('Ctrl+Alt+H', 'Controller help modal (APC slot map)'),

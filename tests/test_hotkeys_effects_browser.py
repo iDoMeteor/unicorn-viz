@@ -1,7 +1,8 @@
 """Hotkey integration tests for the effects browser modal.
 
-Covers Ctrl+B open, the active-context resolver, and key routing while the
-browser is visible (nav, category switch, search, commit, pin, close). Drives a
+Covers naked-B open/close (core hotkey), the active-context resolver, and key
+routing while the browser is visible (nav, category switch, search, commit, pin,
+close). Drives a
 real ``CatalogBrowser`` through the fake overlay so selection/search semantics
 are exercised end-to-end; the App-side actions are recorded on a fake.
 """
@@ -134,11 +135,19 @@ def _setup():
     return handler, app, overlay
 
 
-def test_ctrl_b_opens_browser():
+def test_b_opens_browser():
     handler, app, overlay = _setup()
-    handler.handle(sdl2.SDLK_b, sdl2.KMOD_CTRL)
+    handler.handle(sdl2.SDLK_b, 0)  # naked B — core hotkey
     assert overlay.effects_browser_visible
     assert ('open', None) in app.calls
+
+
+def test_b_while_open_closes_browser():
+    handler, app, overlay = _setup()
+    overlay.effects_browser_visible = True
+    handler.handle(sdl2.SDLK_b, 0)
+    assert ('close', False) in app.calls
+    assert not overlay.effects_browser_visible
 
 
 def test_context_resolver_reports_effects_browser():
