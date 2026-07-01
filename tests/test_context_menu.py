@@ -287,6 +287,19 @@ def test_layout_clamps_to_screen_when_expanded() -> None:
     assert layout['y'] + float(layout['h']) <= ov._height
 
 
+def test_render_draws_audio_reactive_sprite_border() -> None:
+    ov = _bare_overlays()
+    ov._hud_t = 0.0
+    ov._hud_state = {'bass': '0.5', 'mid': '0.3', 'treble': '0.2'}
+    ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    bulb_calls: list[tuple] = []
+    ov._draw_rect = lambda *a, **k: None
+    ov._draw_text = lambda *a, **k: None
+    ov._draw_audio_reactive_border_bulbs = lambda *a, **k: bulb_calls.append(a)
+    ov._render_context_menu()
+    assert len(bulb_calls) == 1
+
+
 def test_dropin_help_entries_reads_dynamic_registry() -> None:
     ov = _bare_overlays()
     ov._dynamic_help_sections = {'Chat': [('Ctrl+Alt+T', 'Chat overlay on / off')]}

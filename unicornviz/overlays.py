@@ -2061,6 +2061,18 @@ void main() {
         self._draw_rect(x0, y0, bw, h, c_border)
         self._draw_rect(x0 + w - bw, y0, bw, h, c_border)
 
+        # Audio-reactive "sprite" bulbs chasing the border (as on other modals).
+        def _fv(key: str) -> float:
+            try:
+                return float(self._hud_state.get(key, '0.0') or 0.0)
+            except (ValueError, TypeError):
+                return 0.0
+
+        self._draw_audio_reactive_border_bulbs(
+            x0, y0, w, h, _fv('bass'), _fv('mid'), _fv('treble'), t,
+            speed_scale=0.5, size_scale=0.5,
+        )
+
         scale = self._CONTEXT_MENU_ROW_SCALE
         hint_scale = self._CONTEXT_MENU_HINT_SCALE
         hint_char_w = float(self._glyph_w) * self._font_scale_norm * hint_scale
