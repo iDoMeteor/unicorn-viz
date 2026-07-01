@@ -1331,6 +1331,12 @@ class HotkeyHandler:
             _on, msg = a.toggle_projectm_only()
             o.flash_message(msg, 1.6)
 
+        elif sym == sdl2.SDLK_c and not (
+            mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_SHIFT)
+        ):
+            # Naked C — toggle the configuration editor.
+            o.toggle_config_editor()
+
         elif sym == sdl2.SDLK_F6:
             effect = a.current_effect
             # Toggle is global — persists even when current effect lacks 'speed'.

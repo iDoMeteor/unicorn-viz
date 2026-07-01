@@ -2114,6 +2114,7 @@ void main() {
             'effects_browser_visible',
             'presets_visible',
             'context_menu_open',
+            'config_editor_open',
         )
         for name in visibility_flags:
             if bool(getattr(overlays, name, False)):
@@ -2169,6 +2170,7 @@ void main() {
         entries.append(header('Open'))
         entries.append(item('Open Effects Browser', K.SDLK_b, 0, 'modal', 'B'))
         entries.append(item('Open Show Presets', K.SDLK_p, K.KMOD_CTRL | K.KMOD_SHIFT, 'modal', 'Ctrl+Shift+P'))
+        entries.append(item('Open Configuration', K.SDLK_c, 0, 'modal', 'C'))
         entries.append(item('Open System Monitor', K.SDLK_m, 0, 'modal', 'M'))
         entries.append(item('Open Control Room', K.SDLK_m, K.KMOD_SHIFT, 'modal', 'Shift+M'))
         entries.append(item('Open Audio Sources', K.SDLK_a, K.KMOD_SHIFT, 'modal', 'Shift+A'))
@@ -3018,6 +3020,18 @@ void main() {
                         self._update_ctrl_state(event.key.keysym.sym, True)
                         self._overlays.close_context_menu()
                         continue
+                    if self._overlays.config_editor_open:
+                        # Editor captures navigation/close; other keys swallowed.
+                        self._update_ctrl_state(event.key.keysym.sym, True)
+                        if not event.key.repeat:
+                            _sym = event.key.keysym.sym
+                            if _sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_c):
+                                self._overlays.close_config_editor()
+                            elif _sym == sdl2.SDLK_LEFT:
+                                self._overlays.move_config_editor_tab(-1)
+                            elif _sym == sdl2.SDLK_RIGHT:
+                                self._overlays.move_config_editor_tab(1)
+                        continue
                     self._update_ctrl_state(event.key.keysym.sym, True)
                     if not event.key.repeat:
                         hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
@@ -3069,6 +3083,17 @@ void main() {
                                 self._overlays.handle_context_menu_motion(hit[0], hit[1])
                         except Exception as exc:
                             log.warning('Context menu hover handling failed: %s', exc)
+                        continue
+                    if self._overlays.config_editor_open:
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x), float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                self._overlays.handle_config_editor_motion(hit[0], hit[1])
+                        except Exception as exc:
+                            log.warning('Config editor hover handling failed: %s', exc)
                         continue
                     if presets_active:
                         try:
@@ -3130,6 +3155,18 @@ void main() {
                         else:
                             # Right/middle click, or a click outside the canvas.
                             self._overlays.close_context_menu()
+                        continue
+                    if self._overlays.config_editor_open:
+                        if event.button.button == sdl2.SDL_BUTTON_LEFT:
+                            try:
+                                hit = self._overlay_mouse_coords(
+                                    float(event.button.x), float(event.button.y),
+                                    self._primary_display_viewport(),
+                                )
+                                if hit is not None:
+                                    self._overlays.handle_config_editor_click(hit[0], hit[1])
+                            except Exception as exc:
+                                log.warning('Config editor click handling failed: %s', exc)
                         continue
                     if (event.button.button == sdl2.SDL_BUTTON_RIGHT
                             and not (presets_active or eb_active or manager_modal_active)

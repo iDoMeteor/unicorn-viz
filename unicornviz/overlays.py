@@ -422,6 +422,7 @@ class Overlays:
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
                 ('B', 'Effects browser (search/filter/preview/pin all effects)'),
+                ('c', 'Configuration editor (tabbed settings + profiles)'),
                 ('Ctrl+Shift+P', 'Show presets (save/load setup: enabled effects, mode, reactivity)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('Ctrl+Alt+K', 'Webcam editor modal'),
@@ -596,6 +597,14 @@ class Overlays:
         self._context_menu_anim = 0.0  # 0 = hidden, 1 = fully open (unroll ease)
         self._context_menu_fading = False  # animating closed
         self._context_menu_row_rects: list[tuple[float, float, float, float, int]] = []
+        # Configuration editor (tabbed modal). Increment 2: shell + tab nav.
+        self._show_config_editor = False
+        self._config_editor_tabs = ['Effects', 'Audio', 'Visuals']
+        self._config_editor_tab = 0
+        self._config_editor_tab_hover = -1
+        self._config_editor_anim = 0.0
+        self._config_editor_fading = False
+        self._config_editor_panel_rect: tuple[float, float, float, float] | None = None
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -1895,6 +1904,7 @@ void main() {
             or self._show_webcam_editor_modal
             or self._show_audio
             or self._show_midi
+            or self._show_config_editor
         )
 
     def dropin_help_entries(self) -> list[tuple[str, str, str]]:
@@ -2158,6 +2168,190 @@ void main() {
                     color=(0.5, 0.6, 0.8, 0.7),
                 )
 
+    # ------------------------------------------------------------------
+    # Configuration editor (tabbed modal)
+    # ------------------------------------------------------------------
+
+    @property
+    def config_editor_open(self) -> bool:
+        """True while the configuration editor is open (interactive)."""
+        return self._show_config_editor
+
+    @property
+    def config_editor_visible(self) -> bool:
+        """True while it should render (open or animating closed)."""
+        return self._show_config_editor or self._config_editor_fading
+
+    @property
+    def config_editor_tab(self) -> int:
+        """Index of the active tab."""
+        return self._config_editor_tab
+
+    @property
+    def config_editor_tab_name(self) -> str:
+        """Name of the active tab."""
+        tabs = self._config_editor_tabs
+        return tabs[self._config_editor_tab] if tabs else ''
+
+    def toggle_config_editor(self) -> bool:
+        """Open/close the configuration editor. Returns the new open state."""
+        if self._show_config_editor:
+            self.close_config_editor()
+            return False
+        self._show_config_editor = True
+        self._config_editor_anim = 0.0
+        self._config_editor_fading = False
+        self._config_editor_tab_hover = -1
+        return True
+
+    def close_config_editor(self) -> None:
+        """Close the editor (animates closed, then stops rendering)."""
+        if self._show_config_editor:
+            self._config_editor_fading = True
+        self._show_config_editor = False
+        self._config_editor_tab_hover = -1
+
+    def set_config_editor_tab(self, index: int) -> None:
+        """Select a tab by index (clamped)."""
+        n = len(self._config_editor_tabs)
+        if n:
+            self._config_editor_tab = max(0, min(int(index), n - 1))
+
+    def move_config_editor_tab(self, delta: int) -> None:
+        """Move the active tab by delta (wraps)."""
+        n = len(self._config_editor_tabs)
+        if n:
+            self._config_editor_tab = (self._config_editor_tab + int(delta)) % n
+
+    def tick_config_editor(self, dt: float) -> None:
+        """Advance the open/close animation toward its target."""
+        if not (self._show_config_editor or self._config_editor_fading):
+            return
+        target = 1.0 if self._show_config_editor else 0.0
+        rate = float(dt) / 0.16
+        if self._config_editor_anim < target:
+            self._config_editor_anim = min(target, self._config_editor_anim + rate)
+        elif self._config_editor_anim > target:
+            self._config_editor_anim = max(target, self._config_editor_anim - rate)
+        if self._config_editor_fading and self._config_editor_anim <= 0.001:
+            self._config_editor_fading = False
+
+    def _config_editor_tab_boxes(
+        self, panel_rect: tuple[float, float, float, float]
+    ) -> list[tuple[int, float, float, float, float]]:
+        """Return clickable tab boxes ``(index, x, y, w, h)`` for the tab bar."""
+        px, py, _pw, _ph = panel_rect
+        scale = 2.4
+        char_w = float(self._glyph_w) * self._font_scale_norm * scale
+        tab_h = 44.0
+        tab_y = py + 64.0
+        gap = 10.0
+        boxes: list[tuple[int, float, float, float, float]] = []
+        x = px + 22.0
+        for i, name in enumerate(self._config_editor_tabs):
+            w = len(name) * char_w + 34.0
+            boxes.append((i, x, tab_y, w, tab_h))
+            x += w + gap
+        return boxes
+
+    def handle_config_editor_motion(self, x: float, y: float) -> None:
+        """Update the hovered tab from cursor position."""
+        self._config_editor_tab_hover = -1
+        if not self._show_config_editor or self._config_editor_panel_rect is None:
+            return
+        for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self._config_editor_tab_hover = i
+                return
+
+    def handle_config_editor_click(self, x: float, y: float) -> bool:
+        """Handle a click; switch tab if one was hit. Returns True if consumed."""
+        if not self._show_config_editor or self._config_editor_panel_rect is None:
+            return False
+        for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self.set_config_editor_tab(i)
+                return True
+        return False
+
+    def _render_config_editor(self) -> None:
+        """Draw the tabbed configuration editor (shell + tab bar + placeholder body)."""
+        if not self.config_editor_visible:
+            return
+        px, py, pw, ph, _W, _H = self._begin_panel(
+            0.84, 1400.0, 0.86, 900.0, underlay_alpha=0.6, underlay_pad=12.0
+        )
+        self._config_editor_panel_rect = (px, py, pw, ph)
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.6)
+
+        # Open/close animation: expand vertically from the centre.
+        a = max(0.0, min(1.0, self._config_editor_anim))
+        ease = a * a * (3.0 - 2.0 * a)
+        vis_h = max(6.0, ph * ease)
+        vy = py + (ph - vis_h) * 0.5
+
+        self._draw_rect(px, vy, pw, vis_h, (0.03, 0.05, 0.11, 0.97))
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(px, vy, pw, bw, c_border)
+        self._draw_rect(px, vy + vis_h - bw, pw, bw, c_border)
+        self._draw_rect(px, vy, bw, vis_h, c_border)
+        self._draw_rect(px + pw - bw, vy, bw, vis_h, c_border)
+
+        def _fv(key: str) -> float:
+            try:
+                return float(self._hud_state.get(key, '0.0') or 0.0)
+            except (ValueError, TypeError):
+                return 0.0
+
+        self._draw_audio_reactive_border_bulbs(
+            px, vy, pw, vis_h, _fv('bass'), _fv('mid'), _fv('treble'), t,
+            speed_scale=0.5, size_scale=0.6,
+        )
+
+        # Content appears once the panel is mostly open.
+        if ease < 0.82:
+            return
+
+        self._draw_text('CONFIGURATION', px + 22, py + 16, scale=3.6,
+                        color=(0.4 + 0.2 * pulse, 0.8, 1.0, 1.0))
+
+        # Tab bar.
+        for i, bx, by, bw2, bh in self._config_editor_tab_boxes((px, py, pw, ph)):
+            name = self._config_editor_tabs[i]
+            active = i == self._config_editor_tab
+            hovered = i == self._config_editor_tab_hover
+            if active:
+                self._draw_rect(bx, by, bw2, bh, (0.12, 0.30, 0.62, 0.9))
+                self._draw_rect(bx, by + bh - 3.0, bw2, 3.0, (0.4, 0.95, 1.0, 0.95))
+            elif hovered:
+                self._context_menu_hover_glow(bx, by, bw2, bh, t)
+            else:
+                self._draw_rect(bx, by, bw2, bh, (0.06, 0.10, 0.22, 0.7))
+            tcol = (1.0, 0.97, 0.6, 1.0) if active else (0.75, 0.85, 1.0, 0.9)
+            self._draw_text(name, bx + 17, by + 11, scale=2.4, color=tcol)
+
+        # Two-pane body (list | detail) — placeholder content this increment.
+        body_y = py + 120.0
+        body_h = ph - (body_y - py) - 46.0
+        left_w = pw * 0.32
+        self._draw_rect(px + 22, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
+        self._draw_rect(px + 22 + left_w, body_y, pw - left_w - 44, body_h, (0.05, 0.08, 0.16, 0.85))
+
+        tab_name = self.config_editor_tab_name
+        self._draw_text(f'{tab_name.upper()} LIST', px + 36, body_y + 16, scale=2.0,
+                        color=(0.55, 0.75, 1.0, 0.85))
+        self._draw_text(f'{tab_name} settings', px + 40 + left_w, body_y + 16, scale=2.4,
+                        color=(0.8, 0.9, 1.0, 0.95))
+        self._draw_text('Live editing lands in the next increment.',
+                        px + 40 + left_w, body_y + 54, scale=2.0,
+                        color=(0.6, 0.7, 0.85, 0.8))
+
+        self._draw_text('Left / Right: switch tabs      Esc: close',
+                        px + 22, py + ph - 34.0, scale=2.0,
+                        color=(0.55, 0.65, 0.75, 0.8))
+
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         self._hud_t += dt
@@ -2265,6 +2459,11 @@ void main() {
 
         if self._show_midi and not route_modals_elsewhere:
             self._render_midi_selector()
+
+        # Configuration editor (full modal, under the context menu).
+        self.tick_config_editor(dt)
+        if self.config_editor_visible and not route_modals_elsewhere:
+            self._render_config_editor()
 
         # Context menu floats above everything else (with open/close unroll).
         self.tick_context_menu(dt)

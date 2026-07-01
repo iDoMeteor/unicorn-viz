@@ -69,6 +69,11 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._context_menu_x = 100.0
     o._context_menu_y = 100.0
 
+    # Configuration editor modal.
+    o._show_config_editor = True
+    o._config_editor_fading = False
+    o._config_editor_anim = 1.0
+
     # Drawing / render hooks replaced by call-capture no-ops.
     o._draw_text = lambda *_a, **_kw: calls.append('draw_text')
     o._draw_rect = lambda *_a, **_kw: calls.append('draw_rect')
@@ -85,6 +90,7 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._render_audio_selector = lambda: calls.append('audio_selector')
     o._render_midi_selector = lambda: calls.append('midi_selector')
     o._render_context_menu = lambda: calls.append('context_menu')
+    o._render_config_editor = lambda: calls.append('config_editor')
 
     o._ctx = object()
     o._cta = _CtaStub(calls)
@@ -113,6 +119,7 @@ def test_render_all_overlays_enabled_smoke() -> None:
         'audio_selector',
         'midi_selector',
         'context_menu',
+        'config_editor',
     }
     missing = expected - set(calls)
     assert not missing, f'Missing render branches with all overlays enabled: {sorted(missing)}'

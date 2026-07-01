@@ -48,10 +48,15 @@ class _Overlay:
         self.messages: list[str] = []
         self.toggled_name = 0
         self.toggled_audio = 0
+        self.toggled_config_editor = 0
         self.audio_selector_visible = False
         self.audio_sources: list[str] = []
         self.audio_viable_flags: list[bool] = []
         self.audio_selected_index = 0
+
+    def toggle_config_editor(self) -> bool:
+        self.toggled_config_editor += 1
+        return True
 
     def flash_message(self, text: str, _duration: float = 0.0) -> None:
         self.messages.append(text)
@@ -279,6 +284,15 @@ def test_ctrl_t_dispatches_registered_auto_vj_handler() -> None:
 
     assert calls == [(sdl2.SDLK_t, sdl2.KMOD_CTRL)]
     assert overlays.messages == ['TRAINERS * ON']
+
+
+def test_naked_c_toggles_config_editor() -> None:
+    handler, app, overlays = _handler()
+    handler.handle(sdl2.SDLK_c, 0)
+    assert overlays.toggled_config_editor == 1
+    # With a modifier, C must not toggle the editor.
+    handler.handle(sdl2.SDLK_c, sdl2.KMOD_CTRL)
+    assert overlays.toggled_config_editor == 1
 
 
 def test_midi_note_is_queued_until_main_thread_dispatch() -> None:
