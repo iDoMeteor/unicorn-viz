@@ -2,13 +2,15 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-06-20
+Last updated: 2026-07-01
 
 This document records architectural decisions for the Auto VJ training pipeline:
 corpus design, scoring, packager logic, headless session infrastructure, and
-tuning protocol.  Update it whenever touching `tools/package_training_set.py`,
-`tools/training_daemon.py`, scorecard thresholds, LLM scoring, Schmidt trigger
-constants, or adding / changing a training workflow step.
+tuning protocol.  Update it whenever touching
+`drop-ins/training-kit-01/tools/package_training_set.py`,
+`drop-ins/training-kit-01/tools/training_daemon.py`, scorecard thresholds,
+LLM scoring, Schmidt trigger constants, or adding / changing a training
+workflow step.
 
 ---
 
@@ -140,13 +142,14 @@ assets/training/sets/
       recordings/    (if present)
 ```
 
-Never manually move corpus files.  Always use `tools/package_training_set.py`.
+Never manually move corpus files.  Always use
+`drop-ins/training-kit-01/tools/package_training_set.py`.
 The script moves screenshots and recordings in addition to corpus and logs.
 
 CLI non-interactive mode (used by daemon):
 
 ```bash
-python tools/package_training_set.py \
+python drop-ins/training-kit-01/tools/package_training_set.py \
     --no-prompt \
     --set-name 20260620-classic-house-2025-2026 \
     --session-notes "baseline run post-tactus-fix"
@@ -171,7 +174,8 @@ Infrastructure stack:
 5. Auto-packager runs on unicorn-viz exit
 
 Session directory naming: `<YYYYMMDD>-<playlist-slug>` built from
-`--playlist-name` argument by `_slugify()` in `training_daemon.py`.
+`--playlist-name` argument by `_slugify()` in
+`drop-ins/training-kit-01/tools/training_daemon.py`.
 
 ---
 

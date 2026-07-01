@@ -552,15 +552,18 @@ Update this file when changing:
 
 Update this file when changing:
 
-- `_BPM_LOCK_CONFIDENCE_FLOOR` in `tools/package_training_set.py` (must stay
+- `_BPM_LOCK_CONFIDENCE_FLOOR` in
+  `drop-ins/training-kit-01/tools/package_training_set.py` (must stay
   in sync with Schmidt trigger thresholds in `auto_vj.py`).
 - Any scorecard metric formula: `_score_lock_quality`, `_score_director_quality`,
   or the `beat_lock` coverage calculation.
 - The LLM scoring pipeline: provider order, model IDs, prompt rubric, or
   JSON extraction logic in `_score_detector_with_llm`.
-- The packaging workflow in `tools/package_training_set.py`: what gets moved,
+- The packaging workflow in
+  `drop-ins/training-kit-01/tools/package_training_set.py`: what gets moved,
   naming conventions, or `--session-notes` / `--no-prompt` behaviour.
-- The headless training daemon (`tools/training_daemon.py`): infrastructure
+- The headless training daemon
+  (`drop-ins/training-kit-01/tools/training_daemon.py`): infrastructure
   choices, audio routing, or session directory naming.
 - The genre / audio profile protocol for training sessions.
 - Baseline quality targets or the tuning protocol sequence.
@@ -581,8 +584,9 @@ rewrite history — old decisions stay in the Superseded table with a reason.
 - Scorecards must include at minimum: row counts, start/end time, detector lock
   behavior summary, director event counts, profile mix, and lock/director
   ratings.
-- Use `tools/package_training_set.py` to package corpus + session logs; do not
-  manually move these files when the script can perform the operation.
+- Use `drop-ins/training-kit-01/tools/package_training_set.py` to package
+  corpus + session logs; do not manually move these files when the script can
+  perform the operation.
 - Packaging must move all files currently under `logs/` (not only JSONL) into
   the destination bucket.
 - Packaging must auto-generate `scorecard.md` from the moved corpus files;

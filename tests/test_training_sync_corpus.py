@@ -69,7 +69,7 @@ def test_sync_corpus_from_logs_populates_rows_with_spotify_metadata() -> None:
         result = subprocess.run(
             [
                 sys.executable,
-                'tools/training/sync_corpus_from_logs.py',
+                'drop-ins/training-kit-01/tools/training/sync_corpus_from_logs.py',
                 str(log_path),
                 '--catalog',
                 str(catalog_path),

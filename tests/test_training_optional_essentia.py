@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 
-_TRAINING_LIB_PATH = Path(__file__).resolve().parents[1] / 'tools' / 'training' / 'training_lib.py'
+_TRAINING_LIB_PATH = Path(__file__).resolve().parents[1] / 'drop-ins' / 'training-kit-01' / 'tools' / 'training' / 'training_lib.py'
 _TRAINING_LIB_SPEC = importlib.util.spec_from_file_location('test_training_lib_module', _TRAINING_LIB_PATH)
 assert _TRAINING_LIB_SPEC is not None and _TRAINING_LIB_SPEC.loader is not None
 _TRAINING_LIB_MODULE = importlib.util.module_from_spec(_TRAINING_LIB_SPEC)

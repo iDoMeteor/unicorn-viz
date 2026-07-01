@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / 'tools' / 'package_training_set.py'
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / 'drop-ins' / 'training-kit-01' / 'tools' / 'package_training_set.py'
 _SPEC = importlib.util.spec_from_file_location('package_training_set', _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 _MOD = importlib.util.module_from_spec(_SPEC)

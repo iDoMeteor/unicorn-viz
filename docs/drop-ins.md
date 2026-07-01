@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-16
+Last updated: 2026-07-01
 
 This page tracks canonical documentation coverage for each drop-in.
 
@@ -23,29 +23,34 @@ Complex drop-ins should also include:
 
 | Drop-in | README | Structured docs | Notes |
 | --- | --- | --- | --- |
-| alien-invasion-01 | Yes | Not required | Simple effect drop-in |
 | audio-out-01 | Yes | Yes | Audio output / SFX-injection subsystem |
 | auto-vj-01 | Yes | Yes | Automation subsystem |
 | banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
 | beat-flash-01 | Yes | Yes | BPM-locked strobe (safety-governed) post subsystem |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
-| cyber-war-01 | Yes | Not required | Simple effect drop-in |
-| disco-ball-01 | Yes | Not required | Simple effect drop-in |
+| cosmic-01 | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion |
+| feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
+| games-01 | Yes | Not required | Effect pack: Breakout |
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
-| hacker-terminal-01 | Yes | Not required | Simple effect drop-in |
+| holiday-01 | Yes | Not required | Effect pack: America 250 (seasonal/event) |
 | images-01 | Yes | Not required | Media effect drop-in |
+| immersive-01 | Yes | Not required | Effect pack: Tunnel, Wormhole, Cathedral of Bass |
 | lyrics-01 | Yes | Yes | Synced lyrics overlay subsystem (LRCLIB) |
 | multi-head-01 | Yes | Yes | Display subsystem |
 | osc-bridge-01 | Yes | Yes | OSC control-surface subsystem |
+| particles-01 | Yes | Not required | Effect pack: Starfield, Fireworks, Particle Storm |
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
+| psychedelic-01 | Yes | Not required | Effect pack: Plasma, Kaleidoscope, Psychedelic |
+| retro-01 | Yes | Not required | Effect pack: Copper Bars, ANSI Viewer, Fractal Zoom, Escher, Dali, Van Gogh |
 | sims-01 | Yes | Not required | Media/effect drop-in |
 | spotify-01 | Yes | Yes | Spotify metadata subsystem |
 | streaming-01 | Yes | Yes | Streaming subsystem |
+| tech-01 | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0 |
 | textures-01 | Yes | Not required | Media effect drop-in |
-| tron-grid-01 | Yes | Not required | Simple effect drop-in |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
+| vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
 | videos-01 | Yes | Not required | Media effect drop-in |
 | webcam-01 | Yes | Not required | Focused subsystem with limited surface; planning doc added |
 

@@ -394,13 +394,13 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 
 | Effect | Hotkey | Description |
 |--------|--------|-------------||
-| Alien Invasion (`alien-invasion-01`) | — | UFO fleets descend with probing beams; audio-reactive formation density and radar sweep |
-| Cyber War (`cyber-war-01`) | — | Hex-grid digital battlefield with AI node attacks and pulsing defense networks |
-| Disco Ball (`disco-ball-01`) | — | Raymarched mirror-tile ball with 3 rotating coloured spot beams and reflective floor |
-| Hacker Terminal (`hacker-terminal-01`) | — | Animated shell/log streams with glitch transitions and text-scroll reactivity |
+| Alien Invasion (`cosmic-01`) | — | UFO fleets descend with probing beams; audio-reactive formation density and radar sweep |
+| Cyber War (`tech-01`) | — | Hex-grid digital battlefield with AI node attacks and pulsing defense networks |
+| Disco Ball (`vector-01`) | — | Raymarched mirror-tile ball with 3 rotating coloured spot beams and reflective floor |
+| Hacker Terminal (`tech-01`) | — | Animated shell/log streams with glitch transitions and text-scroll reactivity |
 | Texture Showcase (`textures-01`) | — | Ken Burns image pan/zoom with audio-reactive colour grade and beat-triggered fade |
-| Prism Storm (`textures-01`) | — | Spinning crystal core with refractive laser beams and electric haze (same drop-in as Texture Showcase) |
-| Tron Grid (`tron-grid-01`) | — | First-person laser-grid corridor; bass scales grid size, beats trigger shockwaves |
+| Wormhole (`immersive-01`) | — | Refractive prism-lattice flight down a shifting light corridor (formerly Prism Lattice) |
+| Tron Grid (`tech-01`) | — | First-person laser-grid corridor; bass scales grid size, beats trigger shockwaves |
 | Unicorn Tears (`unicorn-tears-01`) | `U` | Prismatic teardrops falling through a star-field with audio-reactive burst |
 | Image Showcase (`images-01`) | — | Configurable image directory with Ken Burns motion, 10 presentation styles, audio colour shift |
 | Video Showcase (`videos-01`) | — | Video clip sequencer with smooth crossfade, configurable clip directories |
