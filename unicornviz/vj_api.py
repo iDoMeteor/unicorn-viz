@@ -366,7 +366,10 @@ class VJApi:
         return cls.NAME
 
     def list_effects(self) -> list[tuple[str, list[str]]]:
-        return [(cls.NAME, list(getattr(cls, 'TAGS', []))) for cls in get_effects()]
+        # Sourced from the shared catalog helper so the control-room list and the
+        # effects browser modal stay in lockstep (same order, same tags).
+        from unicornviz.effects.registry import browser_entries
+        return [(e.name, list(e.tags)) for e in browser_entries()]
 
     def get_audio_sources(self) -> list[str]:
         """Return available audio capture source labels."""
@@ -592,6 +595,33 @@ class VJApi:
             if not bool(getattr(overlays, 'projectm_manager_visible', False)):
                 overlays.toggle_projectm_manager()
             return True
+        except Exception:
+            return False
+
+    def open_effects_browser(self) -> bool:
+        """Open the effects browser modal (keyboard + mouse, live preview)."""
+        try:
+            self._app.open_effects_browser()
+            return True
+        except Exception:
+            return False
+
+    def effects_browser_active(self) -> bool:
+        """Return whether the effects browser modal is open."""
+        return bool(getattr(self._app, 'effects_browser_active', False))
+
+    def open_presets(self) -> bool:
+        """Open the show-presets modal."""
+        try:
+            self._app.open_presets()
+            return True
+        except Exception:
+            return False
+
+    def presets_active(self) -> bool:
+        """Return whether the show-presets modal is open."""
+        try:
+            return bool(self._app.presets_modal_active)
         except Exception:
             return False
 
