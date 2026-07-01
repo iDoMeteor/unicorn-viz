@@ -165,6 +165,7 @@ def _bare_overlays() -> Overlays:
     ov._context_menu_x = 0.0
     ov._context_menu_y = 0.0
     ov._context_menu_hover = -1
+    ov._context_menu_expanded = set()
     # Minimal font/geometry state the layout math reads.
     ov._glyph_w = 13
     ov._glyph_h = 18
@@ -175,6 +176,7 @@ def _bare_overlays() -> Overlays:
 
 
 def _sample_entries() -> list[dict]:
+    # Index 0 is a collapsible section header; 1 and 2 are its items.
     return [
         {'label': 'Open', 'header': True, 'enabled': False, 'sym': 0, 'mod': 0},
         {'label': 'Open Effects Browser', 'header': False, 'enabled': True,
@@ -182,6 +184,16 @@ def _sample_entries() -> list[dict]:
         {'label': 'Enable Auto-Advance', 'header': False, 'enabled': True,
          'sym': sdl2.SDLK_t, 'mod': 0, 'hotkey': 'T'},
     ]
+
+
+def _row_for(layout: dict, entry_index: int) -> dict | None:
+    return next((r for r in layout['rows'] if r['index'] == entry_index), None)
+
+
+def _click_center(ov: Overlays, layout: dict, row: dict) -> int:
+    cx = layout['x'] + 20.0
+    cy = row['y'] + row['h'] / 2.0
+    return ov.handle_context_menu_click(cx, cy)
 
 
 def test_open_and_close() -> None:
@@ -194,26 +206,42 @@ def test_open_and_close() -> None:
     assert ov.context_menu_open is False
 
 
-def test_click_selects_selectable_row() -> None:
+def test_sections_collapsed_by_default() -> None:
     ov = _bare_overlays()
     ov.open_context_menu(_sample_entries(), 100.0, 200.0)
     layout = ov._context_menu_layout()
-    rows = layout['rows']
-    # Row index 1 is the first selectable entry (Effects Browser).
-    row = rows[1]
-    cx = layout['x'] + 20.0
-    cy = row['y'] + row['h'] / 2.0
-    assert ov.handle_context_menu_click(cx, cy) == 1
+    # Only the header row is visible; its items are hidden until expanded.
+    assert _row_for(layout, 0) is not None
+    assert _row_for(layout, 1) is None
+    assert _row_for(layout, 2) is None
 
 
-def test_click_on_header_is_noop() -> None:
+def test_clicking_header_expands_and_collapses() -> None:
     ov = _bare_overlays()
     ov.open_context_menu(_sample_entries(), 100.0, 200.0)
     layout = ov._context_menu_layout()
-    header_row = layout['rows'][0]
-    cx = layout['x'] + 20.0
-    cy = header_row['y'] + header_row['h'] / 2.0
-    assert ov.handle_context_menu_click(cx, cy) == -2
+    header_row = _row_for(layout, 0)
+    assert header_row is not None and header_row['collapsible']
+
+    # First click expands the section (no-op return, menu stays open).
+    assert _click_center(ov, layout, header_row) == -2
+    assert 0 in ov._context_menu_expanded
+    layout2 = ov._context_menu_layout()
+    assert _row_for(layout2, 1) is not None  # items now visible
+
+    # Clicking the header again collapses it.
+    assert _click_center(ov, layout2, _row_for(layout2, 0)) == -2
+    assert 0 not in ov._context_menu_expanded
+
+
+def test_click_selects_item_once_expanded() -> None:
+    ov = _bare_overlays()
+    ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    ov._context_menu_expanded.add(0)  # expand 'Open'
+    layout = ov._context_menu_layout()
+    row = _row_for(layout, 1)  # Effects Browser item
+    assert row is not None
+    assert _click_center(ov, layout, row) == 1
 
 
 def test_click_outside_panel_closes() -> None:
@@ -224,21 +252,36 @@ def test_click_outside_panel_closes() -> None:
     assert ov.handle_context_menu_click(far_x, layout['y']) == -1
 
 
-def test_motion_sets_hover() -> None:
+def test_motion_sets_hover_on_expanded_item() -> None:
     ov = _bare_overlays()
     ov.open_context_menu(_sample_entries(), 100.0, 200.0)
+    ov._context_menu_expanded.add(0)
     layout = ov._context_menu_layout()
-    row = layout['rows'][2]  # Auto-Advance
-    cx = layout['x'] + 20.0
-    cy = row['y'] + row['h'] / 2.0
-    ov.handle_context_menu_motion(cx, cy)
+    row = _row_for(layout, 2)  # Auto-Advance
+    assert row is not None
+    ov.handle_context_menu_motion(layout['x'] + 20.0, row['y'] + row['h'] / 2.0)
     assert ov._context_menu_hover == 2
 
 
-def test_layout_clamps_to_screen() -> None:
+def test_non_collapsible_footer_always_visible() -> None:
+    entries = _sample_entries() + [
+        {'label': '', 'header': True, 'enabled': False, 'sym': 0, 'mod': 0},
+        {'label': 'Quit', 'header': False, 'enabled': True,
+         'sym': sdl2.SDLK_ESCAPE, 'mod': 0, 'hotkey': 'Esc'},
+    ]
     ov = _bare_overlays()
-    # Open near the far corner; panel must stay on-screen.
+    ov.open_context_menu(entries, 100.0, 200.0)
+    layout = ov._context_menu_layout()
+    # Quit (index 4) is under an empty-title separator header → always shown.
+    quit_row = _row_for(layout, 4)
+    assert quit_row is not None and quit_row['selectable']
+    assert _click_center(ov, layout, quit_row) == 4
+
+
+def test_layout_clamps_to_screen_when_expanded() -> None:
+    ov = _bare_overlays()
     ov.open_context_menu(_sample_entries(), 1900.0, 1070.0)
+    ov._context_menu_expanded.add(0)
     layout = ov._context_menu_layout()
     assert layout['x'] + float(layout['w']) <= ov._width
     assert layout['y'] + float(layout['h']) <= ov._height

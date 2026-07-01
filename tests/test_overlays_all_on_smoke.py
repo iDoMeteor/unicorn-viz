@@ -63,6 +63,7 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._context_menu_open = True
     o._context_menu_entries = [{'label': 'Quit', 'header': False, 'enabled': True}]
     o._context_menu_hover = -1
+    o._context_menu_expanded = set()
     o._context_menu_x = 100.0
     o._context_menu_y = 100.0
 
