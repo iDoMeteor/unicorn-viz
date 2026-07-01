@@ -372,7 +372,7 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 | Audio Spectrum | audio, visualizer | FFT bars + oscilloscope (3 modes) |
 | Copper Bars | classic, audio | Amiga-style oscillating colour bars |
 | Cosmos | space, audio | Deep-space nebula and stellar drift |
-| Crystal Pyramids | futuristic, audio | Audio-reactive crystalline geometry |
+| Rainbow Trance | futuristic, audio | Audio-reactive crystalline geometry |
 | 3D Cube | classic, 3d | Rotating wireframe cube |
 | Curtains | classic, audio | Multi-colour sine-wave curtain effect |
 | Dali | art, surreal | Melting-clock surrealist scene |

@@ -253,7 +253,7 @@ sequence = []
 # ------------------------------------------------------------
 # Per-effect overrides (class-name keys)
 # ------------------------------------------------------------
-[effects.AlienBiome]
+[effects.WaveyGravy]
 speed = 1.0
 # Optional: constrain the global random-speed hotkey while this effect is active.
 # random_speed_min = 0.75
