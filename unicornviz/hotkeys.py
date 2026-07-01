@@ -21,6 +21,77 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+# Tokens that mark a help "key" string as NOT a single dispatchable chord
+# (ranges, multi-key lists, wheel/mouse, or placeholder words).  Entries whose
+# key contains any of these are skipped by parse_hotkey_chord().
+_NON_CHORD_TOKENS = ('/', ' - ', '..', 'Wheel', 'Click', 'Arrow', 'Number', 'Drag')
+
+_CHORD_MODIFIERS: dict[str, int] = {
+    'ctrl': sdl2.KMOD_CTRL,
+    'control': sdl2.KMOD_CTRL,
+    'alt': sdl2.KMOD_ALT,
+    'option': sdl2.KMOD_ALT,
+    'shift': sdl2.KMOD_SHIFT,
+}
+
+# Help-string spellings that differ from SDL_GetKeyFromName's canonical names.
+_CHORD_BASE_ALIASES: dict[str, str] = {
+    'esc': 'Escape',
+    'del': 'Delete',
+    'ins': 'Insert',
+    'ret': 'Return',
+    'enter': 'Return',
+    'pgup': 'PageUp',
+    'pgdn': 'PageDown',
+}
+
+
+def parse_hotkey_chord(text: str) -> tuple[int, int] | None:
+    """Parse a help-style hotkey label into an ``(sym, mod)`` pair, or ``None``.
+
+    Accepts single-chord forms such as ``'B'``, ``'Ctrl+Shift+P'``, ``'F9'``,
+    ``'Ctrl+Alt+['``, ``'Space'``.  Returns ``None`` for anything that is not a
+    single dispatchable chord (ranges like ``'0 - 9'``, multi-key lists like
+    ``'n / Right'``, or wheel/mouse gestures) so callers can skip it.
+
+    The returned pair matches what SDL delivers for the equivalent keypress
+    (base keycode + modifier bitmask), so it can be fed straight to
+    ``HotkeyHandler.handle(sym, mod)`` to replay the binding.
+    """
+    if not text or not isinstance(text, str):
+        return None
+    s = text.strip()
+    if not s or any(tok in s for tok in _NON_CHORD_TOKENS):
+        return None
+
+    parts = [p for p in s.replace(' ', '').split('+') if p]
+    if not parts:
+        return None
+
+    mod = 0
+    base: str | None = None
+    for part in parts:
+        found = _CHORD_MODIFIERS.get(part.lower())
+        if found is not None:
+            mod |= found
+        elif base is None:
+            base = part
+        else:
+            # Two non-modifier tokens — not a single chord.
+            return None
+
+    if not base:
+        return None
+
+    base = _CHORD_BASE_ALIASES.get(base.lower(), base)
+    sym = sdl2.SDL_GetKeyFromName(base.encode('utf-8'))
+    if sym == sdl2.SDLK_UNKNOWN:
+        sym = sdl2.SDL_GetKeyFromName(base.lower().encode('utf-8'))
+    if sym == sdl2.SDLK_UNKNOWN:
+        return None
+    return int(sym), int(mod)
+
+
 _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'next': (sdl2.SDLK_n, 0),
     'prev': (sdl2.SDLK_p, 0),

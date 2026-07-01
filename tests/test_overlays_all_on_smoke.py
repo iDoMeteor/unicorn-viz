@@ -59,6 +59,13 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._show_audio = True
     o._show_midi = True
 
+    # Context menu (floats above the modal stack).
+    o._context_menu_open = True
+    o._context_menu_entries = [{'label': 'Quit', 'header': False, 'enabled': True}]
+    o._context_menu_hover = -1
+    o._context_menu_x = 100.0
+    o._context_menu_y = 100.0
+
     # Drawing / render hooks replaced by call-capture no-ops.
     o._draw_text = lambda *_a, **_kw: calls.append('draw_text')
     o._draw_rect = lambda *_a, **_kw: calls.append('draw_rect')
@@ -74,6 +81,7 @@ def _build_overlays_all_on() -> tuple[Overlays, list[str]]:
     o._render_webcam_editor_modal = lambda: calls.append('webcam_editor')
     o._render_audio_selector = lambda: calls.append('audio_selector')
     o._render_midi_selector = lambda: calls.append('midi_selector')
+    o._render_context_menu = lambda: calls.append('context_menu')
 
     o._ctx = object()
     o._cta = _CtaStub(calls)
@@ -101,6 +109,7 @@ def test_render_all_overlays_enabled_smoke() -> None:
         'webcam_editor',
         'audio_selector',
         'midi_selector',
+        'context_menu',
     }
     missing = expected - set(calls)
     assert not missing, f'Missing render branches with all overlays enabled: {sorted(missing)}'

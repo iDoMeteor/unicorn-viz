@@ -29,7 +29,7 @@ from unicornviz.effects.registry import get_effects
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
-from unicornviz.hotkeys import HotkeyHandler
+from unicornviz.hotkeys import HotkeyHandler, parse_hotkey_chord
 from unicornviz.midi import MidiManager
 from unicornviz.recording import Recorder
 from unicornviz._null_controllers import (
@@ -88,6 +88,18 @@ def _smart_trim_label(text: str, limit: int = 56) -> str:
     head = max(20, int(limit * 0.58))
     tail = max(12, limit - head - 3)
     return f'{text[:head]}...{text[-tail:]}'
+
+
+def _context_menu_label_from_help(desc: str) -> str:
+    """Turn a drop-in help description into a concise context-menu label.
+
+    Drops any trailing parenthetical hint (e.g. "... (lasts 3 s idle)") so the
+    generated label stays short; the raw help text remains the source of truth.
+    """
+    text = str(desc).strip()
+    if '(' in text:
+        text = text.split('(', 1)[0].strip()
+    return text or 'Action'
 
 
 def _clamp_render_scale(value: float) -> float:
@@ -2091,6 +2103,7 @@ void main() {
             'webcam_editor_modal_visible',
             'effects_browser_visible',
             'presets_visible',
+            'context_menu_open',
         )
         for name in visibility_flags:
             if bool(getattr(overlays, name, False)):
@@ -2109,6 +2122,132 @@ void main() {
         if sym in (sdl2.SDLK_LCTRL, sdl2.SDLK_RCTRL):
             self._ctrl_held = is_keydown
             self._set_cursor_visible(self._cursor_should_be_visible())
+
+    # ------------------------------------------------------------------ #
+    # Right-click context menu                                             #
+    # ------------------------------------------------------------------ #
+
+    def _build_context_menu_model(self) -> list[dict[str, object]]:
+        """Build the right-click context-menu entries.
+
+        Core toggles/modals/actions are declared here with state-aware labels
+        (toggles read live state to show what a click will do). Drop-in features
+        are pulled dynamically from the registered help entries — never
+        hard-coded — so any drop-in that documents a single-chord hotkey appears
+        automatically. Every entry carries the (sym, mod) of its documented
+        binding; selecting it replays that binding via the hotkey handler.
+        """
+        K = sdl2
+
+        def item(label: str, sym: int, mod: int = 0, kind: str = 'action',
+                 hotkey: str = '') -> dict[str, object]:
+            return {
+                'label': label, 'sym': int(sym), 'mod': int(mod),
+                'kind': kind, 'hotkey': hotkey, 'header': False, 'enabled': True,
+            }
+
+        def header(title: str) -> dict[str, object]:
+            return {
+                'label': title, 'sym': 0, 'mod': 0, 'kind': 'header',
+                'hotkey': '', 'header': True, 'enabled': False,
+            }
+
+        ov = self._overlays
+        entries: list[dict[str, object]] = []
+
+        # Modals — "Open <context>".
+        entries.append(header('Open'))
+        entries.append(item('Open Effects Browser', K.SDLK_b, 0, 'modal', 'B'))
+        entries.append(item('Open Show Presets', K.SDLK_p, K.KMOD_CTRL | K.KMOD_SHIFT, 'modal', 'Ctrl+Shift+P'))
+        entries.append(item('Open System Monitor', K.SDLK_m, 0, 'modal', 'M'))
+        entries.append(item('Open Control Room', K.SDLK_m, K.KMOD_SHIFT, 'modal', 'Shift+M'))
+        entries.append(item('Open Audio Sources', K.SDLK_a, K.KMOD_SHIFT, 'modal', 'Shift+A'))
+        entries.append(item('Open MIDI Devices', K.SDLK_m, K.KMOD_ALT, 'modal', 'Alt+M'))
+        entries.append(item('Open Help', K.SDLK_h, 0, 'modal', 'H'))
+
+        # Toggles — state-aware "<action> <context>".
+        entries.append(header('Toggle'))
+        aa = bool(self._auto_advance)
+        entries.append(item(f'{"Disable" if aa else "Enable"} Auto-Advance', K.SDLK_t, 0, 'toggle', 'T'))
+        paused = bool(self.paused)
+        entries.append(item(f'{"Resume" if paused else "Pause"} Playback', K.SDLK_SPACE, 0, 'toggle', 'Space'))
+        inv = bool(self._invert_colors)
+        entries.append(item(f'{"Disable" if inv else "Enable"} Invert Colors', K.SDLK_i, 0, 'toggle', 'I'))
+        fs = bool(self._fullscreen)
+        entries.append(item(f'{"Exit" if fs else "Enter"} Fullscreen', K.SDLK_f, 0, 'toggle', 'F'))
+        rec = bool(getattr(ov, '_recording_active', False))
+        entries.append(item(f'{"Stop" if rec else "Start"} Recording', K.SDLK_v, 0, 'toggle', 'V'))
+        nm = bool(getattr(ov, 'name_overlay_visible', False))
+        entries.append(item(f'{"Hide" if nm else "Show"} Effect Name', K.SDLK_TAB, 0, 'toggle', 'Tab'))
+
+        # One-shot actions.
+        entries.append(header('Actions'))
+        entries.append(item('Next Effect', K.SDLK_n, 0, 'action', 'N'))
+        entries.append(item('Previous Effect', K.SDLK_p, 0, 'action', 'P'))
+        entries.append(item('Random Effects Mode', K.SDLK_r, 0, 'action', 'R'))
+        entries.append(item('Take Screenshot', K.SDLK_s, 0, 'action', 'S'))
+        entries.append(item('Replay Splash', K.SDLK_u, 0, 'action', 'U'))
+
+        # Drop-in features — generated from the help registry (not hard-coded).
+        for section, dropin_items in self._context_menu_dropin_sections():
+            entries.append(header(section))
+            entries.extend(dropin_items)
+
+        # Footer.
+        entries.append(header(''))
+        entries.append(item('Quit', K.SDLK_ESCAPE, 0, 'action', 'Esc'))
+
+        return entries
+
+    def _context_menu_dropin_sections(
+        self,
+    ) -> list[tuple[str, list[dict[str, object]]]]:
+        """Return drop-in menu entries grouped by section, from the help registry.
+
+        Only single-chord bindings are included; ranges / multi-key / wheel help
+        lines are skipped. Duplicate bindings are de-duplicated.
+        """
+        getter = getattr(self._overlays, 'dropin_help_entries', None)
+        if not callable(getter):
+            return []
+        grouped: dict[str, list[dict[str, object]]] = {}
+        order: list[str] = []
+        seen: set[tuple[int, int]] = set()
+        for section, key, desc in getter():
+            chord = parse_hotkey_chord(key)
+            if chord is None:
+                continue
+            sym, mod = chord
+            if (sym, mod) in seen:
+                continue
+            seen.add((sym, mod))
+            entry = {
+                'label': _context_menu_label_from_help(desc),
+                'sym': int(sym), 'mod': int(mod), 'kind': 'dropin',
+                'hotkey': str(key), 'header': False, 'enabled': True,
+            }
+            if section not in grouped:
+                grouped[section] = []
+                order.append(section)
+            grouped[section].append(entry)
+        return [(section, grouped[section]) for section in order]
+
+    def _open_context_menu_at(self, x: float, y: float) -> None:
+        """Build the menu model and open it at overlay coords (x, y)."""
+        entries = self._build_context_menu_model()
+        self._overlays.open_context_menu(entries, x, y)
+        self._set_cursor_visible(True)
+
+    def _activate_context_menu_entry(self, index: int) -> None:
+        """Replay the hotkey binding of the selected context-menu entry."""
+        entries = self._overlays.context_menu_entries
+        if not (0 <= index < len(entries)):
+            return
+        entry = entries[index]
+        sym = int(entry.get('sym', 0) or 0)
+        mod = int(entry.get('mod', 0) or 0)
+        if sym and self._hotkeys is not None:
+            self._hotkeys.handle(sym, mod)
 
     # ------------------------------------------------------------------ #
     # Effect management                                                    #
@@ -2778,6 +2917,11 @@ void main() {
                 if event.type == sdl2.SDL_QUIT:
                     self.request_exit()
                 elif event.type == sdl2.SDL_KEYDOWN:
+                    if self._overlays.context_menu_open:
+                        # Any key dismisses the context menu (swallowed).
+                        self._update_ctrl_state(event.key.keysym.sym, True)
+                        self._overlays.close_context_menu()
+                        continue
                     self._update_ctrl_state(event.key.keysym.sym, True)
                     if not event.key.repeat:
                         hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
@@ -2819,6 +2963,17 @@ void main() {
                         else:
                             self._postfx_controller.on_scroll(dy)
                 elif event.type == sdl2.SDL_MOUSEMOTION:
+                    if self._overlays.context_menu_open:
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x), float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                self._overlays.handle_context_menu_motion(hit[0], hit[1])
+                        except Exception as exc:
+                            log.warning('Context menu hover handling failed: %s', exc)
+                        continue
                     if presets_active:
                         try:
                             hit = self._overlay_mouse_coords(
@@ -2859,6 +3014,40 @@ void main() {
                         except Exception as exc:
                             log.warning('Help overlay hover handling failed: %s', exc)
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
+                    if self._overlays.context_menu_open:
+                        # Menu takes priority: dispatch selection or dismiss.
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.button.x), float(event.button.y),
+                                self._primary_display_viewport(),
+                            )
+                        except Exception:
+                            hit = None
+                        if event.button.button == sdl2.SDL_BUTTON_LEFT and hit is not None:
+                            idx = self._overlays.handle_context_menu_click(hit[0], hit[1])
+                            if idx >= 0:
+                                self._overlays.close_context_menu()
+                                self._activate_context_menu_entry(idx)
+                            elif idx == -1:
+                                self._overlays.close_context_menu()
+                            # idx == -2: click landed on a header/gap; keep open.
+                        else:
+                            # Right/middle click, or a click outside the canvas.
+                            self._overlays.close_context_menu()
+                        continue
+                    if (event.button.button == sdl2.SDL_BUTTON_RIGHT
+                            and not (presets_active or eb_active or manager_modal_active)
+                            and not self._overlays.blocking_modal_open):
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.button.x), float(event.button.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                self._open_context_menu_at(hit[0], hit[1])
+                        except Exception as exc:
+                            log.warning('Context menu open failed: %s', exc)
+                        continue
                     if presets_active:
                         if event.button.button == sdl2.SDL_BUTTON_LEFT:
                             try:

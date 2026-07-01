@@ -357,6 +357,7 @@ class Overlays:
                 ('Alt+Number', 'Jump #31-40'),
                 ('n / Right', 'Next effect'),
                 ('p / Left', 'Prev effect'),
+                ('Right Click', 'Open context menu'),
                 ('ESC', 'Quit'),
                 ('u', 'Replay splash'),
                 ('s', 'Screenshot'),
@@ -584,6 +585,14 @@ class Overlays:
         self._effects_browser_current: str = ''
         self._effects_browser_pinned: str = ''
         self._eb_thumb_tex: 'moderngl.Texture | None' = None
+        # Right-click context menu (entries are built by App from the help
+        # registry; Overlays only renders + hit-tests them).
+        self._context_menu_open = False
+        self._context_menu_entries: list[dict[str, object]] = []
+        self._context_menu_x = 0.0
+        self._context_menu_y = 0.0
+        self._context_menu_hover = -1
+        self._context_menu_row_rects: list[tuple[float, float, float, float, int]] = []
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -1854,6 +1863,194 @@ void main() {
         # Solid thin line above segments
         self._draw_rect(x, y + panel_h - 10.0, panel_w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
 
+    # ------------------------------------------------------------------
+    # Right-click context menu
+    # ------------------------------------------------------------------
+
+    @property
+    def context_menu_open(self) -> bool:
+        """Return True while the right-click context menu is showing."""
+        return self._context_menu_open
+
+    @property
+    def context_menu_entries(self) -> list[dict[str, object]]:
+        """Return the current context-menu entry dicts (as built by App)."""
+        return self._context_menu_entries
+
+    @property
+    def blocking_modal_open(self) -> bool:
+        """Return True if a full-screen selector/browser/manager modal is open.
+
+        Used to suppress opening the context menu on top of another modal.
+        """
+        return bool(
+            self._show_presets
+            or self._show_effects_browser
+            or self._show_projectm_manager
+            or self._show_system_monitor_modal
+            or self._show_controller_help_modal
+            or self._show_webcam_editor_modal
+            or self._show_audio
+            or self._show_midi
+        )
+
+    def dropin_help_entries(self) -> list[tuple[str, str, str]]:
+        """Return registered drop-in help entries as ``(section, key, desc)``.
+
+        Sourced from the dynamically-registered drop-in HELP_ENTRIES so callers
+        (e.g. the context menu) never hard-code drop-in features.
+        """
+        out: list[tuple[str, str, str]] = []
+        sections = getattr(self, '_dynamic_help_sections', {}) or {}
+        order = getattr(self, '_dynamic_help_order', None) or list(sections.keys())
+        for section in order:
+            for key, desc in sections.get(section, []):
+                out.append((str(section), str(key), str(desc)))
+        return out
+
+    def open_context_menu(
+        self, entries: list[dict[str, object]], x: float, y: float
+    ) -> None:
+        """Open the context menu at ``(x, y)`` with App-built entry dicts."""
+        self._context_menu_entries = list(entries)
+        self._context_menu_x = float(x)
+        self._context_menu_y = float(y)
+        self._context_menu_hover = -1
+        self._context_menu_open = bool(self._context_menu_entries)
+
+    def close_context_menu(self) -> None:
+        """Dismiss the context menu."""
+        self._context_menu_open = False
+        self._context_menu_hover = -1
+
+    _CONTEXT_MENU_ROW_SCALE = 2.1
+    _CONTEXT_MENU_HINT_SCALE = 1.7
+
+    def _context_menu_layout(self) -> dict[str, object]:
+        """Compute panel + per-row geometry (shared by render and hit-testing)."""
+        entries = self._context_menu_entries
+        scale = self._CONTEXT_MENU_ROW_SCALE
+        char_w = float(self._glyph_w) * self._font_scale_norm * scale
+        row_h = 8.0 * scale + 14.0
+        header_h = 8.0 * scale + 8.0
+        pad_x = 16.0
+        gap = 34.0
+
+        label_w = max(
+            (len(str(e.get('label', ''))) * char_w for e in entries), default=80.0
+        )
+        hint_w = max(
+            (len(str(e.get('hotkey', '') or '')) * char_w for e in entries), default=0.0
+        )
+        panel_w = pad_x * 2 + label_w + (gap + hint_w if hint_w > 0.0 else 0.0)
+        panel_w = max(200.0, min(panel_w, self._width * 0.6))
+
+        total_h = 12.0
+        for e in entries:
+            total_h += header_h if e.get('header') else row_h
+
+        x0 = max(4.0, min(self._context_menu_x, max(4.0, self._width - panel_w - 4.0)))
+        y0 = max(4.0, min(self._context_menu_y, max(4.0, self._height - total_h - 4.0)))
+
+        rows: list[dict[str, object]] = []
+        ry = y0 + 6.0
+        for i, e in enumerate(entries):
+            is_header = bool(e.get('header'))
+            rh = header_h if is_header else row_h
+            selectable = (not is_header) and bool(e.get('enabled', True))
+            rows.append(
+                {'index': i, 'y': ry, 'h': rh, 'header': is_header, 'selectable': selectable}
+            )
+            ry += rh
+
+        return {'x': x0, 'y': y0, 'w': panel_w, 'h': total_h, 'rows': rows}
+
+    def handle_context_menu_motion(self, x: float, y: float) -> None:
+        """Update the hovered row from cursor position."""
+        if not self._context_menu_open:
+            return
+        layout = self._context_menu_layout()
+        x0 = float(layout['x'])
+        w = float(layout['w'])
+        self._context_menu_hover = -1
+        if not (x0 <= x <= x0 + w):
+            return
+        for row in layout['rows']:  # type: ignore[union-attr]
+            if row['selectable'] and row['y'] <= y < row['y'] + row['h']:
+                self._context_menu_hover = int(row['index'])
+                return
+
+    def handle_context_menu_click(self, x: float, y: float) -> int:
+        """Resolve a click.
+
+        Returns the selected entry index, ``-1`` to close (click outside), or
+        ``-2`` for a no-op click inside the panel (header/disabled row).
+        """
+        if not self._context_menu_open:
+            return -1
+        layout = self._context_menu_layout()
+        x0, y0 = float(layout['x']), float(layout['y'])
+        w, h = float(layout['w']), float(layout['h'])
+        if not (x0 <= x <= x0 + w and y0 <= y <= y0 + h):
+            return -1
+        for row in layout['rows']:  # type: ignore[union-attr]
+            if row['selectable'] and row['y'] <= y < row['y'] + row['h']:
+                return int(row['index'])
+        return -2
+
+    def _render_context_menu(self) -> None:
+        """Draw the right-click context menu panel and rows."""
+        if not self._context_menu_open or not self._context_menu_entries:
+            return
+        layout = self._context_menu_layout()
+        x0, y0 = float(layout['x']), float(layout['y'])
+        w, h = float(layout['w']), float(layout['h'])
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.6)
+
+        self._draw_rect(x0, y0, w, h, (0.04, 0.05, 0.12, 0.97))
+        bw = 2.0
+        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(x0, y0, w, bw, c_border)
+        self._draw_rect(x0, y0 + h - bw, w, bw, c_border)
+        self._draw_rect(x0, y0, bw, h, c_border)
+        self._draw_rect(x0 + w - bw, y0, bw, h, c_border)
+
+        scale = self._CONTEXT_MENU_ROW_SCALE
+        hint_scale = self._CONTEXT_MENU_HINT_SCALE
+        hint_char_w = float(self._glyph_w) * self._font_scale_norm * hint_scale
+        rows = layout['rows']
+
+        for row, entry in zip(rows, self._context_menu_entries):  # type: ignore[arg-type]
+            ry = float(row['y'])
+            rh = float(row['h'])
+            label = str(entry.get('label', ''))
+            if row['header']:
+                if label:
+                    self._draw_text(
+                        label.upper(), x0 + 12, ry + 4, scale=hint_scale,
+                        color=(0.55, 0.75, 1.0, 0.9),
+                    )
+                continue
+            selectable = bool(row['selectable'])
+            hovered = selectable and self._context_menu_hover == int(row['index'])
+            if hovered:
+                self._draw_rect(x0 + 4, ry, w - 8, rh, (0.10, 0.25, 0.55, 0.85))
+            if hovered:
+                tcol = (1.0, 0.92, 0.2, 1.0)
+            elif selectable:
+                tcol = (0.78, 0.86, 1.0, 0.92)
+            else:
+                tcol = (0.5, 0.5, 0.6, 0.55)
+            self._draw_text(label, x0 + 14, ry + 6, scale=scale, color=tcol)
+            hint = str(entry.get('hotkey', '') or '')
+            if hint:
+                hint_w = len(hint) * hint_char_w
+                self._draw_text(
+                    hint, x0 + w - 14 - hint_w, ry + 8, scale=hint_scale,
+                    color=(0.5, 0.6, 0.8, 0.7),
+                )
+
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         self._hud_t += dt
@@ -1961,6 +2158,10 @@ void main() {
 
         if self._show_midi and not route_modals_elsewhere:
             self._render_midi_selector()
+
+        # Context menu floats above everything else.
+        if self._context_menu_open and not route_modals_elsewhere:
+            self._render_context_menu()
 
     # ------------------------------------------------------------------
     # Audio source selector
