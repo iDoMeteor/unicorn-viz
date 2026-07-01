@@ -605,6 +605,14 @@ class Overlays:
         self._config_editor_anim = 0.0
         self._config_editor_fading = False
         self._config_editor_panel_rect: tuple[float, float, float, float] | None = None
+        # Effects tab: pushed by App each frame; Overlays owns selection/focus.
+        self._ce_effects: list[dict[str, str]] = []
+        self._ce_effect_idx = 0
+        self._ce_params: list[dict[str, float | str]] = []
+        self._ce_param_idx = 0
+        self._ce_focus = 0  # 0 = effect list, 1 = parameters
+        self._ce_effect_row_rects: list[tuple[float, float, float, float, int]] = []
+        self._ce_param_row_rects: list[tuple[float, float, float, float, int]] = []
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -2265,14 +2273,87 @@ void main() {
                 return
 
     def handle_config_editor_click(self, x: float, y: float) -> bool:
-        """Handle a click; switch tab if one was hit. Returns True if consumed."""
+        """Handle a click; switch tab or select an effect/parameter row.
+
+        Returns True if the click was consumed.
+        """
         if not self._show_config_editor or self._config_editor_panel_rect is None:
             return False
         for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.set_config_editor_tab(i)
                 return True
+        # Effect / parameter rows (Effects tab).
+        for rx, ry, rw, rh, idx in self._ce_effect_row_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_effect_idx = idx
+                self._ce_focus = 0
+                return True
+        for rx, ry, rw, rh, idx in self._ce_param_row_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_param_idx = idx
+                self._ce_focus = 1
+                return True
         return False
+
+    # -- Effects tab data + selection (App pushes data; Overlays owns cursor) --
+
+    def set_config_editor_effects(self, effects: list[dict[str, str]]) -> None:
+        """Set the effect list ``[{'class_name', 'display_name'}, ...]``."""
+        self._ce_effects = list(effects)
+        if self._ce_effects:
+            self._ce_effect_idx = max(0, min(self._ce_effect_idx, len(self._ce_effects) - 1))
+        else:
+            self._ce_effect_idx = 0
+
+    def set_config_editor_effect_index(self, index: int) -> None:
+        """Select an effect by index (clamped)."""
+        if self._ce_effects:
+            self._ce_effect_idx = max(0, min(int(index), len(self._ce_effects) - 1))
+
+    def set_config_editor_params(self, params: list[dict[str, float | str]]) -> None:
+        """Set the selected effect's parameter rows ``[{'name','value','min','max'}]``."""
+        self._ce_params = list(params)
+        if self._ce_params:
+            self._ce_param_idx = max(0, min(self._ce_param_idx, len(self._ce_params) - 1))
+        else:
+            self._ce_param_idx = 0
+
+    def config_editor_selected_class(self) -> str:
+        """Return the class name of the selected effect, or ''."""
+        if 0 <= self._ce_effect_idx < len(self._ce_effects):
+            return str(self._ce_effects[self._ce_effect_idx].get('class_name', ''))
+        return ''
+
+    def config_editor_param_index(self) -> int:
+        """Return the selected parameter row index."""
+        return self._ce_param_idx
+
+    def config_editor_selected_param(self) -> str | None:
+        """Return the selected parameter name, or None."""
+        if 0 <= self._ce_param_idx < len(self._ce_params):
+            return str(self._ce_params[self._ce_param_idx].get('name', '')) or None
+        return None
+
+    @property
+    def config_editor_focus(self) -> int:
+        """0 = effect list focused, 1 = parameters focused."""
+        return self._ce_focus
+
+    def toggle_config_editor_focus(self) -> None:
+        """Switch focus between the effect list and the parameter list."""
+        self._ce_focus ^= 1
+
+    def move_config_editor_row(self, delta: int) -> None:
+        """Move the cursor within the focused pane (wraps)."""
+        if self._ce_focus == 0:
+            n = len(self._ce_effects)
+            if n:
+                self._ce_effect_idx = (self._ce_effect_idx + int(delta)) % n
+        else:
+            n = len(self._ce_params)
+            if n:
+                self._ce_param_idx = (self._ce_param_idx + int(delta)) % n
 
     def _render_config_editor(self) -> None:
         """Draw the tabbed configuration editor (shell + tab bar + placeholder body)."""
@@ -2334,25 +2415,102 @@ void main() {
             tcol = (1.0, 0.97, 0.6, 1.0) if active else (0.75, 0.85, 1.0, 0.9)
             self._draw_text(name, bx + 17, by + 11, scale=2.4, color=tcol)
 
-        # Two-pane body (list | detail) — placeholder content this increment.
+        # Two-pane body (list | detail).
         body_y = py + 120.0
         body_h = ph - (body_y - py) - 46.0
         left_w = pw * 0.32
-        self._draw_rect(px + 22, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
-        self._draw_rect(px + 22 + left_w, body_y, pw - left_w - 44, body_h, (0.05, 0.08, 0.16, 0.85))
+        left_x = px + 22.0
+        right_x = px + 22.0 + left_w
+        right_w = pw - left_w - 44.0
+        self._draw_rect(left_x, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
+        self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
 
-        tab_name = self.config_editor_tab_name
-        self._draw_text(f'{tab_name.upper()} LIST', px + 36, body_y + 16, scale=2.0,
-                        color=(0.55, 0.75, 1.0, 0.85))
-        self._draw_text(f'{tab_name} settings', px + 40 + left_w, body_y + 16, scale=2.4,
-                        color=(0.8, 0.9, 1.0, 0.95))
-        self._draw_text('Live editing lands in the next increment.',
-                        px + 40 + left_w, body_y + 54, scale=2.0,
-                        color=(0.6, 0.7, 0.85, 0.8))
+        if self.config_editor_tab_name == 'Effects':
+            self._render_config_editor_effects(
+                left_x, right_x, body_y, left_w, right_w, body_h
+            )
+        else:
+            self._ce_effect_row_rects = []
+            self._ce_param_row_rects = []
+            tab_name = self.config_editor_tab_name
+            self._draw_text(f'{tab_name} settings', right_x + 18, body_y + 16, scale=2.4,
+                            color=(0.8, 0.9, 1.0, 0.95))
+            self._draw_text('Coming in a later increment.',
+                            right_x + 18, body_y + 54, scale=2.0,
+                            color=(0.6, 0.7, 0.85, 0.8))
 
         self._draw_text('Left / Right: switch tabs      Esc: close',
                         px + 22, py + ph - 34.0, scale=2.0,
                         color=(0.55, 0.65, 0.75, 0.8))
+
+    def _render_config_editor_effects(
+        self, left_x: float, right_x: float, body_y: float,
+        left_w: float, right_w: float, body_h: float,
+    ) -> None:
+        """Render the Effects tab: effect list (left) + parameter rows (right)."""
+        self._ce_effect_row_rects = []
+        self._ce_param_row_rects = []
+
+        # Left pane — effect list.
+        self._draw_text('EFFECTS', left_x + 14, body_y + 12, scale=1.8,
+                        color=(0.55, 0.75, 1.0, 0.85))
+        list_top = body_y + 42.0
+        row_h = 30.0
+        max_rows = max(1, int((body_h - 52.0) / row_h))
+        n_eff = len(self._ce_effects)
+        start = max(0, min(self._ce_effect_idx - max_rows // 2, max(0, n_eff - max_rows)))
+        for vis, i in enumerate(range(start, min(n_eff, start + max_rows))):
+            ry = list_top + vis * row_h
+            eff = self._ce_effects[i]
+            name = str(eff.get('display_name') or eff.get('class_name') or '')
+            selected = i == self._ce_effect_idx
+            if selected:
+                col = (0.10, 0.25, 0.55, 0.9) if self._ce_focus == 0 else (0.08, 0.16, 0.34, 0.8)
+                self._draw_rect(left_x + 6, ry - 2, left_w - 24, row_h - 2, col)
+            tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.75, 0.83, 0.98, 0.9)
+            self._draw_text(name[:24], left_x + 16, ry + 4, scale=1.9, color=tcol)
+            self._ce_effect_row_rects.append((left_x + 6, ry - 2, left_w - 24, row_h - 2, i))
+
+        # Right pane — parameters of the selected effect.
+        cls = self.config_editor_selected_class()
+        self._draw_text(f'{cls} PARAMETERS'[:40], right_x + 16, body_y + 12, scale=1.9,
+                        color=(0.6, 0.8, 1.0, 0.9))
+        if not self._ce_params:
+            self._draw_text('No tunable parameters.', right_x + 18, body_y + 52, scale=2.0,
+                            color=(0.6, 0.65, 0.75, 0.8))
+            return
+        p_top = body_y + 48.0
+        prow_h = 40.0
+        max_prows = max(1, int((body_h - 64.0) / prow_h))
+        n_p = len(self._ce_params)
+        pstart = max(0, min(self._ce_param_idx - max_prows // 2, max(0, n_p - max_prows)))
+        for vis, i in enumerate(range(pstart, min(n_p, pstart + max_prows))):
+            ry = p_top + vis * prow_h
+            p = self._ce_params[i]
+            name = str(p.get('name', ''))
+            val = float(p.get('value', 0.0))
+            pmin = float(p.get('min', 0.0))
+            pmax = float(p.get('max', 1.0))
+            selected = i == self._ce_param_idx
+            if selected:
+                col = (0.10, 0.25, 0.55, 0.9) if self._ce_focus == 1 else (0.08, 0.16, 0.34, 0.8)
+                self._draw_rect(right_x + 6, ry - 2, right_w - 12, prow_h - 4, col)
+            tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
+            self._draw_text(name[:22], right_x + 16, ry + 2, scale=1.9, color=tcol)
+            # Value bar.
+            bar_x = right_x + 16.0
+            bar_w = right_w - 150.0
+            bar_y = ry + 24.0
+            self._draw_rect(bar_x, bar_y, bar_w, 8.0, (0.15, 0.2, 0.3, 0.8))
+            frac = 0.0 if pmax <= pmin else max(0.0, min(1.0, (val - pmin) / (pmax - pmin)))
+            self._draw_rect(bar_x, bar_y, bar_w * frac, 8.0, (0.3, 0.85, 1.0, 0.9))
+            self._draw_text(f'{val:.3f}', right_x + right_w - 118, ry + 2, scale=1.9,
+                            color=(0.85, 0.95, 0.7, 0.95))
+            self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
+
+        self._draw_text('Tab: pane   Up/Down: select   [ / ]: adjust',
+                        right_x + 16, body_y + body_h - 22.0, scale=1.7,
+                        color=(0.5, 0.6, 0.72, 0.75))
 
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""

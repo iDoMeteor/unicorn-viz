@@ -103,6 +103,19 @@ def _context_menu_label_from_help(desc: str) -> str:
     return text or 'Action'
 
 
+def _infer_param_range(value: float) -> tuple[float, float]:
+    """Infer a sensible (min, max) slider range for a bare float parameter.
+
+    Uses ~0.25x–4x the reference value; falls back to [0, 1] for zero.  Richer
+    per-effect metadata (explicit ranges) is a planned additive follow-up.
+    """
+    v = float(value)
+    if v == 0.0:
+        return 0.0, 1.0
+    lo, hi = sorted((v * 0.25, v * 4.0))
+    return lo, hi
+
+
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
@@ -455,6 +468,7 @@ class App:
         # Live per-effect parameter overrides merged over config.toml at
         # instantiation: {ClassName: {param: value}}.
         self._effect_config_overrides: dict[str, dict[str, float]] = {}
+        self._config_editor_was_open = False
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -2342,6 +2356,60 @@ void main() {
         """Delete a named configuration profile."""
         return self._config_profile_store.delete(name)
 
+    def config_editor_param_rows(self, class_name: str) -> list[dict[str, float | str]]:
+        """Return ``[{'name','value','min','max'}]`` for an effect's parameters.
+
+        Ranges are inferred from the effect's *initial* value where available
+        (the active effect) so they stay stable while editing.
+        """
+        values = self.effect_parameters(class_name)
+        base = dict(values)
+        eff = self._current_effect
+        if eff is not None and type(eff).__name__ == class_name:
+            initial = getattr(eff, '_initial_parameters', None)
+            if isinstance(initial, dict):
+                base = {k: float(initial.get(k, v)) for k, v in values.items()}
+        rows: list[dict[str, float | str]] = []
+        for name in sorted(values):
+            lo, hi = _infer_param_range(base.get(name, values[name]))
+            rows.append({'name': name, 'value': float(values[name]), 'min': lo, 'max': hi})
+        return rows
+
+    def _push_config_editor_model(self) -> None:
+        """Feed the config editor its Effects-tab data each frame while open."""
+        overlays = self._overlays
+        effects = [
+            {'class_name': cls.__name__, 'display_name': str(getattr(cls, 'NAME', cls.__name__))}
+            for cls in get_effects()
+        ]
+        overlays.set_config_editor_effects(effects)
+        if not self._config_editor_was_open:
+            # Rising edge: default-select the current effect.
+            current = self.current_effect_class_name()
+            idx = next(
+                (i for i, e in enumerate(effects) if e['class_name'] == current), 0
+            )
+            overlays.set_config_editor_effect_index(idx)
+            self._config_editor_was_open = True
+        cls = overlays.config_editor_selected_class()
+        overlays.set_config_editor_params(self.config_editor_param_rows(cls) if cls else [])
+
+    def _config_editor_adjust(self, notches: float) -> None:
+        """Adjust the selected parameter by ``notches`` steps, live-applying it."""
+        overlays = self._overlays
+        cls = overlays.config_editor_selected_class()
+        if not cls:
+            return
+        rows = self.config_editor_param_rows(cls)
+        i = overlays.config_editor_param_index()
+        if not (0 <= i < len(rows)):
+            return
+        row = rows[i]
+        lo, hi = float(row['min']), float(row['max'])
+        step = (hi - lo) / 40.0 if hi > lo else 0.01
+        new_value = min(hi, max(lo, float(row['value']) + notches * step))
+        self.set_effect_parameter(cls, str(row['name']), new_value)
+
     # ------------------------------------------------------------------ #
     # Effect management                                                    #
     # ------------------------------------------------------------------ #
@@ -3023,14 +3091,27 @@ void main() {
                     if self._overlays.config_editor_open:
                         # Editor captures navigation/close; other keys swallowed.
                         self._update_ctrl_state(event.key.keysym.sym, True)
-                        if not event.key.repeat:
-                            _sym = event.key.keysym.sym
-                            if _sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_c):
+                        _sym = event.key.keysym.sym
+                        if _sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_c):
+                            if not event.key.repeat:
                                 self._overlays.close_config_editor()
-                            elif _sym == sdl2.SDLK_LEFT:
+                        elif _sym == sdl2.SDLK_LEFT:
+                            if not event.key.repeat:
                                 self._overlays.move_config_editor_tab(-1)
-                            elif _sym == sdl2.SDLK_RIGHT:
+                        elif _sym == sdl2.SDLK_RIGHT:
+                            if not event.key.repeat:
                                 self._overlays.move_config_editor_tab(1)
+                        elif _sym == sdl2.SDLK_TAB:
+                            if not event.key.repeat:
+                                self._overlays.toggle_config_editor_focus()
+                        elif _sym == sdl2.SDLK_UP:
+                            self._overlays.move_config_editor_row(-1)
+                        elif _sym == sdl2.SDLK_DOWN:
+                            self._overlays.move_config_editor_row(1)
+                        elif _sym == sdl2.SDLK_LEFTBRACKET:
+                            self._config_editor_adjust(-1.0)
+                        elif _sym == sdl2.SDLK_RIGHTBRACKET:
+                            self._config_editor_adjust(1.0)
                         continue
                     self._update_ctrl_state(event.key.keysym.sym, True)
                     if not event.key.repeat:
@@ -3056,6 +3137,10 @@ void main() {
                         self._set_cursor_visible(self._cursor_should_be_visible())
                 elif event.type == sdl2.SDL_MOUSEWHEEL:
                     dy = int(event.wheel.y)
+                    if self._overlays.config_editor_open:
+                        if dy != 0:
+                            self._config_editor_adjust(float(dy))
+                        continue
                     if presets_active:
                         if dy != 0:
                             self._overlays.presets_browser.move_selection(-dy)
@@ -3739,6 +3824,12 @@ void main() {
             overlays.set_audio_waveform(
                 _wf_audio.waveform if _wf_audio is not None else None
             )
+
+            # Feed the configuration editor its live data while open.
+            if overlays.config_editor_open:
+                self._push_config_editor_model()
+            else:
+                self._config_editor_was_open = False
 
             # Render
             self._render(dt)
