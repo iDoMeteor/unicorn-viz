@@ -2090,6 +2090,7 @@ void main() {
             'projectm_manager_visible',
             'webcam_editor_modal_visible',
             'effects_browser_visible',
+            'presets_visible',
         )
         for name in visibility_flags:
             if bool(getattr(overlays, name, False)):
@@ -2767,6 +2768,7 @@ void main() {
             self._last_frame_ms = dt * 1000.0
             manager_modal_active = self._projectm_manager_modal_active
             eb_active = self._effects_browser_active
+            presets_active = bool(getattr(self._overlays, 'presets_visible', False))
 
             # Poll events
             event = sdl2.SDL_Event()
@@ -2800,6 +2802,10 @@ void main() {
                         self._set_cursor_visible(self._cursor_should_be_visible())
                 elif event.type == sdl2.SDL_MOUSEWHEEL:
                     dy = int(event.wheel.y)
+                    if presets_active:
+                        if dy != 0:
+                            self._overlays.presets_browser.move_selection(-dy)
+                        continue
                     if eb_active:
                         if dy != 0:
                             self._overlays.effects_browser.move_selection(-dy)
@@ -2813,6 +2819,17 @@ void main() {
                         else:
                             self._postfx_controller.on_scroll(dy)
                 elif event.type == sdl2.SDL_MOUSEMOTION:
+                    if presets_active:
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x), float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                self._overlays.handle_presets_mouse_motion(hit[0], hit[1])
+                        except Exception as exc:
+                            log.warning('Presets hover handling failed: %s', exc)
+                        continue
                     if eb_active:
                         try:
                             hit = self._overlay_mouse_coords(
@@ -2842,6 +2859,20 @@ void main() {
                         except Exception as exc:
                             log.warning('Help overlay hover handling failed: %s', exc)
                 elif event.type == sdl2.SDL_MOUSEBUTTONDOWN:
+                    if presets_active:
+                        if event.button.button == sdl2.SDL_BUTTON_LEFT:
+                            try:
+                                hit = self._overlay_mouse_coords(
+                                    float(event.button.x), float(event.button.y),
+                                    self._primary_display_viewport(),
+                                )
+                                if hit is not None and self._overlays.handle_presets_mouse_click(hit[0], hit[1]):
+                                    name = self.presets_load_selected()
+                                    if name:
+                                        self._overlays.flash_message(f'Preset loaded: {name}', 1.6)
+                            except Exception as exc:
+                                log.warning('Presets click handling failed: %s', exc)
+                        continue
                     if eb_active:
                         if event.button.button == sdl2.SDL_BUTTON_LEFT:
                             try:
@@ -2913,7 +2944,8 @@ void main() {
             self.tick_effects_browser_preview()
 
             # Auto-playlist advance (suppressed while locked to one effect)
-            if (not manager_modal_active and not eb_active and not self._paused
+            if (not manager_modal_active and not eb_active and not presets_active
+                    and not self._paused
                     and self._next_effect is None and self._auto_advance
                     and self._effect_lock is None):
                 allow_advance = True
@@ -4983,6 +5015,60 @@ void main() {
     def delete_show_preset(self, name: str) -> bool:
         """Delete the named preset. Returns True if it existed."""
         return self._preset_store.delete(name)
+
+    # -- Presets modal -------------------------------------------------------
+
+    @property
+    def presets_modal_active(self) -> bool:
+        """Return whether the presets modal is open."""
+        return self._overlays.presets_visible
+
+    def _refresh_presets_entries(self) -> None:
+        self._overlays.set_presets_entries(self.list_show_presets())
+
+    def open_presets(self) -> None:
+        """Open the show-presets modal."""
+        o = self._overlays
+        self._refresh_presets_entries()
+        o.set_presets_name_mode(False)
+        if not o.presets_visible:
+            o.toggle_presets()
+
+    def close_presets(self) -> None:
+        """Close the show-presets modal."""
+        o = self._overlays
+        o.set_presets_name_mode(False)
+        if o.presets_visible:
+            o.toggle_presets()
+
+    def presets_load_selected(self) -> str | None:
+        """Load the highlighted preset. Returns its name."""
+        entry = self._overlays.presets_browser.selected_entry()
+        if entry is None:
+            return None
+        name = str(entry.get('display_name', ''))
+        if self.load_show_preset(name):
+            self.close_presets()
+            return name
+        return None
+
+    def presets_delete_selected(self) -> str | None:
+        """Delete the highlighted preset and refresh the list. Returns its name."""
+        entry = self._overlays.presets_browser.selected_entry()
+        if entry is None:
+            return None
+        name = str(entry.get('display_name', ''))
+        if self.delete_show_preset(name):
+            self._refresh_presets_entries()
+            return name
+        return None
+
+    def presets_save_named(self, name: str) -> str | None:
+        """Save the current setup under *name* and refresh the list."""
+        saved = self.save_show_preset(name)
+        if saved is not None:
+            self._refresh_presets_entries()
+        return saved
 
     # -- Effects browser -----------------------------------------------------
 

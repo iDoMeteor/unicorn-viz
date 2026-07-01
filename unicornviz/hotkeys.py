@@ -262,6 +262,8 @@ class HotkeyHandler:
     def _active_midi_context(self) -> str:
         """Resolve the current MIDI context for slot-dispatch actions."""
         o = self._overlays
+        if bool(getattr(o, 'presets_visible', False)):
+            return 'presets'
         if bool(getattr(o, 'effects_browser_visible', False)):
             return 'effects_browser'
         if bool(getattr(o, 'webcam_editor_modal_visible', False)):
@@ -772,6 +774,54 @@ class HotkeyHandler:
                 return
             # Any other key falls through to ESC check below.
 
+        if getattr(o, 'presets_visible', False):
+            pb = o.presets_browser
+            if o.presets_name_mode:
+                if sym == sdl2.SDLK_ESCAPE:
+                    o.set_presets_name_mode(False)
+                    return
+                if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                    name = o.presets_name_text.strip()
+                    o.set_presets_name_mode(False)
+                    if name:
+                        saved = a.presets_save_named(name)
+                        if saved:
+                            o.flash_message(f'Preset saved: {saved}', 1.6)
+                    return
+                if sym == sdl2.SDLK_BACKSPACE:
+                    o.set_presets_name_text(o.presets_name_text[:-1])
+                    return
+                ch = _projectm_search_char()
+                if ch:
+                    o.set_presets_name_text(o.presets_name_text + ch)
+                return
+
+            if sym == sdl2.SDLK_ESCAPE:
+                a.close_presets()
+                return
+            if sym == sdl2.SDLK_UP:
+                pb.move_selection(-1)
+                return
+            if sym == sdl2.SDLK_DOWN:
+                pb.move_selection(1)
+                return
+            if sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                name = a.presets_load_selected()
+                if name:
+                    o.flash_message(f'Preset loaded: {name}', 1.6)
+                return
+            if sym == sdl2.SDLK_s and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
+                o.set_presets_name_text('')
+                o.set_presets_name_mode(True)
+                return
+            if sym in (sdl2.SDLK_d, sdl2.SDLK_DELETE) and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
+                name = a.presets_delete_selected()
+                if name:
+                    o.flash_message(f'Preset deleted: {name}', 1.4)
+                return
+            # Swallow all other keys while the presets modal is open.
+            return
+
         if getattr(o, 'effects_browser_visible', False):
             b = o.effects_browser
             if self._effects_browser_search_mode:
@@ -1060,14 +1110,18 @@ class HotkeyHandler:
             o.flash_name(cls.NAME)
 
         elif sym in (sdl2.SDLK_p, sdl2.SDLK_LEFT):
-            if p.mode == "random":
+            if sym == sdl2.SDLK_p and (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
+                a.open_presets()
+            elif p.mode == "random":
                 cls = p.advance()
                 log.info("Scene change → %s (random prev)", cls.NAME)
+                a.goto_effect(cls)
+                o.flash_name(cls.NAME)
             else:
                 cls = p.go_index(p.index - 1)
                 log.info("Scene change → %s (prev)", cls.NAME)
-            a.goto_effect(cls)
-            o.flash_name(cls.NAME)
+                a.goto_effect(cls)
+                o.flash_name(cls.NAME)
 
         elif sym == sdl2.SDLK_f:
             a.toggle_fullscreen()

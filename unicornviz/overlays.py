@@ -421,6 +421,7 @@ class Overlays:
                 ('Shift+M', 'Toggle Control Room'),
                 ('Alt+M', 'MIDI device selector'),
                 ('B', 'Effects browser (search/filter/preview/pin all effects)'),
+                ('Ctrl+Shift+P', 'Show presets (save/load setup: enabled effects, mode, reactivity)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('Ctrl+Alt+K', 'Webcam editor modal'),
                 ('Ctrl+Alt+H', 'Controller help modal (APC slot map)'),
@@ -583,6 +584,12 @@ class Overlays:
         self._effects_browser_current: str = ''
         self._effects_browser_pinned: str = ''
         self._eb_thumb_tex: 'moderngl.Texture | None' = None
+        # Show-presets modal (single-pane list + inline name entry).
+        self._show_presets = False
+        self._presets_browser = CatalogBrowser()
+        self._presets_name_mode = False
+        self._presets_name_text = ''
+        self._presets_row_rects: list[tuple[float, float, float, float, int]] = []
         # Mouse hit-regions rebuilt each render: (x, y, w, h, index).
         self._eb_cat_rects: list[tuple[float, float, float, float, int]] = []
         self._eb_row_rects: list[tuple[float, float, float, float, int]] = []
@@ -1898,7 +1905,9 @@ void main() {
             self._render_help()
 
         active_modal_type = ''
-        if self._show_effects_browser:
+        if self._show_presets:
+            active_modal_type = 'presets'
+        elif self._show_effects_browser:
             active_modal_type = 'effects_browser'
         elif self._show_projectm_manager:
             active_modal_type = 'projectm_manager'
@@ -1928,6 +1937,9 @@ void main() {
                     route_modals_elsewhere,
                 )
             self._modal_route_debug_last = route_state
+
+        if self._show_presets and not route_modals_elsewhere:
+            self._render_presets()
 
         if self._show_effects_browser and not route_modals_elsewhere:
             self._render_effects_browser()
@@ -2508,6 +2520,149 @@ void main() {
                 self._draw_rect(edge_x, ty - 1.0, 18.0, 1.0, faint)
                 self._draw_rect(edge_x, ty, 18.0, 3.0, tc)
                 self._draw_rect(edge_x, ty + 3.0, 18.0, 1.0, faint)
+
+    # -- Show presets modal ---------------------------------------------------
+
+    @property
+    def presets_browser(self) -> CatalogBrowser:
+        """Return the model backing the presets list."""
+        return self._presets_browser
+
+    @property
+    def presets_visible(self) -> bool:
+        """Return whether the presets modal is open."""
+        return self._show_presets
+
+    def toggle_presets(self) -> None:
+        """Toggle the presets modal."""
+        self._show_presets = not self._show_presets
+
+    def set_presets_entries(self, names: list[str]) -> None:
+        """Populate the presets list from saved preset names."""
+        self._presets_browser.set_entries(
+            [{'display_name': str(n), 'category_key': 'preset', 'tags': []} for n in names]
+        )
+
+    @property
+    def presets_name_mode(self) -> bool:
+        """Return whether the presets modal is capturing a new preset name."""
+        return self._presets_name_mode
+
+    def set_presets_name_mode(self, active: bool) -> None:
+        """Enter/leave name-entry mode; clears the buffer on leave."""
+        self._presets_name_mode = bool(active)
+        if not self._presets_name_mode:
+            self._presets_name_text = ''
+
+    @property
+    def presets_name_text(self) -> str:
+        """Return the in-progress new-preset name."""
+        return self._presets_name_text
+
+    def set_presets_name_text(self, text: str) -> None:
+        """Set the in-progress new-preset name buffer."""
+        self._presets_name_text = str(text)
+
+    def handle_presets_mouse_motion(self, x: float, y: float) -> bool:
+        """Hover-highlight a preset row. Returns True if over a row."""
+        if not self._show_presets:
+            return False
+        idx = self._eb_hit(self._presets_row_rects, x, y)
+        if idx is not None:
+            self._presets_browser.set_selected_index(idx)
+            return True
+        return False
+
+    def handle_presets_mouse_click(self, x: float, y: float) -> bool:
+        """Select the clicked preset row. Returns True if a row was chosen."""
+        if not self._show_presets:
+            return False
+        idx = self._eb_hit(self._presets_row_rects, x, y)
+        if idx is not None:
+            self._presets_browser.set_selected_index(idx)
+            return True
+        return False
+
+    def _render_presets(self) -> None:
+        """Draw the show-presets modal (list + inline name entry)."""
+        b = self._presets_browser
+        t = self._hud_t
+        pulse = 0.55 + 0.45 * math.sin(t * 2.4)
+        self._presets_row_rects = []
+
+        W = float(self._width)
+        H = float(self._height)
+        panel_w = min(W * 0.62, 900.0)
+        panel_h = min(H * 0.78, 720.0)
+        px = (W - panel_w) * 0.5
+        py = (H - panel_h) * 0.5
+        content_y = py + 96.0
+        content_h = panel_h - 168.0
+        list_x = px + 14.0
+        list_w = panel_w - 28.0
+        footer_y = py + panel_h - 52.0
+
+        self._draw_rect(px, py, panel_w, panel_h, (0.04, 0.05, 0.10, 0.96))
+        border = (0.30 * pulse, 0.85 * pulse, 0.70 * pulse, 0.92)
+        bw = 2.0
+        self._draw_rect(px, py, panel_w, bw, border)
+        self._draw_rect(px, py + panel_h - bw, panel_w, bw, border)
+        self._draw_rect(px, py, bw, panel_h, border)
+        self._draw_rect(px + panel_w - bw, py, bw, panel_h, border)
+
+        bass = float(self._hud_state.get('bass', '0.0') or 0.0)
+        mid = float(self._hud_state.get('mid', '0.0') or 0.0)
+        treble = float(self._hud_state.get('treble', '0.0') or 0.0)
+        self._draw_audio_reactive_border_bulbs(
+            px, py, panel_w, panel_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.5
+        )
+
+        self._draw_text(
+            'SHOW PRESETS', px + 18.0, py + 14.0, scale=3.5,
+            color=(0.40, 0.92 + 0.05 * pulse, 0.78, 1.0),
+        )
+        if self._presets_name_mode:
+            caret = '_' if (int(t * 2.0) % 2 == 0) else ' '
+            self._draw_text(
+                f'Save as: {self._presets_name_text}{caret}', px + 18.0, py + 54.0,
+                scale=2.2, color=(1.0, 0.92, 0.35, 0.95),
+            )
+        else:
+            self._draw_text(
+                f'{len(b.filtered())} saved', px + 18.0, py + 54.0,
+                scale=2.1, color=(0.62, 0.85, 0.72, 0.88),
+            )
+
+        self._draw_modal_frame_decor(px, py, panel_w, panel_h, pulse)
+        self._draw_rect(list_x, content_y, list_w, content_h, (0.05, 0.09, 0.11, 0.82))
+
+        rows = b.filtered()
+        sel_idx = b.selected_index()
+        row_h = 30.0
+        start_y = content_y + 12.0
+        visible = max(1, int((content_h - 20.0) // row_h))
+        top = max(0, sel_idx - visible + 1) if sel_idx >= visible else 0
+        if not rows:
+            self._draw_text(
+                'No presets yet — press S to save the current setup.',
+                list_x + 16.0, start_y + 6.0, scale=2.0, color=(0.86, 0.88, 0.92, 0.86),
+            )
+        for local_idx, entry in enumerate(rows[top:top + visible]):
+            idx = top + local_idx
+            ry = start_y + local_idx * row_h
+            name = str(entry.get('display_name', ''))
+            if idx == sel_idx:
+                self._draw_rect(list_x + 6.0, ry - 2.0, list_w - 12.0, row_h - 4.0, (0.08, 0.30, 0.24, 0.90))
+                self._draw_text(f'> {name}', list_x + 16.0, ry + 4.0, scale=2.1, color=(0.75, 1.0, 0.90, 1.0))
+            else:
+                self._draw_text(f'  {name}', list_x + 16.0, ry + 4.0, scale=2.1, color=(0.86, 0.90, 0.94, 0.90))
+            self._presets_row_rects.append((list_x + 6.0, ry - 2.0, list_w - 12.0, row_h - 4.0, idx))
+
+        if self._presets_name_mode:
+            hint = 'Type a name    Enter: save    Esc: cancel'
+        else:
+            hint = 'Up/Down: browse    Enter/Click: load    S: save current    D: delete    Esc: close'
+        self._draw_text(hint, px + 18.0, footer_y + 6.0, scale=1.8, color=(0.58, 0.72, 0.68, 0.86))
 
     def _render_effects_browser(self) -> None:
         """Draw the effects browser modal (categories + searchable effect list)."""
