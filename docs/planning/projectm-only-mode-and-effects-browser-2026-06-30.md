@@ -1,8 +1,8 @@
 # ProjectM-Only Mode + Effects Browser — Design Examination
 
 Owner: Effects
-Status: ProjectM-only mode IMPLEMENTED (Method A); effects browser NEXT — all
-prerequisites complete (unified discovery, lock primitive, normalized tags)
+Status: ProjectM-only mode IMPLEMENTED (Method A); effects browser IMPLEMENTED
+(keyboard + mouse, live-thumbnail preview, pin/unpin, enable/disable) — see §4
 Last updated: 2026-07-01
 
 > **Implemented 2026-06-30 (Method A).** Generic effect-lock at `_switch_effect`
@@ -133,7 +133,25 @@ auto-advance suppressed). ~half a focused session.
 
 ---
 
-## 4. Effects browser / loader  — `[next — prep complete]`
+## 4. Effects browser / loader  — `[IMPLEMENTED 2026-07-01]`
+
+> **Shipped 2026-07-01.** Full-screen modal opened with **naked `B`** (core
+> naked-key policy; banner moved to `Shift+B` toggle / `Ctrl+B` editor). Keyboard
+> **and** mouse: category tabs (Left/Right focus panes, Up/Down browse), `/`
+> name/tag/category search, mouse hover/click/scroll. **Live-thumbnail preview** —
+> the selected effect is instantiated at 480×270 and rendered to its own offscreen
+> FBO (the active on-screen effect is never touched); `Enter`/click commits.
+> **`P`** pins/unpins (reuses `lock_effect`; shows `[pin]`); **`Space`** toggles
+> enable/disable, persisted in the global `RuntimeStateStore` (`effects.disabled`)
+> and skipped by playlist rotation, `vj_api.goto_random_effect`, and auto-vj
+> ping-pong. Built on the shared GL-free `CatalogBrowser` model
+> (`unicornviz/catalog_browser.py`) fed by `registry.browser_entries()`; the
+> projectM preset manager was **migrated onto the same model**. HUD-style frame
+> decorators added. Tests: `test_catalog_browser`, `test_registry_browser_entries`,
+> `test_hotkeys_effects_browser`, `test_playlist_disabled`. The design notes below
+> are retained as the record of how it was built.
+
+### Original design notes  — `[prep complete]`
 
 A ProjectM-manager-style, full-screen modal browser for **all effects** (core
 analyzers + every category pack + standalone drop-ins): search/filter by
