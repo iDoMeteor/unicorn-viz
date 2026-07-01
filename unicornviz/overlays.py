@@ -2309,6 +2309,8 @@ void main() {
             px, vy, pw, vis_h, _fv('bass'), _fv('mid'), _fv('treble'), t,
             speed_scale=0.5, size_scale=0.6,
         )
+        # HUD-style frame decorators (corner accents + crosshair arms + ticks).
+        self._draw_modal_frame_decor(px, vy, pw, vis_h, pulse)
 
         # Content appears once the panel is mostly open.
         if ease < 0.82:
