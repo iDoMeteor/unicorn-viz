@@ -196,26 +196,40 @@ private repo / submodule.
 search). The new modal is the **searchable, keyboard-and-mouse** surface. Both
 should read the same catalog helper and use `lock_effect` so they never diverge.
 
-### Open design decisions (owner)
+### Design decisions (owner — settled 2026-07-01)
 
-1. **Modal code: generalize vs clone.** The pM manager is ~90% generic. Either
-   (a) extract a shared `_render_catalog_browser` both consumers use (DRY, but
-   edits the working pM modal — risk), or (b) clone into `_render_effects_browser`
-   plus an `effects_browser` hotkey context, sharing only the pure filter helpers
-   (isolated, safe, ~200 lines duplicated). Leaning **(b) clone-first** per the
-   "don't refactor working code" rule, with a later consolidation once both are
-   proven.
-2. **Preview behavior.** pM previews presets live (cheap, same effect). Here a
-   "preview" is a full effect switch (GL destroy/init) — heavier. For the
-   "premium" feel, target **debounced live preview** (switch after ~250 ms of no
-   keyboard/mouse movement) with commit-on-Enter/click, so hovering feels live
-   without GL thrash.
-3. **Thumbnails (the "pimp" factor).** Static list first, then per-effect preview
-   tiles — either lazily rendered live thumbnails (render each effect to a small
-   FBO on demand) or cached screenshots. Live-FBO tiles look best but cost the
-   most; a cached-thumbnail cache dir is the pragmatic middle.
-4. **v1 scope.** Search/filter/jump/pin + keyboard&mouse. Enable/disable-from-
-   rotation (touches playlist + `[dropins] exclude` persistence) and thumbnail
-   tiles are **v2**.
-5. **Trigger surface.** A global open hotkey (added to `HELP_TEXT`), e.g.
-   `Ctrl+B` "Browse effects", plus a control-room button.
+1. **Modal code: generalize now (DECIDED).** Extract one shared
+   `_render_catalog_browser` (+ generic entry store / filter / category / search /
+   selection) in `overlays.py` that BOTH the projectM preset manager and the new
+   effects browser drive. DRY. Because this edits a shipped feature, gate it on
+   the pre-work below (characterization tests for the current pM manager) so the
+   refactor can't silently regress it.
+2. **Preview: debounced live preview (DECIDED).** Hover/arrow to an entry →
+   switch to it live after ~250 ms idle; Enter/click commits; Esc reverts to the
+   pre-open effect. Feels live without GL thrash.
+3. **Input: keyboard + mouse (DECIDED).** Keyboard context (arrows/Tab/`/`/Enter/
+   Esc) fused with mouse hotspots (hover-highlight, click-select, click tabs,
+   scroll) via the control-room `_HitRegion` pattern.
+4. **Thumbnails (the "pimp" factor) — v2.** Per-effect live-FBO preview tiles
+   (or a cached-screenshot cache dir). Best-looking, highest cost; land after the
+   text+live-preview browser works.
+5. **v1 scope.** Shared generic browser + effects catalog + search/filter by
+   name/tag/category + debounced live preview + jump + pin (`lock_effect`) +
+   keyboard&mouse. **v2:** thumbnail tiles, enable/disable-from-rotation (touches
+   playlist + `[dropins] exclude` persistence).
+6. **Trigger surface.** Global open hotkey (added to `HELP_TEXT`), e.g. `Ctrl+B`
+   "Browse effects", plus a control-room button.
+
+### Pre-work (do first, because we're generalizing a shipped modal)
+
+1. **Characterization tests for the current projectM manager** — lock in its
+   filtering (category + name/tag/pack search), selection sync, and open/commit/
+   revert behavior *before* extracting the shared browser, so the refactor is
+   provably behavior-preserving.
+2. **Shared catalog helper in `registry`** — `browser_entries()` returning
+   `{name, cls, pack, category, tags}`; adopt it in control-room's existing list
+   too so the two surfaces share one source of truth.
+
+Then: extract the generic browser, re-point the pM manager at it (tests stay
+green), add the effects catalog + debounced preview + pin + open hotkey, and
+finally the control-room button.
