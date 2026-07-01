@@ -147,6 +147,15 @@ class Playlist:
         if self._mode == "random":
             self._reset_shuffle_cycle(avoid_index=self._index)
 
+    def set_mode(self, mode: str) -> None:
+        """Set the traversal mode ('random' or 'sequential')."""
+        new_mode = "random" if str(mode).lower() == "random" else "sequential"
+        if new_mode == self._mode:
+            return
+        self._mode = new_mode
+        if self._mode == "random":
+            self._reset_shuffle_cycle(avoid_index=self._index)
+
     @property
     def mode(self) -> str:
         return self._mode

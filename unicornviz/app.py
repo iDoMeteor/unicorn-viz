@@ -52,6 +52,7 @@ from unicornviz.dropins import (
 )
 from unicornviz.paths import resolve_path
 from unicornviz.runtime_state import RuntimeStateStore
+from unicornviz.presets import ShowPresetStore
 from unicornviz.vj_api import VJApi
 
 log = logging.getLogger(__name__)
@@ -430,6 +431,8 @@ class App:
         self._disabled_effects: set[str] = {
             str(n) for n in (self._runtime_state.get('effects.disabled', []) or [])
         }
+        preset_path = self.cfg.get('presets', 'path', default='runtime/presets.json')
+        self._preset_store = ShowPresetStore(str(preset_path))
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -4914,6 +4917,72 @@ void main() {
         self._runtime_state.save()
         if self._playlist is not None:
             self._playlist.set_disabled(self._disabled_effects)
+
+    def set_disabled_effects(self, names: 'set[str] | list[str]') -> None:
+        """Replace the whole disabled set at once and persist (preset apply)."""
+        self._disabled_effects = {str(n) for n in (names or [])}
+        self._runtime_state.set('effects.disabled', sorted(self._disabled_effects))
+        self._runtime_state.save()
+        if self._playlist is not None:
+            self._playlist.set_disabled(self._disabled_effects)
+
+    # -- Show presets (named runtime-setup snapshots) ------------------------
+
+    def capture_show_preset(self) -> dict[str, object]:
+        """Snapshot the current show setup into a preset payload."""
+        reactivity = 1.0
+        if self._audio_manager is not None:
+            try:
+                reactivity = float(self._audio_manager.get_reactivity())
+            except Exception:
+                reactivity = 1.0
+        mode = self._playlist.mode if self._playlist is not None else 'sequential'
+        return {
+            'version': 1,
+            'disabled_effects': sorted(self._disabled_effects),
+            'playlist_mode': str(mode),
+            'reactivity': reactivity,
+        }
+
+    def apply_show_preset(self, payload: dict[str, object]) -> None:
+        """Apply a preset payload to the running show (missing keys untouched)."""
+        if not isinstance(payload, dict):
+            return
+        if 'disabled_effects' in payload:
+            self.set_disabled_effects(payload.get('disabled_effects') or [])
+        mode = payload.get('playlist_mode')
+        if mode and self._playlist is not None:
+            self._playlist.set_mode(str(mode))
+            self._playlist_mode = self._playlist.mode
+        if 'reactivity' in payload and self._audio_manager is not None:
+            try:
+                self._audio_manager.set_reactivity(float(payload.get('reactivity', 1.0)))
+            except Exception:
+                log.debug('Preset reactivity apply failed', exc_info=True)
+
+    def list_show_presets(self) -> list[str]:
+        """Return saved show-preset names."""
+        return self._preset_store.names()
+
+    def save_show_preset(self, name: str) -> str | None:
+        """Save the current show setup under *name*. Returns the saved name."""
+        clean = str(name).strip()
+        if not clean:
+            return None
+        self._preset_store.save(clean, self.capture_show_preset())
+        return clean
+
+    def load_show_preset(self, name: str) -> bool:
+        """Apply the named preset. Returns True if it existed."""
+        payload = self._preset_store.get(name)
+        if payload is None:
+            return False
+        self.apply_show_preset(payload)
+        return True
+
+    def delete_show_preset(self, name: str) -> bool:
+        """Delete the named preset. Returns True if it existed."""
+        return self._preset_store.delete(name)
 
     # -- Effects browser -----------------------------------------------------
 
