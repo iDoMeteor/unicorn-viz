@@ -364,55 +364,121 @@ See [User Guide § Audio Setup](docs/user-guide.md#audio-setup) for detailed tro
 
 ## Effects Catalog
 
-**Built-in effects (auto-discovered from `unicornviz/effects/`):**
+All effects are auto-discovered and audio-reactive. Audio analyzers live in the
+core package; every other visual lives in a themed **category pack** (its own
+private repo, wired in as a submodule). Each effect carries a canonical category
+tag as its first tag. Key bindings are **not** listed here — press `H` in-app for
+the live hotkey overlay (the single source of truth). See
+[docs/drop-ins.md](docs/drop-ins.md) for the full drop-in registry.
+
+**Core — audio analyzers (`unicornviz/effects/`):**
 
 | Effect | Tags | Description |
 |--------|------|-------------|
-| ANSI Viewer | ansi, classic | Scrolling CP437 art with CRT phosphor shader |
-| Audio Spectrum | audio, visualizer | FFT bars + oscilloscope (3 modes) |
-| Copper Bars | classic, audio | Amiga-style oscillating colour bars |
-| Cosmos | space, audio | Deep-space nebula and stellar drift |
-| Rainbow Trance | futuristic, audio | Audio-reactive crystalline geometry |
-| 3D Cube | classic, 3d | Rotating wireframe cube |
-| Curtains | classic, audio | Multi-colour sine-wave curtain effect |
-| Dali | art, surreal | Melting-clock surrealist scene |
-| Escher | art, optical | Impossible architecture tile shader |
-| Fire | classic, audio | Cellular-automaton lifelike flame |
-| Fractal Zoom | futuristic, audio | Deep Mandelbrot zoom with beat-burst |
-| Metaballs | futuristic, audio | GLSL SDF metaball field |
-| Particle Storm | futuristic, particles | 100 k GPU particles with curl noise |
-| Plasma | classic, audio | Sin/cos colour-field with palette drift |
-| Sine Scroller 2.0 | classic, audio | Multi-sine bouncing text with rainbow colours |
-| Starfield | classic, audio | 3D warp-speed star tunnel |
-| System Monitor | diagnostic, hud | Live CPU/RAM/GPU + audio graphs |
-| Tunnel | classic, audio | Texture-mapped rotating tunnel |
-| Van Gogh | art, audio | Post-impressionist flowing brush-stroke field |
-| Vector | futuristic, audio | 3D vector-field flow simulation |
-| Wavey Gravy | psychedelic, audio | Psychedelic waving sine-noise field |
+| Audio Spectrum | analyzer, visualizer | FFT frequency bars + oscilloscope waveform |
+| Audio Spectrogram | analyzer, visualizer, spectrogram | Reactive scrolling frequency-history heatmap |
+| Audio Tracks | analyzer, visualizer, timeline | DAW-style horizontal scrolling track lanes |
+| Audio Waveforms | analyzer, visualizer, oscilloscope | Multi-style oscilloscope visualizer |
+| Audio Centroid | analyzer, spectrum, futuristic, reactive | Spectral-brightness (centroid) visualizer |
+| Audio Sine | analyzer, classic, futuristic, neon, lasers | Textless neon wave-lasers with crossing squash |
 
-**Drop-in Effects (tested and working; currently private repositories):**
+**`psychedelic-01`:**
 
-| Effect | Hotkey | Description |
-|--------|--------|-------------||
-| Alien Invasion (`cosmic-01`) | — | UFO fleets descend with probing beams; audio-reactive formation density and radar sweep |
-| Cyber War (`tech-01`) | — | Hex-grid digital battlefield with AI node attacks and pulsing defense networks |
-| Disco Ball (`vector-01`) | — | Raymarched mirror-tile ball with 3 rotating coloured spot beams and reflective floor |
-| Hacker Terminal (`tech-01`) | — | Animated shell/log streams with glitch transitions and text-scroll reactivity |
-| Texture Showcase (`textures-01`) | — | Ken Burns image pan/zoom with audio-reactive colour grade and beat-triggered fade |
-| Wormhole (`immersive-01`) | — | Refractive prism-lattice flight down a shifting light corridor (formerly Prism Lattice) |
-| Tron Grid (`tech-01`) | — | First-person laser-grid corridor; bass scales grid size, beats trigger shockwaves |
-| Unicorn Tears (`unicorn-tears-01`) | `U` | Prismatic teardrops falling through a star-field with audio-reactive burst |
-| Image Showcase (`images-01`) | — | Configurable image directory with Ken Burns motion, 10 presentation styles, audio colour shift |
-| Video Showcase (`videos-01`) | — | Video clip sequencer with smooth crossfade, configurable clip directories |
-| Webcam Overlay (`webcam-01`) | `KP 0`, `KP .`, `KP -/+` | System-wide camera PiP with 5+ visual treatments (threshold, edge detect, emboss, etc.) |
-| WebcamOverlay (playlist effect) (`webcam-01`) | — | Full-playlist camera effect with animated multi-colour background |
-| ProjectM Presets (`projectm-01`) | `Ctrl+N/P/R` | libprojectM Milkdrop preset sequencer with 1000+ community presets and smooth transitions |
-| SimShowcase (`sims-01`) | — | USD scene carousel with camera orbits; load robotics training datasets or galaxy fallback |
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Plasma | psychedelic, classic | Classic sin/cos colour-field shader with palette drift |
+| Kaleidoscope | psychedelic, classic | View through a rotating optical kaleidoscope |
+| Psychedelic | psychedelic, shader | Animated palette-sine neon field |
 
-**Multi-head & System Drop-ins:**
+**`particles-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Starfield | particles, classic, futuristic | Cinematic multi-layer star field with warp-speed mode |
+| Fireworks | particles, classic, celebration | Cinematic night-sky pyrotechnic display |
+| Particle Storm | particles, futuristic | GPU transform-feedback particle system |
+
+**`retro-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Copper Bars | retro, classic, amiga | Amiga-style horizontal raster/colour bars |
+| ANSI Viewer | retro, ansi, classic | Scrolling CP437 `.ANS` art with CRT phosphor shader |
+| Fractal Zoom | retro, futuristic, psychedelic | Deep Mandelbrot voyage with nebula interior shading |
+| Escher | retro, art, optical | Impossible-style tiling corridor illusion |
+| Dali | retro, art, surreal | Surreal melting forms and mirage-like distortions |
+| Van Gogh | retro, art, shader | Painterly swirling night-sky brushstroke field |
+
+**`feature-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Hexy Stars | feature, futuristic, stars, hex | Reactive pulsing hex/octa star field |
+| Rainbow Trance | feature, futuristic, mythic, crystal | Prismatic pyramid field with rainbow sky rays |
+| Metaballs | feature, classic | GLSL SDF orbs that attract and repel |
+
+**`vector-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| 3D Cube | vector, classic, 3d | Solid neon rotating cube with Phong shading |
+| Vector | vector, classic, demoscene, 3d | Classic demoscene spinning wireframe polyhedra |
+| Disco Ball | vector, disco, raymarching, reflections | Raymarched mirror-tile ball with rotating spot beams |
+
+**`cosmic-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Cosmos | cosmic, shader | Nebula clouds with star field and warp streaks |
+| Black Hole Cathedral | cosmic, shader, cathedral | Gothic mega-structure orbiting an accretion lens |
+| Wavey Gravy | cosmic, sci-fi, shader | Pulsating organic landscape with bioluminescent veins |
+| Alien Invasion | cosmic, sci-fi, procedural | UFO fleets descending with atmospheric probing beams |
+
+**`tech-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Tron Grid | tech, tron, laser, grid, raymarching, neon, sci-fi | First-person laser-grid corridor; bass scales grid, beats trigger shockwaves |
+| Cyber War | tech, futuristic, network, cyberpunk | Real-time digital battle-map with AI node attacks |
+| Hacker Terminal | tech, cyberpunk, glitch | Animated shell/log streams with audio-reactive glitch |
+| Hacker Terminal 2.0 | tech, cyberpunk, glitch, text | Real CP437 scrolling text streams with glitch transitions |
+
+**`immersive-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Tunnel | immersive, classic, futuristic | Fully procedural infinite rotating tunnel |
+| Wormhole | immersive, crystal, prism, lattice | Refractive prism-lattice flight down a shifting light corridor |
+| Cathedral of Bass | immersive, bass, shader, raver, cathedral | Layered, room-shaking flight down an infinite nave |
+
+**`games-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| Breakout | games, classic, futuristic, arcade | Audio-reactive arcade brick-breaker |
+
+**`holiday-01`:**
+
+| Effect | Tags | Description |
+|--------|------|-------------|
+| America 250 | holiday, america, patriotic, fireworks | Over-the-top bicentennial-plus-50 celebration |
+
+**Standalone effect drop-ins (one effect per repo):**
+
+| Effect | Source | Tags | Description |
+|--------|--------|------|-------------|
+| Image Showcase | `images-01` | media, images, slideshow | Image directory with Ken Burns motion and multiple presentation styles |
+| Video Showcase | `videos-01` | media, videos, slideshow | Video-clip sequencer with smooth crossfade |
+| Texture Showcase | `textures-01` | media, textures, modern | Ken Burns pan/zoom with reactive colour grade and beat fade |
+| Sim Showcase | `sims-01` | media, 3d, usd, simulation | USD scene carousel with camera orbits (robotics/galaxy scenes) |
+| ProjectM Presets | `projectm-01` | projectm, milkdrop | libprojectM Milkdrop preset host with 1000+ community presets |
+| Unicorn Tears | `unicorn-tears-01` | psychedelic, futuristic | Prismatic iridescent teardrops falling through a star-field |
+
+**System & overlay drop-ins (not playlist effects):**
 
 | Drop-in | Purpose |
-|---------|----------|
+|---------|---------|
+| `webcam-01` | System-wide camera PiP overlay with 5+ visual treatments |
 | `multi-head-01` | Multi-monitor display controller (single / span / mirror modes) |
 | `streaming-01` | RTMP streaming controller (when available) |
 
