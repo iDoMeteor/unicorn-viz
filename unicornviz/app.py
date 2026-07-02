@@ -116,6 +116,21 @@ def _infer_param_range(value: float) -> tuple[float, float]:
     return lo, hi
 
 
+def _name_char_for_keysym(sym: int, mod: int) -> str:
+    """Map an SDL keysym to a profile-name character (a-z, 0-9, space, - _)."""
+    shift = bool(mod & sdl2.KMOD_SHIFT)
+    if sdl2.SDLK_a <= sym <= sdl2.SDLK_z:
+        ch = chr(sym)
+        return ch.upper() if shift else ch
+    if sdl2.SDLK_0 <= sym <= sdl2.SDLK_9 and not shift:
+        return chr(sym)
+    if sym == sdl2.SDLK_SPACE:
+        return ' '
+    if sym == sdl2.SDLK_MINUS:
+        return '_' if shift else '-'
+    return ''
+
+
 def _clamp_render_scale(value: float) -> float:
     """Clamp internal render scale to a sane range."""
     return max(0.5, min(1.0, value))
@@ -2318,8 +2333,15 @@ void main() {
             eff.parameters[str(name)] = float(value)
 
     def clear_effect_overrides(self, class_name: str) -> None:
-        """Drop overrides for one effect (reverts to config.toml + randomized)."""
+        """Drop overrides for one effect and restore the active instance live."""
         self._effect_config_overrides.pop(str(class_name), None)
+        eff = self._current_effect
+        if eff is not None and type(eff).__name__ == class_name:
+            initial = getattr(eff, '_initial_parameters', None)
+            if isinstance(initial, dict):
+                for k, v in initial.items():
+                    if k in eff.parameters:
+                        eff.parameters[k] = float(v)
 
     def config_overrides_snapshot(self) -> dict[str, dict[str, float]]:
         """Return a deep-ish copy of the current per-effect overrides."""
@@ -2393,6 +2415,35 @@ void main() {
             self._config_editor_was_open = True
         cls = overlays.config_editor_selected_class()
         overlays.set_config_editor_params(self.config_editor_param_rows(cls) if cls else [])
+        overlays.set_config_editor_profiles(self.config_profile_names())
+        overlays.set_config_editor_dirty(bool(self._effect_config_overrides))
+
+    def _apply_config_editor_action(self) -> None:
+        """Run a pending footer action (save/load/delete/revert)."""
+        overlays = self._overlays
+        action = overlays.take_config_editor_action()
+        if action is None:
+            return
+        if action == 'save':
+            name = overlays.config_editor_name_text.strip()
+            if name:
+                self.save_config_profile(name)
+                overlays.flash_message(f'Profile saved: {name}', 1.6)
+            else:
+                overlays.set_config_editor_name_mode(True)
+        elif action == 'load':
+            name = overlays.config_editor_selected_profile()
+            if name and self.load_config_profile(name):
+                overlays.flash_message(f'Profile loaded: {name}', 1.6)
+        elif action == 'delete':
+            name = overlays.config_editor_selected_profile()
+            if name and self.delete_config_profile(name):
+                overlays.flash_message(f'Profile deleted: {name}', 1.6)
+        elif action == 'revert':
+            cls = overlays.config_editor_selected_class()
+            if cls:
+                self.clear_effect_overrides(cls)
+                overlays.flash_message(f'Reverted: {cls}', 1.4)
 
     def _config_editor_adjust(self, notches: float) -> None:
         """Adjust the selected parameter by ``notches`` steps, live-applying it."""
@@ -3092,6 +3143,27 @@ void main() {
                         # Editor captures navigation/close; other keys swallowed.
                         self._update_ctrl_state(event.key.keysym.sym, True)
                         _sym = event.key.keysym.sym
+                        if self._overlays.config_editor_name_mode:
+                            # Profile-name text entry captures typing.
+                            if _sym == sdl2.SDLK_ESCAPE:
+                                self._overlays.set_config_editor_name_mode(False)
+                            elif _sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                                _name = self._overlays.config_editor_name_text.strip()
+                                self._overlays.set_config_editor_name_mode(False)
+                                if _name:
+                                    self.save_config_profile(_name)
+                                    self._overlays.flash_message(f'Profile saved: {_name}', 1.6)
+                            elif _sym == sdl2.SDLK_BACKSPACE:
+                                self._overlays.set_config_editor_name_text(
+                                    self._overlays.config_editor_name_text[:-1]
+                                )
+                            else:
+                                _ch = _name_char_for_keysym(_sym, event.key.keysym.mod)
+                                if _ch:
+                                    self._overlays.set_config_editor_name_text(
+                                        self._overlays.config_editor_name_text + _ch
+                                    )
+                            continue
                         if _sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_c):
                             if not event.key.repeat:
                                 self._overlays.close_config_editor()
@@ -3250,6 +3322,7 @@ void main() {
                                 )
                                 if hit is not None:
                                     self._overlays.handle_config_editor_click(hit[0], hit[1])
+                                    self._apply_config_editor_action()
                             except Exception as exc:
                                 log.warning('Config editor click handling failed: %s', exc)
                         continue

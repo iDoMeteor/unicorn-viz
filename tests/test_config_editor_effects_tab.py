@@ -110,6 +110,14 @@ def _editor() -> Overlays:
     ov._ce_focus = 0
     ov._ce_effect_row_rects = []
     ov._ce_param_row_rects = []
+    ov._ce_profiles = []
+    ov._ce_profile_idx = -1
+    ov._ce_dirty = False
+    ov._ce_name_mode = False
+    ov._ce_name_text = ''
+    ov._ce_pending_action = None
+    ov._ce_footer_button_rects = []
+    ov._ce_profile_chip_rects = []
     return ov
 
 

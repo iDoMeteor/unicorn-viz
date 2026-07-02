@@ -20,6 +20,8 @@ def _bare_overlays() -> Overlays:
     ov._config_editor_panel_rect = None
     ov._ce_effect_row_rects = []
     ov._ce_param_row_rects = []
+    ov._ce_footer_button_rects = []
+    ov._ce_profile_chip_rects = []
     ov._glyph_w = 13
     ov._glyph_h = 18
     ov._font_scale_norm = 8.0 / 18.0

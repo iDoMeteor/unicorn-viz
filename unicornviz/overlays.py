@@ -613,6 +613,15 @@ class Overlays:
         self._ce_focus = 0  # 0 = effect list, 1 = parameters
         self._ce_effect_row_rects: list[tuple[float, float, float, float, int]] = []
         self._ce_param_row_rects: list[tuple[float, float, float, float, int]] = []
+        # Profile footer (Increment 4): save/load/delete/revert + name entry.
+        self._ce_profiles: list[str] = []
+        self._ce_profile_idx = -1
+        self._ce_dirty = False
+        self._ce_name_mode = False
+        self._ce_name_text = ''
+        self._ce_pending_action: str | None = None
+        self._ce_footer_button_rects: list[tuple[float, float, float, float, str]] = []
+        self._ce_profile_chip_rects: list[tuple[float, float, float, float, int]] = []
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -2283,6 +2292,18 @@ void main() {
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.set_config_editor_tab(i)
                 return True
+        # Footer buttons (save/load/delete/revert).
+        for rx, ry, rw, rh, action in self._ce_footer_button_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_pending_action = action
+                return True
+        # Profile chips — select one (populates the name field too).
+        for rx, ry, rw, rh, idx in self._ce_profile_chip_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_profile_idx = idx
+                if 0 <= idx < len(self._ce_profiles):
+                    self._ce_name_text = self._ce_profiles[idx]
+                return True
         # Effect / parameter rows (Effects tab).
         for rx, ry, rw, rh, idx in self._ce_effect_row_rects:
             if rx <= x <= rx + rw and ry <= y <= ry + rh:
@@ -2355,6 +2376,48 @@ void main() {
             if n:
                 self._ce_param_idx = (self._ce_param_idx + int(delta)) % n
 
+    # -- Profile footer (save/load/delete/revert + name entry) ----------------
+
+    def set_config_editor_profiles(self, names: list[str]) -> None:
+        """Set the saved-profile name list."""
+        self._ce_profiles = list(names)
+        if self._ce_profile_idx >= len(self._ce_profiles):
+            self._ce_profile_idx = -1
+
+    def set_config_editor_dirty(self, dirty: bool) -> None:
+        """Mark whether there are unsaved parameter overrides."""
+        self._ce_dirty = bool(dirty)
+
+    @property
+    def config_editor_name_mode(self) -> bool:
+        """True while the profile-name entry field is capturing typing."""
+        return self._ce_name_mode
+
+    def set_config_editor_name_mode(self, active: bool) -> None:
+        """Enter/leave profile-name entry mode."""
+        self._ce_name_mode = bool(active)
+
+    @property
+    def config_editor_name_text(self) -> str:
+        """Current profile-name entry buffer."""
+        return self._ce_name_text
+
+    def set_config_editor_name_text(self, text: str) -> None:
+        """Replace the profile-name entry buffer."""
+        self._ce_name_text = str(text)
+
+    def config_editor_selected_profile(self) -> str:
+        """Return the profile to load/delete: the selected chip, else the name text."""
+        if 0 <= self._ce_profile_idx < len(self._ce_profiles):
+            return self._ce_profiles[self._ce_profile_idx]
+        return self._ce_name_text.strip()
+
+    def take_config_editor_action(self) -> str | None:
+        """Pop the pending footer action ('save'/'load'/'delete'/'revert')."""
+        action = self._ce_pending_action
+        self._ce_pending_action = None
+        return action
+
     def _render_config_editor(self) -> None:
         """Draw the tabbed configuration editor (shell + tab bar + placeholder body)."""
         if not self.config_editor_visible:
@@ -2417,7 +2480,8 @@ void main() {
 
         # Two-pane body (list | detail).
         body_y = py + 120.0
-        body_h = ph - (body_y - py) - 46.0
+        footer_h = 128.0
+        body_h = ph - (body_y - py) - footer_h
         left_w = pw * 0.32
         left_x = px + 22.0
         right_x = px + 22.0 + left_w
@@ -2439,9 +2503,62 @@ void main() {
                             right_x + 18, body_y + 54, scale=2.0,
                             color=(0.6, 0.7, 0.85, 0.8))
 
-        self._draw_text('Left / Right: switch tabs      Esc: close',
-                        px + 22, py + ph - 34.0, scale=2.0,
-                        color=(0.55, 0.65, 0.75, 0.8))
+        self._render_config_editor_footer(px, py, pw, ph, t)
+
+    def _render_config_editor_footer(
+        self, px: float, py: float, pw: float, ph: float, t: float
+    ) -> None:
+        """Render the profile footer: chips + name field + Save/Load/Delete/Revert."""
+        self._ce_footer_button_rects = []
+        self._ce_profile_chip_rects = []
+        scale = 2.0
+        char_w = float(self._glyph_w) * self._font_scale_norm * scale
+        footer_h = 128.0
+        fy = py + ph - footer_h + 10.0
+
+        # Saved-profile chips (single row; overflow is clipped for v1).
+        self._draw_text('PROFILES', px + 22, fy, scale=1.7, color=(0.55, 0.75, 1.0, 0.85))
+        chip_y = fy + 24.0
+        chip_h = 28.0
+        cx = px + 22.0
+        for i, name in enumerate(self._ce_profiles):
+            w = len(name) * char_w + 20.0
+            if cx + w > px + pw - 22.0:
+                break
+            selected = i == self._ce_profile_idx
+            self._draw_rect(cx, chip_y, w, chip_h,
+                            (0.12, 0.30, 0.62, 0.9) if selected else (0.06, 0.10, 0.22, 0.75))
+            self._draw_text(name, cx + 10, chip_y + 6, scale=1.7,
+                            color=(1.0, 0.95, 0.55, 1.0) if selected else (0.75, 0.85, 1.0, 0.9))
+            self._ce_profile_chip_rects.append((cx, chip_y, w, chip_h, i))
+            cx += w + 8.0
+        if not self._ce_profiles:
+            self._draw_text('(none saved yet)', px + 140, fy, scale=1.7,
+                            color=(0.55, 0.6, 0.7, 0.7))
+
+        # Name field + dirty indicator.
+        name_y = chip_y + chip_h + 14.0
+        caret = '_' if (self._ce_name_mode and int(t * 2.0) % 2 == 0) else ''
+        field_col = (0.10, 0.18, 0.34, 0.9) if self._ce_name_mode else (0.06, 0.10, 0.20, 0.8)
+        self._draw_rect(px + 22, name_y, 360.0, 32.0, field_col)
+        self._draw_text(f'NAME: {self._ce_name_text}{caret}', px + 30, name_y + 7,
+                        scale=2.0, color=(0.9, 0.95, 1.0, 0.95))
+        if self._ce_dirty:
+            self._draw_rect(px + 392, name_y + 9, 14.0, 14.0, (1.0, 0.58, 0.12, 0.9))
+            self._draw_text('unsaved', px + 414, name_y + 7, scale=1.7,
+                            color=(1.0, 0.7, 0.3, 0.85))
+
+        # Buttons (right-to-left so Save is rightmost).
+        bx = px + pw - 22.0
+        for label, action in (('Revert', 'revert'), ('Delete', 'delete'),
+                              ('Load', 'load'), ('Save', 'save')):
+            w = len(label) * char_w + 26.0
+            bxx = bx - w
+            self._draw_rect(bxx, name_y, w, 32.0, (0.10, 0.24, 0.50, 0.85))
+            self._draw_rect(bxx, name_y + 29.0, w, 2.0, (0.4, 0.9, 1.0, 0.8))
+            self._draw_text(label, bxx + 13, name_y + 7, scale=2.0, color=(0.9, 0.96, 1.0, 0.95))
+            self._ce_footer_button_rects.append((bxx, name_y, w, 32.0, action))
+            bx = bxx - 10.0
 
     def _render_config_editor_effects(
         self, left_x: float, right_x: float, body_y: float,
