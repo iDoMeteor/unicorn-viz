@@ -2228,6 +2228,14 @@ void main() {
         self._show_config_editor = False
         self._config_editor_tab_hover = -1
 
+    def set_config_editor_tabs(self, names: list[str]) -> None:
+        """Set the tab list (App-driven so tabs like 'Auto VJ' can be conditional)."""
+        names = [str(n) for n in names] or ['Effects']
+        if names != self._config_editor_tabs:
+            self._config_editor_tabs = names
+        if self._config_editor_tab >= len(self._config_editor_tabs):
+            self._config_editor_tab = len(self._config_editor_tabs) - 1
+
     def set_config_editor_tab(self, index: int) -> None:
         """Select a tab by index (clamped)."""
         n = len(self._config_editor_tabs)
@@ -2621,10 +2629,21 @@ void main() {
         max_prows = max(1, int((body_h - 64.0) / prow_h))
         n_p = len(self._ce_params)
         pstart = max(0, min(self._ce_param_idx - max_prows // 2, max(0, n_p - max_prows)))
+        any_adjustable = False
         for vis, i in enumerate(range(pstart, min(n_p, pstart + max_prows))):
             ry = p_top + vis * prow_h
             p = self._ce_params[i]
             name = str(p.get('name', ''))
+            if p.get('kind') == 'info':
+                # Read-only diagnostic/status row: name + right-aligned value.
+                self._draw_text(name[:26], right_x + 16, ry + 2, scale=1.9,
+                                color=(0.72, 0.8, 0.95, 0.9))
+                info = str(p.get('info', ''))
+                iw = len(info) * float(self._glyph_w) * self._font_scale_norm * 1.9
+                self._draw_text(info[:28], right_x + right_w - 18 - iw, ry + 2, scale=1.9,
+                                color=(0.85, 0.95, 0.7, 0.95))
+                continue
+            any_adjustable = True
             val = float(p.get('value', 0.0))
             pmin = float(p.get('min', 0.0))
             pmax = float(p.get('max', 1.0))
@@ -2645,9 +2664,10 @@ void main() {
                             color=(0.85, 0.95, 0.7, 0.95))
             self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
 
-        self._draw_text('Up/Down: select   [ / ]: adjust',
-                        right_x + 16, body_y + body_h - 22.0, scale=1.7,
-                        color=(0.5, 0.6, 0.72, 0.75))
+        if any_adjustable:
+            self._draw_text('Up/Down: select   [ / ]: adjust',
+                            right_x + 16, body_y + body_h - 22.0, scale=1.7,
+                            color=(0.5, 0.6, 0.72, 0.75))
 
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""

@@ -108,16 +108,27 @@ A tab-based modal reusing the house style:
 
 ## 5) Build increments (each independently green + committable)
 
-1. **Foundation (this increment):** `ConfigProfileStore` + `App` effect-override
-   layer (`_instantiate` merge, set/get/apply/save/load/clear) + `VJApi` surface +
-   tests.  No UI yet.
-2. **Modal shell:** `ConfigEditor` overlay — themed frame, tab bar, open on `c`,
-   animation/sprite-border/hover-glow, event routing, help entry.  Tabs stubbed.
-3. **Effects tab:** effect list (catalog) + parameter rows with live editing wired
-   to Increment 1.
-4. **Profile footer:** name entry + Save/Load/Delete/Revert + dirty state.
-5. **Audio + Visuals tabs.**
-6. **Later:** Drop-ins + Bindings tabs.
+1. ✅ **Foundation:** `ConfigProfileStore` + `App` effect-override layer.
+2. ✅ **Modal shell:** `ConfigEditor` overlay — themed frame, tab bar, open on `c`,
+   animation/sprite-border/hover-glow/decorators, event routing, help entry.
+3. ✅ **Effects tab:** effect list + parameter rows with live editing.
+4. ✅ **Profile footer:** name entry + Save/Load/Delete/Revert + dirty state.
+5. ✅ **Audio + Visuals tabs:** live global settings (reactivity, advance
+   interval, render scale).
+6. ✅ **System + Auto VJ tabs + drop-in settings:** System tab = read-only
+   diagnostics; Auto VJ tab = conditional (only when the drop-in is loaded),
+   read-only status. Audio/Visuals tabs fold in guarded audio/video drop-in
+   knobs (audio-out reverb, color-grade intensity) via public controller APIs.
+
+### Open follow-ups
+
+- **Persist globals + drop-in settings into profiles.** Config profiles still
+  save the `effects` override map only; Audio/Visuals/drop-in edits apply live
+  but are not written to a profile yet. Extend the schema + save/load.
+- **Drop-in config convention.** Guarded core specs cover the two clean knobs
+  today; a `config_editor_settings()` convention would let any drop-in declare
+  its own tunables without core changes.
+- **Bindings tab:** read-only hotkey/MIDI map from the help registry.
 
 ---
 
@@ -132,3 +143,61 @@ A tab-based modal reusing the house style:
 - **Reset semantics:** "Revert" clears overrides for the selected effect back to
   `config.toml` + randomized defaults (re-instantiate or restore
   `_initial_parameters`).
+
+---
+
+## 7) Follow-on — retire `config.toml` (two-layer settings model)
+
+**Goal (owner-endorsed, 2026-07-01):** once the editor covers what operators
+currently hand-edit, migrate `config.toml` defaults into code and drop the
+committed TOML.  The config editor is the unlock — you can't remove hand-edited
+TOML until there's an in-app way to change everything it holds.
+
+### Target architecture — two layers (not "everything in global_state")
+
+1. **Code = defaults.** Every setting has a sensible baked default; a fresh clone
+   runs with **zero** config files (great for packaging/distribution).
+2. **Persisted layer = sparse overrides.** A writable store holds **only values
+   that differ from the code default**; load = `defaults ⊕ overrides`.
+
+**Trap to avoid — store sparse deltas, never a full snapshot.** A full dump means
+a future default improvement in code is permanently shadowed by a stale stored
+value, and "reset to default" becomes a blob-hunt.  Sparse deltas mean new
+defaults reach users automatically and reset = *delete the key*.
+
+### Placement
+
+- **Durable user settings → a dedicated `runtime/settings.json`**, *not*
+  `runtime/global_state.json` (which holds ephemeral runtime atoms like audio
+  source / banner state).  Same separation-of-concerns instinct that keeps
+  `config_profiles.json` distinct from `presets.json`.
+- **Secrets / machine-specific → local, git-ignored slice** (`settings.local.*`):
+  Ably key, Spotify client ID, audio device name, display/window/MIDI prefs.
+  These must **not** be baked into code or a committed file.
+
+### Resulting taxonomy
+
+| Layer | What | Where |
+|-------|------|-------|
+| Defaults | baked sensible values | code |
+| Active overrides | what the operator changed (sparse) | `runtime/settings.json` |
+| Config profiles | named, swappable tunings | `runtime/config_profiles.json` |
+| Show presets | effect on/off sets | `runtime/presets.json` |
+| Secrets / machine | creds, devices, display prefs | local, git-ignored |
+
+### Sequencing
+
+1. Finish the config editor (in-app control of everything TOML holds).
+2. Migrate defaults into code, with tests proving **no behavior change** per
+   section.
+3. Add the sparse override store; make `Config` read `defaults ⊕ overrides`.
+4. Make `config.toml` **optional** — if present, treat it as an override source
+   (backward-compat + an "import my old config" path) during a transition window.
+5. Retire it once the editor covers everything and `config.toml` is empty by
+   default.
+
+### Governance when we pull the trigger
+
+Update in the same batch: CLAUDE.md's **config.toml Editing Policy** section,
+`docs/effect-settings.md`, and the ADR pointers that currently reference
+`config.toml` keys (they should point at the code constants instead).

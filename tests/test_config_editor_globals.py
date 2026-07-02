@@ -38,6 +38,8 @@ def _app(tmp_path: Path, tab='Audio', audio=True) -> App:
     app._audio_manager = _AudioManager() if audio else None
     app._effect_duration = 30.0
     app._render_scale = 1.0
+    app._color_grade = None
+    app._audio_out = None
     ov = Overlays.__new__(Overlays)
     ov._config_editor_tabs = ['Effects', 'Audio', 'Visuals']
     ov._config_editor_tab = ['Effects', 'Audio', 'Visuals'].index(tab)

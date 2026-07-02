@@ -2398,8 +2398,13 @@ void main() {
         return rows
 
     def _push_config_editor_model(self) -> None:
-        """Feed the config editor its Effects-tab data each frame while open."""
+        """Feed the config editor its per-tab data each frame while open."""
         overlays = self._overlays
+        tabs = ['Effects', 'Audio', 'Visuals', 'System']
+        if self._auto_vj is not None:
+            tabs.append('Auto VJ')
+        overlays.set_config_editor_tabs(tabs)
+
         effects = [
             {'class_name': cls.__name__, 'display_name': str(getattr(cls, 'NAME', cls.__name__))}
             for cls in get_effects()
@@ -2413,16 +2418,57 @@ void main() {
             )
             overlays.set_config_editor_effect_index(idx)
             self._config_editor_was_open = True
+
         tab = overlays.config_editor_tab_name
         if tab == 'Effects':
             cls = overlays.config_editor_selected_class()
             overlays.set_config_editor_params(
                 self.config_editor_param_rows(cls) if cls else []
             )
-        else:
+        elif tab in ('Audio', 'Visuals'):
             overlays.set_config_editor_params(self.config_editor_global_rows(tab))
+        else:  # System, Auto VJ — read-only info rows.
+            overlays.set_config_editor_params(self.config_editor_info_rows(tab))
         overlays.set_config_editor_profiles(self.config_profile_names())
         overlays.set_config_editor_dirty(bool(self._effect_config_overrides))
+
+    def config_editor_info_rows(self, tab: str) -> list[dict[str, str]]:
+        """Return read-only info rows for the System / Auto VJ tabs."""
+        def info(name: str, value: object) -> dict[str, str]:
+            return {'name': name, 'kind': 'info', 'info': str(value)}
+
+        rows: list[dict[str, str]] = []
+        if tab == 'System':
+            rows.append(info('FPS', f'{getattr(self, "_last_frame_fps", 0.0):.1f}'))
+            rows.append(info('Frame ms', f'{getattr(self, "_last_frame_ms", 0.0):.2f}'))
+            if self._audio_manager is not None:
+                rows.append(info('Audio xruns', self._audio_manager.get_xrun_count()))
+                rows.append(info('Audio source', self._audio_manager.get_source_label()))
+                rows.append(info('BPM profile', self._audio_manager.get_profile_name()))
+            rows.append(info('Render size', f'{self._render_width}x{self._render_height}'))
+            rows.append(info('Window size', f'{self._width}x{self._height}'))
+            rows.append(info('Resolution scale', f'{self._render_scale:.2f}'))
+            rows.append(info('Display mode', self._display_mode))
+            rows.append(info('Effects', len(get_effects())))
+            rows.append(info('Platform', sys.platform))
+            rows.append(info(
+                'Python',
+                f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}',
+            ))
+        elif tab == 'Auto VJ' and self._auto_vj is not None:
+            av = self._auto_vj
+
+            def lab(attr: str) -> str:
+                value = getattr(av, attr, None)
+                return str(value) if value not in (None, '') else '-'
+
+            rows.append(info('Mood', lab('hud_mood_label')))
+            rows.append(info('Scene', lab('hud_scene_label')))
+            rows.append(info('BPM', lab('hud_bpm_label')))
+            rows.append(info('BPM confidence', lab('hud_bpm_confidence_label')))
+            rows.append(info('Action in', lab('hud_action_in_label')))
+            rows.append(info('Profile rec', lab('profile_recommendation_hud')))
+        return rows
 
     def _config_editor_global_specs(self, tab: str):
         """Return global settings for a tab as (name, getter, setter, min, max)."""
@@ -2437,6 +2483,20 @@ void main() {
                 lambda v: setattr(self, '_effect_duration', max(10.0, float(v))),
                 10.0, 120.0,
             ))
+            # Audio drop-in: audio-out reverb wet (guarded; public API only).
+            ao = self._audio_out
+            if ao is not None and hasattr(ao, 'set_filter') and hasattr(ao, 'snapshot'):
+                def _ao_reverb_get() -> float:
+                    try:
+                        return float(ao.snapshot().get('params', {}).get('reverb_wet', 0.0))
+                    except Exception:
+                        return 0.0
+                specs.append((
+                    'audio_out_reverb',
+                    _ao_reverb_get,
+                    lambda v: ao.set_filter('reverb_wet', v),
+                    0.0, 1.0,
+                ))
         elif tab == 'Visuals':
             specs.append((
                 'render_scale',
@@ -2444,6 +2504,15 @@ void main() {
                 self.set_render_scale,
                 0.5, 1.0,
             ))
+            # Video drop-in: color-grade intensity (guarded; public API only).
+            cg = self._color_grade
+            if cg is not None and hasattr(cg, 'set_intensity'):
+                specs.append((
+                    'color_grade_intensity',
+                    lambda: float(getattr(cg, 'intensity', 0.0)),
+                    cg.set_intensity,
+                    0.0, 1.0,
+                ))
         return specs
 
     def config_editor_global_rows(self, tab: str) -> list[dict[str, float | str]]:
