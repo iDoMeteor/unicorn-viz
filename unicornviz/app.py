@@ -2413,10 +2413,45 @@ void main() {
             )
             overlays.set_config_editor_effect_index(idx)
             self._config_editor_was_open = True
-        cls = overlays.config_editor_selected_class()
-        overlays.set_config_editor_params(self.config_editor_param_rows(cls) if cls else [])
+        tab = overlays.config_editor_tab_name
+        if tab == 'Effects':
+            cls = overlays.config_editor_selected_class()
+            overlays.set_config_editor_params(
+                self.config_editor_param_rows(cls) if cls else []
+            )
+        else:
+            overlays.set_config_editor_params(self.config_editor_global_rows(tab))
         overlays.set_config_editor_profiles(self.config_profile_names())
         overlays.set_config_editor_dirty(bool(self._effect_config_overrides))
+
+    def _config_editor_global_specs(self, tab: str):
+        """Return global settings for a tab as (name, getter, setter, min, max)."""
+        specs: list[tuple] = []
+        if tab == 'Audio':
+            if self._audio_manager is not None:
+                am = self._audio_manager
+                specs.append(('reactivity', am.get_reactivity, am.set_reactivity, 0.1, 5.0))
+            specs.append((
+                'advance_interval_s',
+                lambda: float(self._effect_duration),
+                lambda v: setattr(self, '_effect_duration', max(10.0, float(v))),
+                10.0, 120.0,
+            ))
+        elif tab == 'Visuals':
+            specs.append((
+                'render_scale',
+                lambda: float(self._render_scale),
+                self.set_render_scale,
+                0.5, 1.0,
+            ))
+        return specs
+
+    def config_editor_global_rows(self, tab: str) -> list[dict[str, float | str]]:
+        """Return ``[{'name','value','min','max'}]`` for a tab's global settings."""
+        rows: list[dict[str, float | str]] = []
+        for name, getter, _setter, lo, hi in self._config_editor_global_specs(tab):
+            rows.append({'name': name, 'value': float(getter()), 'min': lo, 'max': hi})
+        return rows
 
     def _apply_config_editor_action(self) -> None:
         """Run a pending footer action (save/load/delete/revert)."""
@@ -2446,20 +2481,30 @@ void main() {
                 overlays.flash_message(f'Reverted: {cls}', 1.4)
 
     def _config_editor_adjust(self, notches: float) -> None:
-        """Adjust the selected parameter by ``notches`` steps, live-applying it."""
+        """Adjust the selected parameter/setting by ``notches`` steps, live."""
         overlays = self._overlays
-        cls = overlays.config_editor_selected_class()
-        if not cls:
-            return
-        rows = self.config_editor_param_rows(cls)
         i = overlays.config_editor_param_index()
-        if not (0 <= i < len(rows)):
+        tab = overlays.config_editor_tab_name
+        if tab == 'Effects':
+            cls = overlays.config_editor_selected_class()
+            if not cls:
+                return
+            rows = self.config_editor_param_rows(cls)
+            if not (0 <= i < len(rows)):
+                return
+            row = rows[i]
+            lo, hi = float(row['min']), float(row['max'])
+            step = (hi - lo) / 40.0 if hi > lo else 0.01
+            new_value = min(hi, max(lo, float(row['value']) + notches * step))
+            self.set_effect_parameter(cls, str(row['name']), new_value)
             return
-        row = rows[i]
-        lo, hi = float(row['min']), float(row['max'])
+        # Audio / Visuals: apply to the global setting via its setter.
+        specs = self._config_editor_global_specs(tab)
+        if not (0 <= i < len(specs)):
+            return
+        _name, getter, setter, lo, hi = specs[i]
         step = (hi - lo) / 40.0 if hi > lo else 0.01
-        new_value = min(hi, max(lo, float(row['value']) + notches * step))
-        self.set_effect_parameter(cls, str(row['name']), new_value)
+        setter(min(hi, max(lo, float(getter()) + notches * step)))
 
     # ------------------------------------------------------------------ #
     # Effect management                                                    #

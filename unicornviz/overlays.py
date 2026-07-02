@@ -2366,8 +2366,13 @@ void main() {
         self._ce_focus ^= 1
 
     def move_config_editor_row(self, delta: int) -> None:
-        """Move the cursor within the focused pane (wraps)."""
-        if self._ce_focus == 0:
+        """Move the cursor within the focused pane (wraps).
+
+        On non-Effects tabs there is no effect list, so movement always targets
+        the settings rows.
+        """
+        effects_tab = self.config_editor_tab_name == 'Effects'
+        if effects_tab and self._ce_focus == 0:
             n = len(self._ce_effects)
             if n:
                 self._ce_effect_idx = (self._ce_effect_idx + int(delta)) % n
@@ -2489,19 +2494,21 @@ void main() {
         self._draw_rect(left_x, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
         self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
 
-        if self.config_editor_tab_name == 'Effects':
+        tab_name = self.config_editor_tab_name
+        if tab_name == 'Effects':
             self._render_config_editor_effects(
                 left_x, right_x, body_y, left_w, right_w, body_h
             )
         else:
+            # Audio / Visuals: global settings as parameter rows (no effect list).
             self._ce_effect_row_rects = []
-            self._ce_param_row_rects = []
-            tab_name = self.config_editor_tab_name
-            self._draw_text(f'{tab_name} settings', right_x + 18, body_y + 16, scale=2.4,
-                            color=(0.8, 0.9, 1.0, 0.95))
-            self._draw_text('Coming in a later increment.',
-                            right_x + 18, body_y + 54, scale=2.0,
-                            color=(0.6, 0.7, 0.85, 0.8))
+            self._draw_text(tab_name.upper(), left_x + 14, body_y + 12, scale=1.8,
+                            color=(0.55, 0.75, 1.0, 0.85))
+            self._draw_text('Global', left_x + 16, body_y + 44, scale=1.9,
+                            color=(0.75, 0.83, 0.98, 0.9))
+            self._render_config_editor_param_rows(
+                right_x, body_y, right_w, body_h, f'{tab_name.upper()} SETTINGS'
+            )
 
         self._render_config_editor_footer(px, py, pw, ph, t)
 
@@ -2590,10 +2597,23 @@ void main() {
 
         # Right pane — parameters of the selected effect.
         cls = self.config_editor_selected_class()
-        self._draw_text(f'{cls} PARAMETERS'[:40], right_x + 16, body_y + 12, scale=1.9,
+        self._render_config_editor_param_rows(
+            right_x, body_y, right_w, body_h, f'{cls} PARAMETERS'
+        )
+
+    def _render_config_editor_param_rows(
+        self, right_x: float, body_y: float, right_w: float, body_h: float, title: str,
+    ) -> None:
+        """Render the ``_ce_params`` rows (name + value bar + value) in a pane.
+
+        Shared by the Effects tab (per-effect params) and the Audio/Visuals tabs
+        (global settings).
+        """
+        self._ce_param_row_rects = []
+        self._draw_text(title[:40], right_x + 16, body_y + 12, scale=1.9,
                         color=(0.6, 0.8, 1.0, 0.9))
         if not self._ce_params:
-            self._draw_text('No tunable parameters.', right_x + 18, body_y + 52, scale=2.0,
+            self._draw_text('No tunable settings.', right_x + 18, body_y + 52, scale=2.0,
                             color=(0.6, 0.65, 0.75, 0.8))
             return
         p_top = body_y + 48.0
@@ -2625,7 +2645,7 @@ void main() {
                             color=(0.85, 0.95, 0.7, 0.95))
             self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
 
-        self._draw_text('Tab: pane   Up/Down: select   [ / ]: adjust',
+        self._draw_text('Up/Down: select   [ / ]: adjust',
                         right_x + 16, body_y + body_h - 22.0, scale=1.7,
                         color=(0.5, 0.6, 0.72, 0.75))
 

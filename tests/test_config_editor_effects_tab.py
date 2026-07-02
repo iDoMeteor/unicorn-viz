@@ -66,6 +66,8 @@ def test_adjust_applies_live_and_clamps(tmp_path: Path) -> None:
     app = _app(tmp_path, current=eff)
 
     ov = Overlays.__new__(Overlays)
+    ov._config_editor_tabs = ['Effects', 'Audio', 'Visuals']
+    ov._config_editor_tab = 0
     ov._ce_effects = [{'class_name': '_Plasma', 'display_name': 'Plasma'}]
     ov._ce_effect_idx = 0
     ov._ce_params = app.config_editor_param_rows('_Plasma')
