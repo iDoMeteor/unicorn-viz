@@ -154,6 +154,12 @@ def _app(tmp_path: Path, overlay, current=None) -> App:
     app._effect_config_overrides = {}
     app._current_effect = current
     app._overlays = overlay
+    # Settings-spec aggregation (save/load) reads these.
+    app._audio_manager = None
+    app._effect_duration = 30.0
+    app._render_scale = 1.0
+    app._color_grade = None
+    app._audio_out = None
     return app
 
 

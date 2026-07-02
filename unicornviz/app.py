@@ -2348,11 +2348,15 @@ void main() {
         return {k: dict(v) for k, v in self._effect_config_overrides.items()}
 
     def save_config_profile(self, name: str) -> None:
-        """Persist the current effect overrides as a named configuration profile."""
-        self._config_profile_store.save(name, {'effects': self.config_overrides_snapshot()})
+        """Persist effect overrides + global/drop-in settings as a named profile."""
+        settings = {s['key']: float(s['value']) for s in self._config_editor_all_specs()}
+        self._config_profile_store.save(name, {
+            'effects': self.config_overrides_snapshot(),
+            'settings': settings,
+        })
 
     def load_config_profile(self, name: str) -> bool:
-        """Load a configuration profile and apply its effect overrides live."""
+        """Load a profile: apply effect overrides + global/drop-in settings live."""
         payload = self._config_profile_store.get(name)
         if payload is None:
             return False
@@ -2372,6 +2376,17 @@ void main() {
             for k, v in self._effect_config_overrides.get(type(eff).__name__, {}).items():
                 if k in eff.parameters:
                     eff.parameters[k] = float(v)
+        # Apply persisted global + drop-in settings via their live setters.
+        settings = payload.get('settings', {}) if isinstance(payload, dict) else {}
+        if isinstance(settings, dict) and settings:
+            by_key = {s['key']: s for s in self._config_editor_all_specs()}
+            for key, value in settings.items():
+                spec = by_key.get(str(key))
+                if spec is not None and isinstance(value, (int, float)):
+                    try:
+                        spec['set'](float(value))
+                    except Exception:
+                        log.debug('Profile setting apply failed: %s', key, exc_info=True)
         return True
 
     def delete_config_profile(self, name: str) -> bool:
@@ -2470,57 +2485,84 @@ void main() {
             rows.append(info('Profile rec', lab('profile_recommendation_hud')))
         return rows
 
-    def _config_editor_global_specs(self, tab: str):
-        """Return global settings for a tab as (name, getter, setter, min, max)."""
-        specs: list[tuple] = []
+    # App attributes that may hold a config-editor-contributing controller.
+    # (Which of the app's own subsystems to poll — the *settings* still come
+    # from each drop-in via the convention, so nothing drop-in-specific is
+    # hard-coded here.)
+    _CONFIG_CONTRIBUTOR_ATTRS = (
+        '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
+        '_lyrics', '_webcam_system',
+    )
+
+    def _config_editor_settings_specs(self, tab: str) -> list[dict]:
+        """Return unified setting specs for a tab.
+
+        Each spec: ``{'key','name','value','min','max','set'}``.  Combines core
+        globals with drop-in contributions gathered via the config-editor
+        convention (``CONFIG_EDITOR_CATEGORY`` + ``config_editor_settings()`` +
+        ``set_config_setting()``).
+        """
+        specs: list[dict] = []
         if tab == 'Audio':
             if self._audio_manager is not None:
                 am = self._audio_manager
-                specs.append(('reactivity', am.get_reactivity, am.set_reactivity, 0.1, 5.0))
-            specs.append((
-                'advance_interval_s',
-                lambda: float(self._effect_duration),
-                lambda v: setattr(self, '_effect_duration', max(10.0, float(v))),
-                10.0, 120.0,
-            ))
-            # Audio drop-in: audio-out reverb wet (guarded; public API only).
-            ao = self._audio_out
-            if ao is not None and hasattr(ao, 'set_filter') and hasattr(ao, 'snapshot'):
-                def _ao_reverb_get() -> float:
-                    try:
-                        return float(ao.snapshot().get('params', {}).get('reverb_wet', 0.0))
-                    except Exception:
-                        return 0.0
-                specs.append((
-                    'audio_out_reverb',
-                    _ao_reverb_get,
-                    lambda v: ao.set_filter('reverb_wet', v),
-                    0.0, 1.0,
-                ))
+                specs.append({'key': 'audio.reactivity', 'name': 'reactivity',
+                              'value': float(am.get_reactivity()), 'min': 0.1, 'max': 5.0,
+                              'set': am.set_reactivity})
+            specs.append({'key': 'audio.advance_interval_s', 'name': 'advance_interval_s',
+                          'value': float(self._effect_duration), 'min': 10.0, 'max': 120.0,
+                          'set': lambda v: setattr(self, '_effect_duration', max(10.0, float(v)))})
         elif tab == 'Visuals':
-            specs.append((
-                'render_scale',
-                lambda: float(self._render_scale),
-                self.set_render_scale,
-                0.5, 1.0,
-            ))
-            # Video drop-in: color-grade intensity (guarded; public API only).
-            cg = self._color_grade
-            if cg is not None and hasattr(cg, 'set_intensity'):
-                specs.append((
-                    'color_grade_intensity',
-                    lambda: float(getattr(cg, 'intensity', 0.0)),
-                    cg.set_intensity,
-                    0.0, 1.0,
-                ))
+            specs.append({'key': 'visuals.render_scale', 'name': 'render_scale',
+                          'value': float(self._render_scale), 'min': 0.5, 'max': 1.0,
+                          'set': self.set_render_scale})
+        specs.extend(self._config_editor_dropin_specs(tab))
+        return specs
+
+    def _config_editor_dropin_specs(self, tab: str) -> list[dict]:
+        """Gather drop-in setting specs for a tab via the config-editor convention."""
+        specs: list[dict] = []
+        for attr in self._CONFIG_CONTRIBUTOR_ATTRS:
+            ctrl = getattr(self, attr, None)
+            if ctrl is None or getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', None) != tab:
+                continue
+            getter = getattr(ctrl, 'config_editor_settings', None)
+            setter = getattr(ctrl, 'set_config_setting', None)
+            if not (callable(getter) and callable(setter)):
+                continue
+            prefix = str(getattr(ctrl, 'CONFIG_EDITOR_KEY', attr.lstrip('_')))
+            try:
+                rows = getter()
+            except Exception:
+                log.debug('config_editor_settings failed for %s', attr, exc_info=True)
+                continue
+            for row in rows:
+                name = str(row.get('name', ''))
+                if not name:
+                    continue
+                specs.append({
+                    'key': f'dropin.{prefix}.{name}',
+                    'name': name,
+                    'value': float(row.get('value', 0.0)),
+                    'min': float(row.get('min', 0.0)),
+                    'max': float(row.get('max', 1.0)),
+                    'set': (lambda v, s=setter, n=name: s(n, v)),
+                })
+        return specs
+
+    def _config_editor_all_specs(self) -> list[dict]:
+        """All persistable setting specs across the settings tabs."""
+        specs: list[dict] = []
+        for tab in ('Audio', 'Visuals'):
+            specs.extend(self._config_editor_settings_specs(tab))
         return specs
 
     def config_editor_global_rows(self, tab: str) -> list[dict[str, float | str]]:
-        """Return ``[{'name','value','min','max'}]`` for a tab's global settings."""
-        rows: list[dict[str, float | str]] = []
-        for name, getter, _setter, lo, hi in self._config_editor_global_specs(tab):
-            rows.append({'name': name, 'value': float(getter()), 'min': lo, 'max': hi})
-        return rows
+        """Return ``[{'name','value','min','max'}]`` for a tab's settings rows."""
+        return [
+            {'name': s['name'], 'value': s['value'], 'min': s['min'], 'max': s['max']}
+            for s in self._config_editor_settings_specs(tab)
+        ]
 
     def _apply_config_editor_action(self) -> None:
         """Run a pending footer action (save/load/delete/revert)."""
@@ -2567,13 +2609,14 @@ void main() {
             new_value = min(hi, max(lo, float(row['value']) + notches * step))
             self.set_effect_parameter(cls, str(row['name']), new_value)
             return
-        # Audio / Visuals: apply to the global setting via its setter.
-        specs = self._config_editor_global_specs(tab)
+        # Audio / Visuals: apply to the setting via its setter.
+        specs = self._config_editor_settings_specs(tab)
         if not (0 <= i < len(specs)):
             return
-        _name, getter, setter, lo, hi = specs[i]
+        spec = specs[i]
+        lo, hi = float(spec['min']), float(spec['max'])
         step = (hi - lo) / 40.0 if hi > lo else 0.01
-        setter(min(hi, max(lo, float(getter()) + notches * step)))
+        spec['set'](min(hi, max(lo, float(spec['value']) + notches * step)))
 
     # ------------------------------------------------------------------ #
     # Effect management                                                    #

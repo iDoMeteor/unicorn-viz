@@ -95,6 +95,12 @@ def _app(tmp_path: Path, effects_cfg=None, current=None) -> App:
     app._config_profile_store = ConfigProfileStore(tmp_path / 'cp.json')
     app._effect_config_overrides = {}
     app._current_effect = current
+    # Profile save/load aggregates all setting specs, which read these.
+    app._audio_manager = None
+    app._effect_duration = 30.0
+    app._render_scale = 1.0
+    app._color_grade = None
+    app._audio_out = None
     return app
 
 

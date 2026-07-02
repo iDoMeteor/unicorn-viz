@@ -36,25 +36,37 @@ class _AudioManager:
 
 
 class _ColorGrade:
+    """Implements the config-editor convention."""
+
+    CONFIG_EDITOR_CATEGORY = 'Visuals'
+    CONFIG_EDITOR_KEY = 'color_grade'
+
     def __init__(self):
         self.intensity = 0.85
 
-    def set_intensity(self, v):
-        self.intensity = max(0.0, min(1.0, float(v)))
-        return self.intensity
+    def config_editor_settings(self):
+        return [{'name': 'intensity', 'value': self.intensity, 'min': 0.0, 'max': 1.0}]
+
+    def set_config_setting(self, name, value):
+        if name == 'intensity':
+            self.intensity = max(0.0, min(1.0, float(value)))
 
 
 class _AudioOut:
+    """Implements the config-editor convention."""
+
+    CONFIG_EDITOR_CATEGORY = 'Audio'
+    CONFIG_EDITOR_KEY = 'audio_out'
+
     def __init__(self):
         self._wet = 0.45
 
-    def snapshot(self):
-        return {'params': {'reverb_wet': self._wet}}
+    def config_editor_settings(self):
+        return [{'name': 'reverb_wet', 'value': self._wet, 'min': 0.0, 'max': 1.0}]
 
-    def set_filter(self, name, value):
+    def set_config_setting(self, name, value):
         if name == 'reverb_wet':
             self._wet = max(0.0, min(1.0, float(value)))
-        return self._wet
 
 
 class _AutoVJ:
@@ -152,9 +164,9 @@ def test_color_grade_in_visuals(tmp_path: Path) -> None:
     rows = app.config_editor_global_rows('Visuals')
     names = [r['name'] for r in rows]
     assert 'render_scale' in names
-    assert 'color_grade_intensity' in names
+    assert 'intensity' in names  # contributed by color-grade via convention
     # Adjust it live via the global adjust path.
-    app._overlays._ce_param_idx = names.index('color_grade_intensity')
+    app._overlays._ce_param_idx = names.index('intensity')
     app._config_editor_adjust(-1.0)
     assert cg.intensity < 0.85  # decreased
 
@@ -164,8 +176,8 @@ def test_audio_out_in_audio(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Audio', audio_out=ao)
     rows = app.config_editor_global_rows('Audio')
     names = [r['name'] for r in rows]
-    assert 'audio_out_reverb' in names
-    app._overlays._ce_param_idx = names.index('audio_out_reverb')
+    assert 'reverb_wet' in names  # contributed by audio-out via convention
+    app._overlays._ce_param_idx = names.index('reverb_wet')
     app._config_editor_adjust(1.0)
     assert ao._wet > 0.45  # increased
 
@@ -173,4 +185,18 @@ def test_audio_out_in_audio(tmp_path: Path) -> None:
 def test_no_dropins_no_extra_rows(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     names = [r['name'] for r in app.config_editor_global_rows('Visuals')]
-    assert names == ['render_scale']  # color-grade absent → not added
+    assert names == ['render_scale']  # no contributor → nothing extra
+
+
+def test_profile_persists_and_restores_dropin_setting(tmp_path: Path) -> None:
+    cg = _ColorGrade()
+    app = _app(tmp_path, tab='Visuals', color_grade=cg)
+    cg.set_config_setting('intensity', 0.2)
+    app.save_config_profile('Look A')
+
+    # Fresh app + fresh controller at a different value; load must restore 0.2.
+    cg2 = _ColorGrade()
+    app2 = _app(tmp_path, tab='Visuals', color_grade=cg2)
+    assert cg2.intensity == 0.85
+    assert app2.load_config_profile('Look A') is True
+    assert abs(cg2.intensity - 0.2) < 1e-6

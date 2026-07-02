@@ -8,6 +8,12 @@ This document lists every built-in effect and its tweakable values under `[effec
 
 Notes:
 - Keys are **class names**, not display names.
+- **Setting a parameter pins it — it skips that parameter's per-run
+  randomization.** Effects randomize their visible-at-frame-0 parameters each
+  run (see the Effect Randomization Requirements in `CLAUDE.md`); providing a
+  value here (or via the in-app configuration editor / a saved configuration
+  profile) makes the effect use that fixed value instead of randomizing it.
+  Parameters you leave unset keep their per-run variety.
 - If an effect does not list settings here, it currently has no user-tweakable parameters.
 - Global audio reactivity and playlist behavior are controlled outside `[effects]`.
 - Every effect can optionally define `reactivity` under `[effects.<ClassName>]`.

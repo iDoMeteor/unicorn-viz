@@ -2608,6 +2608,10 @@ void main() {
         self._render_config_editor_param_rows(
             right_x, body_y, right_w, body_h, f'{cls} PARAMETERS'
         )
+        # Make the randomization behaviour obvious to the operator.
+        self._draw_text('Adjusting a value pins it (skips its per-run randomization).',
+                        right_x + 16, body_y + body_h - 44.0, scale=1.7,
+                        color=(1.0, 0.72, 0.3, 0.85))
 
     def _render_config_editor_param_rows(
         self, right_x: float, body_y: float, right_w: float, body_h: float, title: str,

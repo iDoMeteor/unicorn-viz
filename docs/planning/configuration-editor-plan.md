@@ -120,15 +120,29 @@ A tab-based modal reusing the house style:
    read-only status. Audio/Visuals tabs fold in guarded audio/video drop-in
    knobs (audio-out reverb, color-grade intensity) via public controller APIs.
 
+### Increment 7 (done): convention + full persistence
+
+- ✅ **Drop-in config convention.** A controller opts in by declaring
+  `CONFIG_EDITOR_CATEGORY` (which tab) + `CONFIG_EDITOR_KEY` (persistence prefix)
+  and implementing `config_editor_settings() -> [{'name','value','min','max'}]`
+  and `set_config_setting(name, value)`. The core aggregates contributors from
+  its own subsystem attributes (`_CONFIG_CONTRIBUTOR_ATTRS`) — the *settings*
+  come entirely from each drop-in, nothing drop-in-specific is hard-coded. The
+  guarded color-grade/audio-out specs were removed; those drop-ins now adopt the
+  convention (color-grade: intensity; audio-out: full filter chain).
+- ✅ **Full persistence.** Profiles now save `{'effects': ..., 'settings':
+  {key: value}}` where `settings` spans core globals + drop-in contributions
+  (keyed `audio.*` / `visuals.*` / `dropin.KEY.NAME`). Load re-applies effect
+  overrides and every setting via its live setter.
+- ✅ **Randomization note surfaced** in the Effects tab UI and
+  `docs/effect-settings.md`.
+
 ### Open follow-ups
 
-- **Persist globals + drop-in settings into profiles.** Config profiles still
-  save the `effects` override map only; Audio/Visuals/drop-in edits apply live
-  but are not written to a profile yet. Extend the schema + save/load.
-- **Drop-in config convention.** Guarded core specs cover the two clean knobs
-  today; a `config_editor_settings()` convention would let any drop-in declare
-  its own tunables without core changes.
 - **Bindings tab:** read-only hotkey/MIDI map from the help registry.
+- **Sparse-vs-full profile settings:** profiles snapshot the full exposed
+  settings set (fine for named "looks"); the always-on active-settings layer of
+  the config.toml retirement (§7) should still be sparse deltas.
 
 ---
 
