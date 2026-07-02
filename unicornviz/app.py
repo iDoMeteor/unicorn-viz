@@ -3334,8 +3334,15 @@ void main() {
                                 float(event.button.x), float(event.button.y),
                                 self._primary_display_viewport(),
                             )
-                            if hit is not None:
-                                self._open_context_menu_at(hit[0], hit[1])
+                            if hit is None:
+                                # Span/mirror: the click can map outside the
+                                # primary-display sub-viewport. Open the menu at
+                                # the overlay-canvas centre so right-click always
+                                # works instead of silently doing nothing.
+                                ow = float(getattr(self._overlays, '_width', self._width) or self._width)
+                                oh = float(getattr(self._overlays, '_height', self._height) or self._height)
+                                hit = (ow * 0.5, oh * 0.5)
+                            self._open_context_menu_at(hit[0], hit[1])
                         except Exception as exc:
                             log.warning('Context menu open failed: %s', exc)
                         continue
