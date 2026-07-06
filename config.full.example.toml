@@ -114,8 +114,6 @@ poll_interval_s = 0.75
 command_timeout_s = 0.25
 now_playing_banner = true
 now_playing_banner_hold_s = 10.0
-# Optional path to local Spotify audio-features JSON map keyed by track id.
-# features_file = "assets/audio/spotify_features.json"
 # Optional live corpus sink for runtime training rows.
 # live_corpus_file = "assets/training/corpus/live-corpus.jsonl"
 

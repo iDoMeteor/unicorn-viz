@@ -39,12 +39,7 @@ def test_build_live_training_row_pairs_spotify_and_live_audio() -> None:
         'duration_s': 180.0,
         'position_s': 90.0,
         'progress': 0.5,
-        'feature_confidence': 0.87,
         'tag_confidence': 0.62,
-        'bpm': 124.0,
-        'energy': 0.81,
-        'danceability': 0.74,
-        'valence': 0.41,
         'tags': ['house', 'chillstep'],
         'genres': ['electronic'],
     }
