@@ -35,6 +35,7 @@ This is the canonical map for project documentation.
 - Configuration editor plan (2026-07-01): [docs/planning/configuration-editor-plan.md](planning/configuration-editor-plan.md)
 - CTA in-app editor + extraction plan (2026-07-13): [docs/planning/cta-editor-and-extraction-plan.md](planning/cta-editor-and-extraction-plan.md)
 - Auto VJ tags + hotkey system overhaul plan (2026-07-13): [docs/planning/vj-tags-and-hotkey-system-plan.md](planning/vj-tags-and-hotkey-system-plan.md)
+- VJ mood-tag rollout spec + verification (2026-07-13): [docs/planning/vj-mood-tag-rollout.md](planning/vj-mood-tag-rollout.md)
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
 - Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
 - ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
