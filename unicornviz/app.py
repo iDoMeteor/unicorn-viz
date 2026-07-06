@@ -163,6 +163,11 @@ def _load_rtmp_streamer_class() -> type:
         return _NullRTMPStreamer
 
 
+def _load_cta_controller_class() -> type:
+    """Load CTAController from the cta-01 drop-in."""
+    return load_dropin_symbol('cta-01/cta_controller.py', 'CTAController')
+
+
 def _load_postfx_controller_class() -> type:
     """Load PostFxController directly from the postfx-01 drop-in."""
     try:
@@ -372,6 +377,7 @@ class App:
         self._control_room_startup_cfg: dict[str, Any] | None = None
         self._control_room_startup_frames_remaining: int = 0
         self._streamer = None
+        self._cta_controller = None
         self._playlist: Playlist | None = None
         self._subsystems: dict[str, Any] = {}
         self._claimed_window_handlers: dict[int, Callable[[Any], None]] = {}
@@ -3235,6 +3241,19 @@ void main() {
             )
 
         if not self._safe_mode:
+            cta_cfg = self.cfg.get('cta', default={}) or {}
+            if not isinstance(cta_cfg, dict):
+                cta_cfg = {}
+            try:
+                cta_cls = _load_cta_controller_class()
+                self._cta_controller = cta_cls(cta_cfg)
+                self._cta_controller.set_vj_api(self.vj_api)
+                self.vj_api.register_key_handler('cta', self._cta_controller.handle_key)
+                log.info('CTAController loaded from drop-in')
+            except Exception as exc:
+                log.warning('CTAController not available: %s', exc)
+
+        if not self._safe_mode:
             banner_cfg = self.cfg.get('banner', default={}) or {}
             if not isinstance(banner_cfg, dict):
                 banner_cfg = {}
@@ -5277,51 +5296,6 @@ void main() {
         if self._streamer is None:
             return 'unavailable'
         return self._streamer.set_provider(provider, restart=True)
-
-    def trigger_streaming_cta(self) -> str:
-        """Trigger CTA overlay via streaming drop-in ownership with core fallback."""
-        if self._overlays is None:
-            return 'CTA unavailable'
-
-        payload = None
-        if self._streamer is not None:
-            method = getattr(self._streamer, 'trigger_cta', None)
-            if callable(method):
-                try:
-                    payload = method()
-                except Exception as exc:
-                    log.debug('Streaming CTA trigger failed: %s', exc)
-
-        if payload is None:
-            self._overlays.trigger_cta()
-            return 'CTA triggered (default)'
-
-        text, icon, duration = payload
-        self._overlays.trigger_cta_custom(str(text), str(icon), float(duration))
-        return 'CTA triggered'
-
-    def trigger_streaming_song_cta(self, one_more: bool = False) -> str:
-        """Trigger dedicated song CTA overlay via streaming drop-in ownership."""
-        if self._overlays is None:
-            return 'CTA unavailable'
-
-        payload = None
-        if self._streamer is not None:
-            method = getattr(self._streamer, 'trigger_song_cta', None)
-            if callable(method):
-                try:
-                    payload = method(bool(one_more))
-                except Exception as exc:
-                    log.debug('Streaming song CTA trigger failed: %s', exc)
-
-        if payload is None:
-            text = 'One more song!' if one_more else 'Last song!'
-            self._overlays.trigger_cta_custom(text, '🎵', 4.5)
-            return 'CTA triggered (default)'
-
-        text, icon, duration = payload
-        self._overlays.trigger_cta_custom(str(text), str(icon), float(duration))
-        return 'CTA triggered'
 
     def _apply_random_speed(self) -> None:
         """Apply random speed using effect-local overrides when available."""

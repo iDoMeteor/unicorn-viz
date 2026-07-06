@@ -1650,12 +1650,6 @@ class HotkeyHandler:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
 
-        elif sym == sdl2.SDLK_F9:
-            a.trigger_streaming_cta()
-
-        elif sym == sdl2.SDLK_F10:
-            a.trigger_streaming_song_cta(one_more=bool(mod & sdl2.KMOD_SHIFT))
-
     def _screenshot(self) -> None:
         import datetime
         from pathlib import Path

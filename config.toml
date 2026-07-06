@@ -142,6 +142,27 @@ http_timeout_s = 1.0
 # crossfade_ms = 0                  # reserved — cross-fade support coming in a future release
 
 # ---------------------------------------------------------------------------
+# CTA (Call-to-Action) hype overlay (drop-ins/cta-01)
+# Cycles configurable social prompts on screen when triggered.
+#
+# Hotkeys:
+#   F9            — Trigger next hype CTA (cycles messages)
+#   F10           — CTA: Last song
+#   Shift+F10     — CTA: One more song
+# ---------------------------------------------------------------------------
+# [cta]
+# enabled     = true      # master on/off
+# duration_s  = 4.5       # seconds each message stays on screen
+# cooldown_s  = 0.0       # minimum seconds between F9 triggers
+# mode        = "cycle"   # "cycle" or "random"
+# seed        = 0         # RNG seed for random mode
+# messages    = [
+#   "Push the buttons!|👍",
+#   "Follow for more!|🔔",
+#   { text = "Share the love!", icon = "❤️" },
+# ]
+
+# ---------------------------------------------------------------------------
 # Live chat overlay (drop-ins/chat-01)
 # Powered by Ably Realtime.  Get a free API key at https://app.ably.io
 # Also see drop-ins/chat-01/web/ChatWidget.tsx for the React component.

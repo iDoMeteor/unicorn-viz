@@ -944,6 +944,17 @@ class VJApi:
         """Toggle RTMP streaming on or off."""
         return self._app.toggle_streaming()
 
+    def trigger_cta_custom(
+        self,
+        text: str,
+        icon: str = '',
+        duration: 'float | None' = None,
+    ) -> None:
+        """Trigger a custom CTA message on the main overlay."""
+        overlays = getattr(self._app, '_overlays', None)
+        if overlays is not None:
+            overlays.trigger_cta_custom(str(text), str(icon), duration)
+
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()
