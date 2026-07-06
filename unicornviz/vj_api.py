@@ -351,6 +351,7 @@ class VJApi:
         if exclude_current and self._app._current_effect is not None:  # noqa: SLF001
             cur_name = self._app._current_effect.__class__.__name__  # noqa: SLF001
             effects = [cls for cls in effects if cls.__name__ != cur_name]
+        base_effects = effects  # enabled set before tag filtering
         if tags:
             tag_set = {t.lower() for t in tags}
             filtered: list[type] = []
@@ -358,7 +359,11 @@ class VJApi:
                 cls_tags = {str(t).lower() for t in getattr(cls, 'TAGS', [])}
                 if cls_tags & tag_set:
                     filtered.append(cls)
-            effects = filtered
+            # Fallback: if no *enabled* effect carries any requested tag, don't
+            # strand the director on the current effect — pick from any enabled
+            # effect so under-tagged effects still get airtime instead of the
+            # scene silently collapsing to whatever handful happens to match.
+            effects = filtered if filtered else base_effects
         if not effects:
             return None
         cls = self._app._rng.choice(effects)  # noqa: SLF001
