@@ -30,7 +30,7 @@ _DEFAULTS: dict[str, Any] = {
     "window": {
         "width": 1920,
         "height": 1080,
-        "fullscreen": False,
+        "fullscreen": True,
         "title": "Unicorn Viz",
         "display_index": 0,
         "display_mode": "single",
@@ -38,8 +38,8 @@ _DEFAULTS: dict[str, Any] = {
     },
     "demo": {
         "mode": "sequential",
-        "effect_duration": 20,
-        "transition": "crossfade",
+        "effect_duration": 60,
+        "transition": "shuffle",
         "transition_duration": 1.0,
         "auto_advance": True,
     },
@@ -101,7 +101,7 @@ _DEFAULTS: dict[str, Any] = {
         "preset": "veryfast",
         "crf": 18,
         "pixel_format": "yuv420p",
-        "capture_audio": False,
+        "capture_audio": True,
         "audio_input_format": "pulse",
         "audio_input_device": "",
         "audio_codec": "aac",
