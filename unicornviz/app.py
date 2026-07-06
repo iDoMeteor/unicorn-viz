@@ -391,7 +391,7 @@ class App:
         self._zoom_randomized: bool = False
         self._demo_timer: float = 0.0
         self._effect_duration: float = float(
-            self.cfg.get('demo', 'effect_duration', default=20)
+            self.cfg.get('demo', 'effect_duration', default=60)
         )
         # Session/show timer surface for Auto VJ planning and VJ API.
         self._session_started_at: float = 0.0
@@ -488,7 +488,7 @@ class App:
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))
-        self._fullscreen = self.cfg.get("window", "fullscreen", default=False)
+        self._fullscreen = self.cfg.get("window", "fullscreen", default=True)
         self._show_cursor_default = bool(self.cfg.get('window', 'show_cursor', default=False))
         self._audio = AudioData()
         self._audio_raw = AudioData()
@@ -1349,7 +1349,7 @@ class App:
                     log.warning('Webcam runtime-state import failed: %s', exc)
             self._webcam_system.start()
             self._webcam_cycle_interval = float(cam_cfg.get('cycle_interval', 0)) or float(
-                self.cfg.get('demo', 'effect_duration', default=20)
+                self.cfg.get('demo', 'effect_duration', default=60)
             )
             if isinstance(self._webcam_system, _NullWebcamSystem):
                 self._webcam_system = None
@@ -2680,7 +2680,7 @@ void main() {
             self._next_effect.destroy()
         self._next_effect = self._instantiate(cls)
 
-        requested = str(self.cfg.get("demo", "transition", default="crossfade")).lower()
+        requested = str(self.cfg.get("demo", "transition", default="shuffle")).lower()
         transition_types = [
             "crossfade",
             "smoothfade",
@@ -3260,7 +3260,7 @@ void main() {
         self._session_started_at = time.monotonic()
         self._demo_timer = 0.0
         self._effect_duration = float(
-            self.cfg.get('demo', 'effect_duration', default=20)
+            self.cfg.get('demo', 'effect_duration', default=60)
         )
         effect_duration = self._effect_duration
         self._webcam_cycle_interval = float(
@@ -5937,7 +5937,7 @@ void main() {
     def reset_advance_interval(self) -> float:
         """Reset the auto-advance interval to the configured value. Returns that value."""
         self._effect_duration = float(
-            self.cfg.get('demo', 'effect_duration', default=20)
+            self.cfg.get('demo', 'effect_duration', default=60)
         )
         return self._effect_duration
 

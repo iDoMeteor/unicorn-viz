@@ -2,8 +2,6 @@
 level = "info"
 
 [window]
-fullscreen = true
-show_cursor = false
 display_mode  = "single"   # single | span_all | mirror_all
 display_index  = 2
 exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span_all / mirror_all
@@ -11,8 +9,6 @@ exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span
 [demo]
 auto_advance = false
 mode = "sequential"
-effect_duration = 30
-transition = "shuffle"
 
 [audio]
 reactivity = 1.0
@@ -23,7 +19,6 @@ profile = "chillstep"
 ansi_dir_auto = "assets/ansi/acid"
 
 [playlist]
-start_effect = "Audio Spectrum"
 
 [effects.AudioSpectrum]
 scale_when_framed = true
@@ -49,15 +44,11 @@ preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_m
 
 [dropins]
 exclude = "none"
-safe_mode = false
 
 [recording]
-auto_record = false
 directory = "recordings"
-capture_audio = true
 
 [render]
-internal_scale = 1
 
 [overlays]
 flash_messages = false
@@ -72,8 +63,6 @@ random_speed_max = 2.50
 random_reactivity_min = 0.40
 random_reactivity_max = 2.00
 # Alt+[/] adjusts zoom; Shift+Z randomizes within this range
-zoom_min = 0.1
-zoom_max = 3.0
 random_zoom_min = 0.30
 random_zoom_max = 1.80
 
@@ -84,10 +73,7 @@ random_zoom_max = 1.80
 # ---------------------------------------------------------------------------
 [streaming]
 enabled = false
-auto_start = false
-provider = "rumble"
 endpoint = "rtmp://live-api-s.rumble.com/live"
-stream_key = ""
 # rumble_endpoint = "rtmp://live-api-s.rumble.com/live"
 # youtube_endpoint = "rtmp://a.rtmp.youtube.com/live2"
 # custom_endpoint = "rtmp://your.rtmp.server/live"
@@ -109,10 +95,7 @@ stream_key = ""
 # ---------------------------------------------------------------------------
 [spotify]
 enabled = true
-player = "spotify"
 poll_interval_s = 0.75
-command_timeout_s = 0.25
-features_file = "assets/audio/spotify_features.json"
 live_corpus_file = "assets/training/corpus/live-corpus.jsonl"
 
 # ---------------------------------------------------------------------------
@@ -122,19 +105,14 @@ live_corpus_file = "assets/training/corpus/live-corpus.jsonl"
 [spotify.web_api]
 enabled = true
 client_id = "9c8acb4afb744638917beab3b89ab369"
-redirect_uri = "http://127.0.0.1:43879/callback"
 scopes = [
 	"user-read-playback-state",
 	"user-read-currently-playing",
 	"playlist-read-private",
 	"playlist-read-collaborative",
 ]
-token_store = "runtime/spotify-token.json"
 poll_interval_s = 3.0        # used when playerctl unavailable (Windows); fallback otherwise
-poll_fallback_s = 60.0       # slow health-check interval when playerctl is handling track detection
 http_timeout_s = 1.0
-resolve_queue = false        # queue BPM pre-fetch use case removed; enable if you want queue length display
-resolve_playlist_context = true
 # NOTE: local PKCE auth intentionally does not store a client secret here.
 
 # ---------------------------------------------------------------------------
@@ -175,14 +153,8 @@ resolve_playlist_context = true
 # ---------------------------------------------------------------------------
 [chat]
 enabled = false
-ably_api_key = ""            # YOUR_APP_ID.KEY_ID:KEY_SECRET from app.ably.io
-channel = "unicornviz-chat"  # must match channelName in ChatWidget
 username = "VJ"              # display name shown in chat for messages you send
 position = "bottom"          # top | bottom | left | right
-visible = true
-glitter = 0.7                # sparkle intensity 0-1
-pulse = 0.5                  # brightness pulse intensity 0-1
-text_scale = 2.0             # glyph scale multiplier
 # scroll_speed = 60.0          # pixels/second for top/bottom ticker
 # message_lifetime_s = 60.0   # seconds a message stays visible in dock mode
 
@@ -190,15 +162,8 @@ text_scale = 2.0             # glyph scale multiplier
 [streaming.cta]
 enabled = true
 duration_s = 4.5
-cooldown_s = 0.0
 mode = "cycle"               # cycle | random
-seed = 0
 # message format: "Text|Icon"
-messages = [
-	"Push the buttons!|👍",
-	"Do the thangs!|🔔",
-	"Share the love!|❤️ 📤",
-]
 
 # ---------------------------------------------------------------------------
 # Post FX subsystem  (drop-ins/postfx-01)
@@ -228,15 +193,6 @@ messages = [
 # ---------------------------------------------------------------------------
 [candy_frame]
 enabled = true
-start_enabled = false
-inset_px = 77.0              # ~20% smaller frame than 96px default
-intensity = 1.0
-pattern_interval_s = 120.0
-reverse_on_cycle = true
-outer_fill_mode = "auto"     # auto | mirror_blur | reactive_gradient | off
-outer_fill_rotate_s = 24.0
-outer_fill_mix = 0.84
-seed = 0
 
 # ---------------------------------------------------------------------------
 # Synced lyrics overlay  (drop-ins/lyrics-01)
@@ -245,7 +201,6 @@ seed = 0
 # ---------------------------------------------------------------------------
 [lyrics]
 enabled = true
-start_enabled = false
 # offset_ms = 0
 # font_px = 40
 # max_lines = 1
@@ -289,23 +244,22 @@ start_enabled = false
 # ---------------------------------------------------------------------------
 [auto_vj]
 enabled = true
-beat_tracker_engine = "v2"
 #profile = "normie"          # chill | normie | raver | user (unset => normie preset)
-auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
-auto_profile_chill_max_bpm = 105.0
-auto_profile_raver_min_bpm = 126.0
+# auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
+# auto_profile_chill_max_bpm = 105.0
+# auto_profile_raver_min_bpm = 126.0
 #auto_profile_min_confidence = 0.45
 # Hysteresis before committing a VJ mood profile switch: BPM must stay in the
 # new zone for this many seconds.  Prevents rapid normie↔chill oscillation when
 # the ACF BPM estimate fluctuates near the 105 BPM chill/normie boundary.
-auto_profile_hold_s = 8.0
+# auto_profile_hold_s = 8.0
 # Minimum gap between successive VJ mood profile auto-switches (seconds).
 # Default was 20; raised to 60; raised again to 120 (2026-06-20) — crossfade-off
 # hard cuts drop confidence to zero briefly, which was causing ~23 mood switches
 # per 43-min chillstep session.  BPM is also now clamped to the active audio
 # profile's hint range before the mood decision, so detector blips above the
 # range (e.g. 125 BPM during a gap in a chillstep set) no longer flip to normie.
-auto_profile_switch_cooldown_s = 120.0
+# auto_profile_switch_cooldown_s = 120.0
 # Runtime beat-prior sync stability (helps avoid BPM lock wobble when profile key thrashes)
 #audio_profile_sync_hold_s = 12.0
 #audio_profile_sync_min_confidence = 0.35
@@ -327,20 +281,19 @@ auto_profile_switch_cooldown_s = 120.0
 # profile_auto_reco_score_margin = 0.25
 # profile_auto_reco_confirm_wins = 3
 log_decisions = true
-detector_log_interval_s = 1.0
 
 # BPM tracker tuning (v2 ACF engine)
 # tempo_hold_s: how long to hold the current BPM estimate after a confident
 #   update before allowing a large tempo jump.  Longer values bridge crossfade
 #   transitions — the default 6.0 s lets noise from overlapping tracks re-open
 #   the lock before the new track stabilises.
-tempo_hold_s = 10.0
+# tempo_hold_s = 10.0
 # silence_reset_s: seconds with no detected onsets before the detector resets
 #   bpm/confidence to 0.  Default 2.0 is too short for Spotify crossfades — the
 #   crossfade window (5–12 s) can produce a gap long enough to blow away the
 #   tempo hold.  15 s bridges the longest crossfade without masking a genuine
 #   pause between DJ sets.
-silence_reset_s = 15.0
+# silence_reset_s = 15.0
 # analysis_mode_enabled: enables the beat-position-map layer — real downbeat
 #   confidence (region consistency + phase coherence + ACF quality + onset
 #   density blend) gating is_downbeat, plus a stricter region-consistency
@@ -415,7 +368,6 @@ live_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 
 # Sequence corpus training (musical-time per-beat heartbeat + event keyframes)
-sequence_training_enabled = false
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # sequence_training_window_s = 2.0
 # sequence_training_heartbeat_interval_s = 1.0
@@ -431,9 +383,7 @@ fullscreen = false       # borderless fullscreen on the chosen display (default 
 display_index = 2
 #width = 1920
 #height = 1080
-show_preview = true
 preview_scale = 0.25
-theme = "dark"
 
 # ---------------------------------------------------------------------------
 # Keystroke logging  (unicornviz/keystroke_log.py)

@@ -36,7 +36,7 @@ class Playlist:
     ) -> None:
         sequence: list[str] = cfg.get("playlist", "sequence", default=[])
         mode: str = cfg.get("demo", "mode", default="sequential")
-        start_name: str = cfg.get("playlist", "start_effect", default="")
+        start_name: str = cfg.get("playlist", "start_effect", default="Audio Spectrum")
 
         if sequence:
             name_map = {cls.__name__: cls for cls in effect_classes}

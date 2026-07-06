@@ -40,7 +40,7 @@ class Recorder:
         self._preset = str(cfg.get('recording', 'preset', default='veryfast'))
         self._crf = int(cfg.get('recording', 'crf', default=18))
         self._pixel_format = str(cfg.get('recording', 'pixel_format', default='yuv420p'))
-        self._capture_audio = bool(cfg.get('recording', 'capture_audio', default=False))
+        self._capture_audio = bool(cfg.get('recording', 'capture_audio', default=True))
         self._audio_input_format = str(cfg.get('recording', 'audio_input_format', default='pulse'))
         self._audio_input_device = str(cfg.get('recording', 'audio_input_device', default='')).strip()
         self._audio_codec = str(cfg.get('recording', 'audio_codec', default='aac'))
