@@ -53,6 +53,9 @@ class Playlist:
         # jumps via go_index() still reach a disabled effect; advance/prev/random
         # skip them. Persisted globally by the app.
         self._disabled: set[str] = set()
+        # Numeric-hotkey slot pins: {slot_index (0-39): effect NAME or class
+        # name}. Persisted globally by the app. See shortcut_effects().
+        self._hotkey_pins: dict[int, str] = {}
 
         # Find starting index by NAME attribute (display name) or class name
         self._index = 0
@@ -70,9 +73,11 @@ class Playlist:
         if self._mode == "random":
             self._reset_shuffle_cycle(avoid_index=self._index)
 
-    def _is_enabled(self, idx: int) -> bool:
-        cls = self._effects[idx]
+    def _cls_enabled(self, cls: Type[BaseEffect]) -> bool:
         return cls.NAME not in self._disabled and cls.__name__ not in self._disabled
+
+    def _is_enabled(self, idx: int) -> bool:
+        return self._cls_enabled(self._effects[idx])
 
     def _enabled_indices(self) -> list[int]:
         return [i for i in range(len(self._effects)) if self._is_enabled(i)]
@@ -168,8 +173,61 @@ class Playlist:
     def effects(self) -> list[Type[BaseEffect]]:
         return self._effects
 
+    HOTKEY_SLOT_COUNT = 40  # naked/shift/ctrl/alt x (1-9, 0)
+
+    def set_hotkey_pins(self, pins: 'dict[int, str] | None') -> None:
+        """Set numeric-hotkey slot pins: {slot_index (0-39): effect name}."""
+        clean: dict[int, str] = {}
+        for k, v in (pins or {}).items():
+            try:
+                idx = int(k)
+            except (TypeError, ValueError):
+                continue
+            name = str(v).strip()
+            if name and 0 <= idx < self.HOTKEY_SLOT_COUNT:
+                clean[idx] = name
+        self._hotkey_pins = clean
+
+    def hotkey_pins(self) -> dict[int, str]:
+        """Return a copy of the current numeric-hotkey slot pins."""
+        return dict(self._hotkey_pins)
+
     @property
     def shortcut_effects(self) -> list[Type[BaseEffect]]:
-        """Effects used by numeric hotkeys (exclude special-key effects)."""
+        """Effects reachable via numeric hotkeys, dynamically re-packed.
+
+        Only *enabled* effects are included (excluding special-key effects),
+        so the mapping automatically consolidates/expands as effects are
+        enabled or disabled — recomputed fresh on every call, never cached.
+        Pinned effects (see set_hotkey_pins) claim their slot when enabled;
+        remaining slots fill with the rest of the enabled effects in catalog
+        order. A pin whose effect is currently disabled, or whose slot index
+        is beyond the enabled count, is simply not honoured until it fits.
+        """
         excluded = {"UnicornTears"}
-        return [cls for cls in self._effects if cls.__name__ not in excluded]
+        eligible = [
+            cls for cls in self._effects
+            if cls.__name__ not in excluded and self._cls_enabled(cls)
+        ]
+        # Accept either the display name (NAME) or the class name as a pin
+        # identifier, matching the convention used by the disabled-effects set.
+        by_name: dict[str, Type[BaseEffect]] = {}
+        for cls in eligible:
+            by_name.setdefault(cls.NAME, cls)
+            by_name.setdefault(cls.__name__, cls)
+        n = len(eligible)
+
+        slots: list[Type[BaseEffect] | None] = [None] * n
+        used: set[Type[BaseEffect]] = set()
+        for idx, name in sorted(self._hotkey_pins.items()):
+            cls = by_name.get(name)
+            if cls is None or cls in used or not (0 <= idx < n):
+                continue
+            slots[idx] = cls
+            used.add(cls)
+
+        remaining = iter(cls for cls in eligible if cls not in used)
+        for i in range(n):
+            if slots[i] is None:
+                slots[i] = next(remaining)
+        return slots  # type: ignore[return-value]

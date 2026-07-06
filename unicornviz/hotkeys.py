@@ -92,6 +92,46 @@ def parse_hotkey_chord(text: str) -> tuple[int, int] | None:
     return int(sym), int(mod)
 
 
+_SHIFT_NUMBER_SYMS = [
+    sdl2.SDLK_EXCLAIM, sdl2.SDLK_AT, sdl2.SDLK_HASH,
+    sdl2.SDLK_DOLLAR, sdl2.SDLK_PERCENT, sdl2.SDLK_CARET,
+    sdl2.SDLK_AMPERSAND, sdl2.SDLK_ASTERISK,
+    sdl2.SDLK_LEFTPAREN, sdl2.SDLK_RIGHTPAREN,
+]
+
+
+def numeric_slot_index(sym: int, mod: int) -> int | None:
+    """Resolve a number-key chord to a numeric-hotkey slot index (0-39).
+
+    Naked 1-9,0 -> 0-9; Shift+1-9,0 -> 10-19; Ctrl+1-9,0 -> 20-29;
+    Alt+1-9,0 -> 30-39. Shift is also recognised via the symbol keysyms some
+    keyboard layouts send instead of number-keysym-plus-modifier (!@#$...).
+    Returns None if ``sym`` is not a number-key chord.
+    """
+    if sym in _SHIFT_NUMBER_SYMS:
+        return 10 + _SHIFT_NUMBER_SYMS.index(sym)
+    if sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
+        base = sym - sdl2.SDLK_1
+    elif sym == sdl2.SDLK_0:
+        base = 9
+    else:
+        return None
+    if mod & sdl2.KMOD_ALT:
+        return 30 + base
+    if mod & sdl2.KMOD_CTRL:
+        return 20 + base
+    if mod & sdl2.KMOD_SHIFT:
+        return 10 + base
+    return base
+
+
+def hotkey_slot_label(slot: int) -> str:
+    """Return a short display label for a numeric-hotkey slot (e.g. 'C+3')."""
+    digit = '0' if slot % 10 == 9 else str((slot % 10) + 1)
+    prefix = ('', 'S+', 'C+', 'A+')[slot // 10] if 0 <= slot < 40 else ''
+    return f'{prefix}{digit}'
+
+
 _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'next': (sdl2.SDLK_n, 0),
     'prev': (sdl2.SDLK_p, 0),
@@ -229,7 +269,6 @@ class HotkeyHandler:
     ) -> None:
         self._app = app
         self._playlist = playlist
-        self._shortcut_effects = playlist.shortcut_effects
         self._overlays = overlays
         self._audio = audio_manager
         self._projectm_preview_origin_path: str = ''
@@ -365,6 +404,24 @@ class HotkeyHandler:
             return False
         self.handle(binding[0], binding[1])
         return True
+
+    def _dispatch_shortcut_slot(self, idx: int, a: "App", o: "Overlays") -> None:
+        """Jump to the effect at numeric-hotkey slot ``idx`` (0-39), if any.
+
+        Slots are recomputed fresh from the playlist's *enabled* effects on
+        every call (see Playlist.shortcut_effects) so the mapping dynamically
+        re-packs as effects are enabled/disabled/pinned — never a stale cache.
+        A slot beyond the current enabled count is a graceful no-op with a
+        flash message rather than wrapping around to an unrelated effect.
+        """
+        effects = self._playlist.shortcut_effects
+        if not (0 <= idx < len(effects)):
+            o.flash_message(f'Key {hotkey_slot_label(idx)}: no effect assigned', 1.0)
+            return
+        cls = effects[idx]
+        log.info("Scene change → %s (key index %d)", cls.NAME, idx)
+        a.goto_effect(cls)
+        o.flash_name(cls.NAME)
 
     def handle(self, sym: int, mod: int) -> None:
         a = self._app
@@ -989,6 +1046,13 @@ class HotkeyHandler:
                 if msg:
                     o.flash_message(msg, 1.2)
                 return
+            if (_slot := numeric_slot_index(sym, mod)) is not None:
+                # Reuse the same chord that would jump to this slot outside
+                # the browser to pin/unpin the selected effect to it.
+                msg = a.effects_browser_toggle_pin_slot(_slot)
+                if msg:
+                    o.flash_message(msg, 1.6)
+                return
             # Swallow all other keys while the browser is open.
             return
 
@@ -1477,62 +1541,8 @@ class HotkeyHandler:
                 val = am.set_reactivity(round(am.get_reactivity() + 0.1, 2))
                 o.flash_message(f"Reactivity  {val:.2f}", 1.0)
 
-        elif sdl2.SDLK_1 <= sym <= sdl2.SDLK_9:
-            if not self._shortcut_effects:
-                return
-            # Alt+1..9 -> effects 31..39
-            if mod & sdl2.KMOD_ALT:
-                idx = 30 + (sym - sdl2.SDLK_1)   # 30..38
-            # Ctrl+1..9 -> effects 21..29
-            elif mod & sdl2.KMOD_CTRL:
-                idx = 20 + (sym - sdl2.SDLK_1)   # 20..28
-            # Support both SDL behaviors for Shift+number:
-            # 1) symbol keysyms (!@#$...) handled below
-            # 2) number keysyms with KMOD_SHIFT handled here
-            elif mod & sdl2.KMOD_SHIFT:
-                idx = 10 + (sym - sdl2.SDLK_1)   # 10..18
-            else:
-                idx = sym - sdl2.SDLK_1          # 0..8
-            cls = self._shortcut_effects[idx % len(self._shortcut_effects)]
-            log.info("Scene change → %s (key index %d)", cls.NAME, idx)
-            a.goto_effect(cls)
-            o.flash_name(cls.NAME)
-
-        elif sym == sdl2.SDLK_0:
-            if not self._shortcut_effects:
-                return
-            # Alt+0 -> effect 40 (index 39)
-            if mod & sdl2.KMOD_ALT:
-                idx = 39
-            # Ctrl+0 -> effect 30 (index 29)
-            elif mod & sdl2.KMOD_CTRL:
-                idx = 29
-            # Support both SDL behaviors for Shift+0: idx 19 (')')
-            elif mod & sdl2.KMOD_SHIFT:
-                idx = 19
-            else:
-                idx = 9
-            cls = self._shortcut_effects[idx % len(self._shortcut_effects)]
-            a.goto_effect(cls)
-            o.flash_name(cls.NAME)
-
-        # Shift+1..0 → effects 10–19  (keysyms: !, @, #, $, %, ^, &, *, (, ))
-        elif sym in (sdl2.SDLK_EXCLAIM, sdl2.SDLK_AT, sdl2.SDLK_HASH,
-                     sdl2.SDLK_DOLLAR, sdl2.SDLK_PERCENT, sdl2.SDLK_CARET,
-                     sdl2.SDLK_AMPERSAND, sdl2.SDLK_ASTERISK,
-                     sdl2.SDLK_LEFTPAREN, sdl2.SDLK_RIGHTPAREN):
-            if not self._shortcut_effects:
-                return
-            _shift_syms = [
-                sdl2.SDLK_EXCLAIM, sdl2.SDLK_AT, sdl2.SDLK_HASH,
-                sdl2.SDLK_DOLLAR, sdl2.SDLK_PERCENT, sdl2.SDLK_CARET,
-                sdl2.SDLK_AMPERSAND, sdl2.SDLK_ASTERISK,
-                sdl2.SDLK_LEFTPAREN, sdl2.SDLK_RIGHTPAREN,
-            ]
-            idx = 10 + _shift_syms.index(sym)   # effects 10–19
-            cls = self._shortcut_effects[idx % len(self._shortcut_effects)]
-            a.goto_effect(cls)
-            o.flash_name(cls.NAME)
+        elif (_num_idx := numeric_slot_index(sym, mod)) is not None:
+            self._dispatch_shortcut_slot(_num_idx, a, o)
 
         elif sym == sdl2.SDLK_COMMA:
             # , = scale down, Shift+, (<) = scale MIN, Ctrl+, = scale reset

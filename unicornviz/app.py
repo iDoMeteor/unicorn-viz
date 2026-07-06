@@ -479,6 +479,11 @@ class App:
         self._disabled_effects: set[str] = {
             str(n) for n in (self._runtime_state.get('effects.disabled', []) or [])
         }
+        # Numeric-hotkey slot pins: {slot_index (0-39): effect name} (persisted).
+        self._hotkey_pins: dict[int, str] = {
+            int(k): str(v)
+            for k, v in (self._runtime_state.get('effects.hotkey_pins', {}) or {}).items()
+        }
         preset_path = self.cfg.get('presets', 'path', default='runtime/presets.json')
         self._preset_store = ShowPresetStore(str(preset_path))
         # Configuration profiles (per-effect parameter overrides). Distinct from
@@ -2960,6 +2965,7 @@ void main() {
 
         playlist = Playlist(effects, self.cfg)
         playlist.set_disabled(self._disabled_effects)
+        playlist.set_hotkey_pins(self._hotkey_pins)
         self._playlist = playlist
         self._playlist_mode = playlist.mode
         self._playlist_index = playlist.index
@@ -5594,6 +5600,7 @@ void main() {
         self._runtime_state.save()
         if self._playlist is not None:
             self._playlist.set_disabled(self._disabled_effects)
+        self._refresh_effect_shortcuts()
 
     def set_disabled_effects(self, names: 'set[str] | list[str]') -> None:
         """Replace the whole disabled set at once and persist (preset apply)."""
@@ -5602,6 +5609,59 @@ void main() {
         self._runtime_state.save()
         if self._playlist is not None:
             self._playlist.set_disabled(self._disabled_effects)
+        self._refresh_effect_shortcuts()
+
+    # -- Numeric-hotkey slot pins (persisted) ---------------------------------
+
+    def hotkey_pins(self) -> dict[int, str]:
+        """Return the current numeric-hotkey slot pins ({slot: effect name})."""
+        return dict(self._hotkey_pins)
+
+    def hotkey_pin_slot_for(self, name: str) -> int | None:
+        """Return the slot index an effect is pinned to, or None."""
+        name = str(name)
+        for slot, pinned in self._hotkey_pins.items():
+            if pinned == name:
+                return slot
+        return None
+
+    def set_hotkey_pin(self, slot: int, name: 'str | None') -> None:
+        """Pin an effect to a numeric-hotkey slot, or clear it (name=None).
+
+        An effect may only occupy one slot at a time; pinning it to a new slot
+        drops any previous pin it held.
+        """
+        slot = int(slot)
+        if name:
+            clean = str(name)
+            self._hotkey_pins = {k: v for k, v in self._hotkey_pins.items() if v != clean}
+            self._hotkey_pins[slot] = clean
+        else:
+            self._hotkey_pins.pop(slot, None)
+        self._persist_hotkey_pins()
+
+    def toggle_hotkey_pin(self, slot: int, name: str) -> bool:
+        """Toggle a slot pin for ``name``. Returns True if now pinned."""
+        slot = int(slot)
+        if self._hotkey_pins.get(slot) == str(name):
+            self.set_hotkey_pin(slot, None)
+            return False
+        self.set_hotkey_pin(slot, name)
+        return True
+
+    def _persist_hotkey_pins(self) -> None:
+        self._runtime_state.set(
+            'effects.hotkey_pins', {str(k): v for k, v in self._hotkey_pins.items()}
+        )
+        self._runtime_state.save()
+        if self._playlist is not None:
+            self._playlist.set_hotkey_pins(self._hotkey_pins)
+        self._refresh_effect_shortcuts()
+
+    def _refresh_effect_shortcuts(self) -> None:
+        """Push the current numeric-hotkey slot mapping to the help overlay."""
+        if self._playlist is not None and self._overlays is not None:
+            self._overlays.set_effect_shortcuts(self._playlist.shortcut_effects)
 
     # -- Show presets (named runtime-setup snapshots) ------------------------
 
@@ -5734,6 +5794,7 @@ void main() {
                 'tags': list(e.tags),
                 'cls': e.cls,
                 'enabled': self.effect_enabled(e.name),
+                'hotkey_slot': self.hotkey_pin_slot_for(e.name),
             }
             for e in browser_entries()
         ]
@@ -5823,6 +5884,27 @@ void main() {
         entry['enabled'] = new_enabled  # live update in the shared model dict
         self.set_effect_enabled(name, new_enabled)
         return f'{name}: {"enabled" if new_enabled else "disabled"}'
+
+    def effects_browser_toggle_pin_slot(self, slot: int) -> str | None:
+        """Toggle a numeric-hotkey slot pin for the selected browser entry.
+
+        Reuses the same key chord that would jump to ``slot`` outside the
+        browser, so pinning shares muscle memory with jumping. Pinning the
+        already-pinned effect on the same slot clears the pin; pinning a
+        different effect there reassigns the slot (and drops that effect's
+        previous pin, if any).
+        """
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        name = str(entry.get('display_name', ''))
+        now_pinned = self.toggle_hotkey_pin(slot, name)
+        # Live-refresh the pin indicator on every visible row (a reassigned
+        # slot may have just unpinned a different effect).
+        for e in self._overlays.effects_browser.entries():
+            e['hotkey_slot'] = self.hotkey_pin_slot_for(str(e.get('display_name', '')))
+        digit = (slot % 10) + 1 if slot % 10 != 9 else 0
+        return f'{name}: pinned to key {digit}' if now_pinned else f'{name}: unpinned'
 
     def tick_effects_browser_preview(self) -> None:
         """Debounced thumbnail rebuild: after ~250 ms idle on a new selection,

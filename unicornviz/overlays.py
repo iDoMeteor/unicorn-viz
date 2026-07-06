@@ -3596,6 +3596,10 @@ void main() {
             suffix = ''
             if is_pinned:
                 suffix += '  [pin]'
+            hotkey_slot = entry.get('hotkey_slot')
+            if isinstance(hotkey_slot, int) and 0 <= hotkey_slot < 40:
+                all_key_labels = self.NUM_KEYS + self.SHIFT_KEYS + self.CTRL_KEYS + self.ALT_KEYS
+                suffix += f'  [key {all_key_labels[hotkey_slot]}]'
             if not enabled:
                 suffix += '  [off]'
             label = f'{prefix} {name[:38]}{suffix}'
@@ -3661,6 +3665,10 @@ void main() {
             'Left/Right: pane   Up/Down: browse   Enter/Click: go   Space: on/off   '
             'P: pin/unpin   /: search   Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
+        )
+        self._draw_text(
+            '1-9,0 (+Shift/Ctrl/Alt): pin/unpin selected effect to that numeric hotkey slot',
+            px + 18.0, footer_y + 26.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )
 
     def _render_projectm_manager(self) -> None:
