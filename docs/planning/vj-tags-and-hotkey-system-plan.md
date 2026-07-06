@@ -138,12 +138,24 @@ model update).
   right-click menu; can't drift.
 - **UX:** row per action with its current binding; click → "press new keys"
   capture; **live conflict detection**; reset-to-default; per-section grouping.
-- **Persist** rebindings to `runtime/settings.json` (sparse overrides).
-- **Enabler / main cost:** refactor `hotkeys.py` from the hardcoded
-  `if/elif sym == …` dispatch to a **table-driven binding map**
-  (`{action → (sym, mod)}`) that the dispatcher consults and the editor mutates.
-  The effect number-key re-pack (§3) and right-click menu can read from the same
-  table.
+- **Persist** rebindings to `runtime/global_state.json` (see below — matches
+  the existing `effects.disabled`/`effects.hotkey_pins` pattern; a separate
+  `settings.json` was considered but not warranted for this single key).
+- **Enabler — ✅ done, commit `7637f8e`.** Rather than rewriting the ~450-line
+  global `if/elif sym == …` chain into a table-driven dispatcher (real risk:
+  ~24 actions each have their own modifier-exclusivity nuances and a couple
+  have built-in key aliases, e.g. next/prev also bind arrow keys), a
+  **translation layer** was used instead: `_MIDI_NOTE_KEY_BINDINGS` — already
+  exactly the needed `{action → (sym, mod)}` table, previously only consumed
+  one-way for MIDI note replay — is now the documented canonical default
+  table. `App.hotkey_overrides()`/`set_hotkey_override()` persist rebinds;
+  `translate_override_chord()` converts an incoming rebound chord back to its
+  action's *default* chord at the single point in `handle()` where every
+  modal has already had first refusal, so the ~450 lines of existing dispatch
+  logic run **completely unmodified** — zero behavior-drift risk. A future
+  editor UI reads `action_names()`/`default_action_binding()` and calls
+  `set_hotkey_override()`; no further `hotkeys.py` changes needed for it to
+  take effect.
 
 ---
 
@@ -153,9 +165,10 @@ model update).
 2. ✅ **Dynamic number-key re-pack + pinning** (§3) — done, commit `0978840`.
 3. ✅ **Effects browser: category isolation + pinning UI** (§4) — pinning UI
    shipped with #2; category isolation turned out to already exist.
-4. ⏳ **Refactor `hotkeys.py` to a table-driven binding map** (§5 enabler) — in
-   progress.
-5. **Hotkey editor** on that table, in the config-editor shell (§5) — next.
+4. ✅ **Rebinding enabler** (§5) — done, commit `7637f8e` (translation-layer
+   design, not a dispatch rewrite; see §5 for why).
+5. **Hotkey editor** UI on top of the enabler, in the config-editor shell
+   (§5) — next.
 
 Regression tests for each step (tag-fallback behavior, re-pack over enabled set,
 pin persistence, binding-table dispatch, help↔binding parity).
