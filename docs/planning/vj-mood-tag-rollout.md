@@ -14,9 +14,10 @@ prior big tag update didn't fully land, so this sheet is the cross-check.
 
 `chill` → `groovy` → `energetic` → `intense` → `hard`
 
-Each rotation effect gets **exactly one** mood tag, **appended** to its existing
-category/style `TAGS` (categories are not removed — the effects browser still
-uses them).
+Each rotation effect gets **one or more** mood tags (owner chose multi-mood so
+versatile effects span scenes — e.g. Psychedelic is `chill` *and* `intense`),
+**appended** to its existing category/style `TAGS` (categories are not removed —
+the effects browser still uses them).
 
 ---
 
@@ -55,58 +56,60 @@ empty set falls back to any enabled effect.
 
 ---
 
-## 3) Effect → mood (proposed; being confirmed via Q&A)
+## 3) Effect → mood(s) — CONFIRMED via Q&A (2026-07-13)
 
-Status legend: `proposed` (my call) → `confirmed` (owner-approved via Q&A).
+Authoritative assignment. Moods are **appended** to each effect's existing tags.
 
-| Effect | Pack | Proposed mood | Status |
-|--------|------|---------------|--------|
-| Cathedral of Bass | immersive-01 | hard | proposed |
-| Fireworks | particles-01 | hard | proposed |
-| America 250 | holiday-01 | hard | proposed |
-| Cyber War | tech-01 | intense | proposed |
-| Tron Grid | tech-01 | intense | proposed |
-| Threat Matrix | tech-01 | intense | proposed |
-| Particle Storm | particles-01 | intense | proposed |
-| Psychedelic | psychedelic-01 | intense | proposed |
-| Alien Invasion | cosmic-01 | intense | proposed |
-| Black Hole Cathedral | cosmic-01 | intense | proposed |
-| Audio Sine | core | energetic | proposed |
-| Kaleidoscope | psychedelic-01 | energetic | proposed |
-| Rainbow Trance | feature-01 | energetic | proposed |
-| Tunnel | immersive-01 | energetic | proposed |
-| Wormhole | immersive-01 | energetic | proposed |
-| Disco Ball | vector-01 | energetic | proposed |
-| Fractal Zoom | retro-01 | energetic | proposed |
-| Hacker Terminal | tech-01 | energetic | proposed |
-| Hacker Terminal 2.0 | tech-01 | energetic | proposed |
-| Breakout | games-01 | energetic | proposed |
-| ProjectM Presets | projectm-01 | energetic | proposed |
-| Plasma | psychedelic-01 | groovy | proposed |
-| Wavey Gravy | cosmic-01 | groovy | proposed |
-| Hexy Stars | feature-01 | groovy | proposed |
-| Metaballs | feature-01 | groovy | proposed |
-| Unicorn Tears | unicorn-tears-01 | groovy | proposed |
-| Copper Bars | retro-01 | groovy | proposed |
-| 3D Cube | vector-01 | groovy | proposed |
-| Vector | vector-01 | groovy | proposed |
-| Sim Showcase | sims-01 | groovy | proposed |
-| Audio Centroid | core | groovy | proposed |
-| Audio Spectrum | core | groovy | proposed |
-| Audio Spectrogram | core | groovy | proposed |
-| Audio Waveforms | core | groovy | proposed |
-| Audio Tracks | core | chill | proposed |
-| Cosmos | cosmic-01 | chill | proposed |
-| Starfield | particles-01 | chill | proposed |
-| Dali | retro-01 | chill | proposed |
-| Escher | retro-01 | chill | proposed |
-| Van Gogh | retro-01 | chill | proposed |
-| ANSI Viewer | retro-01 | chill | proposed |
-| Image Showcase | images-01 | chill | proposed |
-| Texture Showcase | textures-01 | chill | proposed |
-| Video Showcase | videos-01 | chill | proposed |
+| Effect | Pack | Moods (confirmed) |
+|--------|------|-------------------|
+| Cathedral of Bass | immersive-01 | hard |
+| Fireworks | particles-01 | energetic |
+| America 250 | holiday-01 | energetic |
+| Cyber War | tech-01 | intense |
+| Tron Grid | tech-01 | intense |
+| Threat Matrix | tech-01 | hard |
+| Particle Storm | particles-01 | intense |
+| Psychedelic | psychedelic-01 | chill, intense |
+| Alien Invasion | cosmic-01 | groovy |
+| Black Hole Cathedral | cosmic-01 | chill, energetic, hard |
+| Audio Sine | core | groovy, intense, hard |
+| Kaleidoscope | psychedelic-01 | groovy, intense |
+| Rainbow Trance | feature-01 | chill, groovy, energetic, intense |
+| Tunnel | immersive-01 | intense |
+| Wormhole | immersive-01 | chill, energetic, intense |
+| Disco Ball | vector-01 | chill, groovy, intense |
+| Fractal Zoom | retro-01 | chill, groovy |
+| Hacker Terminal | tech-01 | energetic, intense |
+| Hacker Terminal 2.0 | tech-01 | energetic, intense |
+| Breakout | games-01 | groovy |
+| ProjectM Presets | projectm-01 | chill, groovy, energetic, intense, hard |
+| Plasma | psychedelic-01 | intense |
+| Wavey Gravy | cosmic-01 | groovy, intense |
+| Hexy Stars | feature-01 | energetic, hard |
+| Metaballs | feature-01 | energetic, intense, hard |
+| Unicorn Tears | unicorn-tears-01 | chill, groovy, intense, hard |
+| Copper Bars | retro-01 | chill, groovy, energetic, intense |
+| 3D Cube | vector-01 | chill, groovy, intense |
+| Vector | vector-01 | chill, groovy, intense |
+| Sim Showcase | sims-01 | groovy, intense |
+| Audio Centroid | core | groovy, intense, hard |
+| Audio Spectrum | core | chill, groovy, energetic, intense |
+| Audio Spectrogram | core | groovy, intense |
+| Audio Waveforms | core | energetic, intense |
+| Audio Tracks | core | chill, energetic, intense |
+| Cosmos | cosmic-01 | groovy, intense |
+| Starfield | particles-01 | energetic, intense |
+| Dali | retro-01 | chill, groovy, intense |
+| Escher | retro-01 | groovy, intense |
+| Van Gogh | retro-01 | groovy, energetic, intense |
+| ANSI Viewer | retro-01 | groovy, intense |
+| Image Showcase | images-01 | chill, groovy, energetic, intense, hard |
+| Texture Showcase | textures-01 | groovy |
+| Video Showcase | videos-01 | chill, groovy, energetic, intense, hard |
 
-Count (proposed): hard 3, intense 7, energetic 11, groovy 13, chill 10 = **44**.
+Mood coverage (effects carrying each): **chill 16, groovy 24, energetic 17,
+intense 34, hard 11** — every scene now draws from a healthy spread (no more
+5-effect drop lock-in).
 
 ---
 
