@@ -266,7 +266,11 @@ enabled = true
 
 # Recommender-as-decider (default ON in code)
 # profile_auto_reco_decider_enabled = true
-# profile_auto_reco_decider_min_margin = 0.25
+# 2026-07-06: margin is now a softmax probability margin (bounded [0,1]),
+# not an unbounded additive score difference -- code default rescaled
+# 0.25 -> 0.09 to preserve the same practical permissiveness in the new
+# units. See docs/audits/2026-07-06-vj-training-systems-audit.md P2-6.
+# profile_auto_reco_decider_min_margin = 0.09
 # profile_auto_reco_decider_min_confidence = 0.35
 # profile_auto_reco_decider_cooldown_s = 20.0
 # Fast override path (strong candidate can replace weak current profile)
@@ -278,7 +282,9 @@ enabled = true
 # profile_auto_reco_enabled = true
 # profile_auto_reco_eval_interval_s = 8.0
 # profile_auto_reco_window_s = 16.0
-# profile_auto_reco_score_margin = 0.25
+# 2026-07-06: softmax probability margin, not additive score difference --
+# see profile_auto_reco_decider_min_margin note above.
+# profile_auto_reco_score_margin = 0.09
 # profile_auto_reco_confirm_wins = 3
 log_decisions = true
 

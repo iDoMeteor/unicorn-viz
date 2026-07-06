@@ -331,6 +331,45 @@ hand; see `docs/audits/2026-07-06-vj-training-systems-audit.md` P1-4 / Phase 2 s
 
 ---
 
+## Recommender Confirm/Decider Margin — softmax-normalized (2026-07-06)
+
+Decision: `profile_auto_reco_score_margin` and `profile_auto_reco_decider_min_margin`
+default `0.25 → 0.09`; margin is now a softmax probability margin, not an additive score gap
+
+**Problem:** the confirm gate (`margin >= profile_auto_reco_score_margin`) and decider gate
+compared the raw additive composite score gap between the best and current profile.  This
+composite has no fixed scale — it's a weighted sum of Gaussian log-likelihood terms, cosine
+similarities, and rate fractions (see the weight list in the LLM tuning prompt) whose total spread
+depends entirely on how distinguishable the candidate profiles are on the current material.  Real
+logged `top_candidates` scores across two sessions (5,734 samples) show best-vs-second-best
+margins ranging from 0.06 (p10) to 2.17 (p90) — a single fixed `0.25` threshold means very
+different things depending on how spread-out the scores happen to be on a given genre.
+
+**Fix:** the margin used for confirm/decider gating is now `best_prob - current_prob` from a
+numerically-stable softmax over the raw composite scores (`exp(s - max_s)`, normalized).  This
+bounds the margin to `[0, 1]` and makes it a genuine "how much more likely is the best candidate"
+quantity, comparable across sessions regardless of the raw score spread.  `score_current` /
+`score_recommended` in HUD display, logging, and the LLM tuning prompt remain the raw additive
+values unchanged — the LLM prompt's weight-recommendation reasoning (`tempo_fit × 2.0`, etc.)
+operates on that additive scale and would break if it were softmax-transformed too.  Only the
+gating margin changes representation.
+
+**New default derivation:** rather than guess a new threshold, the old `0.25` additive default was
+located at the 31.3rd percentile of the 5,734 real logged margins; the softmax-margin value at that
+same percentile (computed on the same real score arrays) is `0.0915`, rounded to `0.09`.  This
+preserves the system's actual historical permissiveness — operators who were happy with how often
+the decider fired under `0.25` should see materially the same firing frequency under `0.09`, just
+expressed in a scale-stable unit going forward.
+
+Also fixes a related bug: `current_score = dict(candidates).get(current_key, best_score)` fell back
+to `best_score` when the active profile key wasn't among the scored candidates, silently collapsing
+margin to 0 and permanently blocking the decider.  Both the raw-score fallback (for display) and the
+new probability fallback (for gating) now use the second-best candidate instead.
+
+Full analysis: `docs/audits/2026-07-06-vj-training-systems-audit.md` P2-6 / P2-7.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
@@ -345,6 +384,7 @@ hand; see `docs/audits/2026-07-06-vj-training-systems-audit.md` P1-4 / Phase 2 s
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
 | 2026-05-22–2026-07-06 | `_compute_downbeat_confidence()` reading `base = self._confidence` | Identical to `coh` in practice — never an independent third signal; replaced with genuinely independent `_acf_confidence` (see Confidence Blend Bug section) |
 | — | `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN = 0.55` | Never validated against real data; real coherence medians run 0.41-0.47, so 0.55 would have gated `is_downbeat` closed on roughly half of all beats. Lowered to 0.42 as a training-start value (see Analysis Mode section) |
+| — | `profile_auto_reco_score_margin` / `_decider_min_margin = 0.25` (additive score gap) | Unbounded scale meant different things across genres (real margins observed 0.06-2.17); replaced with a softmax probability margin, rescaled to 0.09 at the equivalent historical percentile (see Recommender Confirm/Decider Margin section) |
 
 ---
 
