@@ -266,21 +266,7 @@ enabled = true
 [auto_vj]
 enabled = true
 #profile = "normie"          # chill | normie | raver | user (unset => normie preset)
-# auto_profile_enabled = true  # true = switch chill/normie/raver by BPM
-# auto_profile_chill_max_bpm = 105.0
-# auto_profile_raver_min_bpm = 126.0
 #auto_profile_min_confidence = 0.45
-# Hysteresis before committing a VJ mood profile switch: BPM must stay in the
-# new zone for this many seconds.  Prevents rapid normie↔chill oscillation when
-# the ACF BPM estimate fluctuates near the 105 BPM chill/normie boundary.
-# auto_profile_hold_s = 8.0
-# Minimum gap between successive VJ mood profile auto-switches (seconds).
-# Default was 20; raised to 60; raised again to 120 (2026-06-20) — crossfade-off
-# hard cuts drop confidence to zero briefly, which was causing ~23 mood switches
-# per 43-min chillstep session.  BPM is also now clamped to the active audio
-# profile's hint range before the mood decision, so detector blips above the
-# range (e.g. 125 BPM during a gap in a chillstep set) no longer flip to normie.
-# auto_profile_switch_cooldown_s = 120.0
 # Runtime beat-prior sync stability (helps avoid BPM lock wobble when profile key thrashes)
 #audio_profile_sync_hold_s = 12.0
 #audio_profile_sync_min_confidence = 0.35
@@ -310,17 +296,6 @@ enabled = true
 log_decisions = true
 
 # BPM tracker tuning (v2 ACF engine)
-# tempo_hold_s: how long to hold the current BPM estimate after a confident
-#   update before allowing a large tempo jump.  Longer values bridge crossfade
-#   transitions — the default 6.0 s lets noise from overlapping tracks re-open
-#   the lock before the new track stabilises.
-# tempo_hold_s = 10.0
-# silence_reset_s: seconds with no detected onsets before the detector resets
-#   bpm/confidence to 0.  Default 2.0 is too short for Spotify crossfades — the
-#   crossfade window (5–12 s) can produce a gap long enough to blow away the
-#   tempo hold.  15 s bridges the longest crossfade without masking a genuine
-#   pause between DJ sets.
-# silence_reset_s = 15.0
 # analysis_mode_enabled: enables the beat-position-map layer — real downbeat
 #   confidence (region consistency + phase coherence + ACF quality + onset
 #   density blend) gating is_downbeat, plus a stricter region-consistency

@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-07-06
+Last updated: 2026-07-13
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -109,14 +109,16 @@ During this window, the incoming track's onset pattern conflicts with the
 current BPM estimate.  A 10 s hold bridges the overlap so the departing
 track's tempo is maintained until the new track stabilises.
 
-Default engine `tempo_hold_s`: 6.0 s.  Overridden in `[auto_vj]` to 10.0.
+`tempo_hold_s`: **now the code default `10.0`** (`beat_grid.py`). Was `6.0` with
+config.toml overriding to `10.0`; baked as the default 2026-07-13 (see the
+2026-07-13 entry below).
 
 `silence_reset_s` (2026-06-20): `_reset_tempo_lock()` fires after this many
 seconds with no detected onsets, zeroing `bpm` and `confidence`.  Default 2.0 s
 was shorter than a typical Spotify crossfade gap, causing 53% of peak_time
-sequence rows to show `bpm=0.0` mid-session.  Raised to 15.0 s in `config.toml`
-so the detector holds its tempo through the full crossfade window without
-resetting.
+sequence rows to show `bpm=0.0` mid-session.  **Now the code default `15.0`**
+(`beat_grid.py`), so the detector holds its tempo through the full crossfade
+window without resetting (baked 2026-07-13).
 
 ---
 
@@ -385,6 +387,31 @@ Full analysis: `docs/audits/2026-07-06-vj-training-systems-audit.md` P2-6 / P2-7
 | 2026-05-22–2026-07-06 | `_compute_downbeat_confidence()` reading `base = self._confidence` | Identical to `coh` in practice — never an independent third signal; replaced with genuinely independent `_acf_confidence` (see Confidence Blend Bug section) |
 | — | `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN = 0.55` | Never validated against real data; real coherence medians run 0.41-0.47, so 0.55 would have gated `is_downbeat` closed on roughly half of all beats. Lowered to 0.42 as a training-start value (see Analysis Mode section) |
 | — | `profile_auto_reco_score_margin` / `_decider_min_margin = 0.25` (additive score gap) | Unbounded scale meant different things across genres (real margins observed 0.06-2.17); replaced with a softmax probability margin, rescaled to 0.09 at the equivalent historical percentile (see Recommender Confirm/Decider Margin section) |
+
+---
+
+## Defaults Baked into Code from config.toml (2026-07-13)
+
+As part of the config.toml consolidation (promote operator-tuned values to code
+defaults, then strip the file to non-defaults), these `[auto_vj]` values — long
+carried as config overrides — were promoted to their **code defaults** in the
+`auto-vj-01` drop-in and removed from `config.toml`.  Values unchanged; only the
+*source of truth* moved from config to code.
+
+| Key | Old code default | New code default | File |
+| --- | --- | --- | --- |
+| `tempo_hold_s` | 6.0 | **10.0** | `beat_grid.py` |
+| `silence_reset_s` | 2.0 | **15.0** | `beat_grid.py` |
+| `auto_profile_enabled` | False | **True** | `auto_vj.py` |
+| `auto_profile_chill_max_bpm` | 110.0 | **105.0** | `auto_vj.py` |
+| `auto_profile_raver_min_bpm` | 136.0 | **126.0** | `auto_vj.py` |
+| `auto_profile_switch_cooldown_s` | 20.0 | **120.0** | `auto_vj.py` |
+| `auto_profile_hold_s` | 0.0 | **8.0** | `auto_vj.py` |
+
+Rationale for the values is documented in the Tempo Hold and Auto-Profile Raver
+Threshold sections above; this entry records that they are now defaults, not
+overrides. `auto_vj.log_decisions` was intentionally *not* baked (kept in
+config.toml).
 
 ---
 
