@@ -1,7 +1,8 @@
 # Auto VJ Tag Coverage + Hotkey System Overhaul — Plan
 
 Owner: owner + Claude Opus (master coordinator)
-Status: Planned (not started)
+Status: Complete — all items shipped (VJ tags, re-pack/pinning, browser
+category isolation confirmed pre-existing, rebinding enabler, hotkey editor UI)
 Last updated: 2026-07-13
 
 Two independent problems that surfaced together during the effect/hotkey
@@ -129,19 +130,9 @@ model update).
 
 ---
 
-## 5) Hotkey editor (GNOME-style)
+## 5) Hotkey editor (GNOME-style) ✅ DONE
 
-- **Reuse the config-editor shell** (tabbed modal, sprite border, hover glow,
-  animation) — a new tab or sibling modal.
-- **Generate the binding list from the help registry** (`CORE_HELP_SECTIONS` +
-  drop-in `HELP_ENTRIES`) — single source of truth, same principle as the
-  right-click menu; can't drift.
-- **UX:** row per action with its current binding; click → "press new keys"
-  capture; **live conflict detection**; reset-to-default; per-section grouping.
-- **Persist** rebindings to `runtime/global_state.json` (see below — matches
-  the existing `effects.disabled`/`effects.hotkey_pins` pattern; a separate
-  `settings.json` was considered but not warranted for this single key).
-- **Enabler — ✅ done, commit `7637f8e`.** Rather than rewriting the ~450-line
+- **Enabler — done, commit `7637f8e`.** Rather than rewriting the ~450-line
   global `if/elif sym == …` chain into a table-driven dispatcher (real risk:
   ~24 actions each have their own modifier-exclusivity nuances and a couple
   have built-in key aliases, e.g. next/prev also bind arrow keys), a
@@ -152,10 +143,29 @@ model update).
   `translate_override_chord()` converts an incoming rebound chord back to its
   action's *default* chord at the single point in `handle()` where every
   modal has already had first refusal, so the ~450 lines of existing dispatch
-  logic run **completely unmodified** — zero behavior-drift risk. A future
-  editor UI reads `action_names()`/`default_action_binding()` and calls
-  `set_hotkey_override()`; no further `hotkeys.py` changes needed for it to
-  take effect.
+  logic run **completely unmodified** — zero behavior-drift risk.
+
+- **Editor UI — done, commit `e96b157`.** A new **"Hotkeys" tab** in the
+  existing config-editor shell (no new modal — same sprite border/hover
+  glow/animation as Effects/Audio/Visuals/System).
+  - **Scope:** the ~29 actions in `hotkeys.action_names()` — the same "global
+    commands only" set the enabler covers. Deliberately **not** generated from
+    the full help registry as originally planned: the registry also documents
+    modal-scoped navigation (arrows, Tab, Enter inside a browser) that makes no
+    sense to rebind, and `action_names()` is already exactly the curated
+    "meaningful global action" boundary. Row labels are hand-authored
+    (`App._HOTKEY_ACTION_LABELS`, kept in sync with the binding table by a code
+    comment) rather than parsed from help text, for label quality/stability.
+  - **UX:** row per action showing its current chord (highlighted if
+    overridden); `Enter` on a row starts "press new key" capture (pulsing
+    prompt); the next keypress is validated — rejects bare modifier keys and
+    chords already owned by a *different* action (**live conflict
+    detection**, via `hotkey_action_for_chord()` checking every action's
+    *effective* binding), `Escape` cancels; `Backspace` resets the selected
+    action to its default.
+  - **Persist:** `runtime/global_state.json` key `hotkeys.overrides` — matches
+    the existing `effects.disabled`/`effects.hotkey_pins` pattern; a separate
+    `settings.json` was considered but not warranted for this one key.
 
 ---
 
@@ -167,8 +177,10 @@ model update).
    shipped with #2; category isolation turned out to already exist.
 4. ✅ **Rebinding enabler** (§5) — done, commit `7637f8e` (translation-layer
    design, not a dispatch rewrite; see §5 for why).
-5. **Hotkey editor** UI on top of the enabler, in the config-editor shell
-   (§5) — next.
+5. ✅ **Hotkey editor** UI (§5) — done, commit `e96b157`.
 
-Regression tests for each step (tag-fallback behavior, re-pack over enabled set,
-pin persistence, binding-table dispatch, help↔binding parity).
+All items in this plan are shipped. Regression tests landed alongside each
+step: VJ tag fallback/coverage, dynamic re-pack + pinning (19 tests), the
+rebinding translation layer incl. an end-to-end real-dispatch proof (13
+tests), and the editor UI itself — row model, conflict detection, full
+capture flow, reset-to-default (20 tests).
