@@ -128,7 +128,7 @@ class AudioWaveforms(BaseEffect):
 
     NAME = 'Audio Waveforms'
     AUTHOR = 'unicorn-viz'
-    TAGS = ['analyzer', 'visualizer', 'oscilloscope']
+    TAGS = ['analyzer', 'visualizer', 'oscilloscope', 'energetic', 'intense']
     PING_PONG_FRIENDS = [
         'Audio Spectrum',
         'Audio Spectrogram',

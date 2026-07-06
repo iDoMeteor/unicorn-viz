@@ -269,7 +269,7 @@ def _bar_colour(i: int, n: int) -> tuple[float, float, float]:
 class AudioSpectrum(BaseEffect):
     NAME = "Audio Spectrum"
     AUTHOR = "unicorn-viz"
-    TAGS = ["analyzer", "visualizer"]
+    TAGS = ['analyzer', 'visualizer', 'chill', 'groovy', 'energetic', 'intense']
     PING_PONG_FRIENDS = [
         'Audio Spectrogram',
         'Audio Tracks',
