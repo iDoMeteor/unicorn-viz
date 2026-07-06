@@ -633,10 +633,18 @@ class HotkeyHandler:
         # Skip drop-in dispatch while any text-entry mode is active so that
         # character keys (bare/shift) reach the modal handler instead of
         # accidentally firing a drop-in hotkey (e.g. C toggling chat mid-search).
+        _get_sub = getattr(a.vj_api, 'get_subsystem', None)
+        _cta_editor_open = bool(getattr(
+            _get_sub('cta') if callable(_get_sub) else None,
+            'editor_open', False,
+        ))
         _user_typing = (
-            self._effects_browser_search_mode
-            or self._projectm_search_mode
-            or (getattr(o, 'presets_visible', False) and getattr(o, 'presets_name_mode', False))
+            not _cta_editor_open
+            and (
+                self._effects_browser_search_mode
+                or self._projectm_search_mode
+                or (getattr(o, 'presets_visible', False) and getattr(o, 'presets_name_mode', False))
+            )
         )
         if not _user_typing:
             for _name, _handler in a.vj_api.key_handler_items():

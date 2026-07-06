@@ -955,6 +955,30 @@ class VJApi:
         if overlays is not None:
             overlays.trigger_cta_custom(str(text), str(icon), duration)
 
+    def register_text_input_handler(self, name: str, fn: 'Callable[[str], None]') -> None:
+        """Register *fn(text)* to receive SDL_TEXTINPUT characters on the main window."""
+        self._app.register_text_input_handler(str(name), fn)
+
+    def unregister_text_input_handler(self, name: str) -> None:
+        """Unregister a text input handler registered via register_text_input_handler."""
+        self._app.unregister_text_input_handler(str(name))
+
+    def start_text_input(self) -> None:
+        """Enable SDL IME text-input mode (call when opening a text editor)."""
+        try:
+            import sdl2  # noqa: PLC0415
+            sdl2.SDL_StartTextInput()
+        except Exception:
+            pass
+
+    def stop_text_input(self) -> None:
+        """Disable SDL IME text-input mode (call when closing a text editor)."""
+        try:
+            import sdl2  # noqa: PLC0415
+            sdl2.SDL_StopTextInput()
+        except Exception:
+            pass
+
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()

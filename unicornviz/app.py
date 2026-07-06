@@ -381,6 +381,7 @@ class App:
         self._playlist: Playlist | None = None
         self._subsystems: dict[str, Any] = {}
         self._claimed_window_handlers: dict[int, Callable[[Any], None]] = {}
+        self._text_input_handlers: dict[str, Callable[[str], None]] = {}
         self._hotkeys: HotkeyHandler | None = None
         self._frame_capture_bytes: bytes | None = None
         self._frame_capture_width: int = 0
@@ -597,6 +598,14 @@ class App:
     def release_window_events(self, window_id: int) -> None:
         """Release event ownership for a previously-claimed SDL window."""
         self._claimed_window_handlers.pop(int(window_id), None)
+
+    def register_text_input_handler(self, name: str, fn: 'Callable[[str], None]') -> None:
+        """Register a handler called for every SDL_TEXTINPUT event on the main window."""
+        self._text_input_handlers[str(name)] = fn
+
+    def unregister_text_input_handler(self, name: str) -> None:
+        """Unregister a text-input handler registered via register_text_input_handler."""
+        self._text_input_handlers.pop(str(name), None)
 
     def rebind_main_gl_context(self) -> bool:
         """Re-bind the main audience window's GL context as current.
@@ -3249,6 +3258,7 @@ void main() {
                 self._cta_controller = cta_cls(cta_cfg)
                 self._cta_controller.set_vj_api(self.vj_api)
                 self.vj_api.register_key_handler('cta', self._cta_controller.handle_key)
+                self.vj_api.register_subsystem('cta', self._cta_controller)
                 log.info('CTAController loaded from drop-in')
             except Exception as exc:
                 log.warning('CTAController not available: %s', exc)
@@ -3366,6 +3376,17 @@ void main() {
                         hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
                 elif event.type == sdl2.SDL_KEYUP:
                     self._update_ctrl_state(event.key.keysym.sym, False)
+                elif event.type == sdl2.SDL_TEXTINPUT and self._text_input_handlers:
+                    try:
+                        _text = bytes(event.text.text).partition(b'\x00')[0].decode('utf-8', errors='replace')
+                    except Exception:
+                        _text = ''
+                    if _text:
+                        for _ti_handler in list(self._text_input_handlers.values()):
+                            try:
+                                _ti_handler(_text)
+                            except Exception:
+                                log.warning('Text input handler raised: %s', _ti_handler)
                 elif event.type == sdl2.SDL_WINDOWEVENT:
                     if self._is_mirror_window_id(int(event.window.windowID)):
                         if event.window.event in (
