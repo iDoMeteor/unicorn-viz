@@ -19,7 +19,7 @@ _build_live_training_row = _AUTO_VJ_MODULE._build_live_training_row
 LiveCorpusWriter = _AUTO_VJ_MODULE.LiveCorpusWriter
 
 
-def test_build_live_training_row_pairs_spotify_and_live_audio() -> None:
+def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
         bass_n=0.20,
@@ -39,10 +39,9 @@ def test_build_live_training_row_pairs_spotify_and_live_audio() -> None:
         'duration_s': 180.0,
         'position_s': 90.0,
         'progress': 0.5,
-        'tag_confidence': 0.62,
-        'tags': ['house', 'chillstep'],
-        'genres': ['electronic'],
     }
+    # Device name identifies the audio source as Spotify -- the corpus must
+    # not surface that; it should be masked to the generic 'web player' label.
     state = SimpleNamespace(audio_source='Spotify Monitor', playlist_mode='auto')
     audio_manager = SimpleNamespace(
         get_profile_key=lambda: 'normie',
@@ -54,12 +53,17 @@ def test_build_live_training_row_pairs_spotify_and_live_audio() -> None:
     row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
 
     assert row['analysis_status'] == 'ok'
-    assert row['analysis_source'] == 'spotify+live-audio'
-    assert row['spotify_track_id'] == 'spotify:track:test123'
-    assert row['spotify_title'] == 'Moonwalk'
-    assert row['spotify_artist'] == 'DJ Test'
-    assert row['spotify_album'] == 'Test EP'
-    assert row['audio_source'] == 'Spotify Monitor'
+    assert row['analysis_source'] == 'web-player+live-audio'
+    assert row['track_id'] == 'spotify:track:test123'
+    assert row['track_title'] == 'Moonwalk'
+    assert row['track_artist'] == 'DJ Test'
+    assert row['track_album'] == 'Test EP'
+    assert row['track_status'] == 'playing'
+    assert row['is_playing'] is True
+    assert row['metadata_source'] == 'playerctl+webapi'
+    assert row['change_counter'] == 7
+    assert row['position_s'] == 90.0
+    assert row['audio_source'] == 'web player'
     assert row['audio_profile_key'] == 'normie'
     assert row['audio_profile_name'] == 'Normie'
     assert row['audio_profile_bpm_range'] == '90-130'
@@ -70,6 +74,31 @@ def test_build_live_training_row_pairs_spotify_and_live_audio() -> None:
     assert row['crest_factor'] > 1.0
     assert row['duration_s'] == 180.0
     assert row['progress'] == 0.5
+    assert 'spotify_track_id' not in row
+    assert 'spotify_title' not in row
+    assert 'spotify_artist' not in row
+    assert 'spotify_album' not in row
+    assert 'bpm_confidence' in row and 'feature_confidence' not in row
+    assert 'spotify_bpm' not in row
+    assert 'spotify_energy' not in row
+    assert 'spotify_danceability' not in row
+    assert 'spotify_valence' not in row
+
+
+def test_build_live_training_row_passes_through_non_spotify_source() -> None:
+    """A source label that doesn't mention Spotify is left untouched."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    spotify: dict = {}
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    audio_manager = None
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+
+    assert row['audio_source'] == 'Line In'
 
 
 def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
@@ -78,9 +107,9 @@ def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
 
     row = {
         'analysis_status': 'ok',
-        'spotify_track_id': 'spotify:track:test123',
-        'spotify_title': 'Moonwalk',
-        'spotify_artist': 'DJ Test',
+        'track_id': 'spotify:track:test123',
+        'track_title': 'Moonwalk',
+        'track_artist': 'DJ Test',
         'analysis_generated_at': '2026-06-18T12:00:00+00:00',
     }
 
@@ -89,9 +118,9 @@ def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
 
     rows = [json.loads(line) for line in corpus_path.read_text(encoding='utf-8').splitlines() if line.strip()]
     assert len(rows) == 1
-    assert rows[0]['spotify_track_id'] == 'spotify:track:test123'
-    assert rows[0]['spotify_title'] == 'Moonwalk'
-    assert rows[0]['spotify_artist'] == 'DJ Test'
+    assert rows[0]['track_id'] == 'spotify:track:test123'
+    assert rows[0]['track_title'] == 'Moonwalk'
+    assert rows[0]['track_artist'] == 'DJ Test'
 
 
 def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> None:
