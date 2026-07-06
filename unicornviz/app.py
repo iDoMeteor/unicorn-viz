@@ -484,6 +484,14 @@ class App:
             int(k): str(v)
             for k, v in (self._runtime_state.get('effects.hotkey_pins', {}) or {}).items()
         }
+        # Rebound global-action hotkeys: {action_name: (sym, mod)} (persisted).
+        # See HotkeyHandler / _ACTION_BINDINGS in hotkeys.py for the default
+        # table and the translation layer that makes overrides take effect.
+        self._hotkey_overrides: dict[str, tuple[int, int]] = {
+            str(k): (int(v[0]), int(v[1]))
+            for k, v in (self._runtime_state.get('hotkeys.overrides', {}) or {}).items()
+            if isinstance(v, (list, tuple)) and len(v) == 2
+        }
         preset_path = self.cfg.get('presets', 'path', default='runtime/presets.json')
         self._preset_store = ShowPresetStore(str(preset_path))
         # Configuration profiles (per-effect parameter overrides). Distinct from
@@ -5662,6 +5670,30 @@ void main() {
         """Push the current numeric-hotkey slot mapping to the help overlay."""
         if self._playlist is not None and self._overlays is not None:
             self._overlays.set_effect_shortcuts(self._playlist.shortcut_effects)
+
+    # -- Global-action hotkey rebinding (persisted) ---------------------------
+    # The "enabler" for a future in-app hotkey editor: named global actions
+    # (next/prev/fullscreen/help/... - see hotkeys._ACTION_BINDINGS) can be
+    # rebound to a different key chord. HotkeyHandler translates an incoming
+    # override chord back to the action's default chord before the existing,
+    # unmodified dispatch chain runs, so no dispatch logic needed to change.
+
+    def hotkey_overrides(self) -> dict[str, tuple[int, int]]:
+        """Return the current rebound-action overrides ({action: (sym, mod)})."""
+        return dict(self._hotkey_overrides)
+
+    def set_hotkey_override(self, action: str, sym: 'int | None', mod: int = 0) -> None:
+        """Rebind a global action to a new chord, or clear it (sym=None)."""
+        action = str(action)
+        if sym is None:
+            self._hotkey_overrides.pop(action, None)
+        else:
+            self._hotkey_overrides[action] = (int(sym), int(mod))
+        self._runtime_state.set(
+            'hotkeys.overrides',
+            {k: list(v) for k, v in self._hotkey_overrides.items()},
+        )
+        self._runtime_state.save()
 
     # -- Show presets (named runtime-setup snapshots) ------------------------
 

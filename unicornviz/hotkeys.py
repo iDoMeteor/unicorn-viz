@@ -132,6 +132,15 @@ def hotkey_slot_label(slot: int) -> str:
     return f'{prefix}{digit}'
 
 
+# Canonical {action_name: (sym, mod)} table for named global actions - the
+# single source of truth for both MIDI note→key replay (below) and the
+# hotkey-rebinding "enabler": App.hotkey_overrides() lets an operator rebind
+# any of these actions to a different chord (persisted); translate_override_
+# chord() converts an incoming override chord back to its action's *default*
+# chord before the (unmodified) global dispatch chain in handle() runs, so no
+# dispatch logic needs to change for a rebind to take effect. Only applied in
+# the global tail (after every modal has had first refusal), so a rebind never
+# changes in-modal key behaviour.
 _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'next': (sdl2.SDLK_n, 0),
     'prev': (sdl2.SDLK_p, 0),
@@ -166,6 +175,38 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'reactivity_random': (sdl2.SDLK_F7, 0),
     'zoom_random': (sdl2.SDLK_z, sdl2.KMOD_ALT),
 }
+
+
+def default_action_binding(action: str) -> tuple[int, int] | None:
+    """Return the built-in default (sym, mod) for a named global action."""
+    return _MIDI_NOTE_KEY_BINDINGS.get(action)
+
+
+def action_names() -> list[str]:
+    """Return all rebindable global-action names (for a future hotkey editor)."""
+    return list(_MIDI_NOTE_KEY_BINDINGS.keys())
+
+
+def translate_override_chord(
+    sym: int, mod: int, overrides: 'dict[str, tuple[int, int]]'
+) -> tuple[int, int]:
+    """Translate a possibly-rebound chord back to its action's default chord.
+
+    If ``(sym, mod)`` exactly matches an operator override for some action,
+    return that action's *default* chord, so the existing dispatch chain
+    (which still matches on default chords) fires correctly without needing
+    to know rebinding exists. If ``(sym, mod)`` matches no override, it is
+    returned unchanged.
+    """
+    if not overrides:
+        return sym, mod
+    for action, chord in overrides.items():
+        if chord == (sym, mod):
+            default = _MIDI_NOTE_KEY_BINDINGS.get(action)
+            if default is not None:
+                return default
+    return sym, mod
+
 
 _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
     # Default live-performance mapping when no selector/modal is active.
@@ -1222,6 +1263,14 @@ class HotkeyHandler:
                     o.flash_message('ProjectM delete failed', 1.6)
                 return
             return
+
+        # No modal consumed this key. Translate a rebound chord back to its
+        # action's default chord (a no-op unless the operator has an override
+        # set) so the unmodified global dispatch below fires as if the
+        # default chord had been pressed. See App.hotkey_overrides().
+        _get_overrides = getattr(a, 'hotkey_overrides', None)
+        if callable(_get_overrides):
+            sym, mod = translate_override_chord(sym, mod, _get_overrides())
 
         if sym == sdl2.SDLK_ESCAPE:
             # ESC closes the currently-open menu first; only exits when no menu is open.
