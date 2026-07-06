@@ -174,7 +174,7 @@ resolve_playlist_context = true
 #   KP 1-9 / .   — Set position (compass layout) / hide
 # ---------------------------------------------------------------------------
 [chat]
-enabled = true
+enabled = false
 ably_api_key = ""            # YOUR_APP_ID.KEY_ID:KEY_SECRET from app.ably.io
 channel = "unicornviz-chat"  # must match channelName in ChatWidget
 username = "VJ"              # display name shown in chat for messages you send
@@ -341,6 +341,21 @@ tempo_hold_s = 10.0
 #   tempo hold.  15 s bridges the longest crossfade without masking a genuine
 #   pause between DJ sets.
 silence_reset_s = 15.0
+# analysis_mode_enabled: enables the beat-position-map layer — real downbeat
+#   confidence (region consistency + phase coherence + ACF quality + onset
+#   density blend) gating is_downbeat, plus a stricter region-consistency
+#   check on large tempo-lane jumps.  Off by default historically (never
+#   run in production); turning on for a supervised test session per the
+#   2026-07-06 audit (docs/audits/2026-07-06-vj-training-systems-audit.md).
+#   If is_downbeat fires much less than before, drop/impact/climax
+#   scheduling will visibly stall — watch the session log for that.
+analysis_mode_enabled = true
+# analysis_downbeat_confidence_min: gate for is_downbeat under analysis mode.
+#   Code default lowered 0.55 -> 0.42 (2026-07-06) after fixing a blend bug
+#   where two terms were accidentally the same signal; 0.42 sits just below
+#   the observed real confidence median (~0.41-0.47) as a training-start
+#   value.  Set explicitly here so it's easy to find/tune during the test.
+analysis_downbeat_confidence_min = 0.42
 # tactus_preference_ratio: how aggressively the ACF engine folds high-BPM
 #   estimates down toward the musical pulse.  Lower = more aggressive fold.
 #   Default 0.55; do NOT lower below ~0.50 for house/techno — the 0.75x fold

@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-06-20
+Last updated: 2026-07-06
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -46,8 +46,12 @@ not a bug; do not interpret it as failure.
 Phase tolerance: `_V2_PHASE_TOL = 0.18` (±18% of beat period).  Do not widen
 above 0.25 or the oscillator stops discriminating on-beat from near-beat onsets.
 
-ACF blend: `self._confidence = 0.4 * acf_conf + 0.6 * self._confidence` — ACF
-peak ratio is secondary; phase coherence is primary.
+ACF blend (2026-07-06 fix — see "Confidence Blend" section below for the
+bug this replaced):
+`self._confidence = 0.4 * self._acf_confidence + 0.6 * self._phase_confidence`,
+where `_acf_confidence` and `_phase_confidence` are each persisted
+independently and recomputed whenever either input signal updates — so the
+blend can no longer be silently discarded by whichever signal updates last.
 
 ---
 
@@ -261,6 +265,72 @@ but here the update returned early, so `self._bpm` never moved at all.
 
 ---
 
+## Confidence Blend Bug — `_acf_confidence` / `_phase_confidence` split (2026-07-06)
+
+Decision: split `self._confidence`'s two inputs into independently-persisted fields
+
+**Problem:** `_absorb_onset()` set `self._confidence = sum(coherence_buf) / len(coherence_buf)`
+(raw phase coherence) on **every onset**.  `_estimate_tempo_acf()` set
+`self._confidence = 0.4 * acf_conf + 0.6 * self._confidence` (the documented ACF blend), but only
+when a full ACF update completes — throttled to 1-in-`_V2_ACF_INTERVAL` (8) frames and further
+gated by several early-return guards (ambiguous score, low update confidence, tempo-hold window,
+candidate-persistence check, jump guards).  Because onsets arrive far more often than completed
+ACF updates in real audio, the ACF's contribution was overwritten by the very next onset almost
+immediately — the blend was real for a few milliseconds and then vanished.  Effectively:
+`confidence` was pure phase coherence in practice, matching the "structural equilibrium ~0.375"
+finding above; the ACF peak-ratio signal barely registered downstream.
+
+This same root cause corrupted `_compute_downbeat_confidence()` (analysis mode): its `coh` term
+(`sum(coherence_buf)/len(...)`, freshly recomputed) and `base` term (`self._confidence`) were
+mathematically identical at call time in the overwhelming majority of frames, since nothing
+touches `self._confidence` between the last onset absorption and the downbeat check within the
+same beat interval.  The nominal `0.45 * region + 0.30 * coh + 0.15 * base + 0.10 * density`
+four-way blend was actually `0.45 * region + 0.45 * (one signal, counted twice) + 0.10 * density`
+— phase coherence at ~90% effective weight, region consistency at ~45%, ACF quality contributing
+essentially nothing distinguishable from coherence.
+
+**Fix:** two persisted fields, `self._phase_confidence` (refreshed every onset in `_absorb_onset`)
+and `self._acf_confidence` (refreshed immediately after `acf_conf` is computed in
+`_estimate_tempo_acf`, *before* any of the function's early-return guards — so it updates even on
+frames where the guards ultimately reject a BPM change).  `self._confidence` is recomputed as
+`0.4 * _acf_confidence + 0.6 * _phase_confidence` at both update sites, so the public property
+always reflects the freshest value of both inputs instead of one silently clobbering the other.
+`_compute_downbeat_confidence()` now reads `coh = self._phase_confidence` and
+`base = self._acf_confidence` directly — four genuinely independent signals as originally
+designed. `_reset_tempo_lock()` clears both new fields alongside `self._confidence`.
+
+**Verification:** git-blame traced `_compute_downbeat_confidence` to its introducing commit
+(`1e91f4f`, 2026-05-22) — the double-count was present from day one, not a later regression.
+Confirmed post-fix with a synthetic 130 BPM onset stream: `_acf_confidence` and
+`_phase_confidence` diverge (1.0 vs 0.34 in one run), where pre-fix they were provably identical
+by construction.
+
+---
+
+## Analysis Mode — enabled for supervised testing (2026-07-06)
+
+Decision: `analysis_mode_enabled = true`, `analysis_downbeat_confidence_min` lowered `0.55 → 0.42`
+
+Analysis mode (beat-position map, region consistency, real downbeat-confidence gating on
+`is_downbeat`, and a stricter region-consistency check on large tempo-lane jumps) had never run in
+production — `analysis_mode_enabled` defaulted `False` and was absent from `config.toml`.  Real
+confidence percentiles from three live sessions (`logs/autovj-202607*.jsonl`, 1,832 / 6,216 /
+43,434 ticks): p50 0.41–0.47, p75 0.57–0.59, p90 ~0.625.  With phase coherence carrying ~45%
+effective weight in the blend (see previous section) and typical values sitting at that median,
+the un-fixed formula would gate `is_downbeat` closed on roughly half of all beats at the old 0.55
+threshold — since `schedule_for_next_downbeat()` is how BUILD/DROP/IMPACT/CLIMAX transitions
+actually fire, that risked the director going silent, not just less precise.
+
+**Fix order matters:** the confidence-blend fix (above) had to land first — enabling analysis mode
+against the still-broken formula would have tested a blend where 90% of the "four-way" mix was one
+double-counted signal, producing misleading results.  With the blend fixed, `0.42` is set as a
+training-start value just below the observed real coherence median, not a validated final number —
+there is still no production data on the `region` or `density` terms (analysis mode has never
+logged them live).  Revisit this threshold once a supervised session's real distribution is in
+hand; see `docs/audits/2026-07-06-vj-training-systems-audit.md` P1-4 / Phase 2 step 8.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
@@ -273,6 +343,8 @@ but here the update returned early, so `self._bpm` never moved at all.
 | 2026-06-20 | `auto_profile_switch_cooldown_s = 60.0` | Chillstep crossfade-off: 23 switches/43 min; raised to 120 s |
 | 2026-06-21 | BPM hint-range clamp in `_maybe_auto_switch_profile()` | Clamping BPM to `bpm_hint_max` prevented mood from ever escaping chill when playing wrong-genre playlist (peak-time at 127 BPM clamped to 108 → stuck in chill forever); the 120 s cooldown alone is sufficient protection against crossfade-off blips |
 | — | BeatTracker v1 as primary engine | v2 ACF is more robust; v1 kept as fallback only |
+| 2026-05-22–2026-07-06 | `_compute_downbeat_confidence()` reading `base = self._confidence` | Identical to `coh` in practice — never an independent third signal; replaced with genuinely independent `_acf_confidence` (see Confidence Blend Bug section) |
+| — | `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN = 0.55` | Never validated against real data; real coherence medians run 0.41-0.47, so 0.55 would have gated `is_downbeat` closed on roughly half of all beats. Lowered to 0.42 as a training-start value (see Analysis Mode section) |
 
 ---
 
