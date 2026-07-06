@@ -622,6 +622,9 @@ class Overlays:
         self._ce_pending_action: str | None = None
         self._ce_footer_button_rects: list[tuple[float, float, float, float, str]] = []
         self._ce_profile_chip_rects: list[tuple[float, float, float, float, int]] = []
+        # Hotkeys tab: "press new key" capture mode for the selected action row.
+        self._ce_capture_mode = False
+        self._ce_capture_action: str = ''
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -2431,6 +2434,27 @@ void main() {
         self._ce_pending_action = None
         return action
 
+    @property
+    def config_editor_capture_mode(self) -> bool:
+        """True while waiting for the next keypress to rebind an action."""
+        return self._ce_capture_mode
+
+    @property
+    def config_editor_capture_action(self) -> str:
+        """The action name currently being rebound, or ''."""
+        return self._ce_capture_action
+
+    def set_config_editor_capture(self, active: bool, action: str = '') -> None:
+        """Enter/leave "press new key" capture mode for a hotkey-tab row."""
+        self._ce_capture_mode = bool(active)
+        self._ce_capture_action = str(action) if active else ''
+
+    def config_editor_selected_row(self) -> dict[str, object] | None:
+        """Return the currently-selected row dict on the active tab, if any."""
+        if 0 <= self._ce_param_idx < len(self._ce_params):
+            return self._ce_params[self._ce_param_idx]
+        return None
+
     def _render_config_editor(self) -> None:
         """Draw the tabbed configuration editor (shell + tab bar + placeholder body)."""
         if not self.config_editor_visible:
@@ -2634,6 +2658,7 @@ void main() {
         n_p = len(self._ce_params)
         pstart = max(0, min(self._ce_param_idx - max_prows // 2, max(0, n_p - max_prows)))
         any_adjustable = False
+        any_bindable = False
         for vis, i in enumerate(range(pstart, min(n_p, pstart + max_prows))):
             ry = p_top + vis * prow_h
             p = self._ce_params[i]
@@ -2646,6 +2671,26 @@ void main() {
                 iw = len(info) * float(self._glyph_w) * self._font_scale_norm * 1.9
                 self._draw_text(info[:28], right_x + right_w - 18 - iw, ry + 2, scale=1.9,
                                 color=(0.85, 0.95, 0.7, 0.95))
+                continue
+            if p.get('kind') == 'bind':
+                any_bindable = True
+                selected = i == self._ce_param_idx
+                capturing = selected and self._ce_capture_mode
+                if selected:
+                    self._context_menu_hover_glow(right_x + 6, ry - 2, right_w - 12, prow_h - 4, self._hud_t)
+                tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
+                self._draw_text(name[:30], right_x + 16, ry + 2, scale=1.9, color=tcol)
+                if capturing:
+                    pulse = 0.5 + 0.5 * math.sin(self._hud_t * 6.0)
+                    chord_text = 'Press a key...'
+                    ccol = (1.0, 0.55 + 0.35 * pulse, 0.2, 1.0)
+                else:
+                    chord_text = str(p.get('chord', '-'))
+                    is_override = bool(p.get('is_override', False))
+                    ccol = (0.4, 0.95, 1.0, 0.95) if is_override else (0.75, 0.80, 0.88, 0.85)
+                cw = len(chord_text) * float(self._glyph_w) * self._font_scale_norm * 1.9
+                self._draw_text(chord_text, right_x + right_w - 18 - cw, ry + 2, scale=1.9, color=ccol)
+                self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
                 continue
             any_adjustable = True
             val = float(p.get('value', 0.0))
@@ -2670,6 +2715,10 @@ void main() {
 
         if any_adjustable:
             self._draw_text('Up/Down: select   [ / ]: adjust',
+                            right_x + 16, body_y + body_h - 22.0, scale=1.7,
+                            color=(0.5, 0.6, 0.72, 0.75))
+        elif any_bindable:
+            self._draw_text('Up/Down: select   Enter: rebind   Backspace: reset to default',
                             right_x + 16, body_y + body_h - 22.0, scale=1.7,
                             color=(0.5, 0.6, 0.72, 0.75))
 

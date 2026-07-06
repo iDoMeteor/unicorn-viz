@@ -132,6 +132,41 @@ def hotkey_slot_label(slot: int) -> str:
     return f'{prefix}{digit}'
 
 
+_MODIFIER_KEYSYMS = frozenset((
+    sdl2.SDLK_LSHIFT, sdl2.SDLK_RSHIFT,
+    sdl2.SDLK_LCTRL, sdl2.SDLK_RCTRL,
+    sdl2.SDLK_LALT, sdl2.SDLK_RALT,
+    sdl2.SDLK_LGUI, sdl2.SDLK_RGUI,
+))
+
+
+def is_modifier_keysym(sym: int) -> bool:
+    """Return True if ``sym`` is a bare modifier key (Shift/Ctrl/Alt/GUI).
+
+    Used to reject binding a rebindable action to a modifier key alone, which
+    would be meaningless as a standalone hotkey chord.
+    """
+    return sym in _MODIFIER_KEYSYMS
+
+
+def chord_label(sym: int, mod: int) -> str:
+    """Return a short human display label for a (sym, mod) chord, e.g. 'Ctrl+F'."""
+    parts = []
+    if mod & sdl2.KMOD_CTRL:
+        parts.append('Ctrl')
+    if mod & sdl2.KMOD_ALT:
+        parts.append('Alt')
+    if mod & sdl2.KMOD_SHIFT:
+        parts.append('Shift')
+    if mod & sdl2.KMOD_GUI:
+        parts.append('Gui')
+    name = sdl2.SDL_GetKeyName(sym)
+    if isinstance(name, bytes):
+        name = name.decode('utf-8', errors='replace')
+    parts.append(name or f'Key{sym}')
+    return '+'.join(parts)
+
+
 # Canonical {action_name: (sym, mod)} table for named global actions - the
 # single source of truth for both MIDI note→key replay (below) and the
 # hotkey-rebinding "enabler": App.hotkey_overrides() lets an operator rebind

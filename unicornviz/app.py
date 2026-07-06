@@ -2443,7 +2443,7 @@ void main() {
     def _push_config_editor_model(self) -> None:
         """Feed the config editor its per-tab data each frame while open."""
         overlays = self._overlays
-        tabs = ['Effects', 'Audio', 'Visuals', 'System']
+        tabs = ['Effects', 'Audio', 'Visuals', 'System', 'Hotkeys']
         if self._auto_vj is not None:
             tabs.append('Auto VJ')
         overlays.set_config_editor_tabs(tabs)
@@ -2470,6 +2470,8 @@ void main() {
             )
         elif tab in ('Audio', 'Visuals'):
             overlays.set_config_editor_params(self.config_editor_global_rows(tab))
+        elif tab == 'Hotkeys':
+            overlays.set_config_editor_params(self.config_editor_hotkey_rows())
         else:  # System, Auto VJ — read-only info rows.
             overlays.set_config_editor_params(self.config_editor_info_rows(tab))
         overlays.set_config_editor_profiles(self.config_profile_names())
@@ -2512,6 +2514,123 @@ void main() {
             rows.append(info('Action in', lab('hud_action_in_label')))
             rows.append(info('Profile rec', lab('profile_recommendation_hud')))
         return rows
+
+    # -- Hotkeys tab (rebind global actions) ----------------------------------
+    # Hand-authored labels for the rebindable actions in hotkeys.action_names()
+    # (a curated, deliberately "global commands only" set - not the full help
+    # registry, which also documents modal-scoped/navigation keys that make no
+    # sense to rebind). Keep this in sync when a new action is added to
+    # hotkeys._MIDI_NOTE_KEY_BINDINGS.
+    _HOTKEY_ACTION_LABELS: dict[str, str] = {
+        'next': 'Next Effect',
+        'prev': 'Previous Effect',
+        'random': 'Random Effects Mode',
+        'pause': 'Pause / Resume',
+        'fullscreen': 'Toggle Fullscreen',
+        'audio_toggle': 'Audio On/Off',
+        'eq': 'EQ / Spectrum',
+        'ansi': 'ANSI Viewer',
+        'audio_selector': 'Audio Source Selector',
+        'midi_selector': 'MIDI Device Selector',
+        'system_monitor': 'System Monitor',
+        'control_room': 'Control Room',
+        'projectm_manager': 'ProjectM Manager',
+        'controller_help': 'Controller Help',
+        'help': 'Help Overlay',
+        'hud': 'HUD Toggle',
+        'screenshot': 'Screenshot',
+        'replay_splash': 'Replay Splash',
+        'invert': 'Invert Colors',
+        'display_single': 'Display: Single',
+        'display_span_included': 'Display: Span (Included)',
+        'display_span_all': 'Display: Span (All)',
+        'display_mirror_included': 'Display: Mirror (Included)',
+        'display_mirror_all': 'Display: Mirror (All)',
+        'grand_finale': 'Trigger Grand Finale',
+        'grand_finale_abort': 'Abort Grand Finale',
+        'speed_random': 'Speed Random Toggle',
+        'reactivity_random': 'Reactivity Random Toggle',
+        'zoom_random': 'Zoom Random Toggle',
+    }
+
+    def config_editor_hotkey_rows(self) -> list[dict[str, object]]:
+        """Return rebindable-action rows for the Hotkeys tab.
+
+        Each row: {'name': label, 'kind': 'bind', 'action': action_name,
+        'chord': display label, 'is_override': bool}.
+        """
+        from unicornviz.hotkeys import action_names, chord_label, default_action_binding
+
+        rows: list[dict[str, object]] = []
+        for action in action_names():
+            override = self._hotkey_overrides.get(action)
+            sym_mod = override or default_action_binding(action)
+            chord = chord_label(*sym_mod) if sym_mod is not None else '-'
+            rows.append({
+                'name': self._HOTKEY_ACTION_LABELS.get(action, action),
+                'kind': 'bind',
+                'action': action,
+                'chord': chord,
+                'is_override': override is not None,
+            })
+        return rows
+
+    def hotkey_action_for_chord(self, sym: int, mod: int, exclude_action: 'str | None' = None) -> 'str | None':
+        """Return the rebindable action currently bound to (sym, mod), if any.
+
+        Checks each action's *effective* binding (override if set, else
+        default). Used for live conflict detection when capturing a new chord.
+        """
+        from unicornviz.hotkeys import action_names, default_action_binding
+
+        for action in action_names():
+            if action == exclude_action:
+                continue
+            effective = self._hotkey_overrides.get(action) or default_action_binding(action)
+            if effective == (sym, mod):
+                return action
+        return None
+
+    def start_hotkey_capture(self, action: str) -> None:
+        """Enter capture mode: the next keypress becomes ``action``'s chord."""
+        self._overlays.set_config_editor_capture(True, action)
+        self._overlays.flash_message('Press a new key... (Esc to cancel)', 2.0)
+
+    def apply_hotkey_capture(self, sym: int, mod: int) -> str:
+        """Resolve a captured chord for the action currently being rebound.
+
+        Rejects bare modifier keys and chords already bound to a *different*
+        action (conflict); on success applies the rebind and exits capture
+        mode. Returns a user-facing flash message either way.
+        """
+        from unicornviz.hotkeys import chord_label, is_modifier_keysym
+
+        action = self._overlays.config_editor_capture_action
+        if not action:
+            self._overlays.set_config_editor_capture(False, '')
+            return ''
+        if is_modifier_keysym(sym):
+            return 'Choose a non-modifier key'
+        conflict = self.hotkey_action_for_chord(sym, mod, exclude_action=action)
+        if conflict is not None:
+            label = self._HOTKEY_ACTION_LABELS.get(conflict, conflict)
+            return f'Conflicts with "{label}" - choose another key'
+        self.set_hotkey_override(action, sym, mod)
+        self._overlays.set_config_editor_capture(False, '')
+        label = self._HOTKEY_ACTION_LABELS.get(action, action)
+        return f'{label}: bound to {chord_label(sym, mod)}'
+
+    def cancel_hotkey_capture(self) -> None:
+        """Exit capture mode without changing the binding."""
+        self._overlays.set_config_editor_capture(False, '')
+
+    def reset_hotkey_to_default(self, action: str) -> str:
+        """Clear an action's override, reverting it to its default chord."""
+        label = self._HOTKEY_ACTION_LABELS.get(action, action)
+        if action not in self._hotkey_overrides:
+            return f'{label}: already default'
+        self.set_hotkey_override(action, None)
+        return f'{label}: reset to default'
 
     # App attributes that may hold a config-editor-contributing controller.
     # (Which of the app's own subsystems to poll — the *settings* still come
@@ -3364,6 +3483,18 @@ void main() {
                                         self._overlays.config_editor_name_text + _ch
                                     )
                             continue
+                        if self._overlays.config_editor_capture_mode:
+                            # Hotkeys tab: the very next keydown becomes the
+                            # candidate chord for the action being rebound.
+                            if not event.key.repeat:
+                                if _sym == sdl2.SDLK_ESCAPE:
+                                    self.cancel_hotkey_capture()
+                                    self._overlays.flash_message('Rebind cancelled', 1.2)
+                                else:
+                                    _msg = self.apply_hotkey_capture(_sym, event.key.keysym.mod)
+                                    if _msg:
+                                        self._overlays.flash_message(_msg, 1.8)
+                            continue
                         if _sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_c):
                             if not event.key.repeat:
                                 self._overlays.close_config_editor()
@@ -3380,6 +3511,18 @@ void main() {
                             self._overlays.move_config_editor_row(-1)
                         elif _sym == sdl2.SDLK_DOWN:
                             self._overlays.move_config_editor_row(1)
+                        elif _sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                            if not event.key.repeat and self._overlays.config_editor_tab_name == 'Hotkeys':
+                                _row = self._overlays.config_editor_selected_row()
+                                if _row is not None and _row.get('kind') == 'bind':
+                                    self.start_hotkey_capture(str(_row.get('action', '')))
+                        elif _sym == sdl2.SDLK_BACKSPACE:
+                            if self._overlays.config_editor_tab_name == 'Hotkeys':
+                                _row = self._overlays.config_editor_selected_row()
+                                if _row is not None and _row.get('kind') == 'bind':
+                                    _msg = self.reset_hotkey_to_default(str(_row.get('action', '')))
+                                    if _msg:
+                                        self._overlays.flash_message(_msg, 1.4)
                         elif _sym == sdl2.SDLK_LEFTBRACKET:
                             self._config_editor_adjust(-1.0)
                         elif _sym == sdl2.SDLK_RIGHTBRACKET:
