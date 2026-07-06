@@ -82,39 +82,50 @@ effect is ever permanently invisible.
 
 ---
 
-## 3) Hotkey overflow — dynamic re-pack + pinning
+## 3) Hotkey overflow — dynamic re-pack + pinning ✅ DONE (commit `0978840`)
 
-**Today:** number-keys are static index-based into the *full* effect list
-(naked→0-8, Shift→10-18, Ctrl→20-28, Alt→30-38 = **36 reachable slots**; dead gaps
-at 9/19/29/39+). `go_index` uses modulo and **does not skip disabled** effects, so
-a number key can jump to a disabled effect.
+**Was:** number-keys mapped into a *snapshot of all effects* taken once at
+`HotkeyHandler` construction (`Playlist.shortcut_effects` computed once,
+cached in `self._shortcut_effects`). Enabling/disabling an effect **never**
+changed the mapping at all — not "36 slots with gaps" as originally guessed;
+the real range is a clean **40 slots** (naked/Shift/Ctrl/Alt × 1-9,0), and
+`go_index`'s modulo wraparound meant an out-of-range press landed on an
+unrelated effect rather than no-op'ing.
 
-**Plan:**
-- Map number-keys to the **enabled** effect list in catalog order, **re-packed**
-  on enable/disable (consolidate gaps, expand to fill). Small localized change:
-  index into `_enabled_indices()` instead of the raw list. Fixes the
-  disabled-jump bug for free.
-- **Pinning:** let an operator pin a specific effect to a specific slot so it
-  doesn't move when the enabled set changes (muscle memory). Pins override the
-  dynamic packing; unpinned slots fill around them. Managed from the **effects
-  browser** (§4) and/or the hotkey editor (§5), persisted to
-  `runtime/settings.json`.
+**Shipped:**
+- `Playlist.shortcut_effects` recomputes fresh on **every access** from the
+  *enabled* effect set only — dynamically consolidates/expands, no caching.
+- **Pinning:** `Playlist.set_hotkey_pins()`/`hotkey_pins()` — a pinned effect
+  claims its slot while enabled; unpinned slots fill with the rest in catalog
+  order; a pin whose effect is disabled, or whose slot is unreachable at the
+  current enabled count, is simply not honoured until it fits — recomputed
+  fresh each time, so nothing goes stale.
+- **Pinning UI:** in the effects browser, pressing the *same chord* that would
+  jump to a slot outside the browser instead pins/unpins the selected effect to
+  that slot (muscle-memory reuse) — `App.effects_browser_toggle_pin_slot()`.
+  Pins persist to `runtime/global_state.json` (same store as
+  `effects.disabled`, not a separate `settings.json` — matches the existing
+  pattern already used for disabled-effects persistence).
 - **Overflow escape hatch:** the effects browser (`B`) reaches anything beyond
-  the ~36 slots — there will always be more effects than number-keys, so the
-  browser is the answer for "reach everything," number-keys are fast-access to the
-  working set.
-- The VJ is unaffected by all of this (it ignores hotkeys).
+  slot 40 — confirmed still the right answer; number-keys are fast-access to
+  the current working set, the browser reaches everything.
+- The VJ is unaffected (it never reads hotkeys).
+
+Tests: `tests/test_hotkey_slot_repack_and_pinning.py` (19 tests — slot
+resolver, dynamic re-pack, pin placement/fallback/replacement, browser live
+model update).
 
 ---
 
 ## 4) Effects browser enhancements
 
-- **Pinning UI:** assign/clear a number-slot pin for the selected effect from the
-  browser (shows current pin; conflict feedback).
-- **Category isolation** — like the ProjectM preset browser's category pane:
-  a left category rail (from effect `TAGS` / pack) that filters the effect list to
-  one category at a time, so browsing 44+ effects is navigable. Reuse the
-  `CatalogBrowser` two-pane model the ProjectM manager already uses.
+- **Pinning UI:** ✅ done above.
+- **Category isolation** — ✅ **already existed**, discovered while scoping this
+  work. The effects browser already ships a full two-pane `CatalogBrowser`
+  layout (left category rail + right filtered list, `PANE_CATEGORIES`/
+  `PANE_LIST`, `Tab`/`Left`/`Right` to move focus) — it landed in an earlier
+  "Effects browser 2.0" / "migrate ProjectM manager onto the shared
+  CatalogBrowser model" pass, before this plan was written. No work needed.
 
 ---
 
@@ -138,14 +149,13 @@ a number key can jump to a disabled effect.
 
 ## 6) Sequencing
 
-1. **VJ tag fixes** (§2) — highest value, mostly core:
-   a. `vj_api.goto_random_effect` fallback (2c),
-   b. profile `*_effect_tags` in `profiles.py` (2b),
-   c. tag-coverage audit for effects (2a; core first, then packs).
-2. **Dynamic number-key re-pack** (§3) — small; fixes disabled-jump.
-3. **Effects browser: category isolation + pinning UI** (§4).
-4. **Refactor `hotkeys.py` to a table-driven binding map** (§5 enabler).
-5. **Hotkey editor** on that table, in the config-editor shell (§5).
+1. ✅ **VJ tag fixes** (§2) — done; see `docs/planning/vj-mood-tag-rollout.md`.
+2. ✅ **Dynamic number-key re-pack + pinning** (§3) — done, commit `0978840`.
+3. ✅ **Effects browser: category isolation + pinning UI** (§4) — pinning UI
+   shipped with #2; category isolation turned out to already exist.
+4. ⏳ **Refactor `hotkeys.py` to a table-driven binding map** (§5 enabler) — in
+   progress.
+5. **Hotkey editor** on that table, in the config-editor shell (§5) — next.
 
 Regression tests for each step (tag-fallback behavior, re-pack over enabled set,
 pin persistence, binding-table dispatch, help↔binding parity).
