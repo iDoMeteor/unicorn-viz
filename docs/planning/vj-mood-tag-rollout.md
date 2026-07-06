@@ -1,7 +1,7 @@
 # VJ Mood-Tag Rollout — Spec + Verification Sheet
 
 Owner: owner + Claude Opus (master coordinator)
-Status: In progress — effect moods being confirmed via Q&A
+Status: Complete — tag fixes #2 and #3 both landed and cross-checked
 Last updated: 2026-07-13
 
 Authoritative spec for the mood-tag work (VJ tag fix #2 + #3). Written **before**
@@ -115,13 +115,25 @@ intense 34, hard 11** — every scene now draws from a healthy spread (no more
 
 ## 4) Rollout + verification checklist
 
-- [ ] Confirm all 44 effect moods via Q&A; mark rows `confirmed`.
-- [ ] Locate the VJ mood-profile definitions (`chill`/`normie`/`raver`) and set
-      their per-scene `*_effect_tags` per §2 (auto-vj-01 submodule).
-- [ ] Append the mood tag to each effect's `TAGS` per §3 (per pack; some in
-      submodule packs — commit/push/pointer-bump each).
-- [ ] **Cross-check:** re-scan `get_effects()` and assert every rotation effect
-      carries exactly one of {chill, groovy, energetic, intense, hard}, matching
-      this sheet row-for-row. (This is the "did they all land?" gate.)
-- [ ] Regression test: assert full mood coverage (no rotation effect without a
-      mood tag) so future effects can't silently regress.
+- [x] Confirm all 44 effect moods via Q&A; mark rows `confirmed`.
+- [x] Locate the VJ mood-profile definitions (`chill`/`normie`/`raver`) and set
+      their per-scene `*_effect_tags` per §2 (auto-vj-01 submodule, commit
+      `196b5db`). Discovered the profiles already override the scene tags (the
+      constructor fallback in §1's original diagnosis never fires); the *live*
+      tag lists were a different, mostly-dead vocabulary (`ambient`, `audio`,
+      `futuristic` all resolved to 0 effects) — replaced with the mood
+      vocabulary per §2.
+- [x] Append the mood tag to each effect's `TAGS` per §3 (16 packs + core;
+      commit/push/pointer-bump each — main repo `ead2908`/`813c4fc`/`cb5d04c`,
+      auto-vj-01 pointer `6f23430`). `projectm-01` needed a one-off fix: an
+      orphaned stray `main` branch blocked a push; the real default branch
+      (`master`) fast-forwarded cleanly with no history rewrite.
+- [x] **Cross-check:** scripted apply + immediate re-scan confirmed all 44
+      effects match this sheet row-for-row (`tests/test_effect_mood_coverage.py`
+      + a one-off verification script both green). Zero drift.
+- [x] Regression test: `tests/test_effect_mood_coverage.py` asserts every
+      rotation effect carries ≥1 mood tag and all five moods are represented.
+
+**Verified scene coverage after both fixes** (effects matched per scene, out of
+44): chill profile 16–40, normie 29–40, raver 29–40 — up from ~5 for every
+drop/impact/climax before this work.

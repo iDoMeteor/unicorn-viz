@@ -415,6 +415,49 @@ config.toml).
 
 ---
 
+## VJ Mood Profile Effect-Tag Vocabulary Fix (2026-07-13)
+
+**Bug:** the director was reported as spending a disproportionate amount of time
+on psychedelic-style effects ("stuck in the psychedelics").
+
+**Root cause:** each mood profile's per-scene `*_effect_tags`
+(`cruise`/`breakdown`/`drop`/`impact`/`climax`, resolved via `_profile_value()`
+from `_PROFILE_PRESETS`) requested a tag vocabulary — `ambient`, `audio`,
+`futuristic`, plus `psychedelic`/`classic`/`art`/`particles`/`neon` — that
+barely overlapped with real effect `TAGS` (category/style words like `tech`,
+`cosmic`, `retro`). `ambient`, `audio`, and `futuristic` matched **zero**
+effects. `psychedelic` was the one tag common to nearly every drop/impact/
+climax list, so `goto_random_effect`'s tag filter collapsed to the same ~5
+psychedelic-tagged effects whenever a drop, impact, or climax fired.
+
+**Fix (two parts, both landed):**
+1. All 44 rotation effects were given one-or-more **mood tags** — `chill`,
+   `groovy`, `energetic`, `intense`, `hard` — layered on top of their existing
+   category tags. See `docs/planning/vj-mood-tag-rollout.md` for the full
+   per-effect assignment (owner Q&A-confirmed, scripted apply, cross-checked
+   with zero drift).
+2. Each mood profile's per-scene `*_effect_tags` in `_PROFILE_PRESETS` were
+   replaced with mood-vocabulary requests (owner-specified per profile):
+
+   | Scene | chill | normie | raver |
+   | --- | --- | --- | --- |
+   | cruise | chill, groovy | chill, groovy, energetic | groovy, energetic |
+   | breakdown | chill | chill, groovy | chill, groovy |
+   | drop | groovy, energetic | energetic, intense | energetic, intense |
+   | impact | intense, energetic | intense, hard | intense, hard |
+   | climax | energetic, hard, intense | energetic, hard, intense | energetic, hard, intense |
+
+3. A safety-net fallback was also added in core (`vj_api.goto_random_effect`):
+   when no *enabled* effect matches the requested tags, fall back to any
+   enabled effect instead of returning `None`, so a future tag gap can never
+   strand the director again.
+
+**Verified:** every scene across all three profiles now matches 16–40 of the 44
+rotation effects (was ~5 for every drop/impact/climax before). Regression test:
+`tests/test_effect_mood_coverage.py` (main repo) asserts full mood-tag coverage.
+
+---
+
 ## Open Questions
 
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
