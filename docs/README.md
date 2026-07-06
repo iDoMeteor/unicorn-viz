@@ -37,6 +37,7 @@ This is the canonical map for project documentation.
 - Auto VJ tags + hotkey system overhaul plan (2026-07-13): [docs/planning/vj-tags-and-hotkey-system-plan.md](planning/vj-tags-and-hotkey-system-plan.md)
 - VJ mood-tag rollout spec + verification (2026-07-13): [docs/planning/vj-mood-tag-rollout.md](planning/vj-mood-tag-rollout.md)
 - Deferred offscreen audience FBO plan (2026-06-18): [docs/planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md](planning/offscreen-audience-fbo-deferred-plan-2026-06-18.md)
+- Video drop-ins plan — Video Clips rename + new Video Player (2026-07-06): [docs/planning/video-drop-ins-2026-07-06.md](planning/video-drop-ins-2026-07-06.md)
 - Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
 - ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
