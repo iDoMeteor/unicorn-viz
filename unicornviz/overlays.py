@@ -4645,52 +4645,84 @@ void main() {
         min_sec_scale = max(1.40, item_scale * 0.72)
         min_bottom_margin = 26.0
 
-        def _shortcut_block_height(scale: float) -> float:
-            line_h = 8 * scale + 2.0
-            return (8 * shortcut_title_scale + 3.0) + float(min(rows, 12)) * line_h
+        half = right_w * 0.48
+        # Columns are row-aligned in pairs ("1-0"+"SHIFT", then "CTRL"+"ALT"),
+        # so a long effect name that wraps to 2 lines must push every row
+        # below it down in *both* columns of its pair, not just its own cell.
+        col1_avail = max(60.0, half - 20.0)
+        col2_avail = max(60.0, right_w - half - 20.0)
+        row_n = min(rows, 12)
+
+        def _row_group(items_a: list[str], items_b: list[str], scale: float) -> tuple[list[list[str]], list[list[str]], list[int]]:
+            wrapped_a = [
+                self._wrap_plain_text(items_a[i] if i < len(items_a) else '(none)', col1_avail, scale)
+                for i in range(row_n)
+            ]
+            wrapped_b = [
+                self._wrap_plain_text(items_b[i] if i < len(items_b) else '(none)', col2_avail, scale)
+                for i in range(row_n)
+            ]
+            counts = [max(len(wrapped_a[i]), len(wrapped_b[i])) for i in range(row_n)]
+            return wrapped_a, wrapped_b, counts
 
         top = right_y + 42.0
-        row_count = float(min(rows, 12))
         while sec_scale > min_sec_scale:
             sec_lh = 8 * sec_scale + 2.0
-            top_block_h = (8 * shortcut_title_scale + 3.0) + row_count * sec_lh
+            _, _, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
+            _, _, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
+            top_block_h = (8 * shortcut_title_scale + 3.0) + sum(top_counts) * sec_lh
             bottom_y = top + top_block_h + 28.0
-            total_h = bottom_y + _shortcut_block_height(sec_scale)
+            bottom_block_h = (8 * shortcut_title_scale + 3.0) + sum(bottom_counts) * sec_lh
+            total_h = bottom_y + bottom_block_h
             if total_h <= right_y + right_h - min_bottom_margin:
                 break
             sec_scale -= 0.08
 
         sec_lh = 8 * sec_scale + 2.0
+        num_lines, shift_lines, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
+        ctrl_lines, alt_lines, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
 
-        def _draw_shortcut_block(title: str, items: list[str], bx: float, by: float, color: tuple[float, float, float, float]) -> None:
+        def _row_offsets(counts: list[int]) -> list[float]:
+            offsets: list[float] = []
+            acc = 0
+            for c in counts:
+                offsets.append(float(acc))
+                acc += c
+            return offsets
+
+        top_offsets = _row_offsets(top_counts)
+        bottom_offsets = _row_offsets(bottom_counts)
+
+        def _draw_shortcut_block(
+            title: str, wrapped_items: list[list[str]], bx: float, by: float,
+            offsets: list[float], color: tuple[float, float, float, float],
+        ) -> None:
             self._draw_text(title, bx, by, scale=shortcut_title_scale, color=(0.96, 1.0, 0.70, 0.96))
             y0 = by + 8 * shortcut_title_scale + 3.0
-            for i in range(min(rows, 12)):
-                text = items[i] if i < len(items) else '(none)'
-                self._draw_text(text, bx, y0 + i * sec_lh, scale=sec_scale, color=color)
+            for i, lines in enumerate(wrapped_items):
+                yy = y0 + offsets[i] * sec_lh
+                for line in lines:
+                    self._draw_text(line, bx, yy, scale=sec_scale, color=color)
+                    yy += sec_lh
 
-        half = right_w * 0.48
-        top_block_h = (8 * shortcut_title_scale + 3.0) + row_count * sec_lh
+        top_block_h = (8 * shortcut_title_scale + 3.0) + sum(top_counts) * sec_lh
         bottom_y = top + top_block_h + 28.0
-        _draw_shortcut_block('1-0',   self._num_shortcuts,   right_x + 10.0, top,      (0.82, 1.0,  0.9,  0.95))
-        _draw_shortcut_block('SHIFT', self._shift_shortcuts, right_x + half, top,      (0.92, 0.86, 1.0,  0.95))
-        _draw_shortcut_block('CTRL',  self._ctrl_shortcuts,  right_x + 10.0, bottom_y, (0.84, 0.94, 1.0,  0.95))
-        _draw_shortcut_block('ALT',   self._alt_shortcuts,   right_x + half, bottom_y, (1.0,  0.92, 0.82, 0.95))
+        _draw_shortcut_block('1-0',   num_lines,   right_x + 10.0, top,      top_offsets,    (0.82, 1.0,  0.9,  0.95))
+        _draw_shortcut_block('SHIFT', shift_lines, right_x + half, top,      top_offsets,    (0.92, 0.86, 1.0,  0.95))
+        _draw_shortcut_block('CTRL',  ctrl_lines,  right_x + 10.0, bottom_y, bottom_offsets, (0.84, 0.94, 1.0,  0.95))
+        _draw_shortcut_block('ALT',   alt_lines,   right_x + half, bottom_y, bottom_offsets, (1.0,  0.92, 0.82, 0.95))
 
         # Dedicated Post FX block under number shortcuts, left aligned.
         if self._postfx_help_entries:
-            postfx_y = bottom_y + _shortcut_block_height(sec_scale) + 18.0
+            bottom_block_h = (8 * shortcut_title_scale + 3.0) + sum(bottom_counts) * sec_lh
+            postfx_y = bottom_y + bottom_block_h + 18.0
             self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=shortcut_title_scale, color=(0.98, 0.95, 0.72, 0.96))
             py = postfx_y + 8 * shortcut_title_scale + 3.0
+            postfx_avail = max(60.0, right_w - 20.0)
             for key, desc in self._postfx_help_entries:
-                self._draw_text(
-                    f'{key:<16} {desc}',
-                    right_x + 10.0,
-                    py,
-                    scale=item_scale,
-                    color=(0.96, 0.88, 0.76, 0.96),
-                )
-                py += 8 * item_scale + 2.0
+                for line in self._wrap_help_entry(key, desc, postfx_avail, item_scale, key_width=16):
+                    self._draw_text(line, right_x + 10.0, py, scale=item_scale, color=(0.96, 0.88, 0.76, 0.96))
+                    py += 8 * item_scale + 2.0
 
         if self._unmapped_effects:
             self._draw_text(
@@ -4852,10 +4884,12 @@ void main() {
         max_chars = self._help_text_max_chars(avail_w, scale)
         return self._wrap_words_two_budget(text.split(), max_chars, max_chars)
 
-    def _wrap_help_entry(self, key: str, desc: str, avail_w: float, scale: float) -> list[str]:
+    def _wrap_help_entry(
+        self, key: str, desc: str, avail_w: float, scale: float, key_width: int = 12,
+    ) -> list[str]:
         """Word-wrap a help (key, description) row to fit ``avail_w``.
 
-        The key starts the first line (padded to the usual 12-char column);
+        The key starts the first line (padded to ``key_width`` chars);
         continuation lines hang-indent under the description so a long
         description reads as a wrapped paragraph instead of overflowing the
         section card or restarting at the key column. If the key itself is
@@ -4863,7 +4897,7 @@ void main() {
         it is wrapped too rather than left to overflow.
         """
         max_chars = self._help_text_max_chars(avail_w, scale)
-        key_col = 13
+        key_col = key_width + 1
         indent_w = min(key_col, max(0, max_chars - 1))
         indent = ' ' * indent_w
 
@@ -4873,7 +4907,7 @@ void main() {
             desc_lines = self._wrap_words_two_budget(desc.split() or [''], desc_avail, desc_avail)
             return key_lines + [indent + line for line in desc_lines]
 
-        key_padded = f'{key:<12}' if len(key) < 12 else key
+        key_padded = f'{key:<{key_width}}' if len(key) < key_width else key
         prefix = f'{key_padded} '
         first_avail = max(4, max_chars - len(prefix))
         cont_avail = max(4, max_chars - indent_w)

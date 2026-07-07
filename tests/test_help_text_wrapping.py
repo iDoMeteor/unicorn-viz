@@ -211,3 +211,81 @@ def test_rendered_entry_lines_never_exceed_the_column_budget() -> None:
             continue
         max_chars = overlays._help_text_max_chars(avail_text_w, scale)
         assert len(text) <= max_chars, f'{text!r} overflows its column ({len(text)} > {max_chars} chars)'
+
+
+# --------------------------------------------------------------------------- #
+# LIVE SHORTCUT MAP / POST FX: same overflow class, row-aligned column pairs
+# --------------------------------------------------------------------------- #
+
+def _stub_overlays_for_shortcut_map() -> Overlays:
+    overlays = _stub_overlays_for_render()
+    # 'Black Hole Cathedral' is the longest real effect name in the project
+    # and does not fit the "1-0" column's realistic character budget.
+    overlays._num_shortcuts = ['1 -> Black Hole Cathedral', '2 -> Fire', '3 -> (none)']
+    overlays._shift_shortcuts = ['S+1 -> Hacker Terminal 2.0', 'S+2 -> (none)', 'S+3 -> (none)']
+    overlays._ctrl_shortcuts = ['C+1 -> (none)']
+    overlays._alt_shortcuts = ['A+1 -> (none)']
+    overlays._postfx_help_entries = [
+        ('Ctrl+Alt+1..9 / 0', 'Post FX quick-hit trigger (0 = Smoke & Bubbles)'),
+    ]
+    return overlays
+
+
+def test_shortcut_map_wraps_long_effect_names_instead_of_overflowing() -> None:
+    overlays = _stub_overlays_for_shortcut_map()
+    drawn: list[tuple[str, float, float, float]] = []
+
+    def _capture_text(text: str, x: float, y: float, scale: float = 2.0, **_kw) -> None:
+        drawn.append((text, x, y, scale))
+
+    overlays._draw_text = _capture_text
+    overlays._draw_help_section_content(x=0.0, y=0.0, w=1920.0 - 88.0, h=800.0, help_scale=1.0, content_top_y=100.0)
+
+    # Recompute the two shortcut-map column budgets the same way the renderer
+    # does, and check every drawn shortcut-map / POST FX line fits inside it.
+    left_w = (1920.0 - 88.0) * 0.64
+    right_x = (0.0 + 14.0) + left_w + 10.0
+    right_w = (1920.0 - 88.0) - right_x - 14.0
+    half = right_w * 0.48
+    col1_avail = max(60.0, half - 20.0)
+    col2_avail = max(60.0, right_w - half - 20.0)
+    postfx_avail = max(60.0, right_w - 20.0)
+
+    known_titles = {'1-0', 'SHIFT', 'CTRL', 'ALT', 'LIVE SHORTCUT MAP', 'POST FX'}
+    checked_any = False
+    in_postfx = False
+    for text, x, _y, scale in drawn:
+        if text == 'POST FX':
+            in_postfx = True
+            continue
+        if text in known_titles:
+            continue
+        if in_postfx:
+            avail = postfx_avail
+        elif x == right_x + 10.0:
+            avail = col1_avail
+        elif abs(x - (right_x + half)) < 1e-6:
+            avail = col2_avail
+        else:
+            continue  # a section-card line, covered by the other test
+        max_chars = overlays._help_text_max_chars(avail, scale)
+        assert len(text) <= max_chars, f'{text!r} overflows its column ({len(text)} > {max_chars} chars)'
+        checked_any = True
+    assert checked_any
+
+
+def test_shortcut_map_rows_do_not_overlap_when_one_wraps() -> None:
+    """A wrapped 2-line row must push every row below it down in both
+    columns of its pair, or the next row's text draws on top of it."""
+    overlays = _stub_overlays_for_shortcut_map()
+    drawn_ys: dict[str, list[float]] = {}
+
+    def _capture_text(text: str, x: float, y: float, scale: float = 2.0, **_kw) -> None:
+        drawn_ys.setdefault(f'{x:.1f}', []).append(y)
+
+    overlays._draw_text = _capture_text
+    overlays._draw_help_section_content(x=0.0, y=0.0, w=1920.0 - 88.0, h=800.0, help_scale=1.0, content_top_y=100.0)
+
+    for _col_x, ys in drawn_ys.items():
+        assert len(ys) == len(set(ys)), 'two lines drawn at the same y (row overlap)'
+
