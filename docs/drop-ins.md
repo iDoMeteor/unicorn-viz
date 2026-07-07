@@ -37,6 +37,7 @@ Complex drop-ins should also include:
 | images-01 | Yes | Not required | Media effect drop-in |
 | immersive-01 | Yes | Not required | Effect pack: Tunnel, Wormhole, Cathedral of Bass |
 | lyrics-01 | Yes | Yes | Synced lyrics overlay subsystem (LRCLIB) |
+| media-01 | Yes | Yes | Local audio-file playback subsystem (python-vlc/mpv/ffplay) |
 | multi-head-01 | Yes | Yes | Display subsystem |
 | osc-bridge-01 | Yes | Yes | OSC control-surface subsystem |
 | particles-01 | Yes | Not required | Effect pack: Starfield, Fireworks, Particle Storm |
@@ -95,6 +96,11 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/lyrics-01/docs/configuration.md)
   - [Integration](../drop-ins/lyrics-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/lyrics-01/docs/troubleshooting.md)
+- media-01
+  - [Operations](../drop-ins/media-01/docs/operations.md)
+  - [Configuration](../drop-ins/media-01/docs/configuration.md)
+  - [Integration](../drop-ins/media-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/media-01/docs/troubleshooting.md)
 - multi-head-01
   - [Operations](../drop-ins/multi-head-01/docs/operations.md)
   - [Configuration](../drop-ins/multi-head-01/docs/configuration.md)

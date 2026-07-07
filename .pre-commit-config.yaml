@@ -33,7 +33,7 @@ repos:
         always_run: true
       - id: pip-audit
         name: pip-audit
-        entry: .venv/bin/pip-audit -r requirements.txt -q
+        entry: .venv/bin/pip-audit -r requirements.txt
         language: system
         pass_filenames: false
         stages: [manual]
