@@ -1454,7 +1454,7 @@ class HotkeyHandler:
                 a.open_effects_browser()
 
         elif sym == sdl2.SDLK_m:
-            if mod & sdl2.KMOD_CTRL:
+            if (mod & sdl2.KMOD_CTRL) and not (mod & sdl2.KMOD_ALT):
                 log.info(
                     'Ctrl+M pressed: effect=%s mods=%s',
                     a.current_effect_name or '(none)',
