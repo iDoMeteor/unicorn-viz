@@ -148,6 +148,31 @@ def test_page_header_label_shows_the_correct_item_range() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# "Press Enter to see more items" hint (multi-page sections only)
+# --------------------------------------------------------------------------- #
+
+def test_multipage_section_shows_a_hint_row_first() -> None:
+    overlays = _stub_overlays()
+    rows = overlays._help_section_body_rows('Tweakables', _items(2 * CAP), False, 500.0, 2.0)
+    assert rows[0]['kind'] == 'hint'
+    assert 'press enter' in rows[0]['text'].lower()
+    # Exactly one hint row (not one per page).
+    assert sum(1 for r in rows if r['kind'] == 'hint') == 1
+
+
+def test_small_section_has_no_hint_row() -> None:
+    overlays = _stub_overlays()
+    rows = overlays._help_section_body_rows('Basics', _items(3), False, 500.0, 2.0)
+    assert not any(r['kind'] == 'hint' for r in rows)
+
+
+def test_collapsed_multipage_section_has_no_hint_row() -> None:
+    overlays = _stub_overlays()
+    rows = overlays._help_section_body_rows('Tweakables', _items(2 * CAP), True, 500.0, 2.0)
+    assert not any(r['kind'] == 'hint' for r in rows)
+
+
+# --------------------------------------------------------------------------- #
 # set_help_item_page
 # --------------------------------------------------------------------------- #
 
@@ -206,6 +231,81 @@ def test_toggle_expanded_single_page_section_collapses() -> None:
 
     assert overlays.toggle_help_section(0) is True
     assert overlays._help_collapsed['Tweakables'] is True
+
+
+# --------------------------------------------------------------------------- #
+# Auto-close: moving focus away from an expanded multi-page section
+# collapses it; single-page sections keep their state regardless of focus.
+# --------------------------------------------------------------------------- #
+
+def _two_sections_stub(entries_a: list[tuple[str, str]], entries_b: list[tuple[str, str]]) -> Overlays:
+    overlays = _stub_overlays()
+    overlays._help_focus_idx = 0
+    synthetic = [('SectionA', entries_a), ('SectionB', entries_b)]
+    overlays._current_help_sections = lambda: synthetic
+    overlays._iter_help_sections = lambda: synthetic
+    return overlays
+
+
+def test_move_focus_away_collapses_an_expanded_multipage_section() -> None:
+    overlays = _two_sections_stub(_items(2 * CAP), _items(2))
+    overlays._help_collapsed['SectionA'] = False  # expanded, showing its accordion
+    overlays._help_item_page['SectionA'] = 1
+
+    assert overlays.move_help_focus(1) is True
+    assert overlays._help_focus_idx == 1
+    assert overlays._help_collapsed['SectionA'] is True  # auto-closed
+
+
+def test_move_focus_away_leaves_a_collapsed_multipage_section_collapsed() -> None:
+    overlays = _two_sections_stub(_items(2 * CAP), _items(2))
+    overlays._help_collapsed['SectionA'] = True  # already collapsed
+
+    overlays.move_help_focus(1)
+    assert overlays._help_collapsed['SectionA'] is True
+
+
+def test_move_focus_away_does_not_touch_a_single_page_section() -> None:
+    """A section with <= CAP items keeps its expand/collapse state
+    independent of focus, same as before the accordion existed."""
+    overlays = _two_sections_stub(_items(3), _items(2))
+    overlays._help_collapsed['SectionA'] = False
+
+    overlays.move_help_focus(1)
+    assert overlays._help_collapsed['SectionA'] is False  # untouched
+
+
+def test_toggle_help_section_on_a_different_section_auto_closes_the_old_one() -> None:
+    overlays = _two_sections_stub(_items(2 * CAP), _items(2))
+    overlays._help_collapsed['SectionA'] = False
+    overlays._help_collapsed['SectionB'] = True
+
+    assert overlays.toggle_help_section(1) is True  # jump focus to SectionB
+    assert overlays._help_collapsed['SectionA'] is True  # auto-closed
+    assert overlays._help_collapsed['SectionB'] is False  # expanded by the toggle
+    assert overlays._help_focus_idx == 1
+
+
+def test_toggle_help_section_on_the_same_section_does_not_auto_close() -> None:
+    """Re-toggling the already-focused section must cycle its pages, not
+    trip the "moved away" auto-close path against itself."""
+    overlays = _two_sections_stub(_items(2 * CAP), _items(2))
+    overlays._help_collapsed['SectionA'] = False
+    overlays._help_item_page['SectionA'] = 0
+
+    overlays.toggle_help_section(0)
+    assert overlays._help_collapsed['SectionA'] is False
+    assert overlays._help_item_page['SectionA'] == 1
+
+
+def test_move_focus_wrap_around_does_not_collapse_the_section_you_land_on() -> None:
+    overlays = _two_sections_stub(_items(2 * CAP), _items(2 * CAP))
+    overlays._help_collapsed['SectionA'] = False
+    overlays._help_collapsed['SectionB'] = False
+
+    overlays.move_help_focus(1)  # -> SectionB
+    assert overlays._help_collapsed['SectionA'] is True  # left behind, auto-closed
+    assert overlays._help_collapsed['SectionB'] is False  # the one we moved to is untouched
 
 
 # --------------------------------------------------------------------------- #

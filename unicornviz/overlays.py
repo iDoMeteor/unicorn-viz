@@ -4609,12 +4609,15 @@ void main() {
                 0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96
             )
             page_header_color = (1.0, 0.92, 0.58, 0.96)
+            hint_color = (0.62, 0.72, 0.88, 0.78)
             for row in body_rows:
                 if row['kind'] == 'page_header':
                     self._draw_text(row['text'], sx2 + card_pad, yy, scale=item_scale, color=page_header_color)
                     self._help_item_page_rects.append(
                         (section, row['page_index'], sx2 + card_pad, yy - 2.0, col_w - 2 * card_pad, card_line_h)
                     )
+                elif row['kind'] == 'hint':
+                    self._draw_text(row['text'], sx2 + card_pad, yy, scale=item_scale * 0.82, color=hint_color)
                 else:
                     self._draw_text(row['text'], sx2 + card_pad, yy, scale=item_scale, color=entry_color)
                 yy += card_line_h
@@ -4875,10 +4878,11 @@ void main() {
     ) -> list[dict]:
         """Return the drawable rows for a section's body (below its header).
 
-        Each row is ``{'kind': 'text', 'text': str}`` or, for a page-header
-        row in a multi-page section, ``{'kind': 'page_header', 'text': str,
-        'page_index': int}`` — the latter is clickable (see
-        handle_help_mouse_click) and only one page's items are expanded at a
+        Each row is ``{'kind': 'text', 'text': str}``, a smaller-scale
+        ``{'kind': 'hint', 'text': str}`` row (shown once, right under the
+        header, only for multi-page sections), or a clickable page-header
+        row ``{'kind': 'page_header', 'text': str, 'page_index': int}`` (see
+        handle_help_mouse_click) — only one page's items are expanded at a
         time (accordion: opening one collapses whichever other page was open).
         """
         if collapsed:
@@ -4894,7 +4898,11 @@ void main() {
 
         cap = self.HELP_MAX_ITEMS_PER_SECTION
         open_idx = max(0, min(self._help_item_page.get(section, 0), len(pages) - 1))
-        rows = []
+        hint_scale = item_scale * 0.82
+        rows = [
+            {'kind': 'hint', 'text': line}
+            for line in self._wrap_plain_text('Press Enter to see more items', avail_text_w, hint_scale)
+        ]
         for i, page in enumerate(pages):
             start = i * cap + 1
             end = start + len(page) - 1
@@ -5449,6 +5457,26 @@ void main() {
         """Return the section count for the active help tab (not the full list)."""
         return len(self._current_help_sections())
 
+    def _auto_close_multipage_section_if_leaving(self, new_index: int) -> None:
+        """Collapse the currently-focused section when focus is about to
+        move to a different one — but only if it's a multi-page (item-page
+        accordion) section and currently expanded. Sections with <=
+        HELP_MAX_ITEMS_PER_SECTION entries keep their independent
+        expand/collapse state regardless of focus, same as before the
+        accordion existed.
+        """
+        old_index = self._help_focus_idx
+        if old_index == new_index:
+            return
+        sections = self._current_help_sections()
+        if old_index < 0 or old_index >= len(sections):
+            return
+        name, entries = sections[old_index]
+        if self._help_collapsed.get(name, False):
+            return
+        if self._help_item_page_count(entries) > 1:
+            self._help_collapsed[name] = True
+
     def toggle_help_section(self, index: int) -> bool:
         """Toggle/advance the section at ``index`` (digit keys, Enter).
 
@@ -5461,6 +5489,7 @@ void main() {
         sections = self._current_help_sections()
         if index < 0 or index >= len(sections):
             return False
+        self._auto_close_multipage_section_if_leaving(index)
         name, entries = sections[index]
         self._help_focus_idx = index
         collapsed = self._help_collapsed.get(name, False)
@@ -5485,7 +5514,9 @@ void main() {
         n = self.help_section_count()
         if n <= 0:
             return False
-        self._help_focus_idx = (self._help_focus_idx + delta) % n
+        new_idx = (self._help_focus_idx + delta) % n
+        self._auto_close_multipage_section_if_leaving(new_idx)
+        self._help_focus_idx = new_idx
         return True
 
     def toggle_help_focus_section(self) -> bool:
