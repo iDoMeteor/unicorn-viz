@@ -47,11 +47,12 @@ On **each activation** (`_init`), using `self.rng` (per-instance, so runs differ
 2. Build **groups**:
    - every immediate **subdirectory** that contains ≥1 video → one group (its
      videos);
-   - every **loose video** sitting directly in `videos/` → its own single-item
-     group (so loose files aren't excluded from the draw).
+   - **all loose videos** sitting directly in `videos/` → **one shared group**
+     (not one-per-file), so they're candidates as a set.
 3. **Randomly pick one group** for this run; only that group's videos play.
 4. **Shuffle that group** with `self.rng`; play through without repeats, then
-   reshuffle when exhausted.
+   reshuffle when exhausted. A single clip loops only when it is the *only* clip
+   in the chosen group.
 5. **Shuffle the transition styles** with `self.rng` too (currently
    `random.shuffle`; switch to `self.rng` for per-instance distinctness per the
    Effect Randomization rules).
@@ -92,8 +93,18 @@ internally and hands us video frames — least sync pain for v1.
 - **Directory logic**: reuse the same group-shuffle as Video Clips (extract to a
   tiny shared helper or mirror it) so the Player also honours subdir selection.
 
-### B3. Audio crossfade (Requirement: fade active-source → video audio over the
-transition)
+### B3. Manual-only (not auto-VJ rotated)
+
+Video Player is **manually activated only** — it must never be picked by
+auto-advance / random / Auto VJ (you don't want a full video dropped mid-show at
+random). Add a class-level opt-out (e.g. `AUTO_ROTATE = False` on `BaseEffect`,
+default `True`) that the playlist rotation and `vj_api.goto_random_effect` honour
+— the same "skip in auto, still reachable manually" behaviour as a disabled
+effect, but intrinsic rather than operator state. It stays fully reachable via
+the effects browser, a numeric pin, or a direct jump. (We may add auto-VJ tags
+later once the beat-reactive video pass lands.)
+
+### B4. Audio crossfade (fade active source → video audio over the transition)
 
 - Over the **effect transition duration**: ramp the video's volume **0→1 on
   enter** and **1→0 on exit** via `player.set_volume()`.
@@ -108,7 +119,7 @@ transition)
   SDL audio internally — confirm it coexists with the app's SDL2 without
   contention before committing.
 
-### B4. Deferred to a follow-up update (per your call)
+### B5. Deferred to a follow-up update (per your call)
 
 - **Beat-reactive effects + postfx *on the video itself*** (default on, with an
   option to disable each). This is what I meant by "video takes over
@@ -117,7 +128,7 @@ transition)
   video to its own soundtrack. Cleaner as a v2 once base playback is solid.
 - Transport controls (play/pause/seek/next) — "maybe later".
 
-### B5. Risks to burn down first
+### B6. Risks to burn down first
 
 1. **ffpyplayer + SDL audio** coexistence with the app's SDL2 — validate before
    building out.
@@ -136,10 +147,14 @@ transition)
    + postfx-over-top.
 3. **Later:** beat-reactive video postfx; audio-out-01 routing; transport.
 
-## Decisions to confirm before building
+## Decisions — confirmed 2026-07-06
 
-- **Loose-file grouping:** each loose video in `videos/` = its own single-item
-  group (so a run may legitimately be one clip on loop). Correct?
-- **ffpyplayer as a drop-in-local dep** (not core `requirements.txt`)?
-- **Crossfade scope:** OK that we can only duck app-controlled audio
-  (audio-out-01), not external sources like Spotify?
+- **Loose-file grouping:** all loose videos in `videos/` form **one shared
+  group** (not one-per-file). A single clip loops only if it is the only clip in
+  the chosen group.
+- **ffpyplayer** ships as a **drop-in-local dependency** (its own requirements /
+  installer under the drop-in dir), not core `requirements.txt`.
+- **Crossfade scope:** acceptable — we duck only app-controlled audio
+  (audio-out-01); external sources like Spotify play under until paused.
+- **Video Player is manual-only** (not auto-VJ rotated); may be tagged for
+  auto-VJ later once the beat-reactive video pass exists.
