@@ -242,6 +242,9 @@ class _HelpOverlay:
         self.moves.append(delta)
         return True
 
+    def move_help_right_tab(self, _delta: int) -> bool:
+        return False  # only one right-pane tab in this stub (no Post FX/Mouse)
+
     def flash_message(self, *_a, **_kw) -> None:
         return
 
@@ -284,6 +287,41 @@ def test_help_tab_switch_wins_over_a_drop_in_claiming_the_same_keys(tmp_path: Pa
 
     assert overlay.moves == [1, -1]
     assert vj_api.camera_switch_calls == 0  # help never falls through to the drop-in
+
+
+def test_pageup_pagedown_also_drives_the_right_pane_tabs(tmp_path: Path) -> None:
+    """A single PageUp/PageDown press must move both the left pane's
+    section-page tabs and the right pane's Effects/Post FX/Mouse tabs."""
+    vj_api = _CameraSwitcherVJApi()
+    app, playlist = _app_and_playlist(tmp_path, vj_api)
+    overlay = _HelpOverlay()
+    overlay.right_moves: list[int] = []
+    overlay.move_help_right_tab = lambda delta: overlay.right_moves.append(delta) or True
+    handler = HotkeyHandler(app, playlist, overlay, _Audio())
+
+    handler.handle(sdl2.SDLK_PAGEDOWN, 0)
+    handler.handle(sdl2.SDLK_PAGEUP, 0)
+
+    assert overlay.moves == [1, -1]
+    assert overlay.right_moves == [1, -1]
+
+
+def test_pageup_pagedown_still_consumed_when_only_right_pane_has_multiple_tabs(tmp_path: Path) -> None:
+    """If the left pane has just one page but the right pane has several
+    tabs, the keypress must still be consumed (and not fall through to a
+    drop-in claiming the same keys)."""
+    vj_api = _CameraSwitcherVJApi()
+    app, playlist = _app_and_playlist(tmp_path, vj_api)
+    overlay = _HelpOverlay()
+    overlay.move_help_tab = lambda _delta: False  # only one left-pane page
+    overlay.right_moves: list[int] = []
+    overlay.move_help_right_tab = lambda delta: overlay.right_moves.append(delta) or True
+    handler = HotkeyHandler(app, playlist, overlay, _Audio())
+
+    handler.handle(sdl2.SDLK_PAGEDOWN, 0)
+
+    assert overlay.right_moves == [1]
+    assert vj_api.camera_switch_calls == 0
 
 
 def test_drop_in_still_gets_pageup_pagedown_when_help_is_closed(tmp_path: Path) -> None:

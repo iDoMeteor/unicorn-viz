@@ -336,11 +336,13 @@ class Overlays:
     # A fully-loaded drop-in directory registers a section per drop-in; capping
     # each help-overlay tab at this many headings keeps every section reachable
     # (previously excess sections silently fell off the bottom of the columns).
-    # Kept low (rather than packing tabs as full as possible) because a tall,
-    # heavily-wrapped section can still fail to fit either two-column slot and
-    # get silently skipped for that tab — fewer headings per tab means shorter
-    # per-section cards and much less chance of hitting that edge case.
-    HELP_SECTIONS_PER_TAB = 7
+    HELP_SECTIONS_PER_TAB = 10
+
+    # A section with more entries than this is split into continuation
+    # sections ('Name', 'Name (2)', 'Name (3)', ...) of at most this many
+    # items each, so no single card grows tall enough to fail to fit either
+    # two-column slot and get silently skipped for its tab.
+    HELP_MAX_ITEMS_PER_SECTION = 7
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
@@ -4835,7 +4837,26 @@ void main() {
             entries = dropin_sections.get(section, [])
             if entries:
                 sections.append((section, list(entries)))
-        return sections
+        return self._split_oversized_sections(sections)
+
+    def _split_oversized_sections(
+        self, sections: list[tuple[str, list[tuple[str, str]]]],
+    ) -> list[tuple[str, list[tuple[str, str]]]]:
+        """Split any section over HELP_MAX_ITEMS_PER_SECTION items into
+        continuation sections ('Name', 'Name (2)', 'Name (3)', ...) of at
+        most that many items each, so no single card grows tall enough to
+        fail to fit either two-column slot and get silently skipped."""
+        cap = self.HELP_MAX_ITEMS_PER_SECTION
+        result: list[tuple[str, list[tuple[str, str]]]] = []
+        for name, entries in sections:
+            if len(entries) <= cap:
+                result.append((name, entries))
+                continue
+            for i in range(0, len(entries), cap):
+                part = i // cap + 1
+                label = name if part == 1 else f'{name} ({part})'
+                result.append((label, entries[i:i + cap]))
+        return result
 
     def _help_tab_groups(self) -> list[list[tuple[str, list[tuple[str, str]]]]]:
         """Paginate merged help sections into tabs of <= HELP_SECTIONS_PER_TAB."""

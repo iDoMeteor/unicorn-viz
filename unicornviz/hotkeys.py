@@ -766,10 +766,16 @@ class HotkeyHandler:
         # Help overlay owns PageUp/PageDown for tab paging while it's open —
         # checked ahead of the drop-in key handler loop below so it takes
         # priority over drop-ins that claim the same keys globally (e.g.
-        # webcam-01's camera-device switch on bare PageUp/PageDown).
+        # webcam-01's camera-device switch on bare PageUp/PageDown). Drives
+        # both the left pane's section-page tabs and the right pane's
+        # Effects/Post FX/Mouse tabs at once; either one moving consumes
+        # the keypress, and a pane with only one tab simply doesn't move.
         if getattr(o, 'help_visible', False) and sym in (sdl2.SDLK_PAGEUP, sdl2.SDLK_PAGEDOWN):
             o.note_help_activity()
-            if o.move_help_tab(-1 if sym == sdl2.SDLK_PAGEUP else 1):
+            delta = -1 if sym == sdl2.SDLK_PAGEUP else 1
+            left_moved = o.move_help_tab(delta)
+            right_moved = o.move_help_right_tab(delta)
+            if left_moved or right_moved:
                 return
 
         # Registered drop-in key handlers.
