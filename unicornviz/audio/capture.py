@@ -600,17 +600,36 @@ class AudioCapture:
         """
         self._new_block_event.set()
 
-    def _stop_reader_thread(self) -> None:
-        """Signal the reader thread to stop and wait up to the close timeout."""
+    def _stop_reader_thread(self, stream: object | None = None) -> bool:
+        """Signal the reader thread to stop and wait up to the close timeout.
+
+        Aborts ``stream`` first (if given) so an in-flight blocking
+        ``stream.read()`` call unblocks immediately instead of racing a
+        later ``stop()``/``close()`` from another thread — closing a
+        PortAudio/ALSA stream while a read is still in flight on it is a
+        real crash (segfault) risk, not just a leak.
+
+        Returns True if the reader thread actually exited within the
+        timeout. Callers must not close/reuse ``stream`` when this is False
+        — the reader may still be inside ``stream.read()``.
+        """
         self._stop_event.set()
-        if self._reader_thread is not None:
-            self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
-            if self._reader_thread.is_alive():
-                log.warning(
-                    'Audio: reader thread did not exit within %.2fs',
-                    _CLOSE_STREAM_TIMEOUT_S,
-                )
-            self._reader_thread = None
+        if stream is not None:
+            try:
+                stream.abort()
+            except Exception:
+                pass
+        if self._reader_thread is None:
+            return True
+        self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
+        exited = not self._reader_thread.is_alive()
+        if not exited:
+            log.warning(
+                'Audio: reader thread did not exit within %.2fs',
+                _CLOSE_STREAM_TIMEOUT_S,
+            )
+        self._reader_thread = None
+        return exited
 
     def _blocking_reader_worker(self) -> None:
         """Background daemon thread: block-reads from PortAudio into the ring buffer.
@@ -798,26 +817,28 @@ class AudioCapture:
         self._active = False
         stream = self._stream
         self._stream = None
-        if stream is not None:
-            # Abort synchronously to unblock any in-progress stream.read() call
-            # immediately.  The reader thread catches the resulting exception,
-            # sees _stop_event set, and breaks without logging.  Only then do we
-            # run the full stop/close sequence — with no reader racing the ALSA
-            # buffer, PortAudio cleans up silently.
-            try:
-                stream.abort()
-            except Exception:
-                pass
-        if self._reader_thread is not None:
-            self._reader_thread.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
-            if self._reader_thread.is_alive():
-                log.warning(
-                    'Audio: reader thread did not exit within %.2fs during shutdown',
-                    _CLOSE_STREAM_TIMEOUT_S,
-                )
-            self._reader_thread = None
-        if stream is not None:
+        # Abort synchronously to unblock any in-progress stream.read() call
+        # immediately.  The reader thread catches the resulting exception,
+        # sees _stop_event set, and breaks without logging.  Only then do we
+        # run the full stop/close sequence — with no reader racing the ALSA
+        # buffer, PortAudio cleans up silently.
+        reader_exited = self._stop_reader_thread(stream)
+        if stream is None:
+            return
+        if reader_exited:
             self._close_stream_safely(stream, context='shutdown')
+        else:
+            # The reader may still be inside stream.read() on this exact
+            # stream object — closing it now would race the ALSA teardown
+            # from two threads at once, which is what was crashing on quit
+            # (segfaults deep in PortAudio's ALSA hostapi). The reader is a
+            # daemon thread, so abandoning the stream here is safe: it will
+            # exit on its own once its current blocked read finally returns,
+            # and the process is free to exit in the meantime regardless.
+            log.warning(
+                'Audio: skipping stream close during shutdown — reader thread '
+                'still running would race it; leaving it to clean up on its own'
+            )
 
     @property
     def active(self) -> bool:
@@ -916,10 +937,20 @@ class AudioCapture:
         current_device = self._candidate_devices[current_idx]
         target_device = self._candidate_devices[bounded_idx]
         try:
-            self._stop_reader_thread()
-            if self._stream is not None:
-                self._close_stream_safely(self._stream, context='operator source select')
-                self._stream = None
+            old_stream = self._stream
+            self._stream = None
+            reader_exited = self._stop_reader_thread(old_stream)
+            if old_stream is not None:
+                if reader_exited:
+                    self._close_stream_safely(old_stream, context='operator source select')
+                else:
+                    # See stop()'s comment: closing while the reader may still
+                    # be inside read() on this stream risks a crash. Abandon
+                    # it (daemon thread cleans up on its own) and proceed.
+                    log.warning(
+                        'Audio: reader thread still running after source-select '
+                        'abort; abandoning old stream instead of racing its close'
+                    )
             self._open_stream(target_device)
             self._candidate_index = bounded_idx
             self._selected_source_key = self._source_key_for_device(target_device)
