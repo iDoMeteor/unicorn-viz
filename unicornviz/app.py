@@ -10,6 +10,7 @@ import subprocess
 import time
 import ctypes
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Type
 
@@ -479,6 +480,11 @@ class App:
         self._disabled_effects: set[str] = {
             str(n) for n in (self._runtime_state.get('effects.disabled', []) or [])
         }
+        # Delete-key deletions this session: (timestamp, effect name). Not
+        # persisted across runs — reported as a summary at shutdown and
+        # mirrored live to logs/deleted-effects_<stamp>.log when logging is on.
+        self._deleted_effects_session: list[tuple[str, str]] = []
+        self._deleted_effects_log_path: Path | None = self._compute_deleted_effects_log_path(self.cfg)
         # Numeric-hotkey slot pins: {slot_index (0-39): effect name} (persisted).
         self._hotkey_pins: dict[int, str] = {
             int(k): str(v)
@@ -4539,6 +4545,7 @@ void main() {
         if self._keystroke_logger is not None:
             self._keystroke_logger.close()
             self._keystroke_logger = None
+        self._log_deleted_effects_summary()
         audio_manager.stop()
         midi_manager.stop()
         if self._webcam_system is not None:
@@ -5767,12 +5774,64 @@ void main() {
         if self._effect_lock == name:
             self.unlock_effect()
         self.set_effect_enabled(name, False)
+        self._record_deleted_effect(name)
         playlist = self._playlist
         if playlist is None:
             return f'{name}: disabled'
         cls = playlist.advance()  # skips disabled effects in both modes
         self.goto_effect(cls)
         return f'{name}: disabled -> {cls.NAME}'
+
+    @staticmethod
+    def _compute_deleted_effects_log_path(cfg: Config) -> Path | None:
+        """Return the stamped deleted-effects log path, or None when logging
+        is disabled (``[logging] level = "NONE"``)."""
+        if str(cfg.get('logging', 'level', default='INFO')).upper() == 'NONE':
+            return None
+        try:
+            logs_dir = resolve_path(cfg.get('logging', 'directory', default='logs'))
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            return logs_dir / f'deleted-effects_{stamp}.log'
+        except Exception as exc:
+            log.warning('Could not prepare deleted-effects log path: %s', exc)
+            return None
+
+    def _record_deleted_effect(self, name: str) -> None:
+        """Log + track a Delete-key effect deletion for the session summary.
+
+        Appends to the in-memory session list (reported at shutdown) and, if
+        logging is enabled, live-appends the same line to
+        logs/deleted-effects_<stamp>.log so the record survives a crash.
+        """
+        stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log.info('Effect deleted (Delete key): %s', name)
+        self._deleted_effects_session.append((stamp, name))
+        if self._deleted_effects_log_path is None:
+            return
+        try:
+            with open(self._deleted_effects_log_path, 'a', encoding='utf-8') as f:
+                f.write(f'{stamp}  {name}\n')
+        except Exception as exc:
+            log.warning('Could not write deleted-effects log: %s', exc)
+
+    def _log_deleted_effects_summary(self) -> None:
+        """Log the session's Delete-key deletions to console/main log and
+        append the same summary to logs/deleted-effects_<stamp>.log."""
+        if not self._deleted_effects_session:
+            return
+        lines = [f'{stamp}  {name}' for stamp, name in self._deleted_effects_session]
+        log.info(
+            'Session summary: %d effect(s) deleted via Delete key:\n%s',
+            len(lines), '\n'.join(lines),
+        )
+        if self._deleted_effects_log_path is None:
+            return
+        try:
+            with open(self._deleted_effects_log_path, 'a', encoding='utf-8') as f:
+                f.write('--- session summary ---\n')
+                f.write('\n'.join(lines) + '\n')
+        except Exception as exc:
+            log.warning('Could not write deleted-effects summary: %s', exc)
 
     # -- Effect enable/disable (persisted, excluded from auto-rotation) -------
 

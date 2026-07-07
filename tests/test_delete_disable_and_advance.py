@@ -43,6 +43,8 @@ def _app_with_playlist(tmp_path: Path, names: list[str], start: str | None = Non
     app._effect_lock = None
     app._overlays = None  # _refresh_effect_shortcuts no-ops when overlays is None
     app._current_effect = playlist.current()
+    app._deleted_effects_session = []
+    app._deleted_effects_log_path = None
 
     def _goto(cls):
         app._current_effect = cls
