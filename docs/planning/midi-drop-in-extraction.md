@@ -397,3 +397,151 @@ Drop-in registers its own overlay renderer via subsystem or custom VJ API surfac
 - [Public Runtime Surface Rules](../../.github/copilot-instructions.md#public-runtime-surface-rules)
 - Existing drop-in examples: banner-01, control-room-01, postfx-01
 - Runtime capability system: unicornviz/dropins.py (register_runtime_capability, etc.)
+
+---
+
+## Roadmap: scenes-01 Drop-In (Scene Recorder & Playback)
+
+**Status:** Planned  
+**Target:** v1.x — own private GitHub repo, wired as submodule at `drop-ins/scenes-01/`
+
+### Overview
+
+A scene is a named, ordered list of MIDI actions with relative timestamps.  Tapping
+a pad replays the scene; holding a pad + pressing Shift arms it for recording.
+
+### Architecture
+
+```text
+drop-ins/scenes-01/
+  __init__.py
+  scenes_controller.py   # main controller registered as 'scenes' subsystem
+  scene_player.py        # timed action replay (deque of (action, fire_at))
+  scene_store.py         # load/save TOML scene packs
+  assets/
+    scenes/default.toml  # default empty pack shipped with the drop-in
+```
+
+**SceneDefinition:**
+
+```python
+@dataclass
+class SceneDefinition:
+    name: str
+    actions: list[tuple[str, float]]   # (action_name, delay_s_from_start)
+    coded: Callable[[], None] | None = None  # overrides recorded actions
+```
+
+**SceneStore:**
+
+- Loads TOML packs from `assets/scenes/<pack>.toml`
+- A scene pack maps slot names (`slot_1` … `slot_N`) to `SceneDefinition`
+- `save_pack()` writes back to the pack file
+
+**ScenesController lifecycle:**
+
+1. Constructed and registered as `vj_api` subsystem `'scenes'`
+2. `set_vj_api(api)` → registers MIDI actions and registers itself as key handler
+3. `update(dt)` → ticks the `ScenePlayer` timer queue
+
+**MIDI action registration:**
+
+```python
+api.register_midi_actions('Scenes', [
+    ('scene_arm',    'Arm scene record'),
+    ('scene_slot_1', 'Scene Slot 1'),
+    ('scene_slot_2', 'Scene Slot 2'),
+    ...
+    ('scene_slot_8', 'Scene Slot 8'),
+])
+```
+
+Scene slots map to APC scene launch row (notes 112–119, 8 pads).
+
+**Record flow:**
+
+1. `scene_arm` action → controller enters ARMED state, flash-highlights pads
+2. Tap `scene_slot_N` while armed → start recording to slot N; pad pulses red
+3. Tap `scene_slot_N` again (or another pad, or key shortcut) → stop, save scene
+
+**Keyboard shortcuts** (registered via `vj_api.register_key_handler`):
+
+- `Ctrl+Alt+R` → arm record (same as `scene_arm` action)
+- `Ctrl+Shift+1..8` → play scene slot 1–8
+- `Ctrl+Alt+Shift+1..8` → arm record for scene slot 1–8
+
+**Playback:**
+
+- `ScenePlayer` holds a `deque[tuple[str, float]]` of `(action, fire_at)`
+- `update(dt)` drains entries whose `fire_at <= time.monotonic()` and calls
+  `vj_api.fire_midi_action(action)` for each
+
+**Coded scenes** (v1.1+):
+
+- Register a Python callable under a slot name via
+  `scenes_controller.register_coded_scene('slot_5', my_fn)`
+- On playback, `my_fn()` is called directly; recorded actions are ignored
+
+**Persistence:**
+
+- Scene packs live in `drop-ins/scenes-01/assets/scenes/default.toml` (ship empty)
+- Runtime scenes are saved to `~/.config/unicornviz/scenes/` (user-writable, gitignored)
+- The active pack path is configurable via `[scenes] pack = "path"` in `config.toml`
+
+### LED feedback
+
+Scene pads on the APC:
+
+- Unbound slot → dim blue
+- Bound scene → cyan
+- Armed for record → pulsing orange
+- Currently recording → solid red
+- Playing back → pulsing green
+
+These require additions to `_ACTION_COLORS` in `apc_leds.py`.
+
+### Dependencies
+
+- Registers via `vj_api.register_midi_actions` and `vj_api.fire_midi_action` (no core changes)
+- Tap into the MIDI dispatch chain via existing `register_midi_action_handler` API
+- Zero hard dependencies on any other drop-in
+
+---
+
+## Roadmap: Live Effect Builder Mode (v2.0 Feature)
+
+**Status:** Deferred — requires core render pipeline work  
+**Target:** v2.0
+
+### Concept
+
+In Effect Builder mode the APC's 8×8 pad grid becomes a **layer compositor**:
+each row (or column) maps to a named visual effect running on its own framebuffer,
+and pads toggle layers on/off.  The visible output is a real-time blend of all
+active layers.
+
+### Why this is v2.0
+
+The current core renders exactly one effect to the primary framebuffer per frame.
+Supporting simultaneous layers requires:
+
+1. A `FramebufferStack` abstraction in `unicornviz/app.py` (core change)
+2. Each layer effect renders to its own `moderngl.Framebuffer`
+3. A blend compositor (additive / screen / multiply / alpha-over) renders the
+   composited output
+4. `BaseEffect` gains an optional `render_layer(fb, dt, audio)` entry point
+
+### Minimum viable design (v2.0 milestone)
+
+- `LayerCompositor` subsystem owned by a `layer-compositor-01` drop-in
+- `VJApi` gains `enable_layer_mode()` / `disable_layer_mode()` and
+  `set_layer_effect(index, effect_cls)` / `toggle_layer(index)` surface
+- `midi-controllers-01` enters **layer mode** when `layer_mode_toggle` action fires:
+  pads remap to `layer_0` … `layer_63` (toggle per pad)
+- Shift+layer pad → opens a mini picker showing available effects for that slot
+
+### Intermediate workaround (available today)
+
+The 8 APC scene-launch pads (row 8) can be bound to `scene_slot_1..8` which
+replays scenes that call `vj_api.goto_effect(...)`.  This gives a fast preset-switch
+grid without layer blending — useful for a lot of live VJ workflows.
