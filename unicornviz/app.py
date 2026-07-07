@@ -2740,19 +2740,6 @@ void main() {
                 self.clear_effect_overrides(cls)
                 overlays.flash_message(f'Reverted: {cls}', 1.4)
 
-    def _handle_help_wheel_scroll(self, dy: int) -> None:
-        """Switch the active help-overlay tab on mouse wheel scroll.
-
-        Keyboard PageUp/PageDown drive the same action, but that binding is
-        contended: webcam-01 claims PageUp/PageDown globally (camera switch)
-        ahead of the help-overlay dispatch, so it silently wins whenever the
-        webcam drop-in is loaded. Wheel scroll is handled here instead —
-        centrally, ahead of the PostFX scroll fallback below — so tab
-        switching works regardless of which drop-ins are installed.
-        """
-        if dy != 0:
-            self._overlays.move_help_tab(-1 if dy > 0 else 1)
-
     def _config_editor_adjust(self, notches: float) -> None:
         """Adjust the selected parameter/setting by ``notches`` steps, live."""
         overlays = self._overlays
@@ -3581,9 +3568,6 @@ void main() {
                     if self._overlays.config_editor_open:
                         if dy != 0:
                             self._config_editor_adjust(float(dy))
-                        continue
-                    if self._overlays.help_visible:
-                        self._handle_help_wheel_scroll(dy)
                         continue
                     if presets_active:
                         if dy != 0:

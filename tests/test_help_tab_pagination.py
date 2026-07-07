@@ -9,15 +9,22 @@ section list into tabs of at most Overlays.HELP_SECTIONS_PER_TAB (10)
 headings each, so every section stays reachable regardless of how many
 drop-ins are installed.
 
-Tabs switch via mouse wheel (App._handle_help_wheel_scroll), not PageUp/
-PageDown: webcam-01 claims those keys globally (camera switch) ahead of the
-help-overlay dispatch in HotkeyHandler.handle(), so a keyboard binding here
-would silently do nothing whenever the webcam drop-in is loaded (the default).
+Tabs switch with PageUp/PageDown. Some drop-ins (webcam-01) also register a
+global VJApi key handler on the same keys (camera-device switch); the help
+overlay must be checked for PageUp/PageDown ahead of that drop-in-handler
+loop in HotkeyHandler.handle(), or the drop-in silently wins every time.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+import sdl2
+
 from unicornviz.app import App
+from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.overlays import Overlays
+from unicornviz.playlist import Playlist
+from unicornviz.runtime_state import RuntimeStateStore
 
 
 def _section(name: str) -> tuple[str, list[tuple[str, str]]]:
@@ -173,37 +180,110 @@ def test_handle_help_mouse_click_switches_tab() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Mouse wheel drives tab switching (App._handle_help_wheel_scroll)
+# End-to-end: help overlay outranks a drop-in that also claims PageUp/PageDown
 # --------------------------------------------------------------------------- #
 
-class _WheelOverlay:
+class _Audio:
+    def get_reactivity(self) -> float:
+        return 1.0
+
+
+class _CameraSwitcherVJApi:
+    """Stands in for a drop-in (webcam-01) that claims PageUp/PageDown globally."""
+
+    def __init__(self) -> None:
+        self.camera_switch_calls = 0
+
+    def mark_user_action(self, _kind: str) -> None:
+        return
+
+    def key_handler_items(self):
+        def _handle_key(sym: int, _mod: int):
+            if sym in (sdl2.SDLK_PAGEUP, sdl2.SDLK_PAGEDOWN):
+                self.camera_switch_calls += 1
+                return 'Camera device: 0'
+            return False
+        return [('webcam', _handle_key)]
+
+
+class _HelpOverlay:
+    help_visible = True
+    midi_selector_visible = False
+    name_overlay_visible = False
+    controller_help_modal_visible = False
+    webcam_editor_modal_visible = False
+    audio_selector_visible = False
+    effects_browser_visible = False
+    presets_visible = False
+    projectm_manager_visible = False
+    context_menu_open = False
+    config_editor_open = False
+
     def __init__(self) -> None:
         self.moves: list[int] = []
+
+    def note_help_activity(self) -> None:
+        return
+
+    def help_focus_region(self) -> str:
+        return 'sections'
 
     def move_help_tab(self, delta: int) -> bool:
         self.moves.append(delta)
         return True
 
+    def flash_message(self, *_a, **_kw) -> None:
+        return
 
-def _app_for_wheel() -> App:
+
+def _fx(name: str):
+    return type(name, (), {'NAME': name, 'TAGS': [], 'parameters': {}})
+
+
+class _StubCfg:
+    def get(self, *_keys, default=None):
+        return default
+
+
+def _app_and_playlist(tmp_path: Path, vj_api) -> tuple[App, Playlist]:
+    effects = [_fx('A')]
+    playlist = Playlist(effects, _StubCfg())
+
     app = object.__new__(App)
-    app._overlays = _WheelOverlay()
-    return app
+    app._runtime_state = RuntimeStateStore(tmp_path / 'state.json')
+    app._disabled_effects = set()
+    app._playlist = playlist
+    app._effect_lock = None
+    app._overlays = None
+    app._current_effect = playlist.current()
+    app._auto_vj = None
+    app._keystroke_logger = None
+    app.vj_api = vj_api
+    app.hotkey_overrides = lambda: {}
+    return app, playlist
 
 
-def test_wheel_scroll_up_moves_to_previous_tab() -> None:
-    app = _app_for_wheel()
-    app._handle_help_wheel_scroll(1)  # scroll up
-    assert app._overlays.moves == [-1]
+def test_help_tab_switch_wins_over_a_drop_in_claiming_the_same_keys(tmp_path: Path) -> None:
+    vj_api = _CameraSwitcherVJApi()
+    app, playlist = _app_and_playlist(tmp_path, vj_api)
+    overlay = _HelpOverlay()
+    handler = HotkeyHandler(app, playlist, overlay, _Audio())
+
+    handler.handle(sdl2.SDLK_PAGEDOWN, 0)
+    handler.handle(sdl2.SDLK_PAGEUP, 0)
+
+    assert overlay.moves == [1, -1]
+    assert vj_api.camera_switch_calls == 0  # help never falls through to the drop-in
 
 
-def test_wheel_scroll_down_moves_to_next_tab() -> None:
-    app = _app_for_wheel()
-    app._handle_help_wheel_scroll(-1)  # scroll down
-    assert app._overlays.moves == [1]
+def test_drop_in_still_gets_pageup_pagedown_when_help_is_closed(tmp_path: Path) -> None:
+    vj_api = _CameraSwitcherVJApi()
+    app, playlist = _app_and_playlist(tmp_path, vj_api)
+    overlay = _HelpOverlay()
+    overlay.help_visible = False
+    handler = HotkeyHandler(app, playlist, overlay, _Audio())
 
+    handler.handle(sdl2.SDLK_PAGEDOWN, 0)
 
-def test_wheel_scroll_noop_is_ignored() -> None:
-    app = _app_for_wheel()
-    app._handle_help_wheel_scroll(0)
-    assert app._overlays.moves == []
+    assert overlay.moves == []
+    assert vj_api.camera_switch_calls == 1

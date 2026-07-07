@@ -763,6 +763,15 @@ class HotkeyHandler:
                             o.flash_message(f'{label}: nothing loaded', 1.5)
                         return
 
+        # Help overlay owns PageUp/PageDown for tab paging while it's open —
+        # checked ahead of the drop-in key handler loop below so it takes
+        # priority over drop-ins that claim the same keys globally (e.g.
+        # webcam-01's camera-device switch on bare PageUp/PageDown).
+        if getattr(o, 'help_visible', False) and sym in (sdl2.SDLK_PAGEUP, sdl2.SDLK_PAGEDOWN):
+            o.note_help_activity()
+            if o.move_help_tab(-1 if sym == sdl2.SDLK_PAGEUP else 1):
+                return
+
         # Registered drop-in key handlers.
         # Skip drop-in dispatch while any text-entry mode is active so that
         # character keys (bare/shift) reach the modal handler instead of

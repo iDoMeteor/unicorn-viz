@@ -497,7 +497,10 @@ Guidelines:
 3. Do not mutate help entries at runtime unless the section truly changes.
 4. The help overlay paginates into tabs of at most `Overlays.HELP_SECTIONS_PER_TAB`
    (10) section headings each; a fully-loaded drop-in directory spans multiple
-   tabs (mouse wheel switches pages) rather than overflowing a single screen.
+   tabs (PageUp/PageDown) rather than overflowing a single screen. The help
+   overlay checks PageUp/PageDown ahead of registered drop-in key handlers
+   (`HotkeyHandler.handle()`) so it isn't shadowed by a drop-in claiming the
+   same keys globally.
 
 Discovery path:
 
