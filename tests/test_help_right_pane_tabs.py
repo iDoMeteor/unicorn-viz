@@ -26,12 +26,14 @@ def _stub_overlays() -> Overlays:
     overlays._postfx_help_entries = []
     overlays._mouse_help_entries = []
     overlays._help_collapsed = {}
+    overlays._help_item_page = {}
     overlays._help_focus_region = 'sections'
     overlays._help_focus_idx = 0
     overlays._help_tab_idx = 0
     overlays._help_tab_rects = []
     overlays._help_right_tab_idx = 0
     overlays._help_right_tab_rects = []
+    overlays._help_item_page_rects = []
     overlays._iter_help_sections = lambda: []
     return overlays
 

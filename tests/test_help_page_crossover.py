@@ -23,6 +23,7 @@ def _stub_overlays(left_sections: int, right_tabs: int) -> Overlays:
     overlays._dynamic_help_sections = {}
     overlays._dynamic_help_order = []
     overlays._help_collapsed = {}
+    overlays._help_item_page = {}
     overlays._help_focus_region = 'sections'
     overlays._help_focus_idx = 0
     overlays._help_tab_idx = 0

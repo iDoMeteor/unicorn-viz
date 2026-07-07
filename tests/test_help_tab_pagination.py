@@ -42,6 +42,7 @@ def _stub_overlays(section_count: int) -> Overlays:
     overlays._postfx_help_entries = []
     overlays._mouse_help_entries = []
     overlays._help_collapsed = {}
+    overlays._help_item_page = {}
     overlays._help_focus_region = 'sections'
     overlays._help_focus_idx = 0
     overlays._help_tab_idx = 0

@@ -166,6 +166,7 @@ def _stub_overlays_for_render() -> Overlays:
     overlays._help_focus_region = 'sections'
     overlays._help_focus_idx = 0
     overlays._help_collapsed = {}
+    overlays._help_item_page = {}
     overlays._help_tab_idx = 0
     overlays._help_tab_rects = []
     overlays._help_right_tab_idx = 0

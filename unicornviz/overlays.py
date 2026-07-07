@@ -338,10 +338,10 @@ class Overlays:
     # (previously excess sections silently fell off the bottom of the columns).
     HELP_SECTIONS_PER_TAB = 10
 
-    # A section with more entries than this is split into continuation
-    # sections ('Name', 'Name (2)', 'Name (3)', ...) of at most this many
-    # items each, so no single card grows tall enough to fail to fit either
-    # two-column slot and get silently skipped for its tab.
+    # A section with more entries than this pages them into an inner
+    # accordion (see _help_section_body_rows) instead of showing all of them
+    # at once — only one page's items are expanded at a time, so no single
+    # card grows tall enough to fail to fit either two-column slot.
     HELP_MAX_ITEMS_PER_SECTION = 7
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
@@ -355,8 +355,8 @@ class Overlays:
                 ('Arrow keys', 'Move section focus (this tab)'),
                 ('H / ?', 'Toggle help overlay'),
                 ('Shift+H', 'Notifications on/off'),
-                ('Enter', 'Toggle focused section'),
-                ('0 - 9', 'Toggle section 1-10 (this tab)'),
+                ('Enter', 'Expand/collapse focused section; cycles item-pages if already open'),
+                ('0 - 9', 'Same, for section 1-10 (this tab)'),
             ],
         ),
         (
@@ -733,6 +733,10 @@ class Overlays:
         self._postfx_help_entries: list[tuple[str, str]] = []
         self._mouse_help_entries: list[tuple[str, str]] = []
         self._help_collapsed: dict[str, bool] = {}
+        # Which item-page (of HELP_MAX_ITEMS_PER_SECTION each) is open per
+        # section, for sections with more entries than the cap.
+        self._help_item_page: dict[str, int] = {}
+        self._help_item_page_rects: list[tuple[str, int, float, float, float, float]] = []
         self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
         self._help_tab_idx: int = 0
@@ -4559,6 +4563,7 @@ void main() {
 
         avail_text_w = col_w - card_pad * 2
         title_line_h = 8 * card_title_scale + 2.0
+        self._help_item_page_rects = []
 
         for sec_idx, (section, entries) in enumerate(sections):
             if not entries:
@@ -4570,18 +4575,13 @@ void main() {
             header_text = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
             header_lines = self._wrap_plain_text(header_text, avail_text_w, card_title_scale)
 
-            if collapsed:
-                entry_lines = ['[collapsed]']
-            else:
-                entry_lines = []
-                for key, desc in entries:
-                    entry_lines.extend(self._wrap_help_entry(key, desc, avail_text_w, item_scale))
+            body_rows = self._help_section_body_rows(section, entries, collapsed, avail_text_w, item_scale)
 
             section_h = (
                 card_pad * 2
                 + len(header_lines) * title_line_h
                 + 4
-                + len(entry_lines) * card_line_h
+                + len(body_rows) * card_line_h
             )
             idx = 0 if col_y[0] <= col_y[1] else 1
             if col_y[idx] + section_h > col_max_y:
@@ -4608,8 +4608,15 @@ void main() {
             entry_color = (0.78, 0.84, 0.92, 0.92) if collapsed else (
                 0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96
             )
-            for line in entry_lines:
-                self._draw_text(line, sx2 + card_pad, yy, scale=item_scale, color=entry_color)
+            page_header_color = (1.0, 0.92, 0.58, 0.96)
+            for row in body_rows:
+                if row['kind'] == 'page_header':
+                    self._draw_text(row['text'], sx2 + card_pad, yy, scale=item_scale, color=page_header_color)
+                    self._help_item_page_rects.append(
+                        (section, row['page_index'], sx2 + card_pad, yy - 2.0, col_w - 2 * card_pad, card_line_h)
+                    )
+                else:
+                    self._draw_text(row['text'], sx2 + card_pad, yy, scale=item_scale, color=entry_color)
                 yy += card_line_h
             col_y[idx] += section_h + 8.0
 
@@ -4839,26 +4846,75 @@ void main() {
             entries = dropin_sections.get(section, [])
             if entries:
                 sections.append((section, list(entries)))
-        return self._split_oversized_sections(sections)
+        return sections
 
-    def _split_oversized_sections(
-        self, sections: list[tuple[str, list[tuple[str, str]]]],
-    ) -> list[tuple[str, list[tuple[str, str]]]]:
-        """Split any section over HELP_MAX_ITEMS_PER_SECTION items into
-        continuation sections ('Name', 'Name (2)', 'Name (3)', ...) of at
-        most that many items each, so no single card grows tall enough to
-        fail to fit either two-column slot and get silently skipped."""
+    def _help_item_pages(self, entries: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
+        """Chunk a section's entries into pages of <= HELP_MAX_ITEMS_PER_SECTION.
+
+        A section stays a single card/heading either way; when it has more
+        entries than the cap, the *items* are paged into an inner accordion
+        (see _help_section_body_rows) instead of splitting into separate
+        top-level sections.
+        """
         cap = self.HELP_MAX_ITEMS_PER_SECTION
-        result: list[tuple[str, list[tuple[str, str]]]] = []
-        for name, entries in sections:
-            if len(entries) <= cap:
-                result.append((name, entries))
-                continue
-            for i in range(0, len(entries), cap):
-                part = i // cap + 1
-                label = name if part == 1 else f'{name} ({part})'
-                result.append((label, entries[i:i + cap]))
-        return result
+        if not entries:
+            return [[]]
+        return [entries[i:i + cap] for i in range(0, len(entries), cap)]
+
+    def _help_item_page_count(self, entries: list[tuple[str, str]]) -> int:
+        """Return how many item-pages a section's entries chunk into (>= 1)."""
+        return len(self._help_item_pages(entries)) if entries else 1
+
+    def _help_section_body_rows(
+        self,
+        section: str,
+        entries: list[tuple[str, str]],
+        collapsed: bool,
+        avail_text_w: float,
+        item_scale: float,
+    ) -> list[dict]:
+        """Return the drawable rows for a section's body (below its header).
+
+        Each row is ``{'kind': 'text', 'text': str}`` or, for a page-header
+        row in a multi-page section, ``{'kind': 'page_header', 'text': str,
+        'page_index': int}`` — the latter is clickable (see
+        handle_help_mouse_click) and only one page's items are expanded at a
+        time (accordion: opening one collapses whichever other page was open).
+        """
+        if collapsed:
+            return [{'kind': 'text', 'text': '[collapsed]'}]
+
+        pages = self._help_item_pages(entries)
+        if len(pages) <= 1:
+            rows: list[dict] = []
+            for key, desc in entries:
+                for line in self._wrap_help_entry(key, desc, avail_text_w, item_scale):
+                    rows.append({'kind': 'text', 'text': line})
+            return rows
+
+        cap = self.HELP_MAX_ITEMS_PER_SECTION
+        open_idx = max(0, min(self._help_item_page.get(section, 0), len(pages) - 1))
+        rows = []
+        for i, page in enumerate(pages):
+            start = i * cap + 1
+            end = start + len(page) - 1
+            is_open = i == open_idx
+            icon = '-' if is_open else '+'
+            rows.append({
+                'kind': 'page_header',
+                'text': f'  {icon} Items {start}-{end}',
+                'page_index': i,
+            })
+            if is_open:
+                for key, desc in page:
+                    for line in self._wrap_help_entry(key, desc, avail_text_w - 2.0, item_scale):
+                        rows.append({'kind': 'text', 'text': '  ' + line})
+        return rows
+
+    def set_help_item_page(self, section: str, page_index: int) -> bool:
+        """Open a specific item-page within ``section`` (closes any other)."""
+        self._help_item_page[section] = max(0, int(page_index))
+        return True
 
     def _help_tab_groups(self) -> list[list[tuple[str, list[tuple[str, str]]]]]:
         """Paginate merged help sections into tabs of <= HELP_SECTIONS_PER_TAB."""
@@ -5130,6 +5186,7 @@ void main() {
             if name not in self._help_collapsed:
                 # Start with only the top three core sections expanded.
                 self._help_collapsed[name] = name not in default_expanded
+        self._help_item_page = {k: v for k, v in self._help_item_page.items() if k in valid}
 
         n_tabs = self.help_tab_count()
         if n_tabs:
@@ -5196,10 +5253,13 @@ void main() {
         return self.toggle_help_focus_section()
 
     def handle_help_mouse_click(self, x: float, y: float) -> bool:
-        """Handle mouse clicks on the help tab bars or icon rail."""
+        """Handle mouse clicks on the help tab bars, item-page accordion rows, or icon rail."""
         for i, bx, by, bw, bh in self._help_tab_rects:
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 return self.set_help_tab(i)
+        for section, page_idx, bx, by, bw, bh in self._help_item_page_rects:
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                return self.set_help_item_page(section, page_idx)
         for i, bx, by, bw, bh in self._help_right_tab_rects:
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 return self.set_help_right_tab(i)
@@ -5390,12 +5450,30 @@ void main() {
         return len(self._current_help_sections())
 
     def toggle_help_section(self, index: int) -> bool:
+        """Toggle/advance the section at ``index`` (digit keys, Enter).
+
+        - Collapsed -> expanded (opens its first item-page).
+        - Expanded, multiple item-pages -> cycles to the next item-page
+          (accordion; does not collapse the section).
+        - Expanded, single item-page (<= HELP_MAX_ITEMS_PER_SECTION entries)
+          -> collapsed, same as before this accordion existed.
+        """
         sections = self._current_help_sections()
         if index < 0 or index >= len(sections):
             return False
-        name, _entries = sections[index]
-        self._help_collapsed[name] = not self._help_collapsed.get(name, False)
+        name, entries = sections[index]
         self._help_focus_idx = index
+        collapsed = self._help_collapsed.get(name, False)
+        if collapsed:
+            self._help_collapsed[name] = False
+            self._help_item_page[name] = 0
+            return True
+        n_pages = self._help_item_page_count(entries)
+        if n_pages > 1:
+            current = self._help_item_page.get(name, 0)
+            self._help_item_page[name] = (current + 1) % n_pages
+            return True
+        self._help_collapsed[name] = True
         return True
 
     def set_all_help_sections_collapsed(self, collapsed: bool) -> None:
