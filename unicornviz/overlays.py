@@ -4567,15 +4567,32 @@ void main() {
         col_y = [left_y + 8.0, left_y + 8.0]
         col_max_y = left_y + left_h - 10.0
 
+        avail_text_w = col_w - card_pad * 2
+        title_line_h = 8 * card_title_scale + 2.0
+
         for sec_idx, (section, entries) in enumerate(sections):
             if not entries:
                 continue
             accent = self._help_theme_color(section)
             collapsed = self._help_collapsed.get(section, False)
-            visible_entries = [] if collapsed else entries
-            section_h = card_pad * 2 + 8 * card_title_scale + 4 + len(visible_entries) * card_line_h
+            marker = '>' if (self._help_focus_region == 'sections' and sec_idx == self._help_focus_idx) else ' '
+            icon = '+' if collapsed else '-'
+            header_text = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
+            header_lines = self._wrap_plain_text(header_text, avail_text_w, card_title_scale)
+
             if collapsed:
-                section_h += card_line_h
+                entry_lines = ['[collapsed]']
+            else:
+                entry_lines = []
+                for key, desc in entries:
+                    entry_lines.extend(self._wrap_help_entry(key, desc, avail_text_w, item_scale))
+
+            section_h = (
+                card_pad * 2
+                + len(header_lines) * title_line_h
+                + 4
+                + len(entry_lines) * card_line_h
+            )
             idx = 0 if col_y[0] <= col_y[1] else 1
             if col_y[idx] + section_h > col_max_y:
                 other = 1 - idx
@@ -4593,17 +4610,16 @@ void main() {
                 self._draw_rect(sx2 - 2.0, sy2 - 2.0, col_w + 4.0, section_h + 4.0, (accent[0], accent[1], accent[2], edge_a))
             self._draw_rect(sx2, sy2, col_w, section_h, (0.05 + accent[0] * 0.05, 0.08 + accent[1] * 0.06, 0.14 + accent[2] * 0.05, 0.62))
             self._draw_rect(sx2, sy2, col_w, 3.0, (accent[0], accent[1], accent[2], 0.78))
-            marker = '>' if (self._help_focus_region == 'sections' and sec_idx == self._help_focus_idx) else ' '
-            icon = '+' if collapsed else '-'
-            header = f'{marker}{sec_idx + 1}. {icon} {section.upper()} ({len(entries)})'
-            self._draw_text(header, sx2 + card_pad, sy2 + card_pad, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
-            yy = sy2 + card_pad + 8 * card_title_scale + 4
-            if collapsed:
-                self._draw_text('[collapsed]', sx2 + card_pad, yy, scale=item_scale, color=(0.78, 0.84, 0.92, 0.92))
-                yy += card_line_h
-            for key, desc in visible_entries:
-                line = f'{key:<12} {desc}'
-                self._draw_text(line, sx2 + card_pad, yy, scale=item_scale, color=(0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96))
+            yy = sy2 + card_pad
+            for hline in header_lines:
+                self._draw_text(hline, sx2 + card_pad, yy, scale=card_title_scale, color=(accent[0], accent[1], accent[2], 0.98))
+                yy += title_line_h
+            yy += 4
+            entry_color = (0.78, 0.84, 0.92, 0.92) if collapsed else (
+                0.80 + accent[0] * 0.20, 0.82 + accent[1] * 0.18, 0.84 + accent[2] * 0.16, 0.96
+            )
+            for line in entry_lines:
+                self._draw_text(line, sx2 + card_pad, yy, scale=item_scale, color=entry_color)
                 yy += card_line_h
             col_y[idx] += section_h + 8.0
 
@@ -4799,6 +4815,70 @@ void main() {
         self._help_tab_idx = (self._help_tab_idx + int(delta)) % n
         self._help_focus_idx = 0
         return True
+
+    def _help_text_max_chars(self, avail_w: float, scale: float) -> int:
+        """Return how many glyphs at ``scale`` fit within ``avail_w``."""
+        char_w = float(self._glyph_w) * self._font_scale_norm * scale
+        if char_w <= 0:
+            return 999
+        return max(4, int(avail_w / char_w))
+
+    @staticmethod
+    def _wrap_words_two_budget(words: list[str], first_avail: int, cont_avail: int) -> list[str]:
+        """Greedy-wrap ``words`` into lines; line 1 uses ``first_avail`` chars,
+        later lines ``cont_avail``. Words are never split or dropped — a
+        single word still longer than its line's budget is kept whole on its
+        own line (a bounded overflow, not a truncation)."""
+        if not words:
+            return ['']
+        lines: list[str] = []
+        cur = ''
+        avail = first_avail
+        for word in words:
+            candidate = f'{cur} {word}'.strip()
+            if cur and len(candidate) > avail:
+                lines.append(cur)
+                cur = word
+                avail = cont_avail
+            else:
+                cur = candidate
+        lines.append(cur)
+        return lines
+
+    def _wrap_plain_text(self, text: str, avail_w: float, scale: float) -> list[str]:
+        """Word-wrap ``text`` to fit ``avail_w``; never truncates — long single
+        words that still overflow are placed on their own line as-is rather
+        than cut off."""
+        max_chars = self._help_text_max_chars(avail_w, scale)
+        return self._wrap_words_two_budget(text.split(), max_chars, max_chars)
+
+    def _wrap_help_entry(self, key: str, desc: str, avail_w: float, scale: float) -> list[str]:
+        """Word-wrap a help (key, description) row to fit ``avail_w``.
+
+        The key starts the first line (padded to the usual 12-char column);
+        continuation lines hang-indent under the description so a long
+        description reads as a wrapped paragraph instead of overflowing the
+        section card or restarting at the key column. If the key itself is
+        too wide for the column at this scale (very narrow columns only),
+        it is wrapped too rather than left to overflow.
+        """
+        max_chars = self._help_text_max_chars(avail_w, scale)
+        key_col = 13
+        indent_w = min(key_col, max(0, max_chars - 1))
+        indent = ' ' * indent_w
+
+        if len(key) + 1 > max_chars:
+            key_lines = self._wrap_words_two_budget(key.split() or [key], max_chars, max_chars)
+            desc_avail = max(4, max_chars - indent_w)
+            desc_lines = self._wrap_words_two_budget(desc.split() or [''], desc_avail, desc_avail)
+            return key_lines + [indent + line for line in desc_lines]
+
+        key_padded = f'{key:<12}' if len(key) < 12 else key
+        prefix = f'{key_padded} '
+        first_avail = max(4, max_chars - len(prefix))
+        cont_avail = max(4, max_chars - indent_w)
+        body = self._wrap_words_two_budget(desc.split() or [''], first_avail, cont_avail)
+        return [prefix + body[0]] + [indent + line for line in body[1:]]
 
     def _help_theme_color(self, section: str) -> tuple[float, float, float]:
         """Return accent color for a help section."""
