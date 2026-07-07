@@ -116,6 +116,20 @@ def list_ports() -> list[str]:
         return []
 
 
+def list_output_ports() -> list[str]:
+    """Return available MIDI output port names; empty list when rtmidi is absent."""
+    if not _RTMIDI_OK:
+        return []
+    try:
+        tmp = rtmidi.MidiOut()
+        ports = tmp.get_ports()
+        del tmp
+        return [p if isinstance(p, str) else p.decode('utf-8', errors='replace') for p in ports]
+    except Exception as exc:
+        log.debug('MIDI list_output_ports failed: %s', exc)
+        return []
+
+
 class MidiManager:
     """
     Opens one or more MIDI input ports and forwards CC/Note events to listeners.
@@ -167,6 +181,7 @@ class MidiManager:
     ) -> None:
         self._device_hint = device_hint.lower()
         self._listeners: list[Callable[[MidiEvent], None]] = []
+        self._named_listeners: dict[str, Callable[[MidiEvent], None]] = {}
         self._midi_ins: list['rtmidi.MidiIn'] = []
         self._port_names: list[str] = []
         self._port_name = ''
@@ -208,6 +223,32 @@ class MidiManager:
     def add_listener(self, fn: Callable[[MidiEvent], None]) -> None:
         """Register a callback; called from the rtmidi thread — keep it brief."""
         self._listeners.append(fn)
+
+    def add_named_listener(self, name: str, fn: Callable[[MidiEvent], None]) -> None:
+        """Register a named MIDI event listener, replacing any with the same name."""
+        with self._lock:
+            self._named_listeners[str(name)] = fn
+
+    def remove_named_listener(self, name: str) -> None:
+        """Remove a named listener previously added via add_named_listener."""
+        with self._lock:
+            self._named_listeners.pop(str(name), None)
+
+    def set_note_binding(self, note: int, action: str) -> None:
+        """Bind *note* to *action*, overriding any preset mapping."""
+        self._note_map[int(note)] = str(action)
+
+    def clear_note_binding(self, note: int) -> None:
+        """Remove any binding for *note*."""
+        self._note_map.pop(int(note), None)
+
+    def set_cc_binding(self, cc: int, param: str) -> None:
+        """Bind CC *cc* to *param*, overriding any preset mapping."""
+        self._cc_map[int(cc)] = str(param)
+
+    def clear_cc_binding(self, cc: int) -> None:
+        """Remove any binding for CC *cc*."""
+        self._cc_map.pop(int(cc), None)
 
     def start(self) -> None:
         """Open the configured device port(s).  No-op when rtmidi is unavailable."""
@@ -400,11 +441,17 @@ class MidiManager:
 
         with self._lock:
             listeners = list(self._listeners)
+            named = list(self._named_listeners.values())
         for fn in listeners:
             try:
                 fn(event)
             except Exception as exc:
                 log.warning('MIDI listener error: %s', exc)
+        for fn in named:
+            try:
+                fn(event)
+            except Exception as exc:
+                log.warning('MIDI named listener error: %s', exc)
 
     def cc_to_param(self, cc: int) -> str | None:
         return self._cc_map.get(cc)
@@ -447,3 +494,100 @@ class MidiManager:
     @property
     def note_map(self) -> dict[int, str]:
         return dict(self._note_map)
+
+
+# ---------------------------------------------------------------------------
+# MIDI output (LED feedback / SysEx)
+# ---------------------------------------------------------------------------
+
+class MidiOut:
+    """Thin rtmidi.MidiOut wrapper for LED feedback and SysEx output.
+
+    Safe to instantiate when rtmidi is unavailable; all methods degrade
+    gracefully to no-ops.  One port is held open per instance; call
+    :meth:`open` before :meth:`send`.
+
+    Thread safety: :meth:`send` is safe to call from any thread once the
+    port is open, but :meth:`open` / :meth:`close` must be called from the
+    main thread.
+    """
+
+    def __init__(self) -> None:
+        self._port: 'rtmidi.MidiOut | None' = None
+        self._port_name: str = ''
+        self._hint: str = ''
+
+    def list_ports(self) -> list[str]:
+        """Return available MIDI output port names."""
+        return list_output_ports()
+
+    def open(self, hint: str) -> bool:
+        """Open the first output port whose name contains *hint* (case-insensitive).
+
+        Closes any previously open port first.  Returns True on success.
+        """
+        if not _RTMIDI_OK:
+            return False
+        self.close()
+        try:
+            ports = list_output_ports()
+            hint_low = hint.lower()
+            idx = next(
+                (i for i, p in enumerate(ports) if hint_low in p.lower()),
+                None,
+            )
+            if idx is None:
+                log.warning(
+                    'MidiOut: no output port matching %r — available: %s',
+                    hint,
+                    ', '.join(ports) or '(none)',
+                )
+                return False
+            out = rtmidi.MidiOut()
+            out.open_port(idx)
+            self._port = out
+            self._port_name = ports[idx]
+            self._hint = hint
+            log.info('MidiOut: opened %r', self._port_name)
+            return True
+        except Exception as exc:
+            self.close()
+            log.warning('MidiOut: failed to open port: %s', exc)
+            return False
+
+    def send(self, message: list[int]) -> bool:
+        """Send a raw MIDI message; returns True on success."""
+        if self._port is None:
+            return False
+        try:
+            self._port.send_message(message)
+            return True
+        except Exception as exc:
+            log.debug('MidiOut: send failed: %s', exc)
+            return False
+
+    def close(self) -> None:
+        """Close the active output port."""
+        if self._port is not None:
+            try:
+                self._port.close_port()
+            except Exception:
+                pass
+            self._port = None
+            self._port_name = ''
+            self._hint = ''
+
+    @property
+    def available(self) -> bool:
+        """Return True when an output port is open."""
+        return self._port is not None
+
+    @property
+    def port_name(self) -> str:
+        """Return the name of the active output port, or empty string."""
+        return self._port_name
+
+    @property
+    def hint(self) -> str:
+        """Return the hint string used to open the current port."""
+        return self._hint

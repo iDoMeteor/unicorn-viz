@@ -31,7 +31,7 @@ from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler, parse_hotkey_chord
-from unicornviz.midi import MidiManager
+from unicornviz.midi import MidiManager, MidiOut
 from unicornviz.recording import Recorder
 from unicornviz._null_controllers import (
     _NullMultiHeadController,
@@ -413,6 +413,7 @@ class App:
         self._last_frame_ms: float = 0.0
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
+        self._midi_out: MidiOut | None = None
         self._overlays: Overlays | None = None
         self._recorder: Recorder | None = None
         self._audio_scratch_current = AudioData()
@@ -3139,6 +3140,13 @@ void main() {
             except Exception as _exc:
                 log.debug('midi-controllers-01 renderer registration failed: %s', _exc)
 
+        # midi-controllers-01: init MidiControllerManager now that vj_api is live.
+        if _mc_register_all is not None:
+            try:
+                _mc_register_all(None, None, self.vj_api)
+            except Exception as _exc:
+                log.debug('midi-controllers-01 controller init skipped: %s', _exc)
+
         overlays.set_effect_shortcuts(playlist.shortcut_effects)
         overlays.set_system_monitor_audio_provider(
             self._system_monitor_audio_snapshot
@@ -5395,6 +5403,21 @@ void main() {
         """Return available MIDI input port names for the device selector UI."""
         from unicornviz.midi import list_ports
         return list_ports()
+
+    def midi_send_output(self, port_hint: str, message: list[int]) -> bool:
+        """Send a raw MIDI message to the first output port matching *port_hint*.
+
+        Lazily opens and caches a MidiOut; subsequent calls with the same hint
+        reuse the open port.  If the hint changes the port is reopened.
+        Returns True on success.
+        """
+        if not port_hint:
+            return False
+        if self._midi_out is None:
+            self._midi_out = MidiOut()
+        if not self._midi_out.available or self._midi_out.hint != port_hint:
+            self._midi_out.open(port_hint)
+        return self._midi_out.send(list(message))
 
     def get_audio_sources(self) -> list[str]:
         """Return available audio capture sources for selector UI."""

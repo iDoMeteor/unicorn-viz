@@ -988,6 +988,99 @@ class VJApi:
         except Exception:
             pass
 
+    # ── MIDI output & binding surface ─────────────────────────────────────────
+
+    def midi_available(self) -> bool:
+        """Return True when a MIDI input device is connected."""
+        m = getattr(self._app, '_midi_manager', None)
+        return bool(m is not None and getattr(m, 'available', False))
+
+    def midi_cc_map(self) -> dict[int, str]:
+        """Return a copy of the active CC → parameter mapping."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return {}
+        return dict(getattr(m, '_cc_map', {}))
+
+    def midi_note_map(self) -> dict[int, str]:
+        """Return a copy of the active note → action mapping."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return {}
+        return dict(getattr(m, '_note_map', {}))
+
+    def midi_bind_note(self, note: int, action: str) -> None:
+        """Bind MIDI note *note* to *action*, overriding any preset mapping."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            fn = getattr(m, 'set_note_binding', None)
+            if callable(fn):
+                fn(int(note), str(action))
+
+    def midi_unbind_note(self, note: int) -> None:
+        """Remove any binding for MIDI note *note*."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            fn = getattr(m, 'clear_note_binding', None)
+            if callable(fn):
+                fn(int(note))
+
+    def midi_bind_cc(self, cc: int, param: str) -> None:
+        """Bind MIDI CC *cc* to parameter *param*, overriding any preset mapping."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            fn = getattr(m, 'set_cc_binding', None)
+            if callable(fn):
+                fn(int(cc), str(param))
+
+    def midi_unbind_cc(self, cc: int) -> None:
+        """Remove any binding for MIDI CC *cc*."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            fn = getattr(m, 'clear_cc_binding', None)
+            if callable(fn):
+                fn(int(cc))
+
+    def midi_add_raw_listener(self, name: str, fn: Callable) -> None:
+        """Register a named raw MIDI event listener (receives MidiEvent objects)."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            add_fn = getattr(m, 'add_named_listener', None)
+            if callable(add_fn):
+                add_fn(str(name), fn)
+
+    def midi_remove_raw_listener(self, name: str) -> None:
+        """Remove a named raw MIDI event listener."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            rm_fn = getattr(m, 'remove_named_listener', None)
+            if callable(rm_fn):
+                rm_fn(str(name))
+
+    def midi_list_ports(self) -> list[str]:
+        """Return available MIDI input port names."""
+        try:
+            from unicornviz.midi import list_ports  # noqa: PLC0415
+            return list_ports()
+        except Exception:
+            return []
+
+    def midi_list_output_ports(self) -> list[str]:
+        """Return available MIDI output port names."""
+        try:
+            from unicornviz.midi import list_output_ports  # noqa: PLC0415
+            return list_output_ports()
+        except Exception:
+            return []
+
+    def midi_send_output(self, port_hint: str, message: list[int]) -> bool:
+        """Send a raw MIDI message to the first output port matching *port_hint*.
+
+        Opens and caches the port on first use; subsequent calls with the same
+        hint reuse the open port.  Returns True on success.
+        """
+        return self._app.midi_send_output(str(port_hint), list(message))
+
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()
