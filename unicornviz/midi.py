@@ -512,10 +512,13 @@ class MidiOut:
     main thread.
     """
 
+    _RETRY_INTERVAL_S = 10.0   # seconds between re-attempts when port not found
+
     def __init__(self) -> None:
         self._port: 'rtmidi.MidiOut | None' = None
         self._port_name: str = ''
         self._hint: str = ''
+        self._last_open_attempt: float = -self._RETRY_INTERVAL_S  # allow first attempt
 
     def list_ports(self) -> list[str]:
         """Return available MIDI output port names."""
@@ -524,10 +527,17 @@ class MidiOut:
     def open(self, hint: str) -> bool:
         """Open the first output port whose name contains *hint* (case-insensitive).
 
-        Closes any previously open port first.  Returns True on success.
+        Closes any previously open port first.  Silently skips re-attempts
+        that arrive within ``_RETRY_INTERVAL_S`` of the last failed attempt so
+        callers can invoke this on every frame without flooding the log.
+        Returns True on success.
         """
         if not _RTMIDI_OK:
             return False
+        now = time.monotonic()
+        if now - self._last_open_attempt < self._RETRY_INTERVAL_S:
+            return False
+        self._last_open_attempt = now
         self.close()
         try:
             ports = list_output_ports()
@@ -537,7 +547,7 @@ class MidiOut:
                 None,
             )
             if idx is None:
-                log.warning(
+                log.debug(
                     'MidiOut: no output port matching %r — available: %s',
                     hint,
                     ', '.join(ports) or '(none)',
