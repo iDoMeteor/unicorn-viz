@@ -60,6 +60,28 @@ def test_random_advance_never_hits_disabled():
     assert seen  # something was chosen
 
 
+def _fx_manual(name: str):
+    return type(name, (), {'NAME': name, 'AUTO_ROTATE': False})
+
+
+def test_manual_only_skipped_by_auto_rotation():
+    pl = Playlist([_fx('A'), _fx_manual('M'), _fx('C')], _Cfg())
+    assert pl.current().NAME == 'A'
+    assert pl.advance().NAME == 'C'   # manual-only 'M' skipped
+    assert pl.advance().NAME == 'A'   # wraps past C, still skips M
+
+
+def test_manual_only_reachable_by_go_index():
+    pl = Playlist([_fx('A'), _fx_manual('M'), _fx('C')], _Cfg())
+    assert pl.go_index(1).NAME == 'M'  # manual jump reaches the manual-only effect
+
+
+def test_random_never_hits_manual_only():
+    pl = Playlist([_fx('A'), _fx_manual('M'), _fx('C'), _fx('D')], _Cfg('random'))
+    seen = {pl.advance().NAME for _ in range(60)}
+    assert 'M' not in seen
+
+
 def test_reenable_restores_rotation():
     pl = _playlist(['A', 'B', 'C'])
     pl.set_disabled({'B', 'C'})

@@ -126,6 +126,10 @@ class BaseEffect(ABC):
     NAME: str = "Effect"
     AUTHOR: str = ""
     TAGS: list[str] = []
+    # When False, the effect is excluded from all auto-rotation (playlist
+    # advance/random, Auto VJ, ping-pong) — it is reached only by manual
+    # activation (effects browser, numeric pin, direct jump). Default True.
+    AUTO_ROTATE: bool = True
 
     def __init__(
         self,

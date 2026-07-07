@@ -51,7 +51,8 @@ Complex drop-ins should also include:
 | textures-01 | Yes | Not required | Media effect drop-in |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
-| videos-01 | Yes | Not required | Media effect drop-in |
+| video-clips-01 | Yes | Not required | Video Clips: audio-reactive clip montage (directory-group selection) |
+| videos-01 | Yes | Not required | Video Player: whole videos with audio (ffpyplayer); manual-only |
 | webcam-01 | Yes | Not required | Focused subsystem with limited surface; planning doc added |
 
 ## Structured Docs Links (Complex Drop-ins)

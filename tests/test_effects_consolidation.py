@@ -35,8 +35,8 @@ PACK_NAMES = {
     'holiday-01': {'America 250'},
 }
 ISOLATED_NAMES = {
-    'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Showcase',
-    'Sim Showcase', 'Unicorn Tears',
+    'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Clips',
+    'Video Player', 'Sim Showcase', 'Unicorn Tears',
 }
 OLD_NAMES = {'Sine Scroller 3.1', 'Crystal Pyramids', 'Prism Lattice'}
 OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
@@ -44,7 +44,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 44
+EXPECTED_TOTAL = 45
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
@@ -56,8 +56,8 @@ EXPECTED_CATEGORY = {
     'retro-01': 'retro', 'feature-01': 'feature', 'vector-01': 'vector',
     'cosmic-01': 'cosmic', 'tech-01': 'tech', 'immersive-01': 'immersive',
     'holiday-01': 'holiday', 'images-01': 'media', 'videos-01': 'media',
-    'textures-01': 'media', 'sims-01': 'media', 'projectm-01': 'projectm',
-    'unicorn-tears-01': 'psychedelic',
+    'video-clips-01': 'media', 'textures-01': 'media', 'sims-01': 'media',
+    'projectm-01': 'projectm', 'unicorn-tears-01': 'psychedelic',
 }
 CORE_CATEGORY = 'analyzer'
 # Tags retired during normalization: redundant, structural, misspelled, or (in

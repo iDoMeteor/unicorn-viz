@@ -411,18 +411,30 @@ switch_hide_duration_s = 1.2
 For the full key list and behavior notes, see
 [configuration.md](configuration.md).
 
-### `VideoShowcase` (`Video Showcase`)
+### `VideoClips` (`Video Clips`)
 
 ```toml
-[effects.VideoShowcase]
+[effects.VideoClips]
 speed    = 1.0
 mix_time = 10.0   # seconds per video clip before crossfade
 zoom     = 1.0
-# video_dirs = "assets/videos"  # comma-separated video directories
+# video_dir = "/path/to/clips"   # override the bundled videos/ dir
 # random_speed_min = 0.80
 # random_speed_max = 1.20
 # random_zoom_min = 0.85
 # random_zoom_max = 1.15
+```
+
+### `VideoPlayer` (`Video Player`)
+
+Plays whole videos with their own audio (ffpyplayer); manual-only.
+
+```toml
+[effects.VideoPlayer]
+volume     = 1.0    # target playback volume (0..1)
+audio_fade = 1.5    # seconds to fade the video audio in on activation
+loop       = false  # loop current video instead of advancing at its end
+# video_dir = "/path/to/videos"  # override the bundled videos/ dir
 ```
 
 ### `SimShowcase` (`Sim Showcase`)

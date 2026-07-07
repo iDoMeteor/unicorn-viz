@@ -74,6 +74,10 @@ class Playlist:
             self._reset_shuffle_cycle(avoid_index=self._index)
 
     def _cls_enabled(self, cls: Type[BaseEffect]) -> bool:
+        # AUTO_ROTATE=False effects are manual-only: never auto-rotated, but
+        # still reachable via go_index() / numeric hotkeys / the effects browser.
+        if getattr(cls, 'AUTO_ROTATE', True) is False:
+            return False
         return cls.NAME not in self._disabled and cls.__name__ not in self._disabled
 
     def _is_enabled(self, idx: int) -> bool:

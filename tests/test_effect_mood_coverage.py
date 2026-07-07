@@ -18,6 +18,10 @@ MOODS = {'chill', 'groovy', 'energetic', 'intense', 'hard'}
 def test_every_rotation_effect_has_a_mood_tag() -> None:
     missing = []
     for cls in get_effects():
+        # Manual-only effects (AUTO_ROTATE=False, e.g. Video Player) are never
+        # VJ-selected, so a mood tag would be meaningless for them.
+        if getattr(cls, 'AUTO_ROTATE', True) is False:
+            continue
         tags = {str(t).lower() for t in getattr(cls, 'TAGS', [])}
         if not (tags & MOODS):
             missing.append(cls.NAME)

@@ -105,7 +105,8 @@ Authoritative assignment. Moods are **appended** to each effect's existing tags.
 | ANSI Viewer | retro-01 | groovy, intense |
 | Image Showcase | images-01 | chill, groovy, energetic, intense, hard |
 | Texture Showcase | textures-01 | groovy |
-| Video Showcase | videos-01 | chill, groovy, energetic, intense, hard |
+| Video Clips | video-clips-01 | chill, groovy, energetic, intense, hard |
+| Video Player | videos-01 | — (manual-only, AUTO_ROTATE=False; exempt from mood coverage) |
 
 Mood coverage (effects carrying each): **chill 16, groovy 24, energetic 17,
 intense 34, hard 11** — every scene now draws from a healthy spread (no more

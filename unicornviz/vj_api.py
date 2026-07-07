@@ -342,8 +342,12 @@ class VJApi:
         return self._app.effect_enabled(name)
 
     def enabled_effect_classes(self) -> list[type]:
-        """Return effect classes the operator has not disabled from rotation."""
-        return [cls for cls in get_effects() if self._app.effect_enabled(cls.NAME)]
+        """Return auto-rotatable effect classes: operator-enabled and not
+        AUTO_ROTATE=False (manual-only effects are excluded from auto-selection)."""
+        return [
+            cls for cls in get_effects()
+            if getattr(cls, 'AUTO_ROTATE', True) and self._app.effect_enabled(cls.NAME)
+        ]
 
     def goto_random_effect(self, tags: list[str] | None = None, exclude_current: bool = True) -> str | None:
         # Only auto-select effects the operator has left enabled.

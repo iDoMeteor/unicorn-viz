@@ -538,7 +538,7 @@ zoom = 1.0
 # random_zoom_min = 0.85
 # random_zoom_max = 1.15
 
-[effects.VideoShowcase]
+[effects.VideoClips]                 # video-clips-01: audio-reactive clip montage
 speed = 1.0
 mix_time = 10.0
 zoom = 1.0
@@ -546,6 +546,13 @@ zoom = 1.0
 # random_speed_max = 1.20
 # random_zoom_min = 0.85
 # random_zoom_max = 1.15
+# video_dir = "/path/to/clips"       # override the bundled videos/ dir
+
+# [effects.VideoPlayer]              # videos-01: whole videos with audio (ffpyplayer)
+# volume = 1.0                       # target playback volume (0..1)
+# audio_fade = 1.5                   # seconds to fade the video audio in on activation
+# loop = false                      # loop current video instead of advancing at its end
+# video_dir = "/path/to/videos"     # override the bundled videos/ dir
 
 # ── projectM affinity & extended dwell ──────────────────────────────────────
 # Controls how often the Auto VJ biases toward ProjectM Presets and how long

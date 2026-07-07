@@ -469,7 +469,8 @@ the live hotkey overlay (the single source of truth). See
 | Effect | Source | Tags | Description |
 |--------|--------|------|-------------|
 | Image Showcase | `images-01` | media, images, slideshow | Image directory with Ken Burns motion and multiple presentation styles |
-| Video Showcase | `videos-01` | media, videos, slideshow | Video-clip sequencer with smooth crossfade |
+| Video Clips | `video-clips-01` | media, videos, slideshow | Audio-reactive clip montage with per-activation directory-group selection |
+| Video Player | `videos-01` | media, videos, player | Plays whole videos with their own audio (ffpyplayer), letterboxed; manual-only |
 | Texture Showcase | `textures-01` | media, textures, modern | Ken Burns pan/zoom with reactive colour grade and beat fade |
 | Sim Showcase | `sims-01` | media, 3d, usd, simulation | USD scene carousel with camera orbits (robotics/galaxy scenes) |
 | ProjectM Presets | `projectm-01` | projectm, milkdrop | libprojectM Milkdrop preset host with 1000+ community presets |

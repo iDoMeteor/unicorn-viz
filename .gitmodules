@@ -107,3 +107,6 @@
 [submodule "drop-ins/cta-01"]
 	path = drop-ins/cta-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-cta-01.git
+[submodule "drop-ins/video-clips-01"]
+	path = drop-ins/video-clips-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-video-clips-01.git
