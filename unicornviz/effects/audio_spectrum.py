@@ -256,9 +256,11 @@ _N_WAVE = 512
 _F_MIN = 30.0     # Hz — must match Analyzer._PERC_F_MIN
 _F_MAX = 16000.0  # Hz — must match Analyzer._PERC_F_MAX
 # Bars below this magnitude are untouched; above it they ease toward 1.0 (soft
-# knee) so loud transients "leak over" ~90% instead of hard-pegging flat at the
-# top — the perceptual HF gain otherwise clips cymbals/hats frequently.
-_BAR_KNEE = 0.75
+# knee) so loud bands "leak over" instead of hard-pegging flat at the top. Set
+# fairly low because the perceptual spectrum runs hot — low bands sit high on
+# every kick and HF bands are gain-boosted — so compression should start early
+# to leave visible headroom. Tunable: lower = more headroom.
+_BAR_KNEE = 0.6
 
 
 def _bar_colour(i: int, n: int) -> tuple[float, float, float]:
