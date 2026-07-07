@@ -407,6 +407,9 @@ class HotkeyHandler:
                 self.handle(binding[0], binding[1])
                 return
 
+            if self._app.fire_midi_action(action):
+                return
+
             log.debug('MIDI: unmapped note action %r for note %d', action_raw, event.number)
         elif event.type == 'cc':
             effect = a.current_effect

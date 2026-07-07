@@ -71,6 +71,7 @@ class VJApi:
         self._app = app
         self._key_handlers: dict[str, Callable[[int, int], 'str | None | bool']] = {}
         self._midi_action_registry: dict[str, list[tuple[str, str]]] = {}
+        self._midi_action_handlers: dict[str, Callable[[], None]] = {}
 
     @property
     def ctx(self) -> moderngl.Context | None:
@@ -1094,6 +1095,32 @@ class VJApi:
     def get_registered_midi_actions(self) -> dict[str, list[tuple[str, str]]]:
         """Return all drop-in registered MIDI actions keyed by section name."""
         return dict(self._midi_action_registry)
+
+    def register_midi_action_handler(self, action: str, fn: 'Callable[[], None]') -> None:
+        """Register a zero-argument callable to fire when a MIDI note bound to *action* arrives.
+
+        Drop-ins call this alongside :meth:`register_midi_actions` so the MIDI
+        dispatch chain can actually fire their actions, not just display them in
+        the learn modal.  Replaces any previously registered handler for the
+        same action name.
+        """
+        self._midi_action_handlers[str(action)] = fn
+
+    def fire_midi_action(self, action: str) -> bool:
+        """Invoke the registered handler for *action*.
+
+        Called by the MIDI dispatch chain when a note fires an action that is
+        not in the built-in ``_MIDI_NOTE_KEY_BINDINGS`` table.  Returns True
+        if a handler was found and invoked, False otherwise.
+        """
+        fn = self._midi_action_handlers.get(action)
+        if fn is None:
+            return False
+        try:
+            fn()
+        except Exception as exc:
+            log.debug('fire_midi_action %r raised: %s', action, exc)
+        return True
 
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""

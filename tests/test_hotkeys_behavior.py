@@ -177,6 +177,9 @@ class _App:
     def goto_effect(self, _cls) -> None:
         return
 
+    def fire_midi_action(self, _action: str) -> bool:
+        return False
+
 
 def _handler() -> tuple[HotkeyHandler, _App, _Overlay]:
     app = _App()

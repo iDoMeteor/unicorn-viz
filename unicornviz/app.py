@@ -5419,6 +5419,14 @@ void main() {
             self._midi_out.open(port_hint)
         return self._midi_out.send(list(message))
 
+    def fire_midi_action(self, action: str) -> bool:
+        """Invoke a drop-in registered MIDI action handler.
+
+        Called by the MIDI dispatch chain after built-in action lookup fails.
+        Returns True if a handler was found and called.
+        """
+        return self.vj_api.fire_midi_action(action)
+
     def get_audio_sources(self) -> list[str]:
         """Return available audio capture sources for selector UI."""
         return self._audio_manager.list_sources()
