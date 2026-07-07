@@ -22,6 +22,7 @@ from pathlib import Path
 
 import sdl2
 
+from unicornviz.dropins import discover_dropin_help_entries
 from unicornviz.hotkeys import _MIDI_NOTE_KEY_BINDINGS as _ACTION_MAP  # type: ignore[attr-defined]
 from unicornviz.overlays import Overlays
 
@@ -81,13 +82,22 @@ def _sym_to_label(sym: int, mod: int) -> str:
 
 
 def _documented_key_strings() -> set[str]:
-    """Return all key-string tokens from CORE_HELP_SECTIONS (flat, lowercased for matching)."""
+    """Return all key-string tokens documented in the help overlay.
+
+    Covers both CORE_HELP_SECTIONS and every installed drop-in's own
+    HELP_ENTRIES (the single source of truth for drop-in-owned hotkeys) so a
+    key correctly documented by its drop-in isn't flagged as a false-positive
+    gap just because core no longer duplicates it.
+    """
     tokens: set[str] = set()
     for _section, entries in Overlays.CORE_HELP_SECTIONS:
         for key_str, _desc in entries:
             # Each comma/slash-separated part is a separate token.
             for part in re.split(r'[,/]', key_str):
                 tokens.add(part.strip())
+    for _section, key_str, _desc in discover_dropin_help_entries():
+        for part in re.split(r'[,/]', key_str):
+            tokens.add(part.strip())
     return tokens
 
 
