@@ -5,9 +5,10 @@ A fully-loaded drop-in directory registers one help section per drop-in
 silently: sections past what fit in the two-column layout were simply never
 drawn and were unreachable by keyboard (digit toggle / arrow focus only ever
 walked the merged list, not what was visible). This paginates the merged
-section list into tabs of at most Overlays.HELP_SECTIONS_PER_TAB (10)
-headings each, so every section stays reachable regardless of how many
-drop-ins are installed.
+section list into tabs of at most Overlays.HELP_SECTIONS_PER_TAB headings
+each, so every section stays reachable regardless of how many drop-ins are
+installed. Tests reference the cap via the constant (not hardcoded numbers)
+so a future cap change doesn't require rewriting the arithmetic here too.
 
 Tabs switch with PageUp/PageDown. Some drop-ins (webcam-01) also register a
 global VJApi key handler on the same keys (camera-device switch); the help
@@ -27,6 +28,9 @@ from unicornviz.playlist import Playlist
 from unicornviz.runtime_state import RuntimeStateStore
 
 
+CAP = Overlays.HELP_SECTIONS_PER_TAB
+
+
 def _section(name: str) -> tuple[str, list[tuple[str, str]]]:
     return (name, [(f'{name}-key', f'{name}-desc')])
 
@@ -36,11 +40,14 @@ def _stub_overlays(section_count: int) -> Overlays:
     overlays._dynamic_help_sections = {}
     overlays._dynamic_help_order = []
     overlays._postfx_help_entries = []
+    overlays._mouse_help_entries = []
     overlays._help_collapsed = {}
     overlays._help_focus_region = 'sections'
     overlays._help_focus_idx = 0
     overlays._help_tab_idx = 0
     overlays._help_tab_rects = []
+    overlays._help_right_tab_idx = 0
+    overlays._help_right_tab_rects = []
 
     synthetic = [_section(f'Sec{i:02d}') for i in range(section_count)]
     overlays._iter_help_sections = lambda: synthetic
@@ -51,15 +58,15 @@ def _stub_overlays(section_count: int) -> Overlays:
 # Pagination grouping
 # --------------------------------------------------------------------------- #
 
-def test_help_tab_groups_chunks_at_ten() -> None:
-    overlays = _stub_overlays(23)
+def test_help_tab_groups_chunks_at_cap() -> None:
+    overlays = _stub_overlays(3 * CAP + 2)
     groups = overlays._help_tab_groups()
-    assert [len(g) for g in groups] == [10, 10, 3]
+    assert [len(g) for g in groups] == [CAP, CAP, CAP, 2]
 
 
 def test_help_tab_count_matches_group_count() -> None:
-    overlays = _stub_overlays(23)
-    assert overlays.help_tab_count() == 3
+    overlays = _stub_overlays(3 * CAP + 2)
+    assert overlays.help_tab_count() == 4
 
 
 def test_help_tab_groups_returns_single_empty_page_when_no_sections() -> None:
@@ -68,10 +75,10 @@ def test_help_tab_groups_returns_single_empty_page_when_no_sections() -> None:
     assert overlays.help_tab_count() == 1
 
 
-def test_ten_or_fewer_sections_is_a_single_tab() -> None:
-    overlays = _stub_overlays(10)
+def test_cap_or_fewer_sections_is_a_single_tab() -> None:
+    overlays = _stub_overlays(CAP)
     assert overlays.help_tab_count() == 1
-    assert len(overlays._help_tab_groups()[0]) == 10
+    assert len(overlays._help_tab_groups()[0]) == CAP
 
 
 # --------------------------------------------------------------------------- #
@@ -79,7 +86,7 @@ def test_ten_or_fewer_sections_is_a_single_tab() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_move_help_tab_wraps_and_resets_focus() -> None:
-    overlays = _stub_overlays(23)
+    overlays = _stub_overlays(3 * CAP + 2)
     overlays._help_focus_idx = 5
 
     assert overlays.move_help_tab(1) is True
@@ -88,15 +95,17 @@ def test_move_help_tab_wraps_and_resets_focus() -> None:
 
     overlays.move_help_tab(1)
     assert overlays.help_tab_index() == 2
+    overlays.move_help_tab(1)
+    assert overlays.help_tab_index() == 3
     # Wraps back to the first tab.
     assert overlays.move_help_tab(1) is True
     assert overlays.help_tab_index() == 0
 
 
 def test_move_help_tab_backward_wraps() -> None:
-    overlays = _stub_overlays(23)
+    overlays = _stub_overlays(3 * CAP + 2)
     assert overlays.move_help_tab(-1) is True
-    assert overlays.help_tab_index() == 2
+    assert overlays.help_tab_index() == 3
 
 
 def test_move_help_tab_is_noop_with_a_single_tab() -> None:
@@ -106,9 +115,9 @@ def test_move_help_tab_is_noop_with_a_single_tab() -> None:
 
 
 def test_set_help_tab_clamps_out_of_range_index() -> None:
-    overlays = _stub_overlays(23)
+    overlays = _stub_overlays(3 * CAP + 2)
     assert overlays.set_help_tab(99) is True
-    assert overlays.help_tab_index() == 2
+    assert overlays.help_tab_index() == 3
     assert overlays.set_help_tab(-5) is True
     assert overlays.help_tab_index() == 0
 
@@ -118,35 +127,36 @@ def test_set_help_tab_clamps_out_of_range_index() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_help_section_count_is_scoped_to_active_tab() -> None:
-    overlays = _stub_overlays(23)
-    assert overlays.help_section_count() == 10
-    overlays.set_help_tab(2)
-    assert overlays.help_section_count() == 3
+    overlays = _stub_overlays(3 * CAP + 2)
+    assert overlays.help_section_count() == CAP
+    overlays.set_help_tab(3)
+    assert overlays.help_section_count() == 2
 
 
 def test_toggle_help_section_operates_within_active_tab() -> None:
-    overlays = _stub_overlays(23)
+    overlays = _stub_overlays(3 * CAP + 2)
     overlays.set_help_tab(1)
 
-    # Index 0 on tab 2 is 'Sec10', not the global 'Sec00'.
+    # Index 0 on tab 2 is 'SecCAP', not the global 'Sec00'.
     assert overlays.toggle_help_section(0) is True
-    assert overlays._help_collapsed.get('Sec10') is True
+    assert overlays._help_collapsed.get(f'Sec{CAP:02d}') is True
     assert 'Sec00' not in overlays._help_collapsed
 
 
 def test_move_help_focus_wraps_within_active_tab_only() -> None:
-    overlays = _stub_overlays(23)
-    overlays.set_help_tab(2)  # 3 sections on this tab
-    overlays._help_focus_idx = 2
+    overlays = _stub_overlays(3 * CAP + 2)
+    overlays.set_help_tab(3)  # 2 sections on this (last) tab
+    overlays._help_focus_idx = 1
 
     assert overlays.move_help_focus(1) is True
-    assert overlays._help_focus_idx == 0  # wraps at 3, not 23
+    assert overlays._help_focus_idx == 0  # wraps at 2, not 3*CAP+2
 
 
 def test_set_all_help_sections_collapsed_affects_every_tab() -> None:
-    overlays = _stub_overlays(23)
+    total = 3 * CAP + 2
+    overlays = _stub_overlays(total)
     overlays.set_all_help_sections_collapsed(True)
-    assert all(overlays._help_collapsed.get(f'Sec{i:02d}') is True for i in range(23))
+    assert all(overlays._help_collapsed.get(f'Sec{i:02d}') is True for i in range(total))
 
 
 # --------------------------------------------------------------------------- #
@@ -154,9 +164,9 @@ def test_set_all_help_sections_collapsed_affects_every_tab() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_register_help_entries_clamps_tab_idx_when_sections_shrink() -> None:
-    overlays = _stub_overlays(23)
-    overlays.set_help_tab(2)
-    assert overlays.help_tab_index() == 2
+    overlays = _stub_overlays(3 * CAP + 2)
+    overlays.set_help_tab(3)
+    assert overlays.help_tab_index() == 3
 
     # Rebuilding with far fewer sections should clamp back onto a valid tab.
     overlays._iter_help_sections = lambda: [_section('Only')]

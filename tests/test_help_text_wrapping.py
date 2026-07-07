@@ -168,11 +168,14 @@ def _stub_overlays_for_render() -> Overlays:
     overlays._help_collapsed = {}
     overlays._help_tab_idx = 0
     overlays._help_tab_rects = []
+    overlays._help_right_tab_idx = 0
+    overlays._help_right_tab_rects = []
     overlays._num_shortcuts = []
     overlays._shift_shortcuts = []
     overlays._ctrl_shortcuts = []
     overlays._alt_shortcuts = []
     overlays._postfx_help_entries = []
+    overlays._mouse_help_entries = []
     overlays._unmapped_effects = []
     overlays._draw_rect = lambda *a, **kw: None
 
@@ -232,7 +235,10 @@ def _stub_overlays_for_shortcut_map() -> Overlays:
 
 
 def test_shortcut_map_wraps_long_effect_names_instead_of_overflowing() -> None:
+    """Effects tab: the "1 -> Black Hole Cathedral"-style rows must wrap
+    to fit their column instead of overflowing."""
     overlays = _stub_overlays_for_shortcut_map()
+    overlays._help_right_tab_idx = 0  # Effects
     drawn: list[tuple[str, float, float, float]] = []
 
     def _capture_text(text: str, x: float, y: float, scale: float = 2.0, **_kw) -> None:
@@ -241,34 +247,54 @@ def test_shortcut_map_wraps_long_effect_names_instead_of_overflowing() -> None:
     overlays._draw_text = _capture_text
     overlays._draw_help_section_content(x=0.0, y=0.0, w=1920.0 - 88.0, h=800.0, help_scale=1.0, content_top_y=100.0)
 
-    # Recompute the two shortcut-map column budgets the same way the renderer
-    # does, and check every drawn shortcut-map / POST FX line fits inside it.
     left_w = (1920.0 - 88.0) * 0.64
     right_x = (0.0 + 14.0) + left_w + 10.0
     right_w = (1920.0 - 88.0) - right_x - 14.0
     half = right_w * 0.48
     col1_avail = max(60.0, half - 20.0)
     col2_avail = max(60.0, right_w - half - 20.0)
-    postfx_avail = max(60.0, right_w - 20.0)
 
-    known_titles = {'1-0', 'SHIFT', 'CTRL', 'ALT', 'LIVE SHORTCUT MAP', 'POST FX'}
+    known_titles = {'1-0', 'SHIFT', 'CTRL', 'ALT', 'EFFECTS', 'POST FX'}
     checked_any = False
-    in_postfx = False
     for text, x, _y, scale in drawn:
-        if text == 'POST FX':
-            in_postfx = True
-            continue
         if text in known_titles:
             continue
-        if in_postfx:
-            avail = postfx_avail
-        elif x == right_x + 10.0:
+        if x == right_x + 10.0:
             avail = col1_avail
         elif abs(x - (right_x + half)) < 1e-6:
             avail = col2_avail
         else:
-            continue  # a section-card line, covered by the other test
+            continue  # a section-card line or tab-bar chrome, not this column
         max_chars = overlays._help_text_max_chars(avail, scale)
+        assert len(text) <= max_chars, f'{text!r} overflows its column ({len(text)} > {max_chars} chars)'
+        checked_any = True
+    assert checked_any
+
+
+def test_postfx_tab_wraps_long_entries_instead_of_overflowing() -> None:
+    """Post FX tab: the numbered quick-hit trigger row must wrap to fit
+    the full-width column instead of overflowing."""
+    overlays = _stub_overlays_for_shortcut_map()
+    overlays._help_right_tab_idx = 1  # Post FX (Effects, Post FX)
+    drawn: list[tuple[str, float]] = []
+
+    def _capture_text(text: str, _x: float, _y: float, scale: float = 2.0, **_kw) -> None:
+        drawn.append((text, scale))
+
+    overlays._draw_text = _capture_text
+    overlays._draw_help_section_content(x=0.0, y=0.0, w=1920.0 - 88.0, h=800.0, help_scale=1.0, content_top_y=100.0)
+
+    left_w = (1920.0 - 88.0) * 0.64
+    right_x = (0.0 + 14.0) + left_w + 10.0
+    right_w = (1920.0 - 88.0) - right_x - 14.0
+    postfx_avail = max(60.0, right_w - 20.0)
+
+    known_titles = {'EFFECTS', 'POST FX'}
+    checked_any = False
+    for text, scale in drawn:
+        if text in known_titles:
+            continue
+        max_chars = overlays._help_text_max_chars(postfx_avail, scale)
         assert len(text) <= max_chars, f'{text!r} overflows its column ({len(text)} > {max_chars} chars)'
         checked_any = True
     assert checked_any
@@ -278,6 +304,7 @@ def test_shortcut_map_rows_do_not_overlap_when_one_wraps() -> None:
     """A wrapped 2-line row must push every row below it down in both
     columns of its pair, or the next row's text draws on top of it."""
     overlays = _stub_overlays_for_shortcut_map()
+    overlays._help_right_tab_idx = 0  # Effects
     drawn_ys: dict[str, list[float]] = {}
 
     def _capture_text(text: str, x: float, y: float, scale: float = 2.0, **_kw) -> None:

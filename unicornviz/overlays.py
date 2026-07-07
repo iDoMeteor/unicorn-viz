@@ -336,7 +336,11 @@ class Overlays:
     # A fully-loaded drop-in directory registers a section per drop-in; capping
     # each help-overlay tab at this many headings keeps every section reachable
     # (previously excess sections silently fell off the bottom of the columns).
-    HELP_SECTIONS_PER_TAB = 10
+    # Kept low (rather than packing tabs as full as possible) because a tall,
+    # heavily-wrapped section can still fail to fit either two-column slot and
+    # get silently skipped for that tab — fewer headings per tab means shorter
+    # per-section cards and much less chance of hitting that edge case.
+    HELP_SECTIONS_PER_TAB = 7
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
@@ -725,11 +729,14 @@ class Overlays:
         self._dynamic_help_sections: dict[str, list[tuple[str, str]]] = {}
         self._dynamic_help_order: list[str] = []
         self._postfx_help_entries: list[tuple[str, str]] = []
+        self._mouse_help_entries: list[tuple[str, str]] = []
         self._help_collapsed: dict[str, bool] = {}
         self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
         self._help_tab_idx: int = 0
         self._help_tab_rects: list[tuple[int, float, float, float, float]] = []
+        self._help_right_tab_idx: int = 0
+        self._help_right_tab_rects: list[tuple[int, float, float, float, float]] = []
         self._help_icon_focus_idx: int = 0
         self._help_icon_hover_idx: int = -1
         self._help_icon_hover_pos: tuple[float, float] | None = None
@@ -4507,9 +4514,7 @@ void main() {
 
     def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
         """Draw section cards and shortcut map in the help panel content area."""
-        t = self._hud_t
         hp = self._help_pulse_t
-        pulse_med = 0.5 + 0.5 * math.sin(t * 2.3)
 
         left_x = x + 14.0
         left_y = content_top_y
@@ -4604,115 +4609,119 @@ void main() {
                 yy += card_line_h
             col_y[idx] += section_h + 8.0
 
-        # ── right pane: live shortcut map ─────────────────────────────────
-        live_map_scale = 2.05 * help_scale
-        self._draw_text(
-            'LIVE SHORTCUT MAP',
-            right_x + 10.0,
-            right_y + 10.0,
-            scale=live_map_scale,
-            color=(1.0, 0.92, 0.58, 0.96),
-        )
-        self._draw_rect(right_x + 10.0, right_y + 30.0, right_w - 20.0, 2.0, (1.0, 0.72, 0.24, 0.60 + pulse_med * 0.20))
+        # ── right pane: tabbed (Effects / Post FX / Mouse) ──────────────────
+        right_tabs = self._help_right_tabs()
+        self._help_right_tab_idx = max(0, min(self._help_right_tab_idx, len(right_tabs) - 1))
+        if len(right_tabs) > 1:
+            right_tab_bar_h = 34.0 * help_scale
+            self._draw_help_right_tab_bar(right_x, right_y, right_w, right_tab_bar_h, right_tabs, help_scale)
+            right_y += right_tab_bar_h + 6.0
+            right_h -= right_tab_bar_h + 6.0
+        else:
+            self._help_right_tab_rects = []
 
-        rows = max(
-            len(self._num_shortcuts),
-            len(self._shift_shortcuts),
-            len(self._ctrl_shortcuts),
-            len(self._alt_shortcuts),
-        )
-        shortcut_title_scale = 1.85 * help_scale
-        sec_scale = item_scale
-        min_sec_scale = max(1.40, item_scale * 0.72)
-        min_bottom_margin = 26.0
+        active_right_tab = right_tabs[self._help_right_tab_idx] if right_tabs else 'Effects'
 
-        half = right_w * 0.48
-        # Columns are row-aligned in pairs ("1-0"+"SHIFT", then "CTRL"+"ALT"),
-        # so a long effect name that wraps to 2 lines must push every row
-        # below it down in *both* columns of its pair, not just its own cell.
-        col1_avail = max(60.0, half - 20.0)
-        col2_avail = max(60.0, right_w - half - 20.0)
-        row_n = min(rows, 12)
+        if active_right_tab == 'Effects':
+            rows = max(
+                len(self._num_shortcuts),
+                len(self._shift_shortcuts),
+                len(self._ctrl_shortcuts),
+                len(self._alt_shortcuts),
+            )
+            shortcut_title_scale = 1.85 * help_scale
+            sec_scale = item_scale
+            min_sec_scale = max(1.40, item_scale * 0.72)
+            min_bottom_margin = 26.0
 
-        def _row_group(items_a: list[str], items_b: list[str], scale: float) -> tuple[list[list[str]], list[list[str]], list[int]]:
-            wrapped_a = [
-                self._wrap_plain_text(items_a[i] if i < len(items_a) else '(none)', col1_avail, scale)
-                for i in range(row_n)
-            ]
-            wrapped_b = [
-                self._wrap_plain_text(items_b[i] if i < len(items_b) else '(none)', col2_avail, scale)
-                for i in range(row_n)
-            ]
-            counts = [max(len(wrapped_a[i]), len(wrapped_b[i])) for i in range(row_n)]
-            return wrapped_a, wrapped_b, counts
+            half = right_w * 0.48
+            # Columns are row-aligned in pairs ("1-0"+"SHIFT", then "CTRL"+"ALT"),
+            # so a long effect name that wraps to 2 lines must push every row
+            # below it down in *both* columns of its pair, not just its own cell.
+            col1_avail = max(60.0, half - 20.0)
+            col2_avail = max(60.0, right_w - half - 20.0)
+            row_n = min(rows, 12)
 
-        top = right_y + 42.0
-        while sec_scale > min_sec_scale:
+            def _row_group(items_a: list[str], items_b: list[str], scale: float) -> tuple[list[list[str]], list[list[str]], list[int]]:
+                wrapped_a = [
+                    self._wrap_plain_text(items_a[i] if i < len(items_a) else '(none)', col1_avail, scale)
+                    for i in range(row_n)
+                ]
+                wrapped_b = [
+                    self._wrap_plain_text(items_b[i] if i < len(items_b) else '(none)', col2_avail, scale)
+                    for i in range(row_n)
+                ]
+                counts = [max(len(wrapped_a[i]), len(wrapped_b[i])) for i in range(row_n)]
+                return wrapped_a, wrapped_b, counts
+
+            top = right_y + 10.0
+            while sec_scale > min_sec_scale:
+                sec_lh = 8 * sec_scale + 2.0
+                _, _, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
+                _, _, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
+                top_block_h = (8 * shortcut_title_scale + 3.0) + sum(top_counts) * sec_lh
+                bottom_y = top + top_block_h + 28.0
+                bottom_block_h = (8 * shortcut_title_scale + 3.0) + sum(bottom_counts) * sec_lh
+                total_h = bottom_y + bottom_block_h
+                if total_h <= right_y + right_h - min_bottom_margin:
+                    break
+                sec_scale -= 0.08
+
             sec_lh = 8 * sec_scale + 2.0
-            _, _, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
-            _, _, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
+            num_lines, shift_lines, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
+            ctrl_lines, alt_lines, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
+
+            def _row_offsets(counts: list[int]) -> list[float]:
+                offsets: list[float] = []
+                acc = 0
+                for c in counts:
+                    offsets.append(float(acc))
+                    acc += c
+                return offsets
+
+            top_offsets = _row_offsets(top_counts)
+            bottom_offsets = _row_offsets(bottom_counts)
+
+            def _draw_shortcut_block(
+                title: str, wrapped_items: list[list[str]], bx: float, by: float,
+                offsets: list[float], color: tuple[float, float, float, float],
+            ) -> None:
+                self._draw_text(title, bx, by, scale=shortcut_title_scale, color=(0.96, 1.0, 0.70, 0.96))
+                y0 = by + 8 * shortcut_title_scale + 3.0
+                for i, lines in enumerate(wrapped_items):
+                    yy = y0 + offsets[i] * sec_lh
+                    for line in lines:
+                        self._draw_text(line, bx, yy, scale=sec_scale, color=color)
+                        yy += sec_lh
+
             top_block_h = (8 * shortcut_title_scale + 3.0) + sum(top_counts) * sec_lh
             bottom_y = top + top_block_h + 28.0
-            bottom_block_h = (8 * shortcut_title_scale + 3.0) + sum(bottom_counts) * sec_lh
-            total_h = bottom_y + bottom_block_h
-            if total_h <= right_y + right_h - min_bottom_margin:
-                break
-            sec_scale -= 0.08
+            _draw_shortcut_block('1-0',   num_lines,   right_x + 10.0, top,      top_offsets,    (0.82, 1.0,  0.9,  0.95))
+            _draw_shortcut_block('SHIFT', shift_lines, right_x + half, top,      top_offsets,    (0.92, 0.86, 1.0,  0.95))
+            _draw_shortcut_block('CTRL',  ctrl_lines,  right_x + 10.0, bottom_y, bottom_offsets, (0.84, 0.94, 1.0,  0.95))
+            _draw_shortcut_block('ALT',   alt_lines,   right_x + half, bottom_y, bottom_offsets, (1.0,  0.92, 0.82, 0.95))
 
-        sec_lh = 8 * sec_scale + 2.0
-        num_lines, shift_lines, top_counts = _row_group(self._num_shortcuts, self._shift_shortcuts, sec_scale)
-        ctrl_lines, alt_lines, bottom_counts = _row_group(self._ctrl_shortcuts, self._alt_shortcuts, sec_scale)
+            if self._unmapped_effects:
+                self._draw_text(
+                    f"Extra effects (no direct key): {', '.join(self._unmapped_effects)}",
+                    right_x + 10.0,
+                    right_y + right_h - 20.0,
+                    scale=1.16,
+                    color=(1.0, 0.62, 0.62, 0.94),
+                )
 
-        def _row_offsets(counts: list[int]) -> list[float]:
-            offsets: list[float] = []
-            acc = 0
-            for c in counts:
-                offsets.append(float(acc))
-                acc += c
-            return offsets
-
-        top_offsets = _row_offsets(top_counts)
-        bottom_offsets = _row_offsets(bottom_counts)
-
-        def _draw_shortcut_block(
-            title: str, wrapped_items: list[list[str]], bx: float, by: float,
-            offsets: list[float], color: tuple[float, float, float, float],
-        ) -> None:
-            self._draw_text(title, bx, by, scale=shortcut_title_scale, color=(0.96, 1.0, 0.70, 0.96))
-            y0 = by + 8 * shortcut_title_scale + 3.0
-            for i, lines in enumerate(wrapped_items):
-                yy = y0 + offsets[i] * sec_lh
-                for line in lines:
-                    self._draw_text(line, bx, yy, scale=sec_scale, color=color)
-                    yy += sec_lh
-
-        top_block_h = (8 * shortcut_title_scale + 3.0) + sum(top_counts) * sec_lh
-        bottom_y = top + top_block_h + 28.0
-        _draw_shortcut_block('1-0',   num_lines,   right_x + 10.0, top,      top_offsets,    (0.82, 1.0,  0.9,  0.95))
-        _draw_shortcut_block('SHIFT', shift_lines, right_x + half, top,      top_offsets,    (0.92, 0.86, 1.0,  0.95))
-        _draw_shortcut_block('CTRL',  ctrl_lines,  right_x + 10.0, bottom_y, bottom_offsets, (0.84, 0.94, 1.0,  0.95))
-        _draw_shortcut_block('ALT',   alt_lines,   right_x + half, bottom_y, bottom_offsets, (1.0,  0.92, 0.82, 0.95))
-
-        # Dedicated Post FX block under number shortcuts, left aligned.
-        if self._postfx_help_entries:
-            bottom_block_h = (8 * shortcut_title_scale + 3.0) + sum(bottom_counts) * sec_lh
-            postfx_y = bottom_y + bottom_block_h + 18.0
-            self._draw_text('POST FX', right_x + 10.0, postfx_y, scale=shortcut_title_scale, color=(0.98, 0.95, 0.72, 0.96))
-            py = postfx_y + 8 * shortcut_title_scale + 3.0
-            postfx_avail = max(60.0, right_w - 20.0)
-            for key, desc in self._postfx_help_entries:
-                for line in self._wrap_help_entry(key, desc, postfx_avail, item_scale, key_width=16):
-                    self._draw_text(line, right_x + 10.0, py, scale=item_scale, color=(0.96, 0.88, 0.76, 0.96))
+        elif active_right_tab in ('Post FX', 'Mouse'):
+            entries = self._postfx_help_entries if active_right_tab == 'Post FX' else self._mouse_help_entries
+            title_scale = 1.85 * help_scale
+            title_color = (0.98, 0.95, 0.72, 0.96) if active_right_tab == 'Post FX' else (0.72, 0.98, 0.95, 0.96)
+            entry_color = (0.96, 0.88, 0.76, 0.96) if active_right_tab == 'Post FX' else (0.80, 0.96, 0.94, 0.96)
+            self._draw_text(active_right_tab.upper(), right_x + 10.0, right_y + 10.0, scale=title_scale, color=title_color)
+            py = right_y + 10.0 + 8 * title_scale + 8.0
+            avail = max(60.0, right_w - 20.0)
+            for key, desc in entries:
+                for line in self._wrap_help_entry(key, desc, avail, item_scale, key_width=16):
+                    self._draw_text(line, right_x + 10.0, py, scale=item_scale, color=entry_color)
                     py += 8 * item_scale + 2.0
-
-        if self._unmapped_effects:
-            self._draw_text(
-                f"Extra effects (no direct key): {', '.join(self._unmapped_effects)}",
-                right_x + 10.0,
-                right_y + right_h - 20.0,
-                scale=1.16,
-                color=(1.0, 0.62, 0.62, 0.94),
-            )
 
     def _draw_help_tab_bar(
         self,
@@ -4762,6 +4771,45 @@ void main() {
             scale=hint_scale,
             color=(0.70, 0.86, 1.0, 0.82),
         )
+
+    def _draw_help_right_tab_bar(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        bar_h: float,
+        tabs: list[str],
+        help_scale: float,
+    ) -> None:
+        """Draw the right pane's Effects / Post FX / Mouse tab strip (click to switch)."""
+        self._help_right_tab_rects = []
+        n = len(tabs)
+        gap = 6.0
+        tab_w = min(140.0 * help_scale, (w - (n - 1) * gap) / n)
+        tab_scale = 1.7 * help_scale
+        active = self.help_right_tab_index()
+        tx = x
+        for i, label in enumerate(tabs):
+            accent = self.DYNAMIC_THEME_CYCLE[i % len(self.DYNAMIC_THEME_CYCLE)]
+            is_active = i == active
+            if is_active:
+                bg = (accent[0] * 0.30, accent[1] * 0.30, accent[2] * 0.30, 0.90)
+            else:
+                bg = (0.06, 0.10, 0.18, 0.68)
+            self._draw_rect(tx, y, tab_w, bar_h, bg)
+            if is_active:
+                self._draw_rect(tx, y + bar_h - 3.0, tab_w, 3.0, (accent[0], accent[1], accent[2], 0.95))
+            display = label.upper()
+            tcol = (1.0, 0.96, 0.68, 1.0) if is_active else (0.72, 0.82, 0.94, 0.85)
+            self._draw_text(
+                display,
+                tx + (tab_w - len(display) * 8.0 * tab_scale) * 0.5,
+                y + (bar_h - 8 * tab_scale) * 0.5,
+                scale=tab_scale,
+                color=tcol,
+            )
+            self._help_right_tab_rects.append((i, tx, y, tab_w, bar_h))
+            tx += tab_w + gap
 
     def _iter_help_sections(self) -> list[tuple[str, list[tuple[str, str]]]]:
         """Return merged core + dynamic help sections in render order."""
@@ -4827,6 +4875,50 @@ void main() {
             return False
         self._help_tab_idx = (self._help_tab_idx + int(delta)) % n
         self._help_focus_idx = 0
+        return True
+
+    def _help_right_tabs(self) -> list[str]:
+        """Return the right-pane tab names.
+
+        'Effects' (the live 1-40 hotkey shortcut map) is always present.
+        'Post FX' and 'Mouse' only appear when a drop-in has actually
+        registered entries for them (e.g. no postfx-01 drop-in installed
+        means neither tab exists at all, rather than showing an empty page).
+        """
+        tabs = ['Effects']
+        if self._postfx_help_entries:
+            tabs.append('Post FX')
+        if self._mouse_help_entries:
+            tabs.append('Mouse')
+        return tabs
+
+    def help_right_tab_count(self) -> int:
+        """Return the number of right-pane tabs (always >= 1)."""
+        return len(self._help_right_tabs())
+
+    def help_right_tab_index(self) -> int:
+        """Return the active right-pane tab index, clamped to the current count."""
+        return max(0, min(self._help_right_tab_idx, self.help_right_tab_count() - 1))
+
+    def help_right_tab_name(self) -> str:
+        """Return the active right-pane tab's name."""
+        tabs = self._help_right_tabs()
+        return tabs[self.help_right_tab_index()] if tabs else 'Effects'
+
+    def set_help_right_tab(self, index: int) -> bool:
+        """Select a right-pane tab by index (clamped)."""
+        n = self.help_right_tab_count()
+        if n <= 0:
+            return False
+        self._help_right_tab_idx = max(0, min(int(index), n - 1))
+        return True
+
+    def move_help_right_tab(self, delta: int) -> bool:
+        """Move the active right-pane tab by delta (wraps)."""
+        n = self.help_right_tab_count()
+        if n <= 1:
+            return False
+        self._help_right_tab_idx = (self._help_right_tab_idx + int(delta)) % n
         return True
 
     def _help_text_max_chars(self, avail_w: float, scale: float) -> int:
@@ -4914,6 +5006,7 @@ void main() {
         self._dynamic_help_sections = {}
         self._dynamic_help_order = []
         self._postfx_help_entries = []
+        self._mouse_help_entries = []
 
         for item in entries:
             section = ''
@@ -4931,10 +5024,16 @@ void main() {
             if not (section and key and desc):
                 continue
 
-            if section.strip().lower() == 'post fx':
+            section_lower = section.strip().lower()
+            if section_lower == 'post fx':
                 entry = (key, desc)
                 if entry not in self._postfx_help_entries:
                     self._postfx_help_entries.append(entry)
+                continue
+            if section_lower == 'mouse':
+                entry = (key, desc)
+                if entry not in self._mouse_help_entries:
+                    self._mouse_help_entries.append(entry)
                 continue
 
             bucket = self._dynamic_help_sections.setdefault(section, [])
@@ -4958,6 +5057,9 @@ void main() {
             self._help_tab_idx = max(0, min(self._help_tab_idx, n_tabs - 1))
         cur = self._current_help_sections()
         self._help_focus_idx = max(0, min(self._help_focus_idx, len(cur) - 1)) if cur else 0
+
+        right_tabs = self._help_right_tabs()
+        self._help_right_tab_idx = max(0, min(self._help_right_tab_idx, len(right_tabs) - 1))
 
     def _help_icon_entries(self) -> list[dict[str, object]]:
         """Return the static help icon entries."""
@@ -5015,10 +5117,13 @@ void main() {
         return self.toggle_help_focus_section()
 
     def handle_help_mouse_click(self, x: float, y: float) -> bool:
-        """Handle mouse clicks on the help tab bar or icon rail."""
+        """Handle mouse clicks on the help tab bars or icon rail."""
         for i, bx, by, bw, bh in self._help_tab_rects:
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 return self.set_help_tab(i)
+        for i, bx, by, bw, bh in self._help_right_tab_rects:
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                return self.set_help_right_tab(i)
         idx = self._help_icon_hit_test(x, y)
         if idx < 0:
             return False
@@ -5168,6 +5273,9 @@ void main() {
                 'title': 'HELP OVERLAY',
                 'tab_index': self.help_tab_index(),
                 'tab_count': self.help_tab_count(),
+                'right_tab_index': self.help_right_tab_index(),
+                'right_tab_name': self.help_right_tab_name(),
+                'right_tabs': self._help_right_tabs(),
                 'section_count': len(sections_list),
                 'focus_section': sections_list[focus][0] if sections_list else '-',
                 'focus_idx': focus,
