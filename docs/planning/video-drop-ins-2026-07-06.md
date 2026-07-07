@@ -1,7 +1,7 @@
 ---
 Owner: Effects / Media
-Status: Planning — approved direction, not yet started
-Last updated: 2026-07-06
+Status: Video Clips + Video Player v1 shipped; PyAV backend swap shipped 2026-07-07
+Last updated: 2026-07-07
 ---
 
 # Video Drop-Ins — Video Clips (rename + spruce) + Video Player (new)
@@ -11,7 +11,7 @@ Two video drop-ins going forward:
 | Drop-in | NAME | Class | What it is |
 | --- | --- | --- | --- |
 | `video-clips-01` (rename of `videos-01`) | **Video Clips** | `VideoClips` | Today's audio-*reactive* clip montage (cv2 frames, no clip audio) + a directory-aware spruce. |
-| `videos-01` (new) | **Video Player** | `VideoPlayer` | Plays **whole videos with their own audio** (ffpyplayer), letterboxed, with an audio crossfade in/out. |
+| `videos-01` (new) | **Video Player** | `VideoPlayer` | Plays **whole videos with their own audio** (PyAV decode + sounddevice playback), letterboxed, with an audio crossfade in/out. |
 
 The current `videos-01` (`VideoShowcase`) is a cv2 frame-streamer: sequences
 clips with a crossfade + 10 rotating "styles", cover-fit + Ken-Burns drift,
@@ -66,21 +66,41 @@ playback state (cap/texture)** per instance so each activation is independent.
 
 ## Part B — Video Player (new `videos-01`)
 
-### B1. Dependency — ffpyplayer (drop-in-local)
+### B1. Dependency — PyAV (drop-in-local) — **superseded from ffpyplayer, 2026-07-07**
 
-Add `ffpyplayer` to the drop-in's own `install.sh` + drop-in docs (NOT core
-`requirements.txt` unless we later want it global). Import guarded with
+Originally planned around `ffpyplayer` (see superseded text below); swapped to
+**PyAV** (`av`) before real-world testing because ffpyplayer would not build on
+this dev environment: no prebuilt wheel for the installed Python, and its
+source build requires system ffmpeg dev headers including `libpostproc`, which
+current Fedora `ffmpeg-devel` packages no longer ship (only the conflicting
+`compat-ffmpeg4-devel` does). PyAV ships a self-contained `manylinux` wheel
+with bundled ffmpeg and an `abi3` build — `pip install av` verified clean on
+this box with no system deps touched. Added to the drop-in's own
+`install.sh` + drop-in docs (NOT core `requirements.txt`). Import guarded with
 `try/except`; if absent, the effect degrades gracefully (disabled, logged), per
-Drop-In Independence rules. ffpyplayer handles A/V **sync + audio output**
-internally and hands us video frames — least sync pain for v1.
+Drop-In Independence rules.
+
+Trade-off: PyAV decodes but does not play audio, so this effect drives
+playback itself via `sounddevice` (already a core dependency) — the consumed
+sample count on that stream doubles as the A/V sync clock. This also hands us
+direct volume control for the audio fade-in for free.
+
+**Superseded: original ffpyplayer plan text** — Add `ffpyplayer` to the
+drop-in's own `install.sh` + drop-in docs (NOT core `requirements.txt` unless
+we later want it global). Import guarded with `try/except`; if absent, the
+effect degrades gracefully (disabled, logged), per Drop-In Independence rules.
+ffpyplayer handles A/V **sync + audio output** internally and hands us video
+frames — least sync pain for v1.
 
 ### B2. Architecture
 
-- `BaseEffect` `VideoPlayer`. A **decode thread** owns an
-  `ffpyplayer.player.MediaPlayer` for the current video, pulls frames
-  (`get_frame()` → `(frame, pts)`), and hands the latest frame to the main
-  thread (single-slot, lock-guarded — never block render). Main thread uploads
-  to a GL texture in `render()`.
+- `BaseEffect` `VideoPlayer`. A background **`_Decoder` thread** demuxes/decodes
+  with PyAV, pushing `(pts, rgb24 ndarray)` video frames and resampled float32
+  audio chunks onto bounded queues (never touches GL). A dedicated
+  `sounddevice.OutputStream` callback thread consumes the audio queue and mixes
+  in the fade volume; its cumulative consumed-sample count is the A/V clock.
+  The main/GL thread paces video frames against that clock in `update()` and
+  uploads the current frame to a GL texture in `render()`.
 - **Letterbox/contain** fit (config `fit = contain|cover`, default `contain` so
   whole videos aren't cropped).
 - **`reached_bottom`** duck-typed property = "video finished" → the existing
@@ -113,11 +133,11 @@ later once the beat-reactive video pass lands.)
   public surface). Sources we do **not** control (e.g. Spotify playing directly)
   can't be ducked from here; they play under until paused. Call this limit out
   in the drop-in docs.
-- **audio-out-01 abstraction (Requirement #7):** optional. ffpyplayer's built-in
-  audio is simplest for v1; if we want unified mixing/ducking we abstract the
-  Player's audio through audio-out-01 later. **Validate early:** ffpyplayer uses
-  SDL audio internally — confirm it coexists with the app's SDL2 without
-  contention before committing.
+- **audio-out-01 abstraction (Requirement #7):** optional. The Player owns its
+  own `sounddevice.OutputStream` (PortAudio, not SDL) for v1, so there's no SDL
+  audio contention with the app's SDL2 window/input to validate; if we want
+  unified mixing/ducking we can route the Player's audio through audio-out-01
+  later.
 
 ### B5. Deferred to a follow-up update (per your call)
 
@@ -130,12 +150,15 @@ later once the beat-reactive video pass lands.)
 
 ### B6. Risks to burn down first
 
-1. **ffpyplayer + SDL audio** coexistence with the app's SDL2 — validate before
-   building out.
+1. ~~ffpyplayer + SDL audio coexistence~~ — moot after the PyAV swap (no SDL
+   audio path; PortAudio via `sounddevice` only).
 2. **A/V sync under postfx load** — decode thread must never block the render
-   path; drop frames rather than stall.
-3. **`destroy()` hygiene** — stop audio + join the decode thread cleanly; no
-   zombie audio when the effect switches away.
+   path; bounded queues + a wall-clock-independent sample-count clock so the
+   main thread paces to audio (dropping/holding video frames as needed)
+   rather than stalling.
+3. **`destroy()` hygiene** — stop the `sounddevice` stream and signal the
+   decode thread to stop; it's a daemon thread so we don't block `destroy()`
+   waiting on it (its blocking queue puts re-check the stop flag every 200ms).
 
 ---
 
@@ -152,8 +175,14 @@ later once the beat-reactive video pass lands.)
 - **Loose-file grouping:** all loose videos in `videos/` form **one shared
   group** (not one-per-file). A single clip loops only if it is the only clip in
   the chosen group.
-- **ffpyplayer** ships as a **drop-in-local dependency** (its own requirements /
-  installer under the drop-in dir), not core `requirements.txt`.
+- **ffpyplayer → PyAV, 2026-07-07:** ffpyplayer would not build on this dev
+  environment (no wheel for the installed Python; source build needs
+  `libpostproc` headers current Fedora `ffmpeg-devel` no longer ships).
+  Swapped to **PyAV** (`av`), which ships a self-contained wheel with bundled
+  ffmpeg — still a **drop-in-local dependency** (its own requirements /
+  installer under the drop-in dir), not core `requirements.txt`. Since PyAV
+  only decodes, playback now goes through a `sounddevice.OutputStream` owned
+  by the effect (see B1/B2).
 - **Crossfade scope:** acceptable — we duck only app-controlled audio
   (audio-out-01); external sources like Spotify play under until paused.
 - **Video Player is manual-only** (not auto-VJ rotated); may be tagged for
