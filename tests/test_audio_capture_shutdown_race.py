@@ -34,6 +34,7 @@ class _RecordingStream:
         self.abort_called = False
         self.stop_called = False
         self.close_called = False
+        self.read_available = 1 << 30  # always "ready" for any real reader loop
 
     def start(self) -> None:
         pass
@@ -89,6 +90,111 @@ def test_stop_reader_thread_returns_false_when_thread_hangs() -> None:
         assert exited is False
     finally:
         never.set()
+
+
+# --------------------------------------------------------------------------- #
+# _blocking_reader_worker: polls read_available instead of blocking in read()
+#
+# This is the actual root cause behind the original bug: stream.abort() does
+# not reliably unblock an in-flight blocking stream.read() on this ALSA
+# hostapi, so the old "while not stop: stream.read(blocksize)" loop could get
+# stuck inside PortAudio for an unbounded time after shutdown asked it to
+# stop. sounddevice only blocks inside read() when fewer frames than
+# requested are currently available, so polling read_available first (and
+# only calling read() once a full block is ready) bounds the reader's
+# unresponsive window to _READER_POLL_INTERVAL_S regardless of whether the
+# audio source ever produces data.
+# --------------------------------------------------------------------------- #
+
+def test_reader_never_calls_read_when_data_is_not_available() -> None:
+    cap = _make_capture(block_size=256)
+
+    class _NeverReadyStream(_RecordingStream):
+        def __init__(self) -> None:
+            super().__init__()
+            self.read_available = 0  # never enough frames
+            self.read_call_count = 0
+
+        def read(self, frames: int):
+            self.read_call_count += 1
+            return np.zeros((frames, 1), dtype=np.float32), False
+
+    stream = _NeverReadyStream()
+    cap._stream = stream
+    cap._active = True
+    cap._stop_event.clear()
+
+    t = threading.Thread(target=cap._blocking_reader_worker, daemon=True)
+    t.start()
+    time.sleep(0.05)  # several poll intervals' worth of time
+    cap._stop_event.set()
+    t.join(timeout=1.0)
+
+    assert not t.is_alive()
+    assert stream.read_call_count == 0  # polled read_available, never blocked in read()
+
+
+def test_reader_exits_promptly_even_when_stream_never_has_data() -> None:
+    """The exact scenario behind the original bug: a stream that never
+    produces data used to leave the reader thread blocked in stream.read()
+    indefinitely. It must now exit within a small bounded time instead."""
+    cap = _make_capture(block_size=256)
+
+    class _NeverReadyStream(_RecordingStream):
+        def __init__(self) -> None:
+            super().__init__()
+            self.read_available = 0
+
+        def read(self, frames: int):
+            raise AssertionError('read() must not be called when data is unavailable')
+
+    cap._stream = _NeverReadyStream()
+    cap._active = True
+    cap._stop_event.clear()
+
+    t = threading.Thread(target=cap._blocking_reader_worker, daemon=True)
+    t.start()
+    time.sleep(0.02)
+    cap._stop_event.set()
+
+    start = time.monotonic()
+    t.join(timeout=1.0)
+    elapsed = time.monotonic() - start
+
+    assert not t.is_alive()
+    assert elapsed < 0.5, f'reader took {elapsed:.2f}s to exit — should be near-instant'
+
+
+def test_reader_reads_once_enough_frames_are_available() -> None:
+    """Once read_available reports a full block, the reader still reads and
+    publishes it normally (the polling change doesn't break normal capture)."""
+    cap = _make_capture(block_size=256)
+
+    class _EventuallyReadyStream(_RecordingStream):
+        def __init__(self) -> None:
+            super().__init__()
+            self.read_available = 0
+
+        def read(self, frames: int):
+            return np.full((frames, 1), 0.5, dtype=np.float32), False
+
+    stream = _EventuallyReadyStream()
+    cap._stream = stream
+    cap._active = True
+    cap._stop_event.clear()
+
+    t = threading.Thread(target=cap._blocking_reader_worker, daemon=True)
+    t.start()
+    time.sleep(0.03)  # let it poll a few times while not ready
+    stream.read_available = 256  # now a full block is available
+    deadline = time.monotonic() + 1.0
+    while cap.block_seq < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    cap._stop_event.set()
+    t.join(timeout=1.0)
+
+    assert cap.block_seq >= 1
+    assert not t.is_alive()
 
 
 # --------------------------------------------------------------------------- #

@@ -50,6 +50,7 @@ _WARMUP_DURATION = 0.3  # seconds: time to let buffer stabilize after stream ope
 _STATUS_LOG_INTERVAL = 2.0
 _OPEN_DEVICE_TIMEOUT_S = 1.5  # guard against hostapi/device open hangs
 _CLOSE_STREAM_TIMEOUT_S = 3.0
+_READER_POLL_INTERVAL_S = 0.01  # max time the reader can be blocked before re-checking _stop_event
 _DEFAULT_FALLBACK_RMS_THRESHOLD = 0.0015
 _DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
 _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
@@ -603,11 +604,14 @@ class AudioCapture:
     def _stop_reader_thread(self, stream: object | None = None) -> bool:
         """Signal the reader thread to stop and wait up to the close timeout.
 
-        Aborts ``stream`` first (if given) so an in-flight blocking
-        ``stream.read()`` call unblocks immediately instead of racing a
-        later ``stop()``/``close()`` from another thread — closing a
-        PortAudio/ALSA stream while a read is still in flight on it is a
-        real crash (segfault) risk, not just a leak.
+        Aborts ``stream`` first (if given) as a best-effort nudge to stop
+        PortAudio's internal audio processing — but this is *not* what makes
+        the join reliable. ``stream.abort()`` does not reliably unblock an
+        in-flight blocking ``stream.read()`` on this ALSA hostapi, so the
+        real guarantee is ``_blocking_reader_worker()``'s poll-then-read
+        design (it never blocks in ``read()`` for longer than
+        ``_READER_POLL_INTERVAL_S``), which is what lets this join
+        essentially always succeed well within the timeout.
 
         Returns True if the reader thread actually exited within the
         timeout. Callers must not close/reuse ``stream`` when this is False
@@ -632,14 +636,31 @@ class AudioCapture:
         return exited
 
     def _blocking_reader_worker(self) -> None:
-        """Background daemon thread: block-reads from PortAudio into the ring buffer.
+        """Background daemon thread: drains PortAudio into the ring buffer.
 
-        Runs a tight ``stream.read(blocksize)`` loop.  PortAudio buffers frames
-        internally so this thread just drains them.  If the render thread holds
-        the GIL past one audio period the reader is delayed, but PortAudio's
-        internal ring is not overflowed — no xrun, no static.  When overflow
-        does occur (buffer overfilled before drain) PortAudio reports it via the
-        ``overflow`` flag from ``stream.read()``; we count and log these.
+        Polls ``stream.read_available`` and only calls ``stream.read(blocksize)``
+        once a full block is ready — sounddevice/PortAudio only blocks inside
+        ``read()`` when fewer than the requested frame count is currently
+        available, so this keeps the call itself non-blocking. Otherwise it
+        sleeps for ``_READER_POLL_INTERVAL_S`` and re-checks ``_stop_event``.
+
+        This is deliberate, not just an optimization: ``stream.abort()`` does
+        not reliably unblock an in-flight blocking ``stream.read()`` on this
+        ALSA hostapi, so a tight ``while not stop: data = stream.read(...)``
+        loop could leave the thread genuinely stuck inside PortAudio for an
+        unbounded time after shutdown asks it to stop — exactly what produced
+        the "reader thread did not exit" warning (and, when something upstream
+        raced ahead and touched the stream anyway, ALSA-teardown crashes on
+        quit). Polling bounds how long the thread can go without checking
+        ``_stop_event`` to ``_READER_POLL_INTERVAL_S``, so it reliably exits
+        almost immediately once asked, and the caller's join() in stop()/
+        _stop_reader_thread() should essentially never time out.
+
+        PortAudio still buffers internally between polls, so a render-thread
+        GIL hold past one audio period doesn't overflow anything — no xrun,
+        no static. When overflow does occur (buffer overfilled before drain)
+        PortAudio reports it via the ``overflow`` flag from ``stream.read()``;
+        we count and log these.
         """
         blocksize = self._blocksize
         # Pre-allocate mono scratch to avoid a heap allocation per block.
@@ -650,6 +671,9 @@ class AudioCapture:
             if stream is None or not self._active:
                 break
             try:
+                if stream.read_available < blocksize:
+                    time.sleep(_READER_POLL_INTERVAL_S)
+                    continue
                 data, overflow = stream.read(blocksize)
             except Exception as exc:
                 if not self._stop_event.is_set():
@@ -817,11 +841,13 @@ class AudioCapture:
         self._active = False
         stream = self._stream
         self._stream = None
-        # Abort synchronously to unblock any in-progress stream.read() call
-        # immediately.  The reader thread catches the resulting exception,
-        # sees _stop_event set, and breaks without logging.  Only then do we
-        # run the full stop/close sequence — with no reader racing the ALSA
-        # buffer, PortAudio cleans up silently.
+        # _blocking_reader_worker() polls read_available rather than blocking
+        # in stream.read() (see its docstring), so the reader thread notices
+        # _stop_event within one poll interval and this join essentially
+        # always succeeds. abort() is still called as a best-effort nudge,
+        # but it is not what makes this reliable. Only once the reader has
+        # actually exited do we run the full stop/close sequence — with no
+        # reader touching the stream, PortAudio cleans up without racing it.
         reader_exited = self._stop_reader_thread(stream)
         if stream is None:
             return

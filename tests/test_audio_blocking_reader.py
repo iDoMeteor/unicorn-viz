@@ -48,6 +48,10 @@ def _fake_stream_factory(blocksize: int, channels: int = 1):
         def close(self) -> None:
             pass
 
+        @property
+        def read_available(self) -> int:
+            return blocksize  # always "ready" — the reader loop never polls/sleeps
+
         def read(self, frames: int):  # noqa: D401
             phase = np.linspace(t[0], t[0] + 0.1, frames, dtype=np.float32)
             t[0] += 0.1
@@ -172,6 +176,7 @@ class TestBlockingReader:
         class _BurstStream:
             def __init__(self) -> None:
                 self.i = 0
+                self.read_available = 64  # always "ready"; matches block_size above
 
             def read(self, frames: int):
                 payload = np.full((frames, 1), float(self.i), dtype=np.float32)
@@ -204,6 +209,7 @@ class TestBlockingReader:
         class _OverflowBurstStream:
             def __init__(self) -> None:
                 self.i = 0
+                self.read_available = 128  # always "ready"; matches block_size above
 
             def read(self, frames: int):
                 payload = np.zeros((frames, 1), dtype=np.float32)
