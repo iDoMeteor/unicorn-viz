@@ -315,13 +315,13 @@
 - `[done]` System Monitor effect (audio-reactive CPU/RAM/network/IO cyber dashboard).
 - `[done]` Cyber War effect (digital battle-map style offensive/defensive node animations).
 - `[done]` Hacker Terminal effect (animated shell/log streams with glitch transitions).
-- `[todo]` Threat Matrix effect (heatmaps, trace routes, anomaly pulses, breach waves).
+- `[done]` Threat Matrix effect (heatmaps, trace routes, anomaly pulses, breach waves) — shipped 2026-07-06 in `tech-01`.
 - `[done]` Alien Invasion effect (UFO fleets, atmospheric beams, planetary scan overlays).
 - `[done]` Unicorn Tears effect (iridescent liquid/prism particle trails with dreamy bloom).
 - `[done]` Psychedelic effect (neon palette-sine field split out from the old webcam visual background).
 - `[done]` Image Showcase effect (audio-reactive slideshow from bundled or overridden image directory).
 - `[todo]` BBS! effect suite (dial-up rituals, ANSI login scenes, retro board status walls).
-- `[todo]` Black Hole Cathedral effect (gothic mega-structure orbiting an accretion lens with choir-like pulse reactivity).
+- `[done]` Black Hole Cathedral effect (gothic mega-structure orbiting an accretion lens with choir-like pulse reactivity) — shipped in `cosmic-01`.
 - `[todo]` Reactor Breach effect (industrial core meltdown with plasma vents, warning strobes, and containment-wave transitions).
 - `[todo]` Grand Finale effect suite (staged crescendo, hard drop, cooldown outro).
 - `[done]` Optional keystroke telemetry log for training Auto VJ behavior models.
