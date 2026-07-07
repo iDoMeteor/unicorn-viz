@@ -1836,6 +1836,19 @@ void main() {
         np.multiply(source.fft, scale, out=target.fft)
         np.clip(target.fft, 0.0, 1.0, out=target.fft)
         target.waveform[:] = source.waveform
+        # Reactivity scales only the "level" signals (bass/mid/treble/fft) above.
+        # Everything else is reactivity-independent by design and must be copied
+        # through faithfully — the raw perceptual `bands` in particular drive the
+        # fixed-height spectrum bars, and the z-score normalised / flux fields are
+        # already reactivity-invariant. (Previously these were dropped, so a
+        # per-effect reactivity override fed effects a stale/zero `bands`.)
+        target.bands[:] = source.bands
+        target.bass_n = source.bass_n
+        target.mid_n = source.mid_n
+        target.treble_n = source.treble_n
+        target.bass_flux = source.bass_flux
+        target.mid_flux = source.mid_flux
+        target.spectral_flux = source.spectral_flux
         return target
 
     def _audio_for_effect(

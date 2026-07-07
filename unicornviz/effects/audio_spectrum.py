@@ -255,6 +255,10 @@ _N_BARS = 64
 _N_WAVE = 512
 _F_MIN = 30.0     # Hz — must match Analyzer._PERC_F_MIN
 _F_MAX = 16000.0  # Hz — must match Analyzer._PERC_F_MAX
+# Bars below this magnitude are untouched; above it they ease toward 1.0 (soft
+# knee) so loud transients "leak over" ~90% instead of hard-pegging flat at the
+# top — the perceptual HF gain otherwise clips cymbals/hats frequently.
+_BAR_KNEE = 0.75
 
 
 def _bar_colour(i: int, n: int) -> tuple[float, float, float]:
@@ -351,6 +355,12 @@ class AudioSpectrum(BaseEffect):
         # audio.bands is the shared 64-band perceptual spectrum computed once
         # per frame by the Analyzer. Apply visual pink-noise gain for display.
         np.multiply(audio.bands, self._band_gain, out=self._fft)
+        # Soft knee for headroom: bands up to _BAR_KNEE are linear; above it the
+        # overshoot is compressed into (_BAR_KNEE, 1.0] so loud transients ease
+        # toward the top instead of hard-pegging flat there.
+        over = self._fft > _BAR_KNEE
+        span = 1.0 - _BAR_KNEE
+        self._fft[over] = _BAR_KNEE + span * (1.0 - np.exp(-(self._fft[over] - _BAR_KNEE) / span))
         np.clip(self._fft, 0.0, 1.0, out=self._fft)
 
         # Smooth + peak hold
