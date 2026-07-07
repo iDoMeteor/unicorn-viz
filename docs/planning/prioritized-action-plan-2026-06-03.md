@@ -221,6 +221,81 @@ into one execution order that can be worked down without reopening every source 
     Rule:
     - do not start this work until all P0 and P1 items are closed or explicitly deferred.
 
+### P3-MIDI: scenes-01 Drop-In (Scene Recorder & Playback)
+
+**Status:** Planned — own private GitHub repo, wired as submodule at `drop-ins/scenes-01/`
+
+A scene is a named, ordered list of MIDI actions with relative timestamps. Tapping a pad
+replays the scene; Shift+pad arms it for recording; keyboard shortcuts cover both flows.
+
+**Architecture:**
+
+```text
+drop-ins/scenes-01/
+  __init__.py
+  scenes_controller.py   # main controller registered as 'scenes' subsystem
+  scene_player.py        # timed action replay (deque of (action, fire_at))
+  scene_store.py         # load/save TOML scene packs
+  assets/
+    scenes/default.toml  # default empty pack shipped with the drop-in
+```
+
+**SceneDefinition:**
+
+```python
+@dataclass
+class SceneDefinition:
+    name: str
+    actions: list[tuple[str, float]]   # (action_name, delay_s_from_start)
+    coded: Callable[[], None] | None = None  # overrides recorded actions
+```
+
+**MIDI action registration:**
+
+```python
+api.register_midi_actions('Scenes', [
+    ('scene_arm',    'Arm scene record'),
+    ('scene_slot_1', 'Scene Slot 1'),
+    ...
+    ('scene_slot_8', 'Scene Slot 8'),
+])
+```
+
+Scene slots map to APC scene launch row (notes 112–119, 8 pads).
+
+**Record flow:**
+
+1. `scene_arm` action → controller enters ARMED state, flash-highlights pads
+2. Tap `scene_slot_N` while armed → start recording; pad pulses red
+3. Tap `scene_slot_N` again (or keyboard shortcut) → stop and save scene
+
+**Keyboard shortcuts** (via `vj_api.register_key_handler`):
+
+- `Ctrl+Alt+R` → arm record (same as `scene_arm` action)
+- `Ctrl+Shift+1..8` → play scene slot 1–8
+- `Ctrl+Alt+Shift+1..8` → arm record for scene slot 1–8
+
+**Playback:** `ScenePlayer` holds a `deque[tuple[str, float]]`; `update(dt)` drains entries
+whose `fire_at <= time.monotonic()` and calls `vj_api.fire_midi_action(action)`.
+
+**Coded scenes (v1.1+):** Register a Python callable via
+`scenes_controller.register_coded_scene('slot_5', my_fn)`. On playback `my_fn()` is called
+directly, ignoring recorded actions.
+
+**Persistence:** Runtime scenes saved to `~/.config/unicornviz/scenes/` (user-writable,
+gitignored). Active pack path configurable via `[scenes] pack = "path"` in `config.toml`.
+
+**LED feedback** (requires additions to `_ACTION_COLORS` in `apc_leds.py`):
+
+- Unbound slot → dim blue
+- Bound scene → cyan
+- Armed for record → pulsing orange
+- Currently recording → solid red
+- Playing back → pulsing green
+
+**Dependencies:** Pure drop-in — registers via `vj_api.register_midi_actions` and
+`vj_api.fire_midi_action`; zero hard dependencies on any other drop-in or core changes.
+
 ## Execution order
 
 1. P0.1 runtime stability closure (completed 2026-06-03)

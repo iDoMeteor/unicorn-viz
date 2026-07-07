@@ -96,3 +96,49 @@ Re-entry trigger:
 - Resume after a few sessions with the 2026-06-28 timing tuning in place so the
   remaining aesthetic gap can be felt concretely before values are locked in.
   Estimated effort: 1.5–2 sessions.
+
+---
+
+### DW-004 — Live Effect Builder Mode (v2.0 Feature)
+
+Status: deferred 2026-07-07
+
+What is deferred:
+
+- In Effect Builder mode the APC's 8×8 pad grid becomes a **layer compositor**: each row
+  (or column) maps to a named visual effect running on its own framebuffer, and pads toggle
+  layers on/off. The visible output is a real-time blend of all active layers.
+
+Required core work before this can be implemented:
+
+1. A `FramebufferStack` abstraction in `unicornviz/app.py` (core change — currently renders
+   exactly one effect to the primary framebuffer per frame)
+2. Each layer effect renders to its own `moderngl.Framebuffer`
+3. A blend compositor (additive / screen / multiply / alpha-over) renders composited output
+4. `BaseEffect` gains an optional `render_layer(fb, dt, audio)` entry point
+
+Minimum viable design (v2.0 milestone):
+
+- `LayerCompositor` subsystem owned by a `layer-compositor-01` drop-in
+- `VJApi` gains `enable_layer_mode()` / `disable_layer_mode()` and
+  `set_layer_effect(index, effect_cls)` / `toggle_layer(index)` surface
+- `midi-controllers-01` enters **layer mode** when `layer_mode_toggle` fires:
+  pads remap to `layer_0` … `layer_63` (toggle per pad)
+- Shift+layer pad → opens a mini picker showing available effects for that slot
+
+Intermediate workaround available today:
+
+- The 8 APC scene-launch pads (row 8) can be bound to `scene_slot_1..8`, replaying scenes
+  that call `vj_api.goto_effect(...)`. This gives a fast preset-switch grid without layer
+  blending — useful for many live VJ workflows.
+
+Why deferred:
+
+- Requires a significant core render pipeline change (`FramebufferStack`) that must be
+  designed and approved by the core team before any drop-in work begins.
+- The scenes-01 intermediate workaround covers the primary live use case for v1.x.
+
+Re-entry trigger:
+
+- Resume after scenes-01 ships and the core team has approved the `FramebufferStack`
+  architecture. Estimated effort: 3–5 sessions (core + compositor drop-in + MIDI wiring).
