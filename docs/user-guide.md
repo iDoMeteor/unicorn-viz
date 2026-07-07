@@ -211,26 +211,50 @@ This ensures that viewing the same effect twice never produces identical motion 
 
 ## Audio Profiles (Frequency-Response Tuning)
 
-Different music genres have distinct frequency characteristics. Unicorn Viz includes **12 audio profiles** that optimize bass/mid/treble detection for each style:
+Different music genres have distinct frequency characteristics. Unicorn Viz includes **20 audio profiles** that optimize bass/mid/treble detection, BPM priors, and spectral genre-matching for each style. The set is deliberately focused on electronic dance music and its closely adjacent DJ-culture genres (hip-hop, R&B) rather than covering every possible genre — this keeps the Auto VJ profile recommender's candidate pool tight and its matches confident, rather than diluted across genres the system will rarely encounter.
 
-| Profile      | Description                                                 |
-|--------------|-------------------------------------------------------------|
-| `house`      | Deep bass emphasis, steady mid kick, treble for hi-hats     |
-| `trance`     | Elevated mids, strong highs for synth leads                 |
-| `electronic` | Balanced across frequencies with detail emphasis            |
-| `rap`        | Heavy sub-bass (kick), focused low-mids (punch)             |
-| `hyphy`      | Aggressive sub-bass, bright mids, punchy treble             |
-| `r&b`        | Warm low-mids, vocal-focused mids, smooth treble            |
-| `rock`       | Full-range emphasis, strong mid-bass, treble cymbals        |
-| `generic`    | Flat profile for unknown or mixed content (default fallback)|
-| `classical`  | Wide dynamic range, mid and treble detail emphasis          |
-| `ambient`    | Smooth, subtle reactivity with slight bass boost            |
-| `pop`        | Radio-friendly balance with treble emphasis                 |
-| `metal`      | Aggressive full-range, emphasized mids and treble           |
+| Profile         | Description                                                                      |
+|-----------------|----------------------------------------------------------------------------------|
+| `house`         | Deep bass emphasis, steady mid kick, treble for hi-hats                          |
+| `tech_house`    | Punchy low-end, clipped claps, tight hats, and steady 4/4 pressure               |
+| `peak_time`     | Festival-ready kick, bright tops, and no patience for low-energy lanes           |
+| `hardgroove`    | Rolling tribal percussion, fast low-end groove, and busy hats that want motion   |
+| `uk_garage`     | Swinging kick-snare, vocal chops, and crisp tops around the 130 pocket           |
+| `breaks`        | Broken-beat energy, syncopated mids, and sharp hats with higher tempo tolerance  |
+| `trance`        | Elevated mids, strong highs for synth leads, reactive bass                       |
+| `psytrance`     | Relentless rolling kick, psychedelic mids, and hyper-detailed tops               |
+| `hard_techno`   | Punishing kick, clipped industrial mids, and high-BPM insistence                 |
+| `hardstyle`     | Distorted/pitched kick, reverse-bass sweep, and euphoric screech leads           |
+| `drum_and_bass` | Fast break transients, subs, and bright hats at full sprint                      |
+| `dubstep`       | Half-time wobble bass, scooped growl mids, and sparse syncopated hits            |
+| `fire_dj`       | High-energy wide-tempo profile with heavy kick, active hats, and synth-mid drive |
+| `electronic`    | Balanced across all frequencies with emphasis on detail (broad catch-all)        |
+| `chillstep`     | Slow electronic groove: sub-bass kick, atmospheric pads, soft hi-hats            |
+| `ambient`       | Smooth, subtle reactivity with slight bass emphasis                              |
+| `rap`           | Heavy sub-bass (808 kick), sustained vocal presence, moderate treble             |
+| `hyphy`         | Aggressive sub-bass, sustained hype-vocal chops, bright treble                   |
+| `r&b`           | Warm low-mids, sustained vocal-forward mids, smooth low-noise treble             |
+| `generic`       | Balanced profile for unknown or mixed content (default fallback)                 |
 
 **Switch profiles with `Alt+A` (next) / `Alt+Shift+A` (previous)** — profiles cycle with wraparound.
 
 **Set default profile in config:** `[audio] profile = "house"`
+
+### Where these numbers come from
+
+Each profile carries more than a frequency-range guess: a BPM prior, a target
+spectral centroid and zero-crossing rate, an expected onset density, and a
+64-band spectral fingerprint that the Auto VJ profile recommender compares
+against live audio via cosine similarity. Those targets are synthesized from
+published music-information-retrieval research rather than invented by
+ear — grounded in AcousticBrainz's per-genre spectral descriptor corpus, the
+GTZAN genre dataset (Tzanetakis & Cook, 2002), the FMA dataset (Defferrard et
+al., 2017 — 106,000+ tracks across 161 genres), and EDM-specific
+classification literature (Sturm 2012; Bonnin & Jannach 2014; Schedl et al.
+2018) that characterizes house/techno/trance/DnB and related styles by their
+sub-bass-to-treble energy distribution. See
+`tools/gen_spectral_fingerprints.py` for the synthesis methodology and the
+full acoustic reasoning behind each profile.
 
 Each profile independently tunes:
 - FFT frequency band analysis (bass/mid/treble split points)

@@ -1,4 +1,4 @@
-"""Generate spectral fingerprints for all 22 AudioProfiles using OpenAI.
+"""Generate spectral fingerprints for AudioProfiles using OpenAI.
 
 One-time synthesis script.  Calls gpt-4o with a detailed prompt grounded in
 MIR literature (AcousticBrainz, GTZAN, FMA, EDM classification papers) to
@@ -133,24 +133,37 @@ _PROFILE_META: dict[str, dict] = {
             "1–5 kHz; consistent hi-hat noise 8–16 kHz; high spectral density overall."
         ),
     },
-    "rock": {
-        "name": "Rock",
-        "bpm": "110–138",
+    "hardstyle": {
+        "name": "Hardstyle",
+        "bpm": "145–165",
         "acoustic_notes": (
-            "Live band: guitar power-chord energy 80–600 Hz and 1–5 kHz presence; "
-            "snare crack 200–400 Hz with room 1–3 kHz; cymbals 5–16 kHz; "
-            "bass guitar 40–200 Hz; much weaker sub-bass than electronic; "
-            "mid-heavy spectrum from distorted guitars."
+            "Heavily distorted, often pitch-bent kick with wide harmonic spread "
+            "50–300 Hz (not clean sub-bass like house/techno — distortion pushes "
+            "energy well into the low-mids); 'reverse bass' sweep leading into each "
+            "kick adds continuous low-mid energy 150–600 Hz; aggressive 'screech' "
+            "synth leads and euphoric melodic leads dominate 1.5–4 kHz; wall-of-sound "
+            "compression keeps energy elevated across nearly the whole spectrum, "
+            "similar in continuity to metal but from synthesized/distorted electronic "
+            "sources; hi-hats and crash cymbals in builds add 6–12 kHz presence; "
+            "high spectral centroid and high ZCR from pervasive distortion, comparable "
+            "to hard techno but pushed further by the screech-lead register."
         ),
     },
-    "metal": {
-        "name": "Metal / Extreme",
-        "bpm": "134–170",
+    "dubstep": {
+        "name": "Dubstep",
+        "bpm": "138–142 (produced/tagged tempo; perceived half-time feel)",
         "acoustic_notes": (
-            "Extreme: guitar wall with distortion adds continuous 80–5000 Hz energy; "
-            "palm mutes emphasise 80–200 Hz; double-kick at 50–100 Hz (less sub than "
-            "electronic); ride/crash cymbals 6–16 kHz; high ZCR from distortion; "
-            "very high spectral centroid 3000–4500 Hz typical in GTZAN/FMA analysis."
+            "Defined by sparse, syncopated rhythm rather than continuous 4/4 — "
+            "produced/tagged at ~140 BPM but the audible pulse (snare on the "
+            "half-time backbeat, huge bass hits) feels like ~70 BPM. Deep sub-bass "
+            "'wobble' (LFO-modulated bass) dominates 30–100 Hz; aggressive mid-range "
+            "'growl'/'screech' bass texture spans a wide low-mid band 100–600 Hz with "
+            "complex distorted harmonic content; scooped upper-mids (1.5–4 kHz) is a "
+            "genre hallmark — noticeably less presence here than trance/psytrance; "
+            "snare snap sits around 200–400 Hz; sparse hi-hats/cymbal shimmer in verses "
+            "add modest high-treble energy; low onset density relative to 4/4 club "
+            "genres given the sparse/syncopated hit pattern; moderate-high ZCR from "
+            "the distorted growl-bass texture."
         ),
     },
     "fire_dj": {
@@ -175,10 +188,12 @@ _PROFILE_META: dict[str, dict] = {
         "name": "Rap / Hip-Hop",
         "bpm": "70–100",
         "acoustic_notes": (
-            "Heavy 808/sub kick 30–80 Hz; mid kick punch 80–150 Hz; rap vocals "
-            "emphasise 200–3000 Hz; hi-hats relatively subdued 6–12 kHz; "
-            "low spectral centroid; strong sub dominance; AcousticBrainz shows "
-            "hip-hop centroids typically 800–1200 Hz."
+            "Heavy 808/sub kick 30–80 Hz; mid kick punch 80–150 Hz; rap vocals are "
+            "a SUSTAINED (not transient) signal emphasising 200–3000 Hz — the "
+            "fingerprint should show a broad, continuous plateau across that range "
+            "rather than a choppy percussion-style peak; hi-hats relatively subdued "
+            "6–12 kHz; low spectral centroid; strong sub dominance; AcousticBrainz "
+            "shows hip-hop centroids typically 800–1200 Hz."
         ),
     },
     "hyphy": {
@@ -186,17 +201,23 @@ _PROFILE_META: dict[str, dict] = {
         "bpm": "90–110",
         "acoustic_notes": (
             "Aggressive Oakland hip-hop: heavier bass than rap 30–100 Hz; "
-            "punchy mid synth hits 200–1500 Hz; hype vocal chops 500–3000 Hz; "
-            "bright hats and snare 4–12 kHz; more treble presence than classic rap."
+            "punchy mid synth hits 200–1500 Hz; hype vocal chops are a SUSTAINED "
+            "signal spanning 500–3000 Hz — broader and brighter than rap's vocal "
+            "plateau but still continuous, not choppy; bright hats and snare "
+            "4–12 kHz; more treble presence than classic rap."
         ),
     },
     "r&b": {
         "name": "R&B / Soul",
         "bpm": "75–100",
         "acoustic_notes": (
-            "Warm: smooth bass 40–150 Hz; vocal-forward 200–3000 Hz; "
-            "piano/keys add harmonic content 100–2000 Hz; soft hi-hats 6–10 kHz; "
-            "very low ZCR (smooth not noisy); low spectral centroid ~1400 Hz; "
+            "Warm: smooth bass 40–150 Hz; vocal-forward 200–3000 Hz is the most "
+            "SUSTAINED vocal presence of the three vocal-forward genres — the "
+            "fingerprint should show the broadest, steadiest mid-band plateau of "
+            "the set (150 Hz–3.2 kHz), reflecting continuous, not choppy, vocal "
+            "and harmonic content; piano/keys add harmonic content 100–2000 Hz; "
+            "soft hi-hats 6–10 kHz; very low ZCR (smooth not noisy) — the lowest "
+            "of the three vocal genres; low spectral centroid ~1400 Hz; "
             "low onset density — laid-back grooves."
         ),
     },
@@ -207,16 +228,6 @@ _PROFILE_META: dict[str, dict] = {
             "Flat catch-all: approximately equal energy distribution across all bands "
             "with slight bass emphasis; represents a balanced neutral starting point "
             "without strong genre bias in any frequency region."
-        ),
-    },
-    "classical": {
-        "name": "Classical / Orchestral",
-        "bpm": "60–160 (variable)",
-        "acoustic_notes": (
-            "Wide dynamic range; double-bass/cello at 40–250 Hz; violin/viola 200–4000 Hz; "
-            "brass 80–2000 Hz; woodwind 200–4000 Hz; cymbal/triangle 4–16 kHz; "
-            "NO electronic sub-bass below 50 Hz; high variability; AcousticBrainz "
-            "shows classical spectral centroids 1800–2500 Hz with high spectral spread."
         ),
     },
     "ambient": {
@@ -237,16 +248,6 @@ _PROFILE_META: dict[str, dict] = {
             "soft female vocal or vocal chops 200–2500 Hz; soft hi-hats 6–10 kHz; "
             "higher treble than pure ambient but lower than club genres; "
             "centroid ~900 Hz reflecting atmospheric and bass-dominant balance."
-        ),
-    },
-    "pop": {
-        "name": "Pop",
-        "bpm": "95–125",
-        "acoustic_notes": (
-            "Radio-balanced: kick/bass 40–150 Hz; vocal presence 200–3500 Hz prominent; "
-            "guitar/synth texture 500–4000 Hz; produced hi-hats 6–14 kHz; "
-            "compressed, wide mix — FMA/GTZAN pop shows centroid ~1800 Hz; "
-            "high intelligibility means vocal band (1–3 kHz) is consistently strong."
         ),
     },
 }
