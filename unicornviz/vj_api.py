@@ -70,6 +70,7 @@ class VJApi:
     def __init__(self, app: App) -> None:
         self._app = app
         self._key_handlers: dict[str, Callable[[int, int], 'str | None | bool']] = {}
+        self._midi_action_registry: dict[str, list[tuple[str, str]]] = {}
 
     @property
     def ctx(self) -> moderngl.Context | None:
@@ -1080,6 +1081,19 @@ class VJApi:
         hint reuse the open port.  Returns True on success.
         """
         return self._app.midi_send_output(str(port_hint), list(message))
+
+    def register_midi_actions(self, section: str, actions: list[tuple[str, str]]) -> None:
+        """Register additional MIDI-bindable actions from a drop-in, organized by section.
+
+        Drop-ins call this once after startup so their actions appear in the MIDI
+        Learn modal alongside built-in actions.  *section* is the group header
+        label; *actions* is a list of ``(action_name, display_label)`` tuples.
+        """
+        self._midi_action_registry[str(section)] = [(str(a), str(lbl)) for a, lbl in actions]
+
+    def get_registered_midi_actions(self) -> dict[str, list[tuple[str, str]]]:
+        """Return all drop-in registered MIDI actions keyed by section name."""
+        return dict(self._midi_action_registry)
 
     def toggle_control_room(self) -> tuple[bool, str]:
         """Toggle the operator control-room window."""
