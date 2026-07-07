@@ -333,18 +333,24 @@ class Overlays:
         (0.98, 0.96, 0.72),
     ]
 
+    # A fully-loaded drop-in directory registers a section per drop-in; capping
+    # each help-overlay tab at this many headings keeps every section reachable
+    # (previously excess sections silently fell off the bottom of the columns).
+    HELP_SECTIONS_PER_TAB = 10
+
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
             'Help Usage',
             [
                 ('Tab', 'Toggle section/icon focus'),
-                ('Shift+-', 'Collapse all sections'),
-                ('Shift+=', 'Expand all sections'),
-                ('Arrow keys', 'Move section focus'),
+                ('PageUp / PageDown', 'Switch help tab (page)'),
+                ('Shift+-', 'Collapse all sections (all tabs)'),
+                ('Shift+=', 'Expand all sections (all tabs)'),
+                ('Arrow keys', 'Move section focus (this tab)'),
                 ('H / ?', 'Toggle help overlay'),
                 ('Shift+H', 'Notifications on/off'),
                 ('Enter', 'Toggle focused section'),
-                ('0 - 9', 'Toggle section 1-10'),
+                ('0 - 9', 'Toggle section 1-10 (this tab)'),
             ],
         ),
         (
@@ -741,6 +747,8 @@ class Overlays:
         self._help_collapsed: dict[str, bool] = {}
         self._help_focus_region: str = 'sections'
         self._help_focus_idx: int = 0
+        self._help_tab_idx: int = 0
+        self._help_tab_rects: list[tuple[int, float, float, float, float]] = []
         self._help_icon_focus_idx: int = 0
         self._help_icon_hover_idx: int = -1
         self._help_icon_hover_pos: tuple[float, float] | None = None
@@ -4531,8 +4539,20 @@ void main() {
         right_w = x + w - right_x - 14.0
         right_h = left_h
 
+        # ── tab bar (paginates sections so a fully-loaded drop-in dir stays
+        # navigable instead of overflowing silently off the bottom) ─────────
+        groups = self._help_tab_groups()
+        self._help_tab_idx = max(0, min(self._help_tab_idx, len(groups) - 1))
+        if len(groups) > 1:
+            tab_bar_h = 34.0 * help_scale
+            self._draw_help_tab_bar(left_x, left_y, left_w, tab_bar_h, groups, help_scale)
+            left_y += tab_bar_h + 6.0
+            left_h -= tab_bar_h + 6.0
+        else:
+            self._help_tab_rects = []
+
         # ── section cards ─────────────────────────────────────────────────
-        sections = self._iter_help_sections()
+        sections = groups[self._help_tab_idx] if groups else []
         if sections:
             self._help_focus_idx = max(0, min(self._help_focus_idx, len(sections) - 1))
 
@@ -4665,6 +4685,55 @@ void main() {
                 color=(1.0, 0.62, 0.62, 0.94),
             )
 
+    def _draw_help_tab_bar(
+        self,
+        left_x: float,
+        left_y: float,
+        left_w: float,
+        bar_h: float,
+        groups: list[list[tuple[str, list[tuple[str, str]]]]],
+        help_scale: float,
+    ) -> None:
+        """Draw the help-section tab strip; one tab per page of sections."""
+        self._help_tab_rects = []
+        n = len(groups)
+        gap = 6.0
+        tab_w = min(64.0 * help_scale, (left_w - (n - 1) * gap) / n)
+        tab_scale = 1.7 * help_scale
+        active = self._help_tab_idx
+        tx = left_x
+        for i in range(n):
+            accent = self.DYNAMIC_THEME_CYCLE[i % len(self.DYNAMIC_THEME_CYCLE)]
+            is_active = i == active
+            if is_active:
+                bg = (accent[0] * 0.30, accent[1] * 0.30, accent[2] * 0.30, 0.90)
+            else:
+                bg = (0.06, 0.10, 0.18, 0.68)
+            self._draw_rect(tx, left_y, tab_w, bar_h, bg)
+            if is_active:
+                self._draw_rect(tx, left_y + bar_h - 3.0, tab_w, 3.0, (accent[0], accent[1], accent[2], 0.95))
+            label = str(i + 1)
+            tcol = (1.0, 0.96, 0.68, 1.0) if is_active else (0.72, 0.82, 0.94, 0.85)
+            self._draw_text(
+                label,
+                tx + (tab_w - len(label) * 8.0 * tab_scale) * 0.5,
+                left_y + (bar_h - 8 * tab_scale) * 0.5,
+                scale=tab_scale,
+                color=tcol,
+            )
+            self._help_tab_rects.append((i, tx, left_y, tab_w, bar_h))
+            tx += tab_w + gap
+
+        hint = f'Page {active + 1}/{n} — PageUp/PageDown'
+        hint_scale = 1.5 * help_scale
+        self._draw_text(
+            hint,
+            tx + 10.0,
+            left_y + (bar_h - 8 * hint_scale) * 0.5,
+            scale=hint_scale,
+            color=(0.70, 0.86, 1.0, 0.82),
+        )
+
     def _iter_help_sections(self) -> list[tuple[str, list[tuple[str, str]]]]:
         """Return merged core + dynamic help sections in render order."""
         sections: list[tuple[str, list[tuple[str, str]]]] = []
@@ -4690,6 +4759,46 @@ void main() {
             if entries:
                 sections.append((section, list(entries)))
         return sections
+
+    def _help_tab_groups(self) -> list[list[tuple[str, list[tuple[str, str]]]]]:
+        """Paginate merged help sections into tabs of <= HELP_SECTIONS_PER_TAB."""
+        sections = self._iter_help_sections()
+        if not sections:
+            return [[]]
+        size = self.HELP_SECTIONS_PER_TAB
+        return [sections[i:i + size] for i in range(0, len(sections), size)]
+
+    def _current_help_sections(self) -> list[tuple[str, list[tuple[str, str]]]]:
+        """Return the section list for the active help tab."""
+        groups = self._help_tab_groups()
+        idx = max(0, min(self._help_tab_idx, len(groups) - 1))
+        return groups[idx]
+
+    def help_tab_count(self) -> int:
+        """Return the number of help tabs (pages of <= HELP_SECTIONS_PER_TAB sections)."""
+        return len(self._help_tab_groups())
+
+    def help_tab_index(self) -> int:
+        """Return the active help tab index, clamped to the current tab count."""
+        return max(0, min(self._help_tab_idx, self.help_tab_count() - 1))
+
+    def set_help_tab(self, index: int) -> bool:
+        """Select a help tab by index (clamped); resets section focus to the top."""
+        n = self.help_tab_count()
+        if n <= 0:
+            return False
+        self._help_tab_idx = max(0, min(int(index), n - 1))
+        self._help_focus_idx = 0
+        return True
+
+    def move_help_tab(self, delta: int) -> bool:
+        """Move the active help tab by delta (wraps); resets section focus to the top."""
+        n = self.help_tab_count()
+        if n <= 1:
+            return False
+        self._help_tab_idx = (self._help_tab_idx + int(delta)) % n
+        self._help_focus_idx = 0
+        return True
 
     def _help_theme_color(self, section: str) -> tuple[float, float, float]:
         """Return accent color for a help section."""
@@ -4748,8 +4857,12 @@ void main() {
             if name not in self._help_collapsed:
                 # Start with only the top three core sections expanded.
                 self._help_collapsed[name] = name not in default_expanded
-        if valid:
-            self._help_focus_idx = max(0, min(self._help_focus_idx, len(valid) - 1))
+
+        n_tabs = self.help_tab_count()
+        if n_tabs:
+            self._help_tab_idx = max(0, min(self._help_tab_idx, n_tabs - 1))
+        cur = self._current_help_sections()
+        self._help_focus_idx = max(0, min(self._help_focus_idx, len(cur) - 1)) if cur else 0
 
     def _help_icon_entries(self) -> list[dict[str, object]]:
         """Return the static help icon entries."""
@@ -4807,7 +4920,10 @@ void main() {
         return self.toggle_help_focus_section()
 
     def handle_help_mouse_click(self, x: float, y: float) -> bool:
-        """Handle mouse clicks on the help icon rail."""
+        """Handle mouse clicks on the help tab bar or icon rail."""
+        for i, bx, by, bw, bh in self._help_tab_rects:
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                return self.set_help_tab(i)
         idx = self._help_icon_hit_test(x, y)
         if idx < 0:
             return False
@@ -4950,11 +5066,13 @@ void main() {
                 'entries': entries,
             }
         if self._show_help:
-            sections_list = self._iter_help_sections()
+            sections_list = self._current_help_sections()
             focus = max(0, min(self._help_focus_idx, len(sections_list) - 1))
             return {
                 'type': 'help_overlay',
                 'title': 'HELP OVERLAY',
+                'tab_index': self.help_tab_index(),
+                'tab_count': self.help_tab_count(),
                 'section_count': len(sections_list),
                 'focus_section': sections_list[focus][0] if sections_list else '-',
                 'focus_idx': focus,
@@ -4986,10 +5104,11 @@ void main() {
         return self._flash_enabled
 
     def help_section_count(self) -> int:
-        return len(self._iter_help_sections())
+        """Return the section count for the active help tab (not the full list)."""
+        return len(self._current_help_sections())
 
     def toggle_help_section(self, index: int) -> bool:
-        sections = self._iter_help_sections()
+        sections = self._current_help_sections()
         if index < 0 or index >= len(sections):
             return False
         name, _entries = sections[index]
@@ -4998,6 +5117,7 @@ void main() {
         return True
 
     def set_all_help_sections_collapsed(self, collapsed: bool) -> None:
+        """Collapse/expand every section across every help tab."""
         for name, _entries in self._iter_help_sections():
             self._help_collapsed[name] = collapsed
 
