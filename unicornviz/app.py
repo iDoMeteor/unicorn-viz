@@ -2256,6 +2256,7 @@ void main() {
         entries.append(item('Random Effects Mode', K.SDLK_r, 0, 'action', 'R'))
         entries.append(item('Take Screenshot', K.SDLK_s, 0, 'action', 'S'))
         entries.append(item('Replay Splash', K.SDLK_u, 0, 'action', 'U'))
+        entries.append(item('Disable Effect & Skip', K.SDLK_DELETE, 0, 'action', 'Delete'))
 
         # Drop-in features — generated from the help registry (not hard-coded).
         for section, dropin_items in self._context_menu_dropin_sections():
@@ -2551,6 +2552,7 @@ void main() {
         'speed_random': 'Speed Random Toggle',
         'reactivity_random': 'Reactivity Random Toggle',
         'zoom_random': 'Zoom Random Toggle',
+        'disable_and_advance': 'Disable Effect & Skip',
     }
 
     def config_editor_hotkey_rows(self) -> list[dict[str, object]]:
@@ -5733,6 +5735,44 @@ void main() {
     def unlock_effect(self) -> None:
         """Clear any effect lock."""
         self._effect_lock = None
+
+    def disable_current_effect_and_advance(self) -> str:
+        """Delete-key action: disable the active effect and jump to a new one.
+
+        If the active effect is ProjectM (duck-typed: exposes
+        current_preset_path/set_presets_enabled/next_preset), "disable"
+        applies to the *current preset* and playback advances to the next
+        preset - staying within ProjectM rather than leaving it. Any other
+        effect is disabled from rotation (same persisted set the effects
+        browser's Space toggle uses) and playback advances to the next
+        *enabled* effect. Clears an effect lock first if it points at the
+        effect being disabled, so the lock-redirect in _switch_effect can't
+        immediately bounce back to the effect we just left.
+        """
+        effect = self._current_effect
+        if effect is None:
+            return 'No active effect'
+
+        if (hasattr(effect, 'current_preset_path')
+                and hasattr(effect, 'set_presets_enabled')
+                and hasattr(effect, 'next_preset')):
+            current_path = str(getattr(effect, 'current_preset_path', '') or '')
+            if not current_path:
+                return 'ProjectM: no active preset to disable'
+            effect.set_presets_enabled([current_path], False)
+            label = effect.next_preset()
+            return f'Preset disabled -> {label}' if label else 'Preset disabled (none remaining)'
+
+        name = str(getattr(effect, 'NAME', effect.__class__.__name__))
+        if self._effect_lock == name:
+            self.unlock_effect()
+        self.set_effect_enabled(name, False)
+        playlist = self._playlist
+        if playlist is None:
+            return f'{name}: disabled'
+        cls = playlist.advance()  # skips disabled effects in both modes
+        self.goto_effect(cls)
+        return f'{name}: disabled -> {cls.NAME}'
 
     # -- Effect enable/disable (persisted, excluded from auto-rotation) -------
 

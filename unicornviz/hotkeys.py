@@ -209,6 +209,7 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'speed_random': (sdl2.SDLK_F6, 0),
     'reactivity_random': (sdl2.SDLK_F7, 0),
     'zoom_random': (sdl2.SDLK_z, sdl2.KMOD_ALT),
+    'disable_and_advance': (sdl2.SDLK_DELETE, 0),
 }
 
 
@@ -1545,6 +1546,11 @@ class HotkeyHandler:
             p.toggle_random()
             mode = p.mode.upper()
             o.flash_message(f"Playlist: {mode}", 1.5)
+
+        elif sym == sdl2.SDLK_DELETE:
+            msg = a.disable_current_effect_and_advance()
+            if msg:
+                o.flash_message(msg, 1.8)
 
         elif sym == sdl2.SDLK_PLUS or sym == sdl2.SDLK_EQUALS:
             effect = a.current_effect

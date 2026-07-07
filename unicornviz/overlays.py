@@ -357,6 +357,7 @@ class Overlays:
                 ('Alt+Number', 'Jump #31-40'),
                 ('n / Right', 'Next effect'),
                 ('p / Left', 'Prev effect'),
+                ('Delete', 'Disable current effect & skip (ProjectM: disable preset)'),
                 ('Right Click', 'Open context menu'),
                 ('ESC', 'Quit'),
                 ('u', 'Replay splash'),
