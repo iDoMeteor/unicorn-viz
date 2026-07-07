@@ -801,12 +801,6 @@ class HotkeyHandler:
             if sym == sdl2.SDLK_TAB:
                 if o.toggle_help_focus_region():
                     return
-            if sym == sdl2.SDLK_PAGEUP:
-                if o.move_help_tab(-1):
-                    return
-            elif sym == sdl2.SDLK_PAGEDOWN:
-                if o.move_help_tab(1):
-                    return
             if focus_region == 'icons':
                 if sym in (sdl2.SDLK_LEFT, sdl2.SDLK_UP):
                     if o.move_help_icon_focus(-1):

@@ -6,20 +6,18 @@ silently: sections past what fit in the two-column layout were simply never
 drawn and were unreachable by keyboard (digit toggle / arrow focus only ever
 walked the merged list, not what was visible). This paginates the merged
 section list into tabs of at most Overlays.HELP_SECTIONS_PER_TAB (10)
-headings each, switchable with PageUp/PageDown, so every section stays
-reachable regardless of how many drop-ins are installed.
+headings each, so every section stays reachable regardless of how many
+drop-ins are installed.
+
+Tabs switch via mouse wheel (App._handle_help_wheel_scroll), not PageUp/
+PageDown: webcam-01 claims those keys globally (camera switch) ahead of the
+help-overlay dispatch in HotkeyHandler.handle(), so a keyboard binding here
+would silently do nothing whenever the webcam drop-in is loaded (the default).
 """
 from __future__ import annotations
 
-from pathlib import Path
-
-import sdl2
-
 from unicornviz.app import App
-from unicornviz.hotkeys import HotkeyHandler
 from unicornviz.overlays import Overlays
-from unicornviz.playlist import Playlist
-from unicornviz.runtime_state import RuntimeStateStore
 
 
 def _section(name: str) -> tuple[str, list[tuple[str, str]]]:
@@ -175,81 +173,37 @@ def test_handle_help_mouse_click_switches_tab() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# End-to-end: PageUp/PageDown dispatch through HotkeyHandler.handle()
+# Mouse wheel drives tab switching (App._handle_help_wheel_scroll)
 # --------------------------------------------------------------------------- #
 
-class _Audio:
-    def get_reactivity(self) -> float:
-        return 1.0
-
-
-class _HelpOverlay:
-    help_visible = True
-    midi_selector_visible = False
-    name_overlay_visible = False
-    controller_help_modal_visible = False
-    webcam_editor_modal_visible = False
-    audio_selector_visible = False
-    effects_browser_visible = False
-    presets_visible = False
-    projectm_manager_visible = False
-    context_menu_open = False
-    config_editor_open = False
-
+class _WheelOverlay:
     def __init__(self) -> None:
         self.moves: list[int] = []
-
-    def note_help_activity(self) -> None:
-        return
-
-    def help_focus_region(self) -> str:
-        return 'sections'
 
     def move_help_tab(self, delta: int) -> bool:
         self.moves.append(delta)
         return True
 
-    def flash_message(self, *_a, **_kw) -> None:
-        return
 
-
-class _VJApi:
-    def mark_user_action(self, _kind: str) -> None:
-        return
-
-    def key_handler_items(self):
-        return []
-
-
-def _fx(name: str):
-    return type(name, (), {'NAME': name, 'TAGS': [], 'parameters': {}})
-
-
-class _StubCfg:
-    def get(self, *_keys, default=None):
-        return default
-
-
-def test_pageup_pagedown_dispatch_to_move_help_tab(tmp_path: Path) -> None:
-    effects = [_fx('A')]
-    playlist = Playlist(effects, _StubCfg())
-
+def _app_for_wheel() -> App:
     app = object.__new__(App)
-    app._runtime_state = RuntimeStateStore(tmp_path / 'state.json')
-    app._disabled_effects = set()
-    app._playlist = playlist
-    app._effect_lock = None
-    app._overlays = None
-    app._current_effect = playlist.current()
-    app._auto_vj = None
-    app._keystroke_logger = None
-    app.vj_api = _VJApi()
-    app.hotkey_overrides = lambda: {}
+    app._overlays = _WheelOverlay()
+    return app
 
-    overlay = _HelpOverlay()
-    handler = HotkeyHandler(app, playlist, overlay, _Audio())
 
-    handler.handle(sdl2.SDLK_PAGEDOWN, 0)
-    handler.handle(sdl2.SDLK_PAGEUP, 0)
+def test_wheel_scroll_up_moves_to_previous_tab() -> None:
+    app = _app_for_wheel()
+    app._handle_help_wheel_scroll(1)  # scroll up
+    assert app._overlays.moves == [-1]
 
-    assert overlay.moves == [1, -1]
+
+def test_wheel_scroll_down_moves_to_next_tab() -> None:
+    app = _app_for_wheel()
+    app._handle_help_wheel_scroll(-1)  # scroll down
+    assert app._overlays.moves == [1]
+
+
+def test_wheel_scroll_noop_is_ignored() -> None:
+    app = _app_for_wheel()
+    app._handle_help_wheel_scroll(0)
+    assert app._overlays.moves == []

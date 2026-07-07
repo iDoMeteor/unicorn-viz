@@ -343,7 +343,7 @@ class Overlays:
             'Help Usage',
             [
                 ('Tab', 'Toggle section/icon focus'),
-                ('PageUp / PageDown', 'Switch help tab (page)'),
+                ('Mouse Wheel', 'Switch help tab (page)'),
                 ('Shift+-', 'Collapse all sections (all tabs)'),
                 ('Shift+=', 'Expand all sections (all tabs)'),
                 ('Arrow keys', 'Move section focus (this tab)'),
@@ -4724,7 +4724,7 @@ void main() {
             self._help_tab_rects.append((i, tx, left_y, tab_w, bar_h))
             tx += tab_w + gap
 
-        hint = f'Page {active + 1}/{n} — PageUp/PageDown'
+        hint = f'Page {active + 1}/{n} — scroll wheel to switch'
         hint_scale = 1.5 * help_scale
         self._draw_text(
             hint,
