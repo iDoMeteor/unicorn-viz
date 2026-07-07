@@ -739,6 +739,8 @@ class Overlays:
         self._help_tab_rects: list[tuple[int, float, float, float, float]] = []
         self._help_right_tab_idx: int = 0
         self._help_right_tab_rects: list[tuple[int, float, float, float, float]] = []
+        # Which pane PageUp/PageDown currently advances; see move_help_page().
+        self._help_active_pane: str = 'left'
         self._help_icon_focus_idx: int = 0
         self._help_icon_hover_idx: int = -1
         self._help_icon_hover_pos: tuple[float, float] | None = None
@@ -4940,6 +4942,62 @@ void main() {
         if n <= 1:
             return False
         self._help_right_tab_idx = (self._help_right_tab_idx + int(delta)) % n
+        return True
+
+    def move_help_page(self, delta: int) -> bool:
+        """Move PageUp/PageDown through a single combined left+right tab
+        sequence instead of both panes independently.
+
+        PageDown: left tab 1 -> ... -> left tab N -> right tab 1 -> ... ->
+        right tab M -> wraps back to left tab 1. PageUp is the exact
+        reverse (left tab 1 -> right tab M -> ... -> right tab 1 -> left
+        tab N -> ...). Only one pane's displayed tab changes per keypress;
+        the other pane stays exactly where it was left.
+
+        Returns False only when neither pane has more than one tab (nothing
+        to page through at all), so the keypress can fall through to a
+        drop-in bound to the same keys.
+        """
+        n = self.help_tab_count()
+        m = self.help_right_tab_count()
+        if n <= 1 and m <= 1:
+            return False
+
+        forward = delta > 0
+        left_changed = False
+        if forward:
+            if self._help_active_pane == 'left':
+                if self._help_tab_idx < n - 1:
+                    self._help_tab_idx += 1
+                    left_changed = True
+                else:
+                    self._help_active_pane = 'right'
+                    self._help_right_tab_idx = 0
+            else:
+                if self._help_right_tab_idx < m - 1:
+                    self._help_right_tab_idx += 1
+                else:
+                    self._help_active_pane = 'left'
+                    self._help_tab_idx = 0
+                    left_changed = True
+        else:
+            if self._help_active_pane == 'left':
+                if self._help_tab_idx > 0:
+                    self._help_tab_idx -= 1
+                    left_changed = True
+                else:
+                    self._help_active_pane = 'right'
+                    self._help_right_tab_idx = m - 1
+            else:
+                if self._help_right_tab_idx > 0:
+                    self._help_right_tab_idx -= 1
+                else:
+                    self._help_active_pane = 'left'
+                    self._help_tab_idx = n - 1
+                    left_changed = True
+
+        if left_changed:
+            self._help_focus_idx = 0
         return True
 
     def _help_text_max_chars(self, avail_w: float, scale: float) -> int:
