@@ -264,8 +264,13 @@ parked for v2.
   14-bit) decoded to `deck.filter`. 52 tests green. UI filter-bar indicator was
   written but lost to a concurrent `ui.py` edit (the GL-rebind workstream) —
   re-add once that settles; purely cosmetic, the audio path is complete.
-- [ ] **v2 backlog (not scheduled):** absolute jog scratch, hot-cue/loop pads,
-  FX effect units + paddles, beat-sync via `auto-vj-01`.
+- [x] **Jog scratch (done 2026-07-08, drop-in `ddc2295`).** Platter touch
+  (Note 54) enters scratch; vinyl rotation (CC 34/35, relative) scrubs the
+  playhead forward/reverse via `deck.scratch_touch`/`scratch_move`; a held
+  platter is silent (stopped record); release restores play state.
+  `scratch_scale` tunes samples/tick. 58 tests green.
+- [ ] **v2 backlog (not scheduled):** hot-cue/loop pads, FX effect units +
+  paddles, beat-sync via `auto-vj-01`.
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
