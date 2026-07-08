@@ -1059,6 +1059,29 @@ class VJApi:
             if callable(rm_fn):
                 rm_fn(str(name))
 
+    def midi_add_input_device(self, device_hint: str) -> bool:
+        """Open an additional raw-only MIDI input device (e.g. a second controller).
+
+        Events from it reach raw listeners only (tagged with
+        ``MidiEvent.source == device_hint``) and never drive the primary
+        action/param maps, so a drop-in can decode its own controller while the
+        primary VJ controller keeps working.  Returns True when a port is open.
+        The caller owns cleanup via :meth:`midi_remove_input_device`.
+        """
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return False
+        fn = getattr(m, 'add_input_device', None)
+        return bool(fn(str(device_hint))) if callable(fn) else False
+
+    def midi_remove_input_device(self, device_hint: str) -> None:
+        """Close an aux MIDI input device previously opened for *device_hint*."""
+        m = getattr(self._app, '_midi_manager', None)
+        if m is not None:
+            fn = getattr(m, 'remove_input_device', None)
+            if callable(fn):
+                fn(str(device_hint))
+
     def midi_list_ports(self) -> list[str]:
         """Return available MIDI input port names."""
         try:

@@ -59,6 +59,7 @@ class MidiEvent:
     channel: int       # 0-15
     number: int        # CC number or note number
     value: float       # CC value 0.0-1.0 or note velocity 0.0-1.0
+    source: str = ''   # '' = primary device; else the aux device hint/label
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +184,11 @@ class MidiManager:
         self._listeners: list[Callable[[MidiEvent], None]] = []
         self._named_listeners: dict[str, Callable[[MidiEvent], None]] = {}
         self._midi_ins: list['rtmidi.MidiIn'] = []
+        # Auxiliary raw-only input devices: (hint, MidiIn, port_name).  Their
+        # events reach named listeners only (never the action/param maps), so a
+        # second controller (e.g. a DJ mixer's DDJ-REV1) can be decoded by a
+        # drop-in while the primary controller keeps driving VJ actions.
+        self._aux_ins: list[tuple[str, 'rtmidi.MidiIn', str]] = []
         self._port_names: list[str] = []
         self._port_name = ''
         self._last_maintenance_attempt = 0.0
@@ -292,7 +298,7 @@ class MidiManager:
 
     def maintenance_update(self) -> None:
         """Best-effort hotplug maintenance for reconnect/disconnect handling."""
-        if not _RTMIDI_OK or not self._device_hint:
+        if not _RTMIDI_OK or (not self._device_hint and not self._aux_ins):
             return
 
         now = time.monotonic()
@@ -302,7 +308,12 @@ class MidiManager:
 
         available_ports = list_ports()
         available_lower = {p.lower() for p in available_ports}
+        self._maintain_primary(available_ports, available_lower)
+        self._maintain_aux(available_lower)
 
+    def _maintain_primary(self, available_ports: list[str], available_lower: set[str]) -> None:
+        if not self._device_hint:
+            return
         if self.available:
             missing = [p for p in self._port_names if p.lower() not in available_lower]
             if missing:
@@ -312,10 +323,21 @@ class MidiManager:
                 )
                 self.reopen(self._device_hint)
             return
-
         if self._resolve_target_indices(available_ports, self._device_hint, self._preset):
             if self._open_ports(self._device_hint):
                 log.info('MIDI: reconnected %s', self.active_port_label)
+
+    def _maintain_aux(self, available_lower: set[str]) -> None:
+        for hint, midi_in, name in list(self._aux_ins):
+            if name.lower() in available_lower:
+                continue
+            log.warning('MIDI aux: port disappeared: %s — attempting reconnect', name)
+            try:
+                midi_in.close_port()
+            except Exception:
+                pass
+            self._aux_ins = [t for t in self._aux_ins if t[1] is not midi_in]
+            self.add_input_device(hint)
 
     @staticmethod
     def _normalize_port_name(name: str) -> str:
@@ -407,40 +429,51 @@ class MidiManager:
             return False
 
     def _callback(self, message: tuple[list[int], float], data=None) -> None:
+        # ``data`` is the source tag passed to set_callback: ``None`` for the
+        # primary device, or the aux device hint for a raw-only aux device.
         raw, _delta = message
         if not raw:
             return
         status = raw[0]
         msg_type = status & 0xF0
         channel  = status & 0x0F
+        source = '' if data is None else str(data)
 
         event: MidiEvent | None = None
 
         if msg_type == 0xB0 and len(raw) >= 3:    # CC
-            event = MidiEvent('cc', channel, raw[1], raw[2] / 127.0)
+            event = MidiEvent('cc', channel, raw[1], raw[2] / 127.0, source)
         elif msg_type == 0x90 and len(raw) >= 3:   # Note On
             if raw[2] > 0:
-                event = MidiEvent('note_on', channel, raw[1], raw[2] / 127.0)
+                event = MidiEvent('note_on', channel, raw[1], raw[2] / 127.0, source)
             else:
-                event = MidiEvent('note_off', channel, raw[1], 0.0)
+                event = MidiEvent('note_off', channel, raw[1], 0.0, source)
         elif msg_type == 0x80 and len(raw) >= 3:   # Note Off
-            event = MidiEvent('note_off', channel, raw[1], 0.0)
+            event = MidiEvent('note_off', channel, raw[1], 0.0, source)
 
         if event is None:
             log.debug('MIDI: unhandled raw %s', [hex(b) for b in raw])
             return
 
-        log.debug(
-            'MIDI rx: %s ch=%d num=%d val=%.2f -> action=%s',
-            event.type,
-            event.channel,
-            event.number,
-            event.value,
-            self._note_map.get(event.number) if event.type == 'note_on' else self._cc_map.get(event.number),
-        )
+        if not source:
+            log.debug(
+                'MIDI rx: %s ch=%d num=%d val=%.2f -> action=%s',
+                event.type,
+                event.channel,
+                event.number,
+                event.value,
+                self._note_map.get(event.number) if event.type == 'note_on' else self._cc_map.get(event.number),
+            )
+        else:
+            log.debug(
+                'MIDI rx[%s]: %s ch=%d num=%d val=%.2f',
+                source, event.type, event.channel, event.number, event.value,
+            )
 
         with self._lock:
-            listeners = list(self._listeners)
+            # Aux devices are raw-only: they reach named listeners (drop-in
+            # decoders) but never the plain action-dispatch listeners.
+            listeners = [] if source else list(self._listeners)
             named = list(self._named_listeners.values())
         for fn in listeners:
             try:
@@ -452,6 +485,61 @@ class MidiManager:
                 fn(event)
             except Exception as exc:
                 log.warning('MIDI named listener error: %s', exc)
+
+    def add_input_device(self, device_hint: str) -> bool:
+        """Open an additional *raw-only* input device alongside the primary one.
+
+        Events from this device reach named listeners only (never the action /
+        param maps and never the plain action-dispatch listener), and carry
+        ``MidiEvent.source == device_hint`` so a drop-in can decode a second
+        controller's stream without disturbing the primary VJ controller.
+
+        Idempotent per hint.  Returns True when a matching port is open.
+        """
+        if not _RTMIDI_OK or not device_hint:
+            return False
+        hint = device_hint.lower()
+        if any(src == hint for src, _, _ in self._aux_ins):
+            return True
+        try:
+            ports = list_ports()
+            chosen = self._resolve_target_indices(ports, hint, '')
+            if not chosen:
+                log.warning(
+                    'MIDI aux: no port matching %r — available: %s',
+                    hint, ', '.join(ports) or '(none)',
+                )
+                return False
+            for idx in chosen:
+                midi_in = rtmidi.MidiIn()
+                midi_in.open_port(idx)
+                midi_in.set_callback(self._callback, hint)
+                midi_in.ignore_types(sysex=True, timing=True, active_sense=True)
+                self._aux_ins.append((hint, midi_in, ports[idx]))
+            log.info('MIDI aux: opened %s', ', '.join(ports[i] for i in chosen))
+            return True
+        except Exception as exc:
+            log.warning('MIDI aux: failed to open %r: %s', hint, exc)
+            return False
+
+    def remove_input_device(self, device_hint: str) -> None:
+        """Close and forget any aux device opened for *device_hint*."""
+        hint = device_hint.lower()
+        remaining: list[tuple[str, 'rtmidi.MidiIn', str]] = []
+        for src, midi_in, name in self._aux_ins:
+            if src == hint:
+                try:
+                    midi_in.close_port()
+                except Exception:
+                    pass
+            else:
+                remaining.append((src, midi_in, name))
+        self._aux_ins = remaining
+
+    @property
+    def aux_devices(self) -> list[str]:
+        """Return the port names of the currently-open aux input devices."""
+        return [name for _, _, name in self._aux_ins]
 
     def cc_to_param(self, cc: int) -> str | None:
         return self._cc_map.get(cc)
