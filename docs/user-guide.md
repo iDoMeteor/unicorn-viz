@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-05
+Last updated: 2026-07-07
 
 ## Contents
 
@@ -158,6 +158,7 @@ python -m unicornviz --help
 | `Ctrl+,` / `Ctrl+.` | Reset internal render scale                                  |
 | `E`               | Jump directly to Audio Spectrum / EQ                          |
 | `V`               | Toggle video recording on / off                               |
+| `Delete`          | Disable current effect & skip (ProjectM: disable preset)      |
 | `Tab`             | Toggle Legacy HUD panel                                       |
 | `H`               | Toggle help panel                                             |
 | `A` / `Shift+A`   | Open audio source selector menu                               |
@@ -166,6 +167,26 @@ python -m unicornviz --help
 | `M`               | MIDI device selector                                          |
 | `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
 | `Esc`             | Quit                                                          |
+
+---
+
+## Help Panel Navigation
+
+Press `H` to toggle the help panel. It has two sides:
+
+- **Left pane** — sections (core shortcuts, plus one section per drop-in that
+  registers `HELP_ENTRIES`). Click a section or press Enter/arrows to
+  expand/collapse it. If there are more than 10 sections, they page into tabs
+  (`PageUp` / `PageDown`).
+  - A section with more than 7 entries doesn't grow the card — instead its
+    items page into an inner accordion ("Items 1-7", "8-14", ...). Expanding
+    the section opens the first page and shows a "press Enter to see more
+    items" hint under the title; click a page header (or press Enter again)
+    to cycle to the next page. Only one page is open at a time, and moving
+    focus to another section auto-closes it.
+- **Right pane** — tabbed: `Effects` (the live effect hotkey map, 1-40) is
+  always present; `Post FX` and `Mouse` tabs appear only when a drop-in has
+  registered entries for them. Click a tab to switch.
 
 ---
 
@@ -281,15 +302,6 @@ These controls only take effect while the **Webcam Overlay** drop-in effect is a
 | `KP /`      | Previous webcam effect           |
 | `KP *`      | Next webcam effect               |
 | `KP Enter`  | Toggle webcam effect auto-cycle  |
-| `E`               | Jump directly to Audio Spectrum / EQ                          |
-| `V`               | Toggle video recording on / off                               |
-| `Tab`             | Toggle Legacy HUD panel                                       |
-| `H`               | Toggle help panel                                             |
-| `A` / `Shift+A`   | Open audio source selector menu                               |
-| `Ctrl+A`          | Open audio source selector menu (legacy fallback)             |
-| `M`               | MIDI device selector                                          |
-| `S`               | Save screenshot (`screenshots/unicornviz_YYYYMMDD_HHMMSS.png`)|
-| `Esc`             | Quit                                                          |
 
 ---
 
@@ -549,6 +561,13 @@ Set `SDL_AUDIODRIVER=jack` and configure JACK connections manually.
 ## Logs
 
 Each run writes a timestamped log file under `logs/`.
+
+Pressing `Delete` to disable an effect is logged immediately, and a session
+summary (count + timestamped list) is logged at shutdown. When
+`[logging] level` is not `"NONE"`, the same records are also mirrored live to
+a stamped `logs/deleted-effects_<stamp>.log` file so the record survives a
+crash rather than only existing in memory. This only tracks the
+effect-rotation Delete-key path; ProjectM preset disables are unaffected.
 
 Set the level in `config.toml`:
 

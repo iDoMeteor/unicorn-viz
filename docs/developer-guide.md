@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-18
+Last updated: 2026-07-07
 
 ## Contents
 
@@ -265,6 +265,21 @@ between consecutive FFT frames is compared against a rolling mean + threshold
 `AudioManager.get_audio_data()` is called from the main thread and returns a
 consistent snapshot.
 
+**Reader thread shutdown:** the background reader loop polls
+`stream.read_available` and only calls the blocking `stream.read(blocksize)`
+once enough frames are buffered (sleeping `_READER_POLL_INTERVAL_S` = 10 ms
+otherwise, re-checking `_stop_event` each iteration). This is a deliberate
+workaround, not an optimization: on the ALSA hostapi, `stream.abort()`
+(`Pa_AbortStream`) does not reliably interrupt a `read()` call already
+blocked inside PortAudio, so calling `abort()` from the main thread during
+shutdown could leave the reader thread stuck in a foreign `read()` while the
+stream it references is being torn down — the crash this previously caused
+was an ALSA mmap/buffer error at quit, not a hang. Polling bounds the
+reader's unresponsive window to one poll interval regardless of whether the
+audio source ever produces data, so `abort()`/`close()` only run once the
+reader has actually exited. Do not revert to an unconditional blocking
+`read()` in this loop.
+
 ### ANSI Subsystem
 
 ```
@@ -501,6 +516,20 @@ Guidelines:
    overlay checks PageUp/PageDown ahead of registered drop-in key handlers
    (`HotkeyHandler.handle()`) so it isn't shadowed by a drop-in claiming the
    same keys globally.
+5. A section is never split across multiple top-level cards. If a section has
+   more than `Overlays.HELP_MAX_ITEMS_PER_SECTION` (7) entries, its *items*
+   (not the section) paginate into an inner accordion — "Items 1-7",
+   "8-14", ... — with exactly one item-page open at a time. Expanding a
+   section opens page 0 and shows a "press Enter to see more items" hint
+   under the title when it has more than one page; clicking a page header (or
+   pressing Enter again) cycles to the next page. Moving focus to another
+   section auto-closes any open multi-page accordion. Do not add a
+   competing "split into multiple sections" mechanism — that approach was
+   tried and explicitly rejected in favor of the in-section accordion.
+6. The help overlay's right pane is itself tabbed (`Effects` always present;
+   `Post FX` / `Mouse` appear only when a drop-in has registered entries for
+   them via `_postfx_help_entries` / `_mouse_help_entries`). This is separate
+   from the left pane's per-tab section pagination above.
 
 Discovery path:
 
