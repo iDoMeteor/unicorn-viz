@@ -258,8 +258,14 @@ parked for v2.
   added to `config.full.example.toml` (config.toml left to the owner); drop-in
   registered in `docs/drop-ins.md`; `HELP_ENTRIES` present. Remaining M-4
   polish: HUD `snapshot()` for now-playing, monitor-source guidance in docs.
+- [x] **Color filter (done 2026-07-08, drop-in `a4d46f8`).** `dsp.SweepFilter`
+  bipolar one-knob LPF/HPF (center = bypass, RBJ biquads, geometric cutoff
+  sweep) applied per deck after EQ; REV1 EFFECT FILTER knobs (ch7 CC 23/24,
+  14-bit) decoded to `deck.filter`. 52 tests green. UI filter-bar indicator was
+  written but lost to a concurrent `ui.py` edit (the GL-rebind workstream) —
+  re-add once that settles; purely cosmetic, the audio path is complete.
 - [ ] **v2 backlog (not scheduled):** absolute jog scratch, hot-cue/loop pads,
-  FX paddles, beat-sync via `auto-vj-01`.
+  FX effect units + paddles, beat-sync via `auto-vj-01`.
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
