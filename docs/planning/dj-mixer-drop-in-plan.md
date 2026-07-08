@@ -249,7 +249,7 @@ parked for v2.
   own borderless SDL window (software renderer + streaming texture + throttled
   PIL render thread + deferred teardown, Control Room pattern). Renders both
   decks (waveform + playhead, track, time, pitch %, play/cue, 3-band EQ knobs,
-  channel gain, VU) + centre master + crossfader. `Shift+D` toggles; `Esc`
+  channel gain, VU) + center master + crossfader. `Shift+D` toggles; `Esc`
   closes; left-click toggles a deck. 32 tests green; frame verified headlessly.
 - [x] **M-4 — Integration + docs (done 2026-07-07, main `a6e3a5a`).**
   `_load_dj_mixer_controller_class()` + guarded load site in `app.py` registers
@@ -283,7 +283,7 @@ cross-platform `rtmidi.MidiOut` to the REV1 (the same ownership pattern
   Config-gated (`[dj_mixer].pad_lightshow`, default true). 9 LED tests total.
   **Scope note:** Pioneer's message list exposes LEDs on **buttons + pads**
   only — there are no dedicated VU-meter or jog-ring LEDs on the REV1, so "VU"
-  is realised on the pads. Exact pad **colour** is set by the hardware's active
+  is realized on the pads. Exact pad **color** is set by the hardware's active
   pad mode; we drive on/off (safe regardless of RGB palette). **Hardware
   validation pending** (confirm pads light without a host-mode handshake).
 
