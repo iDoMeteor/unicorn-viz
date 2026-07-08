@@ -232,8 +232,8 @@ enabled = true
 # *active* at boot is controlled by start_enabled).  Uncomment to override.
 # See config.full.example.toml for the full key list.
 # ---------------------------------------------------------------------------
-# [color_grade]
-# start_enabled = true       # passive grade on at boot; Ctrl+Shift+Alt+L toggles
+[color_grade]
+start_enabled = false       # passive grade on at boot; Ctrl+Shift+Alt+L toggles
 # intensity = 0.85
 # default_grade = "random"   # or a look name, e.g. "Neon Rave"
 #
