@@ -245,10 +245,12 @@ parked for v2.
   play/cue. 29 tests green; verified end-to-end against the real core
   `MidiManager` (REV1 drives the engine, APC is ignored). **Remaining: confirm
   polarity/scaling on real hardware.**
-- [ ] **M-3 — Mixer window.** PIL software-rendered two-deck UI (Control Room
-  pattern): track title, waveform overview + playhead, time, pitch %, VU,
-  EQ/filter/crossfader positions. Mouse-interactive so it works without the
-  controller.
+- [x] **M-3 — Mixer window (done 2026-07-07, drop-in `c6acd93`).** `ui.py`:
+  own borderless SDL window (software renderer + streaming texture + throttled
+  PIL render thread + deferred teardown, Control Room pattern). Renders both
+  decks (waveform + playhead, track, time, pitch %, play/cue, 3-band EQ knobs,
+  channel gain, VU) + centre master + crossfader. `Shift+D` toggles; `Esc`
+  closes; left-click toggles a deck. 32 tests green; frame verified headlessly.
 - [ ] **M-4 — Integration + docs.** HUD `snapshot()`, monitor-source guidance,
   `HELP_ENTRIES` for any keyboard toggles, structured docs, register in
   `docs/drop-ins.md`, config skeleton section (commented) in
