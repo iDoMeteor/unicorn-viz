@@ -43,6 +43,7 @@ This is the canonical map for project documentation.
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
 - DJ mixer drop-in plan — `dj-mixer-01` two-deck audio mixer for Pioneer DDJ-REV1 (2026-07-07): [docs/planning/dj-mixer-drop-in-plan.md](planning/dj-mixer-drop-in-plan.md)
 - Active audit tracker: [docs/audits](audits)
+  - Video render pipeline & platform audit (2026-07-08): [docs/audits/2026-07-08-render-pipeline-platform-audit.md](audits/2026-07-08-render-pipeline-platform-audit.md)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-07-01): [docs/audits/2026-07-01-full-system-audit.md](audits/2026-07-01-full-system-audit.md)
   - Full system audit (2026-06-19): [docs/audits/2026-06-19-full-system-audit.md](audits/2026-06-19-full-system-audit.md)
