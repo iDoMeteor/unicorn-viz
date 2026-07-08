@@ -276,9 +276,16 @@ cross-platform `rtmidi.MidiOut` to the REV1 (the same ownership pattern
   (LEDs off on close), config-gated (`[dj_mixer].led_feedback`, default true).
   6 tests via an injected sender. **Hardware validation pending** (polarity is
   trivial; confirm the REV1 accepts the note-on LED convention).
-- [ ] **Lighting Phase 2 — performance-pad RGB, VU meters, jog ring.** Pad LEDs
-  use Note + velocity=colour on the pad channels (8/10/12/14); VU/jog need a
-  periodic level push. Revisit after Phase 1 is confirmed on hardware.
+- [x] **Lighting Phase 2 — performance-pad light show (done 2026-07-08).**
+  `rev1_leds.py` drives the 8 performance pads per deck as an audio-reactive
+  **VU meter** off each deck's output level (pad channels 0x97/0x99, HOT-CUE-mode
+  notes 0–7, on/off velocity, fast-attack/slow-decay smoothing, diffed).
+  Config-gated (`[dj_mixer].pad_lightshow`, default true). 9 LED tests total.
+  **Scope note:** Pioneer's message list exposes LEDs on **buttons + pads**
+  only — there are no dedicated VU-meter or jog-ring LEDs on the REV1, so "VU"
+  is realised on the pads. Exact pad **colour** is set by the hardware's active
+  pad mode; we drive on/off (safe regardless of RGB palette). **Hardware
+  validation pending** (confirm pads light without a host-mode handshake).
 
 ---
 
