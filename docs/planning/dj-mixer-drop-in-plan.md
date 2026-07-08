@@ -251,10 +251,13 @@ parked for v2.
   decks (waveform + playhead, track, time, pitch %, play/cue, 3-band EQ knobs,
   channel gain, VU) + centre master + crossfader. `Shift+D` toggles; `Esc`
   closes; left-click toggles a deck. 32 tests green; frame verified headlessly.
-- [ ] **M-4 — Integration + docs.** HUD `snapshot()`, monitor-source guidance,
-  `HELP_ENTRIES` for any keyboard toggles, structured docs, register in
-  `docs/drop-ins.md`, config skeleton section (commented) in
-  `config.full.example.toml`.
+- [x] **M-4 — Integration + docs (done 2026-07-07, main `a6e3a5a`).**
+  `_load_dj_mixer_controller_class()` + guarded load site in `app.py` registers
+  the `dj_mixer` subsystem and `Shift+D` handler; defaults = loaded-but-idle
+  (REV1 wired, window + audio stream closed until opened). `[dj_mixer]` skeleton
+  added to `config.full.example.toml` (config.toml left to the owner); drop-in
+  registered in `docs/drop-ins.md`; `HELP_ENTRIES` present. Remaining M-4
+  polish: HUD `snapshot()` for now-playing, monitor-source guidance in docs.
 - [ ] **v2 backlog (not scheduled):** absolute jog scratch, hot-cue/loop pads,
   FX paddles, beat-sync via `auto-vj-01`, **bidirectional MIDI** (pad RGB,
   cue/play lit, VU meters — gated on core MIDI-out approval).

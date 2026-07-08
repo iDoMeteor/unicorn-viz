@@ -30,6 +30,7 @@ Complex drop-ins should also include:
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
 | cosmic-01 | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion |
+| dj-mixer-01 | Yes | Yes | Two-deck DJ mixer window + Pioneer DDJ-REV1 input |
 | feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
 | games-01 | Yes | Not required | Effect pack: Breakout |
 | midi-controllers-01 | Yes | Yes | Controller presets + APC mini mk2 LED feedback subsystem |
