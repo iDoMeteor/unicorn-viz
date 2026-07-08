@@ -652,14 +652,15 @@ color = [1.0, 1.0, 1.0]      # flash colour (RGB 0–1)
 beat_threshold = 0.45        # beat rising-edge trigger threshold
 
 # ── dj-mixer-01 — two-deck DJ mixer window + Pioneer DDJ-REV1 ────────────────
-# Loaded when enabled; the REV1 is opened as a raw-only aux MIDI device (it
-# coexists with a VJ-side controller). The mixer window and the audio output
-# stream stay idle at boot — open the window with Shift+D (Esc closes it;
-# left-click a deck to play/pause). See drop-ins/dj-mixer-01/README.md.
+# Loaded when enabled, but stays fully idle: the mixer window, the audio output
+# stream, and the REV1 MIDI port are all left alone at boot. Open the window
+# with Shift+D — that is when the REV1 is claimed (as a raw-only aux device that
+# coexists with a VJ-side controller); closing the window releases it again.
+# Esc closes; left-click a deck to play/pause. See drop-ins/dj-mixer-01/README.md.
 [dj_mixer]
-enabled = true               # load the drop-in + wire REV1 input
+enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = false        # do NOT open the audio output stream at boot
-open_on_start = false        # do NOT auto-open the mixer window at boot
+open_on_start = false        # do NOT auto-open the mixer window (or the REV1)
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
 samplerate = 48000
 blocksize = 512              # lower = tighter jog; higher = safer against underruns
