@@ -29,7 +29,8 @@ PACK_NAMES = {
     'retro-01': {'Copper Bars', 'ANSI Viewer', 'Fractal Zoom', 'Escher', 'Dali', 'Van Gogh'},
     'feature-01': {'Hexy Stars', 'Rainbow Trance', 'Metaballs'},
     'vector-01': {'3D Cube', 'Vector', 'Disco Ball', 'Laser Tunnel'},
-    'cosmic-01': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion'},
+    'cosmic-01': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion',
+                  'Sun Ship 3000'},
     'tech-01': {'Tron Grid', 'Cyber War', 'Hacker Terminal', 'Hacker Terminal 2.0',
                 'Threat Matrix', 'Reactor Breach'},
     'immersive-01': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
@@ -45,7 +46,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 49
+EXPECTED_TOTAL = 50
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
