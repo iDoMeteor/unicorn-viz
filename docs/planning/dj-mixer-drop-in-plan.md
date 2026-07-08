@@ -237,10 +237,14 @@ parked for v2.
   crossfader (equal-power) / 3-band DJ EQ (RBJ biquads) / jog nudge / master
   soft-clip. Pure `render_block` mix path; `sounddevice` stream + safe callback.
   18 tests green (`dsp`/`deck`/`mixer_engine`). No window, no MIDI yet.
-- [ ] **M-2 — REV1 input (unblocked 2026-07-07).** `rev1_map.py` (Appendix A) +
-  `rev1_input.py`: the controller calls `vj_api.midi_add_input_device('ddj-rev1')`
-  and registers a raw listener that decodes only its own `event.source` traffic
-  into deck/mixer commands. Confirm the full core DJ loop works from hardware.
+- [x] **M-2 — REV1 input (done 2026-07-07, drop-in `6cab9c5`).** `rev1_map.py`
+  (Appendix A) + `rev1_input.py`: the controller calls
+  `vj_api.midi_add_input_device('rev1')` and registers a raw listener that
+  decodes only its own `event.source` traffic — 14-bit fader/EQ reassembly,
+  bipolar tempo→pitch + EQ, channel fader→gain, crossfader/master, jog nudge,
+  play/cue. 29 tests green; verified end-to-end against the real core
+  `MidiManager` (REV1 drives the engine, APC is ignored). **Remaining: confirm
+  polarity/scaling on real hardware.**
 - [ ] **M-3 — Mixer window.** PIL software-rendered two-deck UI (Control Room
   pattern): track title, waveform overview + playhead, time, pitch %, VU,
   EQ/filter/crossfader positions. Mouse-interactive so it works without the
