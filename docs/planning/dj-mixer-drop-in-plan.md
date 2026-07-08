@@ -226,16 +226,21 @@ parked for v2.
     submodule `drop-ins/dj-mixer-01` (scaffold: window/engine/deck interfaces,
     equal-power crossfader curve, config validator, structured docs, 3 smoke
     tests green). No MIDI code — see §5.4 / point-3.
-  - [ ] Confirm `midi-controllers-01` port-binding + multi-device fan-out (§5.4)
-    with the VJ MIDI team before M-2.
+  - [x] Core multi-device MIDI landed (2026-07-07, commit `42a5a83`): the core
+    `MidiManager` now opens concurrent **raw-only aux input devices**
+    (`vj_api.midi_add_input_device(hint)`) whose events are source-tagged and
+    reach named listeners only — so the REV1 coexists with a VJ-side APC. This
+    was a **core `unicornviz/midi.py`** change (not a `midi-controllers-01`
+    change), owner-approved. **M-2 is now unblocked.**
 - [x] **M-1 — Audio engine, headless (done 2026-07-07).** `Deck` + `MixerEngine`
   with load (soundfile→PyAV) / play / cue / pitch (varispeed) / channel fader /
   crossfader (equal-power) / 3-band DJ EQ (RBJ biquads) / jog nudge / master
   soft-clip. Pure `render_block` mix path; `sounddevice` stream + safe callback.
   18 tests green (`dsp`/`deck`/`mixer_engine`). No window, no MIDI yet.
-- [ ] **M-2 — REV1 input.** `rev1_map.py` + `rev1_input.py` via the raw
-  listener; the physical controller drives M-1's engine. Confirm the full core
-  DJ loop works from hardware.
+- [ ] **M-2 — REV1 input (unblocked 2026-07-07).** `rev1_map.py` (Appendix A) +
+  `rev1_input.py`: the controller calls `vj_api.midi_add_input_device('ddj-rev1')`
+  and registers a raw listener that decodes only its own `event.source` traffic
+  into deck/mixer commands. Confirm the full core DJ loop works from hardware.
 - [ ] **M-3 — Mixer window.** PIL software-rendered two-deck UI (Control Room
   pattern): track title, waveform overview + playhead, time, pitch %, VU,
   EQ/filter/crossfader positions. Mouse-interactive so it works without the
