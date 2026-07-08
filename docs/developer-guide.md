@@ -322,6 +322,44 @@ falls back to 80×25 if they are zero.
 `HotkeyHandler.attach_midi(midi)` registers itself as a listener and maps
 CC → `effect.parameters[*]` and Note → same actions as keyboard hotkeys.
 
+#### APC mini mk2 LED feedback (midi-controllers-01 drop-in)
+
+The `midi-controllers-01` drop-in extends core MIDI with full-surface LED
+feedback for the Akai APC mini mk2.  `APCLedFeedback` runs an action-centric
+LED state machine: each mapped pad lights with an idle/active colour pair
+derived from current `VJState`.
+
+**Host-mode SysEx** — the APC ships in standalone mode and ignores NoteOn LED
+commands until it receives a specific SysEx packet (`_APC_HOST_MODE_SYSEX`).
+`startup()` sends this automatically.  On reconnect the flag clears so it is
+re-sent before the next colour push.
+
+**rawmidi bypass** — LED output goes through libasound `snd_rawmidi_open`
+directly to the APC Notes port output substream (`hw:{card},0,1`), bypassing
+the ALSA sequencer.  This is necessary because `rtmidi.MidiOut` via the
+sequencer is the fallback path and it fails silently on kernel 7.0+ (see
+below).
+
+**snd_ump regression (kernel 7.0+, Fedora 44)** — `snd_usb_audio` wraps all
+USB MIDI 1.0 devices in the `snd_ump` UMP compatibility bridge
+(`Type: Legacy` in `/proc/asound/card*/midi0`).  The bridge's **output**
+pipeline is broken: bytes are accepted and the Tx counter increments, but
+nothing reaches the USB endpoint.  This affects the sequencer path AND the
+rawmidi path once the bridge is activated by any input subscription.  Fix:
+
+```bash
+echo "options snd_usb_audio midi2_enable=N" \
+    | sudo tee /etc/modprobe.d/snd-usb-midi2.conf
+sudo reboot   # module parameter is read-only at runtime
+```
+
+The `_check_snd_ump_output_broken()` function detects the broken bridge at
+startup and logs a warning with the exact fix commands.
+
+See the drop-in's [Integration doc](../drop-ins/midi-controllers-01/docs/integration.md)
+and [Troubleshooting doc](../drop-ins/midi-controllers-01/docs/troubleshooting.md)
+for the full technical breakdown.
+
 ### Config, Playlist, Overlays
 
 **Config** (`config.py`): Deep-merges `config.toml` over `_DEFAULTS`.  All

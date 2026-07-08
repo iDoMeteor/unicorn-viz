@@ -365,6 +365,23 @@ Select a preset in `config.toml` under `[midi] preset = "..."`.
 | `generic`             | Generic USB keyboard (C4–A4 layout) |
 | `""`                  | No preset — hardcoded defaults only |
 
+### Akai APC mini mk2 — LED feedback
+
+When the `akai_apc_mini_mk2` preset is active, the app drives every pad LED
+to reflect real-time state:
+
+- Pads light with an **idle colour** when their action is available.
+- Pads switch to an **active colour** while the action is engaged (e.g. paused,
+  fullscreen on, a display mode selected).
+- Recording or streaming overlays turn specific pads red or magenta.
+
+All 84 bound notes light up within ~100 ms of startup.  If pads show only the
+APC's own standalone colours (cyan bottom row) see the
+[LED troubleshooting](#apc-mini-mk2-leds-not-lighting-up) section below.
+
+Idle colours can be cycled per-pad in the MIDI Learn modal (`Ctrl+Alt+H`) with
+the `[` and `]` keys.
+
 ### Akai APC mini mk2 maximal mapping
 
 The APC preset is now a full-surface mapping.
@@ -648,6 +665,42 @@ SDL_VIDEODRIVER=x11 python -m unicornviz
 1. Verify `python-rtmidi` is installed: `.venv/bin/pip show python-rtmidi`
 2. Check `dmesg` or `aconnect -l` for your device.
 3. Set `device` to a substring of the port name shown by `aconnect -l`.
+
+### APC mini mk2 LEDs not lighting up
+
+**Symptom:** MIDI input works (pad presses trigger actions) but no LEDs light
+up — pads show only the APC's own standalone colours or stay dark.
+
+**Cause (Fedora 44 / kernel 7.0+):** `snd_usb_audio` wraps all USB MIDI
+devices in the `snd_ump` UMP bridge.  The bridge's output pipeline is broken:
+bytes are accepted by the kernel but never reach the USB endpoint.  The app log
+will show this warning at startup:
+
+```text
+WARNING APCLedFeedback: APC Notes port is wrapped by the snd_ump legacy bridge
+(Type: Legacy). On kernel 7.0+ the snd_ump OUTPUT path is broken…
+```
+
+**Fix:**
+
+```bash
+# Make the fix permanent
+echo "options snd_usb_audio midi2_enable=N" \
+    | sudo tee /etc/modprobe.d/snd-usb-midi2.conf
+
+# Apply it — a reboot is required (the parameter is read-only at runtime)
+sudo reboot
+```
+
+After reboot, `/proc/asound/card*/midi0` should no longer show `Type: Legacy`
+for the APC, and LEDs should light up within 100 ms of app startup.
+
+Setting `midi2_enable=N` disables MIDI 2.0 / UMP wrapping for all USB MIDI
+devices.  This is safe on any system without USB MIDI 2.0 hardware (uncommon
+as of 2026).
+
+For the full technical explanation see
+[midi-controllers-01 Troubleshooting](../drop-ins/midi-controllers-01/docs/troubleshooting.md).
 
 ### Low frame rate
 

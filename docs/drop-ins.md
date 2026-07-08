@@ -32,6 +32,7 @@ Complex drop-ins should also include:
 | cosmic-01 | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion |
 | feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
 | games-01 | Yes | Not required | Effect pack: Breakout |
+| midi-controllers-01 | Yes | Yes | Controller presets + APC mini mk2 LED feedback subsystem |
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
 | holiday-01 | Yes | Not required | Effect pack: America 250 (seasonal/event) |
 | images-01 | Yes | Not required | Media effect drop-in |
@@ -91,6 +92,11 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
   - [Test Matrix](../drop-ins/control-room-01/docs/test-matrix.md)
   - [Troubleshooting](../drop-ins/control-room-01/docs/troubleshooting.md)
+- midi-controllers-01
+  - [Operations](../drop-ins/midi-controllers-01/docs/operations.md)
+  - [Configuration](../drop-ins/midi-controllers-01/docs/configuration.md)
+  - [Integration](../drop-ins/midi-controllers-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/midi-controllers-01/docs/troubleshooting.md)
 - lyrics-01
   - [Operations](../drop-ins/lyrics-01/docs/operations.md)
   - [Configuration](../drop-ins/lyrics-01/docs/configuration.md)
