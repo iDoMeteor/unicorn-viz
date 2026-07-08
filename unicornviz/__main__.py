@@ -8,6 +8,7 @@ SDL2 driver selection (Wayland vs X11) happens in app.py before
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import logging
 import sys
 from datetime import datetime
@@ -16,6 +17,10 @@ from pathlib import Path
 from unicornviz.config import Config, ConfigValidationError
 from unicornviz.dropins import register_dropin_config_validators
 from unicornviz.paths import APP_ROOT, resolve_path
+
+# Kept open for the process lifetime so faulthandler can still write to it
+# from the signal handler after a native crash (segfault, etc.).
+_faulthandler_file: object | None = None
 
 
 class _LogBandFilter(logging.Filter):
@@ -197,6 +202,28 @@ def _setup_logging(cfg: Config) -> None:
     logging.getLogger(__name__).info('Logging to %s', log_path)
 
 
+def _install_faulthandler(cfg: Config) -> None:
+    """Dump a Python-level traceback on native crashes (segfaults, etc.).
+
+    A native crash kills the process before ``logging`` can run, so a hard
+    Mesa/EGL/ALSA-level crash otherwise leaves no trace beyond the log file
+    stopping mid-line. ``faulthandler`` writes from the low-level signal
+    handler instead, which survives that. Mirrors the ``[logging] level``
+    convention used elsewhere (e.g. the deleted-effects log): a real file
+    under the logs directory when logging is enabled, stderr otherwise.
+    """
+    global _faulthandler_file
+    level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
+    if level_name == 'NONE':
+        faulthandler.enable()
+        return
+    log_dir = resolve_path(cfg.get('logging', 'directory', default='logs'))
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / f"faulthandler_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    _faulthandler_file = open(path, 'w', encoding='utf-8')  # noqa: SIM115 - kept open for process lifetime
+    faulthandler.enable(file=_faulthandler_file)
+
+
 def _install_exception_logging() -> None:
     """Log uncaught exceptions so crash tracebacks are persisted in log files."""
 
@@ -224,6 +251,7 @@ def main() -> None:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2) from exc
     _setup_logging(cfg)
+    _install_faulthandler(cfg)
     _install_exception_logging()
     from unicornviz.app import App
     app = App(cfg)
