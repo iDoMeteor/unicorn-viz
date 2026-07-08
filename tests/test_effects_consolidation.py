@@ -24,7 +24,7 @@ CORE_NAMES = {
 }
 PACK_NAMES = {
     'psychedelic-01': {'Plasma', 'Kaleidoscope', 'Psychedelic'},
-    'games-01': {'Breakout'},
+    'games-01': {'Breakout', 'Neon Pac', 'Galaga'},
     'particles-01': {'Starfield', 'Fireworks', 'Particle Storm'},
     'retro-01': {'Copper Bars', 'ANSI Viewer', 'Fractal Zoom', 'Escher', 'Dali', 'Van Gogh'},
     'feature-01': {'Hexy Stars', 'Rainbow Trance', 'Metaballs'},
@@ -45,7 +45,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 47
+EXPECTED_TOTAL = 49
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
