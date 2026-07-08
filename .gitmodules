@@ -110,3 +110,6 @@
 [submodule "drop-ins/video-clips-01"]
 	path = drop-ins/video-clips-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-video-clips-01.git
+[submodule "drop-ins/dj-mixer-01"]
+	path = drop-ins/dj-mixer-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-dj-mixer-01.git

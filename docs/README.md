@@ -41,6 +41,7 @@ This is the canonical map for project documentation.
 - Mono-file refactor plan (2026-06-19): [docs/planning/mono-file-refactor-plan-2026-06-19.md](planning/mono-file-refactor-plan-2026-06-19.md)
 - ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
+- DJ mixer drop-in plan — `dj-mixer-01` two-deck audio mixer for Pioneer DDJ-REV1 (2026-07-07): [docs/planning/dj-mixer-drop-in-plan.md](planning/dj-mixer-drop-in-plan.md)
 - Active audit tracker: [docs/audits](audits)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-07-01): [docs/audits/2026-07-01-full-system-audit.md](audits/2026-07-01-full-system-audit.md)
