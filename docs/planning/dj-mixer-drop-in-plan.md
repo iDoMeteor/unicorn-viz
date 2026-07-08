@@ -228,10 +228,11 @@ parked for v2.
     tests green). No MIDI code — see §5.4 / point-3.
   - [ ] Confirm `midi-controllers-01` port-binding + multi-device fan-out (§5.4)
     with the VJ MIDI team before M-2.
-- [ ] **M-1 — Audio engine, headless.** `Deck` + `MixerEngine` with load /
-  play / cue / pitch / channel fader / crossfader / 3-band EQ. Driven by unit
-  tests + a tiny CLI harness; no window, no MIDI yet. Sound comes out and two
-  tracks crossfade cleanly.
+- [x] **M-1 — Audio engine, headless (done 2026-07-07).** `Deck` + `MixerEngine`
+  with load (soundfile→PyAV) / play / cue / pitch (varispeed) / channel fader /
+  crossfader (equal-power) / 3-band DJ EQ (RBJ biquads) / jog nudge / master
+  soft-clip. Pure `render_block` mix path; `sounddevice` stream + safe callback.
+  18 tests green (`dsp`/`deck`/`mixer_engine`). No window, no MIDI yet.
 - [ ] **M-2 — REV1 input.** `rev1_map.py` + `rev1_input.py` via the raw
   listener; the physical controller drives M-1's engine. Confirm the full core
   DJ loop works from hardware.
