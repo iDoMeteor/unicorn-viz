@@ -259,8 +259,26 @@ parked for v2.
   registered in `docs/drop-ins.md`; `HELP_ENTRIES` present. Remaining M-4
   polish: HUD `snapshot()` for now-playing, monitor-source guidance in docs.
 - [ ] **v2 backlog (not scheduled):** absolute jog scratch, hot-cue/loop pads,
-  FX paddles, beat-sync via `auto-vj-01`, **bidirectional MIDI** (pad RGB,
-  cue/play lit, VU meters — gated on core MIDI-out approval).
+  FX paddles, beat-sync via `auto-vj-01`.
+
+### Lighting (bidirectional MIDI — REV1 LED feedback)
+
+Turns out this needs **no** core MIDI-out change: the mixer owns its own
+cross-platform `rtmidi.MidiOut` to the REV1 (the same ownership pattern
+`apc_leds` uses), so it works on Windows/Linux/macOS. The Linux-only ALSA
+`rawmidi` workaround for the broken kernel `snd_ump` output path is avoided
+(and the owner's kernel update should resolve that anyway).
+
+- [x] **Lighting Phase 1 — transport lights (done 2026-07-08).** `rev1_leds.py`
+  `Rev1Leds`: lights each deck's PLAY / CUE button (Note 11/12 on the deck
+  channel, velocity 0x7F/0x00 per the "MIDI-OUT ← Same as MIDI-IN" spec),
+  diffed so the device is never flooded. Opened/closed with the mixer window
+  (LEDs off on close), config-gated (`[dj_mixer].led_feedback`, default true).
+  6 tests via an injected sender. **Hardware validation pending** (polarity is
+  trivial; confirm the REV1 accepts the note-on LED convention).
+- [ ] **Lighting Phase 2 — performance-pad RGB, VU meters, jog ring.** Pad LEDs
+  use Note + velocity=colour on the pad channels (8/10/12/14); VU/jog need a
+  periodic level push. Revisit after Phase 1 is confirmed on hardware.
 
 ---
 

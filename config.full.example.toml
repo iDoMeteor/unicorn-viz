@@ -662,6 +662,7 @@ enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = false        # do NOT open the audio output stream at boot
 open_on_start = false        # do NOT auto-open the mixer window (or the REV1)
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
+led_feedback = true          # light the REV1 PLAY/CUE LEDs while the mixer is open
 samplerate = 48000
 blocksize = 512              # lower = tighter jog; higher = safer against underruns
 pitch_range = 0.08           # tempo fader range (±8%)
