@@ -275,6 +275,14 @@ def _load_audio_out_controller_class() -> type:
     )
 
 
+def _load_dj_mixer_controller_class() -> type:
+    """Load DjMixerController from the dj-mixer-01 drop-in."""
+    return load_dropin_symbol(
+        'dj-mixer-01/dj_mixer_controller.py',
+        'DjMixerController',
+    )
+
+
 def _load_color_grade_controller_class() -> type:
     """Load ColorGradeController from the color-grade-01 drop-in."""
     return load_dropin_symbol(
@@ -370,6 +378,7 @@ class App:
         self._media: Any = None
         self._chat: Any = None
         self._audio_out = None
+        self._dj_mixer: Any = None
         self._osc_bridge = None
         self._lyrics = None
         self._grand_finale = None
@@ -3296,6 +3305,25 @@ void main() {
                 except Exception as exc:
                     self._audio_out = None
                     log.warning('AudioOutController not available: %s', exc)
+
+            # Two-deck DJ mixer window + DDJ-REV1 input (optional drop-in).
+            # Loaded (and REV1 MIDI wired) when enabled; the window and audio
+            # output stream stay idle until the operator opens it (Shift+D).
+            dj_mixer_cfg = self.cfg.get('dj_mixer', default={}) or {}
+            if not isinstance(dj_mixer_cfg, dict):
+                dj_mixer_cfg = {}
+            if bool(dj_mixer_cfg.get('enabled', True)):
+                try:
+                    dj_mixer_cls = _load_dj_mixer_controller_class()
+                    self._dj_mixer = dj_mixer_cls(self, dj_mixer_cfg)
+                    self.vj_api.register_subsystem('dj_mixer', self._dj_mixer)
+                    key_handler = getattr(self._dj_mixer, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('dj_mixer', key_handler)
+                    log.info('DjMixerController loaded from drop-in')
+                except Exception as exc:
+                    self._dj_mixer = None
+                    log.warning('DjMixerController not available: %s', exc)
 
             # OSC control-surface bridge (optional drop-in).
             osc_cfg = self.cfg.get('osc', default={}) or {}

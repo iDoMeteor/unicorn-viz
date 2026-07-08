@@ -651,6 +651,24 @@ mode = "full"                # full | edge | pulse
 color = [1.0, 1.0, 1.0]      # flash colour (RGB 0–1)
 beat_threshold = 0.45        # beat rising-edge trigger threshold
 
+# ── dj-mixer-01 — two-deck DJ mixer window + Pioneer DDJ-REV1 ────────────────
+# Loaded when enabled; the REV1 is opened as a raw-only aux MIDI device (it
+# coexists with a VJ-side controller). The mixer window and the audio output
+# stream stay idle at boot — open the window with Shift+D (Esc closes it;
+# left-click a deck to play/pause). See drop-ins/dj-mixer-01/README.md.
+[dj_mixer]
+enabled = true               # load the drop-in + wire REV1 input
+start_enabled = false        # do NOT open the audio output stream at boot
+open_on_start = false        # do NOT auto-open the mixer window at boot
+rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
+samplerate = 48000
+blocksize = 512              # lower = tighter jog; higher = safer against underruns
+pitch_range = 0.08           # tempo fader range (±8%)
+display_index = 1            # display the mixer window opens on
+fullscreen = false           # borderless full-display window when true
+width = 1280                 # windowed size when not fullscreen
+height = 800
+
 # ── osc-bridge-01 — OSC control surface (TouchOSC / Ableton / Max) ───────────
 # Exposes runtime tweakables over OSC. Inbound server runs on a daemon thread;
 # actions execute on the main thread once per frame. Loaded by default but the
