@@ -1,12 +1,12 @@
 # Unicorn Viz — Video Render Pipeline & Platform Audit (2026-07-08)
 
 Owner: owner + Claude Sonnet 5 (master coordinator)
-Status: In progress — items 1/3 confirmed fixed on owner's machine; item 2
-(black-screen follow-on) fix landed, awaiting a fresh session log to confirm;
-new item (audience effects lockup from synchronous PBO-fallback readback)
-mitigated, PBO-mapping root cause deferred as a follow-up; dead mirror-window
-code removed; items 4/5 (GNOME panel + overlay migration) still open, not
-started.
+Status: In progress — items 1/3 confirmed fixed on owner's machine; item 8
+(audience lockup) mitigated; dead mirror-window code removed; item 2
+(black-screen) still reproducing despite items 1/2/9's fixes — reframed as
+item 11, a suspected Mutter/Wayland geometry bug affecting all app windows
+(not specific to control-room/mixer), pending an X11 test; items 4/5 (GNOME
+panel + overlay migration) still open, not started.
 Last updated: 2026-07-09
 
 Scope: Owner-reported Fedora-44/GNOME/Wayland-only issues — control-room-01
@@ -482,8 +482,9 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 | 6 | Triage the 8 distinct recurring tracebacks in §7 | Unknown per-item | Unknown per-item | Open — lower urgency |
 | 7 | Confirm/remove dead `_create_mirror_outputs` path | High (it's dead) | Low | **Done** — removed from `app.py` and `multihead.py`, `MATE-X11-MULTIHEAD-NOTES.md` updated with the reconfirmed decision |
 | 8 | Throttle the synchronous PBO-fallback readback harder (0.1s → 1.0s) to stop audience effects locking up while control-room is open | High (matches an already-documented failure mode; direct code-level fix) | Low | **Done** — landed in `945a865`, not yet independently confirmed by the owner |
-| 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | High | Low | **Likely fixed, awaiting owner confirmation** — the DEBUG-level repro (`e69347f`'s diagnostics) showed a deterministic `GL_INVALID_VALUE` on the *read* call, failing after exactly 1 prior successful frame, at both 1920x1080 and 3840x2160 canvases (ruling out a resource/size issue). Root cause: `Framebuffer.read()`/`read_into()` default to a viewport of the *framebuffer's own* reported size, not `App._width`/`_height` — under the owner's mixed-DPI 3-monitor setup those can disagree, sizing the PBOs for one canvas while `read_into()` writes a different amount into them; the mismatch only surfaces as a GL error on the *next* frame's map call, matching the observed pattern exactly. Fixed by pinning `viewport=(0, 0, self._width, self._height)` explicitly on every read call (`abd06c1`) |
+| 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Medium | Low | **Partially addressed, root cause revised** — the viewport-pinning fix (`abd06c1`) is defensively correct but did **not** address the GL_INVALID_VALUE seen in practice: the mismatch-detection warning it added never fired in the owner's next two test logs, meaning `source` size and `App._width`/`_height` already agreed (1920x1080 both). The PBO error itself may be a distinct, still-open sub-issue — see item 11 for the current best theory on what's actually driving the black-screen symptom |
 | 10 | Fix `KeyError: 'iBass'` in `drop-ins/feature-01/rainbow_trance.py:286` (unused uniform stripped by the GLSL compiler) | High | Low | Open — unrelated to the platform investigation, found incidentally |
+| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Medium — correlates strongly with a Mutter bug, but not yet proven causal | Unknown — may not be fixable from application code | Open, awaiting owner's X11 test. `journalctl` cross-referenced against the two latest sessions shows gnome-shell logging "Client provided invalid window geometry... Working around" and `meta_window_set_stack_position_no_sync: assertion 'window->stack_position >= 0' failed` for **all three** windows (main audience window included, not just control-room/mixer) — suggesting a Mutter/Wayland-protocol geometry bug tied to the owner's mixed-DPI 3-monitor layout, not something specific to the second-window architecture. Owner is testing with `SDL_VIDEODRIVER=x11` forced to see if going through XWayland avoids the native-Wayland geometry-validation path entirely |
 
 If item 2's diagnostics show the black screen persists even after the
 surface-refresh fix, the next step per the archived handoff's own "Path 2"
