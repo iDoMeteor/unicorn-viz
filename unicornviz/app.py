@@ -380,6 +380,10 @@ class App:
         self._audio_out = None
         self._dj_mixer: Any = None
         self._osc_bridge = None
+        # Shared BPM hint bus: source -> (bpm, monotonic timestamp).  Lets
+        # tempo-aware drop-ins (dj-mixer, auto-vj, ...) publish/read a tempo and
+        # interact without depending on one another.
+        self._bpm_hints: dict[str, tuple[float, float]] = {}
         self._lyrics = None
         self._grand_finale = None
         self._control_room = None
@@ -575,6 +579,35 @@ class App:
             return False
         self._subsystems[subsystem_name] = subsystem
         return True
+
+    # -- shared BPM hint bus (tempo interop between drop-ins) ----------------
+
+    _BPM_HINT_TTL_S = 5.0
+
+    def publish_bpm(self, source: str, bpm: float) -> None:
+        """Publish a BPM estimate under *source* for other drop-ins to read."""
+        try:
+            value = float(bpm)
+        except (TypeError, ValueError):
+            return
+        if value > 0.0 and str(source):
+            self._bpm_hints[str(source)] = (value, time.monotonic())
+
+    def get_bpm(self, exclude: str = '') -> float:
+        """Return the freshest non-stale BPM hint from a source != *exclude*.
+
+        Returns 0.0 when no usable hint exists.  Lets a drop-in fall back to
+        another's tempo (e.g. the mixer borrowing auto-vj's) without coupling.
+        """
+        now = time.monotonic()
+        best_bpm = 0.0
+        best_t = -1.0
+        for src, (bpm, ts) in self._bpm_hints.items():
+            if src == exclude or (now - ts) > self._BPM_HINT_TTL_S:
+                continue
+            if ts > best_t:
+                best_bpm, best_t = bpm, ts
+        return best_bpm
 
     def unregister_subsystem(self, name: str) -> None:
         """Unregister a runtime subsystem from the app loop."""
@@ -4218,6 +4251,11 @@ void main() {
                     if self._auto_vj is not None
                     else '--'
                 ),
+                'auto_vj_downbeat_pulse': (
+                    getattr(self._auto_vj, 'hud_downbeat_pulse', 0.0)
+                    if self._auto_vj is not None
+                    else 0.0
+                ),
                 'auto_vj_action_in': (
                     getattr(self._auto_vj, 'hud_action_in_label', '--')
                     if self._auto_vj is not None
@@ -4443,10 +4481,18 @@ void main() {
             # while the control-room operator window is open.
             # Streaming readback is not throttled; it must produce one frame
             # per rendered frame to keep the RTMP muxer in sync.
+            # Once the async PBO path has failed once, _read_streaming_frame()
+            # falls back to a synchronous full-resolution read for the rest of
+            # the session (worse still at mirror_all/span_all's spanned
+            # canvas size) — throttle much harder in that state, since a
+            # control-room/dj-mixer preview doesn't need sub-second freshness
+            # and the default 0.1s cadence was enough to visibly stall effect
+            # rendering while HUD/event handling kept running.
             subsystem_capture_due = False
             if need_frame_for_subsystems:
                 _now = time.monotonic()
-                if _now - self._last_subsystem_frame_capture_time >= 0.1:
+                _capture_interval = 1.0 if self._stream_pbo_disabled else 0.1
+                if _now - self._last_subsystem_frame_capture_time >= _capture_interval:
                     subsystem_capture_due = True
                     self._last_subsystem_frame_capture_time = _now
             if need_frame_for_streaming or subsystem_capture_due:

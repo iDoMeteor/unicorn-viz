@@ -117,6 +117,26 @@ class VJApi:
         """
         return self._app.list_subsystems()
 
+    def publish_bpm(self, source: str, bpm: float) -> None:
+        """Publish a BPM estimate on the shared hint bus (under *source*).
+
+        Tempo-aware drop-ins (dj-mixer, auto-vj, ...) publish here so others may
+        read it via :meth:`get_bpm` — they interact without depending on one
+        another.  Degrades to a no-op on older cores.
+        """
+        fn = getattr(self._app, 'publish_bpm', None)
+        if callable(fn):
+            fn(str(source), bpm)
+
+    def get_bpm(self, exclude: str = '') -> float:
+        """Return the freshest non-stale BPM hint from a source != *exclude*.
+
+        Returns 0.0 when none is available.  Lets a drop-in borrow another's
+        tempo as a fallback without coupling to it.
+        """
+        fn = getattr(self._app, 'get_bpm', None)
+        return float(fn(str(exclude))) if callable(fn) else 0.0
+
     def get_runtime_state(self, dotted_path: str = '', default: object | None = None) -> object:
         """Read a value from shared runtime state using dotted-path keys."""
         return self._app.get_runtime_state(str(dotted_path), default)

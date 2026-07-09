@@ -286,13 +286,16 @@ parked for v2.
   autocorrelation + octave/prior logic adapted from auto-vj but *not* dependent
   on it); `deck.detect_bpm()` on load drives beat-correct loop lengths and the
   master echo (`engine.follow_active_deck`). 89 tests green.
-- [ ] **Beat-sync Phase B — SYNC / beatmatch (planned).** Per-deck BPM (now
-  available) + a SYNC action that trims a deck's pitch so its effective tempo
-  matches the other deck. **Architecture decision (owner, 2026-07-08):** the
-  mixer keeps its **own** BPM/beat code (copied+adapted from auto-vj) rather than
-  depending on auto-vj — the two drop-ins interact but are independent, since
-  users may install one without the other. Optional smart interaction (publish/
-  read a BPM hint via `vj_api` when both are present) is a later nicety.
+- [x] **Beat-sync Phase B — SYNC / beatmatch (done 2026-07-08, drop-in
+  `9d7d7ad`).** `deck.sync_to` (octave-folded pitch match) + `engine.sync_deck`;
+  the REV1 SYNC button (Note 88) beatmatches a deck to the other. The mixer owns
+  its own BPM code — no dependency on auto-vj (users may install either alone).
+- [x] **Smart BPM interop (done 2026-07-08).** A shared **BPM hint bus** on
+  `vj_api` (`publish_bpm`/`get_bpm`, TTL'd, core `App`): the mixer publishes its
+  active-deck tempo and borrows an external hint when idle; `auto-vj` publishes
+  its room estimate (publish-only, no ADR impact). Neither depends on the other;
+  if both are present they sharpen each other. Core bus tested in
+  `tests/test_bpm_bus.py`.
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
