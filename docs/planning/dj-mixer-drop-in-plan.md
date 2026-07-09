@@ -281,7 +281,18 @@ parked for v2.
   `BeatEcho` (feedback delay) engaged by the FX1 paddle (Note 80, ch4, momentary)
   with the LEVEL/DEPTH knob (CC 2/4/6) as echo depth; `set_bpm` drives the echo
   time. 77 tests green. FX2 + more effect types are v2.
-- [ ] **Beat-sync via `auto-vj-01` (needs cross-team coordination — see below).**
+- [x] **Beat-sync Phase A — tempo-locked FX/loops (done 2026-07-08, drop-in
+  `9fa40a4`).** The mixer owns its own **offline per-track BPM** (`bpm.py`,
+  autocorrelation + octave/prior logic adapted from auto-vj but *not* dependent
+  on it); `deck.detect_bpm()` on load drives beat-correct loop lengths and the
+  master echo (`engine.follow_active_deck`). 89 tests green.
+- [ ] **Beat-sync Phase B — SYNC / beatmatch (planned).** Per-deck BPM (now
+  available) + a SYNC action that trims a deck's pitch so its effective tempo
+  matches the other deck. **Architecture decision (owner, 2026-07-08):** the
+  mixer keeps its **own** BPM/beat code (copied+adapted from auto-vj) rather than
+  depending on auto-vj — the two drop-ins interact but are independent, since
+  users may install one without the other. Optional smart interaction (publish/
+  read a BPM hint via `vj_api` when both are present) is a later nicety.
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
