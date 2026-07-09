@@ -14,7 +14,17 @@ default to the source framebuffer's own reported size — a mismatch there
 (e.g. under mixed-DPI multi-monitor scaling) would size the PBOs for one
 canvas while read_into() writes a different amount of data into them,
 which live debugging traced to a GL_INVALID_VALUE surfacing on the
-*following* frame's buffer.read() rather than on the write itself.
+*following* frame's buffer.read() rather than on the write itself. That
+fix alone did not explain the field data, though: live MESA_DEBUG capture
+showed a massive glUseProgram/glBindVertexArray/glUniform error cascade
+(zero without control-room/mixer open, ~408k with them open in one
+session), starting from a single glReadBuffer(invalid buffer
+GL_COLOR_ATTACHMENT0) — Mesa rejecting that enum against whatever
+framebuffer was actually bound at read time. _read_streaming_frame() now
+calls source.use() to force-rebind the intended read target immediately
+before reading, since a subsystem's render_overlay() hook binding its own
+FBO without restoring the screen (moderngl's cached "current framebuffer"
+then points at the wrong object) would produce exactly that error.
 """
 from __future__ import annotations
 
@@ -126,6 +136,10 @@ class _FakeSource:
         self.height = height
         self.read_into_calls: list[dict] = []
         self.read_calls: list[dict] = []
+        self.use_calls = 0
+
+    def use(self) -> None:
+        self.use_calls += 1
 
     def read_into(self, buffer, viewport=None, components=3, alignment=1, **kwargs) -> None:  # noqa: ARG002
         self.read_into_calls.append({'viewport': viewport})
@@ -158,6 +172,23 @@ def test_viewport_pinned_to_tracked_size_even_when_source_reports_larger() -> No
     app, source = _stream_frame_app(tracked_size=(1920, 1080), source_size=(3840, 2160))
     app._read_streaming_frame()
     assert source.read_into_calls[-1]['viewport'] == (0, 0, 1920, 1080)
+
+
+def test_source_is_force_rebound_before_reading() -> None:
+    # Regression: a subsystem's render_overlay() hook can leave a different
+    # FBO bound; source.use() must run before the read regardless, or the
+    # read hits whatever framebuffer was left bound by something else.
+    app, source = _stream_frame_app(tracked_size=(1920, 1080), source_size=(1920, 1080))
+    app._read_streaming_frame()
+    assert source.use_calls >= 1
+
+
+def test_source_rebound_on_every_call_not_just_the_first() -> None:
+    app, source = _stream_frame_app(tracked_size=(1920, 1080), source_size=(1920, 1080))
+    app._read_streaming_frame()
+    app._read_streaming_frame()
+    app._read_streaming_frame()
+    assert source.use_calls == 3
 
 
 def test_logs_mismatch_warning_exactly_once(caplog) -> None:

@@ -5749,6 +5749,17 @@ void main() {
             return None
         mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         source = self._fbo_a if (mirror_mode_active and self._fbo_a is not None) else self._ctx.screen
+        # Force-rebind the intended read source before touching it. This
+        # call happens after _render_subsystem_overlays()/overlays.render(),
+        # and any subsystem's render_overlay() hook that binds its own FBO
+        # without restoring the screen leaves moderngl's cached "currently
+        # bound framebuffer" pointing at the wrong object — which surfaces
+        # as glReadBuffer(invalid buffer GL_COLOR_ATTACHMENT0) here (Mesa
+        # rejects that enum against the default framebuffer) and, once GL's
+        # error state is bad, appears to cascade into unrelated
+        # glUseProgram/glBindVertexArray/glUniform failures for the rest of
+        # the session. Costs nothing when already correctly bound.
+        source.use()
         # Framebuffer.read()/read_into() default to a viewport of the
         # framebuffer's OWN reported (width, height) — for self._ctx.screen
         # that tracks the real SDL/GL drawable size, which is not
