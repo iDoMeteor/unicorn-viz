@@ -1145,16 +1145,18 @@ class VJApi:
     def midi_inject_event(self, raw: list[int]) -> None:
         """Inject raw MIDI bytes as if received from the primary MIDI device.
 
-        Used by the rawmidi bypass path to feed APC Notes/Control port events
+        Used by the libusb/rawmidi bypass path to feed APC pad and CC events
         into the normal dispatch chain (note→action, CC→parameter) without
-        going through the ALSA sequencer.  Thread-safe: may be called from
-        the rawmidi reader thread.
+        going through the ALSA sequencer.  Calls MidiManager._callback with
+        source=None so events reach action-dispatch listeners (same path as
+        the primary rtmidi device).  Thread-safe: may be called from the
+        libusb/rawmidi reader thread.
         """
         m = getattr(self._app, '_midi_manager', None)
         if m is not None:
-            fn = getattr(m, '_on_midi_event', None)
+            fn = getattr(m, '_callback', None)
             if callable(fn):
-                fn(list(raw), None)
+                fn((list(raw), 0.0), None)
 
     def register_midi_actions(self, section: str, actions: list[tuple[str, str]]) -> None:
         """Register additional MIDI-bindable actions from a drop-in, organized by section.

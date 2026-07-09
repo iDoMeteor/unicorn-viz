@@ -375,11 +375,25 @@ class HotkeyHandler:
     def _dispatch_midi_event(self, event: "MidiEvent") -> None:
         a = self._app
         o = self._overlays
+        ks_log = getattr(a, '_keystroke_logger', None)
+        _vj = a.auto_vj_controller if ks_log is not None else None
+        _grid = getattr(_vj, '_grid', None) if _vj is not None else None
         if event.type == 'note_on':
             action_raw = a.midi_action_for_note(event.number)
             action = str(action_raw or '').strip().lower()
             if not action:
                 return
+
+            if ks_log is not None:
+                ks_log.log_midi(
+                    f'note:{event.number}',
+                    action=action,
+                    effect_name=a.current_effect_name,
+                    bpm=float(getattr(_grid, 'bpm', 0.0) or 0.0),
+                    beat_phase=float(getattr(_grid, 'beat_phase', 0.0) or 0.0),
+                    energy=float(getattr(_grid, 'energy', 0.0) or 0.0),
+                    vj_mode=str(getattr(_vj, '_mode', '')),
+                )
 
             if self._dispatch_contextual_midi_action(action):
                 return
@@ -419,6 +433,17 @@ class HotkeyHandler:
                     lo, hi = 0.1, 4.0
                     effect.parameters[param] = lo + event.value * (hi - lo)
                     o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
+                    if ks_log is not None:
+                        ks_log.log_midi(
+                            f'cc:{event.number}',
+                            param=param,
+                            value=event.value,
+                            effect_name=a.current_effect_name,
+                            bpm=float(getattr(_grid, 'bpm', 0.0) or 0.0),
+                            beat_phase=float(getattr(_grid, 'beat_phase', 0.0) or 0.0),
+                            energy=float(getattr(_grid, 'energy', 0.0) or 0.0),
+                            vj_mode=str(getattr(_vj, '_mode', '')),
+                        )
 
     def _dispatch_contextual_midi_action(self, action: str) -> bool:
         """Dispatch selector/context navigation actions without hardcoding notes."""
