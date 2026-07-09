@@ -1,24 +1,25 @@
 # Control Room / DJ Mixer Second-Window — Linux Mitigation Strategies
 
 Owner: owner + Claude (planning/audit)
-Status: **M3 implemented, hit a second Linux-specific wall, fixed —
-landed** (2026-07-09, same day) — see §8 and §10. First landing used
-`moderngl.create_context()` for the second window; owner testing (forced
-`SDL_VIDEODRIVER=x11`) confirmed the windowing/present mechanism itself
-works, but the real app's default native-Wayland session hit a second,
-distinct bug: `moderngl.create_context()` cannot attach to a second,
-already-current context on native Wayland at all (its "detect" fallback
-is hardcoded to X11/GLX — a `glcontext` limitation, not a settings issue).
-Rebuilt without moderngl, loading a minimal OpenGL 3.3 subset directly via
-`SDL_GL_GetProcAddress` instead. Verified against real SDL2 + GL with
-`SDL_VIDEODRIVER=wayland` forced (the exact condition that broke before)
-on this machine. Also fixed while in the area: cursor visibility over
-control-room/mixer windows (§10).
+Status: **CLOSED — owner-confirmed working on native Wayland.** Crash,
+GL-context-stealing cascade, black screen, cursor invisibility, and the
+Shift+D toggle-to-close bug are all resolved and confirmed by the owner
+on their actual machine (native `SDL_VIDEODRIVER=wayland`, mixed-DPI
+multi-monitor setup). One cosmetic issue remains and is intentionally
+**not** being chased further per owner direction (2026-07-09): on first
+open, both windows fall slightly short of the bottom of the screen; this
+self-corrects the moment the window is dragged to another display and
+back. The drawable-size fix in §11 was applied as the best-evidenced
+correction but did not fully resolve it — owner has accepted this as a
+known, low-priority cosmetic quirk rather than continuing the
+investigation. See §8-§11 for full mechanism history (moderngl's Wayland
+wall, the raw-GL rewrite, keyboard-forwarding gap, and the DPI-units fix).
 Last updated: 2026-07-09
 
 Companion to the investigation record in
-[`docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md`](../debug/control-room-mixer-second-window-investigation-2026-07-09.md)
-(the crash + GL-cascade fixes and the still-open black-screen symptom). This
+[`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`](../archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md)
+(the crash + GL-cascade fixes and the black-screen symptom, since resolved
+by this document's own findings — see the Status line above). This
 document is the result of a follow-up audit of the core rendering pipeline,
 the control-room-01 / dj-mixer-01 / multi-head-01 drop-ins, the surviving
 session/GL-debug logs, and SDL2's actual source code (v2.32, the exact
@@ -561,6 +562,6 @@ cause, and re-verify.
 - [sdl2-compat #266 — software renderer fails on wayland driver](https://github.com/libsdl-org/sdl2-compat/issues/266)
 - [SDL #4335 — multiple Wayland windows stuck when occluded](https://github.com/libsdl-org/SDL/issues/4335)
 - [SDL #15208 — sticky checked_texture_framebuffer behavior](https://github.com/libsdl-org/SDL/issues/15208)
-- Investigation record: [`docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md`](../debug/control-room-mixer-second-window-investigation-2026-07-09.md)
+- Investigation record: [`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`](../archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md)
 - Platform audit: [`docs/audits/2026-07-08-render-pipeline-platform-audit.md`](../audits/2026-07-08-render-pipeline-platform-audit.md)
 - Prior second-window failure history: [`drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`](../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md)

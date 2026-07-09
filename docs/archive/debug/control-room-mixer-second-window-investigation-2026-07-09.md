@@ -1,25 +1,26 @@
 # Control Room / DJ Mixer Second-Window Investigation (2026-07-08 → 2026-07-09)
 
 Owner: owner + Claude (master coordinator)
-Status: Crash + GL error cascade confirmed fixed (two clean owner-run
-sessions, no apitrace, zero GL errors, clean shutdown). The black-screen
-symptom's root mechanism (SDL2's hidden GL-backed "texture framebuffer")
-was identified and bypassed entirely — both drop-ins now use an explicit,
-independent GL context per second window
+Status: **CLOSED — owner-confirmed resolved on native Wayland.** The
+crash, the GL-context-stealing cascade, and the black screen are all
+fixed: SDL2's hidden GL-backed "texture framebuffer" (the actual
+mechanism behind all three) was identified and bypassed entirely — both
+drop-ins now use an explicit, independent GL context per second window
 (`unicornviz/secondary_gl_window.py`) instead of `SDL_RENDERER_SOFTWARE`.
-The first landing used `moderngl.create_context()` and hit a second,
-distinct Linux-specific wall (moderngl/glcontext cannot attach to a second
-context on native Wayland at all — GLX-only "detect" fallback); rebuilt
-without moderngl, loading GL functions directly via
-`SDL_GL_GetProcAddress` instead. Verified via real-hardware smoke tests on
-this machine with `SDL_VIDEODRIVER=wayland` forced (the exact condition
-that broke); owner visual confirmation on their own native-Wayland session
-still pending. Full details:
-[`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
-§8-§10.
+A second wall (moderngl/glcontext cannot attach to a second context on
+native Wayland — GLX-only "detect" fallback) was hit and fixed by
+dropping moderngl for the second window entirely, loading GL functions
+directly via `SDL_GL_GetProcAddress`. Owner confirmed both windows working
+on their actual native-Wayland, mixed-DPI multi-monitor machine. One
+cosmetic issue (windows fall slightly short of the screen bottom on first
+open, self-corrects after a display drag) remains open but is
+**intentionally not being chased further per owner direction**. Full
+mechanism and fix history:
+[`../../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
+§8-§11.
 Last updated: 2026-07-09
 
-Successor to [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md)
+Successor to [`control-room-debug-handoff.md`](control-room-debug-handoff.md)
 (2026-06-05 and earlier), which chased an overlapping but distinct set of
 symptoms on the same in-process-second-SDL-window architecture and left
 "audience-output starvation" and "audience-output lockup after close" as
@@ -387,7 +388,7 @@ own SDL_Renderer-based window actually gets composited to the screen.
 > real-hardware smoke tests (real SDL2 + moderngl, this machine's actual
 > Wayland/Mesa stack) end-to-end for both drop-ins, plus the full
 > regression suite. See
-> [`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
+> [`../../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 > §1 for the mechanism and §8 for the implementation/verification detail.
 > The "Leading theory" and "Recommended next step" subsections immediately
 > below are preserved as a record of the diagnosis-in-progress state at
@@ -507,10 +508,10 @@ full prioritized item tracker this investigation fed into (items 1, 9, 11).
 
 ## 10) Related docs
 
-- [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md) — the
+- [`control-room-debug-handoff.md`](control-room-debug-handoff.md) — the
   predecessor investigation (2026-06-05 and earlier).
-- [`../audits/2026-07-08-render-pipeline-platform-audit.md`](../audits/2026-07-08-render-pipeline-platform-audit.md) —
+- [`../../audits/2026-07-08-render-pipeline-platform-audit.md`](../../audits/2026-07-08-render-pipeline-platform-audit.md) —
   the live tracked-item audit this investigation was conducted under.
-- [`../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`](../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md) —
+- [`../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`](../../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md) —
   the earlier, separate second-window architecture that was abandoned for
   a related class of fragility.
