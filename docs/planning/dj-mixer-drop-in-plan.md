@@ -274,8 +274,14 @@ parked for v2.
   SHIFT+pad deletes; cues cleared on load. Decoded on pad channels 7/8 (deck A
   normal/shift) and 9/10 (deck B). Pad LEDs show set cues (falling back to the
   VU show when none are set). 64 tests green.
-- [ ] **v2 backlog (not scheduled):** loop pads/roll, FX effect units + paddles,
-  beat-sync via `auto-vj-01`.
+- [x] **Loop / roll pads (done 2026-07-08, drop-in `ce69b5a`).** Deck `bpm` +
+  loop engine (modulo-wrapped read/cursor). AUTO LOOP pads (notes 16-23) toggle
+  a beat-length loop (1/16..8 beats); ROLL pads (notes 80-87) are momentary.
+- [x] **FX units + paddles (done 2026-07-08, drop-in `9b7e348`).** Master
+  `BeatEcho` (feedback delay) engaged by the FX1 paddle (Note 80, ch4, momentary)
+  with the LEVEL/DEPTH knob (CC 2/4/6) as echo depth; `set_bpm` drives the echo
+  time. 77 tests green. FX2 + more effect types are v2.
+- [ ] **Beat-sync via `auto-vj-01` (needs cross-team coordination — see below).**
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
