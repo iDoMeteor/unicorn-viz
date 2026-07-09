@@ -454,6 +454,7 @@ class App:
         self._stream_pbo_size: int = 0
         self._stream_pbo_index: int = 0
         self._stream_pbo_primed: bool = False
+        self._stream_pbo_frame_count: int = 0
         # If a driver/context cannot map PBOs reliably, permanently fall back
         # to direct read for the current session to avoid repeated map failures.
         self._stream_pbo_disabled: bool = False
@@ -1176,6 +1177,7 @@ class App:
         self._stream_pbo_size = 0
         self._stream_pbo_primed = False
         self._stream_pbo_index = 0
+        self._stream_pbo_frame_count = 0
         self._stream_pbo_disabled = False
 
     def _ensure_readback_pbos(self, size: int) -> None:
@@ -1335,7 +1337,12 @@ class App:
         self._ctx = moderngl.create_context()
         self._ctx.enable(moderngl.BLEND)
         self._ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        log.info("OpenGL %s", self._ctx.info["GL_VERSION"])
+        log.info(
+            "OpenGL %s (vendor=%s renderer=%s)",
+            self._ctx.info["GL_VERSION"],
+            self._ctx.info.get("GL_VENDOR", "?"),
+            self._ctx.info.get("GL_RENDERER", "?"),
+        )
         self._build_present_pipeline()
         self._build_blend_pipeline()
         self._build_invert_pipeline()
@@ -5757,35 +5764,69 @@ void main() {
             self._stream_pbo_size = size
             self._stream_pbo_index = 0
             self._stream_pbo_primed = False
+            self._stream_pbo_frame_count = 0
 
         write_idx = self._stream_pbo_index
         read_idx = 1 - write_idx
         try:
             source.read_into(self._stream_pbos[write_idx], components=3, alignment=1)
-            frame: bytes | None = None
-            if self._stream_pbo_primed:
-                frame = self._stream_pbos[read_idx].read()
-            else:
-                self._stream_pbo_primed = True
-            self._stream_pbo_index = read_idx
-            return frame
         except Exception as exc:
-            log.warning(
-                'Streaming PBO readback failed, disabling PBO for this session: %s',
-                exc,
-            )
-            for pbo in self._stream_pbos:
-                pbo.release()
-            self._stream_pbos = []
-            self._stream_pbo_size = 0
-            self._stream_pbo_primed = False
-            self._stream_pbo_index = 0
-            self._stream_pbo_disabled = True
+            self._disable_stream_pbo('write (read_into)', exc, size, mirror_mode_active)
             try:
                 return source.read(components=3, alignment=1)
             except Exception as read_exc:
                 log.error('Streaming direct read after PBO failure also failed: %s', read_exc)
                 return None
+
+        frame: bytes | None = None
+        if self._stream_pbo_primed:
+            try:
+                frame = self._stream_pbos[read_idx].read()
+            except Exception as exc:
+                self._disable_stream_pbo('read (buffer.read)', exc, size, mirror_mode_active)
+                try:
+                    return source.read(components=3, alignment=1)
+                except Exception as read_exc:
+                    log.error('Streaming direct read after PBO failure also failed: %s', read_exc)
+                    return None
+        else:
+            self._stream_pbo_primed = True
+        self._stream_pbo_index = read_idx
+        self._stream_pbo_frame_count += 1
+        return frame
+
+    def _disable_stream_pbo(
+        self, stage: str, exc: Exception, size: int, mirror_mode_active: bool,
+    ) -> None:
+        """Tear down the streaming PBOs and fall back to synchronous reads.
+
+        Logs which specific GL call failed (write vs. read), the raw
+        ``glGetError()`` code, and buffer/canvas context — moderngl's own
+        exception message alone (e.g. "cannot map the buffer") isn't enough
+        to diagnose *why* on a given driver; see
+        docs/audits/2026-07-08-render-pipeline-platform-audit.md §8 item 9.
+        """
+        gl_error = None
+        if self._ctx is not None:
+            try:
+                gl_error = self._ctx.error
+            except Exception:
+                gl_error = None
+        log.warning(
+            'Streaming PBO %s failed after %d prior successful frame(s), '
+            'disabling PBO for this session: %s '
+            '(gl_error=%s buffer_bytes=%d canvas=%dx%d mirror_mode=%s)',
+            stage, self._stream_pbo_frame_count, exc,
+            gl_error, size, self._width, self._height, mirror_mode_active,
+        )
+        for pbo in self._stream_pbos:
+            pbo.release()
+        self._stream_pbos = []
+        self._stream_pbo_size = 0
+        self._stream_pbo_primed = False
+        self._stream_pbo_index = 0
+        self._stream_pbo_frame_count = 0
+        self._stream_pbo_disabled = True
 
     def read_screenshot_frame(self) -> tuple[bytes, int, int] | None:
         """Read an RGB24 screenshot frame from the current drawable surface.

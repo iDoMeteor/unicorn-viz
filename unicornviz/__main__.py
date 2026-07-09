@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import faulthandler
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -202,6 +203,29 @@ def _setup_logging(cfg: Config) -> None:
     logging.getLogger(__name__).info('Logging to %s', log_path)
 
 
+def _install_gl_debug_env(cfg: Config) -> None:
+    """Enable verbose Mesa/EGL driver debug output when logging is DEBUG.
+
+    Must run before the GL context is created (so, before anything imports
+    ``sdl2``/``moderngl``) since Mesa reads these at driver-load time —
+    mirrors the existing ``SDL_VIDEODRIVER`` pattern in ``app.py``. This
+    output goes straight to the process's raw stderr, not through Python's
+    ``logging`` module, so it will not appear in the log file; redirect
+    stderr yourself if you need it captured (e.g. ``... 2>&1 | tee out.log``).
+    """
+    level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
+    if level_name != 'DEBUG':
+        return
+    os.environ.setdefault('MESA_DEBUG', '1')
+    os.environ.setdefault('LIBGL_DEBUG', 'verbose')
+    os.environ.setdefault('EGL_LOG_LEVEL', 'debug')
+    logging.getLogger(__name__).info(
+        'GL driver debug output enabled (MESA_DEBUG=1 LIBGL_DEBUG=verbose '
+        'EGL_LOG_LEVEL=debug) — written to stderr, not the log file; '
+        'redirect stderr if you need it captured.'
+    )
+
+
 def _install_faulthandler(cfg: Config) -> None:
     """Dump a Python-level traceback on native crashes (segfaults, etc.).
 
@@ -251,6 +275,7 @@ def main() -> None:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2) from exc
     _setup_logging(cfg)
+    _install_gl_debug_env(cfg)
     _install_faulthandler(cfg)
     _install_exception_logging()
     from unicornviz.app import App
