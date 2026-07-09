@@ -416,14 +416,6 @@ class SecondaryGLWindow:
                 raise RuntimeError(f'window creation failed: {sdl2.SDL_GetError().decode()}')
             self._window_id = int(sdl2.SDL_GetWindowID(self.window))
 
-            # The WM may have picked a different size than requested (e.g.
-            # borderless-fullscreen sizing quirks) — query the actual size
-            # so the GL viewport/texture match the live window exactly.
-            w_i, h_i = ctypes.c_int(0), ctypes.c_int(0)
-            sdl2.SDL_GetWindowSize(self.window, ctypes.byref(w_i), ctypes.byref(h_i))
-            if w_i.value > 0 and h_i.value > 0:
-                self.width, self.height = int(w_i.value), int(h_i.value)
-
             self._gl_context = sdl2.SDL_GL_CreateContext(self.window)
             if not self._gl_context:
                 raise RuntimeError(f'GL context creation failed: {sdl2.SDL_GetError().decode()}')
@@ -431,6 +423,23 @@ class SecondaryGLWindow:
             # never block eglSwapBuffers/wglSwapBuffers waiting on a
             # compositor frame callback for a window nobody is looking at.
             sdl2.SDL_GL_SetSwapInterval(0)
+
+            # The WM may have picked a different size than requested (e.g.
+            # borderless-fullscreen sizing quirks), and on HiDPI/fractional-
+            # scaling displays the actual GL drawable is in *physical*
+            # pixels while SDL_CreateWindow's w/h and SDL_GetWindowSize are
+            # in *logical* points -- using the logical size here would size
+            # the viewport/texture too small on any scaled display. Query
+            # the real drawable size instead (the same call app.py's own
+            # GL readback path uses for exactly this reason,
+            # read_screenshot_frame()) so the GL viewport/texture -- and,
+            # since callers copy these values back into their own
+            # rasterization size, the PIL-rendered content too -- always
+            # match the live window's true pixel dimensions.
+            w_i, h_i = ctypes.c_int(0), ctypes.c_int(0)
+            sdl2.SDL_GL_GetDrawableSize(self.window, ctypes.byref(w_i), ctypes.byref(h_i))
+            if w_i.value > 0 and h_i.value > 0:
+                self.width, self.height = int(w_i.value), int(h_i.value)
 
             self._gl = _GLBinding()
             self._gl.load()

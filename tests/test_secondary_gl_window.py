@@ -79,10 +79,10 @@ class _FakeSDL2:
     def SDL_GetWindowID(self, window: _FakeWindow) -> int:
         return window.window_id
 
-    def SDL_GetWindowSize(self, window, w_ref, h_ref) -> None:  # noqa: ARG002
-        # Real SDL writes the actual window size back through the pointers;
-        # the fake leaves them at their ctypes default (0) so callers keep
-        # whatever size they already have.
+    def SDL_GL_GetDrawableSize(self, window, w_ref, h_ref) -> None:  # noqa: ARG002
+        # Real SDL writes the actual drawable pixel size back through the
+        # pointers; the fake leaves them at their ctypes default (0) so
+        # callers keep whatever size they already have.
         pass
 
     def SDL_GL_CreateContext(self, window: _FakeWindow):

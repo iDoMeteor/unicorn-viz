@@ -166,6 +166,22 @@ class VJApi:
         """
         return self._app.rebind_main_gl_context()
 
+    def dispatch_subwindow_keydown(self, sym: int, mod: int, repeat: bool = False) -> None:
+        """Forward a keydown event from a subsystem-owned window to global hotkeys.
+
+        Subsystems that claim their own SDL window (via claim_window_events)
+        receive keyboard events exclusively while that window has OS input
+        focus — they never reach the main app's hotkey dispatch otherwise.
+        Call this for any key the subsystem doesn't handle itself, so global
+        hotkeys (and modifier-key state tracked by the main app, e.g. Ctrl)
+        keep working while the subsystem window has focus.
+        """
+        self._app.dispatch_subwindow_keydown(sym, mod, repeat)
+
+    def dispatch_subwindow_keyup(self, sym: int) -> None:
+        """Forward a keyup event from a subsystem-owned window (see dispatch_subwindow_keydown)."""
+        self._app.dispatch_subwindow_keyup(sym)
+
     def get_frame_bytes(self) -> bytes | None:
         """Return the latest cached audience-output frame bytes, if available."""
         frame, _width, _height, _components = self._app.get_frame_capture()

@@ -492,7 +492,62 @@ subsystem window (if any) is open. 8 new tests
 (`tests/test_cursor_visibility_subsystem_windows.py`) plus 1 for
 `DjMixerController.is_open` itself.
 
-## 11) References
+## 11) Follow-up fixes from owner's native-Wayland retest
+
+The owner's retest of §9's fix (windows worked, no crash) surfaced three
+more issues, all fixed the same session:
+
+**Shift+D didn't close the mixer once it had focus.** Both `HELP_ENTRIES`
+and `DjMixerController.toggle_window()` already implement Shift+D as a
+toggle — the bug was that the keypress never reached it. SDL delivers
+keyboard events only to whichever window has OS input focus, and once the
+mixer window opens it typically takes focus; `ui.py`'s `on_sdl_event`
+handled only Escape and left-click, silently dropping every other key,
+including the second Shift+D meant to close it. control-room-01 already
+had a `dispatch_subwindow_keydown`/`keyup` forwarding path for exactly
+this reason (its own richer local key bindings only forward what they
+don't handle themselves) — but that path lived on `App` directly, and
+`MixerWindow` only has `app.vj_api`, not the raw `App`. Added
+`VJApi.dispatch_subwindow_keydown`/`dispatch_subwindow_keyup` (thin
+pass-throughs) and wired `ui.py` to use them for anything it doesn't
+handle locally; switched control-room-01's own two call sites from
+`self._app.dispatch_subwindow_keydown` to `self._vj.dispatch_subwindow_
+keydown` for consistency (both drop-ins now use the same public surface).
+This also explains why held-Ctrl didn't force cursor visibility over the
+mixer in the earlier retest — same missing forwarding path — though that
+symptom is now moot regardless, since cursor visibility no longer depends
+on Ctrl at all (§10).
+
+**Windows didn't quite reach the bottom of the screen on first open**
+(fixed on drag-to-another-display-and-back). Root cause: `Secondary
+GLWindow.create()` sized the GL viewport/texture from `SDL_GetWindowSize()`
+— logical/points units — instead of `SDL_GL_GetDrawableSize()` — physical
+pixels. `unicornviz/app.py`'s own GL readback path
+(`read_screenshot_frame()`) already uses drawable size specifically for
+this reason; the second-window code didn't follow that established
+pattern. On a HiDPI/fractional-scaling display (documented owner setup:
+mixed 100%/200% monitors), the two units diverge. Fixed by switching
+`create()` to `SDL_GL_GetDrawableSize()`, queried after `SDL_GL_
+CreateContext()` succeeds. Since both drop-ins already copy `self.
+_gl_window.width/height` back into their own `self._width/self._height`
+immediately after `create()`, this single change also corrects the render
+thread's PIL rasterization size — no separate fix needed there. Also
+fixed the same logical-vs-physical gap in both drop-ins' `RESIZED`/
+`SIZE_CHANGED` handlers, which were trusting the event's `data1`/`data2`
+(also logical units) directly — they now re-query drawable size too.
+**Confidence note:** this is a concrete, evidence-based bug (verified
+against the project's own established pattern), but the owner described
+the visible symptom as small ("small issue"), which doesn't perfectly
+match how large a full 2x DPI mismatch would typically look — treat this
+fix as the best-evidenced correction available, not a guaranteed root
+cause, and re-verify.
+
+10 new regression tests
+(`drop-ins/dj-mixer-01/tests/test_ui_keyboard_forwarding.py`,
+`tests/test_vj_api_subwindow_keyboard_forwarding.py`). Full suite:
+783/783 (675 main + 108 dj-mixer-01).
+
+## 12) References
 
 - SDL2 source (branch `SDL2` = 2.32.x, verified locally this audit):
   `SDL_video.c` — `ShouldAttemptTextureFramebuffer` (line ~2678),
