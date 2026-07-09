@@ -2,13 +2,19 @@
 
 Owner: owner + Claude Sonnet 5 (master coordinator)
 Status: In progress — items 1/3 confirmed fixed on owner's machine; item 8
-(audience lockup) mitigated; dead mirror-window code removed; item 11
-(black-screen) definitively root-caused via a live apitrace GL call
-capture — control-room-01/dj-mixer-01's SDL_RenderPresent() switches the
-current EGL context and never switches back — fix landed
-(`_present_subsystems()` rebinds once per frame), awaiting owner
-confirmation; items 4/5 (GNOME panel + overlay migration) still open, not
-started.
+(audience lockup) mitigated; dead mirror-window code removed; item 11's
+crash/GL-error-cascade sub-symptom is **confirmed fixed** (two clean,
+non-apitrace owner sessions: zero GL errors, clean shutdown, no crash) via
+the apitrace-confirmed root cause — control-room-01/dj-mixer-01's
+SDL_RenderPresent() switches the current EGL context and never switches
+back, fixed by `_present_subsystems()` rebinding once per frame. However,
+item 11's **visual black-screen symptom is confirmed still open** as a
+separate, unresolved bug — it reproduces in the same clean sessions with
+zero errors and successful "first frame produced/presented" diagnostics.
+See "Status Update 3" below for the full writeup and
+`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
+for the definitive two-day narrative. Items 4/5 (GNOME panel + overlay
+migration) still open, not started.
 Last updated: 2026-07-09
 
 Scope: Owner-reported Fedora-44/GNOME/Wayland-only issues — control-room-01
@@ -173,16 +179,76 @@ open/close, not every frame where `present()` actually runs — and
 **Fix** (`4e26b4c`): the per-frame subsystem-present loop in `run()` was
 extracted into `App._present_subsystems()`, which now calls
 `self.rebind_main_gl_context()` once after the loop, gated on whether any
-subsystem actually had a callable `present()` that frame (so it costs
-nothing when control-room/mixer aren't open) — and rebinds even if a
-presenter raised, since the context can move before a partial failure.
+subsystem has a callable `present()` attribute that frame — and rebinds
+even if a presenter raised, since the context can move before a partial
+failure.
 
-Not yet re-confirmed by the owner. If this doesn't fully resolve it, the
-next apitrace angle is checking whether `eglMakeCurrent` calls happen
-*within* a single frame more than once (e.g. dj-mixer's LED/audio-engine
-code, if any, doing its own EGL work) — `apitrace dump --grep=eglMakeCurrent
-trace.trace` is the fastest way to check that directly rather than
-re-deriving it from Mesa error text again.
+**Correction (Status Update 3):** the "so it costs nothing when
+control-room/mixer aren't open" framing above is not accurate for
+dj-mixer-01 specifically. `DjMixerController.present()`
+(`dj_mixer_controller.py:287`) is always a callable method once the
+drop-in loads — it internally no-ops via `if self._window is not None`
+rather than being absent/replaced when the window is closed — and
+`[dj_mixer].enabled = true` by default, so `getattr(subsystem, 'present',
+None)` is truthy essentially every frame regardless of whether the mixer
+window is actually open. The rebind itself is cheap (0.01–0.03ms observed,
+see Status Update 3), so this is not a correctness bug, just a stale
+claim about when the gate actually engages — left as a known, minor,
+not-yet-actioned cleanup opportunity (tighten the gate to check window
+open state, e.g. `getattr(subsystem, 'is_open', True)`) rather than
+something requiring immediate attention.
+
+See "Status Update 3" immediately below for full owner-confirmed
+verification results.
+
+---
+
+## Status Update 3 — 2026-07-09 (owner-confirmed: crash fixed, black screen still open)
+
+Two clean, non-apitrace owner test sessions
+(`logs/unicornviz_20260709_143729.log`,
+`logs/unicornviz_20260709_143935.log`) — both with control-room and/or
+dj-mixer opened and closed during the session — independently confirm:
+
+- **Zero** `GL_INVALID_*` / GL error lines of any kind.
+- **Zero** exceptions or crashes; clean shutdown sequence both times.
+- `subsys_present` per-frame timing stayed in the 0.01–0.03ms range (the
+  `rebind_main_gl_context()` call is not a measurable cost).
+- Both sessions' `faulthandler_*.log` files are empty (no native crash).
+
+This is decisive confirmation that the `_present_subsystems()` fix (item
+11's crash/cascade sub-symptom) works as intended.
+
+**However**, both sessions — and every clean session run since — still
+showed control-room's and dj-mixer's own windows as **visually black**,
+despite:
+
+- `Control room: render thread produced its first frame` /
+  `first frame presented to the compositor` (and dj-mixer's equivalents)
+  logging success with no error.
+- No GL errors anywhere in the session.
+
+This rules out the GL-context-stealing bug as an explanation for the
+visual symptom (it's fixed, and the symptom persists) and rules out all
+three of the earlier fix attempts too (§8 item 9, `abd06c1`, `6a9c6ec`).
+**The black screen is a distinct, still-unsolved bug.** It reproduces
+identically across GNOME Wayland, GNOME Classic, and MATE/X11, ruling out
+a compositor-specific cause. See
+`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
+§7 for the current leading theory (a Mesa/EGL-level issue specific to
+presenting a second small SDL_RENDERER_SOFTWARE-backed window's surface
+concurrently with a primary OpenGL-heavy context in the same process) and
+the recommended next diagnostic step (a targeted `apitrace` capture of
+control-room's own window surface presentation specifically, since the
+original trace only proved the *main app's subsequent* calls were
+corrupted — it never actually verified control-room's own draw calls
+against a real-error-checking replay).
+
+One additional data point folded in from a later, unrelated test session
+(`logs/unicornviz_20260709_144802.log`): a third clean run with neither
+window opened confirms the baseline app remains fully stable on its own —
+consistent with, but not adding new information to, the black-screen
+question specifically.
 
 ---
 
@@ -526,16 +592,16 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 | # | Item | Confidence | Effort | Status |
 | --- | --- | --- | --- | --- |
 | 1 | Add missing `rebind_main_gl_context()` calls to dj-mixer-01's window open/close path | High | Low | **Done, confirmed fixed** — no more crash, `faulthandler` log empty |
-| 2 | Black-screen follow-on: port control-room-01's stale-surface-refresh fix into dj-mixer-01 + add first-frame diagnostics to both | High (the missing mechanism was confirmed by direct diff; whether it's the *complete* explanation is not) | Low-Medium | **Fix landed, not yet confirmed** — needs a fresh session log with both windows opened |
+| 2 | Black-screen follow-on: port control-room-01's stale-surface-refresh fix into dj-mixer-01 + add first-frame diagnostics to both | High (the missing mechanism was confirmed by direct diff; whether it's the *complete* explanation is not) | Low-Medium | **Fix landed; diagnostics confirm it was not the complete explanation** — "first frame produced/presented" now logs successfully every time, but the black screen persists regardless (see item 11 / Status Update 3) |
 | 3 | Add `faulthandler.enable()` at startup for future silent-crash forensics | N/A (diagnostic) | Trivial | **Done** |
 | 4 | Decide GNOME panel-suppression approach for mirror/span (Option A vs B, §4) | Medium | Medium-High | Open — Option A (per-monitor windows) reconfirmed risky per `MATE-X11-MULTIHEAD-NOTES.md`'s prior 3-platform failure; shared-GL-context variant now documented as preferred *if* revisited, still unbuilt |
 | 5 | Re-derive display/origin state on `FOCUS_GAINED` for mirror/span (§5) | Medium-High | Low-Medium | Open — can proceed in parallel with #4 |
 | 6 | Triage the 8 distinct recurring tracebacks in §7 | Unknown per-item | Unknown per-item | Open — lower urgency |
 | 7 | Confirm/remove dead `_create_mirror_outputs` path | High (it's dead) | Low | **Done** — removed from `app.py` and `multihead.py`, `MATE-X11-MULTIHEAD-NOTES.md` updated with the reconfirmed decision |
 | 8 | Throttle the synchronous PBO-fallback readback harder (0.1s → 1.0s) to stop audience effects locking up while control-room is open | High (matches an already-documented failure mode; direct code-level fix) | Low | **Done** — landed in `945a865`, not yet independently confirmed by the owner |
-| 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Medium | Low | **Partially addressed, root cause revised** — the viewport-pinning fix (`abd06c1`) is defensively correct but did **not** address the GL_INVALID_VALUE seen in practice: the mismatch-detection warning it added never fired in the owner's next two test logs, meaning `source` size and `App._width`/`_height` already agreed (1920x1080 both). The PBO error itself may be a distinct, still-open sub-issue — see item 11 for the current best theory on what's actually driving the black-screen symptom |
+| 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Medium | Low | **Root cause found and fixed, confirmed via clean owner logs** — the PBO `GL_INVALID_VALUE` was a downstream symptom of item 11's GL-context-stealing bug, not a bug in the PBO/viewport code itself; the viewport-pinning fix (`abd06c1`) was defensively correct but insufficient alone. Once item 11's real fix (`4e26b4c`) landed, the PBO errors disappeared entirely — zero occurrences in both post-fix clean sessions. The separate moderngl default-framebuffer `glReadBuffer` bug found along the way (`6a9c6ec`) is also real and fixed, confirmed against moderngl's own upstream source |
 | 10 | Fix `KeyError: 'iBass'` in `drop-ins/feature-01/rainbow_trance.py:286` (unused uniform stripped by the GLSL compiler) | High | Low | Open — unrelated to the platform investigation, found incidentally |
-| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Very high — confirmed directly via apitrace GL call trace, not inferred from error text | Low | **Fixed, unverified** (`4e26b4c`). See "Status Update 2" above for the full apitrace investigation. Real root cause: control-room-01/dj-mixer-01's `SDL_RenderPresent()` calls `eglMakeCurrent` to their own internal EGL context and never switches back, so every subsequent GL call in the main render loop runs against the wrong context. `App._present_subsystems()` now calls `rebind_main_gl_context()` once per frame after subsystem presents, gated on whether any subsystem actually presented. The three earlier fix attempts in this row's history (`source.use()`, moderngl blit-without-depth, blit-with-depth) were each real fixes for real bugs, just not the cause of this specific symptom — they only rebind once per window open/close, not every frame |
+| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Very high — confirmed directly via apitrace GL call trace, not inferred from error text | Low | **Crash/GL-error-cascade sub-symptom: confirmed fixed** (`4e26b4c`), verified via two clean, non-apitrace owner sessions with zero GL errors and clean shutdown — see "Status Update 3". Real root cause: control-room-01/dj-mixer-01's `SDL_RenderPresent()` calls `eglMakeCurrent` to their own internal EGL context and never switches back, so every subsequent GL call in the main render loop runs against the wrong context. `App._present_subsystems()` now calls `rebind_main_gl_context()` once per frame after subsystem presents. **Visual black-screen sub-symptom: confirmed still open**, reproduces in the same clean, error-free sessions — this is a separate, unresolved bug; see the standalone writeup `docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md` §7 for the current leading theory and next diagnostic step. The three earlier fix attempts in this row's history (`source.use()`, moderngl blit-without-depth, blit-with-depth) were each real fixes for real bugs, just not the cause of either sub-symptom |
 
 If item 2's diagnostics show the black screen persists even after the
 surface-refresh fix, the next step per the archived handoff's own "Path 2"

@@ -51,6 +51,7 @@ This is the canonical map for project documentation.
   - Full system audit (2026-06-17): [docs/audits/2026-06-17-full-system-audit.md](audits/2026-06-17-full-system-audit.md)
 - Archived debug and handoff notes: [docs/archive/debug](archive/debug)
   - Audio startup regression + validation hardening (2026-06-04): [docs/archive/debug/audio-startup-regression-2026-06-04.md](archive/debug/audio-startup-regression-2026-06-04.md)
+  - Control room / DJ mixer second-window investigation (2026-07-08 → 2026-07-09): [docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md](archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md)
 - Archived audit reports and review snapshots: [docs/archive/audits](archive/audits)
   - Full system audit (2026-06-01): [docs/archive/audits/2026-06-01-system-audit.md](archive/audits/2026-06-01-system-audit.md)
   - Hotkey refactor P0 hotfix brief (2026-06-01): [docs/archive/audits/2026-06-01-hotkey-refactor-regressions.md](archive/audits/2026-06-01-hotkey-refactor-regressions.md)

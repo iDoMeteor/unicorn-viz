@@ -1,5 +1,28 @@
 # Control Room Debug Handoff
 
+## See Also
+
+This document is superseded by
+[`control-room-mixer-second-window-investigation-2026-07-09.md`](control-room-mixer-second-window-investigation-2026-07-09.md),
+which picks up the same in-process-second-SDL-window architecture on
+2026-07-08/09, covers dj-mixer-01 (which cloned this drop-in's approach) as
+well as control-room-01, and finds the definitive root cause of the
+GL-context-corruption class of bug via a live `apitrace` GL call capture:
+`SDL_RenderPresent()` on the `SDL_CreateRenderer(SDL_RENDERER_SOFTWARE)` path
+adopted here in Attempt N calls `eglMakeCurrent` internally on Wayland and
+never switches back. This is consistent with — and explains the mechanism
+behind — Attempt N's own finding below that Mutter enforces a stricter
+`wl_buffer` frame-callback contract on "GL client" processes: SDL2 appears to
+route its "software" renderer through EGL specifically to satisfy that
+contract, which is exactly what causes it to silently steal the process's
+current GL context. The successor document also found and fixed the black
+screen was two more independent bugs (a moderngl default-framebuffer
+`glReadBuffer` bug, and a missing rebind call in dj-mixer-01 that control
+room already had per Attempt G here) — but as of last update, the visual
+"still black" symptom in control-room/mixer's own window is again present
+and still under investigation there, distinct from every bug fixed on this
+page.
+
 ## 2026-06-05 Status Note
 
 - This document remains a historical debug handoff and should not be treated as current runtime truth for Windows.
