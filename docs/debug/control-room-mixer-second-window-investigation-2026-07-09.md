@@ -7,7 +7,7 @@ screen on control-room/mixer's own windows is a **separate, still-open**
 bug — see §7.
 Last updated: 2026-07-09
 
-Successor to [`control-room-debug-handoff.md`](control-room-debug-handoff.md)
+Successor to [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md)
 (2026-06-05 and earlier), which chased an overlapping but distinct set of
 symptoms on the same in-process-second-SDL-window architecture and left
 "audience-output starvation" and "audience-output lockup after close" as
@@ -476,10 +476,10 @@ full prioritized item tracker this investigation fed into (items 1, 9, 11).
 
 ## 10) Related docs
 
-- [`control-room-debug-handoff.md`](control-room-debug-handoff.md) — the
+- [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md) — the
   predecessor investigation (2026-06-05 and earlier).
-- [`../../audits/2026-07-08-render-pipeline-platform-audit.md`](../../audits/2026-07-08-render-pipeline-platform-audit.md) —
+- [`../audits/2026-07-08-render-pipeline-platform-audit.md`](../audits/2026-07-08-render-pipeline-platform-audit.md) —
   the live tracked-item audit this investigation was conducted under.
-- [`../../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`](../../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md) —
+- [`../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`](../../drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md) —
   the earlier, separate second-window architecture that was abandoned for
   a related class of fragility.

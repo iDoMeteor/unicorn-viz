@@ -3,7 +3,7 @@
 ## See Also
 
 This document is superseded by
-[`control-room-mixer-second-window-investigation-2026-07-09.md`](control-room-mixer-second-window-investigation-2026-07-09.md),
+[`control-room-mixer-second-window-investigation-2026-07-09.md`](../../debug/control-room-mixer-second-window-investigation-2026-07-09.md),
 which picks up the same in-process-second-SDL-window architecture on
 2026-07-08/09, covers dj-mixer-01 (which cloned this drop-in's approach) as
 well as control-room-01, and finds the definitive root cause of the

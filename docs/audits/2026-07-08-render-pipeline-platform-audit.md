@@ -12,7 +12,7 @@ item 11's **visual black-screen symptom is confirmed still open** as a
 separate, unresolved bug — it reproduces in the same clean sessions with
 zero errors and successful "first frame produced/presented" diagnostics.
 See "Status Update 3" below for the full writeup and
-`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
+`docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
 for the definitive two-day narrative. Items 4/5 (GNOME panel + overlay
 migration) still open, not started.
 Last updated: 2026-07-09
@@ -234,7 +234,7 @@ three of the earlier fix attempts too (§8 item 9, `abd06c1`, `6a9c6ec`).
 **The black screen is a distinct, still-unsolved bug.** It reproduces
 identically across GNOME Wayland, GNOME Classic, and MATE/X11, ruling out
 a compositor-specific cause. See
-`docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
+`docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md`
 §7 for the current leading theory (a Mesa/EGL-level issue specific to
 presenting a second small SDL_RENDERER_SOFTWARE-backed window's surface
 concurrently with a primary OpenGL-heavy context in the same process) and
@@ -601,7 +601,7 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 | 8 | Throttle the synchronous PBO-fallback readback harder (0.1s → 1.0s) to stop audience effects locking up while control-room is open | High (matches an already-documented failure mode; direct code-level fix) | Low | **Done** — landed in `945a865`, not yet independently confirmed by the owner |
 | 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Medium | Low | **Root cause found and fixed, confirmed via clean owner logs** — the PBO `GL_INVALID_VALUE` was a downstream symptom of item 11's GL-context-stealing bug, not a bug in the PBO/viewport code itself; the viewport-pinning fix (`abd06c1`) was defensively correct but insufficient alone. Once item 11's real fix (`4e26b4c`) landed, the PBO errors disappeared entirely — zero occurrences in both post-fix clean sessions. The separate moderngl default-framebuffer `glReadBuffer` bug found along the way (`6a9c6ec`) is also real and fixed, confirmed against moderngl's own upstream source |
 | 10 | Fix `KeyError: 'iBass'` in `drop-ins/feature-01/rainbow_trance.py:286` (unused uniform stripped by the GLSL compiler) | High | Low | Open — unrelated to the platform investigation, found incidentally |
-| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Very high — confirmed directly via apitrace GL call trace, not inferred from error text | Low | **Crash/GL-error-cascade sub-symptom: confirmed fixed** (`4e26b4c`), verified via two clean, non-apitrace owner sessions with zero GL errors and clean shutdown — see "Status Update 3". Real root cause: control-room-01/dj-mixer-01's `SDL_RenderPresent()` calls `eglMakeCurrent` to their own internal EGL context and never switches back, so every subsequent GL call in the main render loop runs against the wrong context. `App._present_subsystems()` now calls `rebind_main_gl_context()` once per frame after subsystem presents. **Visual black-screen sub-symptom: confirmed still open**, reproduces in the same clean, error-free sessions — this is a separate, unresolved bug; see the standalone writeup `docs/archive/debug/control-room-mixer-second-window-investigation-2026-07-09.md` §7 for the current leading theory and next diagnostic step. The three earlier fix attempts in this row's history (`source.use()`, moderngl blit-without-depth, blit-with-depth) were each real fixes for real bugs, just not the cause of either sub-symptom |
+| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Very high — confirmed directly via apitrace GL call trace, not inferred from error text | Low | **Crash/GL-error-cascade sub-symptom: confirmed fixed** (`4e26b4c`), verified via two clean, non-apitrace owner sessions with zero GL errors and clean shutdown — see "Status Update 3". Real root cause: control-room-01/dj-mixer-01's `SDL_RenderPresent()` calls `eglMakeCurrent` to their own internal EGL context and never switches back, so every subsequent GL call in the main render loop runs against the wrong context. `App._present_subsystems()` now calls `rebind_main_gl_context()` once per frame after subsystem presents. **Visual black-screen sub-symptom: confirmed still open**, reproduces in the same clean, error-free sessions — this is a separate, unresolved bug; see the standalone writeup `docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md` §7 for the current leading theory and next diagnostic step. The three earlier fix attempts in this row's history (`source.use()`, moderngl blit-without-depth, blit-with-depth) were each real fixes for real bugs, just not the cause of either sub-symptom |
 
 If item 2's diagnostics show the black screen persists even after the
 surface-refresh fix, the next step per the archived handoff's own "Path 2"
