@@ -1,19 +1,10 @@
 [logging]
-level = "info"
+level = "debug"
 
 [window]
 display_mode  = "single"   # single | span_all | mirror_all
 display_index  = 2
 exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span_all / mirror_all
-
-[demo]
-auto_advance = false
-mode = "sequential"
-
-[audio]
-reactivity = 1.0
-latency = "low"
-profile = "chillstep"
 
 [ansi]
 ansi_dir_auto = "assets/ansi/acid"
@@ -306,11 +297,16 @@ log_decisions = true
 #   scheduling will visibly stall — watch the session log for that.
 analysis_mode_enabled = true
 # analysis_downbeat_confidence_min: gate for is_downbeat under analysis mode.
-#   Code default lowered 0.55 -> 0.42 (2026-07-06) after fixing a blend bug
-#   where two terms were accidentally the same signal; 0.42 sits just below
-#   the observed real confidence median (~0.41-0.47) as a training-start
-#   value.  Set explicitly here so it's easy to find/tune during the test.
-analysis_downbeat_confidence_min = 0.42
+#   Lowered twice on 2026-07-08: 0.42 -> 0.35 -> 0.30.  Field data across
+#   ~22k post-fix decision-log ticks (2026-07-06 through 2026-07-08) showed
+#   median downbeat_confidence sitting at 0.34-0.49 across most profiles --
+#   0.42 was too strict.  NOTE: this value is read once at AutoVJController
+#   construction; it is NOT hot-reloaded from a running process, so a config
+#   edit here requires a full app restart before it takes effect (confirmed
+#   via two short 2026-07-08 test sessions whose peak downbeat_confidence,
+#   0.37 and 0.39, never actually cleared the *old* 0.42 gate they were still
+#   running under -- not evidence 0.35 itself was insufficient).
+analysis_downbeat_confidence_min = 0.30
 # tactus_preference_ratio: how aggressively the ACF engine folds high-BPM
 #   estimates down toward the musical pulse.  Lower = more aggressive fold.
 #   Default 0.55; do NOT lower below ~0.50 for house/techno — the 0.75x fold
@@ -381,7 +377,7 @@ sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # ---------------------------------------------------------------------------
 [control_room]
 enabled = false
-fullscreen = false       # borderless fullscreen on the chosen display (default true)
+fullscreen = true       # borderless fullscreen on the chosen display (default true)
 display_index = 2
 #width = 1920
 #height = 1080
@@ -525,7 +521,7 @@ dark_brightness_threshold = 0.02
 # analysis_region_min_beats = 8
 # analysis_region_tol = 0.20
 # analysis_region_confidence_min = 0.58
-# analysis_downbeat_confidence_min = 0.55
+# analysis_downbeat_confidence_min = 0.30
 #
 # To enable, add the key inside your [auto_vj] block, e.g.:
 #   [auto_vj]
@@ -570,3 +566,17 @@ dark_brightness_threshold = 0.02
 #   postfx_pingpong_enabled = true
 #   postfx_pingpong_trigger_chance = 0.40
 # ---------------------------------------------------------------------------
+
+# ── dj-mixer-01 — two-deck DJ mixer window + Pioneer DDJ-REV1 ────────────────
+# Loaded but idle: the window, the audio output stream, and the REV1 MIDI port
+# are all left alone until you open the mixer with Shift+D (Esc closes it;
+# left-click a deck to play/pause). Opening the window is when the REV1 is
+# claimed (as a raw-only aux device that coexists with a VJ-side controller);
+# closing releases it. See drop-ins/dj-mixer-01/docs/ (feature-overview.md,
+# hardware-bringup.md, configuration.md).
+[dj_mixer]
+enabled = true               # load the drop-in (idle until Shift+D)
+start_enabled = false        # open the mixer (window + REV1 + audio) at boot
+rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
+display_index = 1            # display the mixer window opens on
+fullscreen = true           # borderless full-display window when true

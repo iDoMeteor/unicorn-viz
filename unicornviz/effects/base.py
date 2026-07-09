@@ -79,7 +79,8 @@ class AudioData:
     __slots__ = ("fft", "waveform", "bass", "mid", "treble",
                  "bass_n", "mid_n", "treble_n",
                  "beat", "bpm", "bass_flux", "mid_flux",
-                 "bands", "spectral_flux")
+                 "bands", "spectral_flux",
+                 "vocal_hnr", "vocal_fmr")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -104,6 +105,22 @@ class AudioData:
         # Overall gated spectral flux scalar from the Analyzer (same value used
         # for onset detection, exposed here for recommender / corpus logging).
         self.spectral_flux: float = 0.0
+        # Vocal-presence heuristics (Auto VJ profile recommender only; not
+        # audio-reactive parameters for effects). Neither is a true vocal
+        # detector -- they measure acoustic properties real singing/rapping
+        # tends to have, and can false-positive on any harmonically pitched,
+        # syllabically-modulated source (e.g. a synth lead with vibrato).
+        # vocal_hnr: 0-1 harmonic-to-noise-ratio proxy in the vocal-formant
+        #   band (300 Hz-3.4 kHz) -- how strongly periodic/harmonic that
+        #   band's spectral shape is this frame. High for voice or any
+        #   pitched tone; low for noise-like/percussive content.
+        self.vocal_hnr: float = 0.0
+        # vocal_fmr: 0-1 formant modulation rate -- fraction of the vocal
+        #   band's energy envelope modulation concentrated in 3-8 Hz
+        #   (syllabic/vibrato rate), tracked over a ~2s rolling window and
+        #   updated periodically (not every frame). High for sung/spoken
+        #   delivery; low for a sustained pad or a one-shot hit.
+        self.vocal_fmr: float = 0.0
 
 
 class BaseEffect(ABC):

@@ -54,6 +54,22 @@ _ENV_LEN = int(_ENV_RATE * _ENV_WINDOW_S)   # 150 samples
 _BEAT_MAD_K = 1.80          # threshold = median + k * MAD
 _BEAT_ABS_FLOOR = 0.02      # minimum absolute threshold (silences silence triggers)
 
+# Vocal-presence heuristics (Auto VJ profile recommender). Neither vocal_hnr
+# nor vocal_fmr is a true vocal detector -- see AudioData docstring comments
+# in unicornviz/effects/base.py for the caveats. Formant band matches the
+# range used across the [audio] profile literature-grounded fingerprints.
+_VOCAL_HZ = (300.0, 3400.0)
+_VOCAL_HNR_MIN_LAG_BINS = 2   # skip lag 0/1: dominated by envelope shape, not harmonic spacing
+
+# FMR: track the vocal-band energy envelope at a coarse rate over a short
+# window, then look for modulation energy concentrated in the syllabic/
+# vibrato rate band (3-8 Hz) vs. the rest of the modulation spectrum.
+_VOCAL_ENV_RATE = 40.0
+_VOCAL_ENV_WINDOW_S = 2.0
+_VOCAL_ENV_LEN = int(_VOCAL_ENV_RATE * _VOCAL_ENV_WINDOW_S)   # 80 samples
+_VOCAL_FMR_HZ = (3.0, 8.0)
+_VOCAL_FMR_RECOMPUTE_FRAMES = 8   # throttle the modulation FFT; ~130-190ms at typical block sizes
+
 
 @dataclass(frozen=True)
 class OnsetEvent:
@@ -123,6 +139,15 @@ class Analyzer:
         # P1 — onset event queue
         self._onset_queue: deque[OnsetEvent] = deque(maxlen=256)
 
+        # Vocal-presence heuristics (see _VOCAL_HZ / AudioData docstring).
+        self._vocal_slice: slice = slice(0, 1)
+        self._vocal_env_buf: np.ndarray = np.zeros(_VOCAL_ENV_LEN, dtype=np.float32)
+        self._vocal_env_write_idx: int = 0
+        self._vocal_env_t_acc: float = 0.0
+        self._vocal_env_filled: bool = False
+        self._vocal_fmr_cached: float = 0.0
+        self._vocal_fmr_frame_count: int = 0
+
         # P3 — adaptive refractory (set by BeatTracker via set_expected_bpm)
         self._refractory_s: float | None = None
         self._beat_cooldown_until_t: float = -1e9
@@ -175,7 +200,13 @@ class Analyzer:
         self._bass_slice = slice(min(b0, b1), max(b0 + 1, b1))
         self._mid_slice = slice(min(m0, m1), max(m0 + 1, m1))
         self._treble_slice = slice(min(t0, t1), max(t0 + 1, t1))
-        
+
+        # Vocal-formant band is fixed (not profile-dependent) -- it targets
+        # the acoustic range voiced speech/singing occupies regardless of genre.
+        v0 = hz_to_bin(_VOCAL_HZ[0])
+        v1 = hz_to_bin(_VOCAL_HZ[1])
+        self._vocal_slice = slice(min(v0, v1), max(v0 + 1, v1))
+
         # Beat detection weighting: emphasize bass + mid flux based on profile.
         # Per-band emphasis comes from the profile so kick-driven genres
         # (house/rap/techno) suppress hi-hat onsets, while broader genres
@@ -281,6 +312,86 @@ class Analyzer:
         return threshold, mad
 
     # ------------------------------------------------------------------
+    # Vocal-presence heuristics: HNR (per-frame) + FMR (rolling window)
+    # ------------------------------------------------------------------
+
+    def _compute_vocal_hnr(self, spectrum: np.ndarray) -> float:
+        """Return a 0-1 harmonic-to-noise-ratio proxy for the vocal formant band.
+
+        Autocorrelates the log-compressed magnitude spectrum within the
+        formant band (this is the standard cepstral-pitch trick: a harmonic
+        comb in the spectrum produces a periodic ripple across frequency
+        bins, which shows up as a strong autocorrelation peak at a nonzero
+        lag). High for voice or any pitched tone; low for noise-like or
+        percussive content sharing the same band.
+        """
+        band = spectrum[self._vocal_slice]
+        n = band.size
+        if n < 8:
+            return 0.0
+        log_band = np.log1p(band.astype(np.float64))
+        log_band -= log_band.mean()
+        energy = float(np.dot(log_band, log_band))
+        if energy <= 1e-9:
+            return 0.0
+        f = np.fft.rfft(log_band, n=2 * n)
+        acf = np.fft.irfft(f * np.conj(f))[:n]
+        acf0 = acf[0]
+        if acf0 <= 1e-9:
+            return 0.0
+        acf /= acf0
+        if n <= _VOCAL_HNR_MIN_LAG_BINS + 1:
+            return 0.0
+        peak = float(np.max(acf[_VOCAL_HNR_MIN_LAG_BINS:]))
+        return float(np.clip(peak, 0.0, 1.0))
+
+    def _push_vocal_envelope(self, dt: float, vocal_energy: float) -> None:
+        """Resample the vocal-band energy scalar into the FMR ring (40 Hz)."""
+        self._vocal_env_t_acc += dt
+        step = 1.0 / _VOCAL_ENV_RATE
+        while self._vocal_env_t_acc >= step:
+            self._vocal_env_t_acc -= step
+            self._vocal_env_buf[self._vocal_env_write_idx] = vocal_energy
+            self._vocal_env_write_idx = (self._vocal_env_write_idx + 1) % _VOCAL_ENV_LEN
+            if self._vocal_env_write_idx == 0:
+                self._vocal_env_filled = True
+
+    def _compute_vocal_fmr(self) -> float:
+        """Return the fraction of vocal-band modulation energy in 3-8 Hz.
+
+        FFTs the vocal-band energy ring (not the audio itself -- this is a
+        modulation spectrum, one level removed) and compares energy in the
+        syllabic/vibrato rate band against total modulation energy excluding
+        DC. High for sung/spoken delivery; low for a sustained pad (little
+        modulation at all) or pure noise (modulation spread flat/broadband).
+        """
+        n_valid = _VOCAL_ENV_LEN if self._vocal_env_filled else self._vocal_env_write_idx
+        if n_valid < 16:
+            return 0.0
+        if self._vocal_env_filled:
+            idx = self._vocal_env_write_idx
+            arr = np.concatenate([self._vocal_env_buf[idx:], self._vocal_env_buf[:idx]])
+        else:
+            arr = self._vocal_env_buf[:n_valid].copy()
+        arr = arr.astype(np.float64)
+        arr -= arr.mean()
+        # Window before the modulation FFT: an un-windowed segment boundary
+        # (block-rate leakage from the source FFT, or simply a non-periodic
+        # slice) spreads energy across many bins, including 3-8 Hz, even when
+        # the true envelope is flat -- confirmed against a synthetic
+        # unmodulated tone that otherwise scored ~0.46 instead of ~0.
+        arr *= np.hanning(arr.size)
+        mag = np.abs(np.fft.rfft(arr))
+        mod_energy = mag[1:]  # exclude DC (bin 0)
+        total = float(np.sum(mod_energy))
+        if total <= 1e-9:
+            return 0.0
+        freqs = np.fft.rfftfreq(arr.size, d=1.0 / _VOCAL_ENV_RATE)[1:]
+        band_mask = (freqs >= _VOCAL_FMR_HZ[0]) & (freqs <= _VOCAL_FMR_HZ[1])
+        band_energy = float(np.sum(mod_energy[band_mask]))
+        return float(np.clip(band_energy / total, 0.0, 1.0))
+
+    # ------------------------------------------------------------------
     # Existing helpers
     # ------------------------------------------------------------------
 
@@ -368,6 +479,23 @@ class Analyzer:
         data.mid_flux = float(np.sum(
             self._flux_delta[self._mid_slice] * self._flux_weights[self._mid_slice]
         ))
+
+        # Vocal-presence heuristics -- must read the raw (pre-normalization)
+        # spectrum, same as flux above, since the in-place normalize below
+        # rescales per-frame and would erase the harmonic ripple shape.
+        if energy > 1e-5:
+            data.vocal_hnr = self._compute_vocal_hnr(spectrum)
+            vocal_energy = float(spectrum[self._vocal_slice].mean())
+        else:
+            data.vocal_hnr = 0.0
+            vocal_energy = 0.0
+        vocal_dt = len(pcm) / _ASSUMED_SAMPLE_RATE
+        self._push_vocal_envelope(vocal_dt, vocal_energy)
+        self._vocal_fmr_frame_count += 1
+        if self._vocal_fmr_frame_count >= _VOCAL_FMR_RECOMPUTE_FRAMES:
+            self._vocal_fmr_frame_count = 0
+            self._vocal_fmr_cached = self._compute_vocal_fmr()
+        data.vocal_fmr = self._vocal_fmr_cached
 
         # --- Normalise spectrum for display / band-level computation ---
         max_val = spectrum.max()

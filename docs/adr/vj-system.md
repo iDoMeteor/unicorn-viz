@@ -143,6 +143,22 @@ search window via `bpm_hint_min` / `bpm_hint_max`.
 `set_profile()` on both v1 and v2 trackers now applies `bpm_hint_min/max` and
 re-runs `_setup_acf_arrays()` when the range changes.
 
+**Note (table above is stale):** the table predates the current 20-profile roster (see
+`unicornviz/audio/profiles.py` for the authoritative list) and even shows outdated σ values for
+`house`/`chillstep`; not rewritten here as out of scope for this entry.
+
+**`rap`/`hyphy`/`r&b` bpm_hint gap fixed (2026-07-08):** these three were the only profiles in the
+entire roster with no `bpm_hint_min`/`bpm_hint_max` set at all — meaning their ACF search ran the
+full unconstrained `60-200` BPM range (`_V2_BPM_MIN`/`_V2_BPM_MAX` in `beat_grid.py`) relying only
+on the soft Gaussian prior, while every other profile hard-caps its search to an 8-40 BPM window.
+Discovered while investigating a live Detroit techno (120-135 BPM) track locking the recommender
+into `hyphy` despite having no vocal content — the uncapped search meant techno's tempo wasn't
+rejected outright, only mildly penalized by the prior (~1.3-1.6σ off-center). Fixed by wiring each
+profile's hint range to the tempo pocket already documented in its own code comment: `rap` 70-100,
+`hyphy` 90-110, `r&b` 75-100. This is a search-range fix, not a fingerprint fix — it does not by
+itself solve non-vocal tracks matching the vocal-forward spectral shape (see the HNR/FMR vocal-
+detection work below).
+
 ### 2. VJ mood profiles (director)
 
 Set with `Ctrl+J` → `M`.  Called **moods**: `chill`, `normie`, `raver`.
@@ -330,6 +346,188 @@ training-start value just below the observed real coherence median, not a valida
 there is still no production data on the `region` or `density` terms (analysis mode has never
 logged them live).  Revisit this threshold once a supervised session's real distribution is in
 hand; see `docs/audits/2026-07-06-vj-training-systems-audit.md` P1-4 / Phase 2 step 8.
+
+---
+
+## Downbeat Confidence Gate — 0.42 → 0.35 → 0.30 after live validation (2026-07-08)
+
+Decision: `analysis_downbeat_confidence_min` lowered `0.42 → 0.35 → 0.30`
+
+The `0.42` training-start value above was never validated against production `is_downbeat` firing
+behavior — only against a raw confidence percentile. A new HUD element (a downbeat pulse dot next
+to the BPM label, driven directly by `_grid.is_downbeat`) let the operator watch the gate live for
+the first time, and it showed `is_downbeat` **not firing at all** in a real session at `0.42` — a
+hard failure, not a soft near-miss.
+
+A quantitative pass over ~22k post-fix decision-log ticks (2026-07-06 through 2026-07-08, spanning
+56 sessions) confirmed it: `downbeat_confidence` median sits at 0.34–0.60 depending on profile, with
+most profiles (hyphy, rap, chillstep, ambient, fire_dj, rock) spending 35–70% of signal-present
+ticks in the 0.30–0.42 band — below the old gate for a majority of ticks in exactly the genres this
+session's fingerprint work targeted. `0.42` was still too strict even with the blend bug fixed.
+
+The first drop to `0.35` was reported as still producing zero fires across two more sessions. Log
+inspection showed this was a false negative, not a real second failure: the first of those two
+sessions started *before* the `0.35` edit landed on disk (still genuinely running `0.42`, peak
+`downbeat_confidence` 0.37 — correctly below gate), and the second started after the edit but never
+exceeded 0.39 (below `0.42`, but the config value is read once at `AutoVJController.__init__` and is
+**not hot-reloaded** — a running process, or a subsystem-reload path that reuses an already-parsed
+config object, keeps the old gate until the next full app restart). A separate, much longer
+(~130 min) session that ran fully under the original `0.42` gate fired `is_downbeat` 54 times with a
+healthy confidence distribution (median 0.43, max 0.76) — proof the gate mechanism itself works
+given enough stable, confident playback; the two short test clips (19s, 42s) simply didn't run long
+enough at the intended threshold to prove anything either way.
+
+Moved to `0.30` regardless, both because it's a safe additional margin below the observed median
+floor and because the operator explicitly requested it. **Any future test of this value must
+confirm a full app restart happened after the config edit** — config.toml is not hot-reloaded for
+this key, and matching an observed max-confidence value against the *previous* gate is easy to
+mistake for a real gate failure.
+
+This is a live-only regression: unit tests exercise `_compute_downbeat_confidence()` and the gate
+comparison directly, so they couldn't have caught a threshold that's mathematically fine but
+empirically miscalibrated against the real signal's distribution. The HUD pulse dot is the intended
+detection mechanism going forward — watch it during any future threshold change instead of relying
+solely on log percentiles.
+
+---
+
+## Per-Bar `downbeat_fire` Decision-Log Event (2026-07-08)
+
+Decision: log every real `is_downbeat` firing as its own edge-triggered `downbeat_fire` event
+(`_maybe_log_downbeat_event()` in `auto_vj.py`), in addition to the existing `detector_tick` field.
+
+While investigating the gate-threshold changes above, a 130-minute session logged only 54
+`detector_tick`-visible `is_downbeat=True` reads despite an estimated ~3,036 real bars over that
+session (~93 BPM average) — a 1.78% apparent fire rate. The cause: `is_downbeat` is a true one-frame
+flag (`grid.update()` resets it to `False` every frame, 60fps), but `detector_tick` is only written
+once per second (`_detector_log_interval_s`). The odds of the one throttled log write per second
+landing on the exact frame the flag was `True` are ~1/60 — almost exactly the 1.78% observed. Cross-
+checking against `downbeat_confidence` (which *holds* its value between bar-checks rather than
+blinking, so a 1-second sample is a much better proxy) showed ~53% of samples clearing the 0.42 gate
+that session — meaning the real fire rate was likely ~30x higher than the log suggested.
+
+**`detector_tick`'s `is_downbeat` field is not a usable instrument for measuring per-bar rate** and
+should not be used for that going forward — use `downbeat_fire` events (one per real firing, with a
+monotonic `bar_count`) instead. `detector_tick` remains fine for everything else it captures
+(confidence, bpm, lock state) since those persist between samples rather than blinking.
+
+---
+
+## Vocal-Presence Heuristics — HNR + FMR (2026-07-08)
+
+Decision: add `vocal_hnr` / `vocal_fmr` to `AudioData` (computed in `unicornviz/audio/analyzer.py`)
+and `vocal_hnr_mu` / `vocal_fmr_mu` to `AudioProfile`, wired into the recommender's `_profile_score()`
+at low weight (0.3 / 0.4, vs. 1.0+ for the established fit terms).
+
+**Motivation:** a live Detroit techno track (120-135 BPM, no vocals) was observed locking the
+recommender into `hyphy` — traced to two causes. First, `hyphy` (along with `rap`/`r&b`) had no
+`bpm_hint_min/max`, so its ACF search ran the full unconstrained range (fixed separately, see the
+Audio Profile System section above). Second, and more fundamentally: none of the recommender's
+existing signals (spectral centroid, ZCR, onset density, or the 64-band cosine-similarity
+fingerprint) measure vocal presence as a concept — they measure time-averaged energy *shape*, and a
+bass-heavy instrumental track can match a "sustained vocal plateau" fingerprint just as well as an
+actual voice, because nothing in that fingerprint encodes periodicity, harmonicity, or
+syllable-rate modulation over time.
+
+**What was added:**
+
+- `vocal_hnr`: a harmonic-to-noise-ratio proxy in the vocal-formant band (300 Hz-3.4 kHz), computed
+  per-frame by autocorrelating the log-compressed magnitude spectrum in that band (the standard
+  cepstral-pitch trick — a harmonic comb produces a periodic ripple across frequency bins, which
+  shows up as an autocorrelation peak at a nonzero lag). Cheap: reuses the FFT the analyzer already
+  computes, no extra buffering.
+- `vocal_fmr`: fraction of the vocal-band energy envelope's modulation concentrated in 3-8 Hz
+  (syllabic/vibrato rate), tracked via a dedicated 40 Hz/2s rolling ring (mirroring the existing
+  onset-envelope pattern) and recomputed every 8 frames via a small windowed FFT of that ring.
+
+**Known limitations (validated via synthetic signal tests, not real session data):**
+
+- Neither is a true vocal detector. `vocal_hnr` mainly separates "any pitched/harmonic content" from
+  "noise-like content" in that band — it will read high for a synth lead or bassline just as readily
+  as a voice. `vocal_fmr` is the stronger genre discriminator in principle (steady 4/4 kick-driven
+  modulation sits at the beat rate, ~2 Hz at 120 BPM, well below the 3-8 Hz target band) but showed
+  real leakage-driven noise in testing: a synthetic *unmodulated* stationary multi-harmonic tone
+  scored ~0.5 (should ideally be near the ~0.25 chance baseline for this band's width), vs. ~0.68 for
+  a genuinely 5 Hz-modulated tone and ~0.20-0.26 for noise/wrong-rate modulation — real separation,
+  but noisier than hoped on a synthetic edge case unlikely to occur in real audio (which has much
+  richer natural dynamics than a pure sum of stationary sinusoids).
+- Profile `vocal_hnr_mu`/`vocal_fmr_mu` values (rap/hyphy 0.55/0.50, r&b 0.60/0.55, the 14
+  instrumental-dominant profiles 0.35/0.25, `ambient`/`chillstep`/`generic` left uncalibrated) are
+  first-pass estimates informed by the synthetic test results, **not validated against real session
+  data** the way the spectral fingerprints were. Revisit once live sessions accumulate
+  `mean_vocal_hnr`/`mean_vocal_fmr` in the `profile_recommendation` decision-log entries.
+- A proper fix would use a pretrained vocal-activity-detection model — deferred as DW-005 in
+  `docs/planning/deferred-work-2026-06-18.md` pending evidence this heuristic pair isn't sufficient.
+
+---
+
+## Profile Confusability Pass (2026-07-08)
+
+Decision: `electronic.zcr_mu` lowered `0.065 → 0.052`; `fire_dj.bpm_prior_mu` shifted `148 → 152`.
+
+**Methodology:** rather than eyeballing the full profile table (see
+`docs/audio-profile-reference.md`) for similar-looking profiles, wrote a standalone script
+(`/tmp/.../scratchpad/confusability.py`, not committed) reusing `_profile_score()`'s exact Gaussian
+sigmas and composite weights (tempo/centroid/zcr/onset/spectral-shape/vocal-hnr/vocal-fmr fits;
+`band_fit` and `kick_regularity_fit` omitted as they need live per-frame samples, not a static
+profile spec). For each profile pair (A, B), built a "canonical track" for A from A's own mu values,
+scored it against both A's and B's profile, and took the gap (`self_score_A − cross_score_B`,
+averaged both directions) as a confusability metric — smaller gap means a track built exactly to A's
+spec still scores nearly as well against B.
+
+**Findings (top 3 closest pairs, before any tweak):**
+
+1. `electronic`/`generic` (gap 0.058) — `spectral_centroid_mu` (1600), `zcr_mu` (0.065), and
+   `onset_density_mu` (2.5) were all *identical* between the two, plus 98.1% `expected_bands` cosine
+   similarity. `electronic` had accidentally inherited `generic`'s exact scalar targets.
+2. `hard_techno`/`fire_dj` (gap 0.071) — identical `bpm_prior_mu` (148), 98.8% fingerprint
+   similarity. `fire_dj` is an intentional wide multi-genre catch-all (132-170 BPM) but its center
+   point exactly copied `hard_techno`'s instead of sitting at its own range's center (~151).
+3. `tech_house`/`electronic` (gap 0.081) — same `zcr_mu` (0.065), close centroid/bpm, 98.5%
+   similarity — a secondary symptom of the same `electronic` scalar-target issue as #1.
+
+**Fix:** `zcr_mu` was the one dimension both of `electronic`'s neighbors (`generic` and
+`tech_house`) shared at exactly 0.065 — lowering it to 0.052 separates from both simultaneously
+without trading centroid/onset distance against either (tested numerically before applying).
+`fire_dj.bpm_prior_mu` moved to 152, near the true center of its own declared 132-170 range.
+
+**Result:** re-running the same gap calculation after the tweak: `electronic`/`generic` 0.058 →
+0.185 (3.2x), `tech_house`/`electronic` 0.081 → 0.208 (2.6x), `hard_techno`/`fire_dj` 0.071 → 0.093
+(fire_dj-mu-only fix; residual closeness here is expected — a broad catch-all profile spanning a
+narrow genre's range will always sit somewhat close to it). Neither original top-2 pair got pushed
+into a *new* top-3 collision after the fix — the post-tweak ranking's new #1 is still
+`hard_techno`/`fire_dj`, followed by `hardgroove`/`breaks` and `hardgroove`/`uk_garage` (both
+pre-existing, not introduced by this change).
+
+This pass only touched two scalar values on two profiles; `hardgroove`/`breaks` and
+`hardgroove`/`uk_garage` are the next-closest pairs and were not addressed here — flagged for a
+future pass if it becomes an issue in practice.
+
+---
+
+## Profile Confusability Pass, Round 2 (2026-07-08)
+
+Decision: `hardgroove.zcr_mu` raised `0.068 → 0.086`.
+
+Follow-up to the round-1 pass above, addressing the next two closest pairs it flagged:
+`hardgroove`/`breaks` (gap 0.136) and `hardgroove`/`uk_garage` (gap 0.157). Unlike round 1, there was
+no single exact-duplicate value across *all* dimensions — `hardgroove` instead sits centrally
+between `breaks` and `uk_garage` on bpm, centroid, and onset (each profile's value bracketing
+`hardgroove`'s on both sides), meaning any move on those three dimensions trades separation from one
+neighbor against the other. `zcr_mu` was the one dimension not in that three-way sandwich: it tied
+`uk_garage`'s exactly (0.068) and sat close to `breaks`' (0.075).
+
+Verified numerically (script from round 1) that lowering `zcr_mu` separates from both neighbors
+faster than raising it — but raising was chosen instead: `hardgroove`'s own description ("rolling
+tribal percussion... busy hats that want motion") implies *more* noise-like/percussive high-frequency
+content than its neighbors, not less. `0.086` was chosen as the smallest value clearing both
+neighbors on the same side (not landing symmetrically between them, which would cancel out the
+separation gain against whichever neighbor it lands equidistant from).
+
+**Result:** `hardgroove`/`breaks` 0.136 → 0.190, `hardgroove`/`uk_garage` 0.157 → 0.400. Confirmed
+via a full re-ranking that neither became a new top-3 collision and no other pair regressed;
+`hard_techno`/`fire_dj` (0.093, the accepted residual catch-all overlap from round 1) remains the
+closest pair in the roster.
 
 ---
 

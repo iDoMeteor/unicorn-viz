@@ -83,6 +83,24 @@ class AudioProfile:
     zcr_mu: float | None = None
     onset_density_mu: float | None = None
 
+    # Vocal-presence heuristics (2026-07-08, first-pass/unvalidated starting
+    # values -- not yet checked against real session data the way the
+    # spectral fingerprints below were). See Analyzer._compute_vocal_hnr /
+    # _compute_vocal_fmr in unicornviz/audio/analyzer.py for what these
+    # measure and their known limitations (neither is a true vocal detector).
+    # vocal_hnr_mu: expected 0-1 harmonic-to-noise-ratio in the vocal-formant
+    #   band. Weak genre discriminator on its own (most genres have *some*
+    #   harmonic bass/lead content in that band) -- mainly separates
+    #   noise/percussion-dominated material from anything tonal.
+    # vocal_fmr_mu: expected 0-1 fraction of formant-band modulation energy
+    #   in the 3-8 Hz syllabic/vibrato rate. The stronger genre
+    #   discriminator: steady 4/4 kick-driven modulation sits at the beat
+    #   rate (~2 Hz at 120 BPM), well below this band, so instrumental
+    #   dance genres should score meaningfully lower than sung/rapped vocal.
+    # None on a profile = not calibrated, skip scoring on that dimension.
+    vocal_hnr_mu: float | None = None
+    vocal_fmr_mu: float | None = None
+
     # 64-element normalized (0.0–1.0) spectral fingerprint: expected relative
     # magnitude per log-spaced band (30 Hz – 16 kHz, matching audio_spectrum.py).
     # Cosine similarity between the observed window-mean vector and this fingerprint
@@ -144,6 +162,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1500.0,
         zcr_mu=0.060,
         onset_density_mu=2.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.950, 0.900, 0.850, 0.800, 0.750, 0.700, 0.650, 0.700,
             0.750, 0.800, 0.900, 0.850, 0.650, 0.600, 0.550, 0.500,
@@ -180,6 +200,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1700.0,
         zcr_mu=0.065,
         onset_density_mu=2.8,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.900, 0.850, 0.800, 0.750, 0.700, 0.650, 0.600, 0.750,
             0.800, 0.850, 0.750, 0.800, 0.850, 0.700, 0.750, 0.800,
@@ -216,6 +238,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2000.0,
         zcr_mu=0.072,
         onset_density_mu=3.2,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.920, 0.880, 0.850, 0.800, 0.780, 0.760, 0.740, 0.920,
             0.900, 0.880, 0.940, 0.900, 0.800, 0.780, 0.760, 0.740,
@@ -254,6 +278,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2200.0,
         zcr_mu=0.080,
         onset_density_mu=3.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.880, 0.860, 0.840, 0.820, 0.800, 0.780, 0.760, 0.820,
             0.880, 0.900, 0.850, 0.800, 0.750, 0.780, 0.800, 0.820,
@@ -290,6 +316,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2500.0,
         zcr_mu=0.090,
         onset_density_mu=4.0,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.850, 0.850, 0.850, 0.820, 0.820, 0.820, 0.820, 0.880,
             0.920, 0.960, 0.850, 0.780, 0.700, 0.780, 0.850, 0.900,
@@ -325,8 +353,17 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=118.0,
         bpm_hint_max=132.0,
         spectral_centroid_mu=1600.0,
-        zcr_mu=0.065,
+        # 2026-07-08: lowered 0.065 -> 0.052 (confusability pass, see ADR).
+        # zcr_mu was an exact duplicate of both generic's (0.065) and
+        # tech_house's (0.065) values, making this profile the closest
+        # competing match to both. This is the one dimension both neighbors
+        # shared, so it's a single-parameter fix that separates from both
+        # simultaneously without trading centroid/onset distance against
+        # either.
+        zcr_mu=0.052,
         onset_density_mu=2.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.820, 0.800, 0.780, 0.760, 0.740, 0.720, 0.700, 0.760,
             0.840, 0.880, 0.850, 0.820, 0.800, 0.780, 0.760, 0.740,
@@ -361,8 +398,18 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=132.0,
         bpm_hint_max=140.0,
         spectral_centroid_mu=1800.0,
-        zcr_mu=0.068,
+        # 2026-07-08: raised 0.068 -> 0.086 (confusability pass, see ADR).
+        # Was tied exactly with uk_garage's zcr_mu and close to breaks',
+        # making this the 2nd/3rd-closest competing pair in the whole
+        # roster. Raised rather than lowered: "rolling tribal percussion...
+        # busy hats" (see description above) implies more noise-like/
+        # percussive high-frequency content than its neighbors, not less --
+        # this is the direction consistent with the genre's own character,
+        # and numerically separates from both neighbors at once.
+        zcr_mu=0.086,
         onset_density_mu=3.2,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.880, 0.840, 0.800, 0.760, 0.720, 0.680, 0.650, 0.900,
             0.950, 1.000, 0.920, 0.850, 0.800, 0.920, 0.880, 0.840,
@@ -399,6 +446,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1700.0,
         zcr_mu=0.068,
         onset_density_mu=2.8,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.780, 0.760, 0.740, 0.720, 0.700, 0.680, 0.660, 0.750,
             0.800, 0.820, 0.780, 0.740, 0.700, 0.760, 0.800, 0.820,
@@ -435,6 +484,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1900.0,
         zcr_mu=0.075,
         onset_density_mu=3.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.550, 0.570, 0.580, 0.600, 0.620, 0.620, 0.600, 0.650,
             0.680, 0.720, 0.750, 0.730, 0.700, 0.780, 0.850, 0.880,
@@ -471,6 +522,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2000.0,
         zcr_mu=0.075,
         onset_density_mu=3.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.850, 0.820, 0.800, 0.750, 0.700, 0.650, 0.600, 0.880,
             0.920, 0.960, 0.850, 0.780, 0.700, 0.780, 0.850, 0.900,
@@ -510,6 +563,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1550.0,
         zcr_mu=0.130,
         onset_density_mu=4.0,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.900, 0.900, 0.920, 0.920, 0.850, 0.800, 0.750, 0.750,
             0.730, 0.710, 0.700, 0.700, 0.800, 0.850, 0.850, 0.880,
@@ -544,13 +599,21 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.45,
         onset_mid_emphasis=1.30,
         onset_treble_emphasis=1.18,
-        bpm_prior_mu=148.0,
+        # 2026-07-08: bpm_prior_mu 148 -> 152 (confusability pass, see ADR).
+        # This wide-tempo DJ-set catch-all (132-170 BPM) exactly copied
+        # hard_techno's center point (148), making it the closest competing
+        # match to a much narrower, specific genre profile. Shifted to sit
+        # nearer the true center of this profile's own declared range
+        # instead of duplicating a neighbor's.
+        bpm_prior_mu=152.0,
         bpm_prior_sigma=0.32,
         bpm_hint_min=132.0,
         bpm_hint_max=170.0,
         spectral_centroid_mu=2100.0,
         zcr_mu=0.076,
         onset_density_mu=3.8,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             0.920, 0.880, 0.850, 0.820, 0.780, 0.750, 0.800, 0.850,
             0.900, 0.950, 0.800, 0.850, 0.900, 0.880, 0.850, 0.900,
@@ -587,6 +650,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2200.0,
         zcr_mu=0.085,
         onset_density_mu=4.5,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             1.000, 0.950, 0.900, 0.850, 0.800, 0.750, 0.950, 0.970,
             0.990, 0.800, 0.900, 0.850, 0.800, 0.850, 0.900, 0.950,
@@ -629,6 +694,8 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=950.0,
         zcr_mu=0.095,
         onset_density_mu=1.8,
+        vocal_hnr_mu=0.35,
+        vocal_fmr_mu=0.25,
         expected_bands=[
             1.000, 0.980, 0.950, 0.930, 0.920, 0.850, 0.820, 0.780,
             0.750, 0.720, 0.700, 0.650, 0.850, 0.900, 0.880, 0.850,
@@ -663,9 +730,18 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.80,
         bpm_prior_mu=88.0,
         bpm_prior_sigma=0.30,
+        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
+        # own tempo pocket being documented above ("70-100 BPM") -- without a
+        # hint, the ACF search ran the full 60-200 BPM range unconstrained,
+        # relying only on the soft Gaussian prior. Wired the hint to the
+        # range already documented in this profile's own comment.
+        bpm_hint_min=70.0,
+        bpm_hint_max=100.0,
         spectral_centroid_mu=1600.0,
         zcr_mu=0.060,
         onset_density_mu=2.0,
+        vocal_hnr_mu=0.55,
+        vocal_fmr_mu=0.5,
         # Fingerprint reshaped for a sustained (not choppy) plateau across the
         # 150 Hz-3.2 kHz vocal-formant range (bands 16-47) — rap vocals are a
         # continuous signal, unlike percussion transients, so the genre match
@@ -704,9 +780,20 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.80,
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.25,
+        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
+        # own tempo pocket being documented above ("90-110 BPM") -- without a
+        # hint, the ACF search ran the full 60-200 BPM range unconstrained
+        # (confirmed as a likely factor in a real Detroit-techno-into-hyphy
+        # misclassification, since 120-135 BPM techno sat comfortably inside
+        # this profile's uncapped search). Wired the hint to the range
+        # already documented in this profile's own comment.
+        bpm_hint_min=90.0,
+        bpm_hint_max=110.0,
         spectral_centroid_mu=1800.0,
         zcr_mu=0.068,
         onset_density_mu=2.5,
+        vocal_hnr_mu=0.55,
+        vocal_fmr_mu=0.5,
         # Fingerprint reshaped for a sustained hype-vocal-chop plateau across
         # 200 Hz-3 kHz (bands 16-47), brighter/broader than rap's per the
         # genre's punchier, more treble-forward character.
@@ -742,11 +829,20 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.7,
         bpm_prior_mu=85.0,
         bpm_prior_sigma=0.30,
+        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
+        # own tempo pocket being documented above ("75-100 BPM") -- without a
+        # hint, the ACF search ran the full 60-200 BPM range unconstrained.
+        # Wired the hint to the range already documented in this profile's
+        # own comment.
+        bpm_hint_min=75.0,
+        bpm_hint_max=100.0,
         spectral_centroid_mu=1400.0,
         # Lowered slightly (0.052 -> 0.048): smooth, sustained vocals are the
         # least noisy signal of the three vocal-forward profiles.
         zcr_mu=0.048,
         onset_density_mu=1.8,
+        vocal_hnr_mu=0.6,
+        vocal_fmr_mu=0.55,
         # Fingerprint reshaped into the broadest, most sustained vocal plateau
         # of the three (150 Hz-3.2 kHz, bands 16-47 at 0.82-0.97) — the most
         # vocal-forward genre of the set should show the steadiest mid-band

@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-18
+Last updated: 2026-07-08
 
 This is the canonical map for project documentation.
 
@@ -11,6 +11,7 @@ This is the canonical map for project documentation.
 - [User Guide](user-guide.md)
 - [Configuration Reference](configuration.md)
 - [Effect Settings Reference](effect-settings.md)
+- [Audio Profile Reference](audio-profile-reference.md)
 - [Developer Guide](developer-guide.md)
 - [Testing Guide](testing.md)
 - [Drop-in Documentation Registry](drop-ins.md)

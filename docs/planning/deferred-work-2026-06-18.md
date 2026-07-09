@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-06-18
+Last updated: 2026-07-08
 
 This document tracks intentionally deferred engineering work that is
 acknowledged and scheduled for a later dedicated batch.
@@ -142,3 +142,42 @@ Re-entry trigger:
 
 - Resume after scenes-01 ships and the core team has approved the `FramebufferStack`
   architecture. Estimated effort: 3–5 sessions (core + compositor drop-in + MIDI wiring).
+
+---
+
+### DW-005 — ONNX Vocal-Activity-Detection Model
+
+Status: deferred 2026-07-08
+
+What is deferred:
+
+- Replace/augment the hand-rolled `vocal_hnr` / `vocal_fmr` heuristics in
+  `unicornviz/audio/analyzer.py` (added 2026-07-08 — see
+  `docs/adr/vj-system.md`) with a small pretrained vocal-activity-detection
+  model (ONNX runtime), run on the audio thread.
+
+Why deferred:
+
+- The heuristic pair (harmonic-to-noise-ratio proxy + formant modulation
+  rate) is real signal — synthetic tests show clean noise-vs-tonal
+  separation on HNR and a genuine (if noisier) preference for true 3-8 Hz
+  syllabic-rate modulation on FMR — but neither is a true vocal detector;
+  both can false-positive on any harmonically pitched, syllabically-
+  modulated non-vocal source (a synth lead with vibrato, for example).
+- A real VAD model would need a new runtime dependency (`onnxruntime` is not
+  in `requirements.txt`), a model file to source/vet, and inference wired
+  onto the audio thread without violating the "no blocking I/O in
+  render()"/16.67ms frame budget constraints — a bigger lift than the
+  heuristic pair, which reuses FFT data the analyzer already computes.
+- The heuristic pair should be observed against real session data first
+  (mirroring how the spectral fingerprints and BPM-detector thresholds were
+  validated this session) before deciding whether the accuracy gap actually
+  justifies the added dependency and complexity.
+
+Re-entry trigger:
+
+- Resume if live sessions show `vocal_hnr`/`vocal_fmr` still misclassifying
+  non-vocal genres into rap/hyphy/r&b (or vice versa) often enough that the
+  heuristic pair isn't closing the gap it was added for. Estimated effort:
+  1–2 sessions (dependency vetting, model sourcing, audio-thread inference
+  wiring, parity check against the heuristic pair before removing it).

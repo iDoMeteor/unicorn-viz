@@ -4275,6 +4275,11 @@ void main() {
                     if self._auto_vj is not None
                     else 0.0
                 ),
+                'auto_vj_beat_pulse': (
+                    getattr(self._auto_vj, 'hud_beat_pulse', 0.0)
+                    if self._auto_vj is not None
+                    else 0.0
+                ),
                 'auto_vj_action_in': (
                     getattr(self._auto_vj, 'hud_action_in_label', '--')
                     if self._auto_vj is not None

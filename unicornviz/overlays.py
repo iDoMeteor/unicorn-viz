@@ -1866,6 +1866,41 @@ void main() {
         )
         self._draw_text(line2, line2_x, status_box_y + 30.0, scale=1.9, color=(1.0, 0.68, 0.22, 0.96))
 
+        # Beat/downbeat pulse dot -- pulses cyan on every beat (_hud_beat_pulse,
+        # fast ~1/8s decay) and flashes magenta on downbeats (_hud_downbeat_pulse,
+        # slower ~1/3s decay so the flash reads as a distinct event rather than
+        # blending into the very next beat). Lets an operator see at a glance
+        # whether beats/downbeats are actually firing on-tempo or stalled.
+        beat_pulse = min(1.0, max(0.0, _fv('auto_vj_beat_pulse')))
+        downbeat_pulse = min(1.0, max(0.0, _fv('auto_vj_downbeat_pulse')))
+        combined_pulse = max(beat_pulse, downbeat_pulse)
+        char_h_line2 = float(self._glyph_h) * self._font_scale_norm * 1.9
+        # Downbeats are a superset trigger of beats (every 4th beat is also a
+        # downbeat), so both pulses spike together on that frame -- the extra
+        # downbeat_pulse term makes that flash visibly bigger than a plain beat.
+        dot_h = 8.0 + beat_pulse * 6.0 + downbeat_pulse * 10.0
+        dot_gap = 10.0
+        dot_x = line2_x - dot_gap - dot_h
+        dot_y = status_box_y + 30.0 + (char_h_line2 - dot_h) * 0.5
+        _pulse_cyan = (0.10, 0.94, 1.0)
+        _pulse_magenta = (1.0, 0.10, 0.90)
+        mix = downbeat_pulse
+        dot_r = _pulse_cyan[0] + (_pulse_magenta[0] - _pulse_cyan[0]) * mix
+        dot_g = _pulse_cyan[1] + (_pulse_magenta[1] - _pulse_cyan[1]) * mix
+        dot_b = _pulse_cyan[2] + (_pulse_magenta[2] - _pulse_cyan[2]) * mix
+        if combined_pulse > 0.05:
+            glow_pad = 3.0 + combined_pulse * 4.0
+            self._draw_rect(
+                dot_x - glow_pad * 0.5, dot_y - glow_pad * 0.5,
+                dot_h + glow_pad, dot_h + glow_pad,
+                (dot_r, dot_g, dot_b, combined_pulse * 0.25),
+            )
+        dot_alpha = 0.30 + combined_pulse * 0.70
+        self._draw_rect(
+            dot_x, dot_y, dot_h, dot_h,
+            (dot_r, dot_g, dot_b, dot_alpha),
+        )
+
         # ── layer 10: LCARS tick marks (right edge decoration) ───────────
         # Three evenly spaced horizontal tick marks on the right border
         tick_x = x + panel_w - 24.0
