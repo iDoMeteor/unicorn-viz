@@ -3,8 +3,10 @@
 Owner: owner + Claude Sonnet 5 (master coordinator)
 Status: In progress — items 1/3 confirmed fixed on owner's machine; item 2
 (black-screen follow-on) fix landed, awaiting a fresh session log to confirm;
-dead mirror-window code removed; items 4/5 (GNOME panel + overlay migration)
-still open, not started.
+new item (audience effects lockup from synchronous PBO-fallback readback)
+mitigated, PBO-mapping root cause deferred as a follow-up; dead mirror-window
+code removed; items 4/5 (GNOME panel + overlay migration) still open, not
+started.
 Last updated: 2026-07-09
 
 Scope: Owner-reported Fedora-44/GNOME/Wayland-only issues — control-room-01
@@ -71,6 +73,65 @@ now explicitly marked as the preferred direction *if* per-monitor windows
 are ever revisited for panel suppression — it's architecturally distinct
 from the removed CPU-readback approach and shouldn't inherit its failure
 history automatically, but remains unproven in this codebase.
+
+**New finding — a third, distinct symptom: audience effects locking up
+while the HUD keeps updating.** Owner testing after the above fixes (both
+control-room and dj-mixer open simultaneously, `mirror_included` across 3
+displays) reported the audience output flashing partial/black then locking
+up entirely, while the HUD kept rendering live — i.e. the main loop and
+Python were not hung, only effect rendering stalled. `journalctl`
+cross-referenced against the session log showed GNOME Shell logging its own
+internal assertion failures (`surface_constraint_data_new: code should not
+be reached`, a `g_return_if_reached()`-class Mutter bug) and "invalid
+window geometry... Working around" for every window opened, including the
+*main* audience window at startup — before Control Room or the mixer ever
+opened. `coredumpctl`/`dmesg` showed no OOM kill, no GPU reset, no core
+dump, and gnome-shell (pid stable throughout) never restarted — ruling out
+a hard crash on either side and pointing to a hang. (Owner's monitor layout
+— two 1920×1080 @ 200% above a 3840×2160 @ 100–200% — was confirmed
+intentional, not a detection bug, so the geometry Mutter is complaining
+about is a real mixed-DPI-scaling layout, not bad EDID data.)
+
+Root cause identified in `app.py`'s `_read_streaming_frame()`
+(`app.py:5722`): once the async PBO readback path fails once — which it
+does reliably every session ("cannot map the buffer") — it permanently
+falls back to a **synchronous** full-resolution `source.read(...)`
+(effectively `glReadPixels`) for the rest of the session, driven by
+control-room's `needs_frame_bytes`. At `mirror_included`'s full spanned
+canvas (3840×2160 in the reported session) that's a ~24MB synchronous
+GPU→CPU transfer roughly 10×/second (the existing 0.1s throttle) — heavy
+enough on integrated graphics to stall the GL command queue for that frame,
+matching "effects lock up, HUD keeps going." The comment already at that
+call site (`app.py:4476-4481`) documents this exact failure mode as *"the
+primary cause of the audience-output freeze observed while the
+control-room operator window is open"* — a known, previously only
+partially mitigated issue, not something introduced this session.
+
+**Fix landed:** the subsystem-preview capture throttle now checks
+`self._stream_pbo_disabled` and widens from 0.1s to 1.0s once the fallback
+path is active (`app.py`, in the commit that also added the shared BPM hint
+bus — `945a865`), cutting the expensive synchronous read rate ~10×. Not
+independently unit-tested (see note below) — this specific branch is a
+one-line ternary gating an existing, already-tested code path, and
+extracting it into a testable helper was judged not worth another isolation
+pass on a heavily-concurrently-edited file; low regression risk.
+
+**Deferred as a follow-up, not investigated further this pass:** *why* the
+PBO buffer mapping fails with "cannot map the buffer" in the first place.
+That's a Mesa/Iris Xe-under-Wayland driver-behavior question that needs
+live GL debugging (`MESA_DEBUG`, checking `glGetError()` around the
+`read_into`/`.read()` calls, whether it's a fence/sync timeout vs. a hard
+mapping failure) rather than static analysis. The throttle mitigation above
+should make the symptom much less severe regardless of the root cause, but
+doesn't fix the underlying PBO failure itself.
+
+**Also found, unrelated:** a real, reproducible `KeyError: 'iBass'` crash
+in `drop-ins/feature-01/rainbow_trance.py:286` — the shader declares
+`uniform float iBass;` (line 31) but never references it in the fragment
+logic, so Mesa's GLSL compiler strips it as dead code and
+`self._prog['iBass'].value = ...` throws at runtime. Confirmed still
+present as of the latest `feature-01` bump (`ee7b4ff`). Not fixed this
+pass — flagging for a separate task.
 
 ---
 
@@ -420,6 +481,9 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 | 5 | Re-derive display/origin state on `FOCUS_GAINED` for mirror/span (§5) | Medium-High | Low-Medium | Open — can proceed in parallel with #4 |
 | 6 | Triage the 8 distinct recurring tracebacks in §7 | Unknown per-item | Unknown per-item | Open — lower urgency |
 | 7 | Confirm/remove dead `_create_mirror_outputs` path | High (it's dead) | Low | **Done** — removed from `app.py` and `multihead.py`, `MATE-X11-MULTIHEAD-NOTES.md` updated with the reconfirmed decision |
+| 8 | Throttle the synchronous PBO-fallback readback harder (0.1s → 1.0s) to stop audience effects locking up while control-room is open | High (matches an already-documented failure mode; direct code-level fix) | Low | **Done** — landed in `945a865`, not yet independently confirmed by the owner |
+| 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Unknown — needs live Mesa/Iris Xe GL debugging under Wayland | Medium | Open, deferred — item 8's throttle should reduce severity regardless |
+| 10 | Fix `KeyError: 'iBass'` in `drop-ins/feature-01/rainbow_trance.py:286` (unused uniform stripped by the GLSL compiler) | High | Low | Open — unrelated to the platform investigation, found incidentally |
 
 If item 2's diagnostics show the black screen persists even after the
 surface-refresh fix, the next step per the archived handoff's own "Path 2"
