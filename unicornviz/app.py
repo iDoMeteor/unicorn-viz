@@ -758,6 +758,37 @@ class App:
             except Exception as exc:
                 log.warning('%s subsystem overlay render failed: %s', name, exc)
 
+    def _present_subsystems(self) -> None:
+        """Call each subsystem's own present() (e.g. control-room-01/
+        dj-mixer-01 blitting to their own SDL window), then restore our GL
+        context if any of them ran.
+
+        control-room-01/dj-mixer-01's SDL_RenderPresent() on their own
+        second SDL window silently calls eglMakeCurrent to their own
+        internal context on Wayland and never switches back — confirmed via
+        apitrace: a whole cascade of glUseProgram(GL_INVALID_VALUE)/
+        glBindVertexArray(non-gen name)/etc. immediately follows in the
+        trace, all valid object IDs in *our* context, invalid in whatever
+        context SDL left current. Without the rebind here, every GL call
+        for the rest of the session runs against the wrong context.
+        """
+        any_attempted = False
+        for name, subsystem in list(self._subsystems.items()):
+            presenter = getattr(subsystem, 'present', None)
+            if not callable(presenter):
+                continue
+            any_attempted = True
+            try:
+                presenter()
+            except Exception as exc:
+                log.warning('%s subsystem present failed: %s', name, exc)
+        if any_attempted:
+            # Rebind on any attempt, not just successful ones — a presenter
+            # can switch the GL context internally (e.g. via SDL_RenderPresent)
+            # before failing partway through, so a caught exception doesn't
+            # rule out the context having already moved.
+            self.rebind_main_gl_context()
+
     def _update_frame_capture_snapshot(self, frame: bytes | None) -> None:
         """Cache the latest audience-output frame for subsystem preview use."""
         if frame is None:
@@ -4550,14 +4581,7 @@ void main() {
             if perf_debug_enabled:
                 perf_after_swap = time.perf_counter()
 
-            for name, subsystem in list(self._subsystems.items()):
-                presenter = getattr(subsystem, 'present', None)
-                if not callable(presenter):
-                    continue
-                try:
-                    presenter()
-                except Exception as exc:
-                    log.warning('%s subsystem present failed: %s', name, exc)
+            self._present_subsystems()
             if perf_debug_enabled:
                 perf_after_subsystem_present = time.perf_counter()
                 perf_frame_counter += 1
