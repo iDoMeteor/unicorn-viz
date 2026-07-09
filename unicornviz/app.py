@@ -459,6 +459,17 @@ class App:
         # to direct read for the current session to avoid repeated map failures.
         self._stream_pbo_disabled: bool = False
         self._stream_viewport_mismatch_logged: bool = False
+        # Reading self._ctx.screen directly via moderngl's Framebuffer.read()/
+        # read_into() is broken: it unconditionally issues
+        # glReadBuffer(GL_COLOR_ATTACHMENT0 + attachment), which is invalid
+        # for the default framebuffer (framebuffer_obj == 0) per the GL spec.
+        # moderngl's own context-init code carries a comment acknowledging
+        # this exact issue for draw_buffers ("GL_COLOR_ATTACHMENT0 is causes
+        # error: 1282") but the equivalent fix was never applied to the read
+        # path. _screen_copy_fbo is a real FBO we blit the screen into via
+        # copy_framebuffer() (which correctly uses the queried GL_BACK/FRONT
+        # draw buffer) so reads never touch the default framebuffer directly.
+        self._screen_copy_fbo: moderngl.Framebuffer | None = None
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         # In mirror_all the SDL window spans all displays, while effects/HUD
@@ -5748,17 +5759,18 @@ void main() {
         if self._ctx is None:
             return None
         mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
-        source = self._fbo_a if (mirror_mode_active and self._fbo_a is not None) else self._ctx.screen
-        # Force-rebind the intended read source before touching it. This
-        # call happens after _render_subsystem_overlays()/overlays.render(),
-        # and any subsystem's render_overlay() hook that binds its own FBO
-        # without restoring the screen leaves moderngl's cached "currently
-        # bound framebuffer" pointing at the wrong object — which surfaces
-        # as glReadBuffer(invalid buffer GL_COLOR_ATTACHMENT0) here (Mesa
-        # rejects that enum against the default framebuffer) and, once GL's
-        # error state is bad, appears to cascade into unrelated
-        # glUseProgram/glBindVertexArray/glUniform failures for the rest of
-        # the session. Costs nothing when already correctly bound.
+        if mirror_mode_active and self._fbo_a is not None:
+            source = self._fbo_a
+        else:
+            # Never read self._ctx.screen (the default framebuffer) directly
+            # — see the comment on self._screen_copy_fbo's declaration for
+            # why moderngl's Framebuffer.read()/read_into() are broken for
+            # framebuffer_obj == 0. Blit it into a real FBO first;
+            # copy_framebuffer() uses the correctly-queried draw buffer
+            # instead of a hardcoded attachment enum, so it doesn't hit the
+            # same bug.
+            source = self._ensure_screen_copy_fbo()
+            self._ctx.copy_framebuffer(source, self._ctx.screen)
         source.use()
         # Framebuffer.read()/read_into() default to a viewport of the
         # framebuffer's OWN reported (width, height) — for self._ctx.screen
@@ -5878,7 +5890,12 @@ void main() {
         if w <= 0 or h <= 0:
             w = int(self._window_width or self._width)
             h = int(self._window_height or self._height)
-        data = self._ctx.screen.read(viewport=(0, 0, w, h), components=3, alignment=1)
+        # Never read self._ctx.screen directly — see _ensure_screen_copy_fbo's
+        # docstring for why moderngl's Framebuffer.read() is broken for the
+        # default framebuffer.
+        copy_fbo = self._ensure_screen_copy_fbo(w, h)
+        self._ctx.copy_framebuffer(copy_fbo, self._ctx.screen)
+        data = copy_fbo.read(viewport=(0, 0, w, h), components=3, alignment=1)
         return data, w, h
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
@@ -6355,6 +6372,28 @@ void main() {
             tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
             self._eb_thumb_fbo = self._ctx.framebuffer(color_attachments=[tex])
         return self._eb_thumb_fbo
+
+    def _ensure_screen_copy_fbo(self, width: int | None = None, height: int | None = None) -> moderngl.Framebuffer:
+        """Lazily (re)allocate the real FBO used to work around moderngl's
+        broken glReadBuffer(GL_COLOR_ATTACHMENT0) on the default framebuffer
+        (see the comment on self._screen_copy_fbo's declaration). Sized to
+        (width, height) if given, else the logical canvas (self._width,
+        self._height) — callers reading the raw SDL drawable size (which can
+        exceed the logical canvas, e.g. mirror mode) should pass it explicitly."""
+        w = max(1, int(width if width is not None else self._width))
+        h = max(1, int(height if height is not None else self._height))
+        if self._screen_copy_fbo is None or (self._screen_copy_fbo.width, self._screen_copy_fbo.height) != (w, h):
+            if self._screen_copy_fbo is not None:
+                self._screen_copy_fbo.release()
+            tex = self._ctx.texture((w, h), 4)
+            # copy_framebuffer()/glBlitFramebuffer always blits
+            # GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT (moderngl does not
+            # expose a color-only blit) — a depth attachment is required or
+            # the blit hits GL_INVALID_FRAMEBUFFER_OPERATION (incomplete
+            # draw/read buffers), same as _make_fbo()'s pattern.
+            depth = self._ctx.depth_renderbuffer((w, h))
+            self._screen_copy_fbo = self._ctx.framebuffer(color_attachments=[tex], depth_attachment=depth)
+        return self._screen_copy_fbo
 
     def _eb_destroy_thumb_effect(self) -> None:
         """Release the current preview effect instance, if any."""
