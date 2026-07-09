@@ -269,8 +269,13 @@ parked for v2.
   playhead forward/reverse via `deck.scratch_touch`/`scratch_move`; a held
   platter is silent (stopped record); release restores play state.
   `scratch_scale` tunes samples/tick. 58 tests green.
-- [ ] **v2 backlog (not scheduled):** hot-cue/loop pads, FX effect units +
-  paddles, beat-sync via `auto-vj-01`.
+- [x] **Hot-cue pads (done 2026-07-08, drop-in `dbd5cf7`).** 8 hot-cue slots per
+  deck: press a HOT-CUE-mode pad to set (if empty) or jump+play (if set),
+  SHIFT+pad deletes; cues cleared on load. Decoded on pad channels 7/8 (deck A
+  normal/shift) and 9/10 (deck B). Pad LEDs show set cues (falling back to the
+  VU show when none are set). 64 tests green.
+- [ ] **v2 backlog (not scheduled):** loop pads/roll, FX effect units + paddles,
+  beat-sync via `auto-vj-01`.
 
 ### Lighting (bidirectional MIDI — REV1 LED feedback)
 
