@@ -1061,32 +1061,10 @@ class App:
             return 0, 0, self._width, self._height
         return bounds.x, bounds.y, bounds.w, bounds.h
 
-    def _destroy_mirror_outputs(self) -> None:
-        self._multihead.destroy_mirror_outputs()
-
-    def _create_mirror_outputs(self) -> None:
-        """No-op: legacy SDL_Renderer mirror windows replaced by GL-native tile-blit.
-
-        See drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md for rationale and
-        the legacy approach (kept in MultiHeadController for fallback testing).
-        """
-        return
-
-    def _resize_mirror_textures(self) -> None:
-        self._multihead.resize_mirror_textures(self._width, self._height)
-
-    def _present_mirror_outputs(self, frame_bytes: bytes) -> None:
-        self._multihead.present_mirror_outputs(frame_bytes, self._width, self._height)
-
-    def _is_mirror_window_id(self, window_id: int) -> bool:
-        return self._multihead.is_mirror_window_id(window_id)
-
     def _rebuild_multihead_outputs(self) -> None:
-        title = self.cfg.get('window', 'title', default='Unicorn Viz')
         self._display_index = self._multihead.rebuild_multihead_outputs(
             self._width,
             self._height,
-            title,
         )
         if self._window is None:
             return
@@ -3061,10 +3039,6 @@ void main() {
             "audio_manager": audio_manager,
         }
 
-        # Mirror windows are created after splash so startup does not spend time
-        # presenting black frames to mirror outputs.
-        self._create_mirror_outputs()
-
         # midi-controllers-01: register device presets before MidiManager is constructed
         # so the preset lookup in MidiManager.__init__ picks them up.
         _mc_register_all = None
@@ -3602,13 +3576,6 @@ void main() {
                             except Exception:
                                 log.warning('Text input handler raised: %s', _ti_handler)
                 elif event.type == sdl2.SDL_WINDOWEVENT:
-                    if self._is_mirror_window_id(int(event.window.windowID)):
-                        if event.window.event in (
-                            sdl2.SDL_WINDOWEVENT_CLOSE,
-                        ):
-                            log.warning('Mirror window event %d received; rebuilding mirror outputs', int(event.window.event))
-                            self._create_mirror_outputs()
-                        continue
                     if event.window.event == sdl2.SDL_WINDOWEVENT_RESIZED:
                         self._on_resize(
                             event.window.data1, event.window.data2
@@ -4636,7 +4603,6 @@ void main() {
             self._burst_vbo.release()
         if self._burst_prog:
             self._burst_prog.release()
-        self._destroy_mirror_outputs()
         self._release_readback_pbos()
         self._runtime_state.save()
         sdl2.SDL_GL_DeleteContext(self._gl_context)
@@ -5027,7 +4993,6 @@ void main() {
             self._grand_finale.resize(w, h)
         if self._overlays is not None:
             self._overlays.resize(w, h)
-        self._resize_mirror_textures()
         # When leaving mirror mode the composite FBO is no longer needed.
         # Release it before recreating fbo_a / fbo_b so its texture/depth
         # buffer don't linger in GL state during the texture re-allocations
@@ -5111,9 +5076,6 @@ void main() {
         # Ensure display layout cache is fresh before geometry changes.
         self._log_video_displays()
         self._display_index = self._resolve_display_index()
-
-        # Tear down old mirror windows before mode transition.
-        self._destroy_mirror_outputs()
 
         if self._fullscreen:
             if self._is_span_mode(self._display_mode):

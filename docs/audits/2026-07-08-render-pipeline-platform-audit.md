@@ -1,8 +1,11 @@
 # Unicorn Viz — Video Render Pipeline & Platform Audit (2026-07-08)
 
 Owner: owner + Claude Sonnet 5 (master coordinator)
-Status: Complete — recommendations pending owner prioritization
-Last updated: 2026-07-08
+Status: In progress — items 1/3 confirmed fixed on owner's machine; item 2
+(black-screen follow-on) fix landed, awaiting a fresh session log to confirm;
+dead mirror-window code removed; items 4/5 (GNOME panel + overlay migration)
+still open, not started.
+Last updated: 2026-07-09
 
 Scope: Owner-reported Fedora-44/GNOME/Wayland-only issues — control-room-01
 crashing shortly after first frame, dj-mixer-01 crashing shortly after first
@@ -16,6 +19,58 @@ Method: static code review of `drop-ins/control-room-01/`,
 `unicornviz/app.py` / `unicornviz/overlays.py` window/display code, plus
 grep-based forensics across the full `logs/` corpus. No live GPU/Wayland
 reproduction was run this pass (see §6 for a proposed repro protocol).
+
+---
+
+## Status Update — 2026-07-09
+
+**Item 1 (dj-mixer-01 missing GL rebind) — fixed and confirmed.** Owner
+tested: control-room and mixer windows opened, app quit cleanly, no crash,
+no ALSA/EGL error trace, and `faulthandler_*.log` was 0 bytes (no native
+crash caught). Fix: `rebind_main_gl_context()` calls added to
+`dj_mixer_controller.py` (open/close) and `ui.py`'s own `_destroy_window()`
+(covers the self-close-via-Esc path too, mirroring control-room-01's
+pattern exactly). 19 new tests, `ef48171`/`4603256` in `dj-mixer-01`.
+
+**Item 3 (faulthandler) — fixed and confirmed working** — it's what
+produced the empty `faulthandler_*.log` files that confirmed item 1. 4 new
+tests, `9306fe4` in the main repo.
+
+**New finding — item 1's fix uncovered a second, previously-masked bug.**
+The same owner session that confirmed no more crashes also reported both
+control-room and dj-mixer windows rendering **black**. Investigation found
+`docs/archive/debug/control-room-debug-handoff.md` had already chased this
+exact symptom across six prior fix attempts on control-room-01, concluding
+GNOME/Mutter can hand a freshly-(re)mapped SDL window a stale surface that
+blits as black until something forces a fresh commit — control-room-01 has
+a `_needs_surface_refresh` mechanism for exactly this (reset on
+`EXPOSED`/`SHOWN`/`RESTORED`/`FOCUS_GAINED`), but **dj-mixer-01, despite
+cloning the rest of control-room-01's window approach, never picked up this
+part of it**. Working theory: this bug was always present in both, but the
+crash (item 1) killed the process before it became visible; fixing item 1
+let execution proceed far enough to hit it.
+
+Action taken: ported the stale-surface-refresh fix into dj-mixer-01's
+`ui.py`, and added one-shot "first frame rendered" / "first frame
+presented" diagnostic logging to both drop-ins so a future black-window
+report shows exactly which stage failed. 6 new tests
+(`test_ui_surface_refresh.py`), `4603256`/`eee7f0f` in the respective
+drop-in repos, `51391cf` in the main repo. **Not yet confirmed fixed** —
+needs a fresh session log to verify (see §8, item 2 revised).
+
+**Dead code cleanup.** Investigating item 4 (GNOME panel suppression)
+surfaced that a per-monitor-SDL-window approach for `mirror_all` was already
+tried and abandoned (`drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`,
+"Iteration 1") — it went black/froze/crashed on Fedora 37/GNOME, Fedora
+44/MATE, *and* Windows 11. The dead code from that attempt
+(`create_mirror_outputs`/`destroy_mirror_outputs`/`resize_mirror_textures`/
+`present_mirror_outputs`/`is_mirror_window_id` in `multihead.py`, and their
+no-op call sites in `app.py`) has been removed. The shared-GL-context
+variant (never implemented, listed as an alternative in the same doc) is
+now explicitly marked as the preferred direction *if* per-monitor windows
+are ever revisited for panel suppression — it's architecturally distinct
+from the removed CPU-readback approach and shouldn't inherit its failure
+history automatically, but remains unproven in this codebase.
 
 ---
 
@@ -354,17 +409,21 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 
 ---
 
-## 8) Proposed prioritization (for review — nothing below has been started)
+## 8) Proposed prioritization (updated 2026-07-09)
 
-| # | Item | Confidence | Effort | Suggested order |
-|---|------|-----------|--------|------------------|
-| 1 | Add missing `rebind_main_gl_context()` calls to dj-mixer-01's window open/close path | High | Low | Do first — cheap, mirrors an already-proven fix |
-| 2 | Live repro + core dump / `WAYLAND_DEBUG`/`MESA_DEBUG` capture for control-room-01 (and re-test dj-mixer-01 after #1) | N/A (diagnostic) | Low-Medium | Do second, informs whether a deeper Mesa/EGL-level fix is still needed after #1 |
-| 3 | Add `faulthandler.enable()` at startup for future silent-crash forensics | N/A (diagnostic) | Trivial | Bundle with #2 |
-| 4 | Decide GNOME panel-suppression approach for mirror/span (Option A vs B, §4) | Medium | Medium-High | Design conversation first — this is the one item that needs an actual decision, not just a fix |
-| 5 | Re-derive display/origin state on `FOCUS_GAINED` for mirror/span (§5) | Medium-High | Low-Medium | Can proceed in parallel with #4 once a repro is confirmed |
-| 6 | Triage the 8 distinct recurring tracebacks in §7 | Unknown per-item | Unknown per-item | Separate pass, lower urgency than the platform-specific reports |
-| 7 | Confirm/remove dead `_create_mirror_outputs` path | High (it's dead) | Low | Cleanup, do opportunistically |
+| # | Item | Confidence | Effort | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Add missing `rebind_main_gl_context()` calls to dj-mixer-01's window open/close path | High | Low | **Done, confirmed fixed** — no more crash, `faulthandler` log empty |
+| 2 | Black-screen follow-on: port control-room-01's stale-surface-refresh fix into dj-mixer-01 + add first-frame diagnostics to both | High (the missing mechanism was confirmed by direct diff; whether it's the *complete* explanation is not) | Low-Medium | **Fix landed, not yet confirmed** — needs a fresh session log with both windows opened |
+| 3 | Add `faulthandler.enable()` at startup for future silent-crash forensics | N/A (diagnostic) | Trivial | **Done** |
+| 4 | Decide GNOME panel-suppression approach for mirror/span (Option A vs B, §4) | Medium | Medium-High | Open — Option A (per-monitor windows) reconfirmed risky per `MATE-X11-MULTIHEAD-NOTES.md`'s prior 3-platform failure; shared-GL-context variant now documented as preferred *if* revisited, still unbuilt |
+| 5 | Re-derive display/origin state on `FOCUS_GAINED` for mirror/span (§5) | Medium-High | Low-Medium | Open — can proceed in parallel with #4 |
+| 6 | Triage the 8 distinct recurring tracebacks in §7 | Unknown per-item | Unknown per-item | Open — lower urgency |
+| 7 | Confirm/remove dead `_create_mirror_outputs` path | High (it's dead) | Low | **Done** — removed from `app.py` and `multihead.py`, `MATE-X11-MULTIHEAD-NOTES.md` updated with the reconfirmed decision |
 
-This document only records findings and options — no code has been changed.
-Let's talk through prioritization and pick what to tackle first.
+If item 2's diagnostics show the black screen persists even after the
+surface-refresh fix, the next step per the archived handoff's own "Path 2"
+is to instrument `SDL_GL_GetCurrentWindow()`/`glGetError()` around
+control-room open/close rather than guessing further — see
+`docs/archive/debug/control-room-debug-handoff.md` "Path 2" for the exact
+protocol.
