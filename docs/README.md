@@ -51,6 +51,7 @@ This is the canonical map for project documentation.
   - Full system audit (2026-06-17): [docs/audits/2026-06-17-full-system-audit.md](audits/2026-06-17-full-system-audit.md)
 - Active debug investigations: [docs/debug](debug)
   - Control room / DJ mixer second-window investigation (2026-07-08 → 2026-07-09, black-screen symptom still open): [docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md](debug/control-room-mixer-second-window-investigation-2026-07-09.md)
+  - Second-window Linux mitigation strategies (2026-07-09, SDL2 texture-framebuffer root-cause audit + ranked fixes): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 - Archived debug and handoff notes: [docs/archive/debug](archive/debug)
   - Audio startup regression + validation hardening (2026-06-04): [docs/archive/debug/audio-startup-regression-2026-06-04.md](archive/debug/audio-startup-regression-2026-06-04.md)
 - Archived audit reports and review snapshots: [docs/archive/audits](archive/audits)

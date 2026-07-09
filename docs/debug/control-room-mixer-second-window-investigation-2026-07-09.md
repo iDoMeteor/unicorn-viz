@@ -363,6 +363,14 @@ not explained by any of the other three earlier fix attempts either. It
 is a distinct, still-unsolved bug in how control-room-01/dj-mixer-01's
 own SDL_Renderer-based window actually gets composited to the screen.
 
+> **Update (2026-07-09, later the same day):** a follow-up audit refined
+> the leading theory below to a specific, source-verified mechanism —
+> SDL2's hidden "texture framebuffer" (a second, GL-backed renderer SDL
+> silently creates for any window-surface window on Linux). See
+> [`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
+> for the full mechanism, per-environment mitigation options, and a
+> diagnostics plan whose first experiments need zero code changes.
+
 ### Leading theory for the remaining black screen
 
 The `journalctl` findings from §4.2 — "Client provided invalid window
