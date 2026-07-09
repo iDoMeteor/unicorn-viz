@@ -458,6 +458,7 @@ class App:
         # If a driver/context cannot map PBOs reliably, permanently fall back
         # to direct read for the current session to avoid repeated map failures.
         self._stream_pbo_disabled: bool = False
+        self._stream_viewport_mismatch_logged: bool = False
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         # In mirror_all the SDL window spans all displays, while effects/HUD
@@ -5748,10 +5749,32 @@ void main() {
             return None
         mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         source = self._fbo_a if (mirror_mode_active and self._fbo_a is not None) else self._ctx.screen
+        # Framebuffer.read()/read_into() default to a viewport of the
+        # framebuffer's OWN reported (width, height) — for self._ctx.screen
+        # that tracks the real SDL/GL drawable size, which is not
+        # guaranteed to equal our own tracked self._width/self._height
+        # (e.g. under mixed-DPI multi-monitor scaling). A mismatch there
+        # means the PBOs are sized for one canvas but read_into() writes a
+        # different amount of data into them, which can surface later as a
+        # GL_INVALID_VALUE on the *next* frame's buffer.read() rather than
+        # on the write itself. Pin the viewport explicitly so the PBO size
+        # and the actual read region can never disagree.
+        viewport = (0, 0, self._width, self._height)
+        if (
+            not self._stream_viewport_mismatch_logged
+            and (int(source.width), int(source.height)) != (self._width, self._height)
+        ):
+            self._stream_viewport_mismatch_logged = True
+            log.warning(
+                'Streaming source framebuffer size (%dx%d) does not match '
+                'the tracked canvas size (%dx%d) — pinning the read '
+                'viewport explicitly to avoid a PBO size mismatch.',
+                source.width, source.height, self._width, self._height,
+            )
         size = self._width * self._height * 3  # RGB24
         if self._stream_pbo_disabled:
             try:
-                return source.read(components=3, alignment=1)
+                return source.read(viewport=viewport, components=3, alignment=1)
             except Exception as exc:
                 log.error('Streaming direct read failed: %s', exc)
                 return None
@@ -5769,11 +5792,11 @@ void main() {
         write_idx = self._stream_pbo_index
         read_idx = 1 - write_idx
         try:
-            source.read_into(self._stream_pbos[write_idx], components=3, alignment=1)
+            source.read_into(self._stream_pbos[write_idx], viewport=viewport, components=3, alignment=1)
         except Exception as exc:
             self._disable_stream_pbo('write (read_into)', exc, size, mirror_mode_active)
             try:
-                return source.read(components=3, alignment=1)
+                return source.read(viewport=viewport, components=3, alignment=1)
             except Exception as read_exc:
                 log.error('Streaming direct read after PBO failure also failed: %s', read_exc)
                 return None
@@ -5785,7 +5808,7 @@ void main() {
             except Exception as exc:
                 self._disable_stream_pbo('read (buffer.read)', exc, size, mirror_mode_active)
                 try:
-                    return source.read(components=3, alignment=1)
+                    return source.read(viewport=viewport, components=3, alignment=1)
                 except Exception as read_exc:
                     log.error('Streaming direct read after PBO failure also failed: %s', read_exc)
                     return None
