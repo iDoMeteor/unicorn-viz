@@ -1,5 +1,5 @@
 [logging]
-level = "debug"
+level = "info"
 
 [window]
 display_mode  = "single"   # single | span_all | mirror_all
@@ -284,7 +284,7 @@ enabled = true
 # see profile_auto_reco_decider_min_margin note above.
 # profile_auto_reco_score_margin = 0.09
 # profile_auto_reco_confirm_wins = 3
-log_decisions = true
+log_decisions = false
 
 # BPM tracker tuning (v2 ACF engine)
 # analysis_mode_enabled: enables the beat-position-map layer — real downbeat
