@@ -7,10 +7,16 @@ symptom's root mechanism (SDL2's hidden GL-backed "texture framebuffer")
 was identified and bypassed entirely — both drop-ins now use an explicit,
 independent GL context per second window
 (`unicornviz/secondary_gl_window.py`) instead of `SDL_RENDERER_SOFTWARE`.
-Landed and verified via real-hardware smoke tests on this machine; owner
-visual confirmation still pending. Full details:
+The first landing used `moderngl.create_context()` and hit a second,
+distinct Linux-specific wall (moderngl/glcontext cannot attach to a second
+context on native Wayland at all — GLX-only "detect" fallback); rebuilt
+without moderngl, loading GL functions directly via
+`SDL_GL_GetProcAddress` instead. Verified via real-hardware smoke tests on
+this machine with `SDL_VIDEODRIVER=wayland` forced (the exact condition
+that broke); owner visual confirmation on their own native-Wayland session
+still pending. Full details:
 [`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
-§8.
+§8-§10.
 Last updated: 2026-07-09
 
 Successor to [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md)

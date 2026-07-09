@@ -1,16 +1,24 @@
 """Regression tests for SecondaryGLWindow — the explicit-GL replacement for
 control-room-01/dj-mixer-01's second-window presentation path.
 
-SDL2's window-surface software renderer was found to silently create a
-second, GL-backed renderer on Linux (see the module docstring in
-unicornviz/secondary_gl_window.py and
-docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md
-for the full investigation). These tests exercise SecondaryGLWindow's own
-GL bracketing discipline — create()/present()/destroy() must each restore
-whatever GL window/context was current before they ran, regardless of
-success or failure — using fakes for both sdl2 and moderngl, since SDL's
-``dummy`` video driver (used elsewhere in this repo for headless SDL
-tests) does not support real GL context creation.
+Two Linux-specific bugs were found and worked around by this module (see
+its docstring for the full mechanism):
+
+1. SDL2 silently creates a second, GL-backed renderer behind any
+   SDL_RENDERER_SOFTWARE window on Linux.
+2. moderngl.create_context() cannot attach to that second window's own,
+   independently-created GL context on native Wayland — its "detect an
+   existing context" fallback is hardcoded to X11/GLX (glcontext has no
+   Wayland equivalent), so this module loads its own minimal GL bindings
+   via SDL_GL_GetProcAddress instead of using moderngl at all.
+
+These tests exercise SecondaryGLWindow's own bracketing discipline —
+create()/present()/destroy() must each restore whatever GL window/context
+was current before they ran, regardless of success or failure — using
+fakes for both ``sdl2`` and the internal ``_GLBinding`` GL wrapper, since
+SDL's ``dummy`` video driver (used elsewhere in this repo for headless SDL
+tests) does not support real GL context creation, and real GL calls can't
+be faked below the ctypes boundary without a real context.
 """
 from __future__ import annotations
 
@@ -74,8 +82,7 @@ class _FakeSDL2:
     def SDL_GetWindowSize(self, window, w_ref, h_ref) -> None:  # noqa: ARG002
         # Real SDL writes the actual window size back through the pointers;
         # the fake leaves them at their ctypes default (0) so callers keep
-        # whatever size they already have — none of these tests exercise a
-        # WM overriding the requested size.
+        # whatever size they already have.
         pass
 
     def SDL_GL_CreateContext(self, window: _FakeWindow):
@@ -121,130 +128,146 @@ class _FakeSDL2:
         return _FakeError()
 
 
-class _FakeGLObject:
-    def __init__(self, kind: str) -> None:
-        self.kind = kind
-        self.released = False
-        self.filter = None
+class _FakeGLBinding:
+    """Stands in for the real _GLBinding — no ctypes/real GL calls."""
 
-    def release(self) -> None:
-        self.released = True
-
-
-class _FakeProgram(_FakeGLObject):
-    def __init__(self) -> None:
-        super().__init__('program')
-        self.uniforms: dict[str, object] = {}
-
-    def __setitem__(self, key, value) -> None:
-        self.uniforms[key] = value
-
-
-class _FakeVAO(_FakeGLObject):
-    def __init__(self) -> None:
-        super().__init__('vao')
-        self.render_calls: list[object] = []
-
-    def render(self, mode) -> None:
-        self.render_calls.append(mode)
-
-
-class _FakeTexture(_FakeGLObject):
-    def __init__(self, size, components) -> None:
-        super().__init__('texture')
-        self.size = size
-        self.components = components
-        self.writes: list[bytes] = []
-        self.use_calls: list[int] = []
-
-    def write(self, data: bytes) -> None:
-        self.writes.append(data)
-
-    def use(self, location: int = 0) -> None:
-        self.use_calls.append(location)
-
-
-class _FakeScreen:
-    def __init__(self) -> None:
-        self.use_calls = 0
-        self.clear_calls: list[tuple] = []
-        self.viewport = None
-
-    def use(self) -> None:
-        self.use_calls += 1
-
-    def clear(self, r, g, b, a) -> None:
-        self.clear_calls.append((r, g, b, a))
-
-
-class _FakeMglCtx:
-    def __init__(self) -> None:
-        self.screen = _FakeScreen()
-        self.programs: list[_FakeProgram] = []
-        self.textures: list[_FakeTexture] = []
-
-    def program(self, vertex_shader, fragment_shader):  # noqa: ARG002
-        prog = _FakeProgram()
-        self.programs.append(prog)
-        return prog
-
-    def buffer(self, data):  # noqa: ARG002
-        return _FakeGLObject('buffer')
-
-    def vertex_array(self, program, bindings):  # noqa: ARG002
-        return _FakeVAO()
-
-    def texture(self, size, components):
-        tex = _FakeTexture(size, components)
-        self.textures.append(tex)
-        return tex
-
-
-class _FakeModerngl:
-    LINEAR = 'LINEAR'
-    TRIANGLE_STRIP = 'TRIANGLE_STRIP'
+    fail_load = False
+    fail_compile = False
 
     def __init__(self) -> None:
-        self.created_contexts: list[_FakeMglCtx] = []
+        self.loaded = False
+        self._next_id = 1
+        self.textures: dict[int, tuple[int, int]] = {}
+        self.deleted_textures: list[int] = []
+        self.deleted_buffers: list[int] = []
+        self.deleted_vaos: list[int] = []
+        self.deleted_programs: list[int] = []
+        self.tex_sub_image_calls: list[tuple] = []
+        self.tex_image_calls: list[tuple] = []
+        self.draw_calls = 0
+        self.swap_program_calls = 0
+        self.bound_texture: int | None = None
+        self.bound_vao: int | None = None
 
-    def create_context(self) -> _FakeMglCtx:
-        ctx = _FakeMglCtx()
-        self.created_contexts.append(ctx)
-        return ctx
+    def _alloc(self) -> int:
+        val = self._next_id
+        self._next_id += 1
+        return val
+
+    def load(self) -> None:
+        if type(self).fail_load:
+            raise RuntimeError('SDL_GL_GetProcAddress returned NULL for glCreateShader')
+        self.loaded = True
+
+    def compile_program(self, vertex_src, fragment_src) -> int:  # noqa: ARG002
+        if type(self).fail_compile:
+            raise RuntimeError('GL program link failed: fake failure')
+        return self._alloc()
+
+    def use_program(self, program: int) -> None:
+        self.swap_program_calls += 1
+
+    def get_uniform_location(self, program, name) -> int:  # noqa: ARG002
+        return 0
+
+    def set_uniform_1i(self, location, value) -> None:
+        pass
+
+    def gen_buffer(self) -> int:
+        return self._alloc()
+
+    def bind_array_buffer(self, buf_id: int) -> None:
+        pass
+
+    def array_buffer_data_static(self, data) -> None:
+        pass
+
+    def gen_vertex_array(self) -> int:
+        return self._alloc()
+
+    def bind_vertex_array(self, vao_id: int) -> None:
+        self.bound_vao = vao_id
+
+    def setup_quad_attribs(self) -> None:
+        pass
+
+    def gen_texture(self) -> int:
+        return self._alloc()
+
+    def bind_texture(self, tex_id: int) -> None:
+        self.bound_texture = tex_id
+
+    def set_bound_texture_filter_linear_clamped(self) -> None:
+        pass
+
+    def tex_image_2d_rgba(self, width: int, height: int, data) -> None:
+        self.tex_image_calls.append((width, height, data))
+        self.textures[self.bound_texture] = (width, height)
+
+    def tex_sub_image_2d_rgba(self, width: int, height: int, data: bytes) -> None:
+        self.tex_sub_image_calls.append((width, height, data))
+
+    def active_texture0(self) -> None:
+        pass
+
+    def viewport(self, width: int, height: int) -> None:
+        pass
+
+    def clear_black(self) -> None:
+        pass
+
+    def draw_triangle_strip_quad(self) -> None:
+        self.draw_calls += 1
+
+    def delete_texture(self, tex_id: int) -> None:
+        self.deleted_textures.append(tex_id)
+
+    def delete_buffer(self, buf_id: int) -> None:
+        self.deleted_buffers.append(buf_id)
+
+    def delete_vertex_array(self, vao_id: int) -> None:
+        self.deleted_vaos.append(vao_id)
+
+    def delete_program(self, program: int) -> None:
+        self.deleted_programs.append(program)
+
+    def get_error(self) -> int:
+        return 0
 
 
 @pytest.fixture
 def fakes(monkeypatch):
     fake_sdl2 = _FakeSDL2()
-    fake_mgl = _FakeModerngl()
+    _FakeGLBinding.fail_load = False
+    _FakeGLBinding.fail_compile = False
     monkeypatch.setattr(sgw, 'sdl2', fake_sdl2)
-    monkeypatch.setattr(sgw, 'moderngl', fake_mgl)
-    return fake_sdl2, fake_mgl
+    monkeypatch.setattr(sgw, '_GLBinding', _FakeGLBinding)
+    return fake_sdl2
 
 
-def _make(fakes) -> sgw.SecondaryGLWindow:
+def _make() -> sgw.SecondaryGLWindow:
     return sgw.SecondaryGLWindow(b'Test Window', 0, 0, 640, 480)
 
 
 def test_create_builds_window_context_and_pipeline(fakes) -> None:
-    fake_sdl2, fake_mgl = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     assert win.is_open
     assert win.window_id == 1
     assert win._gl_context is not None  # noqa: SLF001
-    assert len(fake_mgl.created_contexts) == 1
+    assert win._gl.loaded is True  # noqa: SLF001
     assert fake_sdl2.swap_interval_calls == [0]
 
 
 def test_create_restores_previously_current_context(fakes) -> None:
-    fake_sdl2, _ = fakes
+    fake_sdl2 = fakes
     outer_window = _FakeWindow(99)
     outer_ctx = _FakeGLContext(99)
     fake_sdl2.current_window = outer_window
     fake_sdl2.current_context = outer_ctx
 
-    win = _make(fakes)
+    win = _make()
     win.create()
 
     assert fake_sdl2.current_window is outer_window
@@ -252,9 +275,9 @@ def test_create_restores_previously_current_context(fakes) -> None:
 
 
 def test_create_raises_and_cleans_up_on_window_creation_failure(fakes) -> None:
-    fake_sdl2, _ = fakes
+    fake_sdl2 = fakes
     fake_sdl2.fail_create_window = True
-    win = _make(fakes)
+    win = _make()
     with pytest.raises(RuntimeError):
         win.create()
     assert win.window is None
@@ -262,9 +285,9 @@ def test_create_raises_and_cleans_up_on_window_creation_failure(fakes) -> None:
 
 
 def test_create_raises_and_cleans_up_on_context_creation_failure(fakes) -> None:
-    fake_sdl2, _ = fakes
+    fake_sdl2 = fakes
     fake_sdl2.fail_create_context = True
-    win = _make(fakes)
+    win = _make()
     with pytest.raises(RuntimeError):
         win.create()
     # The window that was created before the context failed must be torn
@@ -273,28 +296,48 @@ def test_create_raises_and_cleans_up_on_context_creation_failure(fakes) -> None:
     assert len(fake_sdl2.destroyed_windows) == 1
 
 
+def test_create_raises_and_cleans_up_when_gl_functions_fail_to_load(fakes) -> None:
+    fake_sdl2 = fakes
+    _FakeGLBinding.fail_load = True
+    win = _make()
+    with pytest.raises(RuntimeError):
+        win.create()
+    assert win.window is None
+    assert len(fake_sdl2.destroyed_windows) == 1
+    assert len(fake_sdl2.deleted_contexts) == 1
+
+
+def test_create_raises_and_cleans_up_when_shader_compile_fails(fakes) -> None:
+    fake_sdl2 = fakes
+    _FakeGLBinding.fail_compile = True
+    win = _make()
+    with pytest.raises(RuntimeError):
+        win.create()
+    assert win.window is None
+    assert len(fake_sdl2.destroyed_windows) == 1
+    assert len(fake_sdl2.deleted_contexts) == 1
+
+
 def test_present_uploads_draws_and_swaps(fakes) -> None:
-    fake_sdl2, fake_mgl = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     raw = b'\x00' * (640 * 480 * 4)
     ok = win.present(raw, 640, 480)
     assert ok is True
-    ctx = fake_mgl.created_contexts[0]
-    assert ctx.textures[-1].writes == [raw]
-    assert ctx.screen.use_calls == 1
-    assert ctx.screen.clear_calls == [(0.0, 0.0, 0.0, 1.0)]
+    assert win._gl.tex_sub_image_calls == [(640, 480, raw)]  # noqa: SLF001
+    assert win._gl.draw_calls == 1  # noqa: SLF001
     assert fake_sdl2.swap_calls == [win.window]
 
 
 def test_present_returns_false_when_never_created(fakes) -> None:
-    win = _make(fakes)
+    win = _make()
     assert win.present(b'\x00', 640, 480) is False
 
 
 def test_present_restores_previous_context_on_success(fakes) -> None:
-    fake_sdl2, _ = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     outer_window = _FakeWindow(42)
     outer_ctx = _FakeGLContext(42)
@@ -308,8 +351,8 @@ def test_present_restores_previous_context_on_success(fakes) -> None:
 
 
 def test_present_restores_previous_context_when_make_current_fails(fakes) -> None:
-    fake_sdl2, _ = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     outer_window = _FakeWindow(42)
     outer_ctx = _FakeGLContext(42)
@@ -325,8 +368,8 @@ def test_present_restores_previous_context_when_make_current_fails(fakes) -> Non
 
 
 def test_present_restores_context_when_draw_raises(fakes, monkeypatch) -> None:
-    fake_sdl2, fake_mgl = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     outer_window = _FakeWindow(7)
     outer_ctx = _FakeGLContext(7)
@@ -336,7 +379,7 @@ def test_present_restores_context_when_draw_raises(fakes, monkeypatch) -> None:
     def _boom(*_a, **_k):
         raise RuntimeError('draw exploded')
 
-    monkeypatch.setattr(win._vao, 'render', _boom)  # noqa: SLF001
+    monkeypatch.setattr(win._gl, 'draw_triangle_strip_quad', _boom)  # noqa: SLF001
     ok = win.present(b'\x00' * (640 * 480 * 4), 640, 480)
 
     assert ok is False
@@ -345,28 +388,29 @@ def test_present_restores_context_when_draw_raises(fakes, monkeypatch) -> None:
 
 
 def test_present_resizes_texture_only_when_size_changes(fakes) -> None:
-    _, fake_mgl = fakes
-    win = _make(fakes)
+    win = _make()
     win.create()
-    ctx = fake_mgl.created_contexts[0]
-    assert len(ctx.textures) == 1
+    gl = win._gl  # noqa: SLF001
+    assert len(gl.tex_image_calls) == 1  # initial allocation in create()
 
     win.present(b'\x00' * (640 * 480 * 4), 640, 480)
-    assert len(ctx.textures) == 1  # unchanged size: no new texture
+    assert len(gl.tex_image_calls) == 1  # unchanged size: no reallocation
 
     win.present(b'\x00' * (800 * 600 * 4), 800, 600)
-    assert len(ctx.textures) == 2  # resized: new texture allocated
-    assert ctx.textures[0].released is True
+    assert len(gl.tex_image_calls) == 2  # resized: reallocated
     assert win.width == 800 and win.height == 600
 
 
 def test_destroy_releases_gl_resources_and_window(fakes) -> None:
-    fake_sdl2, fake_mgl = fakes
-    win = _make(fakes)
+    win = _make()
     win.create()
-    ctx = fake_mgl.created_contexts[0]
+    gl = win._gl  # noqa: SLF001
     gl_context = win._gl_context  # noqa: SLF001
     window_obj = win.window
+    texture_id = win._texture  # noqa: SLF001
+    vao_id = win._vao  # noqa: SLF001
+    vbo_id = win._vbo  # noqa: SLF001
+    program_id = win._program  # noqa: SLF001
 
     win.destroy()
 
@@ -374,22 +418,22 @@ def test_destroy_releases_gl_resources_and_window(fakes) -> None:
     assert win.window is None
     assert window_obj.destroyed is True
     assert gl_context.deleted is True
-    for prog in ctx.programs:
-        assert prog.released is True
-    for tex in ctx.textures:
-        assert tex.released is True
+    assert gl.deleted_textures == [texture_id]
+    assert gl.deleted_vaos == [vao_id]
+    assert gl.deleted_buffers == [vbo_id]
+    assert gl.deleted_programs == [program_id]
 
 
 def test_destroy_is_idempotent(fakes) -> None:
-    win = _make(fakes)
+    win = _make()
     win.create()
     win.destroy()
     win.destroy()  # must not raise
 
 
 def test_destroy_restores_previously_current_context(fakes) -> None:
-    fake_sdl2, _ = fakes
-    win = _make(fakes)
+    fake_sdl2 = fakes
+    win = _make()
     win.create()
     outer_window = _FakeWindow(11)
     outer_ctx = _FakeGLContext(11)

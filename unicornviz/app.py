@@ -2274,6 +2274,24 @@ void main() {
             self._show_cursor_default
             or self._ctrl_held
             or self._cursor_modal_override_active()
+            or self._subsystem_window_open()
+        )
+
+    def _subsystem_window_open(self) -> bool:
+        """Return True while any subsystem's own window (e.g. control-room-01
+        or dj-mixer-01's operator window) is open.
+
+        SDL_ShowCursor is a single, process-global setting — it cannot be
+        scoped to one window. Subsystems used to fight this main-loop policy
+        by calling SDL_ShowCursor(ENABLE) directly from their own present(),
+        racing against this per-frame call and often losing (the cursor
+        would flicker or stay hidden). Centralizing the check here instead
+        means there is exactly one place per frame that decides cursor
+        visibility.
+        """
+        return any(
+            bool(getattr(subsystem, 'is_open', False))
+            for subsystem in self._subsystems.values()
         )
 
     def _update_ctrl_state(self, sym: int, is_keydown: bool) -> None:

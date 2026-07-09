@@ -15,16 +15,35 @@ process — confirmed directly in SDL2 source
 ``SDL_CreateWindowTexture``). That hidden renderer creates its own GL
 context and, on Wayland, was observed (via a live apitrace capture)
 calling ``eglMakeCurrent`` to switch to it with no restore, corrupting the
-main app's GL state for the rest of the session. Full writeup:
-``docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md``
-and ``docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md``
-(this module implements that document's "M3" option).
+main app's GL state for the rest of the session.
 
-This module gives a drop-in an explicit, first-class GL context for its
-second window instead, so there is exactly one context per window, under
-our control, and every entry point restores whatever GL window/context was
-current before it ran — a caller never needs to guess whether presenting
-moved the current context out from under it.
+Why this doesn't use moderngl
+------------------------------
+The first version of this module built its GL pipeline with
+``moderngl.create_context()``. That works for the *first* GL context in a
+process, but ``moderngl.create_context()`` caches a single global context
+(``glcontext``'s ``_store.default_context``); every call after the first
+falls into "detect an already-current context" mode, and on Linux that
+detection path is hardcoded to X11/GLX (``glcontext.default_backend()``
+always returns the x11 backend on Linux — there is no Wayland equivalent).
+On a native-Wayland SDL session (no XWayland), the second context has no
+GLX to detect, and ``moderngl.create_context()`` raises
+``"(detect) glXGetCurrentContext: cannot detect OpenGL context"`` even
+though a perfectly valid EGL context is current. This is a structural
+limitation of the ``glcontext`` dependency, not a settings issue.
+
+Instead, this module loads the small subset of OpenGL 3.3 core entry
+points it actually needs (~20 functions: one texture, one shader program,
+one vertex array, one draw call) via ``SDL_GL_GetProcAddress``, which SDL
+itself implements portably across every video backend it supports (X11,
+native Wayland, Windows, macOS) — the same mechanism SDL uses internally
+for its own GL examples. This sidesteps ``glcontext``'s platform-detection
+logic entirely.
+
+Full investigation:
+``docs/debug/control-room-mixer-second-window-investigation-2026-07-09.md``
+and
+``docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md``.
 
 Usage
 -----
@@ -49,20 +68,41 @@ import ctypes
 import logging
 from typing import Any
 
-import moderngl
-import numpy as np
 import sdl2
 
 log = logging.getLogger(__name__)
 
-# Vertex shader — maps a fullscreen quad to clip space and carries an
-# explicit UV attribute (not derived from position) so the fragment shader
-# samples row 0 of the uploaded texture (a top-down raster, e.g. PIL's
-# native row order) at the top of the screen.
+# -- GL constants (OpenGL 1.1 - 3.3 core subset actually used below) -------
+_GL_FALSE = 0
+_GL_FLOAT = 0x1406
+_GL_UNSIGNED_BYTE = 0x1401
+_GL_TEXTURE_2D = 0x0DE1
+_GL_RGBA = 0x1908
+_GL_RGBA8 = 0x8058
+_GL_TEXTURE_MIN_FILTER = 0x2801
+_GL_TEXTURE_MAG_FILTER = 0x2800
+_GL_LINEAR = 0x2601
+_GL_TEXTURE_WRAP_S = 0x2802
+_GL_TEXTURE_WRAP_T = 0x2803
+_GL_CLAMP_TO_EDGE = 0x812F
+_GL_ARRAY_BUFFER = 0x8892
+_GL_STATIC_DRAW = 0x88E4
+_GL_VERTEX_SHADER = 0x8B31
+_GL_FRAGMENT_SHADER = 0x8B30
+_GL_COMPILE_STATUS = 0x8B81
+_GL_LINK_STATUS = 0x8B82
+_GL_TRIANGLE_STRIP = 0x0005
+_GL_COLOR_BUFFER_BIT = 0x00004000
+_GL_TEXTURE0 = 0x84C0
+
+# Vertex shader — maps a fullscreen quad to clip space. Explicit
+# `layout(location=N)` qualifiers avoid needing glGetAttribLocation.
+# uv.y=0 at the top screen vertices so texel row 0 (the first row written
+# to the texture, e.g. PIL's top row) lands at the top of the window.
 _VERTEX_SHADER = """
 #version 330
-in vec2 in_vert;
-in vec2 in_uv;
+layout(location = 0) in vec2 in_vert;
+layout(location = 1) in vec2 in_uv;
 out vec2 v_uv;
 void main() {
     v_uv = in_uv;
@@ -82,15 +122,235 @@ void main() {
 }
 """
 
-# Triangle-strip quad: (position.xy, uv.xy) per vertex. uv.y=0 at the top
-# screen vertices so texel row 0 (the first row written to the texture)
-# lands at the top of the window -- see the vertex shader comment above.
-_QUAD_VERTICES = np.array([
+# Triangle-strip quad: (position.xy, uv.xy) per vertex.
+_QUAD_VERTICES = (ctypes.c_float * 16)(
     -1.0, -1.0, 0.0, 1.0,
     1.0, -1.0, 1.0, 1.0,
     -1.0, 1.0, 0.0, 0.0,
     1.0, 1.0, 1.0, 0.0,
-], dtype='f4')
+)
+
+_GL_FUNCTIONS: dict[str, tuple] = {
+    # name: (restype, *argtypes)
+    'glGetError': (ctypes.c_uint,),
+    'glViewport': (None, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int),
+    'glClearColor': (None, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float),
+    'glClear': (None, ctypes.c_uint),
+    'glGenTextures': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glDeleteTextures': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glBindTexture': (None, ctypes.c_uint, ctypes.c_uint),
+    'glTexParameteri': (None, ctypes.c_uint, ctypes.c_uint, ctypes.c_int),
+    'glTexImage2D': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ctypes.c_int, ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p,
+    ),
+    'glTexSubImage2D': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ctypes.c_int, ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p,
+    ),
+    'glActiveTexture': (None, ctypes.c_uint),
+    'glGenBuffers': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glDeleteBuffers': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glBindBuffer': (None, ctypes.c_uint, ctypes.c_uint),
+    'glBufferData': (None, ctypes.c_uint, ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint),
+    'glGenVertexArrays': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glDeleteVertexArrays': (None, ctypes.c_int, ctypes.POINTER(ctypes.c_uint)),
+    'glBindVertexArray': (None, ctypes.c_uint),
+    'glEnableVertexAttribArray': (None, ctypes.c_uint),
+    'glVertexAttribPointer': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.c_uint, ctypes.c_uint8,
+        ctypes.c_int, ctypes.c_void_p,
+    ),
+    'glCreateShader': (ctypes.c_uint, ctypes.c_uint),
+    'glDeleteShader': (None, ctypes.c_uint),
+    'glShaderSource': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_char_p),
+        ctypes.POINTER(ctypes.c_int),
+    ),
+    'glCompileShader': (None, ctypes.c_uint),
+    'glGetShaderiv': (None, ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_int)),
+    'glGetShaderInfoLog': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p,
+    ),
+    'glCreateProgram': (ctypes.c_uint,),
+    'glDeleteProgram': (None, ctypes.c_uint),
+    'glAttachShader': (None, ctypes.c_uint, ctypes.c_uint),
+    'glLinkProgram': (None, ctypes.c_uint),
+    'glGetProgramiv': (None, ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_int)),
+    'glGetProgramInfoLog': (
+        None, ctypes.c_uint, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_char_p,
+    ),
+    'glUseProgram': (None, ctypes.c_uint),
+    'glGetUniformLocation': (ctypes.c_int, ctypes.c_uint, ctypes.c_char_p),
+    'glUniform1i': (None, ctypes.c_int, ctypes.c_int),
+    'glDrawArrays': (None, ctypes.c_uint, ctypes.c_int, ctypes.c_int),
+}
+
+
+class _GLBinding:
+    """Thin, Pythonic wrapper around the raw GL entry points this module
+    needs, loaded via ``SDL_GL_GetProcAddress`` against whatever GL context
+    is current when :meth:`load` runs.
+
+    Deliberately not a 1:1 ``glFoo``-named passthrough — each method here
+    does one specific job for this module's fixed quad-blit pipeline, so
+    the raw ctypes plumbing (out-parameters, string buffers, info-log
+    fetches) stays in one place instead of scattered through
+    :class:`SecondaryGLWindow`.
+    """
+
+    def __init__(self) -> None:
+        self._fn: dict[str, Any] = {}
+
+    def load(self) -> None:
+        for name, sig in _GL_FUNCTIONS.items():
+            restype, *argtypes = sig
+            addr = sdl2.SDL_GL_GetProcAddress(name.encode())
+            if not addr:
+                raise RuntimeError(f'SDL_GL_GetProcAddress returned NULL for {name}')
+            self._fn[name] = ctypes.CFUNCTYPE(restype, *argtypes)(addr)
+
+    def gen_texture(self) -> int:
+        tex_id = ctypes.c_uint(0)
+        self._fn['glGenTextures'](1, ctypes.byref(tex_id))
+        return int(tex_id.value)
+
+    def delete_texture(self, tex_id: int) -> None:
+        arr = (ctypes.c_uint * 1)(tex_id)
+        self._fn['glDeleteTextures'](1, arr)
+
+    def bind_texture(self, tex_id: int) -> None:
+        self._fn['glBindTexture'](_GL_TEXTURE_2D, tex_id)
+
+    def set_bound_texture_filter_linear_clamped(self) -> None:
+        for pname in (_GL_TEXTURE_MIN_FILTER, _GL_TEXTURE_MAG_FILTER):
+            self._fn['glTexParameteri'](_GL_TEXTURE_2D, pname, _GL_LINEAR)
+        for pname in (_GL_TEXTURE_WRAP_S, _GL_TEXTURE_WRAP_T):
+            self._fn['glTexParameteri'](_GL_TEXTURE_2D, pname, _GL_CLAMP_TO_EDGE)
+
+    def tex_image_2d_rgba(self, width: int, height: int, data: bytes | None) -> None:
+        ptr = ctypes.cast(data, ctypes.c_void_p) if data is not None else None
+        self._fn['glTexImage2D'](
+            _GL_TEXTURE_2D, 0, _GL_RGBA8, width, height, 0,
+            _GL_RGBA, _GL_UNSIGNED_BYTE, ptr,
+        )
+
+    def tex_sub_image_2d_rgba(self, width: int, height: int, data: bytes) -> None:
+        ptr = ctypes.cast(data, ctypes.c_void_p)
+        self._fn['glTexSubImage2D'](
+            _GL_TEXTURE_2D, 0, 0, 0, width, height, _GL_RGBA, _GL_UNSIGNED_BYTE, ptr,
+        )
+
+    def active_texture0(self) -> None:
+        self._fn['glActiveTexture'](_GL_TEXTURE0)
+
+    def gen_buffer(self) -> int:
+        buf_id = ctypes.c_uint(0)
+        self._fn['glGenBuffers'](1, ctypes.byref(buf_id))
+        return int(buf_id.value)
+
+    def delete_buffer(self, buf_id: int) -> None:
+        arr = (ctypes.c_uint * 1)(buf_id)
+        self._fn['glDeleteBuffers'](1, arr)
+
+    def bind_array_buffer(self, buf_id: int) -> None:
+        self._fn['glBindBuffer'](_GL_ARRAY_BUFFER, buf_id)
+
+    def array_buffer_data_static(self, data: ctypes.Array) -> None:
+        self._fn['glBufferData'](_GL_ARRAY_BUFFER, ctypes.sizeof(data), data, _GL_STATIC_DRAW)
+
+    def gen_vertex_array(self) -> int:
+        vao_id = ctypes.c_uint(0)
+        self._fn['glGenVertexArrays'](1, ctypes.byref(vao_id))
+        return int(vao_id.value)
+
+    def delete_vertex_array(self, vao_id: int) -> None:
+        arr = (ctypes.c_uint * 1)(vao_id)
+        self._fn['glDeleteVertexArrays'](1, arr)
+
+    def bind_vertex_array(self, vao_id: int) -> None:
+        self._fn['glBindVertexArray'](vao_id)
+
+    def setup_quad_attribs(self) -> None:
+        """Enable+configure attribs 0 (2f position) and 1 (2f uv) against
+        the currently bound array buffer, matching _QUAD_VERTICES' fixed
+        interleaved layout (stride 16 bytes)."""
+        stride = 4 * ctypes.sizeof(ctypes.c_float)
+        self._fn['glEnableVertexAttribArray'](0)
+        self._fn['glVertexAttribPointer'](0, 2, _GL_FLOAT, _GL_FALSE, stride, None)
+        self._fn['glEnableVertexAttribArray'](1)
+        offset = ctypes.c_void_p(2 * ctypes.sizeof(ctypes.c_float))
+        self._fn['glVertexAttribPointer'](1, 2, _GL_FLOAT, _GL_FALSE, stride, offset)
+
+    def compile_program(self, vertex_src: str, fragment_src: str) -> int:
+        vs = self._compile_shader(_GL_VERTEX_SHADER, vertex_src)
+        fs = self._compile_shader(_GL_FRAGMENT_SHADER, fragment_src)
+        program = self._fn['glCreateProgram']()
+        self._fn['glAttachShader'](program, vs)
+        self._fn['glAttachShader'](program, fs)
+        self._fn['glLinkProgram'](program)
+        status = ctypes.c_int(0)
+        self._fn['glGetProgramiv'](program, _GL_LINK_STATUS, ctypes.byref(status))
+        if not status.value:
+            log_text = self._program_info_log(program)
+            self._fn['glDeleteProgram'](program)
+            self._fn['glDeleteShader'](vs)
+            self._fn['glDeleteShader'](fs)
+            raise RuntimeError(f'GL program link failed: {log_text}')
+        self._fn['glDeleteShader'](vs)
+        self._fn['glDeleteShader'](fs)
+        return int(program)
+
+    def _compile_shader(self, kind: int, source: str) -> int:
+        shader = self._fn['glCreateShader'](kind)
+        src_bytes = source.encode()
+        src_array = (ctypes.c_char_p * 1)(src_bytes)
+        self._fn['glShaderSource'](shader, 1, src_array, None)
+        self._fn['glCompileShader'](shader)
+        status = ctypes.c_int(0)
+        self._fn['glGetShaderiv'](shader, _GL_COMPILE_STATUS, ctypes.byref(status))
+        if not status.value:
+            log_text = self._shader_info_log(shader)
+            self._fn['glDeleteShader'](shader)
+            raise RuntimeError(f'GL shader compile failed: {log_text}')
+        return int(shader)
+
+    def _shader_info_log(self, shader: int) -> str:
+        buf = ctypes.create_string_buffer(2048)
+        length = ctypes.c_int(0)
+        self._fn['glGetShaderInfoLog'](shader, 2048, ctypes.byref(length), buf)
+        return buf.value.decode(errors='replace')
+
+    def _program_info_log(self, program: int) -> str:
+        buf = ctypes.create_string_buffer(2048)
+        length = ctypes.c_int(0)
+        self._fn['glGetProgramInfoLog'](program, 2048, ctypes.byref(length), buf)
+        return buf.value.decode(errors='replace')
+
+    def delete_program(self, program: int) -> None:
+        self._fn['glDeleteProgram'](program)
+
+    def use_program(self, program: int) -> None:
+        self._fn['glUseProgram'](program)
+
+    def get_uniform_location(self, program: int, name: str) -> int:
+        return int(self._fn['glGetUniformLocation'](program, name.encode()))
+
+    def set_uniform_1i(self, location: int, value: int) -> None:
+        self._fn['glUniform1i'](location, value)
+
+    def viewport(self, width: int, height: int) -> None:
+        self._fn['glViewport'](0, 0, width, height)
+
+    def clear_black(self) -> None:
+        self._fn['glClearColor'](0.0, 0.0, 0.0, 1.0)
+        self._fn['glClear'](_GL_COLOR_BUFFER_BIT)
+
+    def draw_triangle_strip_quad(self) -> None:
+        self._fn['glDrawArrays'](_GL_TRIANGLE_STRIP, 0, 4)
+
+    def get_error(self) -> int:
+        return int(self._fn['glGetError']())
 
 
 class SecondaryGLWindow:
@@ -122,11 +382,12 @@ class SecondaryGLWindow:
         self.window: Any = None
         self._window_id = 0
         self._gl_context: Any = None
-        self._mgl_ctx: moderngl.Context | None = None
-        self._program: Any = None
-        self._vbo: Any = None
-        self._vao: Any = None
-        self._texture: Any = None
+        self._gl: _GLBinding | None = None
+        self._program = 0
+        self._uniform_loc = 0
+        self._vbo = 0
+        self._vao = 0
+        self._texture = 0
 
     @property
     def window_id(self) -> int:
@@ -171,17 +432,26 @@ class SecondaryGLWindow:
             # compositor frame callback for a window nobody is looking at.
             sdl2.SDL_GL_SetSwapInterval(0)
 
-            self._mgl_ctx = moderngl.create_context()
-            self._program = self._mgl_ctx.program(
-                vertex_shader=_VERTEX_SHADER, fragment_shader=_FRAGMENT_SHADER,
-            )
-            self._program['uTexture'] = 0
-            self._vbo = self._mgl_ctx.buffer(_QUAD_VERTICES.tobytes())
-            self._vao = self._mgl_ctx.vertex_array(
-                self._program, [(self._vbo, '2f 2f', 'in_vert', 'in_uv')],
-            )
-            self._texture = self._mgl_ctx.texture((self.width, self.height), 4)
-            self._texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            self._gl = _GLBinding()
+            self._gl.load()
+            self._program = self._gl.compile_program(_VERTEX_SHADER, _FRAGMENT_SHADER)
+            self._gl.use_program(self._program)
+            self._uniform_loc = self._gl.get_uniform_location(self._program, 'uTexture')
+            self._gl.set_uniform_1i(self._uniform_loc, 0)
+
+            self._vbo = self._gl.gen_buffer()
+            self._gl.bind_array_buffer(self._vbo)
+            self._gl.array_buffer_data_static(_QUAD_VERTICES)
+            self._vao = self._gl.gen_vertex_array()
+            self._gl.bind_vertex_array(self._vao)
+            self._gl.bind_array_buffer(self._vbo)
+            self._gl.setup_quad_attribs()
+
+            self._texture = self._gl.gen_texture()
+            self._gl.bind_texture(self._texture)
+            self._gl.set_bound_texture_filter_linear_clamped()
+            self._gl.tex_image_2d_rgba(self.width, self.height, None)
+            self._gl.active_texture0()
         except Exception:
             self._release_gl_resources()
             if self._gl_context is not None:
@@ -205,7 +475,7 @@ class SecondaryGLWindow:
         rebind-even-on-failure discipline, since a caller must be able to
         assume its own context is current again regardless of outcome.
         """
-        if self.window is None or self._mgl_ctx is None:
+        if self.window is None or self._gl is None:
             return False
         prev_window = sdl2.SDL_GL_GetCurrentWindow()
         prev_context = sdl2.SDL_GL_GetCurrentContext()
@@ -216,12 +486,13 @@ class SecondaryGLWindow:
                 return False
             if (int(width), int(height)) != (self.width, self.height):
                 self._resize(int(width), int(height))
-            self._texture.write(raw_rgba)
-            self._mgl_ctx.screen.use()
-            self._mgl_ctx.viewport = (0, 0, self.width, self.height)
-            self._mgl_ctx.screen.clear(0.0, 0.0, 0.0, 1.0)
-            self._texture.use(location=0)
-            self._vao.render(moderngl.TRIANGLE_STRIP)
+            self._gl.bind_texture(self._texture)
+            self._gl.tex_sub_image_2d_rgba(self.width, self.height, raw_rgba)
+            self._gl.viewport(self.width, self.height)
+            self._gl.clear_black()
+            self._gl.use_program(self._program)
+            self._gl.bind_vertex_array(self._vao)
+            self._gl.draw_triangle_strip_quad()
             sdl2.SDL_GL_SwapWindow(self.window)
             ok = True
         except Exception as exc:
@@ -233,10 +504,8 @@ class SecondaryGLWindow:
     def _resize(self, width: int, height: int) -> None:
         self.width = max(1, width)
         self.height = max(1, height)
-        if self._texture is not None:
-            self._texture.release()
-        self._texture = self._mgl_ctx.texture((self.width, self.height), 4)
-        self._texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        self._gl.bind_texture(self._texture)
+        self._gl.tex_image_2d_rgba(self.width, self.height, None)
 
     def destroy(self) -> None:
         """Release all GL resources and destroy the window/context.
@@ -263,14 +532,21 @@ class SecondaryGLWindow:
             self._restore(prev_window, prev_context)
 
     def _release_gl_resources(self) -> None:
-        for obj in (self._vao, self._vbo, self._texture, self._program):
-            if obj is not None:
-                try:
-                    obj.release()
-                except Exception as exc:  # pragma: no cover - defensive
-                    log.warning('SecondaryGLWindow: resource release failed: %s', exc)
-        self._vao = self._vbo = self._texture = self._program = None
-        self._mgl_ctx = None
+        gl = self._gl
+        if gl is not None:
+            try:
+                if self._texture:
+                    gl.delete_texture(self._texture)
+                if self._vao:
+                    gl.delete_vertex_array(self._vao)
+                if self._vbo:
+                    gl.delete_buffer(self._vbo)
+                if self._program:
+                    gl.delete_program(self._program)
+            except Exception as exc:  # pragma: no cover - defensive
+                log.warning('SecondaryGLWindow: resource release failed: %s', exc)
+        self._texture = self._vao = self._vbo = self._program = 0
+        self._gl = None
 
     @staticmethod
     def _restore(window: Any, context: Any) -> None:

@@ -1,10 +1,19 @@
 # Control Room / DJ Mixer Second-Window — Linux Mitigation Strategies
 
 Owner: owner + Claude (planning/audit)
-Status: **M3 implemented and landed** (2026-07-09, same day) — see §9.
-Owner testing with the previous M2/XWayland workaround (slow, mixer
-unresponsive) predates this and should be re-tested against M3, which
-does not use XWayland or the hidden SDL texture-framebuffer path at all.
+Status: **M3 implemented, hit a second Linux-specific wall, fixed —
+landed** (2026-07-09, same day) — see §8 and §10. First landing used
+`moderngl.create_context()` for the second window; owner testing (forced
+`SDL_VIDEODRIVER=x11`) confirmed the windowing/present mechanism itself
+works, but the real app's default native-Wayland session hit a second,
+distinct bug: `moderngl.create_context()` cannot attach to a second,
+already-current context on native Wayland at all (its "detect" fallback
+is hardcoded to X11/GLX — a `glcontext` limitation, not a settings issue).
+Rebuilt without moderngl, loading a minimal OpenGL 3.3 subset directly via
+`SDL_GL_GetProcAddress` instead. Verified against real SDL2 + GL with
+`SDL_VIDEODRIVER=wayland` forced (the exact condition that broke before)
+on this machine. Also fixed while in the area: cursor visibility over
+control-room/mixer windows (§10).
 Last updated: 2026-07-09
 
 Companion to the investigation record in
@@ -394,15 +403,96 @@ re-testing against this implementation, not assumed fixed or unfixed by it.
   window's lifecycle.
 - Full main-repo suite: 662/662 passing.
 
-**Not yet verified:** actual visual confirmation on the owner's machine —
-all testing above confirms the mechanism works and the main context is
-never left stranded, but only the owner's own eyes can confirm the
-black-screen symptom itself is gone. Also not retested: whether the M2
-slowness/unresponsiveness symptoms recur (expected not to, since M3 uses
-neither XWayland nor SDL's software renderer path at all, but this is a
-prediction, not a measurement).
+**Not yet verified (at the time this section was first written):** actual
+visual confirmation on the owner's machine. See §9 for what happened next.
 
-## 9) References
+## 9) Second wall and fix — moderngl can't attach to a second context on native Wayland
+
+Owner testing of the §8 landing found: forcing `SDL_VIDEODRIVER=x11` on
+the command line, both windows opened, presented, and worked well (mixer
+was hard to fully judge without a music library loaded). But the app's
+*default* configuration forces `SDL_VIDEODRIVER=wayland`
+(`unicornviz/app.py::_init_sdl`), and under that native-Wayland session
+the mixer window failed to open with:
+
+```text
+dj-mixer-01: mixer window failed to open: (detect) glXGetCurrentContext: cannot detect OpenGL context
+```
+
+**Root cause**, traced directly in `moderngl`'s and `glcontext`'s own
+Python source (both pure-Python, no need to guess from a compiled
+traceback): `moderngl.create_context()` caches a single context per
+process in `glcontext`'s `_store.default_context`. The *first* call in a
+process (the main app's own `_init_moderngl()`) takes a fast path that
+just wraps whatever context is already current. Every call after that —
+including `SecondaryGLWindow.create()`'s call — falls into `mode="detect"`,
+and `glcontext.default_backend()` **unconditionally returns the x11
+backend on Linux** (`glcontext/__init__.py::default_backend`) — there is
+no Wayland branch at all. `glcontext` does ship an `egl` backend, but only
+as a `standalone` (headless, pbuffer-based) context creator reachable via
+`get_backend_by_name('egl')`, not as a "detect the context SDL just made
+current" mode — so there is no way to make the public `moderngl.
+create_context()` API attach to a second, already-current, window-bound
+EGL context on native Wayland at all. This is a structural gap in
+`glcontext`, not a bug in this project's usage of it. Confirmed by
+forcing `SDL_VIDEODRIVER=wayland` on the earlier (moderngl-based) smoke
+test script and reproducing the exact same exception locally.
+
+**Fix:** rewrote `unicornviz/secondary_gl_window.py` to not use `moderngl`
+at all for the second window. It now loads the ~20 OpenGL 3.3 core
+entry points it actually needs (one texture, one shader program, one
+vertex array, one draw call) directly via `SDL_GL_GetProcAddress`, which
+SDL itself implements portably across every video backend it supports
+(X11, native Wayland, Windows, macOS) — the exact mechanism SDL's own
+examples use for GL, and the same portability guarantee `SDL_GL_
+CreateContext`/`SDL_GL_MakeCurrent`/`SDL_GL_SwapWindow` already had (those
+were never the problem — only moderngl's separate, GLX-only "attach to an
+existing context" path was). The public `SecondaryGLWindow` API
+(`create()`/`present()`/`destroy()`/`.width`/`.height`/`.window`/
+`.window_id`/`.is_open`) is unchanged, so neither drop-in needed any
+further changes beyond this module.
+
+**Verification:** all 15 unit tests (fakes for `sdl2` and the new internal
+`_GLBinding`, no `moderngl` involved) plus three real-hardware smoke tests
+re-run with `SDL_VIDEODRIVER=wayland` forced explicitly — the exact
+condition that broke before. All passed: bare `SecondaryGLWindow`, the
+real `MixerWindow`, and `control_room.py`'s real window lifecycle, each
+opening/presenting/closing cleanly under native Wayland. Full main-repo
+suite: 664/664 (662 + 2 new). Owner's own visual confirmation on native
+Wayland is still the only thing left unverified.
+
+## 10) Cursor visibility over control-room/mixer windows
+
+Reported alongside the `SDL_VIDEODRIVER=x11` test: the mouse cursor was
+very hard to see over Control Room and effectively invisible over the
+mixer window.
+
+**Root cause:** `SDL_ShowCursor` is a single, process-global setting — it
+cannot be scoped to one window. `App._set_cursor_visible(App.
+_cursor_should_be_visible())` already runs once per frame, early (right
+after event polling), and hides the cursor by default (fullscreen VJ
+visuals). control-room-01's own `present()` — which runs later in the same
+frame, after `SDL_GL_SwapWindow` — called `SDL_ShowCursor(SDL_ENABLE)`
+unconditionally on every frame it was open, racing against the main
+loop's own decision from earlier that same frame (and again at the start
+of the *next* frame, before control-room's next present() call). The net
+effect was the cursor flickering shown/hidden every frame rather than
+staying reliably visible. dj-mixer-01's `ui.py` had no `SDL_ShowCursor`
+call at all, so its window never showed the cursor.
+
+**Fix:** promoted cursor visibility to a single authoritative policy.
+Added `DjMixerController.is_open` (mirroring `ControlRoomController.
+is_open`, which already existed) and `App._subsystem_window_open()`,
+which checks `getattr(subsystem, 'is_open', False)` across every
+registered subsystem. `App._cursor_should_be_visible()` now also returns
+True whenever any subsystem window is open. Removed control-room-01's own
+`SDL_ShowCursor` call entirely — there is now exactly one place per frame
+that decides cursor visibility, and it already runs regardless of which
+subsystem window (if any) is open. 8 new tests
+(`tests/test_cursor_visibility_subsystem_windows.py`) plus 1 for
+`DjMixerController.is_open` itself.
+
+## 11) References
 
 - SDL2 source (branch `SDL2` = 2.32.x, verified locally this audit):
   `SDL_video.c` — `ShouldAttemptTextureFramebuffer` (line ~2678),
