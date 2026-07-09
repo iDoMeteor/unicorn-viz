@@ -653,14 +653,13 @@ beat_threshold = 0.45        # beat rising-edge trigger threshold
 
 # ── dj-mixer-01 — two-deck DJ mixer window + Pioneer DDJ-REV1 ────────────────
 # Loaded when enabled, but stays fully idle: the mixer window, the audio output
-# stream, and the REV1 MIDI port are all left alone at boot. Open the window
-# with Shift+D — that is when the REV1 is claimed (as a raw-only aux device that
-# coexists with a VJ-side controller); closing the window releases it again.
-# Esc closes; left-click a deck to play/pause. See drop-ins/dj-mixer-01/README.md.
+# stream, and the REV1 MIDI port are all left alone until you open the mixer
+# with Shift+D — a single action that brings up the window + REV1 + audio
+# together (the REV1 is a raw-only aux device that coexists with a VJ-side
+# controller). Esc closes and releases it all. See drop-ins/dj-mixer-01/README.md.
 [dj_mixer]
 enabled = true               # load the drop-in (idle until Shift+D)
-start_enabled = false        # do NOT open the audio output stream at boot
-open_on_start = false        # do NOT auto-open the mixer window (or the REV1)
+start_enabled = false        # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
 led_feedback = true          # light the REV1 PLAY/CUE LEDs while the mixer is open
 pad_lightshow = true         # audio-reactive VU meter across the 8 performance pads
