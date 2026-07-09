@@ -3,9 +3,10 @@
 Owner: owner + Claude Sonnet 5 (master coordinator)
 Status: In progress — items 1/3 confirmed fixed on owner's machine; item 8
 (audience lockup) mitigated; dead mirror-window code removed; item 11
-(black-screen) root-caused via an owner-run isolation test (0 vs ~408k GL
-errors with/without control-room+mixer open) to a missing framebuffer
-rebind in `_read_streaming_frame()` — fix landed, awaiting owner
+(black-screen) definitively root-caused via a live apitrace GL call
+capture — control-room-01/dj-mixer-01's SDL_RenderPresent() switches the
+current EGL context and never switches back — fix landed
+(`_present_subsystems()` rebinds once per frame), awaiting owner
 confirmation; items 4/5 (GNOME panel + overlay migration) still open, not
 started.
 Last updated: 2026-07-09
@@ -133,6 +134,55 @@ logic, so Mesa's GLSL compiler strips it as dead code and
 `self._prog['iBass'].value = ...` throws at runtime. Confirmed still
 present as of the latest `feature-01` bump (`ee7b4ff`). Not fixed this
 pass — flagging for a separate task.
+
+---
+
+## Status Update 2 — 2026-07-09 (apitrace: the real root cause, item 11)
+
+Three targeted fixes (`source.use()`, viewport pinning, the moderngl
+default-framebuffer blit workaround) each addressed a real, verifiable bug
+but none stopped the black-screen symptom, and owner testing kept showing
+the same massive GL error cascade after each one — just with the specific
+trigger error shifting. Rather than keep guessing from Mesa's error text,
+installed `apitrace` (`sudo dnf install apitrace`) and had the owner
+capture two live traces (`apitrace trace -a egl -o trace.trace -- ...`,
+opening Control Room / DJ Mixer respectively).
+
+**Definitive finding**, read directly out of the trace, not inferred:
+control-room-01/dj-mixer-01's `SDL_RenderPresent()` on their own second SDL
+window silently calls `eglMakeCurrent` to switch to their own internal EGL
+context — call 34699 in the trace — runs a sequence of legacy
+client-array GL calls (`glEnableClientState`/`glTexCoordPointer`/etc., SDL's
+own internal blit implementation), calls `eglSwapBuffers` for control-room's
+window at call 34718, and **never switches back**. The very next GL call
+from our own app (`glUseProgram(124)` at call 34812) immediately fails with
+`GL_INVALID_VALUE`, because program 124 — a perfectly valid object in
+*our* context — doesn't exist in whatever context is now current. Every GL
+call for the rest of the session runs against the wrong context: this is
+the actual source of the `glUseProgram`/`glBindVertexArray`/`glUniform`/
+`glBufferSubData` cascade chased across items 1, 9, and 11.
+
+This does not invalidate the earlier fixes — `rebind_main_gl_context()` on
+control-room create/destroy (item 1) was a real, necessary fix for the
+original crash; the moderngl default-framebuffer read bug (item 9) is real
+and confirmed against moderngl's own upstream source. Neither one was the
+cause of *this* symptom, because both only rebind once per window
+open/close, not every frame where `present()` actually runs — and
+`present()` runs every single frame control-room/mixer are open.
+
+**Fix** (`4e26b4c`): the per-frame subsystem-present loop in `run()` was
+extracted into `App._present_subsystems()`, which now calls
+`self.rebind_main_gl_context()` once after the loop, gated on whether any
+subsystem actually had a callable `present()` that frame (so it costs
+nothing when control-room/mixer aren't open) — and rebinds even if a
+presenter raised, since the context can move before a partial failure.
+
+Not yet re-confirmed by the owner. If this doesn't fully resolve it, the
+next apitrace angle is checking whether `eglMakeCurrent` calls happen
+*within* a single frame more than once (e.g. dj-mixer's LED/audio-engine
+code, if any, doing its own EGL work) — `apitrace dump --grep=eglMakeCurrent
+trace.trace` is the fastest way to check that directly rather than
+re-deriving it from Mesa error text again.
 
 ---
 
@@ -485,7 +535,7 @@ confirming §1/§2's Mesa/EGL hypothesis is to actually capture one:
 | 8 | Throttle the synchronous PBO-fallback readback harder (0.1s → 1.0s) to stop audience effects locking up while control-room is open | High (matches an already-documented failure mode; direct code-level fix) | Low | **Done** — landed in `945a865`, not yet independently confirmed by the owner |
 | 9 | Root-cause why PBO buffer mapping fails ("cannot map the buffer") in the first place | Medium | Low | **Partially addressed, root cause revised** — the viewport-pinning fix (`abd06c1`) is defensively correct but did **not** address the GL_INVALID_VALUE seen in practice: the mismatch-detection warning it added never fired in the owner's next two test logs, meaning `source` size and `App._width`/`_height` already agreed (1920x1080 both). The PBO error itself may be a distinct, still-open sub-issue — see item 11 for the current best theory on what's actually driving the black-screen symptom |
 | 10 | Fix `KeyError: 'iBass'` in `drop-ins/feature-01/rainbow_trance.py:286` (unused uniform stripped by the GLSL compiler) | High | Low | Open — unrelated to the platform investigation, found incidentally |
-| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | High — causation proven by isolation test (0 GL errors without control-room/mixer vs. ~408k with); the moderngl bug itself is confirmed against its own upstream C++ source, not inferred | Low | **In progress, unverified** (`6a9c6ec`, supersedes `5ea7ab5`'s insufficient `source.use()` attempt). Confirmed by reading moderngl's own source (github.com/moderngl/moderngl): `Framebuffer.read()`/`read_into()` unconditionally issue `glReadBuffer(GL_COLOR_ATTACHMENT0 + attachment)`, invalid for the default framebuffer — moderngl's own context-init code has a comment acknowledging this exact bug class for `draw_buffers` ("GL_COLOR_ATTACHMENT0 is causes error: 1282") but never applied the equivalent fix to the read path. `_read_streaming_frame()`/`read_screenshot_frame()` now blit `ctx.screen` into a real FBO via `copy_framebuffer()` (which correctly uses each framebuffer's queried draw buffer) and read from that instead. First version of this fix (tested live by the owner via the shared working tree before commit) silenced the original trigger but its new FBO lacked a depth attachment, and `copy_framebuffer()` always blits color+depth — produced a new `GL_INVALID_FRAMEBUFFER_OPERATION` (incomplete draw/read buffers), error cascade and black screen persisted. Depth attachment added in `6a9c6ec`, mirroring `_make_fbo()`'s existing pattern. Not yet re-confirmed — this is the third fix attempt for this specific symptom (`source.use()`, then blit-without-depth, now blit-with-depth) |
+| 11 | Root-cause control-room/mixer showing black despite successful render+present (per items 1-2's own diagnostics) | Very high — confirmed directly via apitrace GL call trace, not inferred from error text | Low | **Fixed, unverified** (`4e26b4c`). See "Status Update 2" above for the full apitrace investigation. Real root cause: control-room-01/dj-mixer-01's `SDL_RenderPresent()` calls `eglMakeCurrent` to their own internal EGL context and never switches back, so every subsequent GL call in the main render loop runs against the wrong context. `App._present_subsystems()` now calls `rebind_main_gl_context()` once per frame after subsystem presents, gated on whether any subsystem actually presented. The three earlier fix attempts in this row's history (`source.use()`, moderngl blit-without-depth, blit-with-depth) were each real fixes for real bugs, just not the cause of this specific symptom — they only rebind once per window open/close, not every frame |
 
 If item 2's diagnostics show the black screen persists even after the
 surface-refresh fix, the next step per the archived handoff's own "Path 2"
