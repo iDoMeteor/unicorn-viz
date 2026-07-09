@@ -1,10 +1,16 @@
 # Control Room / DJ Mixer Second-Window Investigation (2026-07-08 → 2026-07-09)
 
-Owner: owner + Claude Sonnet 5 (master coordinator)
+Owner: owner + Claude (master coordinator)
 Status: Crash + GL error cascade confirmed fixed (two clean owner-run
-sessions, no apitrace, zero GL errors, clean shutdown). Visual black
-screen on control-room/mixer's own windows is a **separate, still-open**
-bug — see §7.
+sessions, no apitrace, zero GL errors, clean shutdown). The black-screen
+symptom's root mechanism (SDL2's hidden GL-backed "texture framebuffer")
+was identified and bypassed entirely — both drop-ins now use an explicit,
+independent GL context per second window
+(`unicornviz/secondary_gl_window.py`) instead of `SDL_RENDERER_SOFTWARE`.
+Landed and verified via real-hardware smoke tests on this machine; owner
+visual confirmation still pending. Full details:
+[`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
+§8.
 Last updated: 2026-07-09
 
 Successor to [`control-room-debug-handoff.md`](../archive/debug/control-room-debug-handoff.md)
@@ -363,15 +369,26 @@ not explained by any of the other three earlier fix attempts either. It
 is a distinct, still-unsolved bug in how control-room-01/dj-mixer-01's
 own SDL_Renderer-based window actually gets composited to the screen.
 
-> **Update (2026-07-09, later the same day):** a follow-up audit refined
-> the leading theory below to a specific, source-verified mechanism —
-> SDL2's hidden "texture framebuffer" (a second, GL-backed renderer SDL
-> silently creates for any window-surface window on Linux). See
+> **Update (2026-07-09, later the same day) — RESOLVED (pending owner
+> visual confirmation):** a follow-up audit refined the leading theory
+> below into a specific, source-verified mechanism — SDL2's hidden
+> "texture framebuffer" (a second, GL-backed renderer SDL silently creates
+> for any window-surface window on Linux, on both X11 and Wayland) — then
+> both drop-ins were rewritten to bypass that mechanism entirely rather
+> than work around it: each second window now gets its own explicit,
+> independent GL context via the new `unicornviz/secondary_gl_window.py`,
+> replacing `SDL_RENDERER_SOFTWARE` + `SDL_RenderPresent`. Verified via
+> real-hardware smoke tests (real SDL2 + moderngl, this machine's actual
+> Wayland/Mesa stack) end-to-end for both drop-ins, plus the full
+> regression suite. See
 > [`../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md`](../planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
-> for the full mechanism, per-environment mitigation options, and a
-> diagnostics plan whose first experiments need zero code changes.
+> §1 for the mechanism and §8 for the implementation/verification detail.
+> The "Leading theory" and "Recommended next step" subsections immediately
+> below are preserved as a record of the diagnosis-in-progress state at
+> the time — they predate the fix and were superseded by it, not proven or
+> disproven by further apitrace work.
 
-### Leading theory for the remaining black screen
+### Leading theory for the remaining black screen (superseded — see the update above)
 
 The `journalctl` findings from §4.2 — "Client provided invalid window
 geometry... Working around" and Mutter-internal assertion failures firing
@@ -388,7 +405,7 @@ i.e., a narrower, presentation-only version of the same
 "second-window-in-one-process" fragility documented for the abandoned
 mirror-mode legacy path (§1).
 
-### Recommended next step
+### Recommended next step (superseded — see the update above; not executed, made moot by the fix)
 
 Apply the same `apitrace` methodology that found root cause #2, but
 targeted specifically at control-room's *own* window surface presentation

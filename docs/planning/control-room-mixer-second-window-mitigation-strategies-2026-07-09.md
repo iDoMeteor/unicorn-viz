@@ -1,7 +1,10 @@
 # Control Room / DJ Mixer Second-Window — Linux Mitigation Strategies
 
 Owner: owner + Claude (planning/audit)
-Status: active — proposed plan, awaiting owner decisions and Experiment 0/1 results
+Status: **M3 implemented and landed** (2026-07-09, same day) — see §9.
+Owner testing with the previous M2/XWayland workaround (slow, mixer
+unresponsive) predates this and should be re-tested against M3, which
+does not use XWayland or the hidden SDL texture-framebuffer path at all.
 Last updated: 2026-07-09
 
 Companion to the investigation record in
@@ -321,7 +324,85 @@ localized the failure.
   repeatedly; quit from each state. Confirm: windows visibly render, no GL
   errors, clean shutdown, `faulthandler` log empty.
 
-## 8) References
+## 8) Implementation update — M3 landed (2026-07-09, same day)
+
+M3 (explicit-GL operator window) was implemented rather than started with
+M1/M2, on the owner's call — M2 (XWayland + `SDL_FRAMEBUFFER_ACCELERATION=0`)
+had already been tried and, while it did display the windows, was slow and
+left the mixer window largely unresponsive. Since M3 removes the hidden
+SDL texture-framebuffer path (and XWayland) entirely rather than working
+around it, those two symptoms are a different code path and need
+re-testing against this implementation, not assumed fixed or unfixed by it.
+
+**What was built:**
+
+- `unicornviz/secondary_gl_window.py` (new core module) — `SecondaryGLWindow`,
+  a shared helper owning a second SDL window with its own explicit,
+  independent GL context (`SDL_WINDOW_OPENGL` + `SDL_GL_CreateContext`, no
+  `SDL_GL_SHARE_WITH_CURRENT_CONTEXT`). `present(raw_rgba, w, h)` uploads
+  into a moderngl texture, draws one textured triangle-strip quad, and
+  swaps — bracketed by `SDL_GL_GetCurrentWindow()`/`GetCurrentContext()` +
+  restore, so `create()`/`present()`/`destroy()` always leave whatever GL
+  context was current before them current again, regardless of success or
+  failure. This addresses hypothesis H1/H2/H3 from §3 by removing SDL's
+  hidden renderer from the picture entirely rather than diagnosing it
+  further — both drop-ins previously duplicated (and once diverged on) this
+  window-lifecycle code, so it was hoisted into core instead of cloned a
+  third time.
+- `control-room-01/control_room.py` and `dj-mixer-01/ui.py` — both
+  `_create_window()`/`present()`/`_destroy_window()` rewritten to use
+  `SecondaryGLWindow` instead of `SDL_CreateRenderer(...,
+  SDL_RENDERER_SOFTWARE)` + `SDL_RenderPresent`. The render-thread PIL
+  output changed from `.tobytes('raw', 'BGRA')` to plain `.tobytes()`
+  (RGBA) to match `moderngl.texture()`'s upload format — the old BGRA
+  order was specific to `SDL_PIXELFORMAT_ARGB8888`, which no longer exists
+  in this path.
+- `App._present_subsystems()` (`unicornviz/app.py`) is unchanged and still
+  calls `rebind_main_gl_context()` after any subsystem presents — now
+  redundant for control-room/mixer specifically (`SecondaryGLWindow`
+  brackets its own context switches) but left in place as defense-in-depth
+  for any future subsystem that doesn't use this helper.
+
+**Verification performed this session:**
+
+- `tests/test_secondary_gl_window.py` (13 tests, main repo) — fakes for
+  both `sdl2` and `moderngl`, covering create/present/destroy success and
+  failure paths, context-restore-on-every-exit-path, and resize-only-when-
+  size-changes. One of these tests caught a real bug before it shipped:
+  the first implementation called `moderngl.Context.clear()`, which
+  doesn't exist on `Context` (only on `Framebuffer`) — fixed to
+  `self._mgl_ctx.screen.clear(...)`.
+- `drop-ins/dj-mixer-01/tests/test_ui_gl_rebind.py` and
+  `test_ui_surface_refresh.py` rewritten to fake `SecondaryGLWindow`
+  itself rather than exercising real GL — SDL's `dummy` video driver (used
+  for headless testing throughout this repo) has **no GL support at all**
+  (confirmed directly in SDL2 source, `src/video/dummy/SDL_nullvideo.c`),
+  so the previous tests, which constructed a real `MixerWindow` under the
+  dummy driver, would now fail outright. Real GL mechanics are covered by
+  `test_secondary_gl_window.py` instead. Full dj-mixer-01 suite: 101/101
+  passing.
+- Three manual, real-hardware smoke tests (this machine: Fedora 44, GNOME/
+  Wayland, Mesa 26.1.3, Intel Iris Xe) against actual SDL2 + moderngl, not
+  fakes — not part of the regression suite, one-off verification: (1) a
+  bare `SecondaryGLWindow` presenting solid-color frames alongside a real
+  main GL context; (2) the real `MixerWindow` class end-to-end (create,
+  10 presents, close); (3) `control_room.py`'s real
+  `_create_window`/`present`/`_destroy_window` end-to-end. All three
+  passed — windows opened, presented, and closed cleanly, and the main
+  context was verified current again (by address, via
+  `SDL_GL_GetCurrentWindow()`) after every single call into the second
+  window's lifecycle.
+- Full main-repo suite: 662/662 passing.
+
+**Not yet verified:** actual visual confirmation on the owner's machine —
+all testing above confirms the mechanism works and the main context is
+never left stranded, but only the owner's own eyes can confirm the
+black-screen symptom itself is gone. Also not retested: whether the M2
+slowness/unresponsiveness symptoms recur (expected not to, since M3 uses
+neither XWayland nor SDL's software renderer path at all, but this is a
+prediction, not a measurement).
+
+## 9) References
 
 - SDL2 source (branch `SDL2` = 2.32.x, verified locally this audit):
   `SDL_video.c` — `ShouldAttemptTextureFramebuffer` (line ~2678),
