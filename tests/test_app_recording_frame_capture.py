@@ -45,3 +45,32 @@ def test_capture_recording_frame_skips_when_screenshot_unavailable() -> None:
     app._capture_recording_frame()
 
     assert recorder.frames == []
+
+
+def test_frame_capture_snapshot_defaults_to_canvas_dimensions() -> None:
+    app = App(_default_cfg())
+    app._width = 1920
+    app._height = 1080
+
+    app._update_frame_capture_snapshot(b'full-frame')
+
+    assert app.get_frame_capture() == (b'full-frame', 1920, 1080, 3)
+
+
+def test_frame_capture_snapshot_records_downsampled_dimensions() -> None:
+    app = App(_default_cfg())
+    app._width = 3840
+    app._height = 2163
+
+    app._update_frame_capture_snapshot(b'preview-frame', 960, 541)
+
+    assert app.get_frame_capture() == (b'preview-frame', 960, 541, 3)
+
+
+def test_frame_capture_snapshot_clears_on_none() -> None:
+    app = App(_default_cfg())
+    app._update_frame_capture_snapshot(b'frame', 960, 540)
+
+    app._update_frame_capture_snapshot(None)
+
+    assert app.get_frame_capture() == (None, 0, 0, 0)

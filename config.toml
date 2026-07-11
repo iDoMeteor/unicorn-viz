@@ -2,8 +2,8 @@
 level = "info"
 
 [window]
-display_mode  = "single"   # single | span_all | mirror_all
-display_index  = 2
+display_mode  = "mirror"   # single | span_all | mirror_all
+display_index  = 0
 exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span_all / mirror_all
 
 [ansi]
@@ -122,9 +122,9 @@ http_timeout_s = 1.0
 #
 # TODO(future): cross-fade / auto-mixing via crossfade_ms key (reserved).
 # ---------------------------------------------------------------------------
-# [media]
-# enabled = false
-# media_dir = ""                     # path to your music folder; empty = drop-ins/media-01/media/
+[media]
+enabled = true
+media_dir = "C:/Users/Administrator/music"  # path to your music folder; empty = drop-ins/media-01/media/
 # shuffle = true                     # randomize play order on load
 # volume = 100                       # 0-200; 100 = 100%
 # now_playing_banner = true          # show the track-change overlay banner
@@ -376,12 +376,14 @@ sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # tweakable controls, and an effect browser.
 # ---------------------------------------------------------------------------
 [control_room]
-enabled = false
+enabled = true
 fullscreen = true       # borderless fullscreen on the chosen display (default true)
-display_index = 2
+display_index = 3
 #width = 1920
 #height = 1080
 preview_scale = 0.25
+render_interval = 0.5
+output_device = "DDJ-REV1, Windows WASAPI"
 
 # ---------------------------------------------------------------------------
 # Keystroke logging  (unicornviz/keystroke_log.py)
@@ -576,7 +578,11 @@ dark_brightness_threshold = 0.02
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
 enabled = true               # load the drop-in (idle until Shift+D)
-start_enabled = false        # open the mixer (window + REV1 + audio) at boot
+start_enabled = true        # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
-display_index = 1            # display the mixer window opens on
+display_index = 4            # display the mixer window opens on
 fullscreen = true           # borderless full-display window when true
+music_dir = "C:/Users/Administrator/music/digitaldjpool"  # folder scanned for tracks
+#blocksize=2048
+prebuffer_blocks = 6   # PortAudio output buffer depth (blocks of `blocksize`); ~10.7 ms each at 48k/512.
+                        # Sets control-to-ear latency + glitch immunity (blocking-write mode). 6 ≈ 64 ms.

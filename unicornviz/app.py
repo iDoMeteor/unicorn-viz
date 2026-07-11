@@ -65,6 +65,12 @@ FRAME_TIME = 1.0 / TARGET_FPS
 # Effects browser live-preview thumbnail resolution (16:9).
 _EB_THUMB_W = 480
 _EB_THUMB_H = 270
+
+# Maximum width of the downsampled subsystem-preview readback frame.  The
+# control-room / dj-mixer preview panels render at a few hundred pixels wide,
+# so reading the full canvas (24 MB at a 3840x2163 spanned canvas) just to
+# shrink it again on the CPU wastes PCIe bandwidth and stalls the GL pipeline.
+_PREVIEW_MAX_WIDTH = 960
 _SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
 _SPLASH_REPLAY_COOLDOWN_S = 1.25
 _TRANSITION_MODE_MAP = {
@@ -470,6 +476,10 @@ class App:
         # copy_framebuffer() (which correctly uses the queried GL_BACK/FRONT
         # draw buffer) so reads never touch the default framebuffer directly.
         self._screen_copy_fbo: moderngl.Framebuffer | None = None
+        # Small FBO the canvas is downsample-rendered into before the
+        # subsystem-preview readback (see _read_preview_frame).  Capped at
+        # _PREVIEW_MAX_WIDTH so the glReadPixels transfer stays tiny.
+        self._preview_fbo: moderngl.Framebuffer | None = None
         self._width = self.cfg.get("window", "width", default=1920)
         self._height = self.cfg.get("window", "height", default=1080)
         # In mirror_all the SDL window spans all displays, while effects/HUD
@@ -789,8 +799,19 @@ class App:
             # rule out the context having already moved.
             self.rebind_main_gl_context()
 
-    def _update_frame_capture_snapshot(self, frame: bytes | None) -> None:
-        """Cache the latest audience-output frame for subsystem preview use."""
+    def _update_frame_capture_snapshot(
+        self,
+        frame: bytes | None,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Cache the latest audience-output frame for subsystem preview use.
+
+        Pass ``width``/``height`` when the frame is not full-canvas sized
+        (e.g. the downsampled preview readback); consumers must honour
+        get_frame_capture()'s reported dimensions rather than assume the
+        canvas size.
+        """
         if frame is None:
             self._frame_capture_bytes = None
             self._frame_capture_width = 0
@@ -798,8 +819,8 @@ class App:
             self._frame_capture_components = 0
             return
         self._frame_capture_bytes = bytes(frame)
-        self._frame_capture_width = int(self._width)
-        self._frame_capture_height = int(self._height)
+        self._frame_capture_width = int(width if width is not None else self._width)
+        self._frame_capture_height = int(height if height is not None else self._height)
         self._frame_capture_components = 3
 
     def get_frame_capture(self) -> tuple[bytes | None, int, int, int]:
@@ -4548,34 +4569,42 @@ void main() {
             need_frame_for_subsystems = self._subsystems_need_frame_capture()
             # Throttle the subsystem preview readback so it fires at the
             # subsystem's own render rate (≤15 fps) rather than the full
-            # audience output frame rate.  Without this, a single glReadPixels
-            # call on each 1080p+ frame stalls the GPU pipeline for 5–20 ms,
-            # which is the primary cause of the audience-output freeze observed
-            # while the control-room operator window is open.
-            # Streaming readback is not throttled; it must produce one frame
-            # per rendered frame to keep the RTMP muxer in sync.
-            # Once the async PBO path has failed once, _read_streaming_frame()
-            # falls back to a synchronous full-resolution read for the rest of
-            # the session (worse still at mirror_all/span_all's spanned
-            # canvas size) — throttle much harder in that state, since a
-            # control-room/dj-mixer preview doesn't need sub-second freshness
-            # and the default 0.1s cadence was enough to visibly stall effect
-            # rendering while HUD/event handling kept running.
+            # audience output frame rate.  Streaming readback is not
+            # throttled; it must produce one frame per rendered frame to keep
+            # the RTMP muxer in sync.
+            #
+            # The subsystem preview no longer rides the full-resolution
+            # streaming readback: it now uses _read_preview_frame(), which
+            # downsamples the canvas on the GPU first so the glReadPixels
+            # transfer is a couple of MB at most instead of 24 MB on a
+            # spanned canvas.  Full-res frames are still reused for the
+            # preview when streaming already produced one this frame.
             subsystem_capture_due = False
             if need_frame_for_subsystems:
                 _now = time.monotonic()
-                _capture_interval = 1.0 if self._stream_pbo_disabled else 0.1
-                if _now - self._last_subsystem_frame_capture_time >= _capture_interval:
+                if _now - self._last_subsystem_frame_capture_time >= 0.1:
                     subsystem_capture_due = True
                     self._last_subsystem_frame_capture_time = _now
-            if need_frame_for_streaming or subsystem_capture_due:
+            if need_frame_for_streaming:
                 try:
                     stream_frame = self._read_streaming_frame()
                 except Exception as exc:
                     log.error('Streaming frame readback failed: %s', exc)
                     stream_frame = None
             if subsystem_capture_due:
-                self._update_frame_capture_snapshot(stream_frame)
+                if stream_frame is not None:
+                    self._update_frame_capture_snapshot(stream_frame)
+                else:
+                    try:
+                        preview = self._read_preview_frame()
+                    except Exception as exc:
+                        log.error('Preview frame readback failed: %s', exc)
+                        preview = None
+                    if preview is not None:
+                        pframe, pw, ph = preview
+                        self._update_frame_capture_snapshot(pframe, pw, ph)
+                    else:
+                        self._update_frame_capture_snapshot(None)
             elif not need_frame_for_subsystems:
                 self._update_frame_capture_snapshot(None)
             if need_frame_for_streaming and stream_frame is not None:
@@ -5792,6 +5821,60 @@ void main() {
             return
         if not self._recorder.write_frame(frame):
             self._sync_recording_overlay()
+
+    def _ensure_preview_fbo(self, width: int, height: int) -> moderngl.Framebuffer:
+        """Lazily (re)allocate the small FBO used for downsampled preview reads."""
+        w = max(1, int(width))
+        h = max(1, int(height))
+        if self._preview_fbo is None or (self._preview_fbo.width, self._preview_fbo.height) != (w, h):
+            if self._preview_fbo is not None:
+                self._preview_fbo.release()
+            tex = self._ctx.texture((w, h), 4)
+            self._preview_fbo = self._ctx.framebuffer(color_attachments=[tex])
+        return self._preview_fbo
+
+    def _read_preview_frame(self) -> tuple[bytes, int, int] | None:
+        """Read a downsampled RGB24 frame for subsystem preview panels.
+
+        Renders the canvas texture through the present shader into a small
+        FBO capped at _PREVIEW_MAX_WIDTH wide (aspect preserved), then reads
+        that.  The GPU does the shrink, so the readback moves ~1.5 MB instead
+        of the full canvas (24 MB on a 3840x2163 spanned canvas) — the
+        full-size synchronous read was the dominant GL-pipeline stall while a
+        control-room / dj-mixer preview was open.  moderngl's
+        copy_framebuffer() cannot scale (it blits min(src, dst) 1:1), hence
+        the textured-quad pass.
+
+        Returns ``(rgb_bytes, width, height)`` or ``None``.
+        """
+        if self._ctx is None or self._present_vao is None:
+            return None
+        # Stage the canvas into an exactly canvas-sized FBO first so the
+        # quad pass samples only real content (fbo_a / the SDL drawable can
+        # be larger than the logical canvas).  copy_framebuffer copies the
+        # overlapping region 1:1 from the origin, which is the canvas.
+        staging = self._ensure_screen_copy_fbo()
+        mirror_mode_active = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
+        if mirror_mode_active and self._fbo_a is not None:
+            self._ctx.copy_framebuffer(staging, self._fbo_a)
+        else:
+            # Never read/sample self._ctx.screen directly — see the comment
+            # on self._screen_copy_fbo's declaration.
+            self._ctx.copy_framebuffer(staging, self._ctx.screen)
+        pw = min(int(self._width), _PREVIEW_MAX_WIDTH)
+        ph = max(1, round(int(self._height) * pw / max(1, int(self._width))))
+        fbo = self._ensure_preview_fbo(pw, ph)
+        fbo.use()
+        self._ctx.viewport = (0, 0, pw, ph)
+        staging.color_attachments[0].use(location=0)
+        self._present_prog['tex'].value = 0
+        self._present_vao.render(moderngl.TRIANGLE_STRIP)
+        frame = fbo.read(viewport=(0, 0, pw, ph), components=3, alignment=1)
+        # Restore the state the post-readback overlay pass expects — the
+        # non-mirror branch does not rebind the screen itself.
+        self._ctx.screen.use()
+        self._ctx.viewport = (0, 0, self._width, self._height)
+        return frame, pw, ph
 
     def _read_streaming_frame(self) -> bytes | None:
         """Read one RGB24 frame for RTMP streaming using double-buffered PBOs.
