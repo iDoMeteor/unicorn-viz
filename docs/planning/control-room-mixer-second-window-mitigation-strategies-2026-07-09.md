@@ -548,7 +548,40 @@ cause, and re-verify.
 `tests/test_vj_api_subwindow_keyboard_forwarding.py`). Full suite:
 783/783 (675 main + 108 dj-mixer-01).
 
-## 12) References
+## 12) Possible: dedicated presenter thread for secondary windows (2026-07-11)
+
+Deferred candidate from the Windows/Iris Xe main-loop-overload
+investigation (see
+`drop-ins/dj-mixer-01/docs/issue-audio-degradation-control-room-2026-07-11.md`).
+Perf-frame instrumentation showed `_present_subsystems()` costing
+**15–56 ms per frame** on an Intel Iris Xe: each present does
+MakeCurrent → full-frame `glTexSubImage2D` upload → draw → swap →
+context restore, all on the main thread.
+
+**Idea:** move `SecondaryGLWindow` presents to a dedicated presenter
+thread that *owns* the secondary GL context outright. The main loop
+never pays the context switches or uploads; the existing raster threads
+(dj-mixer-01/control-room-01 `ui.py`) already publish frames under a
+lock, so the pipeline is naturally decoupled — the presenter thread
+just consumes the newest frame at its own cadence.
+
+**Touches:** `unicornviz/secondary_gl_window.py` (context ownership +
+thread loop + teardown handshake), `App._present_subsystems()` call
+site, and the drop-ins' `present()` hooks (become no-ops or enqueue).
+
+**Caveats:** SDL wants window creation/destruction and event pumping on
+the main thread — only the GL calls move. Teardown ordering needs a
+join-then-destroy handshake (same discipline as the mixer's audio
+writer thread). The current `rebind_main_gl_context()` discipline
+becomes unnecessary for presents but must be kept for create/destroy.
+
+**Status:** not scheduled. Mitigations landed instead on 2026-07-11:
+frame-budget present skipping in `App._present_subsystems()` (skip when
+the previous frame exceeded 1.5× budget, max 3 consecutive) and the
+`[dj_mixer] ui_scale` reduced-resolution raster. Revisit if secondary
+windows gain enough features that those stop being sufficient.
+
+## 13) References
 
 - SDL2 source (branch `SDL2` = 2.32.x, verified locally this audit):
   `SDL_video.c` — `ShouldAttemptTextureFramebuffer` (line ~2678),
