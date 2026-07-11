@@ -18,6 +18,11 @@ This is the canonical map for project documentation.
 - [Security Policy](../SECURITY.md)
 - [Marketing](marketing/README.md)
 
+## Packaging & Installation
+
+- [docs/packaging](packaging)
+  - Windows native dependency build — field notes & remediation ideas (2026-07-11): [docs/packaging/windows-native-deps-2026-07-11.md](packaging/windows-native-deps-2026-07-11.md)
+
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
