@@ -3,6 +3,7 @@ Name: unicorn-viz
 Version: 0.1.0
 Summary: Modern demoscene visualizer — Razor 1911 vibes, Wayland-native
 Requires-Python: >=3.11
+License-File: LICENSE
 Requires-Dist: moderngl>=5.10
 Requires-Dist: pysdl2>=0.9.16
 Requires-Dist: pysdl2-dll>=2.28
@@ -17,3 +18,4 @@ Requires-Dist: pytest>=8.0; extra == "dev"
 Requires-Dist: bandit>=1.7; extra == "dev"
 Requires-Dist: pip-audit>=2.7; extra == "dev"
 Requires-Dist: ruff>=0.4; extra == "dev"
+Dynamic: license-file
