@@ -61,6 +61,12 @@ log = logging.getLogger(__name__)
 
 TARGET_FPS = 60
 FRAME_TIME = 1.0 / TARGET_FPS
+# Budget-skip for secondary-window presents: when the previous frame ran over
+# 1.5x the frame budget, skip _present_subsystems() this frame (secondary
+# windows cost 15-56 ms per present on iGPUs) so the main canvas recovers
+# first.  Capped so sustained overload still presents at ~TARGET_FPS/4.
+_SUBSYS_PRESENT_SKIP_MS = FRAME_TIME * 1000.0 * 1.5
+_SUBSYS_PRESENT_MAX_SKIPS = 3
 
 # Effects browser live-preview thumbnail resolution (16:9).
 _EB_THUMB_W = 480
@@ -430,6 +436,8 @@ class App:
         self._audio_raw: AudioData | None = None
         self._last_frame_fps: float = 0.0
         self._last_frame_ms: float = 0.0
+        # Consecutive _present_subsystems() skips under the frame-budget guard.
+        self._subsys_present_skips: int = 0
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
         self._midi_out: MidiOut | None = None
@@ -781,7 +789,18 @@ class App:
         trace, all valid object IDs in *our* context, invalid in whatever
         context SDL left current. Without the rebind here, every GL call
         for the rest of the session runs against the wrong context.
+
+        Budget guard: when the previous frame overran 1.5x the frame budget,
+        the present is skipped (up to _SUBSYS_PRESENT_MAX_SKIPS in a row) so
+        secondary-window blits stop compounding a main-loop overload.
         """
+        if (
+            self._last_frame_ms > _SUBSYS_PRESENT_SKIP_MS
+            and self._subsys_present_skips < _SUBSYS_PRESENT_MAX_SKIPS
+        ):
+            self._subsys_present_skips += 1
+            return
+        self._subsys_present_skips = 0
         any_attempted = False
         for name, subsystem in list(self._subsystems.items()):
             presenter = getattr(subsystem, 'present', None)

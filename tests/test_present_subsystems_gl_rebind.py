@@ -40,6 +40,8 @@ def _stub_app(*, subsystems: dict) -> App:
     app = object.__new__(App)
     app._subsystems = subsystems
     app._rebind_calls = 0
+    app._last_frame_ms = 0.0
+    app._subsys_present_skips = 0
 
     def _rebind() -> bool:
         app._rebind_calls += 1
@@ -97,3 +99,53 @@ def test_logs_and_continues_past_a_failing_presenter() -> None:
     app._present_subsystems()
     assert dj_mixer.present_calls == 1
     assert app._rebind_calls == 1
+
+
+def test_skips_present_when_previous_frame_overbudget() -> None:
+    from unicornviz.app import _SUBSYS_PRESENT_SKIP_MS
+
+    mixer = _StubSubsystemWithPresent()
+    app = _stub_app(subsystems={'dj_mixer': mixer})
+    app._last_frame_ms = _SUBSYS_PRESENT_SKIP_MS + 1.0
+    app._present_subsystems()
+    assert mixer.present_calls == 0
+    assert app._rebind_calls == 0
+    assert app._subsys_present_skips == 1
+
+
+def test_presents_at_or_under_budget_threshold() -> None:
+    from unicornviz.app import _SUBSYS_PRESENT_SKIP_MS
+
+    mixer = _StubSubsystemWithPresent()
+    app = _stub_app(subsystems={'dj_mixer': mixer})
+    app._last_frame_ms = _SUBSYS_PRESENT_SKIP_MS  # not strictly over
+    app._present_subsystems()
+    assert mixer.present_calls == 1
+    assert app._subsys_present_skips == 0
+
+
+def test_consecutive_skips_are_capped_under_sustained_overload() -> None:
+    from unicornviz.app import _SUBSYS_PRESENT_MAX_SKIPS, _SUBSYS_PRESENT_SKIP_MS
+
+    mixer = _StubSubsystemWithPresent()
+    app = _stub_app(subsystems={'dj_mixer': mixer})
+    app._last_frame_ms = _SUBSYS_PRESENT_SKIP_MS * 4.0
+    for _ in range(_SUBSYS_PRESENT_MAX_SKIPS + 1):
+        app._present_subsystems()
+    # Skipped MAX times, then presented anyway so the window cannot freeze.
+    assert mixer.present_calls == 1
+    assert app._subsys_present_skips == 0
+
+
+def test_good_frame_resets_skip_counter() -> None:
+    from unicornviz.app import _SUBSYS_PRESENT_SKIP_MS
+
+    mixer = _StubSubsystemWithPresent()
+    app = _stub_app(subsystems={'dj_mixer': mixer})
+    app._last_frame_ms = _SUBSYS_PRESENT_SKIP_MS + 1.0
+    app._present_subsystems()
+    assert app._subsys_present_skips == 1
+    app._last_frame_ms = 5.0
+    app._present_subsystems()
+    assert mixer.present_calls == 1
+    assert app._subsys_present_skips == 0
