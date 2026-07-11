@@ -585,4 +585,5 @@ fullscreen = true           # borderless full-display window when true
 music_dir = "C:/Users/Administrator/music/digitaldjpool"  # folder scanned for tracks
 #blocksize=2048
 prebuffer_blocks = 6   # PortAudio output buffer depth (blocks of `blocksize`); ~10.7 ms each at 48k/512.
-                        # Sets control-to-ear latency + glitch immunity (blocking-write mode). 6 ≈ 64 ms.
+                        # Sets control-to-ear latency + glitch immunity (blocking-write mode). 6 ≈ 64 ms.#ui_scale = 0.5         # mixer-window raster scale (0.25-1.0, default 1.0); 0.5 quarters
+                        # PIL raster + texture-upload cost, GPU upscales to the window.

@@ -398,7 +398,11 @@ def test_present_resizes_texture_only_when_size_changes(fakes) -> None:
 
     win.present(b'\x00' * (800 * 600 * 4), 800, 600)
     assert len(gl.tex_image_calls) == 2  # resized: reallocated
-    assert win.width == 800 and win.height == 600
+    # Texture (frame) size follows the presented frame; window size tracks
+    # the drawable, not the frame -- a smaller frame is upscaled by the
+    # quad (ui_scale support), so width/height must NOT follow the frame.
+    assert win._tex_width == 800 and win._tex_height == 600  # noqa: SLF001
+    assert win.width == 640 and win.height == 480
 
 
 def test_destroy_releases_gl_resources_and_window(fakes) -> None:

@@ -388,6 +388,11 @@ class SecondaryGLWindow:
         self._vbo = 0
         self._vao = 0
         self._texture = 0
+        # Texture (frame) dimensions -- tracked separately from the window
+        # drawable size so callers can present frames rasterized at a lower
+        # resolution and have the linear-filtered quad upscale them.
+        self._tex_width = 0
+        self._tex_height = 0
 
     @property
     def window_id(self) -> int:
@@ -460,6 +465,7 @@ class SecondaryGLWindow:
             self._gl.bind_texture(self._texture)
             self._gl.set_bound_texture_filter_linear_clamped()
             self._gl.tex_image_2d_rgba(self.width, self.height, None)
+            self._tex_width, self._tex_height = self.width, self.height
             self._gl.active_texture0()
         except Exception:
             self._release_gl_resources()
@@ -477,6 +483,11 @@ class SecondaryGLWindow:
     def present(self, raw_rgba: bytes, width: int, height: int) -> bool:
         """Upload ``raw_rgba`` (top-down, RGBA8) and present it.
 
+        ``width``/``height`` are the *frame* dimensions and may be smaller
+        than the window drawable: the frame is uploaded at its own size and
+        the linear-filtered fullscreen quad upscales it to the viewport
+        (how dj-mixer-01's ``ui_scale`` renders at reduced resolution).
+
         Returns True on success, False if the window isn't open or the
         upload/draw/swap failed (logged, not raised). Always restores
         the previously-current GL window/context before returning,
@@ -493,10 +504,18 @@ class SecondaryGLWindow:
             if sdl2.SDL_GL_MakeCurrent(self.window, self._gl_context) != 0:
                 log.warning('SecondaryGLWindow: SDL_GL_MakeCurrent failed: %s', sdl2.SDL_GetError().decode())
                 return False
-            if (int(width), int(height)) != (self.width, self.height):
-                self._resize(int(width), int(height))
+            # The drawable can change independently of the frame size
+            # (window resize while the raster thread still produces the old
+            # size) -- track it separately so the viewport always covers
+            # the real window.
+            w_i, h_i = ctypes.c_int(0), ctypes.c_int(0)
+            sdl2.SDL_GL_GetDrawableSize(self.window, ctypes.byref(w_i), ctypes.byref(h_i))
+            if w_i.value > 0 and h_i.value > 0:
+                self.width, self.height = int(w_i.value), int(h_i.value)
             self._gl.bind_texture(self._texture)
-            self._gl.tex_sub_image_2d_rgba(self.width, self.height, raw_rgba)
+            if (int(width), int(height)) != (self._tex_width, self._tex_height):
+                self._resize_texture(int(width), int(height))
+            self._gl.tex_sub_image_2d_rgba(self._tex_width, self._tex_height, raw_rgba)
             self._gl.viewport(self.width, self.height)
             self._gl.clear_black()
             self._gl.use_program(self._program)
@@ -510,11 +529,10 @@ class SecondaryGLWindow:
             self._restore(prev_window, prev_context)
         return ok
 
-    def _resize(self, width: int, height: int) -> None:
-        self.width = max(1, width)
-        self.height = max(1, height)
-        self._gl.bind_texture(self._texture)
-        self._gl.tex_image_2d_rgba(self.width, self.height, None)
+    def _resize_texture(self, width: int, height: int) -> None:
+        self._tex_width = max(1, width)
+        self._tex_height = max(1, height)
+        self._gl.tex_image_2d_rgba(self._tex_width, self._tex_height, None)
 
     def destroy(self) -> None:
         """Release all GL resources and destroy the window/context.
