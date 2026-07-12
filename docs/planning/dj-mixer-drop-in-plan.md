@@ -474,13 +474,12 @@ Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 �
 
 Owner-requested / near-term first, then a grab-bag to prioritize.
 
-- [ ] **BPM beat flasher (replaces the pad VU — owner-requested).** Flash the
-  performance pads on the beat instead of streaming a per-frame VU meter. Beat
-  phase is derived from each deck's `cursor`/`samplerate` × `bpm/60`; flash on an
-  integer-beat crossing (downbeat = brighter / all-pads). This sends ~2 MIDI-out
-  messages per beat vs the VU's continuous stream — so it's also the **real fix**
-  for the USB-MIDI congestion flake (LED throttle is the interim). Config to pick
-  pad behaviour: `off | cues | beat` (VU retired).
+- [x] **BPM beat flasher (done 2026-07-12).** The **PLAY button** pulses on its
+  own deck's beat while playing (phase from `position × bpm/60`, buffer-latency
+  compensated), on for the first half of each beat. ~2 MIDI-out messages per beat
+  vs the VU's continuous stream — the **real fix** for the USB-MIDI congestion
+  flake. The pad VU is **retired**; pads now show set hot cues only. Config
+  `beat_flash` (default true). Owner chose the play button over the pads.
 - [ ] **Mix recording.** Capture the master mix to a file (record your set) —
   tap the existing engine output.
 - [ ] **Cue / headphone monitor.** Pre-listen a deck on a second output device
