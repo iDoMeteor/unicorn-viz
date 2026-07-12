@@ -23,3 +23,4 @@ Last updated: 2026-07-12
 | Silverfox | Influencers | to-verify | - | pending | DJ influencer lead, add primary platform/link. |
 | Giada Brince | Influencers | to-verify | - | pending | DJ influencer lead, add primary platform/link. |
 | Regis66 | Influencers | to-verify | - | pending | Friend of Squibbs; DJ influencer lead. |
+| Dark Feel | Influencers | to-verify | - | pending | DJ influencer lead, add primary platform/link. |
