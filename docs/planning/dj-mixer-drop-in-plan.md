@@ -484,8 +484,12 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   tap the existing engine output.
 - [ ] **Cue / headphone monitor.** Pre-listen a deck on a second output device
   (split master vs cue), the classic DJ headphone workflow.
-- [ ] **Track metadata.** Read ID3/Vorbis tags (mutagen) for "Artist — Title" in
-  the browser + a now-playing HUD `snapshot()` for the active deck.
+- [x] **Track metadata (done 2026-07-12).** The browser reads ID3/Vorbis tags
+  (`mutagen`, optional) and shows `Artist - Title`, falling back to the filename
+  stem when untagged or the package is absent. Tags are read lazily per visible
+  row and cached; the display name is captured at load time and propagates to
+  the deck's `snapshot()['track']` label. Follow-up idea: a dedicated
+  now-playing HUD line for the active deck.
 - [ ] **Waveform niceties.** Frequency-colored waveform, beat-grid markers,
   on-waveform BPM/time; colored playhead.
 - [ ] **Key detection + harmonic mixing.** Estimate musical key on load; show
