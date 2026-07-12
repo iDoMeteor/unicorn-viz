@@ -1,7 +1,8 @@
 ---
 Owner: Planning
-Status: draft — M-0 scaffold shipped 2026-07-07
-Last updated: 2026-07-07
+Status: REV1 fully wired (M-1..M-4, scratch, cues, loops, FX, BPM/SYNC, lighting,
+browser). Pending: hardware bring-up, mouse-friendly UI, feature backlog.
+Last updated: 2026-07-12
 ---
 
 # DJ Mixer Drop-In Plan — `dj-mixer-01` (Pioneer DDJ-REV1)
@@ -439,3 +440,64 @@ for coarse control and add the LSB for smoothness.
 All button Notes send `0x7F` on press and `0x00` on release. Jog/browse
 encoders are **relative** (two's-complement-style around 0x40): clockwise counts
 up from 0x41, counterclockwise down from 0x3F.
+
+---
+
+## Mouse-Friendly UI Plan (v-next)
+
+Goal: the mixer window is fully usable **without** the DDJ-REV1 — every control
+clickable/draggable — so it works on a laptop, and so REV1 polarity/handshake
+issues never block a set. Adopt `control-room-01`'s proven **hit-region +
+tweakable-drag** pattern: the render thread publishes a list of hotspot rects
+with their control payloads; the main thread hit-tests mouse events against the
+latest snapshot (already thread-safe there).
+
+- [ ] **Foundation — hotspot system.** A `_HitRegion(rect, kind, payload)` list
+  built during `_render_ui` and published under the frame lock; `on_sdl_event`
+  routes `MOUSEBUTTONDOWN/MOTION/UP/WHEEL` against it. Cursor visibility is
+  already handled (`is_open`).
+- [ ] **M-mouse 1 — faders & knobs (drag).** Crossfader (horizontal), channel
+  faders + master + tempo/pitch (vertical drag), EQ ×3 + filter (vertical drag or
+  wheel). Live value while dragging; double-click to reset to center/unity.
+- [ ] **M-mouse 2 — buttons.** Click PLAY/CUE, SYNC, FX engage (press-hold with
+  the mouse), and a clickable hot-cue / loop pad grid per deck.
+- [ ] **M-mouse 3 — browser.** Click a row to select, scroll-wheel to browse,
+  per-deck **▶A / ▶B** load buttons (or double-click a row → active/last deck),
+  drag the scrollbar.
+- [ ] **M-mouse 4 — waveform.** Click/drag on the waveform overview to seek; hold
+  to scrub (mouse "scratch"); optional needle-drop.
+- [ ] **Polish.** Hover highlights, tooltips with the value, keyboard fallbacks.
+
+Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 → 4.
+
+## Feature Backlog & Ideas
+
+Owner-requested / near-term first, then a grab-bag to prioritize.
+
+- [ ] **BPM beat flasher (replaces the pad VU — owner-requested).** Flash the
+  performance pads on the beat instead of streaming a per-frame VU meter. Beat
+  phase is derived from each deck's `cursor`/`samplerate` × `bpm/60`; flash on an
+  integer-beat crossing (downbeat = brighter / all-pads). This sends ~2 MIDI-out
+  messages per beat vs the VU's continuous stream — so it's also the **real fix**
+  for the USB-MIDI congestion flake (LED throttle is the interim). Config to pick
+  pad behaviour: `off | cues | beat` (VU retired).
+- [ ] **Mix recording.** Capture the master mix to a file (record your set) —
+  tap the existing engine output.
+- [ ] **Cue / headphone monitor.** Pre-listen a deck on a second output device
+  (split master vs cue), the classic DJ headphone workflow.
+- [ ] **Track metadata.** Read ID3/Vorbis tags (mutagen) for "Artist — Title" in
+  the browser + a now-playing HUD `snapshot()` for the active deck.
+- [ ] **Waveform niceties.** Frequency-colored waveform, beat-grid markers,
+  on-waveform BPM/time; colored playhead.
+- [ ] **Key detection + harmonic mixing.** Estimate musical key on load; show
+  Camelot-style compatible-key hints for the other deck.
+- [ ] **Auto-gain / loudness normalization** on load so decks match in level.
+- [ ] **Sampler pads.** One-shot samples/stingers on a pad bank (pairs with
+  `audio-out-01` clip playback).
+- [ ] **More FX + FX2.** Reverb / flanger / gate / filter-roll and the second FX
+  unit + its paddle.
+- [ ] **Browser search / crates / recently-played**; **session recall**
+  (save/restore deck + mixer state).
+- [ ] **Generalize MIDI mapping.** A mapping-file layer so other controllers work
+  (mirrors the `midi-controllers-01` preset idea) — REV1 becomes one profile.
+- [ ] **Deck depth.** True shadow-playhead loop roll, beat-jump pads, slip mode.
