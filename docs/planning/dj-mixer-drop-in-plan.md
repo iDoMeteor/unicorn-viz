@@ -1,7 +1,8 @@
 ---
 Owner: Planning
 Status: REV1 fully wired (M-1..M-4, scratch, cues, loops, FX, BPM/SYNC, lighting,
-browser). Pending: hardware bring-up, mouse-friendly UI, feature backlog.
+browser). Track metadata + mouse M-mouse 1 (draggable faders/EQ/filter/master)
+done. Pending: hardware bring-up, mouse M-mouse 2-4, feature backlog.
 Last updated: 2026-07-12
 ---
 
@@ -452,13 +453,21 @@ tweakable-drag** pattern: the render thread publishes a list of hotspot rects
 with their control payloads; the main thread hit-tests mouse events against the
 latest snapshot (already thread-safe there).
 
-- [ ] **Foundation — hotspot system.** A `_HitRegion(rect, kind, payload)` list
-  built during `_render_ui` and published under the frame lock; `on_sdl_event`
-  routes `MOUSEBUTTONDOWN/MOTION/UP/WHEEL` against it. Cursor visibility is
-  already handled (`is_open`).
-- [ ] **M-mouse 1 — faders & knobs (drag).** Crossfader (horizontal), channel
-  faders + master + tempo/pitch (vertical drag), EQ ×3 + filter (vertical drag or
-  wheel). Live value while dragging; double-click to reset to center/unity.
+- [x] **Foundation — hotspot system (done 2026-07-12).** A `_Hit` list
+  (`x0,y0,x1,y1,mode,lo,hi,get,set`) is built during `_render_ui` next to each
+  widget and published under `_frame_lock`; `on_sdl_event` routes
+  `MOUSEBUTTONDOWN/MOTION/UP` against it (`_begin_drag`/`_drag_to`/`_end_drag`).
+  Draw coords are full-window pixels == SDL mouse coords, so no `ui_scale`
+  conversion is needed. `get`/`set` bind the same engine/deck floats the REV1
+  writes, so mouse and hardware share one value. (Plain `__slots__` class, not a
+  dataclass — the module is imported by path and isn't in `sys.modules`, which
+  breaks dataclass string-annotation resolution.)
+- [x] **M-mouse 1 — faders & knobs (drag) (done 2026-07-12).** Crossfader,
+  per-channel gain, color filter (bipolar) and master are click-and-drag and
+  jump to the cursor; the 3 EQ knobs turn with a relative vertical drag (up =
+  boost, no jump, `_KNOB_DRAG_SPAN` px = full sweep). A click off any control
+  still toggles the deck under it. Follow-ups: tempo/pitch has no widget yet;
+  double-click-to-reset and scroll-wheel not yet added.
 - [ ] **M-mouse 2 — buttons.** Click PLAY/CUE, SYNC, FX engage (press-hold with
   the mouse), and a clickable hot-cue / loop pad grid per deck.
 - [ ] **M-mouse 3 — browser.** Click a row to select, scroll-wheel to browse,
