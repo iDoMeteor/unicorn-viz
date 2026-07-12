@@ -2,7 +2,9 @@
 Owner: Planning
 Status: REV1 fully wired (M-1..M-4, scratch, cues, loops, FX, BPM/SYNC, lighting,
 browser). Track metadata + mouse M-mouse 1 (draggable faders/EQ/filter/master)
-done. Pending: hardware bring-up, mouse M-mouse 2-4, feature backlog.
+done. Planning: performance pad modes (beat jump, trans, tracking=track-nav,
+sampler, scratch bank) + beatgrid edit/lock. Pending: hardware bring-up, mouse
+M-mouse 2-4, feature backlog.
 Last updated: 2026-07-12
 ---
 
@@ -479,6 +481,64 @@ latest snapshot (already thread-safe there).
 
 Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 → 4.
 
+## Performance Pad Modes Plan (v-next)
+
+Goal: flesh out the REV1's eight performance pads across the full set of pad
+modes. On the REV1 the four pad-mode buttons make the pads emit a **different
+note base** per mode on the shared pad channels (deck A = MIDI ch 8/9
+normal/+shift → 0-indexed 7/8; deck B = 10/11 → 9/10); `rev1_input.py` already
+dispatches by that note base. **Every new mode's note base must be transcribed
+from Pioneer's official DDJ-REV1 MIDI list (Appendix A) — never guessed**
+(CLAUDE.md MIDI rule).
+
+**Already shipped** (for reference, don't rebuild):
+
+- **Hot Cue** — notes 0–7; normal press sets/jumps, +shift deletes.
+- **Auto Loop** — notes 16–23; toggles a loop of `LOOP_BEATS[pad]` beats.
+- **Roll** — notes 80–87; momentary loop while held.
+- **Scratch** — the jog platter (touch note 54 + relative CC 34/35), not a pad
+  mode but the eighth "scratch" concept from the owner's list.
+
+**New modes to build** (owner listed: beat jump, trans, tracking, sampler,
+scratch bank). Grouped by shared machinery / risk:
+
+- [ ] **Beat Jump** *(S — playhead math, reuses the loop/beat engine)*. Eight
+  pads = jump sizes/directions (e.g. 1/4 pads jump back, others forward, or a
+  size grid ±1/2/4/8 beats) staying in time. No DSP, no assets.
+- [ ] **Trans / Transform** *(S — small DSP)*. Rhythmic channel gate synced to
+  the deck BPM/phase; pads = gate rates (1/16 … 1 beat). A gain gate in the mix
+  path; reuses the existing `bpm`/phase already driving the beat flasher.
+- [ ] **Tracking = track navigation** *(S — playhead math)*. **Owner decision
+  2026-07-12: the tracking pads do section-jump navigation, not beatgrid
+  editing.** Eight pads jump the playhead to eight equal points across the
+  loaded track — pad *i* → `position = duration × i/8` (0%, 12.5%, … 87.5%) — a
+  fast scrub/section grid for long tracks. (Beatgrid editing is split out as its
+  own feature below.)
+- [ ] **Sampler** *(L — new subsystem)*. Load short one-shots/stingers to the
+  eight pads and mix their voices over the master. Needs a sample loader, a
+  small polyphonic voice mixer in the engine, committed sample assets, and
+  config (bank path, gain). Pairs with the backlog `audio-out-01` clip idea.
+- [ ] **Scratch Bank** *(M — reuses the sampler loader + existing platter
+  scratch)*. Temporarily swap a scratch-source sample onto a deck to scratch
+  with (platter already implemented), then restore the loaded track. Depends on
+  the Sampler loader infra landing first.
+
+**Split-out feature — Beatgrid edit/lock** *(M — not a pad mode)*. The owner
+wants grid correction handled *some other way* than the tracking pads. It needs
+a **beat-anchor/offset model on the deck** (today the deck has only a scalar
+`bpm`; SYNC and the beat flasher derive phase from `position × bpm/60` with no
+downbeat anchor). Candidate surfaces to design later: dedicated keys, a
+mouse/waveform "set downbeat + nudge" interaction (ties into *M-mouse 4 —
+waveform*), or a small on-window grid utility. **Open: decide the surface and
+the anchor data model.** This directly improves SYNC and flash accuracy since
+BPM is auto-estimated per track and often a hair off the downbeat.
+
+**Proposed sequencing (recommendation — confirm on return):** Beat Jump →
+Trans → Tracking (track-nav) → Sampler → Scratch Bank, one mode per commit +
+submodule bump, each with its own tests + docs (avoid a monolithic commit per
+CLAUDE.md). Beatgrid edit/lock is scheduled independently once its surface is
+chosen. **Owner is keeping this in planning; no code yet.**
+
 ## Feature Backlog & Ideas
 
 Owner-requested / near-term first, then a grab-bag to prioritize.
@@ -505,11 +565,13 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   Camelot-style compatible-key hints for the other deck.
 - [ ] **Auto-gain / loudness normalization** on load so decks match in level.
 - [ ] **Sampler pads.** One-shot samples/stingers on a pad bank (pairs with
-  `audio-out-01` clip playback).
+  `audio-out-01` clip playback). → now scoped under **Performance Pad Modes
+  Plan** (Sampler mode).
 - [ ] **More FX + FX2.** Reverb / flanger / gate / filter-roll and the second FX
   unit + its paddle.
 - [ ] **Browser search / crates / recently-played**; **session recall**
   (save/restore deck + mixer state).
 - [ ] **Generalize MIDI mapping.** A mapping-file layer so other controllers work
   (mirrors the `midi-controllers-01` preset idea) — REV1 becomes one profile.
-- [ ] **Deck depth.** True shadow-playhead loop roll, beat-jump pads, slip mode.
+- [ ] **Deck depth.** True shadow-playhead loop roll, slip mode. (Beat-jump pads
+  moved to the **Performance Pad Modes Plan**.)
