@@ -274,6 +274,38 @@ out vec2 out_pos;
 - Screenshots (`unicornviz_*.png`) are gitignored; don't commit them.
 - Commit & push after each substantial change; avoid large monolithic commits.
 
+## Versioning & Release Standards
+
+The project follows **Semantic Versioning 2.0.0** (`MAJOR.MINOR.PATCH`).  The
+**core package and every drop-in are versioned independently** — each ships its
+own version and moves at its own pace.
+
+**Alpha stage (current).** Every component stays in the `0.MINOR.PATCH` range
+until its **first feature-complete, validated release, which is `1.0.0`**.  While
+a component is `0.x` its API/config is considered unstable.
+
+**Bump rules.**
+- Pre-1.0 (alpha): **never bump MAJOR** (stays `0`).  A user-facing feature bumps
+  **MINOR** (and resets PATCH to 0); a fix/tweak bumps **PATCH**.
+- 1.0+: **MAJOR** = incompatible API / behaviour / config change; **MINOR** =
+  backward-compatible feature; **PATCH** = backward-compatible fix.
+- Bump the touched component's version **in the same commit** as the user-facing
+  change, and mention the new version in the commit message.
+
+**Where the version lives (single source of truth per component).**
+- Core: `unicornviz.__version__` in `unicornviz/__init__.py`.
+- Each drop-in: `__version__` in its primary module (e.g. the controller), and
+  echoed in the drop-in `README.md` status/version header.
+
+**Changelog.** Each component keeps a short, newest-first **Changelog** section in
+its `README.md` — one line per version.  Keep it lightweight during alpha; every
+MINOR/PATCH bump adds a line.  Do not restate git history; capture the
+user-visible change.
+
+**Agent duties.** When landing a user-facing change to a component, bump that
+component's version per the rules above, add the changelog line, and keep the
+README header in sync.  Purely internal refactors, tests, or docs need no bump.
+
 ## Regression Test Discipline
 
 - Any commit that changes runtime behavior must include corresponding updates to
