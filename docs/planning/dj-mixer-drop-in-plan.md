@@ -505,12 +505,16 @@ Press on a browser row → drag → release over any deck panel → load that tr
 into that deck (uses the existing hit-region/drag foundation; adds a browser-row
 grab + deck drop-targets + a drag ghost/label).
 
-### #4 — Auto-play (isolated segment, after #1–#3)
+### #4 — Auto-play (isolated segment, after #1–#3) — DONE 2026-07-13
+
+Shipped in `autoplay.py` (`AutoPlay` sequencer) + control-bar buttons in `ui.py`
++ the `rev1_leds` warn hook, ticked from the controller each frame. Notes below
+reflect what was built.
 
 A panel above the track list with **three state buttons (active = highlighted):
 `cut` | `crossfade` | `ai`** (start with cut + crossfade; **ai greyed/disabled**
 for now). Clicking the **active** button turns auto-play **off** and returns full
-control to the DJ.
+control to the DJ. Buttons have hover states + tooltip strings.
 
 - **Only decks 1 & 2** participate in auto-play, in every mode — so the DJ is
   free to work on the **non-playing side's alternate deck (3/4)**.
