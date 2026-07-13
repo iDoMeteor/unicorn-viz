@@ -508,6 +508,13 @@ scratch bank). Grouped by shared machinery / risk:
 - [ ] **Trans / Transform** *(S — small DSP)*. Rhythmic channel gate synced to
   the deck BPM/phase; pads = gate rates (1/16 … 1 beat). A gain gate in the mix
   path; reuses the existing `bpm`/phase already driving the beat flasher.
+  **Keep it (decided 2026-07-13).** DJs use Transform to rapidly cut a channel
+  on/off in time (from the "transformer" crossfader scratch) for stutter/gating
+  over build-ups, drops, and breakdowns. Beatgrid editing lives on the window
+  (above), so it needs **no** pad slot — there's no reason to drop Transform for
+  it. Transform overlaps with loop roll + the planned gate FX, so *if* future
+  hardware pad-mode pressure ever forces a cut it's a defensible one, but that's
+  a later trade, not now.
 - [ ] **Tracking = track navigation** *(S — playhead math)*. **Owner decision
   2026-07-12: the tracking pads do section-jump navigation, not beatgrid
   editing.** Eight pads jump the playhead to eight equal points across the
@@ -523,15 +530,30 @@ scratch bank). Grouped by shared machinery / risk:
   with (platter already implemented), then restore the loaded track. Depends on
   the Sampler loader infra landing first.
 
-**Split-out feature — Beatgrid edit/lock** *(M — not a pad mode)*. The owner
-wants grid correction handled *some other way* than the tracking pads. It needs
-a **beat-anchor/offset model on the deck** (today the deck has only a scalar
-`bpm`; SYNC and the beat flasher derive phase from `position × bpm/60` with no
-downbeat anchor). Candidate surfaces to design later: dedicated keys, a
-mouse/waveform "set downbeat + nudge" interaction (ties into *M-mouse 4 —
-waveform*), or a small on-window grid utility. **Open: decide the surface and
-the anchor data model.** This directly improves SYNC and flash accuracy since
-BPM is auto-estimated per track and often a hair off the downbeat.
+**Split-out feature — Beatgrid editing** *(M — not a pad mode)*. Conceptual
+overview + principles: **dj-mixer-01 `README.md` → "Beat Grid Editing"**. The
+owner wants grid correction handled *some other way* than the tracking pads.
+
+- **Surface (decided 2026-07-13):** the **mixer window (mouse) + keyboard**, not
+  the REV1 performance controls — gridding is a *prep* activity, so it must stay
+  off the primary controller's performance path and muscle memory. Ties into
+  *M-mouse 4 — waveform* (set-downbeat / drag-to-shift on the waveform). Optional
+  REV1 GRID pad-mode only later, opt-in, and only if a pad slot is free.
+- **Data model:** add a **beat anchor** `beat_offset` (seconds) to the deck
+  alongside `bpm`; all phase becomes `(position − beat_offset) × bpm/60` (the
+  beat flasher, SYNC, and future quantized pads read this one anchor). Defaults
+  to `0.0` → fully backward compatible. Variable/warp grids (multiple anchors)
+  are a later generalisation, out of scope for v1.
+- **Phasing:** (1) model — add `beat_offset`, thread it through SYNC + the
+  flasher, and have `estimate_bpm` return an initial downbeat offset (pure logic,
+  no UI); (2) render beat/bar markers on the window waveform (read-only; pairs
+  with *Waveform niceties*); (3) mouse/keyboard editing — set-downbeat,
+  drag-to-shift, ÷2/×2, nudge ±, tap tempo (non-destructive); (4) persistence —
+  a per-track sidecar cache (`{bpm, beat_offset}` keyed by path+mtime/hash) with
+  reset-to-detected; (5) later — optional REV1 GRID mode, variable/warp grids.
+- **Why:** directly improves SYNC + flash accuracy since BPM is auto-estimated
+  per track and often a hair off the downbeat; it's also the foundation the
+  future Auto-DJ needs for beat-accurate automatic transitions.
 
 **Proposed sequencing (recommendation — confirm on return):** Beat Jump →
 Trans → Tracking (track-nav) → Sampler → Scratch Bank, one mode per commit +
