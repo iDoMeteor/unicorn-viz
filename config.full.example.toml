@@ -668,6 +668,7 @@ pad_lightshow = true         # performance pads light the deck's set hot cues
 vu_idle_seconds = 120        # idle this long (no non-volume input) -> pads
                              #   become a VU meter; any interaction (except the
                              #   volume faders) stops it. 0 disables the VU.
+wave_zoom_seconds = 10       # seconds shown in each deck's zoomed close-up wave
 samplerate = 48000
 blocksize = 512              # lower = tighter jog; higher = safer against underruns
 pitch_range = 0.08           # tempo fader range (±8%)
