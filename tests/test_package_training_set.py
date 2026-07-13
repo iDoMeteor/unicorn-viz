@@ -23,6 +23,9 @@ _detect_llm_provider = _MOD._detect_llm_provider
 _score_lock_quality = _MOD._score_lock_quality
 _BPM_LOCK_CONFIDENCE_FLOOR = _MOD._BPM_LOCK_CONFIDENCE_FLOOR
 _cleanup_stale_empty_corpus_files = _MOD._cleanup_stale_empty_corpus_files
+_load_profile_expected_values = _MOD._load_profile_expected_values
+_format_profile_expected_values_block = _MOD._format_profile_expected_values_block
+_build_combined_prompt = _MOD._build_combined_prompt
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -204,3 +207,52 @@ def test_cleanup_handles_both_live_and_sequence_empty_placeholders(tmp_path: Pat
 
 def test_cleanup_on_empty_directory_returns_empty_list(tmp_path: Path) -> None:
     assert _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS) == []
+
+
+# ---- profile-expected-values prompt block (stays in sync with PROFILES) -----
+
+
+def test_load_profile_expected_values_matches_live_roster() -> None:
+    """The LLM prompt's profile table must never drift from the real roster.
+
+    This used to be a hand-copied snapshot that silently went stale (it still
+    listed profiles like 'lofi'/'jazz'/'metal' long after they were removed
+    from unicornviz.audio.profiles). Reading PROFILES directly at prompt-build
+    time makes that drift structurally impossible -- this test just confirms
+    the live import path actually resolves and covers the full roster.
+    """
+    from unicornviz.audio.profiles import PROFILES
+
+    values = _load_profile_expected_values()
+    assert set(values.keys()) == set(PROFILES.keys())
+    for key, profile in PROFILES.items():
+        assert values[key]['centroid'] == pytest.approx(profile.spectral_centroid_mu)
+        assert values[key]['zcr'] == pytest.approx(profile.zcr_mu)
+        assert values[key]['onset'] == pytest.approx(profile.onset_density_mu)
+
+
+def test_format_profile_expected_values_block_empty() -> None:
+    assert 'unable to load' in _format_profile_expected_values_block({})
+
+
+def test_format_profile_expected_values_block_renders_all_entries() -> None:
+    values = {
+        'house': {'centroid': 1500.0, 'zcr': 0.06, 'onset': 2.5},
+        'ambient': {'centroid': 800.0, 'zcr': 0.03, 'onset': 0.4},
+    }
+    block = _format_profile_expected_values_block(values)
+    assert 'ambient:' in block
+    assert 'house:' in block
+    assert 'centroid=1500 Hz' in block
+    assert 'zcr=0.060' in block
+    assert 'onset=2.5/s' in block
+
+
+def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> None:
+    """No hardcoded/removed profile name (e.g. 'lofi', 'jazz', 'metal') should ever appear."""
+    detector_payload = {'essentia_available': False}
+    director_payload = {}
+    prompt = _build_combined_prompt(detector_payload, director_payload, None)
+    for stale_name in ('lofi:', 'jazz:', 'classical:', 'deep_house:', 'metal:', 'industrial:', 'reggae:'):
+        assert stale_name not in prompt, f'stale profile {stale_name!r} leaked into prompt'
+    assert 'house:' in prompt
