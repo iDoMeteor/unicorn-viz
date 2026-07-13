@@ -724,13 +724,13 @@ class Overlays:
             'recording': 'OFF',
             'streaming': 'OFF',
             'streaming_provider': '-',
-            'spotify_visible': 'NO',
+            'now_playing_visible': 'NO',
             'spotify_auth_visible': 'NO',
             'spotify_auth_status': 'Ctrl+Alt+S to auth',
-            'spotify_status': 'OFF',
-            'spotify_track': '-',
-            'spotify_artist': '-',
-            'spotify_progress': '--:--/--:-- 0%',
+            'now_playing_status': 'OFF',
+            'now_playing_track': '-',
+            'now_playing_artist': '-',
+            'now_playing_progress': '--:--/--:-- 0%',
             'postfx': 'N/A',
             'bass': '0.00',
             'mid': '0.00',
@@ -769,9 +769,9 @@ class Overlays:
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
         # Live PCM waveform fed each frame from the audio pipeline.
-        # Used to render the Spotify progress-bar waveform visualization.
+        # Used to render the now-playing progress-bar waveform visualization.
         self._live_waveform: np.ndarray | None = None
-        self._spotify_beat_decay: float = 0.0
+        self._now_playing_beat_decay: float = 0.0
         self._help_icon_asset_dir: Path = resolve_path('assets/icons/help')
         self._help_icon_asset_bucket: str = self._help_icon_bucket_for_width(self._width)
         self._help_icon_textures: dict[str, moderngl.Texture] = {}
@@ -1408,8 +1408,8 @@ void main() {
         """Render animated LCARS-style status HUD with pulsing glows, scan lines and decorations."""
         panel_w = min(1050.0, self._width * 0.93)
         lh = 28.0
-        spotify_visible = str(self._hud_state.get('spotify_visible', 'NO')).upper() == 'YES'
-        row0_offset = 264.0 if spotify_visible else 188.0
+        now_playing_visible = str(self._hud_state.get('now_playing_visible', 'NO')).upper() == 'YES'
+        row0_offset = 264.0 if now_playing_visible else 188.0
         row_text_h = 8.0 * 2.05 + 4.0
 
         # ── animation clocks ─────────────────────────────────────────────
@@ -1658,21 +1658,21 @@ void main() {
         sx_session = x + (panel_w - len(session_line) * 8.0 * 2.2) * 0.5
         self._draw_text(session_line, sx_session, y + 76.0, scale=2.2, color=(0.12, 0.98, 1.0, title_a))
 
-        # ── layer 6: Spotify sub-pane + effect banner ────────────────────
+        # ── layer 6: now-playing sub-pane + effect banner ────────────────
         band_x = x + 8.0
         band_y = y + 104.0
         band_w = panel_w - 16.0
-        band_h = 156.0 if spotify_visible else 80.0
+        band_h = 156.0 if now_playing_visible else 80.0
 
-        # Spotify sub-pane (between title/timer header and main data panes).
-        spotify_h = 72.0 if spotify_visible else 0.0
-        spotify_y = band_y
-        spotify_status = str(self._hud_state.get('spotify_status', 'OFF'))
-        spotify_track = str(self._hud_state.get('spotify_track', '-'))
-        spotify_artist = str(self._hud_state.get('spotify_artist', '-'))
-        spotify_progress = str(self._hud_state.get('spotify_progress', '--:--/--:-- 0%'))
+        # Now-playing sub-pane (between title/timer header and main data panes).
+        now_playing_h = 72.0 if now_playing_visible else 0.0
+        now_playing_y = band_y
+        now_playing_status = str(self._hud_state.get('now_playing_status', 'OFF'))
+        now_playing_track = str(self._hud_state.get('now_playing_track', '-'))
+        now_playing_artist = str(self._hud_state.get('now_playing_artist', '-'))
+        now_playing_progress = str(self._hud_state.get('now_playing_progress', '--:--/--:-- 0%'))
 
-        status_l = spotify_status.lower()
+        status_l = now_playing_status.lower()
         if status_l == 'playing':
             accent = (0.16, 0.95, 0.48)
         elif status_l == 'paused':
@@ -1680,8 +1680,8 @@ void main() {
         else:
             accent = (0.46, 0.90, 0.98)
 
-        # Effect banner lives below Spotify when visible, otherwise occupies the top band.
-        effect_y = spotify_y + spotify_h + 4.0 if spotify_visible else band_y
+        # Effect banner lives below the now-playing pane when visible, otherwise occupies the top band.
+        effect_y = now_playing_y + now_playing_h + 4.0 if now_playing_visible else band_y
         effect_h = 80.0
         banner_glow_a = 0.06 + bass * 0.26 + pulse_slow * 0.04
         self._draw_rect(band_x, effect_y, band_w, effect_h, (0.04, 0.60 + bass * 0.40, 0.80, banner_glow_a))
@@ -1708,26 +1708,26 @@ void main() {
             color=(1.0, 0.66 + pulse_fast * 0.12, 0.24, 0.94),
         )
 
-        if spotify_visible:
-            # Spotify pane sits above the effect banner to avoid overlap.
-            self._draw_rect(band_x, spotify_y, band_w, spotify_h, (0.02, 0.14, 0.10, 0.84))
-            self._draw_rect(band_x, spotify_y, band_w, 2.0, (accent[0], accent[1], accent[2], 0.62 + pulse_med * 0.20))
-            self._draw_rect(band_x, spotify_y + spotify_h - 2.0, band_w, 2.0, (accent[0], accent[1], accent[2], 0.46 + pulse_slow * 0.16))
-            self._draw_rect(band_x, spotify_y, 4.0, spotify_h, (accent[0], accent[1], accent[2], 0.78))
+        if now_playing_visible:
+            # Now-playing pane sits above the effect banner to avoid overlap.
+            self._draw_rect(band_x, now_playing_y, band_w, now_playing_h, (0.02, 0.14, 0.10, 0.84))
+            self._draw_rect(band_x, now_playing_y, band_w, 2.0, (accent[0], accent[1], accent[2], 0.62 + pulse_med * 0.20))
+            self._draw_rect(band_x, now_playing_y + now_playing_h - 2.0, band_w, 2.0, (accent[0], accent[1], accent[2], 0.46 + pulse_slow * 0.16))
+            self._draw_rect(band_x, now_playing_y, 4.0, now_playing_h, (accent[0], accent[1], accent[2], 0.78))
 
-            spotify_phase = t * 0.85
-            spotify_a = 0.88 + (1.0 - pulse_slow) * 0.12
+            now_playing_phase = t * 0.85
+            now_playing_a = 0.88 + (1.0 - pulse_slow) * 0.12
             if status_l == 'paused':
                 line_rgb = (
-                    0.90 + 0.06 * math.sin(spotify_phase + 0.6),
-                    0.72 + 0.08 * math.sin(spotify_phase + 2.0),
+                    0.90 + 0.06 * math.sin(now_playing_phase + 0.6),
+                    0.72 + 0.08 * math.sin(now_playing_phase + 2.0),
                     1.00,
                 )
             elif status_l == 'playing':
                 line_rgb = (
-                    0.86 + 0.08 * math.sin(spotify_phase + 0.15),
+                    0.86 + 0.08 * math.sin(now_playing_phase + 0.15),
                     1.00,
-                    0.90 + 0.06 * math.sin(spotify_phase + 2.7),
+                    0.90 + 0.06 * math.sin(now_playing_phase + 2.7),
                 )
             else:
                 line_rgb = (
@@ -1736,23 +1736,23 @@ void main() {
                     1.00,
                 )
 
-            char_w_spotify = float(self._glyph_w) * self._font_scale_norm * 2.2
-            center_line = f'{spotify_artist} | {spotify_track} | {spotify_progress}'
-            text_w = len(center_line) * char_w_spotify
+            char_w_now_playing = float(self._glyph_w) * self._font_scale_norm * 2.2
+            center_line = f'{now_playing_artist} | {now_playing_track} | {now_playing_progress}'
+            text_w = len(center_line) * char_w_now_playing
             center_x = band_x + max(8.0, (band_w - text_w) * 0.5)
-            self._draw_text(center_line, center_x, spotify_y + 14.0, scale=2.2, color=(line_rgb[0], line_rgb[1], line_rgb[2], spotify_a))
+            self._draw_text(center_line, center_x, now_playing_y + 14.0, scale=2.2, color=(line_rgb[0], line_rgb[1], line_rgb[2], now_playing_a))
 
             pct = 0.0
-            if '%' in spotify_progress:
+            if '%' in now_playing_progress:
                 try:
-                    pct = float(spotify_progress.rsplit(' ', 1)[-1].replace('%', '').strip())
+                    pct = float(now_playing_progress.rsplit(' ', 1)[-1].replace('%', '').strip())
                 except Exception:
                     pct = 0.0
             pct = max(0.0, min(100.0, pct))
 
             rail_pad = 12.0
             rail_x = band_x + rail_pad
-            rail_y = spotify_y + 40.0
+            rail_y = now_playing_y + 40.0
             rail_w = band_w - rail_pad * 2.0
             rail_h = 26.0
             rail_center_y = rail_y + rail_h * 0.5
@@ -1770,11 +1770,11 @@ void main() {
             if waveform_mode:
                 _beat = _fv('audio_beat')
                 # Leaky-peak beat glow: snaps up on beat, decays between frames.
-                self._spotify_beat_decay = max(
-                    self._spotify_beat_decay * 0.80,
+                self._now_playing_beat_decay = max(
+                    self._now_playing_beat_decay * 0.80,
                     min(1.0, _beat * 1.5),
                 )
-                beat_g = self._spotify_beat_decay
+                beat_g = self._now_playing_beat_decay
 
                 _N = 128
                 col_w = rail_w / _N

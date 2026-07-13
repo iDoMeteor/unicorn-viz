@@ -229,7 +229,7 @@ Fields worth adding to the operator status panel:
 | audio_source + audio_profile | hud_state['audio_source'] + ['audio_profile'] | multi-column |
 | bass / mid / treble | hud_state['bass'] / ['mid'] / ['treble'] | mini bar row |
 | display_mode + display_index | hud_state['display_mode'] + ['display_index'] | multi-column |
-| spotify status | hud_state['spotify_status'] etc | mirrored here for diagnostics even when Spotify panel is prominent |
+| now-playing status | hud_state['now_playing_status'] etc | mirrored here for diagnostics even when now-playing panel is prominent |
 | session clock (elapsed + remaining) | VJState.session_elapsed_s | |
 | vj_status pill | hud_state['vj_status'] | Auto VJ status line |
 

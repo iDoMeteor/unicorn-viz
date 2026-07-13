@@ -4140,10 +4140,10 @@ void main() {
             if _active_np_source is None and self._spotify is not None:
                 _active_np_source = self._spotify
 
-            spotify_visible = 'YES' if _active_np_source is not None else 'NO'
-            spotify_status = 'OFF'
-            spotify_change_counter = 0
-            spotify_length = '--:--'
+            now_playing_visible = 'YES' if _active_np_source is not None else 'NO'
+            now_playing_status = 'OFF'
+            now_playing_change_counter = 0
+            now_playing_length = '--:--'
             banner_enabled = False
             banner_hold_s = 10.0
             banner_track = '-'
@@ -4151,51 +4151,51 @@ void main() {
             banner_album = '-'
             banner_prev_artist = '-'
             banner_prev_title = '-'
-            _spotify_snap: dict | None = None
+            _now_playing_snap: dict | None = None
             if _active_np_source is not None:
                 snap_fn = getattr(_active_np_source, 'snapshot', None)
                 if callable(snap_fn):
                     try:
-                        _spotify_snap = snap_fn()
+                        _now_playing_snap = snap_fn()
                     except Exception:
-                        _spotify_snap = None
-                    if isinstance(_spotify_snap, dict):
-                        available = bool(_spotify_snap.get('available', False))
-                        playing = bool(_spotify_snap.get('is_playing', False))
-                        raw_status = str(_spotify_snap.get('status', '') or '').strip().upper()
+                        _now_playing_snap = None
+                    if isinstance(_now_playing_snap, dict):
+                        available = bool(_now_playing_snap.get('available', False))
+                        playing = bool(_now_playing_snap.get('is_playing', False))
+                        raw_status = str(_now_playing_snap.get('status', '') or '').strip().upper()
                         if available and raw_status:
-                            spotify_status = raw_status
+                            now_playing_status = raw_status
                         elif available:
-                            spotify_status = 'PLAYING' if playing else 'PAUSED'
-                        banner_track = str(_spotify_snap.get('title', '') or '').strip() or '-'
-                        banner_artist = str(_spotify_snap.get('artist', '') or '').strip() or '-'
-                        banner_album = str(_spotify_snap.get('album', '') or '').strip() or '-'
-                        banner_prev_artist = str(_spotify_snap.get('previous_artist', '') or '').strip() or '-'
-                        banner_prev_title = str(_spotify_snap.get('previous_title', '') or '').strip() or '-'
-                        spotify_change_counter = int(_spotify_snap.get('banner_change_counter', 0) or 0)
-                        banner_enabled = bool(_spotify_snap.get('now_playing_banner_enabled', False))
-                        banner_hold_s = max(1.0, float(_spotify_snap.get('now_playing_banner_hold_s', 10.0) or 10.0))
-                        dur_b = max(0.0, float(_spotify_snap.get('duration_s', 0.0) or 0.0))
+                            now_playing_status = 'PLAYING' if playing else 'PAUSED'
+                        banner_track = str(_now_playing_snap.get('title', '') or '').strip() or '-'
+                        banner_artist = str(_now_playing_snap.get('artist', '') or '').strip() or '-'
+                        banner_album = str(_now_playing_snap.get('album', '') or '').strip() or '-'
+                        banner_prev_artist = str(_now_playing_snap.get('previous_artist', '') or '').strip() or '-'
+                        banner_prev_title = str(_now_playing_snap.get('previous_title', '') or '').strip() or '-'
+                        now_playing_change_counter = int(_now_playing_snap.get('banner_change_counter', 0) or 0)
+                        banner_enabled = bool(_now_playing_snap.get('now_playing_banner_enabled', False))
+                        banner_hold_s = max(1.0, float(_now_playing_snap.get('now_playing_banner_hold_s', 10.0) or 10.0))
+                        dur_b = max(0.0, float(_now_playing_snap.get('duration_s', 0.0) or 0.0))
                         total_b = max(0, int(dur_b))
                         mm_b, ss_b = divmod(total_b, 60)
                         hh_b, mm_b = divmod(mm_b, 60)
-                        spotify_length = f'{hh_b:02d}:{mm_b:02d}:{ss_b:02d}' if hh_b > 0 else f'{mm_b:02d}:{ss_b:02d}'
+                        now_playing_length = f'{hh_b:02d}:{mm_b:02d}:{ss_b:02d}' if hh_b > 0 else f'{mm_b:02d}:{ss_b:02d}'
             current_banner = 'NOW PLAYING: {artist} :: {album} :: {track} :: {length}'.format(
                 artist=banner_artist,
                 album=banner_album,
                 track=banner_track,
-                length=spotify_length,
+                length=now_playing_length,
             )
             previous_banner = 'Previous: {artist} :: {track}'.format(
                 artist=banner_prev_artist,
                 track=banner_prev_title,
             )
             overlays.set_overlay_banner(
-                banner_enabled and spotify_visible == 'YES' and spotify_status == 'PLAYING',
+                banner_enabled and now_playing_visible == 'YES' and now_playing_status == 'PLAYING',
                 current_banner,
                 previous_banner,
                 banner_hold_s,
-                spotify_change_counter,
+                now_playing_change_counter,
             )
 
             # Playlist sync (cheap, always)
@@ -4232,16 +4232,19 @@ void main() {
                 advance_total = max(0.1, self._effect_duration)
                 advance_time = f"{advance_elapsed:.1f}/{advance_total:.1f}s"
 
-                # Spotify HUD-only fields (clipped strings, progress, auth)
+                # Now-playing HUD-only fields (clipped strings, progress).
+                # spotify_auth_* stay Spotify-specific -- media-01 (local
+                # playback) has no auth/OAuth concept, so a generic name
+                # would be misleading for these two.
                 spotify_auth_visible = 'NO'
                 spotify_auth_status = 'OFF'
-                spotify_track = '-'
-                spotify_artist = '-'
-                spotify_album = '-'
-                spotify_prev_artist = '-'
-                spotify_prev_title = '-'
-                spotify_progress = '--:--/--:-- 0%'
-                if isinstance(_spotify_snap, dict):
+                now_playing_track = '-'
+                now_playing_artist = '-'
+                now_playing_album = '-'
+                now_playing_prev_artist = '-'
+                now_playing_prev_title = '-'
+                now_playing_progress = '--:--/--:-- 0%'
+                if isinstance(_now_playing_snap, dict):
                     def _clip(text: str, limit: int) -> str:
                         txt = str(text).strip()
                         if not txt:
@@ -4254,19 +4257,19 @@ void main() {
                         hh, mm = divmod(mm, 60)
                         return f'{hh:02d}:{mm:02d}:{ss:02d}' if hh > 0 else f'{mm:02d}:{ss:02d}'
 
-                    spotify_track = _clip(str(_spotify_snap.get('title', '') or ''), 24)
-                    spotify_artist = _clip(str(_spotify_snap.get('artist', '') or ''), 24)
-                    spotify_album = _clip(str(_spotify_snap.get('album', '') or ''), 24)
-                    spotify_prev_artist = _clip(str(_spotify_snap.get('previous_artist', '') or ''), 24)
-                    spotify_prev_title = _clip(str(_spotify_snap.get('previous_title', '') or ''), 24)
-                    pos = max(0.0, float(_spotify_snap.get('position_s', 0.0) or 0.0))
-                    dur = max(0.0, float(_spotify_snap.get('duration_s', 0.0) or 0.0))
+                    now_playing_track = _clip(str(_now_playing_snap.get('title', '') or ''), 24)
+                    now_playing_artist = _clip(str(_now_playing_snap.get('artist', '') or ''), 24)
+                    now_playing_album = _clip(str(_now_playing_snap.get('album', '') or ''), 24)
+                    now_playing_prev_artist = _clip(str(_now_playing_snap.get('previous_artist', '') or ''), 24)
+                    now_playing_prev_title = _clip(str(_now_playing_snap.get('previous_title', '') or ''), 24)
+                    pos = max(0.0, float(_now_playing_snap.get('position_s', 0.0) or 0.0))
+                    dur = max(0.0, float(_now_playing_snap.get('duration_s', 0.0) or 0.0))
                     pct = int(round(min(100.0, (pos / dur) * 100.0))) if dur > 0.0 else 0
-                    spotify_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
-                    spotify_auth_visible = 'YES' if bool(_spotify_snap.get('web_api_enabled', False)) else 'NO'
-                    auth_status = str(_spotify_snap.get('auth_status', '') or '').strip()
-                    display_name = str(_spotify_snap.get('display_name', '') or '').strip()
-                    if bool(_spotify_snap.get('auth_ready', False)):
+                    now_playing_progress = f'{_fmt_secs(pos)}/{_fmt_secs(dur)} {pct}%'
+                    spotify_auth_visible = 'YES' if bool(_now_playing_snap.get('web_api_enabled', False)) else 'NO'
+                    auth_status = str(_now_playing_snap.get('auth_status', '') or '').strip()
+                    display_name = str(_now_playing_snap.get('display_name', '') or '').strip()
+                    if bool(_now_playing_snap.get('auth_ready', False)):
                         label = display_name if display_name else 'authenticated'
                         spotify_auth_status = f'{label} active'
                     elif auth_status in ('needs_auth', 'not_configured', ''):
@@ -4383,15 +4386,15 @@ void main() {
                 'recording': rec_state,
                 'streaming': stream_state,
                 'streaming_provider': stream_provider,
-                'spotify_visible': spotify_visible,
+                'now_playing_visible': now_playing_visible,
                 'spotify_auth_visible': spotify_auth_visible,
                 'spotify_auth_status': spotify_auth_status,
-                'spotify_status': spotify_status,
-                'spotify_track': spotify_track,
-                'spotify_artist': spotify_artist,
-                'spotify_album': spotify_album,
-                'spotify_length': spotify_length,
-                'spotify_progress': spotify_progress,
+                'now_playing_status': now_playing_status,
+                'now_playing_track': now_playing_track,
+                'now_playing_artist': now_playing_artist,
+                'now_playing_album': now_playing_album,
+                'now_playing_length': now_playing_length,
+                'now_playing_progress': now_playing_progress,
                 'postfx': self._postfx_controller.active_name if self._postfx_controller is not None else 'N/A',
                 'postfx_debug': (
                     self._postfx_controller.debug_summary

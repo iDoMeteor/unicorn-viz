@@ -1,7 +1,12 @@
-"""Regression tests for the Spotify HUD pane layout in overlays.py.
+"""Regression tests for the now-playing HUD pane layout in overlays.py.
 
 Guards the centered single-line text + full-width progress bar redesign
 and the auto-VJ waveform history mode so neither can silently revert.
+
+The pane is source-agnostic: media-01 (local playback) and spotify-01
+expose an identical snapshot() shape, so app.py feeds this pane from
+whichever is active under generic `now_playing_*` hud_state keys.
+`spotify_auth_*` stays Spotify-specific (media-01 has no auth concept).
 """
 from __future__ import annotations
 
@@ -52,13 +57,13 @@ _BASE_HUD_STATE: dict[str, str] = {
     'recording': 'OFF',
     'streaming': 'OFF',
     'streaming_provider': '-',
-    'spotify_visible': 'YES',
+    'now_playing_visible': 'YES',
     'spotify_auth_visible': 'NO',
     'spotify_auth_status': 'OFF',
-    'spotify_status': 'PLAYING',
-    'spotify_track': 'My Song',
-    'spotify_artist': 'The Artist',
-    'spotify_progress': '02:30/05:00 50%',
+    'now_playing_status': 'PLAYING',
+    'now_playing_track': 'My Song',
+    'now_playing_artist': 'The Artist',
+    'now_playing_progress': '02:30/05:00 50%',
     'postfx': 'N/A',
     'bass': '0.50',
     'mid': '0.30',
@@ -91,7 +96,7 @@ def _make_stub(extra: dict[str, str] | None = None) -> Overlays:
         ov._hud_state.update(extra)
     # Waveform attributes (normally set in __init__).
     ov._live_waveform = None
-    ov._spotify_beat_decay = 0.0
+    ov._now_playing_beat_decay = 0.0
     ov._draw_text = MagicMock()  # type: ignore[method-assign]
     ov._draw_rect = MagicMock()  # type: ignore[method-assign]
     return ov
@@ -109,8 +114,8 @@ def _rect_calls(ov: Overlays) -> list[tuple[float, float, float, float]]:
 # Text format tests
 # ---------------------------------------------------------------------------
 
-class TestSpotifyHudPaneFormat:
-    """Verify the Spotify pane uses the redesigned centered single-line layout."""
+class TestNowPlayingHudPaneFormat:
+    """Verify the pane uses the redesigned centered single-line layout."""
 
     def test_centered_line_contains_artist_track_progress(self) -> None:
         """Exactly one text draw in the pane must carry artist | track | progress."""
@@ -120,53 +125,37 @@ class TestSpotifyHudPaneFormat:
         expected = 'The Artist | My Song | 02:30/05:00 50%'
         texts = _text_calls(ov)
         assert expected in texts, (
-            f'Expected centered Spotify line not found.\n'
+            f'Expected centered now-playing line not found.\n'
             f'Expected: {expected!r}\n'
             f'Got draw_text calls: {texts}'
         )
 
-    def test_no_legacy_spotify_prefix_in_text(self) -> None:
-        """The old 'SPOTIFY PLAYING | ...' pane line must not appear.
-
-        Note: 'SPOTIFY AUTH ...' is a legitimately-drawn data-zone string and
-        must not be flagged.  The old pane format is distinguishable by the
-        pipe-separated artist/progress fields that follow the status word.
-        """
+    def test_legacy_pane_format_does_not_reappear(self) -> None:
+        """None of the three pre-redesign rendering patterns may resurface:
+        a 'SPOTIFY PLAYING | ...' prefixed line, a standalone right-aligned
+        track name, or a standalone progress label. All three guard the
+        same historical redesign, so one render call covers all three."""
         ov = _make_stub()
         ov._render_hud()
 
         texts = _text_calls(ov)
-        bad = [t for t in texts if t.startswith('SPOTIFY ') and ' | ' in t]
-        assert not bad, f'Legacy SPOTIFY pane line found in draw_text calls: {bad}'
-
-    def test_track_not_drawn_separately(self) -> None:
-        """Track name must not be drawn as a standalone right-aligned string."""
-        ov = _make_stub()
-        ov._render_hud()
-
-        texts = _text_calls(ov)
-        standalone = [t for t in texts if t == 'My Song']
-        assert not standalone, (
-            f'Track name drawn as standalone string (old right-aligned format): {standalone}'
-        )
-
-    def test_progress_not_drawn_as_standalone_label(self) -> None:
-        """Progress string must not appear as a separate small-scale text label."""
-        ov = _make_stub()
-        ov._render_hud()
-
-        texts = _text_calls(ov)
-        standalone = [t for t in texts if t == '02:30/05:00 50%']
-        assert not standalone, (
-            f'Progress drawn as standalone label (duplicate old behavior): {standalone}'
-        )
+        # Note: 'SPOTIFY AUTH ...' is a legitimately-drawn data-zone string
+        # and must not be flagged -- the old pane format is distinguishable
+        # by the pipe-separated artist/progress fields that follow the
+        # status word.
+        legacy_prefix = [t for t in texts if t.startswith('SPOTIFY ') and ' | ' in t]
+        standalone_track = [t for t in texts if t == 'My Song']
+        standalone_progress = [t for t in texts if t == '02:30/05:00 50%']
+        assert not legacy_prefix, f'Legacy prefixed pane line found: {legacy_prefix}'
+        assert not standalone_track, f'Track drawn standalone (old right-aligned format): {standalone_track}'
+        assert not standalone_progress, f'Progress drawn as standalone label: {standalone_progress}'
 
 
 # ---------------------------------------------------------------------------
 # Flat-bar fallback tests (auto_vj_bpm == 0)
 # ---------------------------------------------------------------------------
 
-class TestSpotifyHudPaneBar:
+class TestNowPlayingHudPaneBar:
     """Verify the full-width flat-bar fallback when auto-VJ is not active."""
 
     # No BPM → flat bar fallback.
@@ -188,25 +177,21 @@ class TestSpotifyHudPaneBar:
             f'Progress bar width {max_rail_w:.1f}px looks like old narrow 33% bar'
         )
 
-    def test_pct_zero_fills_nothing(self) -> None:
-        """At 0% the fill rect should have near-zero width."""
-        ov = _make_stub({**self._FLAT, 'spotify_progress': '00:00/05:00 0%'})
-        ov._render_hud()
-
-        rects = _rect_calls(ov)
-        near_zero = [w for (_, _, w, _) in rects if w < 2.0]
+    def test_pct_boundaries_fill_correctly(self) -> None:
+        """At 0% the fill rect is ~zero-width; at 100% it matches the rail width."""
+        ov_zero = _make_stub({**self._FLAT, 'now_playing_progress': '00:00/05:00 0%'})
+        ov_zero._render_hud()
+        rects_zero = _rect_calls(ov_zero)
+        near_zero = [w for (_, _, w, _) in rects_zero if w < 2.0]
         assert near_zero, (
             'Expected a zero-width fill rect at 0% but none found. '
-            f'All widths: {[round(w, 1) for (_, _, w, _) in rects]}'
+            f'All widths: {[round(w, 1) for (_, _, w, _) in rects_zero]}'
         )
 
-    def test_pct_full_fills_rail(self) -> None:
-        """At 100% the fill rect width should equal the rail background width."""
-        ov = _make_stub({**self._FLAT, 'spotify_progress': '05:00/05:00 100%'})
-        ov._render_hud()
-
-        rects = _rect_calls(ov)
-        bar_rects = [(x, y, w, h) for (x, y, w, h) in rects if abs(h - 26.0) < 0.1 and w > 100.0]
+        ov_full = _make_stub({**self._FLAT, 'now_playing_progress': '05:00/05:00 100%'})
+        ov_full._render_hud()
+        rects_full = _rect_calls(ov_full)
+        bar_rects = [(x, y, w, h) for (x, y, w, h) in rects_full if abs(h - 26.0) < 0.1 and w > 100.0]
         assert len(bar_rects) == 2, (
             f'Expected exactly 2 bar rects (background + fill) at 100%, got: {bar_rects}'
         )
@@ -220,41 +205,35 @@ class TestSpotifyHudPaneBar:
 # Waveform mode tests (auto_vj_bpm > 0 + audio_beat present)
 # ---------------------------------------------------------------------------
 
-class TestSpotifyHudPaneWaveform:
+class TestNowPlayingHudPaneWaveform:
     """Verify waveform mode draws live column bars instead of a flat fill rect."""
 
     _WF: dict[str, str] = {
         'auto_vj_bpm': '128',
         'audio_beat': '0.8',
         'audio_rms': '0.3',
-        'spotify_progress': '02:30/05:00 50%',
+        'now_playing_progress': '02:30/05:00 50%',
     }
 
     @staticmethod
     def _stub_with_waveform(extra: dict[str, str] | None = None) -> 'Overlays':
-        ov = _make_stub({**TestSpotifyHudPaneWaveform._WF, **(extra or {})})
+        ov = _make_stub({**TestNowPlayingHudPaneWaveform._WF, **(extra or {})})
         # Supply a real 512-sample sine waveform so waveform_mode activates.
         ov._live_waveform = np.sin(np.linspace(0, np.pi * 8, 512)).astype(np.float32)
         return ov
 
-    def test_waveform_mode_draws_many_narrow_rects(self) -> None:
-        """In waveform mode many narrow column bars should appear in the played region."""
+    def test_waveform_mode_draws_column_bars_not_flat_fill(self) -> None:
+        """In waveform mode many narrow column bars should appear, and the
+        old single ~50%-wide flat fill rect must not appear -- both checks
+        come from the same render call."""
         ov = self._stub_with_waveform()
         ov._render_hud()
 
         rects = _rect_calls(ov)
-        # Column bars are narrow (<20px) and taller than 1px.
         col_bars = [(x, y, w, h) for (x, y, w, h) in rects if w < 20.0 and h > 1.5]
         assert len(col_bars) > 20, (
             f'Expected >20 column bars in waveform mode, got {len(col_bars)}'
         )
-
-    def test_waveform_mode_no_single_mid_width_fill_rect(self) -> None:
-        """In waveform mode a single ~50%-wide fill rect must not appear."""
-        ov = self._stub_with_waveform()
-        ov._render_hud()
-
-        rects = _rect_calls(ov)
         # A flat fill at 50% would be ~505px wide with h≈26.
         suspicious = [
             (x, y, w, h) for (x, y, w, h) in rects
@@ -265,12 +244,12 @@ class TestSpotifyHudPaneWaveform:
         )
 
     def test_beat_decay_updates_on_render(self) -> None:
-        """With a strong beat signal, _spotify_beat_decay should be > 0 after render."""
+        """With a strong beat signal, _now_playing_beat_decay should be > 0 after render."""
         ov = self._stub_with_waveform({'audio_beat': '1.0'})
-        ov._spotify_beat_decay = 0.0
+        ov._now_playing_beat_decay = 0.0
         ov._render_hud()
-        assert ov._spotify_beat_decay > 0.0, (
-            '_spotify_beat_decay should increase when audio_beat > 0'
+        assert ov._now_playing_beat_decay > 0.0, (
+            '_now_playing_beat_decay should increase when audio_beat > 0'
         )
 
 
@@ -278,15 +257,15 @@ class TestSpotifyHudPaneWaveform:
 # Pane hidden
 # ---------------------------------------------------------------------------
 
-class TestSpotifyHudPaneHidden:
-    """When spotify_visible is NO, no Spotify content should be drawn."""
+class TestNowPlayingHudPaneHidden:
+    """When now_playing_visible is NO, no now-playing content should be drawn."""
 
-    def test_no_spotify_draws_when_hidden(self) -> None:
-        ov = _make_stub({'spotify_visible': 'NO'})
+    def test_no_now_playing_draws_when_hidden(self) -> None:
+        ov = _make_stub({'now_playing_visible': 'NO'})
         ov._render_hud()
 
         texts = _text_calls(ov)
-        spotify_texts = [t for t in texts if 'The Artist' in t or 'My Song' in t]
-        assert not spotify_texts, (
-            f'Spotify content drawn despite spotify_visible=NO: {spotify_texts}'
+        now_playing_texts = [t for t in texts if 'The Artist' in t or 'My Song' in t]
+        assert not now_playing_texts, (
+            f'Now-playing content drawn despite now_playing_visible=NO: {now_playing_texts}'
         )
