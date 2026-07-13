@@ -569,14 +569,15 @@ Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 �
 
 ## Performance Pad Modes Plan (v-next)
 
-> **UI + mouse actions in (dj-mixer-01 0.13.0):** each deck now shows an 8-pad
-> grid + two rows of mode buttons in REV1 order (cue/loop/track/sample ·
-> jump/roll/trans/scratch). **Mouse-wired**: hot cue, auto loop, roll (momentary),
-> **track-nav** (`deck.seek_fraction`), **beat jump** (`deck.beat_jump`); pads
-> self-label per mode. **Still needs subsystems**: sampler, transform (gate),
-> scratch bank. **Hardware note-bases** for the new modes still must come from the
-> REV1 MIDI list before wiring the pads to the controller (Appendix A only covers
-> hot cue / auto loop / roll).
+> **UI + mouse actions in (dj-mixer-01 0.14.0):** each deck shows an 8-pad grid +
+> two rows of mode buttons in REV1 order (cue/loop/track/sample ·
+> jump/roll/trans/scratch). **Mouse-wired + engine-backed**: hot cue, auto loop,
+> roll (momentary), **track-nav** (`deck.seek_fraction`), **beat jump**
+> (`deck.beat_jump`), **transform** (beat-synced gate, `deck.trans_rate`), and
+> **sampler** (shared 8-slot one-shot player, `sampler.py`, `[dj_mixer].sampler_dir`).
+> **Still open**: **scratch bank** (sampler-backed scratch source), and the
+> **hardware note-bases** for the new modes must come from the REV1 MIDI list
+> before wiring the physical pads (Appendix A covers only hot cue / loop / roll).
 
 Goal: flesh out the REV1's eight performance pads across the full set of pad
 modes. On the REV1 the four pad-mode buttons make the pads emit a **different

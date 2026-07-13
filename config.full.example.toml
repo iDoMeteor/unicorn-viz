@@ -662,6 +662,7 @@ enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = false        # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
 music_dir = ""               # folder scanned for tracks (browse encoder + LOAD)
+sampler_dir = ""             # folder of one-shot samples for the SAMPLER pads (up to 8)
 led_feedback = true          # REV1 LED feedback while the mixer is open
 beat_flash = true            # PLAY button pulses on its track's beat while playing
 pad_lightshow = true         # performance pads light the deck's set hot cues
