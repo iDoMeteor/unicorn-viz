@@ -575,9 +575,12 @@ Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 �
 > roll (momentary), **track-nav** (`deck.seek_fraction`), **beat jump**
 > (`deck.beat_jump`), **transform** (beat-synced gate, `deck.trans_rate`), and
 > **sampler** (shared 8-slot one-shot player, `sampler.py`, `[dj_mixer].sampler_dir`).
-> **Still open**: **scratch bank** (sampler-backed scratch source), and the
-> **hardware note-bases** for the new modes must come from the REV1 MIDI list
-> before wiring the physical pads (Appendix A covers only hot cue / loop / roll).
+> **DONE (0.16.0):** all eight pad modes are wired for **mouse and hardware** —
+> hardware note bases came from the official MIDI list (`docs/midi/`, saved PDF):
+> hot cue 0, auto loop 16, tracking 32, sampler 48, beat jump 64, roll 80,
+> trans 96, scratch bank 112 (each base..base+7). `rev1_map.pad_mode_of()`
+> resolves them. Scratch bank loads a sampler slot onto the deck as a scratch
+> source (full platter-scratch integration lands with the platter work).
 
 Goal: flesh out the REV1's eight performance pads across the full set of pad
 modes. On the REV1 the four pad-mode buttons make the pads emit a **different

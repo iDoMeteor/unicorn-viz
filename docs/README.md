@@ -15,6 +15,7 @@ This is the canonical map for project documentation.
 - [Developer Guide](developer-guide.md)
 - [Testing Guide](testing.md)
 - [Drop-in Documentation Registry](drop-ins.md)
+- [DDJ-REV1 MIDI reference](midi/README.md)
 - [Security Policy](../SECURITY.md)
 - [Marketing](marketing/README.md)
 
