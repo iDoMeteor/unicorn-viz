@@ -49,6 +49,7 @@ This is the canonical map for project documentation.
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
 - DJ mixer drop-in plan — `dj-mixer-01` two-deck audio mixer for Pioneer DDJ-REV1 (2026-07-07): [docs/planning/dj-mixer-drop-in-plan.md](planning/dj-mixer-drop-in-plan.md)
 - Second-window Linux mitigation strategies (2026-07-09, closed — SDL2 texture-framebuffer + moderngl/Wayland root-cause audit, explicit-GL fix implemented and owner-confirmed): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
+- Tooltip system plan — control room / mixer / overlays full-surface audit + shared architecture (2026-07-13): [docs/planning/tooltip-system-plan-2026-07-13.md](planning/tooltip-system-plan-2026-07-13.md)
 - Active audit tracker: [docs/audits](audits)
   - Video render pipeline & platform audit (2026-07-08): [docs/audits/2026-07-08-render-pipeline-platform-audit.md](audits/2026-07-08-render-pipeline-platform-audit.md)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
