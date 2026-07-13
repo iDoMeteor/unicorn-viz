@@ -446,6 +446,88 @@ up from 0x41, counterclockwise down from 0x3F.
 
 ---
 
+## Four-Deck + Waveforms + Auto-Play Plan (v-next)
+
+Owner-directed 2026-07-13. Four sub-features; build **#1 → #2 → #3, then #4 as
+its own isolated segment**. All four reshape the same window, so the layout is
+locked once (below) and built against, not thrashed per-feature.
+
+### Locked decisions
+
+- **Sides & decks.** Two physical sides. **Left side = decks 1 & 3 (a/c)**,
+  **right side = decks 2 & 4 (b/d)**. The REV1's **upper-corner DECK-SELECT
+  buttons** (Appendix A: **Note 60** on the deck's channel) switch which deck a
+  side controls; when a side selects deck 3/4, the hardware re-addresses that
+  side's controls to channel 3/4 (0-indexed 2/3), which our channel dispatch
+  already routes. All decks keep *playing* regardless of which one a side is
+  *controlling*.
+- **Hardware-addressed 3/4** (not software-only): decks 3 & 4 are first-class,
+  driven by the REV1 exactly like 1 & 2, plus mouse on the window.
+- **Crossfader = decks 1 ↔ 2 only.** Decks 3 & 4 run at full and are blended via
+  their own channel faders. One crossfader, matching the REV1 hardware.
+- **LOAD targets the selected deck** (Appendix A): LOAD-L → the left side's
+  currently-selected deck (a or c), LOAD-R → the right side's (b or d).
+- **Window layout: 2×2 decks + center console.** Decks 1&2 top, 3&4 bottom, with
+  the browser / auto-play / master / crossfader as a center console band. Each
+  deck shows the full-track wave **and** a zoomed ~10 s wave beneath it.
+- **Control bar above the console** (moves with the console; will also host
+  search / filter / etc.) carries **three intuitive state icons** for the
+  auto-play mode.
+- **Buttons:** every button gets a **hover state** now and carries a **tooltip
+  string** so it's plug-ready for the **core team's forthcoming tooltip system**
+  (we do not build that system here).
+
+### #1 — Decks 3 & 4 (engine + hardware + UX)
+
+- **#1a Engine/hardware foundation** *(testable, no UI)*: add `deck_c`/`deck_d`
+  to `MixerEngine`; `render_block` = `xfade(a,b) + c + d`; extend
+  `follow_active_deck` and `sync_deck` to 4 decks. `rev1_map`: `DECK_CHANNELS`
+  += `{2:'c',3:'d'}`, `DECK_SELECT_NOTE = 60`, pads += channels 11–14 (+shift),
+  `FILTER_CC14` += CH3 (25/57) & CH4 (26/58), LOAD notes resolve to the selected
+  deck per side. `rev1_input`: track the selected deck per side from Note 60,
+  route LOAD accordingly, apply filter c/d; deck controls for ch 2/3 already flow
+  through `_deck()`. `rev1_leds`: PLAY/CUE + pads for all 4 decks (throttle +
+  diff already guard MIDI-out).
+- **#1b UX**: relayout `ui.py` to the 2×2 + center console; mouse controls
+  (draggable faders/EQ/filter/gain) for all four decks; the console hosts the
+  master, crossfader, browser and the auto-play control bar.
+
+### #2 — Dual waveforms per deck
+
+Each deck keeps the full-track overview wave and gains a **zoomed ~10 s wave**
+beneath it (default window `wave_zoom_seconds = 10`, config), centered on the
+playhead and scrolling with it — the close-up DJs beatmatch against. Reuses
+`deck.waveform_peaks` with a position-windowed variant.
+
+### #3 — Drag a track onto a deck to load
+
+Press on a browser row → drag → release over any deck panel → load that track
+into that deck (uses the existing hit-region/drag foundation; adds a browser-row
+grab + deck drop-targets + a drag ghost/label).
+
+### #4 — Auto-play (isolated segment, after #1–#3)
+
+A panel above the track list with **three state buttons (active = highlighted):
+`cut` | `crossfade` | `ai`** (start with cut + crossfade; **ai greyed/disabled**
+for now). Clicking the **active** button turns auto-play **off** and returns full
+control to the DJ.
+
+- **Only decks 1 & 2** participate in auto-play, in every mode — so the DJ is
+  free to work on the **non-playing side's alternate deck (3/4)**.
+- Auto-play loads the next track into the **next non-playing** primary and, at
+  the track's end, transitions to it (`cut` = hard switch on the crossfader;
+  `crossfade` = timed blend). **Never auto-switch from the current playing deck
+  to an already-playing one** when toggling the mode on.
+- **Pre-transition warning:** **10 s** before an auto transition begins, the
+  **non-playing side's 3/4 pad flashes at 1 Hz** (1 flash/second) to tell the DJ
+  to stop working that alt deck — that side is about to go live (auto-play will
+  switch it from the alt 3/4 back to the primary 1/2). Reuses the `rev1_leds`
+  MIDI-out path.
+- `ai` mode (future): beat-/structure-aware automatic transitions — the Auto-DJ
+  frosting; depends on the beatgrid `beat_offset` model.
+
+---
+
 ## Mouse-Friendly UI Plan (v-next)
 
 Goal: the mixer window is fully usable **without** the DDJ-REV1 — every control
