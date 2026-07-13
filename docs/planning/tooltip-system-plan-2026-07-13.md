@@ -1,7 +1,11 @@
 # Tooltip System — Plan & Full-Surface Audit
 
 Owner: owner + Claude (planning)
-Status: proposed — awaiting owner review of §9 open questions before implementation
+Status: **approved — ready for implementation.** All §9 questions decided
+by the owner (2026-07-13, recorded inline). §3.4/§5 revised same day to
+build on dj-mixer-01's freshly-landed `_Hit` region foundation
+(`dj-mixer-01@50a3d4b`, mouse-draggable faders/EQ/crossfader) instead of
+proposing a parallel one.
 Last updated: 2026-07-13
 
 A unified hover-tooltip system for the three operator-facing UI surfaces:
@@ -23,7 +27,7 @@ one core mechanism:
 |---|---|---|---|
 | Overlays (main window) | moderngl immediate primitives (`_draw_rect`/`_draw_text` bitmap font), drawn every frame in `Overlays.render()` | Per-modal handlers (`_help_icon_hit_test`, `handle_effects_browser_mouse_motion`, `handle_presets_mouse_motion`, `handle_config_editor_motion`, `handle_context_menu_motion`) | Routed per-modal from `app.py`'s event loop through `_overlay_mouse_coords()` (viewport-corrected) |
 | control-room-01 | PIL rasterization on a background thread (~30 fps), uploaded via `SecondaryGLWindow` | `_HitRegion(action, payload, rect)` hotspot list rebuilt every rendered frame, published under `_frame_lock`; **all buttons flow through the single `_draw_button()` choke point** | `SDL_MOUSEMOTION` handled only for slider drags; cursor position not stored |
-| dj-mixer-01 | Same PIL-thread + `SecondaryGLWindow` pattern | None (click = left/right half toggles deck A/B) | Not handled at all |
+| dj-mixer-01 | Same PIL-thread + `SecondaryGLWindow` pattern | `_Hit` region list (`50a3d4b`, 2026-07-12): plain `__slots__` regions with `get`/`set` value bindings, rebuilt each render pass beside the widget they mirror, published under `_frame_lock`; drives mouse-draggable faders/EQ/crossfader/master | `SDL_MOUSEMOTION` handled for drags (`_begin_drag`/`_drag_to`/`_end_drag`); cursor position not yet stored outside a drag |
 
 **Existing prior art to generalize, not duplicate:** the help-icon rail in
 `unicornviz/overlays.py` already implements a complete one-off tooltip:
@@ -174,18 +178,39 @@ parameters; it owns geometry/wrapping, not branding.
 
 ### 3.4 dj-mixer-01 integration (own repo)
 
-- No hotspot infrastructure exists; add `self._tooltip_regions:
-  list[TooltipRegion]` rebuilt inside `_render_ui()` right where each
-  element's layout rect is already computed (deck panels, knobs, bars,
-  meters, browser, crossfader), published under the existing
-  `_frame_lock` exactly like `_frame_bytes`.
-- Add `SDL_MOUSEMOTION` capture to `on_sdl_event` (it now forwards
-  unhandled keys already; motion is a two-line addition) + leave-event
-  clear.
+Revised 2026-07-13: the mixer landed its own hit-region foundation the
+day before this plan (`50a3d4b` — `_Hit` regions driving mouse-draggable
+faders/EQ knobs/crossfader/master). Tooltips build on it rather than
+adding a parallel structure:
+
+- **Draggable controls:** add a `tip: str = ''` slot to `_Hit` so each
+  control carries its tooltip alongside its geometry and value binding —
+  one list, one rebuild, no drift between drag targets and tooltip
+  targets. (`_Hit` is deliberately a plain `__slots__` class, *not* a
+  dataclass — `ui.py` is imported by path via `importlib` without
+  `sys.modules` registration, which breaks dataclass string-annotation
+  resolution under `from __future__ import annotations`. Keep it that
+  way; see §8.)
+- **Informational elements** (waveform, VU/MST meters, PLAY/CUE state,
+  time, browser rows, REV1 badge): a second, plain
+  `list[TooltipRegion]` built in `_render_ui()` where those rects are
+  already computed, published under `_frame_lock` beside `_hits`. The
+  render thread feeds the tracker the union of both lists (mapping
+  `_Hit` → `TooltipRegion` is a comprehension over `x0..y1` + `tip`).
+- **Coordinates:** `50a3d4b` already settled the space — draw
+  coordinates are full-window pixels matching SDL mouse coordinates, no
+  `ui_scale` conversion needed (the `ui_scale` raster divisor from
+  `7116bd8` affects the PIL raster size only; the tooltip bubble is
+  drawn on the raster, so `draw_tooltip_pil` receives raster-space
+  anchor/bounds — divide by the same factor the widgets already use).
+- Extend `on_sdl_event`'s existing `SDL_MOUSEMOTION` branch to always
+  store the cursor position (currently only consumed mid-drag) + clear
+  on `SDL_WINDOWEVENT_LEAVE`; drags call `tracker.notify_click()` so a
+  tooltip never sits over a fader being dragged.
 - Render thread: same tracker + `draw_tooltip_pil` pattern as control
-  room. Mixer tooltips are mostly informational (its only click action
-  is deck toggle), which is exactly where tooltips earn their keep —
-  the owner's own test feedback ("mixer was hard to tell") shows the
+  room. Mixer tooltips are mostly informational (clicks are deck toggle
+  and drags), which is exactly where tooltips earn their keep — the
+  owner's own test feedback ("mixer was hard to tell") shows the
   surface is under-explained.
 
 ### 3.5 What deliberately stays out of core
@@ -333,26 +358,31 @@ exclusions" / "Reset to config"). Close buttons: "Close (Esc)".
 
 ## 5) Tooltip inventory — dj-mixer-01
 
-All informational except the deck click zones; this is the surface where
-tooltips add the most immediate value.
+Mostly informational plus the draggable controls; this is the surface
+where tooltips add the most immediate value. Draggable controls (per
+`50a3d4b`) state their drag semantics: sliders jump to the cursor, EQ
+knobs turn with a relative vertical drag. (Decks 3/4 and the pad
+VU-screensaver/beat-flasher from the recent commits are engine/REV1-LED
+features with no window UI yet — if on-screen decks C/D land later, the
+deck-scoped texts below apply unchanged via their `{deck}` parameter.)
 
 | Element | Tooltip |
 |---|---|
 | Header REV1 badge | DDJ-REV1 status — the controller is claimed only while this window is open |
 | Deck panel (click zone) | Click to toggle play/cue for deck {A\|B} |
-| PLAY / CUE state | Deck transport state |
-| Track title | Currently loaded track |
+| PLAY / CUE state | Deck transport state (PLAY flashes on the beat via the REV1 LEDs) |
+| Track title | Currently loaded track (Artist - Title from tags) |
 | Waveform | Track overview — bright = played, line = playhead |
 | Time display | Elapsed / total track time |
 | PITCH | Tempo adjustment from the pitch fader ({±range}%) |
-| HI / MID / LOW knobs | 3-band EQ for this deck (REV1 knobs) |
-| CH bar | Channel gain (trim) for this deck |
-| FLT bar | Bipolar color filter — left of center: low-pass, right: high-pass |
+| HI / MID / LOW knobs | 3-band EQ for this deck — drag vertically; REV1 knobs drive the same value |
+| CH bar | Channel gain (trim) for this deck — drag or click to set |
+| FLT bar | Bipolar color filter — left of center: low-pass, right: high-pass; drag to set |
 | Deck VU | Post-EQ channel level; red = clipping risk |
-| MST meter | Master output level |
+| MST meter | Master output level — drag to set |
 | BROWSER | Track library ({n} tracks) — set [dj_mixer].music_dir if empty; navigate/load via the REV1 |
 | Browser row | {track name} |
-| Crossfader | Blend between deck A (left) and deck B (right) |
+| Crossfader | Blend between deck A (left) and deck B (right) — drag or click to set |
 
 ---
 
@@ -373,7 +403,7 @@ tooltips add the most immediate value.
 | ProjectM manager | Category / preset rows + action buttons | As in the control-room modal table (§4) — same registry shared, not duplicated: control room renders these modals from the same overlay snapshot |
 | Audio / MIDI selector | Source/port row | Switch capture to '{name}' / Connect to '{port}' |
 | | Viability toggle | Show all devices, including ones that failed the probe |
-| System monitor | Metric labels | Brief explanation per metric (CPU/RAM/SWAP/DISK/NET/FPS/frame-time) |
+| System monitor | Metric labels | **Skipped per owner decision (§9.3)** — modal judged self-explanatory |
 | Context menu | — | **Deferred** — entries are already self-labeled and have hover glow; add only if labels prove insufficient |
 | Ambient HUD | — | **Excluded by design** (§2 non-goals) |
 
@@ -435,7 +465,13 @@ implementing session doesn't rediscover it):
 
 - Dataclasses with `__slots__`; type annotations on public surface;
   module/class/method docstrings; single quotes; f-strings; `logging`
-  only.
+  only. **Exception, learned from `dj-mixer-01@50a3d4b`:** modules
+  imported by path without `sys.modules` registration (dj-mixer's
+  sibling-module loading of `ui.py`) cannot use `@dataclass` under
+  `from __future__ import annotations` (string-annotation resolution
+  breaks) — use plain `__slots__` classes there. Core modules
+  (`unicornviz/tooltips.py`) and control-room (registered in
+  `sys.modules` by the shared drop-in loader) are unaffected.
 - No `render()`-hot-path allocations in the main loop: the overlay
   tracker updates only on `SDL_MOUSEMOTION` events, and region lists are
   rebuilt only when a modal's layout changes, not per frame.
@@ -446,17 +482,17 @@ implementing session doesn't rediscover it):
 
 ---
 
-## 9) Open questions for the owner
+## 9) Decisions (owner, 2026-07-13)
 
-1. **Help-icon rail delay:** it currently shows tooltips instantly on
-   hover. Standardize on the 0.55 s delay, or keep the rail instant
-   (tracker supports per-surface delay either way)? Recommendation:
-   keep the rail instant — it's a discovery surface — and use the delay
-   everywhere else.
-2. **Informational tooltips scope:** §4's INFO/AUTO VJ tables and §5's
-   meter explanations are the "teach the surface" tier. Ship them in the
-   same pass, or actions-only first? Recommendation: same pass for the
-   mixer (it has almost no actions), actions-first for control room.
-3. **System monitor metric tooltips** (§6): worth it, or is that modal
-   self-explanatory enough to skip? Recommendation: skip in v1.
-4. **Context menu**: confirmed deferred?
+1. **Help-icon rail delay: keep instant.** The rail stays 0-delay (it's
+   a discovery surface); the 0.55 s default applies everywhere else. The
+   tracker's per-surface `delay_s` parameter covers this.
+2. **Informational tooltips: mixer gets the full pass (actions +
+   informational) in phase 4; control room ships actions-first, with
+   §4's INFO/AUTO VJ informational tables as a fast-follow** once the
+   action tooltips have been used live for a bit.
+3. **System monitor metric tooltips: skipped.** Removed from scope; the
+   §6 row stays in the inventory only as a record of the decision.
+4. **Context menu: no tooltips, confirmed.** Entries are self-labeled
+   with hover glow; permanently out of scope unless labels prove
+   insufficient later.
