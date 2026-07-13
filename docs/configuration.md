@@ -210,6 +210,19 @@ Notes:
 
 ---
 
+## `[tooltips]`
+
+Hover tooltips on the operator surfaces (control-room window, main-window
+modal browsers/selectors, help-icon rail). Never shown on the bare
+audience HUD.
+
+| Key       | Type  | Default | Description                                                             |
+|-----------|-------|---------|-------------------------------------------------------------------------|
+| `enabled` | bool  | `true`  | Master switch for all hover tooltips.                                   |
+| `delay_s` | float | `0.55`  | Hover time before a tooltip appears (help-icon rail is always instant). |
+
+---
+
 ## `[spotify]`
 
 | Key                         | Type   | Default | Description |

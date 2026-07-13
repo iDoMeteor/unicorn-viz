@@ -18,6 +18,7 @@ import numpy as np
 from unicornviz.catalog_browser import CatalogBrowser, PANE_CATEGORIES, PANE_LIST
 from unicornviz.cta_overlay import CTAOverlay, _CTA_SHOW_DURATION, _CTA_SLOTS
 from unicornviz.paths import resolve_path
+from unicornviz.tooltips import TooltipHoverTracker, TooltipRegion, wrap_tooltip_text
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -344,6 +345,15 @@ class Overlays:
     # card grows tall enough to fail to fit either two-column slot.
     HELP_MAX_ITEMS_PER_SECTION = 7
 
+    # Tooltip state — class-level defaults (tooltips off, no trackers) so the
+    # lightweight ``Overlays.__new__``-style shells used across the test
+    # suite behave sanely without running __init__, which replaces these
+    # with real per-instance values.
+    _tooltips_enabled = False
+    _tooltip_tracker: TooltipHoverTracker | None = None
+    _rail_tooltip_tracker: TooltipHoverTracker | None = None
+    _tooltip_surface = ''
+
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
             'Help Usage',
@@ -541,10 +551,19 @@ class Overlays:
         hud_timeout_s: float = 60.0,
         flash_router: Callable[[str, float], bool] | None = None,
         modal_gate: Callable[[], bool] | None = None,
+        tooltips_enabled: bool = True,
+        tooltip_delay_s: float = 0.55,
     ) -> None:
         self._ctx = ctx
         self._width = width
         self._height = height
+        self._tooltips_enabled = bool(tooltips_enabled)
+        # Modal surfaces (browsers, config editor) use the configured hover
+        # delay; the help-icon rail stays instant by owner decision (see
+        # docs/planning/tooltip-system-plan-2026-07-13.md §9.1).
+        self._tooltip_tracker = TooltipHoverTracker(delay_s=float(tooltip_delay_s))
+        self._rail_tooltip_tracker = TooltipHoverTracker(delay_s=0.0)
+        self._tooltip_surface = ''
         self._flash_enabled = flash_messages
         self._show_recording_indicator = show_recording_indicator
         self._hud_auto_hide = bool(hud_auto_hide)
@@ -746,8 +765,6 @@ class Overlays:
         # Which pane PageUp/PageDown currently advances; see move_help_page().
         self._help_active_pane: str = 'left'
         self._help_icon_focus_idx: int = 0
-        self._help_icon_hover_idx: int = -1
-        self._help_icon_hover_pos: tuple[float, float] | None = None
         self._pending_help_icon_action: dict[str, str] | None = None
         self._help_pulse_t: float = 0.0
         self._hud_t: float = 0.0
@@ -924,49 +941,61 @@ void main() {
             return tooltip
         return str(entry.get('description', entry.get('label', '')) or '').strip()
 
-    def _help_icon_hit_test(self, x: float, y: float) -> int:
-        """Return the icon index under x/y or -1 when not over an icon."""
+    def _help_icon_cells(self) -> list[tuple[float, float, float, float]]:
+        """Return each rail icon's cell rect (x, y, w, h), one per entry.
+
+        Derived from the same panel math the help renderer uses; the single
+        geometry source for both click hit-testing and tooltip regions.
+        Empty when the help overlay is hidden.
+        """
         if not self._show_help:
-            return -1
+            return []
+        entries = self._help_icon_entries()
+        if not entries:
+            return []
         panel_pad = 44.0
         px = panel_pad
         py = panel_pad
         pw = self._width - panel_pad * 2.0
-        ph = self._height - panel_pad * 2.0
-        if x < px or x > px + pw or y < py or y > py + ph:
-            return -1
-
         res_ratio = min(self._width, self._height) / 1080.0
         help_scale = min(1.28, max(1.0, res_ratio ** 0.35))
         icon_band_y = py + 100.0
         icon_px = 152.0 if self._help_icon_asset_bucket == '152px' else 76.0
         band_h = max(icon_px + 20.0, 72.0 * help_scale)
-        entries = self._help_icon_entries()
-        if not entries:
-            return -1
-
         gap = max(14.0, 16.0 * help_scale)
-        cell_w = icon_px
-        cell_h = icon_px
-        total_w = len(entries) * cell_w + max(0, len(entries) - 1) * gap
+        total_w = len(entries) * icon_px + max(0, len(entries) - 1) * gap
         start_x = round(px + max(0.0, (pw - total_w) * 0.5))
-        rail_y = round(icon_band_y + max(0.0, (band_h - cell_h) * 0.5) - 10.0)
+        rail_y = round(icon_band_y + max(0.0, (band_h - icon_px) * 0.5) - 10.0)
+        return [
+            (float(round(start_x + idx * (icon_px + gap))), float(rail_y), icon_px, icon_px)
+            for idx in range(len(entries))
+        ]
 
-        if y < icon_band_y or y > icon_band_y + band_h:
-            return -1
-
-        for idx, _entry in enumerate(entries):
-            cell_x = round(start_x + idx * (cell_w + gap))
-            if cell_x <= x <= cell_x + cell_w and rail_y <= y <= rail_y + cell_h:
+    def _help_icon_hit_test(self, x: float, y: float) -> int:
+        """Return the icon index under x/y or -1 when not over an icon."""
+        for idx, (cx, cy, cw, ch) in enumerate(self._help_icon_cells()):
+            if cx <= x <= cx + cw and cy <= y <= cy + ch:
                 return idx
         return -1
 
+    def _help_icon_tooltip_regions(self) -> list[TooltipRegion]:
+        """Build tooltip regions for the rail icons from the shared cells."""
+        entries = self._help_icon_entries()
+        return [
+            TooltipRegion(
+                rect=(int(cx), int(cy), int(cw), int(ch)),
+                text=self._help_icon_tooltip(entries[idx]),
+            )
+            for idx, (cx, cy, cw, ch) in enumerate(self._help_icon_cells())
+            if idx < len(entries)
+        ]
+
     def handle_help_mouse_motion(self, x: float, y: float) -> bool:
         """Update hover state for help icon tooltips."""
-        idx = self._help_icon_hit_test(x, y)
-        self._help_icon_hover_idx = idx
-        self._help_icon_hover_pos = (float(x), float(y)) if idx >= 0 else None
-        return idx >= 0
+        regions = self._help_icon_tooltip_regions()
+        if self._rail_tooltip_tracker is not None:
+            self._rail_tooltip_tracker.on_motion(x, y, regions)
+        return any(region.contains(x, y) for region in regions)
 
     def _draw_rect(
         self,
@@ -2327,10 +2356,26 @@ void main() {
         self._config_editor_tab_hover = -1
         if not self._show_config_editor or self._config_editor_panel_rect is None:
             return
+        self._feed_modal_tooltips(
+            'config_editor', x, y, self._config_editor_tooltip_regions(),
+        )
         for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self._config_editor_tab_hover = i
                 return
+
+    def _config_editor_tooltip_regions(self) -> list[TooltipRegion]:
+        """Build tooltip regions for the config editor's tab bar."""
+        if self._config_editor_panel_rect is None:
+            return []
+        regions: list[TooltipRegion] = []
+        for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
+            if 0 <= i < len(self._config_editor_tabs):
+                regions.append(TooltipRegion(
+                    rect=(int(bx), int(by), int(bw), int(bh)),
+                    text=f'Edit {self._config_editor_tabs[i]} settings',
+                ))
+        return regions
 
     def handle_config_editor_click(self, x: float, y: float) -> bool:
         """Handle a click; switch tab or select an effect/parameter row.
@@ -2339,6 +2384,8 @@ void main() {
         """
         if not self._show_config_editor or self._config_editor_panel_rect is None:
             return False
+        if self._tooltip_tracker is not None:
+            self._tooltip_tracker.notify_click()
         for i, bx, by, bw, bh in self._config_editor_tab_boxes(self._config_editor_panel_rect):
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self.set_config_editor_tab(i)
@@ -2880,6 +2927,9 @@ void main() {
         if self.context_menu_visible and not route_modals_elsewhere:
             self._render_context_menu()
 
+        # Hover tooltip for the modal surfaces, above every modal layer.
+        self._render_active_tooltip(route_modals_elsewhere)
+
     # ------------------------------------------------------------------
     # Audio source selector
     # ------------------------------------------------------------------
@@ -3363,6 +3413,9 @@ void main() {
         """Hover-highlight the row under the cursor. Returns True if over a row."""
         if not self._show_effects_browser:
             return False
+        self._feed_modal_tooltips(
+            'effects_browser', x, y, self._effects_browser_tooltip_regions(),
+        )
         idx = self._eb_hit(self._eb_row_rects, x, y)
         if idx is not None:
             self._effects_browser.set_focus_pane(PANE_LIST)
@@ -3374,6 +3427,8 @@ void main() {
         """Route a click. Returns 0 miss, 1 category selected, 2 row chosen."""
         if not self._show_effects_browser:
             return 0
+        if self._tooltip_tracker is not None:
+            self._tooltip_tracker.notify_click()
         cidx = self._eb_hit(self._eb_cat_rects, x, y)
         if cidx is not None:
             self._effects_browser.set_focus_pane(PANE_CATEGORIES)
@@ -3385,6 +3440,75 @@ void main() {
             self._effects_browser.set_selected_index(ridx)
             return 2
         return 0
+
+    def _effects_browser_tooltip_regions(self) -> list[TooltipRegion]:
+        """Build tooltip regions from the browser's cached row/category rects."""
+        regions: list[TooltipRegion] = []
+        categories = self._effects_browser.categories()
+        for rx, ry, rw, rh, idx in self._eb_cat_rects:
+            if 0 <= idx < len(categories):
+                regions.append(TooltipRegion(
+                    rect=(int(rx), int(ry), int(rw), int(rh)),
+                    text=f"Filter to the '{categories[idx]}' category",
+                ))
+        rows = self._effects_browser.filtered()
+        for rx, ry, rw, rh, idx in self._eb_row_rects:
+            if 0 <= idx < len(rows):
+                name = str(rows[idx].get('display_name', '') or '')
+                regions.append(TooltipRegion(
+                    rect=(int(rx), int(ry), int(rw), int(rh)),
+                    text=f"Switch the audience output to '{name}'",
+                ))
+        return regions
+
+    def _feed_modal_tooltips(
+        self, surface: str, x: float, y: float, regions: list[TooltipRegion],
+    ) -> None:
+        """Feed a modal surface's cursor position into the shared tracker."""
+        if not self._tooltips_enabled:
+            return
+        self._tooltip_surface = surface
+        self._tooltip_tracker.on_motion(x, y, regions)
+
+    def lookup_help_key(self, description: str) -> str:
+        """Return the key combo whose help entry matches ``description``.
+
+        Keeps tooltip key hints sourced from the help registry — the single
+        source of truth for bindings — instead of hardcoding key names.
+        Empty string when no entry matches.
+        """
+        needle = str(description or '').strip().lower()
+        if not needle:
+            return ''
+        for _section, entries in self._iter_help_sections():
+            for key, desc in entries:
+                if str(desc).strip().lower() == needle:
+                    return str(key)
+        return ''
+
+    def _render_active_tooltip(self, route_modals_elsewhere: bool) -> None:
+        """Draw the active modal tooltip, last, above every modal layer."""
+        if not self._tooltips_enabled or route_modals_elsewhere:
+            return
+        surface_visible = {
+            'effects_browser': self._show_effects_browser,
+            'presets': self._show_presets,
+            'config_editor': self._show_config_editor,
+        }
+        if self._tooltip_surface and not surface_visible.get(self._tooltip_surface, False):
+            self._tooltip_tracker.reset()
+            self._tooltip_surface = ''
+            return
+        tip = self._tooltip_tracker.tick()
+        anchor = self._tooltip_tracker.anchor
+        if tip is None or anchor is None:
+            return
+        text = tip.text
+        if tip.hotkey_ref:
+            key = self.lookup_help_key(tip.hotkey_ref)
+            if key:
+                text = f'{text} — key: {key}'
+        self._draw_tooltip_bubble(text, anchor)
 
     def _draw_modal_frame_decor(
         self, x: float, y: float, w: float, h: float, pulse: float
@@ -3485,6 +3609,7 @@ void main() {
         """Hover-highlight a preset row. Returns True if over a row."""
         if not self._show_presets:
             return False
+        self._feed_modal_tooltips('presets', x, y, self._presets_tooltip_regions())
         idx = self._eb_hit(self._presets_row_rects, x, y)
         if idx is not None:
             self._presets_browser.set_selected_index(idx)
@@ -3495,11 +3620,26 @@ void main() {
         """Select the clicked preset row. Returns True if a row was chosen."""
         if not self._show_presets:
             return False
+        if self._tooltip_tracker is not None:
+            self._tooltip_tracker.notify_click()
         idx = self._eb_hit(self._presets_row_rects, x, y)
         if idx is not None:
             self._presets_browser.set_selected_index(idx)
             return True
         return False
+
+    def _presets_tooltip_regions(self) -> list[TooltipRegion]:
+        """Build tooltip regions from the presets browser's cached row rects."""
+        regions: list[TooltipRegion] = []
+        rows = self._presets_browser.filtered()
+        for rx, ry, rw, rh, idx in self._presets_row_rects:
+            if 0 <= idx < len(rows):
+                name = str(rows[idx].get('display_name', '') or '')
+                regions.append(TooltipRegion(
+                    rect=(int(rx), int(ry), int(rw), int(rh)),
+                    text=f"Load preset '{name}'",
+                ))
+        return regions
 
     def _render_presets(self) -> None:
         """Draw the show-presets modal (list + inline name entry)."""
@@ -4470,12 +4610,11 @@ void main() {
         self._draw_rect(x, y + h - 10.0, w, 2.0, (0.10, 0.94, 1.0, 0.44 + pulse_med * 0.18))
 
         self._draw_help_section_content(x, y, w, h, help_scale, content_top_y)
-        entries = self._help_icon_entries()
-        if self._help_icon_hover_idx >= 0 and self._help_icon_hover_idx < len(entries):
-            hover_entry = entries[self._help_icon_hover_idx]
-            tooltip = self._help_icon_tooltip(hover_entry)
-            if tooltip:
-                self._draw_help_icon_tooltip(tooltip, self._help_icon_hover_pos, x, y, w, icon_band_h)
+        if self._tooltips_enabled and self._rail_tooltip_tracker is not None:
+            tip = self._rail_tooltip_tracker.tick()
+            anchor = self._rail_tooltip_tracker.anchor
+            if tip is not None and anchor is not None:
+                self._draw_tooltip_bubble(tip.text, anchor)
 
     def _render_help_icon_rail(self, x: float, y: float, w: float, help_scale: float) -> float:
         """Draw the centered help icon rail and return its rendered height."""
@@ -4528,32 +4667,35 @@ void main() {
 
         return band_h
 
-    def _draw_help_icon_tooltip(
-        self,
-        tooltip: str,
-        hover_pos: tuple[float, float] | None,
-        panel_x: float,
-        panel_y: float,
-        panel_w: float,
-        band_h: float,
-    ) -> None:
-        """Draw a small tooltip bubble for a hovered help icon."""
-        text = str(tooltip or '').strip()
-        if not text:
+    def _draw_tooltip_bubble(self, text: str, anchor: tuple[float, float]) -> None:
+        """Draw the shared tooltip bubble at a cursor anchor, on-screen clamped.
+
+        Same visual language as the original help-icon bubble (dark panel,
+        teal top edge, violet bottom edge), generalized to any anchor and
+        wrapped up to a few lines for longer modal texts.
+        """
+        body = str(text or '').strip()
+        if not body:
             return
-        tip_x = float(hover_pos[0]) + 14.0 if hover_pos is not None else panel_x + panel_w * 0.5 - 120.0
-        tip_y = panel_y + band_h + 8.0
         scale = 1.48
-        text_w = max(180.0, min(420.0, len(text) * 8.0 * scale + 28.0))
-        box_h = 30.0
-        if tip_x + text_w > panel_x + panel_w - 10.0:
-            tip_x = panel_x + panel_w - text_w - 10.0
-        if tip_x < panel_x + 10.0:
-            tip_x = panel_x + 10.0
-        self._draw_rect(tip_x, tip_y, text_w, box_h, (0.03, 0.05, 0.08, 0.92))
-        self._draw_rect(tip_x, tip_y, text_w, 2.0, (0.10, 0.94, 1.0, 0.72))
-        self._draw_rect(tip_x, tip_y + box_h - 2.0, text_w, 2.0, (0.78, 0.38, 1.0, 0.68))
-        self._draw_text(text, tip_x + 10.0, tip_y + 7.0, scale=scale, color=(0.96, 0.98, 1.0, 0.98))
+        char_w = 8.0 * scale
+        lines = wrap_tooltip_text(body, None, 420, lambda s: len(s) * char_w)
+        if not lines:
+            return
+        line_h = 8.0 * scale + 6.0
+        box_w = max(len(line) for line in lines) * char_w + 20.0
+        box_h = len(lines) * line_h + 12.0
+        tip_x = float(anchor[0]) + 14.0
+        tip_y = float(anchor[1]) + 20.0
+        if tip_y + box_h > self._height - 8.0:
+            tip_y = float(anchor[1]) - box_h - 10.0
+        tip_x = max(8.0, min(tip_x, self._width - box_w - 8.0))
+        tip_y = max(8.0, tip_y)
+        self._draw_rect(tip_x, tip_y, box_w, box_h, (0.03, 0.05, 0.08, 0.92))
+        self._draw_rect(tip_x, tip_y, box_w, 2.0, (0.10, 0.94, 1.0, 0.72))
+        self._draw_rect(tip_x, tip_y + box_h - 2.0, box_w, 2.0, (0.78, 0.38, 1.0, 0.68))
+        for i, line in enumerate(lines):
+            self._draw_text(line, tip_x + 10.0, tip_y + 8.0 + i * line_h, scale=scale, color=(0.96, 0.98, 1.0, 0.98))
 
     def _draw_help_section_content(self, x: float, y: float, w: float, h: float, help_scale: float, content_top_y: float) -> None:
         """Draw section cards and shortcut map in the help panel content area."""
@@ -5314,8 +5456,8 @@ void main() {
             return False
         self._help_focus_region = 'icons'
         self._help_icon_focus_idx = idx
-        self._help_icon_hover_idx = idx
-        self._help_icon_hover_pos = (float(x), float(y))
+        if self._rail_tooltip_tracker is not None:
+            self._rail_tooltip_tracker.notify_click()
         self._queue_help_icon_action(entries[idx])
         return True
 
@@ -5834,8 +5976,8 @@ void main() {
             self._help_focus_region = 'sections'
             self._help_focus_idx = 0
             self._help_icon_focus_idx = 0
-            self._help_icon_hover_idx = -1
-            self._help_icon_hover_pos = None
+        if self._rail_tooltip_tracker is not None:
+            self._rail_tooltip_tracker.reset()
         self._help_timer = 60.0 if self._show_help else 0.0
 
     def toggle_flash_messages(self) -> bool:

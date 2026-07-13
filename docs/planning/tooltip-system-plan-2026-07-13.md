@@ -1,11 +1,21 @@
 # Tooltip System — Plan & Full-Surface Audit
 
 Owner: owner + Claude (planning)
-Status: **approved — ready for implementation.** All §9 questions decided
-by the owner (2026-07-13, recorded inline). §3.4/§5 revised same day to
-build on dj-mixer-01's freshly-landed `_Hit` region foundation
-(`dj-mixer-01@50a3d4b`, mouse-draggable faders/EQ/crossfader) instead of
-proposing a parallel one.
+Status: **phases 1–3 implemented (2026-07-13); phase 4 (dj-mixer-01) ON
+HOLD per owner — major concurrent work in flight there, revisit next
+iteration.** Landed: core `unicornviz/tooltips.py` (tracker + PIL bubble,
+21 tests); overlays integration (help-icon rail migrated onto the shared
+tracker at instant delay per §9.1, effects/presets browsers + config
+editor tabs, 11 tests); control-room-01 integration (action tooltip
+table + `_tooltip_for` formatter + render-thread hover pass, 12 tests —
+its first test suite, which required aligning its package `__init__.py`
+with dj-mixer-01's no-import marker convention). ProjectM manager +
+audio/MIDI selector overlay regions deferred: those modals have no mouse
+support at all yet on the main window (keyboard/CR-driven), so tooltip
+regions there need motion plumbing first — folded into the phase-4/
+fast-follow pass. All §9 questions decided by the owner (recorded
+inline). §3.4/§5 build on dj-mixer-01's `_Hit` region foundation
+(`50a3d4b`).
 Last updated: 2026-07-13
 
 A unified hover-tooltip system for the three operator-facing UI surfaces:

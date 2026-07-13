@@ -3254,6 +3254,8 @@ void main() {
             hud_timeout_s=float(self.cfg.get('overlays', 'hud_timeout_s', default=60.0)),
             flash_router=self.route_flash_message,
             modal_gate=self.control_room_flash_gate_active,
+            tooltips_enabled=bool(self.cfg.get('tooltips', 'enabled', default=True)),
+            tooltip_delay_s=float(self.cfg.get('tooltips', 'delay_s', default=0.55)),
         )
         self._overlays = overlays
 
