@@ -569,6 +569,15 @@ Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 �
 
 ## Performance Pad Modes Plan (v-next)
 
+> **UI + mouse actions in (dj-mixer-01 0.13.0):** each deck now shows an 8-pad
+> grid + two rows of mode buttons in REV1 order (cue/loop/track/sample ·
+> jump/roll/trans/scratch). **Mouse-wired**: hot cue, auto loop, roll (momentary),
+> **track-nav** (`deck.seek_fraction`), **beat jump** (`deck.beat_jump`); pads
+> self-label per mode. **Still needs subsystems**: sampler, transform (gate),
+> scratch bank. **Hardware note-bases** for the new modes still must come from the
+> REV1 MIDI list before wiring the pads to the controller (Appendix A only covers
+> hot cue / auto loop / roll).
+
 Goal: flesh out the REV1's eight performance pads across the full set of pad
 modes. On the REV1 the four pad-mode buttons make the pads emit a **different
 note base** per mode on the shared pad channels (deck A = MIDI ch 8/9
