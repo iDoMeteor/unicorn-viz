@@ -22,6 +22,12 @@ _run_llm_scoring = _MOD._run_llm_scoring
 _detect_llm_provider = _MOD._detect_llm_provider
 _score_lock_quality = _MOD._score_lock_quality
 _BPM_LOCK_CONFIDENCE_FLOOR = _MOD._BPM_LOCK_CONFIDENCE_FLOOR
+_cleanup_stale_empty_corpus_files = _MOD._cleanup_stale_empty_corpus_files
+
+_CORPUS_PATTERNS = [
+    'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
+    'sequence-corpus*.jsonl', 'sequence*.jsonl',
+]
 
 
 def _make_seq_row(
@@ -147,3 +153,54 @@ def test_score_lock_quality_rating_scale() -> None:
     assert _score_lock_quality(30.0, 0.35) == 3
     assert _score_lock_quality(12.0, 0.20) == 2
     assert _score_lock_quality(0.0, 0.50) == 1
+
+
+# ---- _cleanup_stale_empty_corpus_files ---------------------------------------
+
+
+def test_cleanup_removes_zero_byte_matching_files(tmp_path: Path) -> None:
+    empty = tmp_path / 'live-corpus.jsonl'
+    empty.write_text('')
+
+    removed = _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS)
+
+    assert removed == [empty]
+    assert not empty.exists()
+
+
+def test_cleanup_does_not_touch_non_empty_matching_files(tmp_path: Path) -> None:
+    real = tmp_path / 'live-corpus-20260101T000000Z.jsonl'
+    real.write_text('{"row": 1}\n')
+
+    removed = _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS)
+
+    assert removed == []
+    assert real.exists()
+
+
+def test_cleanup_ignores_non_matching_files(tmp_path: Path) -> None:
+    unrelated = tmp_path / 'notes.txt'
+    unrelated.write_text('')
+
+    removed = _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS)
+
+    assert removed == []
+    assert unrelated.exists()
+
+
+def test_cleanup_handles_both_live_and_sequence_empty_placeholders(tmp_path: Path) -> None:
+    live_empty = tmp_path / 'live-corpus.jsonl'
+    seq_empty = tmp_path / 'sequence-corpus.jsonl'
+    live_empty.write_text('')
+    seq_empty.write_text('')
+    real_live = tmp_path / 'live-corpus-20260622T015156Z.jsonl'
+    real_live.write_text('{"row": 1}\n')
+
+    removed = _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS)
+
+    assert set(removed) == {live_empty, seq_empty}
+    assert real_live.exists()
+
+
+def test_cleanup_on_empty_directory_returns_empty_list(tmp_path: Path) -> None:
+    assert _cleanup_stale_empty_corpus_files(tmp_path, _CORPUS_PATTERNS) == []
