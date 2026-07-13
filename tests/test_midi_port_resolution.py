@@ -10,7 +10,17 @@ _DROPIN = Path(__file__).parent.parent / 'drop-ins' / 'midi-controllers-01'
 sys.path.insert(0, str(_DROPIN))
 from controller_presets import register_all  # noqa: E402
 
-register_all(MidiManager, None)
+# See test_midi_apc_preset.py: register_all() claims the APC rawmidi device
+# early, which blocks test collection while the running app holds it. Neutralize
+# just that side effect (its only use of load_dropin_symbol here), then restore.
+import unicornviz.dropins as _dropins  # noqa: E402
+
+_saved_loader = _dropins.load_dropin_symbol
+_dropins.load_dropin_symbol = lambda *_a, **_k: None
+try:
+    register_all(MidiManager, None)
+finally:
+    _dropins.load_dropin_symbol = _saved_loader
 
 
 def test_generic_preset_selects_first_hint_match() -> None:

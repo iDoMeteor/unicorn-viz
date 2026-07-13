@@ -10,7 +10,20 @@ _DROPIN = Path(__file__).parent.parent / 'drop-ins' / 'midi-controllers-01'
 sys.path.insert(0, str(_DROPIN))
 from controller_presets import register_all  # noqa: E402  (after sys.path manipulation)
 
-register_all(MidiManager, None)
+# register_all() also claims the APC rawmidi device early (an app-startup
+# optimization). That is harmless at runtime but blocks during test collection
+# when the running app already holds the device -- which wedged the whole
+# pytest hook. The claim is register_all's only use of load_dropin_symbol in a
+# (MidiManager, None) call, so neutralize just that side effect, then restore it
+# so nothing else in the session is affected.
+import unicornviz.dropins as _dropins  # noqa: E402
+
+_saved_loader = _dropins.load_dropin_symbol
+_dropins.load_dropin_symbol = lambda *_a, **_k: None
+try:
+    register_all(MidiManager, None)
+finally:
+    _dropins.load_dropin_symbol = _saved_loader
 
 
 def test_apc_preset_maps_entire_grid() -> None:
