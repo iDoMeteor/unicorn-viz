@@ -531,6 +531,48 @@ closest pair in the roster.
 
 ---
 
+## First Direct beat_grid.py Test Coverage — Two Findings (2026-07-08)
+
+Status: documented, not fixed. See `tests/test_beat_tracker_v2.py` / `tests/test_beat_grid_tracker_v1.py`.
+
+Writing the first direct unit tests for `beat_grid.py` (previously zero coverage of either
+`BeatTracker` or `BeatGridTracker` themselves — only a path-existence check in
+`test_corpus_writers.py`) surfaced two real behaviors worth recording, discovered via synthetic
+click-track simulation rather than live-session log analysis:
+
+**1. Silence reset does not clear the onset envelope.** `_reset_tempo_lock()` (fired after
+`silence_reset_s` of no onsets) clears `bpm`/`confidence`/`phase`/`candidate_history`/
+`beat_position_map`/`tempo_hold_until_t`, but never clears `_env_buf`/`_env_write_idx`/
+`_env_filled`. Since the onset envelope is an 8-second ring (`_V2_ENV_WINDOW_S`), a periodic ACF
+re-estimation running shortly after the reset can still find the pre-silence onset pattern still
+resident in the ring and re-lock onto it — confirmed via simulation to happen within under a
+second of the reset firing, well before any new real onset has arrived. This likely undermines the
+intended purpose of the silence reset (clean state for the next song) for up to ~8s after a gap
+begins. Not fixed here — flagging for a decision on whether `_reset_tempo_lock()` should also clear
+the envelope ring, at the cost of losing a few seconds of legitimate cross-fade audio history for a
+song that resumes quickly.
+
+**2. Phase confidence has no explicit initial sync.** On first BPM lock, the phase oscillator
+(`self._phase`) starts wherever it was left (0.0 from `_reset_tempo_lock`/`__init__`), not
+synchronized to the actual onset that triggered the lock. `_absorb_onset`'s phase-coherence nudge
+only activates once an onset already lands within ±18% (`_V2_PHASE_TOL`) of the current phase, so
+if the initial offset is larger than that, the phase can only drift into tolerance opportunistically
+via the small BPM-estimate error against true tempo, not through any deliberate re-sync step.
+Simulated on a perfectly steady, unambiguous 120 BPM click track: `acf_confidence` reached ~1.0
+within ~4s of the first lock, but `phase_confidence` (and therefore the blended `confidence`, and
+`downbeat_confidence`'s 30%-weighted `coh` term) took **30-50s** to converge to a comparable level.
+This is a plausible structural contributor to the "downbeat gate sits below threshold for extended
+stretches even on confidently-locked material" pattern observed in the 2026-07-08 downbeat-gate
+investigation above — not the whole explanation (that investigation also found genuine per-genre
+struggle concentrated in chillstep/hyphy), but a mechanism that would affect every genre equally
+for the first 30-50s after any fresh lock (track start, tempo change, or post-silence re-lock).
+
+Re-entry trigger: revisit if live sessions show downbeat scheduling feels sluggish specifically in
+the first ~30-50s after a track starts or after silence, which would corroborate finding #2 as a
+practical (not just theoretical) problem.
+
+---
+
 ## Recommender Confirm/Decider Margin — softmax-normalized (2026-07-06)
 
 Decision: `profile_auto_reco_score_margin` and `profile_auto_reco_decider_min_margin`
