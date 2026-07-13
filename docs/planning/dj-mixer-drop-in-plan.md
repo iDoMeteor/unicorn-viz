@@ -647,6 +647,44 @@ submodule bump, each with its own tests + docs (avoid a monolithic commit per
 CLAUDE.md). Beatgrid edit/lock is scheduled independently once its surface is
 chosen. **Owner is keeping this in planning; no code yet.**
 
+## Library Analysis & Faceted Filter Plan (v-next)
+
+The browser now has **search + a faceted filter flyout** (tags / artists / BPM
+range / genre) in `library.py`, drawing facet values from each track's **tags**
+(`Library.distinct(facet)`).  BPM uses fixed **overlapping** bands (90–110,
+100–120, …).  That's tier 1; the facet *data source* should grow through
+progressive analysis tiers, all feeding the same filter + browser.
+
+**Analysis tiers (owner-directed 2026-07-13; progressive, layered):**
+
+1. **Tagged-set (current default).** Read facets from file tags on demand, cached
+   per entry.  Zero analysis cost; quality tracks how well the crate is tagged;
+   missing facets are simply absent.
+2. **At-load.** When a track loads onto a deck, run cheap DSP on it (BPM already
+   via `estimate_bpm`; add key, energy, and the beatgrid `beat_offset`).  Fills
+   gaps for the tracks actually in play; ties into the Beatgrid feature.
+3. **Full library (optional continuous).** A background pass over the whole
+   folder computing + caching facets/analysis for every track (BPM, key, energy,
+   waveform preview).  *Continuous* variant watches the folder and (re)analyses
+   new/changed files.
+4. **All prior + stems.** Add stem separation (drums / bass / vocals / other)
+   per track for stem-aware filtering + future stem FX.  Heaviest; opt-in.
+
+**Cache/index.** Persist analysis in a **local library index** (JSON or SQLite)
+keyed by path + mtime/hash — never committed (same spirit as the `config.toml`
+gitignore item).  The faceted filter reads the index instantly instead of
+re-reading tags every time `distinct()` is called (today's on-demand tag read is
+fine for small crates but O(N files) per facet expand — the index removes that).
+
+**Config surface (to design).** `[dj_mixer].library_analysis =
+"tagged" | "at_load" | "full" | "full_continuous" | "stems"` (or layered
+booleans), plus an index path.  Facets/filters stay identical across tiers; only
+their completeness + new facets (key, energy, stems) grow.
+
+**Open:** index format + schema, incremental/continuous scan scheduling (must not
+touch the audio/RT path), stem backend choice, and how key/energy surface as new
+filter facets.
+
 ## Feature Backlog & Ideas
 
 Owner-requested / near-term first, then a grab-bag to prioritize.
