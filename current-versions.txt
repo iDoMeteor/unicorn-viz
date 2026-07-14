@@ -7,11 +7,16 @@
   core (unicornviz)             1.0.0-beta.1        BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.18.0              alpha ▲       module
+  dj-mixer-01                   0.19.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.1          RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
+
+  ── alpha ▲ ───────────────────────────────────────────────────────────────
+  games-01                      0.9.1               alpha ▲       MISMATCH (readme=0.9.0)
+
+  ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
   spotify-01                    1.0.0-rc.1          RC            module
@@ -21,7 +26,6 @@
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   cosmic-01                     0.9.0               alpha ▲       module
   feature-01                    0.9.0               alpha ▲       module
-  games-01                      0.9.0               alpha ▲       module
   immersive-01                  0.9.0               alpha ▲       module
   particles-01                  0.9.0               alpha ▲       module
   projectm-01                   0.9.0               alpha ▲       module
@@ -58,4 +62,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   39 components total  ·  7 RC  1 beta  31 alpha  0 unversioned
+  ⚠  1 version mismatch(es): games-01
 

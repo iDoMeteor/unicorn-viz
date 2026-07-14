@@ -817,3 +817,102 @@ app's mouse-menu accordion behaviour (one section open at a time).
 - **Phasing.** (1) per-bucket scan in `Library` (logic only); (2) accordion UI
   reusing the new browser windowing; (3) route sample buckets to sampler/scratch;
   (4) filters-within-bucket + persisted last-open bucket in `state.py`.
+
+## External Streaming Sources Plan — Spotify / Beatport / Apple·Google (v-next, owner-requested 2026-07-13)
+
+Goal: **Spotify playlists (and later Beatport, Apple/Google Music) as top-level
+accordion buckets in the browser.** Builds on the *Accordion Crate Browser Plan*
+above — each service is another top-level bucket whose children are
+playlists → tracks.
+
+### ⚠️ The hard constraint (decide this first)
+
+**You cannot pull raw Spotify/Apple/Google audio into a deck.** Their Web APIs
+expose *metadata only*; feeding their streamed audio into a custom mixer for
+scratch/cue/loop is not offered and is against their terms. So a "Spotify
+bucket" can browse playlists but the tracks are **not directly deck-loadable**.
+Three ways to make it useful (owner picks — this drives everything else):
+
+- **A) Local-file matching (recommended).** Browse the streaming playlist; for
+  each track, match it to a **local file** in the crates (by ISRC, else
+  artist+title+duration) and load *that* file into the deck. Fully legal + fully
+  mixable (scratch/cue/loop). Unmatched tracks show greyed with a "no local
+  file" tag (a buy/download to-do list). Turns your Spotify playlists into a
+  shopping/prep list mapped onto what you can actually spin.
+- **B) `spotifyd` Connect capture.** The project already runs `spotifyd`
+  (`_SPOTIFYD_WARMUP_S` in `beat_grid.py`); capture its PipeWire output as a
+  **live line-in deck source**. Plays anything in Spotify but it's a *live,
+  non-seekable* stream — no scratch/cue/loop, no waveform overview. A "broadcast
+  deck," not a performance deck. Could pair with A.
+- **C) Browse-only reference.** Show playlists/queue as read-only context (what's
+  playing, up-next) with no deck load. Lowest effort; ties to the existing
+  now-playing HUD.
+
+**Recommendation:** ship **A** (real DJ value, legal, mixable), optionally add
+**B** later as a "Spotify live deck." **Beatport is the exception** — see below.
+
+### What already exists (reuse, don't rebuild)
+
+`drop-ins/spotify-01` (**v1.0.0-rc.1**, active) already implements the whole
+Spotify auth + Web API spine, per CLAUDE.md's Spotify rules:
+
+- **PKCE auth** (Authorization Code + PKCE) over a **loopback `127.0.0.1`**
+  redirect, minimal scopes (`playlist-read-private`,
+  `playlist-read-collaborative`, user-read-playback/currently-playing), tokens
+  in an **ignored runtime file** (`runtime/spotify-token.json`) with refresh.
+- Web API polling for **playback context, queue, and the current playlist**;
+  local MPRIS metadata via `playerctl`.
+- `snapshot()`, `begin_auth_async()`, logout hotkey.
+
+**Gap to fill in `spotify-01`:** it resolves the *current* playlist context, not
+a **browse-all** surface. Add (in the spotify-01 repo, its own commit + submodule
+bump — Drop-In Source Policy): `list_playlists()` → `GET /me/playlists`
+(paginated) and `playlist_tracks(id)` → `GET /playlists/{id}/tracks` (paginated,
+request only needed fields incl. `external_ids.isrc` for matching). Honour 429 +
+`Retry-After`, cache per-playlist, never store the client secret (Client ID +
+PKCE only).
+
+### Integration boundary (independence rules)
+
+`dj-mixer-01` must **not hard-import** `spotify-01`. Consume it via
+`vj_api` (preferred — add a small capability like
+`vj_api.get_spotify_playlists()` / `get_spotify_playlist_tracks(id)`) or, if a
+direct handle is unavoidable, `load_dropin_symbol()` wrapped in `try/except`
+with a graceful "Spotify bucket hidden" fallback when spotify-01 is absent or
+unauthenticated. The Spotify bucket simply doesn't appear if the drop-in isn't
+installed/authed — never an error.
+
+### Beatport / Apple / Google (later tiers)
+
+- **Beatport** — the best "real DJ" fit: it's a **purchase/download** store, so
+  tracks you own become **local files → fully deck-loadable** (no matching hack).
+  Beatport also has LINK (streaming) + an OAuth catalog API for playlists/charts.
+  Plan: OAuth (owner Beatport dev account), browse charts/playlists/purchases,
+  load owned downloads directly; treat LINK-only tracks like option A/C.
+- **Apple Music** — MusicKit (developer token + user token); metadata + playlist
+  browse only, playback via Apple's SDK → same no-raw-audio constraint as
+  Spotify → option A/C tier.
+- **Google / YouTube Music** — no first-class DJ-friendly API; metadata/matching
+  tier at best; lowest priority.
+
+### Owner decisions needed before coding
+
+1. **Audio strategy** (A local-match / B spotifyd capture / C browse-only) — A
+   recommended.
+2. **Spotify Developer app + Client ID** — owner registers the app, adds the
+   `http://127.0.0.1:<port>/callback` loopback redirect, hands over the Client ID
+   (goes in config, not the secret). Without this the Web API can't authenticate.
+3. **Extend `spotify-01`** with `list_playlists()` / `playlist_tracks(id)` (its
+   own repo/commit) — confirm before touching the shared drop-in.
+4. Service priority order (recommend **Spotify → Beatport → Apple → Google**).
+
+### Phasing (after the Accordion Crate Browser lands)
+
+1. `spotify-01`: add `list_playlists()` + `playlist_tracks(id)` + a `vj_api`
+   capability (spotify-01 repo).
+2. `dj-mixer-01`: a **Spotify accordion bucket** (browse-only, option C) reading
+   that capability via `try/except` — proves the boundary end to end.
+3. **Option A local-file matching** (ISRC → artist/title/duration) so playlist
+   tracks load their local file into a deck; greyed "no local file" otherwise.
+4. Optional **spotifyd live deck** (option B).
+5. **Beatport** bucket (owned downloads = local files) → then Apple → Google.
