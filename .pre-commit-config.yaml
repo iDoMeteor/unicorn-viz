@@ -31,6 +31,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: version-report
+        name: version-report
+        entry: bash -c '.venv/bin/python tools/version_report.py --plain > current-versions.txt && git add current-versions.txt'
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: pip-audit
         name: pip-audit
         entry: .venv/bin/pip-audit -r requirements.txt
