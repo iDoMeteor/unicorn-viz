@@ -1,5 +1,8 @@
 # Unicorn Viz
 
+**Version 1.0.0-beta.1**
+
+
 ## Press `H` or `?` for Help
 
 If you're running a live stream or recorded set with Unicorn Viz and upload it
@@ -530,3 +533,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 ---
 
 **Happy demoscene visualizing!** 🦄✨
+
+## Changelog
+
+- **1.0.0-beta.1** — initial versioned release.
