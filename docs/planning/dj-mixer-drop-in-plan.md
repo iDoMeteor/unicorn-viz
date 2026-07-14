@@ -1,11 +1,14 @@
 ---
 Owner: Planning
 Status: REV1 fully wired (M-1..M-4, scratch, cues, loops, FX, BPM/SYNC, lighting,
-browser). Track metadata + mouse M-mouse 1 (draggable faders/EQ/filter/master)
-done. Planning: performance pad modes (beat jump, trans, tracking=track-nav,
-sampler, scratch bank) + beatgrid edit/lock. Pending: hardware bring-up, mouse
-M-mouse 2-4, feature backlog.
-Last updated: 2026-07-12
+browser). All 8 pad modes (mouse + hardware). Mouse: M-mouse 1 (faders/EQ/filter/
+master), 3 (browser: wheel-scroll, fills height, scrollbar) and 4 (waveform
+scrub/scratch + click-seek) done; transport bar, centred TRIM, crossfader
+auto-fade arrows, tri-colour VU, session recall (state.py), compact platter
+indicator all landed. Planning: bigger platter viz (collapsed decks) + full
+jog-wheel, accordion crate browser, beatgrid edit/lock. Pending: hardware
+bring-up, mouse M-mouse 2, feature backlog.
+Last updated: 2026-07-13
 ---
 
 # DJ Mixer Drop-In Plan — `dj-mixer-01` (Pioneer DDJ-REV1)
@@ -558,11 +561,18 @@ latest snapshot (already thread-safe there).
   double-click-to-reset and scroll-wheel not yet added.
 - [ ] **M-mouse 2 — buttons.** Click PLAY/CUE, SYNC, FX engage (press-hold with
   the mouse), and a clickable hot-cue / loop pad grid per deck.
-- [ ] **M-mouse 3 — browser.** Click a row to select, scroll-wheel to browse,
-  per-deck **▶A / ▶B** load buttons (or double-click a row → active/last deck),
-  drag the scrollbar.
-- [ ] **M-mouse 4 — waveform.** Click/drag on the waveform overview to seek; hold
-  to scrub (mouse "scratch"); optional needle-drop.
+- [x] **M-mouse 3 — browser (done 2026-07-13, 0.18.0).** Double-click a row →
+  loads the opposite deck (fresh setup → deck 1 + play); **scroll-wheel browses**
+  the list; the visible window now **fills the pane height** (not a fixed 12) and
+  reports the true total, with a **scrollbar indicator** on the right edge. Still
+  open: per-deck **▶A / ▶B** load buttons, click-to-select-without-load, draggable
+  scrollbar thumb.
+- [x] **M-mouse 4 — waveform (done 2026-07-13, 0.18.0).** Press-drag on either
+  wave **scrubs/scratches** through the deck's platter (`scratch_touch` +
+  `scratch_move`); a click-and-release **seeks** — FULL = absolute needle-drop,
+  ZOOM = relative to the playhead. Click-vs-drag split by a travel threshold
+  (`_WAVE_CLICK_SLOP`). Fixed a HiDPI bug where mouse points weren't mapped to the
+  drawable-pixel space the regions use, so clicks fell through to play/pause.
 - [ ] **Polish.** Hover highlights, tooltips with the value, keyboard fallbacks.
 
 Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 → 4.
@@ -728,9 +738,82 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   Plan** (Sampler mode).
 - [ ] **More FX + FX2.** Reverb / flanger / gate / filter-roll and the second FX
   unit + its paddle.
-- [ ] **Browser search / crates / recently-played**; **session recall**
-  (save/restore deck + mixer state).
+- [ ] **Browser search / crates / recently-played** (crates → see **Accordion
+  Crate Browser Plan** below).
+- [x] **Session recall (done 2026-07-13, 0.18.0).** `state.py` persists the board
+  to `runtime/dj_mixer_state.json` (atomic JSON): master + crossfader, every
+  deck's gain/TRIM/EQ/filter/pitch, pad modes, auto-play mode, collapsed decks,
+  and each loaded deck's track path + playhead position. Restored on startup
+  (controls instantly; tracks decoded off-thread, always **paused** at their saved
+  position); saved on close/shutdown + a 30 s autosave. Config `persist_state`
+  (default true), `state_path` override.
 - [ ] **Generalize MIDI mapping.** A mapping-file layer so other controllers work
   (mirrors the `midi-controllers-01` preset idea) — REV1 becomes one profile.
 - [ ] **Deck depth.** True shadow-playhead loop roll, slip mode. (Beat-jump pads
   moved to the **Performance Pad Modes Plan**.)
+
+## Platter Integration Plan (v-next)
+
+The hardware jog already scratches (touch note 54, rotation CC 34/35, side jog
+CC 33 → `deck.scratch_touch`/`scratch_move`). This plan is about the **UI**: a
+mouse path to the same scratch, plus a visual platter. Agent proposed three
+ideas (2026-07-13); **owner picked #1 + #2 to execute nextish**, #3 deferred.
+
+- [x] **Platter indicator (idea #2, done 2026-07-13, 0.18.0).** A compact spinning
+  disc in each deck header: angle derives from the playhead position, so it spins
+  while playing, freezes when paused, and **jogs back/forth under a scrub/scratch**;
+  the ring turns **red while scratching** (`deck.is_scratching()`). Cheap to draw,
+  doubles as a transport + motion read-out. Placement chosen by the agent (header,
+  all decks). See `_draw_platter` in `ui.py`.
+- [x] **Waveform scrub/scratch (idea #1, done 2026-07-13, 0.18.0).** Press-drag on
+  a waveform scratches through the deck platter; click seeks. (Details under
+  *M-mouse 4* above.) This is the mouse-parity half of platter integration.
+- [ ] **Bigger platter viz when decks 3 & 4 are collapsed (owner preference,
+  2026-07-13).** When the secondary decks are folded, decks 1 & 2 gain room —
+  show a **larger, more detailed platter** for the primaries there (progress ring,
+  BPM-locked strobe dots, cue markers around the rim). Gate the fuller viz on the
+  collapsed state so the expanded 2×2 layout stays uncluttered; the compact header
+  disc above stays on always.
+- [ ] **Full jog-wheel widget (idea #3, deferred).** A large round platter with an
+  outer nudge ring + inner scratch zone. Most skeuomorphic but real-estate hungry
+  in the 2×2 grid and largely duplicates waveform-scrub; revisit only if the
+  collapsed-decks viz proves it earns the space.
+
+**Skeuomorphism (owner asked what it means):** designing a digital control to
+*look and behave like its real-world physical counterpart* — e.g. a round vinyl
+platter that visibly spins, a fader that looks like a channel strip, a knob with a
+pointer and detent. The opposite is an **abstract/flat** control (a plain slider,
+a number). Skeuomorphic = more familiar/tactile and better motion feedback, but
+costs screen space and can add visual noise; flat = compact and clean but less
+immediately "readable" as a physical action. Idea #3 (a real jog wheel) is the
+most skeuomorphic; the current header disc is a light, semi-skeuomorphic middle
+ground. **Owner has ideas here — discuss after this batch.**
+
+## Accordion Crate Browser Plan (v-next, owner-requested 2026-07-13)
+
+Goal: organise the browser into **buckets** the owner named — *crates, loops,
+foley, samples, scratch, vocals* — instead of one flat track list. Owner's
+chosen starting approach: **a folder per bucket**, shown as an **accordion** —
+click a bucket to expand it and **auto-contract the others**, matching the core
+app's mouse-menu accordion behaviour (one section open at a time).
+
+- **Data model.** Each bucket = a configured directory (default: subfolders of
+  `[dj_mixer].music_dir`, e.g. `crates/`, `loops/`, `foley/`, `samples/`,
+  `scratch/`, `vocals/`). `Library` scans per-bucket so each keeps its own track
+  list + facet cache; the flat scan becomes the "all / crates" default bucket.
+- **UI.** Replace the single list header with a stack of bucket headers
+  (name + count). The **expanded** bucket shows its windowed, scrollable track
+  list (reuse the height-fill + wheel scroll + scrollbar just added); collapsed
+  buckets show only their header. Exactly one expands at a time (accordion);
+  clicking another collapses the current — mirror the core mouse-menu component's
+  open/close semantics rather than inventing new ones.
+- **Interaction.** Wheel scrolls within the open bucket; double-click / drag to a
+  deck works as today; buckets remember their last selection. Sample-type buckets
+  (foley/samples/scratch/vocals) should also be loadable into the **sampler** /
+  **scratch bank**, not just decks — natural tie-in with the Performance Pad Modes.
+- **Config.** `[dj_mixer].crates = { crates = "…", loops = "…", … }` (or auto from
+  subfolders) + which bucket opens on start. Ties into the **Library Analysis &
+  Faceted Filter Plan** above: facets/filters apply *within* the open bucket.
+- **Phasing.** (1) per-bucket scan in `Library` (logic only); (2) accordion UI
+  reusing the new browser windowing; (3) route sample buckets to sampler/scratch;
+  (4) filters-within-bucket + persisted last-open bucket in `state.py`.
