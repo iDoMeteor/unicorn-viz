@@ -14,7 +14,7 @@
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  games-01                      0.9.1               alpha ▲       MISMATCH (readme=0.9.0)
+  games-01                      0.9.1               alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
@@ -62,5 +62,4 @@
 ────────────────────────────────────────────────────────────────────────────
 
   39 components total  ·  7 RC  1 beta  31 alpha  0 unversioned
-  ⚠  1 version mismatch(es): games-01
 
