@@ -14,6 +14,7 @@
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  cosmic-01                     0.10.0              alpha ▲       module
   games-01                      0.9.1               alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
@@ -24,7 +25,6 @@
   webcam-01                     1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  cosmic-01                     0.9.0               alpha ▲       module
   feature-01                    0.9.0               alpha ▲       module
   immersive-01                  0.9.0               alpha ▲       module
   particles-01                  0.9.0               alpha ▲       module
