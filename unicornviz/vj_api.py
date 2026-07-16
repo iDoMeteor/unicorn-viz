@@ -117,6 +117,26 @@ class VJApi:
         """
         return self._app.list_subsystems()
 
+    def register_now_playing(self, name: str, snapshot_fn, priority: int = 0,
+                             ambient: bool = False) -> None:
+        """Register a now-playing announcement source (track banner + HUD pane).
+
+        *snapshot_fn* returns the shared snapshot dict (see
+        :mod:`unicornviz.now_playing` for the contract).  Higher *priority*
+        wins when several sources are playing (dj mixer 30, media player 20,
+        spotify 10); *ambient* sources are also shown while idle.  Degrades to
+        a no-op on older cores.
+        """
+        hub = getattr(self._app, 'now_playing', None)
+        if hub is not None:
+            hub.register(name, snapshot_fn, priority=priority, ambient=ambient)
+
+    def unregister_now_playing(self, name: str) -> None:
+        """Remove a now-playing source registered by this drop-in."""
+        hub = getattr(self._app, 'now_playing', None)
+        if hub is not None:
+            hub.unregister(name)
+
     def publish_bpm(self, source: str, bpm: float) -> None:
         """Publish a BPM estimate on the shared hint bus (under *source*).
 

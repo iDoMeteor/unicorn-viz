@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.2**
+**Version 1.0.0-beta.3**
 
 
 ## Press `H` or `?` for Help
@@ -536,6 +536,13 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.3** — **Now-playing announcement hub**
+  (`unicornviz/now_playing.py`): the track banner + HUD pane feed is now a
+  registry (`vj_api.register_now_playing`) instead of hard-coded media/spotify
+  references in `app.py`.  Sources register a shared-shape snapshot callable
+  with a priority (dj mixer 30 > media 20 > spotify 10-ambient); the loudest
+  claim wins, ambient sources show while idle, and older drop-ins are
+  auto-registered for back-compat.
 - **1.0.0-beta.2** — Fix: **ALSA sequencer client leak** in the MIDI core.
   python-rtmidi objects need an explicit `delete()` on Python 3.14 (GC does
   not release the client); every port scan leaked one portless client until

@@ -555,6 +555,11 @@ class App:
         # instantiation: {ClassName: {param: value}}.
         self._effect_config_overrides: dict[str, dict[str, float]] = {}
         self._config_editor_was_open = False
+        # Now-playing announcement hub: sources (spotify/media/dj-mixer/...)
+        # register snapshot callables; the render loop announces the audible
+        # one (see unicornviz/now_playing.py).  Must exist before drop-ins load.
+        from unicornviz.now_playing import NowPlayingHub
+        self.now_playing = NowPlayingHub()
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -4127,38 +4132,27 @@ void main() {
             # --- Tier B: now-playing snapshot (always, needed for banner) ---
             # Source priority: media-01 when actively playing, else spotify-01.
             # Both expose the same snapshot() dict shape so no format changes below.
-            _active_np_source = None
-            if self._media is not None:
-                _media_snap_fn = getattr(self._media, 'snapshot', None)
-                if callable(_media_snap_fn):
-                    try:
-                        _ms = _media_snap_fn()
-                        if isinstance(_ms, dict) and bool(_ms.get('is_playing', False)):
-                            _active_np_source = self._media
-                    except Exception:
-                        pass
-            if _active_np_source is None and self._spotify is not None:
-                _active_np_source = self._spotify
+            # Announcement sources come from the now-playing hub; older
+            # spotify-01/media-01 builds that don't self-register are added
+            # here so mixed versions keep working.
+            _hub = self.now_playing
+            if self._media is not None and 'media' not in _hub.names():
+                _snap_fn = getattr(self._media, 'snapshot', None)
+                if callable(_snap_fn):
+                    _hub.register('media', _snap_fn, priority=20)
+            if self._spotify is not None and 'spotify' not in _hub.names():
+                _snap_fn = getattr(self._spotify, 'snapshot', None)
+                if callable(_snap_fn):
+                    _hub.register('spotify', _snap_fn, priority=10, ambient=True)
+            _np_active = _hub.active()
 
-            now_playing_visible = 'YES' if _active_np_source is not None else 'NO'
+            now_playing_visible = 'YES' if _np_active is not None else 'NO'
             now_playing_status = 'OFF'
-            now_playing_change_counter = 0
             now_playing_length = '--:--'
-            banner_enabled = False
-            banner_hold_s = 10.0
-            banner_track = '-'
-            banner_artist = '-'
-            banner_album = '-'
-            banner_prev_artist = '-'
-            banner_prev_title = '-'
             _now_playing_snap: dict | None = None
-            if _active_np_source is not None:
-                snap_fn = getattr(_active_np_source, 'snapshot', None)
-                if callable(snap_fn):
-                    try:
-                        _now_playing_snap = snap_fn()
-                    except Exception:
-                        _now_playing_snap = None
+            if _np_active is not None:
+                _now_playing_snap = _np_active[1]
+                if True:
                     if isinstance(_now_playing_snap, dict):
                         available = bool(_now_playing_snap.get('available', False))
                         playing = bool(_now_playing_snap.get('is_playing', False))
@@ -4167,36 +4161,14 @@ void main() {
                             now_playing_status = raw_status
                         elif available:
                             now_playing_status = 'PLAYING' if playing else 'PAUSED'
-                        banner_track = str(_now_playing_snap.get('title', '') or '').strip() or '-'
-                        banner_artist = str(_now_playing_snap.get('artist', '') or '').strip() or '-'
-                        banner_album = str(_now_playing_snap.get('album', '') or '').strip() or '-'
-                        banner_prev_artist = str(_now_playing_snap.get('previous_artist', '') or '').strip() or '-'
-                        banner_prev_title = str(_now_playing_snap.get('previous_title', '') or '').strip() or '-'
-                        now_playing_change_counter = int(_now_playing_snap.get('banner_change_counter', 0) or 0)
-                        banner_enabled = bool(_now_playing_snap.get('now_playing_banner_enabled', False))
-                        banner_hold_s = max(1.0, float(_now_playing_snap.get('now_playing_banner_hold_s', 10.0) or 10.0))
                         dur_b = max(0.0, float(_now_playing_snap.get('duration_s', 0.0) or 0.0))
                         total_b = max(0, int(dur_b))
                         mm_b, ss_b = divmod(total_b, 60)
                         hh_b, mm_b = divmod(mm_b, 60)
                         now_playing_length = f'{hh_b:02d}:{mm_b:02d}:{ss_b:02d}' if hh_b > 0 else f'{mm_b:02d}:{ss_b:02d}'
-            current_banner = 'NOW PLAYING: {artist} :: {album} :: {track} :: {length}'.format(
-                artist=banner_artist,
-                album=banner_album,
-                track=banner_track,
-                length=now_playing_length,
-            )
-            previous_banner = 'Previous: {artist} :: {track}'.format(
-                artist=banner_prev_artist,
-                track=banner_prev_title,
-            )
-            overlays.set_overlay_banner(
-                banner_enabled and now_playing_visible == 'YES' and now_playing_status == 'PLAYING',
-                current_banner,
-                previous_banner,
-                banner_hold_s,
-                now_playing_change_counter,
-            )
+            overlays.set_overlay_banner(*_hub.banner_args(
+                _now_playing_snap, now_playing_visible == 'YES',
+                now_playing_status))
 
             # Playlist sync (cheap, always)
             self._playlist_mode = playlist.mode
