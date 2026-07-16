@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.1**
+**Version 1.0.0-beta.2**
 
 
 ## Press `H` or `?` for Help
@@ -536,4 +536,12 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.2** — Fix: **ALSA sequencer client leak** in the MIDI core.
+  python-rtmidi objects need an explicit `delete()` on Python 3.14 (GC does
+  not release the client); every port scan leaked one portless client until
+  the kernel's ~64-user-client table filled — MIDI died mid-session
+  (controllers unresponsive, selector overlay empty) while open connections
+  kept working.  Port enumeration now reuses one cached probe per direction
+  and every teardown path (`stop`, `remove_input_device`, aux reconnect,
+  `MidiOut.close`) explicitly frees its clients.
 - **1.0.0-beta.1** — initial versioned release.

@@ -41,7 +41,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
@@ -103,32 +103,71 @@ BUILTIN_PRESETS: dict[str, dict[str, dict[int, str]]] = {
 }
 
 
+def destroy_rtmidi(obj: Any) -> None:
+    """Explicitly free an rtmidi object's underlying ALSA sequencer client.
+
+    python-rtmidi requires an explicit ``delete()`` — relying on garbage
+    collection is not guaranteed to release the client, and on Python 3.14 it
+    observably does not: portless ``RtMidiIn Client`` entries accumulated (one
+    per port scan) until the kernel's ~64-user-client sequencer table filled,
+    at which point every port list came back empty and new opens failed with
+    "error creating ALSA sequencer client object" — dead controllers
+    mid-session while already-open connections kept working.
+    """
+    if obj is None:
+        return
+    try:
+        obj.close_port()
+    except Exception:
+        pass
+    try:
+        obj.delete()
+    except Exception:
+        pass
+
+
+class _PortProbe:
+    """One cached rtmidi probe per direction for port enumeration.
+
+    Enumeration needs a client of its own; creating (and leaking, see
+    :func:`destroy_rtmidi`) one per scan is what exhausted the sequencer.  The
+    probes live for the process lifetime — two clients total — and are rebuilt
+    on the next call if a scan ever fails.
+    """
+
+    _in: Any = None
+    _out: Any = None
+
+    @classmethod
+    def ports(cls, direction: str) -> list[str]:
+        attr = '_in' if direction == 'in' else '_out'
+        try:
+            probe = getattr(cls, attr)
+            if probe is None:
+                probe = rtmidi.MidiIn() if direction == 'in' else rtmidi.MidiOut()
+                setattr(cls, attr, probe)
+            return [p if isinstance(p, str) else
+                    p.decode('utf-8', errors='replace')
+                    for p in probe.get_ports()]
+        except Exception as exc:
+            destroy_rtmidi(getattr(cls, attr))
+            setattr(cls, attr, None)
+            log.debug('MIDI port scan (%s) failed: %s', direction, exc)
+            return []
+
+
 def list_ports() -> list[str]:
     """Return available MIDI input port names; empty list when rtmidi is absent."""
     if not _RTMIDI_OK:
         return []
-    try:
-        tmp = rtmidi.MidiIn()
-        ports = tmp.get_ports()
-        del tmp
-        return [p if isinstance(p, str) else p.decode('utf-8', errors='replace') for p in ports]
-    except Exception as exc:
-        log.debug('MIDI list_ports failed: %s', exc)
-        return []
+    return _PortProbe.ports('in')
 
 
 def list_output_ports() -> list[str]:
     """Return available MIDI output port names; empty list when rtmidi is absent."""
     if not _RTMIDI_OK:
         return []
-    try:
-        tmp = rtmidi.MidiOut()
-        ports = tmp.get_ports()
-        del tmp
-        return [p if isinstance(p, str) else p.decode('utf-8', errors='replace') for p in ports]
-    except Exception as exc:
-        log.debug('MIDI list_output_ports failed: %s', exc)
-        return []
+    return _PortProbe.ports('out')
 
 
 class MidiManager:
@@ -332,10 +371,7 @@ class MidiManager:
             if name.lower() in available_lower:
                 continue
             log.warning('MIDI aux: port disappeared: %s — attempting reconnect', name)
-            try:
-                midi_in.close_port()
-            except Exception:
-                pass
+            destroy_rtmidi(midi_in)
             self._aux_ins = [t for t in self._aux_ins if t[1] is not midi_in]
             self.add_input_device(hint)
 
@@ -528,10 +564,7 @@ class MidiManager:
         remaining: list[tuple[str, 'rtmidi.MidiIn', str]] = []
         for src, midi_in, name in self._aux_ins:
             if src == hint:
-                try:
-                    midi_in.close_port()
-                except Exception:
-                    pass
+                destroy_rtmidi(midi_in)
             else:
                 remaining.append((src, midi_in, name))
         self._aux_ins = remaining
@@ -549,10 +582,7 @@ class MidiManager:
 
     def stop(self) -> None:
         for midi_in in self._midi_ins:
-            try:
-                midi_in.close_port()
-            except Exception:
-                pass
+            destroy_rtmidi(midi_in)
         self._midi_ins = []
         self._port_names = []
         self._port_name = ''
@@ -665,12 +695,9 @@ class MidiOut:
             return False
 
     def close(self) -> None:
-        """Close the active output port."""
+        """Close the active output port (and free its ALSA client)."""
         if self._port is not None:
-            try:
-                self._port.close_port()
-            except Exception:
-                pass
+            destroy_rtmidi(self._port)
             self._port = None
             self._port_name = ''
             self._hint = ''
