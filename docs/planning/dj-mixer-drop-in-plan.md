@@ -720,10 +720,11 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   vs the VU's continuous stream — the **real fix** for the USB-MIDI congestion
   flake. The pad VU is **retired**; pads now show set hot cues only. Config
   `beat_flash` (default true). Owner chose the play button over the pads.
-- [ ] **Mix recording.** Capture the master mix to a file (record your set) —
-  tap the existing engine output.
-- [ ] **Cue / headphone monitor.** Pre-listen a deck on a second output device
-  (split master vs cue), the classic DJ headphone workflow.
+- [x] **Mix recording (done 2026-07-16, 0.29.0).** REC button by the
+  crossfader; post-master tap -> WAV via a flusher thread.
+- [x] **Cue / headphone monitor (done 2026-07-16, 0.30.0).** PFL cue bus, CUE
+  buttons under each fader + master, second output stream
+  (headphone_device), REV1 M7/M8 wired.
 - [x] **Track metadata (done 2026-07-12).** The browser reads ID3/Vorbis tags
   (`mutagen`, optional) and shows `Artist - Title`, falling back to the filename
   stem when untagged or the package is absent. Tags are read lazily per visible
@@ -738,8 +739,9 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
 - [ ] **Sampler pads.** One-shot samples/stingers on a pad bank (pairs with
   `audio-out-01` clip playback). → now scoped under **Performance Pad Modes
   Plan** (Sampler mode).
-- [ ] **More FX + FX2.** Reverb / flanger / gate / filter-roll and the second FX
-  unit + its paddle.
+- [x] **More FX + FX2 (done 2026-07-16, 0.31.0).** FX1 + FX2 units with
+  echo/reverb/flanger slots, SLOT SELECT buttons, paddles and per-unit depth.
+  Still open: gate/filter-roll effects, FX UI readout.
 - [ ] **Browser search / crates / recently-played** (crates → see **Accordion
   Crate Browser Plan** below).
 - [x] **Session recall (done 2026-07-13, 0.18.0).** `state.py` persists the board
