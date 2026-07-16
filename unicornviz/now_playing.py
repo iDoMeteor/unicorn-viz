@@ -92,9 +92,26 @@ class NowPlayingHub:
         return None
 
     @staticmethod
+    def is_identified(snap: dict[str, Any] | None) -> bool:
+        """True when the snapshot actually names its track.
+
+        A source can report ``is_playing`` while it does not yet know *what*
+        is playing (metadata still fetching, an unlabelled stream).  Audience-
+        facing announcements — the Now Spinning platter and the track-change
+        banner — stay hidden until the track is identified; the HUD pane still
+        shows the raw source state.
+        """
+        if not isinstance(snap, dict):
+            return False
+        title = str(snap.get('title', '') or '').strip()
+        return bool(title) and title.lower() not in ('unknown', 'unknown track',
+                                                     'unknown title', '-')
+
+    @staticmethod
     def banner_args(snap: dict[str, Any] | None,
                     visible: bool, status: str) -> tuple:
         """Build ``overlays.set_overlay_banner`` arguments from a snapshot."""
+        identified = NowPlayingHub.is_identified(snap)
         snap = snap if isinstance(snap, dict) else {}
         track = str(snap.get('title', '') or '').strip() or '-'
         artist = str(snap.get('artist', '') or '').strip() or '-'
@@ -112,5 +129,5 @@ class NowPlayingHub:
         length = f'{hh:02d}:{mm:02d}:{ss:02d}' if hh > 0 else f'{mm:02d}:{ss:02d}'
         current = (f'NOW PLAYING: {artist} :: {album} :: {track} :: {length}')
         previous = f'Previous: {prev_artist} :: {prev_title}'
-        return (enabled and visible and status == 'PLAYING',
+        return (enabled and visible and identified and status == 'PLAYING',
                 current, previous, hold_s, counter)

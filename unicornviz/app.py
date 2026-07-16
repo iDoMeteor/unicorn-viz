@@ -776,6 +776,10 @@ class App:
         active = self.now_playing.active()
         if active is None or not active[1].get('is_playing'):
             return
+        # A playing source that can't name its track yet (unknown metadata)
+        # stays quiet — no platter until we know what's spinning.
+        if not self.now_playing.is_identified(active[1]):
+            return
         if self._now_spinning is None:
             try:
                 from unicornviz.now_spinning import NowSpinningOverlay

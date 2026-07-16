@@ -4,11 +4,11 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.5        BETA          module
+  core (unicornviz)             1.0.0-beta.6        BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.32.1              alpha ▲       module
-  media-01                      0.14.0              alpha ▲       module
+  dj-mixer-01                   0.33.0              alpha ▲       module
+  media-01                      0.15.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.1          RC            module

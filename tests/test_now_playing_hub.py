@@ -64,3 +64,18 @@ def test_banner_args_formatting_and_gating() -> None:
     assert NowPlayingHub.banner_args(snap, True, 'PLAYING')[0] is False
     assert NowPlayingHub.banner_args(None, True, 'PLAYING')[1].startswith(
         'NOW PLAYING: - :: - :: -')
+
+
+def test_unidentified_track_suppresses_banner_and_platter_gate() -> None:
+    # A source that says it is playing but can't name the track must not
+    # announce: no banner fire, and is_identified (the platter gate) is False.
+    for title in ('', '   ', 'Unknown', 'unknown track', '-', None):
+        snap = {'title': title, 'is_playing': True,
+                'now_playing_banner_enabled': True}
+        assert NowPlayingHub.is_identified(snap) is False
+        assert NowPlayingHub.banner_args(snap, True, 'PLAYING')[0] is False
+    assert NowPlayingHub.is_identified(None) is False
+    named = {'title': 'Better Off Alone', 'is_playing': True,
+             'now_playing_banner_enabled': True}
+    assert NowPlayingHub.is_identified(named) is True
+    assert NowPlayingHub.banner_args(named, True, 'PLAYING')[0] is True
