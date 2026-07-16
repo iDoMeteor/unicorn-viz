@@ -770,12 +770,13 @@ ideas (2026-07-13); **owner picked #1 + #2 to execute nextish**, #3 deferred.
 - [x] **Waveform scrub/scratch (idea #1, done 2026-07-13, 0.18.0).** Press-drag on
   a waveform scratches through the deck platter; click seeks. (Details under
   *M-mouse 4* above.) This is the mouse-parity half of platter integration.
-- [ ] **Bigger platter viz when decks 3 & 4 are collapsed (owner preference,
-  2026-07-13).** When the secondary decks are folded, decks 1 & 2 gain room —
-  show a **larger, more detailed platter** for the primaries there (progress ring,
-  BPM-locked strobe dots, cue markers around the rim). Gate the fuller viz on the
-  collapsed state so the expanded 2×2 layout stays uncluttered; the compact header
-  disc above stays on always.
+- [x] **Bigger platter viz when decks 3 & 4 are collapsed (done 2026-07-15,
+  0.24.0).** In 2-deck mode the waves cap at ~25% of the pane each and each
+  primary draws a **big neon platter**: glow rims breathing on the beat, vinyl
+  grooves, strobe spokes, a downbeat-flash beat ring, orbiting sparkles while
+  playing, red rim while scratching, BPM on the label — and the disc is
+  **grab-and-spin scratchable** (angular drag). The compact header disc stays
+  on always.
 - [ ] **Full jog-wheel widget (idea #3, deferred).** A large round platter with an
   outer nudge ring + inner scratch zone. Most skeuomorphic but real-estate hungry
   in the 2×2 grid and largely duplicates waveform-scrub; revisit only if the
