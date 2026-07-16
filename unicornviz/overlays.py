@@ -432,6 +432,7 @@ class Overlays:
                 ('Ctrl+Shift+P', 'Show presets (save/load setup: enabled effects, mode, reactivity)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('i', 'Invert colors'),
+                ('w', 'Now Spinning platter overlay'),
             ],
         ),
     ]

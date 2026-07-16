@@ -14,6 +14,10 @@ class _VJApi:
     def mark_user_action(self, kind: str) -> None:
         self.marked.append(kind)
 
+    def toggle_now_spinning(self) -> bool:
+        self.now_spinning_toggles = getattr(self, 'now_spinning_toggles', 0) + 1
+        return self.now_spinning_toggles % 2 == 1
+
     def register_key_handler(self, name: str, handler) -> None:
         self._handlers.append((name, handler))
 
@@ -410,3 +414,15 @@ def test_midi_controller_help_action_toggles_modal() -> None:
     handler.process_pending_midi()
 
     assert overlays.controller_help_modal_visible is True
+
+
+def test_w_toggles_now_spinning_overlay() -> None:
+    handler, app, overlays = _handler()
+
+    handler.handle(sdl2.SDLK_w, 0)
+    assert app.vj_api.now_spinning_toggles == 1
+    assert any('Now Spinning' in m and 'ON' in m for m in overlays.messages)
+
+    handler.handle(sdl2.SDLK_w, 0)
+    assert app.vj_api.now_spinning_toggles == 2
+    assert any('OFF' in m for m in overlays.messages)

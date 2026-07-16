@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.4**
+**Version 1.0.0-beta.5**
 
 
 ## Press `H` or `?` for Help
@@ -536,6 +536,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.5** — `W` hotkey toggles the Now Spinning platter overlay (listed in the `H` help)
 - **1.0.0-beta.4** — **Now Spinning overlay promoted to core**
   (`unicornviz/now_spinning.py`): the corner platter card is now fed by the
   now-playing hub, so the DJ mixer, media player and Spotify all get it with

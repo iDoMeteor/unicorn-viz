@@ -196,6 +196,7 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'screenshot': (sdl2.SDLK_s, 0),
     'replay_splash': (sdl2.SDLK_u, 0),
     'invert': (sdl2.SDLK_i, 0),
+    'now_spinning': (sdl2.SDLK_w, 0),
     'display_single': (sdl2.SDLK_x, 0),
     'display_span_included': (sdl2.SDLK_x, sdl2.KMOD_CTRL),
     'display_span_all': (sdl2.SDLK_x, sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT),
@@ -1798,6 +1799,10 @@ class HotkeyHandler:
         elif sym == sdl2.SDLK_i:
             enabled = a.toggle_invert()
             o.flash_message(f"Invert: {'ON' if enabled else 'OFF'}", 1.5)
+
+        elif sym == sdl2.SDLK_w:
+            on = self._app.vj_api.toggle_now_spinning()
+            o.flash_message(f"Now Spinning platter: {'ON' if on else 'OFF'}", 1.5)
 
     def _screenshot(self) -> None:
         import datetime
