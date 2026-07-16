@@ -124,13 +124,14 @@ http_timeout_s = 1.0
 # ---------------------------------------------------------------------------
 [media]
 enabled = true
-media_dir = "~/Music/crates"         # your shared crate folder
+media_dir = "~/Music"                # local music root (Media Deck: Shift+L)
 # shuffle = true                     # randomize play order on load
 # volume = 100                       # 0-200; 100 = 100%
 # now_playing_banner = true          # show the track-change overlay banner
 # now_playing_banner_hold_s = 10.0  # seconds the banner stays visible
 # now_playing_banner_delay_s = 2.0  # delay before banner fires on track change
 # crossfade_ms = 0                  # reserved — cross-fade support coming in a future release
+# crate_depth = 5                   # library accordion: max sub-folder nesting depth
 
 # ---------------------------------------------------------------------------
 # CTA (Call-to-Action) hype overlay (drop-ins/cta-01)
