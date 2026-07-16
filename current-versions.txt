@@ -16,6 +16,7 @@
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   cosmic-01                     0.10.0              alpha ▲       module
   games-01                      0.9.1               alpha ▲       module
+  media-01                      0.9.1               alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
@@ -27,7 +28,6 @@
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   feature-01                    0.9.0               alpha ▲       module
   immersive-01                  0.9.0               alpha ▲       module
-  media-01                      0.9.0               alpha ▲       module
   particles-01                  0.9.0               alpha ▲       module
   projectm-01                   0.9.0               alpha ▲       module
   psychedelic-01                0.9.0               alpha ▲       module
