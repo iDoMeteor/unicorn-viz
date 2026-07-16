@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.3**
+**Version 1.0.0-beta.4**
 
 
 ## Press `H` or `?` for Help
@@ -536,6 +536,12 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.4** — **Now Spinning overlay promoted to core**
+  (`unicornviz/now_spinning.py`): the corner platter card is now fed by the
+  now-playing hub, so the DJ mixer, media player and Spotify all get it with
+  zero wiring.  Visual glow-up: pulsing cyan↔magenta neon frame with a comet
+  sprite racing the border, two-line title/artist, more air around the disc.
+  `[now_spinning] enabled/corner` config; `vj_api.set/toggle_now_spinning`.
 - **1.0.0-beta.3** — **Now-playing announcement hub**
   (`unicornviz/now_playing.py`): the track banner + HUD pane feed is now a
   registry (`vj_api.register_now_playing`) instead of hard-coded media/spotify

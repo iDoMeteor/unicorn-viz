@@ -137,6 +137,20 @@ class VJApi:
         if hub is not None:
             hub.unregister(name)
 
+    def set_now_spinning(self, enabled: bool) -> bool:
+        """Enable/disable the core Now Spinning corner-platter overlay."""
+        self._app.now_spinning_enabled = bool(enabled)
+        return self._app.now_spinning_enabled
+
+    def toggle_now_spinning(self) -> bool:
+        """Flip the Now Spinning overlay; returns the new state."""
+        return self.set_now_spinning(not getattr(self._app,
+                                                 'now_spinning_enabled', False))
+
+    @property
+    def now_spinning_enabled(self) -> bool:
+        return bool(getattr(self._app, 'now_spinning_enabled', False))
+
     def publish_bpm(self, source: str, bpm: float) -> None:
         """Publish a BPM estimate on the shared hint bus (under *source*).
 

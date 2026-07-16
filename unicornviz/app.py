@@ -560,6 +560,9 @@ class App:
         # one (see unicornviz/now_playing.py).  Must exist before drop-ins load.
         from unicornviz.now_playing import NowPlayingHub
         self.now_playing = NowPlayingHub()
+        self._now_spinning = None
+        self.now_spinning_enabled = bool(
+            self.cfg.get('now_spinning', 'enabled', default=True))
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -765,6 +768,30 @@ class App:
         """Return True when any registered subsystem wants preview-frame bytes."""
         return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
 
+    def _render_now_spinning(self, width: int, height: int) -> None:
+        """The corner platter card (core Now Spinning overlay), fed by the
+        now-playing hub — announces whichever source is audible."""
+        if not self.now_spinning_enabled:
+            return
+        active = self.now_playing.active()
+        if active is None or not active[1].get('is_playing'):
+            return
+        if self._now_spinning is None:
+            try:
+                from unicornviz.now_spinning import NowSpinningOverlay
+                corner = str(self.cfg.get('now_spinning', 'corner',
+                                          default='br') or 'br')
+                self._now_spinning = NowSpinningOverlay(self.ctx, corner)
+                log.info('Now Spinning overlay ready (%s corner)', corner)
+            except Exception as exc:
+                self.now_spinning_enabled = False
+                log.warning('Now Spinning overlay unavailable: %s', exc)
+                return
+        try:
+            self._now_spinning.render(int(width), int(height), active[1])
+        except Exception as exc:
+            log.debug('Now Spinning render failed: %s', exc)
+
     def _render_subsystem_overlays(self, dt: float, width: int, height: int) -> None:
         """Render optional subsystem overlay layers before HUD composition."""
         for name, subsystem in list(self._subsystems.items()):
@@ -780,6 +807,7 @@ class App:
                     log.warning('%s subsystem overlay render failed: %s', name, exc)
             except Exception as exc:
                 log.warning('%s subsystem overlay render failed: %s', name, exc)
+        self._render_now_spinning(width, height)
 
     def _present_subsystems(self) -> None:
         """Call each subsystem's own present() (e.g. control-room-01/
