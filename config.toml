@@ -589,3 +589,12 @@ prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`);
                         # Sets control-to-ear latency + glitch immunity (blocking-write mode). 6 ≈ 64 ms.
 #ui_scale = 0.5         # mixer-window raster scale (0.25-1.0, default 1.0); 0.5 quarters
                         # PIL raster + texture-upload cost, GPU upscales to the window.
+# -- Stems (Serato-style per-deck VOCALS/MELODY/BASS/DRUMS toggles) ----------
+# Stems are extracted OFFLINE with Demucs (unicorn-horn's model path), cached
+# under runtime/stems/ keyed by the track's audio hash, and auto-attach on
+# deck load.  The header STEMS+ button extracts the loaded track; toggles
+# appear once stems exist.  Requires demucs (pip install demucs, or an
+# installed unicorn-horn with optional requirements — its venv is reused).
+#stems_model = "htdemucs"   # htdemucs | htdemucs_ft | hdemucs_mmi | mdx_q | mdx_extra_q
+#stems_python = ""          # interpreter that can import demucs (auto-detected when empty)
+#stems_dir = ""             # stem cache folder (default: runtime/stems)

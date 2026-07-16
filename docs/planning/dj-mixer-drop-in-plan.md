@@ -451,6 +451,34 @@ up from 0x41, counterclockwise down from 0x3F.
 
 ---
 
+## Stems (landed 0.34.0 — follows unicorn-horn's decisions)
+
+Serato/djay-style per-deck stem toggles, built on unicorn-horn's ADRs rather
+than realtime separation:
+
+- **Offline, deterministic extraction** (ADR-0002): Demucs CLI subprocess
+  (`python -m demucs`), exactly unicorn-horn's `DemucsCliStemAdapter` shape;
+  model set = ADR-0007 (`htdemucs` default, MDX variants allowed).
+- **Capability-aware UI** (ADR-0003): the V/M/B/D chips & STEMS+ button stay
+  visible but disabled/grey when unavailable, tooltips say why.
+- **Manifest-backed cache**: `runtime/stems/<hash16>-<slug>/` with the four
+  wavs + `manifest.json` (source, audio_hash, model, runner, elapsed).
+- **Metadata home**: buckets are keyed by the deck's *audio hash* and recorded
+  in the track store next to cues/loops/BPM — stems survive retag/rename/move.
+- **Runtime reuse**: interpreter resolution prefers a local unicorn-horn venv
+  so one demucs install serves both products.
+- Audio: all-stems-on plays the untouched master (bit-exact); muting switches
+  the deck read path to a per-block weighted stem sum (playback, loops,
+  transform gate, and scratching all follow).
+- Deferred: per-stem gains (not just mutes), REV1 pad bank for stems, stem FX.
+
+## Frequency-Coloured Waveforms (landed 0.34.0)
+
+FULL/ZOOM/collapsed waves blend low=red, mid=green, high=blue from a per-track
+(2048, 3) Butterworth band-energy grid computed once at load on a ~24 kHz
+decimated mono mix; highs are display-boosted (energy ratio 1/1.6/3.2) so hats
+read. Amplitude stays the RMS peak envelope; unplayed material dims to 42%.
+
 ## Four-Deck + Waveforms + Auto-Play Plan (v-next)
 
 Owner-directed 2026-07-13. Four sub-features; build **#1 → #2 → #3, then #4 as
