@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.6**
+**Version 1.0.0-beta.7**
 
 
 ## Press `H` or `?` for Help
@@ -536,6 +536,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.7** — Fix the promoted Now Spinning platter never rendering: the lazy overlay create referenced a nonexistent `App.ctx` (AttributeError disabled it on first use since beta.4); it now uses the app GL context directly and waits quietly until GL is up
 - **1.0.0-beta.6** — Unknown-source quiet mode: when a now-playing source is playing but cannot name its track, the Now Spinning platter auto-hides and the track banner does not fire
 - **1.0.0-beta.5** — `W` hotkey toggles the Now Spinning platter overlay (listed in the `H` help)
 - **1.0.0-beta.4** — **Now Spinning overlay promoted to core**

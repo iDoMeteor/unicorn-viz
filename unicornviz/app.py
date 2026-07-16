@@ -780,12 +780,14 @@ class App:
         # stays quiet — no platter until we know what's spinning.
         if not self.now_playing.is_identified(active[1]):
             return
+        if self._ctx is None:          # GL not up yet: try again next frame
+            return
         if self._now_spinning is None:
             try:
                 from unicornviz.now_spinning import NowSpinningOverlay
                 corner = str(self.cfg.get('now_spinning', 'corner',
                                           default='br') or 'br')
-                self._now_spinning = NowSpinningOverlay(self.ctx, corner)
+                self._now_spinning = NowSpinningOverlay(self._ctx, corner)
                 log.info('Now Spinning overlay ready (%s corner)', corner)
             except Exception as exc:
                 self.now_spinning_enabled = False
