@@ -1,14 +1,16 @@
 ---
 Owner: Planning
-Status: REV1 fully wired (M-1..M-4, scratch, cues, loops, FX, BPM/SYNC, lighting,
-browser). All 8 pad modes (mouse + hardware). Mouse: M-mouse 1 (faders/EQ/filter/
-master), 3 (browser: wheel-scroll, fills height, scrollbar) and 4 (waveform
-scrub/scratch + click-seek) done; transport bar, centred TRIM, crossfader
-auto-fade arrows, tri-colour VU, session recall (state.py), compact platter
-indicator all landed. Planning: bigger platter viz (collapsed decks) + full
-jog-wheel, accordion crate browser, beatgrid edit/lock. Pending: hardware
-bring-up, mouse M-mouse 2, feature backlog.
-Last updated: 2026-07-13
+Status: REV1 fully wired (M-1..M-4, scratch, cues, manual+auto loops incl. the
+corner LOOP IN/OUT/1/2X/2X buttons, FX, BPM/SYNC, lighting, browser). All 8 pad
+modes (mouse + hardware). Mouse M-mouse 1/3/4 done; transport bar (BACK/PLAY/
+CUE/LOOP/IN/OUT/CLR), session recall (state.py), **hash-keyed track store**
+(track_store.py: BPM/cues/loops/grid remembered forever), beat-grid v1
+(beat_offset + zoom grid lines + right-click set-downbeat), library manager
+(BPM column, sort, analyze all/filtered, context menu, keyboard nav), platter
+indicator all landed (0.21.0). Planning: bigger platter viz (collapsed decks),
+accordion crate browser, streaming sources. Pending: hardware bring-up, mouse
+M-mouse 2 remainder, feature backlog.
+Last updated: 2026-07-15
 ---
 
 # DJ Mixer Drop-In Plan — `dj-mixer-01` (Pioneer DDJ-REV1)
