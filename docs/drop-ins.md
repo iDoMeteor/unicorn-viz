@@ -33,7 +33,7 @@ Complex drop-ins should also include:
 | dj-mixer-01 | Yes | Yes | Two-deck DJ mixer window + Pioneer DDJ-REV1 input |
 | feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
 | flying-01 | Yes | Not required | Effect pack: Warp Drive, Cloud Surfer, Canyon Run, Wingsuit Dive, Nebula Drift, Asteroid Run, Portal Flight |
-| games-01 | Yes | Not required | Effect pack: Breakout, Neon Pac, Galaga, Joust |
+| games-01 | Yes | Not required | Effect pack: Breakout, Neon Pac, Galaga, Joust, Tetris, Missile Command, Donkey Kong, Q*bert |
 | midi-controllers-01 | Yes | Yes | Controller presets + APC mini mk2 LED feedback subsystem |
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
 | holiday-01 | Yes | Not required | Effect pack: America 250 (seasonal/event) |
