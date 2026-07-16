@@ -756,6 +756,31 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
 - [ ] **Deck depth.** True shadow-playhead loop roll, slip mode. (Beat-jump pads
   moved to the **Performance Pad Modes Plan**.)
 
+## AI v Human Mode (THE EPIC — owner-requested 2026-07-16)
+
+**The dream:** alternating full-system control, song by song — a human runs
+the whole rig (mixer + VJ visuals) for one track, then the AI takes the booth
+(auto-mix + auto-VJ), then back — a live human-vs-machine battle format.
+
+- **Building blocks that already exist:** auto-play (cut/crossfade + the
+  armed-deck/override-return logic), SYNC/beatmatch, per-track BPM + beat grid,
+  the disabled **AI mode button** in the mixer console (reserved for exactly
+  this), auto-vj-01 (beat-locked visual direction), and the now-playing hub
+  (who's "on deck" is already announced).
+- **Missing pieces to design:** a *turn arbiter* (who owns the controls this
+  song; handoff at track boundaries via the auto-play transition points), a
+  **control-ownership flag** surfaced across mixer + VJ (inputs from the
+  "benched" side ignored or blended out), an on-screen **VS scoreboard/banner**
+  (round number, who's live, maybe crowd-reaction scoring via audio energy),
+  and an AI mixing brain one notch above auto-play: pick the next track
+  (harmonic/BPM-aware once key detection lands), beatmatch, and choose
+  cut/crossfade per transition.
+- **Phasing sketch:** (1) turn arbiter + handoff at track end (mixer only:
+  AI song / human song alternation using existing auto-play); (2) VJ side
+  joins (auto-vj on for AI turns, manual for human turns); (3) the show layer
+  — VS banner, round intros, scoring; (4) smarter AI selection (key/energy
+  aware) as library analysis tiers land.
+
 ## Platter Integration Plan (v-next)
 
 The hardware jog already scratches (touch note 54, rotation CC 34/35, side jog
