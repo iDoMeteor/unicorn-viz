@@ -94,7 +94,7 @@ def test_audio_visual_section_shrank_to_genuinely_core_entries() -> None:
 def test_audio_visual_only_contains_genuinely_core_keys() -> None:
     expected = {
         'e', 'a / A', 'Ctrl+A', 'Alt+A / Alt+Shift+A', 'm', 'Alt+M',
-        'B', 'c', 'Ctrl+Shift+P', 'Ctrl+L', 'i',
+        'B', 'c', 'Ctrl+Shift+P', 'Ctrl+L', 'i', 'w',
     }
     actual = {key for key, _desc in _audio_visual_entries()}
     assert actual == expected
