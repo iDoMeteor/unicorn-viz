@@ -113,3 +113,6 @@
 [submodule "drop-ins/dj-mixer-01"]
 	path = drop-ins/dj-mixer-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-dj-mixer-01.git
+[submodule "drop-ins/flying-01"]
+	path = drop-ins/flying-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-flying-01.git

@@ -35,6 +35,8 @@ PACK_NAMES = {
                 'Threat Matrix', 'Reactor Breach'},
     'immersive-01': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
     'holiday-01': {'America 250'},
+    'flying-01': {'Warp Drive', 'Cloud Surfer', 'Canyon Run', 'Wingsuit Dive',
+                  'Nebula Drift', 'Asteroid Run', 'Portal Flight'},
 }
 ISOLATED_NAMES = {
     'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Clips',
@@ -46,7 +48,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 51
+EXPECTED_TOTAL = 58
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
@@ -57,7 +59,8 @@ EXPECTED_CATEGORY = {
     'psychedelic-01': 'psychedelic', 'games-01': 'games', 'particles-01': 'particles',
     'retro-01': 'retro', 'feature-01': 'feature', 'vector-01': 'vector',
     'cosmic-01': 'cosmic', 'tech-01': 'tech', 'immersive-01': 'immersive',
-    'holiday-01': 'holiday', 'images-01': 'media', 'videos-01': 'media',
+    'holiday-01': 'holiday', 'flying-01': 'flying',
+    'images-01': 'media', 'videos-01': 'media',
     'video-clips-01': 'media', 'textures-01': 'media', 'sims-01': 'media',
     'projectm-01': 'projectm', 'unicorn-tears-01': 'psychedelic',
 }
