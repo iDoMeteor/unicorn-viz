@@ -792,7 +792,7 @@ immediately "readable" as a physical action. Idea #3 (a real jog wheel) is the
 most skeuomorphic; the current header disc is a light, semi-skeuomorphic middle
 ground. **Owner has ideas here — discuss after this batch.**
 
-## Accordion Crate Browser Plan (owner-requested 2026-07-13 — phases 1–2 + persistence DONE 2026-07-16, 0.26.0; sample-bucket routing to sampler/scratch still pending)
+## Accordion Crate Browser Plan (owner-requested 2026-07-13 — DONE: phases 1–2 + persistence 0.26.0; sample-bucket routing 0.27.0 — drag-drop pad banks, split sampler/scratch banks, ≤8-track auto-fill from samples//scratch/ crates, bank persistence)
 
 Goal: organise the browser into **buckets** the owner named — *crates, loops,
 foley, samples, scratch, vocals* — instead of one flat track list. Owner's
