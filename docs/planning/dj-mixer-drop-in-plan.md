@@ -451,6 +451,19 @@ up from 0x41, counterclockwise down from 0x3F.
 
 ---
 
+## Open Items (truth-synced 2026-07-17)
+
+The live short list, in the owner's chosen order (one at a time from here):
+
+1. **Key detection + harmonic mixing** — musical key on load, Camelot-style
+   compatibility hints in the browser.
+2. **Deck depth** — true slip mode (shadow playhead under rolls/scratches).
+3. **Stems round 2** — per-stem gains (not just mutes), REV1 stem pad bank,
+   stem FX; plus the deliberate unicorn-horn integration discussion.
+4. **AI v Human mode** — the epic (phase 1 not started).
+5. **Hardware bring-up checklist** — after every REV1 button is coded up and
+   working; gates 1.0.0.
+
 ## Stems (landed 0.34.0 — follows unicorn-horn's decisions)
 
 Serato/djay-style per-deck stem toggles, built on unicorn-horn's ADRs rather
@@ -589,7 +602,7 @@ latest snapshot (already thread-safe there).
   boost, no jump, `_KNOB_DRAG_SPAN` px = full sweep). A click off any control
   still toggles the deck under it. Follow-ups: tempo/pitch has no widget yet;
   double-click-to-reset and scroll-wheel not yet added.
-- [ ] **M-mouse 2 — buttons.** Click PLAY/CUE, SYNC, FX engage (press-hold with
+- [x] **M-mouse 2 — buttons (done, truth-sync 2026-07-17).** Click PLAY/CUE, SYNC, FX engage (press-hold with
   the mouse), and a clickable hot-cue / loop pad grid per deck.
 - [x] **M-mouse 3 — browser (done 2026-07-13, 0.18.0).** Double-click a row →
   loads the opposite deck (fresh setup → deck 1 + play); **scroll-wheel browses**
@@ -603,7 +616,7 @@ latest snapshot (already thread-safe there).
   ZOOM = relative to the playhead. Click-vs-drag split by a travel threshold
   (`_WAVE_CLICK_SLOP`). Fixed a HiDPI bug where mouse points weren't mapped to the
   drawable-pixel space the regions use, so clicks fell through to play/pause.
-- [ ] **Polish.** Hover highlights, tooltips with the value, keyboard fallbacks.
+- [x] **Polish (done, truth-sync 2026-07-17).** Hover highlights, tooltips with the value, keyboard fallbacks.
 
 Phasing: Foundation → M-mouse 1 (the faders/EQ are the 80% win) → 2 → 3 → 4.
 
@@ -641,10 +654,10 @@ from Pioneer's official DDJ-REV1 MIDI list (Appendix A) — never guessed**
 **New modes to build** (owner listed: beat jump, trans, tracking, sampler,
 scratch bank). Grouped by shared machinery / risk:
 
-- [ ] **Beat Jump** *(S — playhead math, reuses the loop/beat engine)*. Eight
+- [x] **Beat Jump (done — JUMP pad bank, truth-sync 2026-07-17)** *(S — playhead math, reuses the loop/beat engine)*. Eight
   pads = jump sizes/directions (e.g. 1/4 pads jump back, others forward, or a
   size grid ±1/2/4/8 beats) staying in time. No DSP, no assets.
-- [ ] **Trans / Transform** *(S — small DSP)*. Rhythmic channel gate synced to
+- [x] **Trans / Transform (done — TRANS pad bank, truth-sync 2026-07-17)** *(S — small DSP)*. Rhythmic channel gate synced to
   the deck BPM/phase; pads = gate rates (1/16 … 1 beat). A gain gate in the mix
   path; reuses the existing `bpm`/phase already driving the beat flasher.
   **Keep it (decided 2026-07-13).** DJs use Transform to rapidly cut a channel
@@ -654,17 +667,17 @@ scratch bank). Grouped by shared machinery / risk:
   it. Transform overlaps with loop roll + the planned gate FX, so *if* future
   hardware pad-mode pressure ever forces a cut it's a defensible one, but that's
   a later trade, not now.
-- [ ] **Tracking = track navigation** *(S — playhead math)*. **Owner decision
+- [x] **Tracking = track navigation (done — TRK pad bank, truth-sync 2026-07-17)** *(S — playhead math)*. **Owner decision
   2026-07-12: the tracking pads do section-jump navigation, not beatgrid
   editing.** Eight pads jump the playhead to eight equal points across the
   loaded track — pad *i* → `position = duration × i/8` (0%, 12.5%, … 87.5%) — a
   fast scrub/section grid for long tracks. (Beatgrid editing is split out as its
   own feature below.)
-- [ ] **Sampler** *(L — new subsystem)*. Load short one-shots/stingers to the
+- [x] **Sampler (done — SMPL bank + sampler.py, truth-sync 2026-07-17)** *(L — new subsystem)*. Load short one-shots/stingers to the
   eight pads and mix their voices over the master. Needs a sample loader, a
   small polyphonic voice mixer in the engine, committed sample assets, and
   config (bank path, gain). Pairs with the backlog `audio-out-01` clip idea.
-- [ ] **Scratch Bank** *(M — reuses the sampler loader + existing platter
+- [x] **Scratch Bank (done — SCR bank + engine scratch_bank, truth-sync 2026-07-17)** *(M — reuses the sampler loader + existing platter
   scratch)*. Temporarily swap a scratch-source sample onto a deck to scratch
   with (platter already implemented), then restore the loaded track. Depends on
   the Sampler loader infra landing first.
@@ -759,18 +772,18 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   row and cached; the display name is captured at load time and propagates to
   the deck's `snapshot()['track']` label. Follow-up idea: a dedicated
   now-playing HUD line for the active deck.
-- [ ] **Waveform niceties.** Frequency-colored waveform, beat-grid markers,
+- [x] **Waveform niceties (done 0.34.0–0.35.x).** Frequency-colored waveform, beat-grid markers,
   on-waveform BPM/time; colored playhead.
 - [ ] **Key detection + harmonic mixing.** Estimate musical key on load; show
   Camelot-style compatible-key hints for the other deck.
-- [ ] **Auto-gain / loudness normalization** on load so decks match in level.
-- [ ] **Sampler pads.** One-shot samples/stingers on a pad bank (pairs with
+- [x] **Auto-gain / loudness normalization (done 0.38.0, 2026-07-17)** — RMS-of-loud-body gain on load, `auto_gain` config, clamped ±8 dB.
+- [x] **Sampler pads (done — duplicate of Sampler above, truth-sync 2026-07-17).** One-shot samples/stingers on a pad bank (pairs with
   `audio-out-01` clip playback). → now scoped under **Performance Pad Modes
   Plan** (Sampler mode).
 - [x] **More FX + FX2 (done 2026-07-16, 0.31.0).** FX1 + FX2 units with
   echo/reverb/flanger slots, SLOT SELECT buttons, paddles and per-unit depth.
   Still open: gate/filter-roll effects, FX UI readout.
-- [ ] **Browser search / crates / recently-played** (crates → see **Accordion
+- [x] **Browser search / crates / recently-played (done — RECENT tab landed 0.38.0, 2026-07-17)** (crates → see **Accordion
   Crate Browser Plan** below).
 - [x] **Session recall (done 2026-07-13, 0.18.0).** `state.py` persists the board
   to `runtime/dj_mixer_state.json` (atomic JSON): master + crossfader, every
@@ -779,7 +792,7 @@ Owner-requested / near-term first, then a grab-bag to prioritize.
   (controls instantly; tracks decoded off-thread, always **paused** at their saved
   position); saved on close/shutdown + a 30 s autosave. Config `persist_state`
   (default true), `state_path` override.
-- [ ] **Generalize MIDI mapping.** A mapping-file layer so other controllers work
+- [x] **Generalize MIDI mapping (done 0.38.0, 2026-07-17).** `midi_map.py` TOML mapping files (`mappings/example-generic.toml`), `[dj_mixer] midi_map` config; Rev1Input parametrized over its control map so other controllers work
   (mirrors the `midi-controllers-01` preset idea) — REV1 becomes one profile.
 - [ ] **Deck depth.** True shadow-playhead loop roll, slip mode. (Beat-jump pads
   moved to the **Performance Pad Modes Plan**.)
@@ -832,7 +845,7 @@ ideas (2026-07-13); **owner picked #1 + #2 to execute nextish**, #3 deferred.
   playing, red rim while scratching, BPM on the label — and the disc is
   **grab-and-spin scratchable** (angular drag). The compact header disc stays
   on always.
-- [ ] **Full jog-wheel widget (idea #3, deferred).** A large round platter with an
+- [x] **Full jog-wheel widget (done — the 2-deck-mode big scratchable platter, truth-sync 2026-07-17).** A large round platter with an
   outer nudge ring + inner scratch zone. Most skeuomorphic but real-estate hungry
   in the 2×2 grid and largely duplicates waveform-scrub; revisit only if the
   collapsed-decks viz proves it earns the space.
