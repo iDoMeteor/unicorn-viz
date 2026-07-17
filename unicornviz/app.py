@@ -95,6 +95,49 @@ _TRANSITION_MODE_MAP = {
 }
 
 
+class _StartupProfiler:
+    """Records named startup checkpoints and logs their timings.
+
+    One-shot, main-thread only. Used to find where boot time goes so the
+    splash-overlap optimization targets measured hotspots rather than
+    guesses. Each :meth:`mark` logs the delta since the previous mark and
+    the total elapsed; :meth:`summary` dumps every phase sorted by cost.
+    Always-on INFO — startup happens once and the volume is small.
+    """
+
+    __slots__ = ('_t0', '_last', '_marks')
+
+    def __init__(self) -> None:
+        now = time.perf_counter()
+        self._t0 = now
+        self._last = now
+        self._marks: list[tuple[str, float]] = []
+
+    def mark(self, label: str) -> None:
+        """Record a checkpoint and log its delta + total-elapsed."""
+        now = time.perf_counter()
+        delta = now - self._last
+        elapsed = now - self._t0
+        self._last = now
+        self._marks.append((label, delta))
+        log.info(
+            'Startup timing: %-30s +%7.1fms  (t=%6.2fs)',
+            label, delta * 1000.0, elapsed,
+        )
+
+    def summary(self) -> None:
+        """Log total boot time and every phase ranked by cost."""
+        total = time.perf_counter() - self._t0
+        ranked = sorted(self._marks, key=lambda m: m[1], reverse=True)
+        log.info('Startup timing summary — total %.2fs, phases by cost:', total)
+        for label, delta in ranked:
+            ms = delta * 1000.0
+            if ms < 1.0:
+                continue
+            pct = (100.0 * delta / total) if total > 0 else 0.0
+            log.info('  %-30s %8.1fms  (%4.1f%%)', label, ms, pct)
+
+
 def _smart_trim_label(text: str, limit: int = 56) -> str:
     """Trim long HUD labels without losing the start and end context."""
     if len(text) <= limit:
@@ -3107,8 +3150,11 @@ void main() {
     # ------------------------------------------------------------------ #
 
     def run(self) -> None:
+        boot = _StartupProfiler()
         self._init_sdl()
+        boot.mark('init_sdl')
         self._init_moderngl()
+        boot.mark('init_moderngl')
 
         # Subsystems (audio starts before splash so splash can react to music)
         log.info('Startup: initializing audio subsystem')
@@ -3156,6 +3202,7 @@ void main() {
                 raise RuntimeError(msg)
             log.warning('%s; continuing with audio disabled/inactive', msg)
         self._audio_manager = audio_manager
+        boot.mark('audio_start')
 
         # Kick off background image decoding so disk I/O overlaps with the splash.
         # warm_cache() after the splash will find bytes already in memory and
@@ -3177,6 +3224,8 @@ void main() {
                 if bool(_sim_cfg.get('preload', True)):
                     _cls.prewarm_async(_sim_cfg)
                 break
+
+        boot.mark('pre_splash_async_kickoff')
 
         # Splash screen — shown before any effect loads
         splash_path = str(resolve_path(self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")))
@@ -3210,6 +3259,8 @@ void main() {
                 sdl2.SDL_Quit()
                 return
             splash.destroy()
+
+        boot.mark('splash (blocking)')
 
         # Store splash config for later replay via hotkey U
         self._splash_config = {
@@ -3246,6 +3297,7 @@ void main() {
         )
         midi_manager.start()
         self._midi_manager = midi_manager
+        boot.mark('midi')
 
         effects = get_effects()
         if not effects:
@@ -3264,6 +3316,7 @@ void main() {
                     except Exception as exc:
                         log.warning('Image Showcase cache warmup failed: %s', exc)
                 break
+        boot.mark('effects_scan + image_warm(GL)')
 
         for effect_cls in effects:
             if getattr(effect_cls, 'NAME', '') == 'ProjectM Presets' and hasattr(effect_cls, 'warm_up'):
@@ -3274,6 +3327,7 @@ void main() {
                     except Exception as exc:
                         log.warning('ProjectM warm-up failed (non-fatal): %s', exc)
                 break
+        boot.mark('projectm_warmup')
 
         playlist = Playlist(effects, self.cfg)
         playlist.set_disabled(self._disabled_effects)
@@ -3371,6 +3425,7 @@ void main() {
         )
         hotkeys.attach_midi(midi_manager)
         self._hotkeys = hotkeys
+        boot.mark('playlist + overlays + hotkeys')
 
         if not self._safe_mode:
             # Spotify controller (optional drop-in subsystem).
@@ -3404,6 +3459,7 @@ void main() {
                 except Exception as exc:
                     self._spotify = None
                     log.warning('SpotifyController not available: %s', exc)
+            boot.mark('subsystem: spotify')
 
             # Local media player controller (optional drop-in).
             media_cfg = self.cfg.get('media', default={}) or {}
@@ -3424,6 +3480,7 @@ void main() {
                 except Exception as exc:
                     self._media = None
                     log.warning('MediaController not available: %s', exc)
+            boot.mark('subsystem: media (library scan)')
 
             # Live chat overlay controller (optional drop-in).
             chat_cfg = self.cfg.get('chat', default={}) or {}
@@ -3480,6 +3537,7 @@ void main() {
                 except Exception as exc:
                     self._dj_mixer = None
                     log.warning('DjMixerController not available: %s', exc)
+            boot.mark('subsystem: dj_mixer')
 
             # OSC control-surface bridge (optional drop-in).
             osc_cfg = self.cfg.get('osc', default={}) or {}
@@ -3624,11 +3682,14 @@ void main() {
                 log.info('BannerController loaded from drop-in')
             except Exception as exc:
                 log.warning('BannerController not available: %s', exc)
+        boot.mark('subsystems: remainder')
         self._sync_recording_overlay()
         if self._recorder.enabled and self._recorder.auto_record:
             started, _ = self.start_recording()
             if started:
                 log.info('Auto-record enabled')
+        boot.mark('finalize (recording/overlay sync)')
+        boot.summary()
         self._running = True
 
         prev_time = time.perf_counter()
