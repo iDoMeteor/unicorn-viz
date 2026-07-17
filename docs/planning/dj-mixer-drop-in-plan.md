@@ -458,10 +458,9 @@ The live short list, in the owner's chosen order (one at a time from here):
 1. **Key detection + harmonic mixing** — musical key on load, Camelot-style
    compatibility hints in the browser.
 2. **Deck depth** — true slip mode (shadow playhead under rolls/scratches).
-3. **Stems round 2** — ~~REV1 stem pad bank~~ (done 0.39.0: STEMS alt bank
-   via double-tap HOT CUE, latching solos) — remaining: per-stem gains
-   (not just mutes), stem FX; plus the deliberate unicorn-horn integration
-   discussion.
+3. **Stems round 2 — DEFERRED (owner call 2026-07-17)** — ~~REV1 stem pad
+   bank~~ (done 0.39.0). Deferred: per-stem gains (not just mutes), stem FX.
+   The unicorn-horn integration discussion stays pending.
 4. **AI v Human mode** — the epic (phase 1 not started).
 5. **Hardware bring-up checklist** — after every REV1 button is coded up and
    working; gates 1.0.0.
