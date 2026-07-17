@@ -451,19 +451,36 @@ up from 0x41, counterclockwise down from 0x3F.
 
 ---
 
-## Open Items (truth-synced 2026-07-17)
+## Open Items (truth-synced 2026-07-18)
 
-The live short list, in the owner's chosen order (one at a time from here):
+Since the 2026-07-17 truth-sync, a large run landed: ~~key detection +
+harmonic mixing~~ (0.42, wheel-coloured KEY column + green/magenta name
+signals + KEY sync), ~~slip mode~~ (0.44), ~~sync phase-lock~~ (0.44),
+~~bar-level phrase alignment~~ (0.46), FX depth (0.47, six tunable slots +
+SETTINGS panel), ~~100% REV1 MIDI coverage~~ (0.51, PDF-verified: paddle
+lever, LEVEL/DEPTH macro, shift layer, vinyl-off jog), Beat Grid Editor v1
+(0.54), **persistent sync/key LOCKs** (0.53) and a **legend/help overlay**
+(0.55). With LOCKs + auto-play XFADE + KEY-auto + auto-gain the mixer can
+run a beatmatched, harmonically-mixed, level-matched set on its own — the
+AI-DJ substrate already exists.
 
-1. **Key detection + harmonic mixing** — musical key on load, Camelot-style
-   compatibility hints in the browser.
-2. **Deck depth** — true slip mode (shadow playhead under rolls/scratches).
+The live short list, in the owner's chosen order:
+
+1. **AI v Human mode** — the epic. Phase 1 not started, but the pieces are
+   now in place (auto-play director, sync/key locks, key+tempo compatibility
+   scoring already drives the green/magenta browser signals). This is the
+   next big feature.
+2. **Deck depth (deferred v2)** — full slip refinements + true DVS are out of
+   scope; basic slip shipped 0.44.
 3. **Stems round 2 — DEFERRED (owner call 2026-07-17)** — ~~REV1 stem pad
    bank~~ (done 0.39.0). Deferred: per-stem gains (not just mutes), stem FX.
    The unicorn-horn integration discussion stays pending.
-4. **AI v Human mode** — the epic (phase 1 not started).
-5. **Hardware bring-up checklist** — after every REV1 button is coded up and
-   working; gates 1.0.0.
+4. **Control-pane polish (in progress 2026-07-18)** — 2-deck inset pod:
+   dials-on-top, centred sliders, HOLD above each bank, D/W + FXM dials, a
+   six-effect selector below the sliders.
+5. **Hardware bring-up checklist** — the 1.0.0 gate. Every REV1 control is
+   coded (0.51); this is now a live-hardware validation pass, not
+   engineering.
 
 ## Stems (landed 0.34.0 — follows unicorn-horn's decisions)
 
