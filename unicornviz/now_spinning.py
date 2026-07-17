@@ -243,8 +243,11 @@ void main() {
                 self._tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
             self._tex.write(arr.tobytes())
         m = 18
+        # Bottom corners clear the overlay banner ticker strip along the
+        # bottom edge; top corners only need the cosmetic margin.
+        mb = 72
         x = m if 'l' in self._corner else width - _W - m
-        y = m if 't' in self._corner else height - _H - m
+        y = m if 't' in self._corner else height - _H - mb
 
         def px(v: float) -> float:
             return (v / float(width)) * 2.0 - 1.0
