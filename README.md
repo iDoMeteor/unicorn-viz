@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.8**
+**Version 1.0.0-beta.9**
 
 
 ## Press `H` or `?` for Help
@@ -536,6 +536,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.9** — New core analyzer: **Audio Chromogram** — real pitch-class
+  (chroma) analysis of the live FFT, folding every bin into one of the twelve
+  equal-tempered pitch classes (C, C#, D, ... B) regardless of octave. Shown
+  as a scrolling chromagram strip (pitch class vs. time) and a circular chroma
+  wheel with a dominant-note highlight ring. Uses a soft Gaussian-in-semitone
+  weighting with confidence-scaled low-frequency de-weighting rather than
+  hard bin rounding, since the shared low-latency 1024-point FFT (46.875 Hz/
+  bin) is wider than a semitone below ~800 Hz — verified against synthetic
+  tones to be exact from ~D5 up and within one semitone from ~C3 up, with
+  sub-bass contributing an honest diffuse glow rather than a falsely precise
+  note.
 - **1.0.0-beta.8** — Now Spinning platter raised clear of the bottom banner ticker (bottom corners get 72px clearance)
 - **1.0.0-beta.7** — Fix the promoted Now Spinning platter never rendering: the lazy overlay create referenced a nonexistent `App.ctx` (AttributeError disabled it on first use since beta.4); it now uses the app GL context directly and waits quietly until GL is up
 - **1.0.0-beta.6** — Unknown-source quiet mode: when a now-playing source is playing but cannot name its track, the Now Spinning platter auto-hides and the track banner does not fire
