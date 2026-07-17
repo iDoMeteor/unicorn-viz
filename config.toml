@@ -599,9 +599,13 @@ prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`);
 #stems_python = ""          # interpreter that can import demucs (auto-detected when empty)
 #stems_dir = ""             # stem cache folder (default: runtime/stems)
 #auto_gain = true            # loudness-match decks on load (RMS of the loud body)
-#headphone_device = "same"   # DEFAULT (on): 4-channel master device (REV1
-                             # jack: outputs 1-2 master, 3-4 cue); stereo-only
-                             # devices fall back gracefully. Set a device name
-                             # for a separate output, or "" to disable.
+output_device = "DDJ-REV1: USB Audio"   # master → the REV1 (a 4-output USB
+                             # interface); connect your speakers to the REV1's
+                             # master output.  Leave unset for the system default.
+headphone_device = "same"    # cue on the REV1's outputs 3-4 (the phones jack);
+                             # 'same' shares the 4-channel master device (1-2
+                             # master, 3-4 cue).  Set a separate device name for
+                             # a different output, or "" to disable.  Stereo-only
+                             # master devices fall back to master-only.
 #midi_map = ""               # TOML mapping file for a non-REV1 controller
                              # (see drop-ins/dj-mixer-01/mappings/example-generic.toml)
