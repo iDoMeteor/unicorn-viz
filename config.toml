@@ -599,5 +599,7 @@ prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`);
 #stems_python = ""          # interpreter that can import demucs (auto-detected when empty)
 #stems_dir = ""             # stem cache folder (default: runtime/stems)
 #auto_gain = true            # loudness-match decks on load (RMS of the loud body)
+#headphone_device = "same"   # "same" = 4-channel master device (REV1 jack:
+                             # outputs 1-2 master, 3-4 headphone cue)
 #midi_map = ""               # TOML mapping file for a non-REV1 controller
                              # (see drop-ins/dj-mixer-01/mappings/example-generic.toml)
