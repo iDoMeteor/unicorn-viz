@@ -475,9 +475,10 @@ The live short list, in the owner's chosen order:
 3. **Stems round 2 — DEFERRED (owner call 2026-07-17)** — ~~REV1 stem pad
    bank~~ (done 0.39.0). Deferred: per-stem gains (not just mutes), stem FX.
    The unicorn-horn integration discussion stays pending.
-4. **Control-pane polish (in progress 2026-07-18)** — 2-deck inset pod:
-   dials-on-top, centred sliders, HOLD above each bank, D/W + FXM dials, a
-   six-effect selector below the sliders.
+4. **Control-pane polish — DONE (0.56.0, 2026-07-18)** — 2-deck inset pod
+   moved to the inner (console) edge: dials on top (EQ + TRIM/FLT/D-W/FXM),
+   HOLD centred above each bank, centred PITCH/TEMPO sliders, a six-effect
+   selector at the foot (single click select/unlock, double-click lock on).
 5. **Hardware bring-up checklist** — the 1.0.0 gate. Every REV1 control is
    coded (0.51); this is now a live-hardware validation pass, not
    engineering.
