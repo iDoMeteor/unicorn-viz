@@ -5827,7 +5827,8 @@ void main() {
         bar_x = 16.0
         bar_w = max(320.0, self._width - 32.0)
         bar_h = 54.0
-        bar_y = -bar_h + phase * (bar_h + 12.0)
+        top_offset = self._height * 0.05  # clear GNOME panels that don't auto-hide
+        bar_y = -bar_h + phase * (bar_h + 12.0 + top_offset)
         bg_a = 0.85 * (0.65 + phase * 0.35)
         edge_a = 0.24 + phase * 0.52
         accent = (0.10, 0.94, 1.00)
