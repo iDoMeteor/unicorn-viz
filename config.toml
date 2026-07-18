@@ -379,7 +379,7 @@ sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 [control_room]
 enabled = false
 fullscreen = true       # borderless fullscreen on the chosen display (default true)
-display_index = 0
+display_index = 3
 #width = 1920
 #height = 1080
 preview_scale = 0.25
@@ -516,9 +516,23 @@ dark_brightness_threshold = 0.02
 # Beat tracker engine selection (inside [auto_vj] section)
 #
 # beat_tracker_engine = "v2"       — ACF + phase-locked oscillator (default)
+# beat_tracker_engine = "v3"       — v2 + freezes the tempo prior while
+#                                    confidently locked, instead of letting
+#                                    every profile-recommender switch re-prime
+#                                    it mid-track (see docs/adr/vj-system.md
+#                                    "Recommender Weight Promotion +
+#                                    Manual-Override Label", 2026-07-18)
 # beat_tracker_engine = "legacy"   — IOI-median estimator (fallback)
 #
-# Optional v2 analysis-mode guardrails (disabled by default):
+# beat_tracker_shadow_engine = "v3" — optional: runs a second tracker engine
+#                                    on the same audio purely for A/B
+#                                    comparison logging (bpm_shadow/
+#                                    confidence_shadow fields in the sequence
+#                                    corpus + decision log). Never drives the
+#                                    director/recommender. Unset = disabled.
+#                                    Ignored if equal to beat_tracker_engine.
+#
+# Optional v2/v3 analysis-mode guardrails (disabled by default):
 # analysis_mode_enabled = true
 # analysis_map_beats = 64
 # analysis_region_min_beats = 8
@@ -529,8 +543,10 @@ dark_brightness_threshold = 0.02
 # To enable, add the key inside your [auto_vj] block, e.g.:
 #   [auto_vj]
 #   beat_tracker_engine = "v2"
+#   beat_tracker_shadow_engine = "v3"
 # ---------------------------------------------------------------------------
 # beat_tracker_engine = "v2"
+# beat_tracker_shadow_engine = "v3"
 
 # ---------------------------------------------------------------------------
 # projectM affinity & preset behavior (inside [auto_vj] section)
@@ -582,7 +598,7 @@ enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = false   # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
 music_dir = "~/Music/crates" # crate folder browsed by the REV1 rotary + LOAD
-display_index = 3            # display the mixer window opens on
+display_index = 4            # display the mixer window opens on
 fullscreen = true           # borderless full-display window when true
 #blocksize=2048
 prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`); ~10.7 ms each at 48k/512.

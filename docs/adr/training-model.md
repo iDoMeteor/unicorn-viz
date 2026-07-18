@@ -323,6 +323,33 @@ hot-reload, matching the same "load once at init" pattern as
 
 ---
 
+## Shadow-Engine Scorecard Comparison (2026-07-18)
+
+**Decision: `_build_shadow_comparison()` summarizes active-vs-shadow divergence per session, omitted when absent**
+
+Companion to `docs/adr/vj-system.md`'s "BeatTracker v3 — Frozen Tempo Prior +
+Shadow-Mode A/B": when `[auto_vj] beat_tracker_shadow_engine` is set, every
+sequence-corpus row carries `bpm_shadow`/`confidence_shadow`/`shadow_engine`
+alongside the active engine's own `bpm`/`bpm_confidence`.
+`_build_shadow_comparison(seq_rows)` in `package_training_set.py` reduces
+these into one summary (`bpm_delta_median`, `bpm_agreement_pct` at a 2 BPM
+tolerance, `active_confidence_median`, `shadow_confidence_median`) attached
+to the detector payload as `shadow_engine_comparison`.
+
+Returns `None` (not an empty/zeroed dict) when no shadow data is present in
+the session, so the packager and the LLM prompt can omit the section
+entirely rather than show a misleading all-zero comparison. The LLM prompt
+gets a short explanatory note only when the section is present, clarifying
+that the shadow engine never drove any live decision — it's comparison
+data only, the active engine's own fields remain what actually happened.
+
+This is the mechanism for validating a new engine (e.g. v3) against real
+sessions before promoting it to the active `beat_tracker_engine` — run a
+batch of sessions in shadow mode first, review `bpm_agreement_pct` /
+`bpm_delta_median` trends across packaged buckets, then switch.
+
+---
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

@@ -28,6 +28,7 @@ _format_profile_expected_values_block = _MOD._format_profile_expected_values_blo
 _build_combined_prompt = _MOD._build_combined_prompt
 _format_reco_weights_line = _MOD._format_reco_weights_line
 _RECO_WEIGHT_DEFAULTS = _MOD._RECO_WEIGHT_DEFAULTS
+_build_shadow_comparison = _MOD._build_shadow_comparison
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -258,6 +259,46 @@ def test_reco_weights_line_used_consistently_in_both_prompt_spots() -> None:
     prompt = _build_combined_prompt(detector_payload, {}, None)
     line = _format_reco_weights_line(_RECO_WEIGHT_DEFAULTS)
     assert prompt.count(line) == 2
+
+
+def test_build_shadow_comparison_none_when_no_shadow_data() -> None:
+    rows = [_make_seq_row() for _ in range(3)]
+    assert _build_shadow_comparison(rows) is None
+
+
+def test_build_shadow_comparison_summarizes_agreement() -> None:
+    rows = [
+        {**_make_seq_row(bpm=124.0, confidence=0.6), 'bpm_shadow': 124.5, 'confidence_shadow': 0.58},
+        {**_make_seq_row(bpm=124.0, confidence=0.6), 'bpm_shadow': 146.3, 'confidence_shadow': 0.5},
+        {**_make_seq_row(bpm=124.0, confidence=0.6), 'bpm_shadow': 124.2, 'confidence_shadow': 0.62},
+    ]
+    for r in rows:
+        r['shadow_engine'] = '3.0.0'
+
+    summary = _build_shadow_comparison(rows)
+
+    assert summary is not None
+    assert summary['shadow_engine'] == '3.0.0'
+    assert summary['compared_rows'] == 3
+    assert summary['bpm_agreement_pct'] == pytest.approx(200.0 / 3, abs=0.1)   # 2 of 3 within 2 BPM
+    assert summary['active_confidence_median'] == pytest.approx(0.6)
+
+
+def test_build_detector_payload_includes_shadow_comparison_when_present() -> None:
+    rows = [
+        {**_make_seq_row(bpm=124.0, confidence=0.6), 'bpm_shadow': 124.2,
+         'confidence_shadow': 0.6, 'shadow_engine': '3.0.0'}
+        for _ in range(3)
+    ]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['shadow_engine_comparison'] is not None
+    assert payload['shadow_engine_comparison']['shadow_engine'] == '3.0.0'
+
+
+def test_build_detector_payload_shadow_comparison_absent_without_shadow_data() -> None:
+    rows = [_make_seq_row() for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['shadow_engine_comparison'] is None
 
 
 def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> None:

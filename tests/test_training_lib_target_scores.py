@@ -75,3 +75,15 @@ def test_custom_penalty_per_override(tmp_path: Path) -> None:
 def test_missing_file_and_empty_input_produce_no_scores(tmp_path: Path) -> None:
     assert compute_override_target_scores([]) == {}
     assert compute_override_target_scores([tmp_path / 'does-not-exist.jsonl']) == {}
+
+
+def test_matches_real_track_id_field_not_just_spotify_track_id(tmp_path: Path) -> None:
+    """_build_live_training_row() (auto_vj.py) writes the sequence-corpus
+    track key as 'track_id', not 'spotify_track_id' -- this must still match."""
+    seq = tmp_path / 'sequence-corpus-a.jsonl'
+    _write_seq(seq, [
+        {'track_id': 'spotify:track:aaa', 'event_type': 'profile_switch',
+         'reason': 'manual_override'},
+    ])
+    scores = compute_override_target_scores([seq])
+    assert scores == {'spotify:track:aaa': 0.6}

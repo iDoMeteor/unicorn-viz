@@ -28,7 +28,80 @@ Key algorithm properties:
 - Confidence = phase coherence: fraction of last 32 onsets landing in phase window
 
 Activate with `beat_tracker_engine = "v2"` in `[auto_vj]`.  v1 remains
-available as fallback but is not tuned for current genre targets.
+available as fallback but is not tuned for current genre targets.  `v3`
+(2026-07-18) is a v2 subclass that changes only `set_profile()` — see
+"BeatTracker v3 — Frozen Tempo Prior" below.
+
+---
+
+## BeatTracker v3 — Frozen Tempo Prior + Shadow-Mode A/B (2026-07-18)
+
+Decision: `BeatTrackerV3(BeatTracker)` overrides only `set_profile()`;
+`ENGINE_VERSION` semver added to all three tracker classes; optional
+shadow-mode A/B via `beat_tracker_shadow_engine`.
+
+**Root cause investigated:** operator-reported "BPM tending toward 20 hot."
+Two 2026-06 fixes for this symptom (deferred tracker-prior push;
+`lock_band_pct` widening) were confirmed still in place — this was a third,
+previously undocumented mechanism. Traced against real session logs
+(`logs/autovj-20260708T171026.jsonl`, track "Alchemist"): the profile
+recommender cycled through **four profile candidates in under 90 seconds**
+on a single track (generic → peak_time → trance-candidate → psytrance).
+Once `psytrance` (mu=145, sigma=0.16 — a tight, high prior) was applied via
+`_sync_grid_audio_profile()` → `set_profile()`, the tracker's own `bpm`
+readout drifted from a correct ~124 up through 140 → 142.9 → 146.3 over the
+following ~35 seconds — with **no change in the actual audio's tempo**.
+Cross-checked against "Playground (MEDUZA Remix)" (ground truth 120 BPM,
+confirmed via Tunebat/SongBPM): locked at 127/135/144/146 across four
+separate real sessions, never at the correct value.
+
+The 2026-06-21 "Recommender → Tracker Profile Apply" fix deferred *when*
+`set_profile()`'s prior update fires (a 12 s hold + 0.35 confidence gate on
+the *sync*), but never addressed *whether* re-priming the ACF's Gaussian
+prior is correct for a track whose real tempo hasn't changed — once the
+deferred sync fires, v2's `set_profile()` still unconditionally overwrites
+`_prior_mu`/`_prior_sigma`, and a tight high-confidence prior then drags
+the comb-score argmax toward it over subsequent ACF updates. This is a
+recommender-driven feedback loop, not an ACF octave/tactus error — ruled
+out separately: neither a synthetic secondary percussion layer at various
+gain/ratio combinations, nor a mismatched-profile-prior against a clean
+click track, reproduced a "hot" drift in isolation (both tested negative
+before the real-log trace pointed at the actual mechanism).
+
+**Fix — `BeatTrackerV3`:** once confidently locked (`confidence >=
+_PRIOR_FREEZE_CONFIDENCE = 0.55`, mirroring `AutoVJController.
+_BPM_LOCK_CONFIDENCE`), `set_profile()` still applies the new profile's
+`bpm_hint_min`/`bpm_hint_max` search-range clamp (a genuinely wrong tempo
+remains correctable/boundable) but leaves `_prior_mu`/`_prior_sigma`
+untouched. The prior is free to re-prime again the instant the lock is
+lost — `_reset_tempo_lock()` (silence gap / new track) zeroes both `bpm`
+and `confidence`, so the next `set_profile()` call after that falls
+through to v2's full re-prime unchanged. Verified directly: locking
+`BeatTracker`/`BeatTrackerV3` on a steady 124 BPM synthetic click track to
+real lock-confidence (empirically ~65 s from cold start — phase coherence
+needs wall-clock time to fill its 32-onset window), then applying a
+psytrance-like profile — v2's `_prior_mu` snaps to the new profile's mu;
+v3's does not move (`tests/test_beat_tracker_v3.py`).
+
+**Engine versioning:** `ENGINE_VERSION` is now a class attribute on all
+three tracker classes (`BeatGridTracker` = `'1.0.0'`, `BeatTracker` =
+`'2.0.0'`, `BeatTrackerV3` = `'3.0.0'`) — MAJOR tracks the engine
+generation (matches the `beat_tracker_engine` config name), MINOR/PATCH
+track tuning changes within it.  Bump on any behavior-changing edit.
+
+**Shadow-mode A/B (`beat_tracker_shadow_engine`):** an optional second
+tracker instance runs on the same audio in parallel — same `update()` and
+`set_profile()` calls as the active tracker — but never drives the
+director/recommender; only its `bpm`/`confidence`/`ENGINE_VERSION` are
+read, into `bpm_shadow`/`confidence_shadow`/`shadow_engine` fields on
+decision-log (`_detector_snapshot()`) and sequence-corpus
+(`_build_live_training_row()`) rows. This makes real sessions the A/B
+dataset for validating a new engine before switching `beat_tracker_engine`
+itself — see `docs/adr/training-model.md` "Shadow-Engine Scorecard
+Comparison" for the packager-side reporting.  Ignored if set equal to the
+active `beat_tracker_engine`. All shadow calls are wrapped in try/except
+that only logs at debug level — a shadow-engine failure can never affect
+the active engine or director.
 
 ---
 
