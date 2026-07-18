@@ -1006,3 +1006,54 @@ installed/authed — never an error.
    tracks load their local file into a deck; greyed "no local file" otherwise.
 4. Optional **spotifyd live deck** (option B).
 5. **Beatport** bucket (owned downloads = local files) → then Apple → Google.
+
+## Mixer Open-Window Performance Plan (owner-requested 2026-07-18)
+
+**Symptom.** The first `Shift+D` open of the mixer is noticeably slower than
+later opens. By design the mixer is *idle* until opened — the window, the
+REV1 MIDI port, and the audio output stream are all deferred to open-time so
+nothing claims USB/audio hardware while sitting unused (the snd_ump/UMP USB
+fragility). So the first-open cost is exactly those deferred claims.
+
+**What is NOT the cost (already handled).** Deck audio decode is *not* a
+first-open cost: `_restore_state()` at controller construction (app startup)
+decodes restored deck tracks **off-thread** (`dj_mixer_controller.py`, the
+`# decode tracks off-thread` restore). The engine, decoder, track store and
+browser are all built at startup too.
+
+**First-open cost candidates** (in `open_window()`):
+
+| Step | Nature | Notes |
+|---|---|---|
+| `_load_sibling('ui.py', 'MixerWindow')` | re-executes the ~1600-line `ui.py` module body **on every open** (its numpy/PIL deps are already in `sys.modules`, but `_load_sibling` does `spec_from_file_location` + `exec_module`, which does not consult `sys.modules`) | repeatable per-open cost, not just first |
+| `MixerWindow(...)` | SDL window + GL context + shader compile + render-thread start | same class of cost as control-room's open |
+| `_open_rev1()` | REV1 USB-MIDI claim (hardware) | **deferred by design**; ties into the separate MIDI-startup item — do not pre-claim at idle |
+| `self._engine.start(...)` | PortAudio `OutputStream` open + `query_devices` + 4-channel probe | PortAudio host-API is already warm (the app's input capture inits `sounddevice` at startup), so this is stream-open cost, not cold init; still a device open + a channel-count probe |
+
+**Instrumentation (landed 2026-07-18).** `open_window()` now logs
+always-on `dj-mixer-01: open timing: <step> +N.Nms` deltas for `ui.py import`,
+`window + thread`, `rev1 open`, and `engine.start` — the mixer-scoped analog
+of the core `_StartupProfiler`. Measure the real split (cold first open vs.
+warm reopen) before optimizing, rather than guessing which claim dominates.
+
+**Candidate optimizations (measurement-first).**
+
+1. **Pre-import `ui.py` at controller construction (cheap, safe win).**
+   `_load_sibling('ui.py', …)` re-executes the whole module every open. Import
+   is side-effect-free (no SDL/GL/hardware — the window is only built when
+   `MixerWindow(...)` is *constructed*, not when the module is imported), so
+   importing the module once at `DjMixerController.__init__` (during app
+   startup, overlapping the splash) and reusing the cached `MixerWindow`
+   reference removes the module re-exec from the open path. Lowest-risk item;
+   do first once instrumentation confirms its share.
+2. **`engine.start()` on a background thread**, if the profiler shows the
+   `OutputStream` open dominates. It is pure device I/O (no GL), so it can run
+   off the main thread while the window renders its first frames from silence,
+   then swaps to live audio when the stream is ready. Needs care around the
+   writer-thread start ordering; measure first.
+3. **REV1 claim** stays deferred by design — folded into the separate
+   MIDI-startup work, not this plan. Do not pre-claim USB-MIDI at idle.
+
+**Non-goal.** Moving the hardware claims (audio out, REV1) to app startup —
+that reintroduces the idle-hardware-claim fragility the deferred-open design
+exists to avoid.
