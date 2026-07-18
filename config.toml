@@ -599,13 +599,24 @@ prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`);
 #stems_python = ""          # interpreter that can import demucs (auto-detected when empty)
 #stems_dir = ""             # stem cache folder (default: runtime/stems)
 #auto_gain = true            # loudness-match decks on load (RMS of the loud body)
-output_device = "DDJ-REV1: USB Audio"   # master → the REV1 (a 4-output USB
+output_device = ""   # master → the REV1 (a 4-output USB
                              # interface); connect your speakers to the REV1's
                              # master output.  Leave unset for the system default.
-headphone_device = "same"    # cue on the REV1's outputs 3-4 (the phones jack);
+headphone_device = "DDJ-REV1: USB Audio"    # cue on the REV1's outputs 3-4 (the phones jack);
                              # 'same' shares the 4-channel master device (1-2
                              # master, 3-4 cue).  Set a separate device name for
                              # a different output, or "" to disable.  Stereo-only
                              # master devices fall back to master-only.
 #midi_map = ""               # TOML mapping file for a non-REV1 controller
                              # (see drop-ins/dj-mixer-01/mappings/example-generic.toml)
+# -- Scratch transition (auto-mix flourish) ---------------------------------
+# On an auto-crossfade into a track that is NOT harmonically compatible, one
+# wheel step away, or within `spin_bpm_tol` BPM, the outgoing deck does a
+# turntable spin to paper over the discontinuity: a backspin (reverse) when the
+# incoming track is slower, a spin-up (over-speed) when it is faster.
+#spin_transitions = true     # master on/off for the effect
+#spin_back = -5.0            # backspin strength (slower incoming; below -1 the
+                             # audio actually runs backward)
+#spin_fwd = 4.5             # spin-up strength (faster incoming)
+#spin_bpm_tol = 8.0          # incoming within N BPM counts as smooth (no spin)
+#spin_decay = 0.89           # coast-back rate per audio block (higher = longer)
