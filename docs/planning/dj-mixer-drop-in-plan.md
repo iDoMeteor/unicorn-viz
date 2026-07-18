@@ -1047,27 +1047,57 @@ always-on `dj-mixer-01: open timing: <step> +N.Nms` deltas for `ui.py import`,
 of the core `_StartupProfiler`. Measure the real split (cold first open vs.
 warm reopen) before optimizing, rather than guessing which claim dominates.
 
-**Candidate optimizations (measurement-first).**
+### Measured results (2026-07-18) — all three candidates dropped
 
-1. **Pre-import `ui.py` at controller construction (cheap, safe win).**
-   `_load_sibling('ui.py', …)` re-executes the whole module every open. Import
-   is side-effect-free (no SDL/GL/hardware — the window is only built when
-   `MixerWindow(...)` is *constructed*, not when the module is imported), so
-   importing the module once at `DjMixerController.__init__` (during app
-   startup, overlapping the splash) and reusing the cached `MixerWindow`
-   reference removes the module re-exec from the open path. Lowest-risk item;
-   do first once instrumentation confirms its share.
-2. **`engine.start()` on a background thread**, if the profiler shows the
-   `OutputStream` open dominates. It is pure device I/O (no GL), so it can run
-   off the main thread while the window renders its first frames from silence,
-   then swaps to live audio when the stream is ready. Needs care around the
-   writer-thread start ordering; measure first.
-3. **REV1 claim** stays deferred by design — folded into the separate
-   MIDI-startup work, not this plan. Do not pre-claim USB-MIDI at idle.
+Two real opens, captured by the instrumentation above:
 
-**Non-goal.** Moving the hardware claims (audio out, REV1) to app startup —
-that reintroduces the idle-hardware-claim fragility the deferred-open design
-exists to avoid.
+```
+open #1:  ui.py import 3.2ms | window+thread  69.8ms | rev1 2.1ms | engine.start 22.3ms  ->  97ms
+open #2:  ui.py import 3.1ms | window+thread 150.4ms | rev1 3.0ms | engine.start 42.4ms  -> 199ms
+```
+
+**`open_window()` is already fast (~100–200ms end to end), and every
+pre-measurement hypothesis was wrong.** Recording this so nobody re-derives
+the same guesses:
+
+| Candidate | Predicted | Measured | Verdict |
+|---|---|---|---|
+| Pre-import `ui.py` at `__init__` | "cheap, safe win" | **3ms** per open | **Dropped** — the module re-exec is negligible; not worth the caching complexity |
+| Background `engine.start()` | possibly dominant (PortAudio open) | **22–42ms** | **Dropped** — PortAudio host-API really is already warm from the app's input capture |
+| REV1 claim cost | possibly slow (USB-MIDI) | **2–3ms** | **Dropped** — the claim is effectively free; MIDI has no bearing on open latency |
+| `window + thread` | inherent | **70–150ms** (dominant) | Inherent: SDL window + GL context + shader compile |
+
+Also note **there was no first-open penalty in these samples** — the *second*
+open was slower than the first (150ms vs 70ms on `window + thread`, likely
+compositor/GPU scheduling noise), so the cost is not a one-time warm-up.
+
+### Where to look next (if "first open feels slow" persists)
+
+The reported symptom ("not cheap the first time") does **not** match a
+~100ms `open_window()`. If it still feels slow with these timings, the cost
+is **downstream of `open_window()`**, not inside it. Most likely, in order:
+
+1. **The render thread's first full frame.** `open_window()` returns as soon
+   as the thread is *started*; the first 4-deck frame (waveform bars, browser,
+   pads) is drawn afterwards and the window shows nothing until
+   `SecondaryGLWindow.present()` uploads it. Instrument
+   `MixerWindow._loop`'s first `_render_ui()` — the existing
+   `render thread produced its first frame` / `first frame presented` log
+   lines already bracket this; add a delta between them and `open_window()`
+   returning.
+2. **Deck audio decode**, when a session starts with decks *not* already
+   restored — `deck.load()` decodes on the caller's thread and is explicitly
+   "slow". Restored decks decode off-thread at app startup, so this only
+   bites when loading fresh tracks at open time.
+3. **Waveform/beat-grid analysis** for freshly loaded tracks.
+
+Measure before optimizing — the same discipline that invalidated all three
+candidates above.
+
+**Non-goal (unchanged).** Moving the hardware claims (audio out, REV1) to app
+startup — that reintroduces the idle-hardware-claim fragility the
+deferred-open design exists to avoid. The measurements make this moot anyway:
+those claims cost 2–42ms combined.
 
 ## Mixer Runtime Present-Coupling (owner-observed 2026-07-17)
 
