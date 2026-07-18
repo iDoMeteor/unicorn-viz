@@ -50,7 +50,7 @@ different from a guessed one.**
 |---|---|---|
 | `beat_grid` | BPM, downbeat phase, bar position — *authoritative* when present | dj-mixer (hand-corrected grid); media-01 (if detected) |
 | `timeline` | ordered sections (`intro`/`build`/`drop`/`breakdown`/`verse`/`outro`) with start/end, confidence, energy | any source with offline analysis of a local file |
-| `position_room_s` | playhead translated to **room time** (see §3) | any local-file source |
+| `clock` | track position, playback rate and wall-time, for room-time conversion (§3, §8) | any local-file source |
 | `upcoming` | near-future events: next section boundary, scheduled transition, announced performance action | dj-mixer; media-01 (boundaries only) |
 | `confidence` | per-field confidence, so consumers can require more for expensive decisions | all |
 
@@ -86,8 +86,10 @@ The **producer** owns that translation, because the producer owns the playhead
 and the rate. A consumer must never have to know that a pitch fader exists, and
 the VJ must never do arithmetic on someone else's transport.
 
-Since room-time drifts whenever rate changes, the feed is re-derived
-continuously and kept cheap, rather than published once and left stale.
+Room-time therefore drifts whenever the rate changes. Rather than re-sending
+the future to chase that drift, the producer publishes the timeline once (it is
+static in *track* time) plus a small, frequent clock, and consumers convert
+through a core-provided helper. See §8.
 
 ---
 
@@ -150,13 +152,28 @@ AI DJ, and no model. They should not wait on any of it.
 
 ---
 
-## 8. Open questions
+## 8. Resolved
 
-- **Republish rate** — the feed must stay cheap enough to update continuously
-  without touching the frame budget.
-- **Both decks during a blend** — resolved: publish both timelines, flag the
-  live one, and include where the mix is heading.
-- **Priority vs. blend** — the hub picks one winner today. During a crossfade
-  two sources are genuinely audible. Does the mixer publish a single merged
-  view (it knows the crossfader position), or does the hub learn about blends?
-  Leaning the former: the mixer already owns that math.
+**Republish rate — static timeline, cheap clock, shared helper.** Publishing a
+whole timeline often, only to chase varispeed drift, would be wasteful for
+data that is *static in track time*. Instead, three rates:
+
+| what | when | cost |
+|---|---|---|
+| `timeline` | once per track load | rare, arbitrarily rich |
+| `clock` — track position, rate, wall-time | a few Hz | three floats |
+| events (transition scheduled, manual/unexpected action) | **immediately** | rare |
+
+Consumers convert track time to room time through a **core-provided helper**,
+so the "no consumer does pitch math" rule holds without the producer having to
+re-send the future every frame. Since the future is known, the only thing that
+needs to be timely is *change* — hence events push at once.
+
+**Priority vs. blend — the mixer publishes one merged view.** It owns the
+crossfader position and both decks, so it resolves the blend itself rather than
+teaching the hub about blends. Both decks' timelines are included, the live one
+flagged, along with where the mix is heading.
+
+## 9. Open questions
+
+- None outstanding. Producers and phases are specified; PF-1 can start.
