@@ -221,3 +221,16 @@ Commit sequencing:
 4. Current rail order places auth controls at the right edge:
    - `... -> settings -> account -> login/logout`
    - Account is planned to be auth-gated in a follow-up but intentionally remains visible for now.
+
+---
+
+## Follow-up: "Tour" rail tile (owner-requested 2026-07-18)
+
+The icon rail gains a **Tour** tile that launches the guided onboarding walk-
+through for whichever surface the help overlay belongs to (core here; the mixer
+and control room reuse the same affordance in their own help panels). Icon
+follows the help-icon standard (`assets/icons/help/76px|152px`, authored
+orientation, no runtime flip).
+
+Scope, behaviour, and the per-surface step lists live in the canonical plan:
+[docs/planning/guided-tour-plan.md](guided-tour-plan.md).

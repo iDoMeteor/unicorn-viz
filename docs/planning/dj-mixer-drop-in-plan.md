@@ -774,6 +774,17 @@ filter facets.
 
 Owner-requested / near-term first, then a grab-bag to prioritize.
 
+- [ ] **"Give me a tour" — mixer walkthrough (owner-requested 2026-07-18).** A
+  guided tour entry in the mixer's `?` help overlay that walks a first-time DJ
+  through: deck anatomy (2×2 vs 2-deck, full+zoom waves, playhead-tracking
+  platter) → the browser's colour language (white on-deck / green mixes clean /
+  magenta one wheel step / gold has stems) → load + transport → the pod (dials,
+  PITCH/TEMPO, HOLDs, FX selector single-click-select vs double-click-lock) →
+  SYNC/KEY/🔒 locks incl. pre-sync-on-load → stems (`G:` faders, right-click
+  mute, `S:` solos) → auto-play + the scratch transition → headphone cue.
+  Non-blocking, skippable, resumable; never touches audio state. Canonical
+  cross-surface plan: [guided-tour-plan.md](guided-tour-plan.md).
+
 - [x] **BPM beat flasher (done 2026-07-12).** The **PLAY button** pulses on its
   own deck's beat while playing (phase from `position × bpm/60`, buffer-latency
   compensated), on for the first half of each beat. ~2 MIDI-out messages per beat
