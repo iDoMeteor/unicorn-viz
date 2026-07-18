@@ -78,7 +78,7 @@ the **baton** it (and others) hold.
 
 ### 3.1 Three layers
 
-```
+```text
    ┌─────────────────────────────────────────────────────────────┐
    │  Drivers   AI-DJ controller │ human tools │ remote client    │
    │            (new drop-in)    │             │ (later phase)     │
@@ -251,9 +251,9 @@ Both consume audio and make musical decisions; they must not fight or double up.
 - [ ] **M1 — `DjApi` write surface.** The bounded action vocabulary forwarding
   to mixer/VjApi public methods, with guardrails, clamps, rate limits, authority
   arbitration, and the audit log. Still no autonomous controller.
-- [ ] **M2 — `dj-mixer-pro` deterministic auto-DJ.** Harmonic/tempo track selection
-  + pre-synced load + timed/scratch transitions + tail FX, driven purely through
-  `DjApi`. Cooldowns + manual grace. The first hands-free set.
+- [ ] **M2 — `dj-mixer-pro` deterministic auto-DJ.** Harmonic/tempo track
+  selection, pre-synced load, timed/scratch transitions, and tail FX — driven
+  purely through `DjApi`. Cooldowns + manual grace. The first hands-free set.
 - [ ] **M3 — DJ↔VJ coordination bus.** Structure/energy/section channel +
   director hints; analysis-authority handoff; auto-vj consumes DJ hints and
   vice-versa. Both still run independently.
@@ -294,13 +294,14 @@ Both consume audio and make musical decisions; they must not fight or double up.
    Recorded in the VJ plan too (see `docs/planning/` auto-vj docs / ADR) so both
    sides document the handshake. Discovery via `get_subsystem`, every cross-call
    guarded — neither hard-depends on the other.
-8. **Training kit — LEAN: extend `training-kit-01`.** The DJ needs a training
-   pipeline like the VJ's, and `training-kit-01` already owns the packaging /
-   scorecard / session-log machinery. Proposal: **add a DJ track to
-   `training-kit-01`** (shared tooling, DJ-specific corpus schema + scorecard
-   metrics: beatmatch accuracy, harmonic-compatibility rate, transition
-   smoothness, crowd-energy proxy) rather than spin up a parallel kit — split
-   only if it grows unwieldy. Owner to confirm extend-vs-new.
+8. **Training kit — DECIDED: extend `training-kit-01`.** The DJ training
+   pipeline is **added to `training-kit-01`** (it already owns the packaging /
+   scorecard / session-log machinery), not a parallel kit — a **DJ track**
+   with its own corpus schema + scorecard metrics (beatmatch accuracy,
+   harmonic-compatibility rate, transition smoothness, crowd-energy proxy),
+   reusing the shared tooling. Split out only if it grows unwieldy. (Owner to
+   loop in the VJ/training-kit team; ADR trigger — the training-model ADR at
+   `docs/adr/training-model.md` should gain a DJ section when this lands.)
 
 ---
 
