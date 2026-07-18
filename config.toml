@@ -620,3 +620,7 @@ headphone_device = "DDJ-REV1: USB Audio"    # cue on the REV1's outputs 3-4 (the
 #spin_fwd = 4.5             # spin-up strength (faster incoming)
 #spin_bpm_tol = 8.0          # incoming within N BPM counts as smooth (no spin)
 #spin_decay = 0.89           # coast-back rate per audio block (higher = longer)
+#spin_throw_s = 0.6          # a spin is a SLAM: the crossfade becomes a fast
+                             # fader throw this long (~the spin's coast) instead
+                             # of the full crossfade_s blend, and the transition
+                             # fires late so the outgoing track isn't cut short
