@@ -94,6 +94,15 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
   - [Test Matrix](../drop-ins/control-room-01/docs/test-matrix.md)
   - [Troubleshooting](../drop-ins/control-room-01/docs/troubleshooting.md)
+- dj-mixer-01
+  - [Operations](../drop-ins/dj-mixer-01/docs/operations.md)
+  - [Configuration](../drop-ins/dj-mixer-01/docs/configuration.md)
+  - [Integration](../drop-ins/dj-mixer-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/dj-mixer-01/docs/troubleshooting.md)
+  - [Feature Overview](../drop-ins/dj-mixer-01/docs/feature-overview.md)
+  - [Hardware Bring-up](../drop-ins/dj-mixer-01/docs/hardware-bringup.md)
+  - [Smart DJ Plan](../drop-ins/dj-mixer-01/docs/smart-dj-plan.md)
+  - [Stems FX Plan](../drop-ins/dj-mixer-01/docs/stems-fx-plan.md)
 - midi-controllers-01
   - [Operations](../drop-ins/midi-controllers-01/docs/operations.md)
   - [Configuration](../drop-ins/midi-controllers-01/docs/configuration.md)
