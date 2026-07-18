@@ -1057,3 +1057,51 @@ warm reopen) before optimizing, rather than guessing which claim dominates.
 **Non-goal.** Moving the hardware claims (audio out, REV1) to app startup —
 that reintroduces the idle-hardware-claim fragility the deferred-open design
 exists to avoid.
+
+## Mixer Runtime Present-Coupling (owner-observed 2026-07-17)
+
+**Symptom.** When the main visualizer is **paused or its window is
+occluded/minimized**, the mixer window's refresh drops to a crawl — even
+though the mixer's own render thread keeps producing frames fine.
+
+**Root cause (diagnosed).** The mixer *produces* frames on its own throttled
+render thread (`ui.py`, `render_interval` ≈ 30 fps), but it *presents* them
+(GL upload + `SDL_RenderPresent` on its second SDL window) only when the core
+main loop calls `controller.present()` — from `App._present_subsystems()`,
+right after the main window's vsync `SDL_GL_SwapWindow`. So the mixer's
+on-screen rate is **gated by the main-loop iteration rate**. Two things slow
+that loop and starve the mixer present:
+
+1. The main window's vsync swap is throttled by the compositor when that
+   window is hidden/occluded (hidden windows get low-rate vsync callbacks).
+2. `_present_subsystems()` has a **budget guard** that *skips* the subsystem
+   present when the previous main frame overran 1.5× budget
+   (`_SUBSYS_PRESENT_SKIP_MS`, up to `_SUBSYS_PRESENT_MAX_SKIPS`).
+
+The present is deliberately main-thread-only because a second SDL window's
+`SDL_RenderPresent` silently switches the GL context on Wayland and never
+switches back — `_present_subsystems()` rebinds the main context afterward
+(see its docstring). That constraint is why this isn't a trivial fix.
+
+**Why it's parked (not a quick win).** Decoupling the mixer present from the
+main loop means presenting the mixer window from something other than the
+main thread's post-swap call — which reopens the exact cross-thread /
+Wayland GL-context hazard the current design routes around. That's an
+architectural change with real risk, not a one-liner.
+
+**Candidate approaches (design-only, measurement-first).**
+
+1. **Own paced present, still on the main thread.** Give the mixer present its
+   own wall-clock cadence (e.g. a floor rate) so a slow/occluded main loop
+   doesn't drop it below ~20–30 fps — decoupling the *rate* without moving the
+   *thread*. Needs the main loop to keep iterating (not block) when occluded.
+2. **Fully independent present** on the mixer's own thread with its own GL
+   context made-current there, never touching the main context (so no rebind
+   needed). Cleanest in theory; highest Wayland-context risk; prototype behind
+   a flag.
+3. **Accept + document** as an OS/compositor behavior for hidden windows
+   (lowest effort) — the mixer is usually foreground when in use.
+
+**Priority:** low (owner: "not a big deal"). Revisit if a two-screen setup
+(visualizer on the audience display, mixer on the booth display) makes the
+occluded-main-window case common.

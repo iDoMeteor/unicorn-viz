@@ -27,6 +27,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- AI DJ + public system interface plan (draft, 2026-07-17): [docs/planning/ai-dj-public-interface-plan.md](planning/ai-dj-public-interface-plan.md)
 - Cross-platform installer plan (gold-star roadmap, refreshed 2026-06-21): [docs/planning/installers.md](planning/installers.md)
 - Auto VJ training protocol: [docs/planning/auto-vj-training-pack-protocol.md](planning/auto-vj-training-pack-protocol.md)
 - Hotkey architecture refactor: [docs/planning/hotkey-architecture-refactor.md](planning/hotkey-architecture-refactor.md)

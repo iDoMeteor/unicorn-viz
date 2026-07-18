@@ -183,6 +183,16 @@ class VJApi:
         self._app.set_runtime_state(key, value)
         return True
 
+    def request_exit(self, *, force: bool = False) -> bool:
+        """Request the whole application to exit (graceful shutdown).
+
+        Lets a subsystem (e.g. the dj-mixer Quit button) close unicorn-viz
+        itself rather than just its own window.  Returns True if the exit was
+        accepted.  A no-op returning False if the app can't be reached.
+        """
+        fn = getattr(self._app, 'request_exit', None)
+        return bool(fn(force=force)) if callable(fn) else False
+
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)
