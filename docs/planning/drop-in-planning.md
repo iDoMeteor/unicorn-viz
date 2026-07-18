@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: archive
-Last updated: 2026-06-18
+Last updated: 2026-07-18
 
 
 ## Control Room Follow-Ups
@@ -43,6 +43,17 @@ Last updated: 2026-06-18
   Notes:
   - derive fonts/padding/button sizes from one clamped UI scale value
   - preserve preview aspect ratio with letterboxing rules
+  - 2026-07-18: preview panel height was a fixed 0.43-of-available-height
+    fraction, independent of the actual audience frame aspect — produced
+    large grey letterbox bars, especially on spanned/mirrored multi-monitor
+    output (e.g. a 3x1080p span is much wider than the panel shape assumed).
+    Changed to a fixed 16:9 aspect (`left_w * 9/16`, clamped against
+    available height) since HD is the sane default and the effect browser
+    below it already grows/shrinks to fill remaining space. `[todo]`
+    matching the panel's aspect to the *actual* live frame aspect
+    (single/span/mirror all differ) is deferred — owner call: don't chase
+    the dynamic version until it's a real pain point, ship the 16:9 default
+    now.
   - enforce min readable text and min click target sizes
   - add a hard "screen too small" guard that switches to an operator-safe fallback instead of trying to cram the full layout into an unusable surface
   - operator-safe fallback should show only critical actions, key state, and a short reason that the full layout is suppressed at the current window size

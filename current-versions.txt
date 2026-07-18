@@ -25,6 +25,9 @@
   unicorn-tears-01              1.0.0-rc.1          RC            module
   webcam-01                     1.0.0-rc.1          RC            module
 
+  ── alpha ─────────────────────────────────────────────────────────────────
+  control-room-01               0.8.1               alpha         module
+
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   feature-01                    0.9.0               alpha ▲       module
   immersive-01                  0.9.0               alpha ▲       module
@@ -40,7 +43,6 @@
   banner-01                     0.8.0               alpha         module
   beat-flash-01                 0.8.0               alpha         module
   color-grade-01                0.8.0               alpha         module
-  control-room-01               0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
   images-01                     0.8.0               alpha         module
   sims-01                       0.7.1               alpha         module
