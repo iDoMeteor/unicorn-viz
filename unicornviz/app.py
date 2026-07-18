@@ -77,6 +77,9 @@ _EB_THUMB_H = 270
 # so reading the full canvas (24 MB at a 3840x2163 spanned canvas) just to
 # shrink it again on the CPU wastes PCIe bandwidth and stalls the GL pipeline.
 _PREVIEW_MAX_WIDTH = 960
+# Historical default ceiling for the subsystem-preview glReadPixels throttle,
+# used when no active consumer exposes its own ``preview_fps_cap``.
+_DEFAULT_SUBSYSTEM_PREVIEW_FPS = 10.0
 _SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
 _SPLASH_REPLAY_COOLDOWN_S = 1.25
 _TRANSITION_MODE_MAP = {
@@ -810,6 +813,25 @@ class App:
     def _subsystems_need_frame_capture(self) -> bool:
         """Return True when any registered subsystem wants preview-frame bytes."""
         return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
+
+    def _subsystem_preview_capture_interval_s(self) -> float:
+        """Return the glReadPixels throttle interval for subsystem preview frames.
+
+        A subsystem consuming frame bytes may expose ``preview_fps_cap`` (an
+        int fps ceiling; omit or 0 to just take the default) alongside
+        ``needs_frame_bytes``.  The fastest active request wins, so several
+        simultaneous consumers all get frames at least as fresh as their own
+        cap.  No subsystem opting in preserves the historical 10 fps default.
+        """
+        caps: list[float] = []
+        for subsystem in self._subsystems.values():
+            if not bool(getattr(subsystem, 'needs_frame_bytes', False)):
+                continue
+            cap = getattr(subsystem, 'preview_fps_cap', None)
+            if isinstance(cap, (int, float)) and cap > 0:
+                caps.append(float(cap))
+        fps = max(caps) if caps else _DEFAULT_SUBSYSTEM_PREVIEW_FPS
+        return 1.0 / max(1.0, fps)
 
     def _render_now_spinning(self, width: int, height: int) -> None:
         """The corner platter card (core Now Spinning overlay), fed by the
@@ -4685,8 +4707,10 @@ void main() {
             )
             need_frame_for_subsystems = self._subsystems_need_frame_capture()
             # Throttle the subsystem preview readback so it fires at the
-            # subsystem's own render rate (≤15 fps) rather than the full
-            # audience output frame rate.  Streaming readback is not
+            # fastest active consumer's requested cap (see
+            # _subsystem_preview_capture_interval_s; defaults to 10 fps when
+            # no consumer opts into a faster/slower ceiling) rather than the
+            # full audience output frame rate.  Streaming readback is not
             # throttled; it must produce one frame per rendered frame to keep
             # the RTMP muxer in sync.
             #
@@ -4699,7 +4723,7 @@ void main() {
             subsystem_capture_due = False
             if need_frame_for_subsystems:
                 _now = time.monotonic()
-                if _now - self._last_subsystem_frame_capture_time >= 0.1:
+                if _now - self._last_subsystem_frame_capture_time >= self._subsystem_preview_capture_interval_s():
                     subsystem_capture_due = True
                     self._last_subsystem_frame_capture_time = _now
             if need_frame_for_streaming:
