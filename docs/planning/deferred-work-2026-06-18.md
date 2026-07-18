@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-07-08
+Last updated: 2026-07-18
 
 This document tracks intentionally deferred engineering work that is
 acknowledged and scheduled for a later dedicated batch.
@@ -181,3 +181,56 @@ Re-entry trigger:
   heuristic pair isn't closing the gap it was added for. Estimated effort:
   1–2 sessions (dependency vetting, model sourcing, audio-thread inference
   wiring, parity check against the heuristic pair before removing it).
+
+
+### DW-006 — Bootable Fedora "Appliance" USB Image
+
+Source:
+
+- Owner request, 2026-07-18.
+
+Status:
+
+- Deferred to a dedicated batch; no work started.
+
+What is deferred:
+
+- A live Fedora USB image that boots straight into Unicorn Viz as a kiosk
+  appliance — no desktop session, no login, no manual setup — so the whole
+  rig travels on a stick and comes up show-ready on borrowed hardware.
+
+Why this is attractive:
+
+- The project already pins its runtime (`requirements.txt`), targets Fedora
+  as the primary platform, and expects PipeWire + a Wayland compositor —
+  which is exactly the environment an image can guarantee instead of hope
+  for.  It also removes the single largest source of "works on my machine"
+  variance from live use: the host's audio stack and GPU drivers.
+- Persistence would let the library, `config.toml`, track store, stems cache
+  and saved sets ride along with the stick.
+
+What it would involve (sketch, not a plan):
+
+- Kickstart + `livemedia-creator` (or Image Builder) to define the compose;
+  a systemd unit launching the app in place of a desktop session; a writable
+  overlay or a separate persistent partition for user data.
+- Decisions needed before it becomes a plan: which GPU driver sets to ship
+  (Mesa-only vs. bundling NVIDIA), whether MIDI/DDJ-REV1 udev rules ship
+  preinstalled, how drop-in submodules are baked in given they are private
+  repos, and how the image gets updated without a full re-flash.
+
+Why deferred:
+
+- It is a packaging/distribution workstream, not a runtime one, and it wants
+  the runtime to be closer to stable first — an appliance image freezes
+  whatever it ships, so it is best built once the mixer and Auto VJ have
+  settled their config surfaces.
+- Needs hardware to validate against (at minimum: a non-development machine
+  to boot on) and a real test loop, or it becomes a large untested artifact.
+
+Re-entry trigger:
+
+- Revisit once the mixer reaches a stable config surface and the drop-in
+  submodule distribution question is answered.  Natural companion to the
+  installer work already tracked in
+  [installers.md](installers.md).

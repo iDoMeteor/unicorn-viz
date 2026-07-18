@@ -26,6 +26,8 @@ _cleanup_stale_empty_corpus_files = _MOD._cleanup_stale_empty_corpus_files
 _load_profile_expected_values = _MOD._load_profile_expected_values
 _format_profile_expected_values_block = _MOD._format_profile_expected_values_block
 _build_combined_prompt = _MOD._build_combined_prompt
+_format_reco_weights_line = _MOD._format_reco_weights_line
+_RECO_WEIGHT_DEFAULTS = _MOD._RECO_WEIGHT_DEFAULTS
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -246,6 +248,16 @@ def test_format_profile_expected_values_block_renders_all_entries() -> None:
     assert 'centroid=1500 Hz' in block
     assert 'zcr=0.060' in block
     assert 'onset=2.5/s' in block
+
+
+def test_reco_weights_line_used_consistently_in_both_prompt_spots() -> None:
+    """The two weight mentions in the prompt used to be separate hand-typed
+    lists that could silently drift from each other; both must now come from
+    the same _RECO_WEIGHT_DEFAULTS dict via _format_reco_weights_line()."""
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    line = _format_reco_weights_line(_RECO_WEIGHT_DEFAULTS)
+    assert prompt.count(line) == 2
 
 
 def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> None:
