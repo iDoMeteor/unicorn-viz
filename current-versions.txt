@@ -26,7 +26,7 @@
   webcam-01                     1.0.0-rc.1          RC            module
 
   ── alpha ─────────────────────────────────────────────────────────────────
-  control-room-01               0.8.1               alpha         module
+  control-room-01               0.8.2               alpha         module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   feature-01                    0.9.0               alpha ▲       module

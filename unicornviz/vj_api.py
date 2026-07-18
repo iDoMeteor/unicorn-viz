@@ -785,6 +785,7 @@ class VJApi:
                 'swap': float(getattr(overlays, '_sysmon_swap', 0.0) or 0.0),
                 'disk_mbs': float(getattr(overlays, '_sysmon_disk_mbs', 0.0) or 0.0),
                 'net_mbs': float(getattr(overlays, '_sysmon_net_mbs', 0.0) or 0.0),
+                'fps': float(getattr(self._app, '_last_frame_fps', 0.0) or 0.0),
             }
         except Exception:
             return {
@@ -793,6 +794,7 @@ class VJApi:
                 'swap': 0.0,
                 'disk_mbs': 0.0,
                 'net_mbs': 0.0,
+                'fps': 0.0,
             }
 
     def auto_vj_snapshot(self) -> dict[str, object]:
