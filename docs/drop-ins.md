@@ -102,6 +102,7 @@ Complex drop-ins should also include:
   - [Feature Overview](../drop-ins/dj-mixer-01/docs/feature-overview.md)
   - [Hardware Bring-up](../drop-ins/dj-mixer-01/docs/hardware-bringup.md)
   - [Smart DJ Plan](../drop-ins/dj-mixer-01/docs/smart-dj-plan.md)
+  - [AI DJ Plan](../drop-ins/dj-mixer-01/docs/ai-dj-plan.md)
   - [Stems FX Plan](../drop-ins/dj-mixer-01/docs/stems-fx-plan.md)
 - midi-controllers-01
   - [Operations](../drop-ins/midi-controllers-01/docs/operations.md)
