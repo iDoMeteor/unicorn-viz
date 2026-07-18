@@ -2,13 +2,16 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-07-01
+Last updated: 2026-07-18
 
 This document records architectural decisions for the Auto VJ training pipeline:
 corpus design, scoring, packager logic, headless session infrastructure, and
 tuning protocol.  Update it whenever touching
 `drop-ins/training-kit-01/tools/package_training_set.py`,
-`drop-ins/training-kit-01/tools/training_daemon.py`, scorecard thresholds,
+`drop-ins/training-kit-01/tools/training_daemon.py`,
+`drop-ins/training-kit-01/tools/training/training_lib.py`,
+`drop-ins/training-kit-01/tools/training/sync_corpus_from_logs.py`,
+`drop-ins/training-kit-01/tools/promote_weights.py`, scorecard thresholds,
 LLM scoring, Schmidt trigger constants, or adding / changing a training
 workflow step.
 
@@ -247,6 +250,76 @@ These targets represent the floor for proceeding to the 50-session automated run
 | LLM overall score | ≥ 3.0 / 5 |
 
 Update targets as the detector improves.
+
+---
+
+## Target-Label Mechanism — Manual-Override Penalty (2026-07-18)
+
+**Decision: manual recommender overrides are the implicit `target_score` label**
+
+`fit_ridge_weights()` (`training_lib.py`) has always needed a `target_column`
+to fit against, but nothing produced one — `training-capture-strategy.md`
+finding #5 flagged this gap in June 2026 and it stayed open. The fix follows
+that doc's own proposal and `INTELLIGENCE_TRAINING.md`'s L4 note that human
+overrides are "the highest-signal training data we have":
+
+- `auto_vj.py`'s `cycle_profile()` now tags a manual profile switch with
+  `reason='manual_override'` on the `profile_switch` sequence-corpus
+  keyframe it already emitted (cycling back to `'auto'` re-enables the
+  decider but fires no keyframe, so it carries no label either way).
+- `training_lib.compute_override_target_scores(sequence_corpus_paths,
+  penalty_per_override=0.4)` scans sequence-corpus files for that tag,
+  grouped by `spotify_track_id`: no override during a track → `target_score
+  = 1.0`; each override subtracts `penalty_per_override`, floored at `0.0`.
+  A track never observed in the sequence corpus gets **no score at all**
+  (not assumed 1.0) — `fit_ridge_weights()` already skips rows missing the
+  target column, so sparse labeling degrades gracefully.
+- `sync_corpus_from_logs.py` wires this in: `--sequence-corpus` (default
+  glob `assets/training/corpus/sequence-corpus*.jsonl`) and
+  `--override-penalty` (default `training_lib.DEFAULT_OVERRIDE_PENALTY =
+  0.4`) control it; the sync report gained a `tracks_labeled` count.
+
+`0.4` is a first-pass, hand-picked constant, not yet validated against real
+override-timing data — see the L4 "reward = absence of correction within K
+seconds" idea in `INTELLIGENCE_TRAINING.md` for a future time-weighted
+refinement once real labeled sessions exist to tune against.
+
+---
+
+## Recommender Weight Promotion (2026-07-18)
+
+**Decision: promoted weights live in `auto-vj-01/weights/`, loaded once at startup, never automatically**
+
+Blocker #3 on the Essentia offline pipeline was that nothing consumed
+`fit_ridge_weights()`'s output. Rather than have `auto_vj.py` read
+training-kit-01's output directly (a drop-in-to-drop-in runtime dependency,
+against the independence rules), the fitted weights are **promoted**: a
+deliberate, human-triggered copy from training-kit-01's offline output into
+auto-vj-01's own directory.
+
+- `auto_vj.py._DEFAULT_RECO_WEIGHTS` names the 13 composite-score terms
+  (`lock_rate`, `tempo_fit`, `band_fit`, `centroid_fit`, `zcr_fit`,
+  `onset_fit`, `spectral_shape_fit`, `kick_regularity_fit`, `top_cand_fit`,
+  `mean_conf`, `mean_dconf`, `vocal_hnr_fit`, `vocal_fmr_fit`) with their
+  current hand-tuned values; `_load_recommender_weights()` reads
+  `drop-ins/auto-vj-01/weights/recommender-weights.json` at controller
+  `__init__` and overrides only the keys present there — a missing or
+  malformed file falls back to the defaults entirely.
+- `drop-ins/training-kit-01/tools/promote_weights.py <fitted.json>`
+  validates the fitted file's shape, archives whatever is currently active
+  into `weights/archive/recommender-weights-<UTC timestamp>.json`, and
+  writes the new file as the active one. A fresh offline fit has zero
+  effect on a live session until this is run by hand.
+- `package_training_set.py`'s LLM tuning prompt mirrors
+  `_DEFAULT_RECO_WEIGHTS` as `_RECO_WEIGHT_DEFAULTS` (comment-linked, not
+  imported — training-kit-01 must not hard-depend on auto-vj-01 either) and
+  now renders it through one `_format_reco_weights_line()` helper used in
+  both prompt locations that used to be separately hand-typed and could
+  drift from each other.
+
+Weights take effect only on the **next Auto VJ startup** — there is no
+hot-reload, matching the same "load once at init" pattern as
+`unicornviz.audio.profiles.PROFILES`.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-07-13
+Last updated: 2026-07-18
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -609,6 +609,25 @@ margin to 0 and permanently blocking the decider.  Both the raw-score fallback (
 new probability fallback (for gating) now use the second-best candidate instead.
 
 Full analysis: `docs/audits/2026-07-06-vj-training-systems-audit.md` P2-6 / P2-7.
+
+---
+
+## Recommender Weight Promotion + Manual-Override Label (2026-07-18)
+
+Decision: composite-score weights (`_DEFAULT_RECO_WEIGHTS`) are now overridable
+by a promoted file; manual profile overrides are tagged for offline training.
+
+- `_load_recommender_weights()` reads `drop-ins/auto-vj-01/weights/
+  recommender-weights.json` at controller init, overriding only recognized
+  keys; missing/malformed → code defaults, unchanged from before this change.
+- `cycle_profile()`'s manual-switch branch now passes
+  `reason='manual_override'` into the `profile_switch` sequence-corpus
+  keyframe — a pure additive label, no change to switching behavior itself.
+
+Full design + the offline fit/promote workflow: `docs/adr/training-model.md`
+§ "Target-Label Mechanism" and § "Recommender Weight Promotion" (this is a
+training-pipeline concern; this entry exists here only because both touch
+`auto_vj.py` runtime code the header above requires tracking).
 
 ---
 
