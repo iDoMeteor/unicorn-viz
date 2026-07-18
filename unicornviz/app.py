@@ -3225,6 +3225,32 @@ void main() {
                     _cls.prewarm_async(_sim_cfg)
                 break
 
+        # Background the ProjectM preset-catalog scan (the ~10k-file disk walk,
+        # the non-GL half of warm_up) so it overlaps the splash; warm_up after
+        # the splash finds the catalog cached and only builds the GL bridge.
+        for _cls in _pre_effects:
+            if getattr(_cls, 'NAME', '') == 'ProjectM Presets' and hasattr(_cls, 'prescan_catalog_async'):
+                _pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
+                if bool(_pm_cfg.get('enabled', True)):
+                    try:
+                        _cls.prescan_catalog_async(_pm_cfg)
+                    except Exception as _exc:
+                        log.debug('ProjectM prescan skipped: %s', _exc)
+                break
+
+        # Background the Media library walk + tag reads (the controller's
+        # dominant construction cost) so it overlaps the splash instead of
+        # stalling boot after it; the controller (built after the splash)
+        # consumes the cached scan.
+        _media_cfg = self.cfg.get('media', default={}) or {}
+        if isinstance(_media_cfg, dict) and bool(_media_cfg.get('enabled', False)):
+            try:
+                _media_cls = _load_media_controller_class()
+                if hasattr(_media_cls, 'prescan_async'):
+                    _media_cls.prescan_async(_media_cfg)
+            except Exception as _exc:
+                log.debug('Media prescan skipped: %s', _exc)
+
         boot.mark('pre_splash_async_kickoff')
 
         # Splash screen — shown before any effect loads
