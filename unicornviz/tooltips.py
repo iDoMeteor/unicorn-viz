@@ -216,8 +216,25 @@ def wrap_tooltip_text(
     ``measure`` returns the pixel width of a string in ``font`` (callers
     pass ``lambda s: draw.textlength(s, font=font)``); split out so the
     wrapping is testable against a trivial measure function.
+
+    Explicit newlines are honoured as paragraph breaks: a blank line in the
+    source becomes a blank line in the output, so a tooltip can separate "what
+    this does" from a caveat instead of running them together.  Text without
+    newlines wraps exactly as before.
     """
-    words = str(text).split()
+    raw = str(text)
+    if '\n' in raw:
+        out: list[str] = []
+        for i, para in enumerate(raw.split('\n\n')):
+            if i:
+                out.append('')                     # blank line between paras
+            for chunk in para.split('\n'):
+                out.extend(wrap_tooltip_text(chunk, font, max_width_px,
+                                             measure))
+        while out and not out[-1]:
+            out.pop()
+        return out
+    words = raw.split()
     if not words:
         return []
     lines: list[str] = []
