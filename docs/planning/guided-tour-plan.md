@@ -1,6 +1,11 @@
 ---
 Owner: Planning
-Status: BACKLOG — owner-requested 2026-07-18. Not started.
+Status: BACKLOG — owner-requested 2026-07-18. Not started. **Sequencing
+note (2026-07-18): a simpler v1 ships first** — a centered slide dialog
+with next/prev/close + a show-on-startup toggle, specified in
+[`first-run-tour-plan-2026-07-18.md`](first-run-tour-plan-2026-07-18.md).
+This doc remains the v2 interactive-spotlight vision and builds on v1's
+trigger, persistence, and entry points.
 Last updated: 2026-07-18
 ---
 
