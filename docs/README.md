@@ -52,6 +52,7 @@ This is the canonical map for project documentation.
 - ProjectM-only mode + effects browser examination (2026-06-30): [docs/planning/projectm-only-mode-and-effects-browser-2026-06-30.md](planning/projectm-only-mode-and-effects-browser-2026-06-30.md)
 - Effects consolidation analysis (Option B category packs selected 2026-06-30): [docs/planning/effects-consolidation-analysis.md](planning/effects-consolidation-analysis.md)
 - DJ mixer drop-in plan — `dj-mixer-01` two-deck audio mixer for Pioneer DDJ-REV1 (2026-07-07): [docs/planning/dj-mixer-drop-in-plan.md](planning/dj-mixer-drop-in-plan.md)
+- Mixer-only mode plan — boot profile + hosted single-window console + alternate launch methods (2026-07-18): [docs/planning/mixer-only-mode-plan-2026-07-18.md](planning/mixer-only-mode-plan-2026-07-18.md)
 - Second-window Linux mitigation strategies (2026-07-09, closed — SDL2 texture-framebuffer + moderngl/Wayland root-cause audit, explicit-GL fix implemented and owner-confirmed): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 - Tooltip system plan — control room / mixer / overlays full-surface audit + shared architecture (2026-07-13): [docs/planning/tooltip-system-plan-2026-07-13.md](planning/tooltip-system-plan-2026-07-13.md)
 - Active audit tracker: [docs/audits](audits)
