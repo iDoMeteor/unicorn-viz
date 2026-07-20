@@ -2,6 +2,10 @@
 
 **Version 1.0.0-beta.9**
 
+## Contact Me!
+
+If you are using UV, please contact me asap!  This repo is going to move.
+DJUnicornTears on X/Gmail.
 
 ## Press `H` or `?` for Help
 
@@ -9,6 +13,10 @@ If you're running a live stream or recorded set with Unicorn Viz and upload it
 somewhere, let us know and we'll repost it.
 
 A fullscreen OpenGL 3.3 demoscene visualizer written in Python 3.11+, designed for Linux (Wayland-first, X11 fallback). Renders audio-reactive effects, classic CP437 ANSI art, live audio input capture via PipeWire/ALSA, and MIDI control.
+
+## Contact Me
+
+If you are using UV, please contact me!  djunicorntears on X/Gmail.
 
 ## Repository Notice
 
