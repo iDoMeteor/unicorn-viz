@@ -14,8 +14,10 @@ This module owns everything that is *not* rendering or input:
   persisted runtime state store: a missing key means "first run", which
   is exactly the case that should be offered the tour.
 
-Drop-in slide contribution (``TOUR_SLIDES`` discovery, mirroring
-``HELP_ENTRIES``) is phase 2 and intentionally absent here.
+Drop-in slide contribution mirrors ``HELP_ENTRIES``: modules under
+``drop-ins/`` declare module-level ``TOUR_SLIDES``, collected by
+``unicornviz.dropins.discover_dropin_tour_slides()`` and appended to the
+core deck when the tour opens (``App._tour_deck``).
 """
 from __future__ import annotations
 

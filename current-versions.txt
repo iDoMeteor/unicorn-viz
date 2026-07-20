@@ -4,10 +4,10 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.10       BETA          MISMATCH (readme=1.0.0-beta.9)
+  core (unicornviz)             1.0.0-beta.11       BETA          MISMATCH (readme=1.0.0-beta.9)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.90.0              alpha ▲       module
+  dj-mixer-01                   0.91.0              alpha ▲       module
   media-01                      0.15.2              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
@@ -25,10 +25,8 @@
   unicorn-tears-01              1.0.0-rc.1          RC            module
   webcam-01                     1.0.0-rc.1          RC            module
 
-  ── alpha ─────────────────────────────────────────────────────────────────
-  control-room-01               0.8.3               alpha         module
-
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  control-room-01               0.9.0               alpha ▲       module
   feature-01                    0.9.0               alpha ▲       module
   immersive-01                  0.9.0               alpha ▲       module
   particles-01                  0.9.0               alpha ▲       module

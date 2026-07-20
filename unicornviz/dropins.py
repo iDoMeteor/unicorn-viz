@@ -342,6 +342,50 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
     return discovered
 
 
+def discover_dropin_tour_slides() -> list[tuple[str, str, str]]:
+    """Discover TOUR_SLIDES from drop-in modules for the first-run tour.
+
+    Supported formats (module level only):
+    - TOUR_SLIDES = [('Section', 'Title', 'Body'), ...]
+    - TOUR_SLIDES = [{'section': ..., 'title': ..., 'body': ...}, ...]
+
+    Bodies may use the same ``{key:<help description>}`` tokens as the core
+    deck (resolved against the help registry at display time). Returns plain
+    tuples so this module stays decoupled from ``unicornviz.tour``; malformed
+    entries are skipped with a warning, and drop-ins are scanned in sorted
+    directory order so the deck is stable across runs.
+    """
+    root = _dropins_root()
+    if not root.exists():
+        return []
+
+    discovered: list[tuple[str, str, str]] = []
+    for file_path in sorted(root.glob('*/*.py')):
+        if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
+            continue
+        if _is_dropin_excluded(file_path.parent.name):
+            continue
+        try:
+            module = _load_module_from_file(file_path)
+        except Exception as exc:
+            log.warning('Skipping drop-in tour module %s: %s', file_path, exc)
+            continue
+
+        for raw in getattr(module, 'TOUR_SLIDES', []) or []:
+            if isinstance(raw, dict):
+                parts = (raw.get('section'), raw.get('title'), raw.get('body'))
+            elif isinstance(raw, (tuple, list)) and len(raw) == 3:
+                parts = tuple(raw)
+            else:
+                parts = None
+            if parts is None or not all(isinstance(p, str) and p for p in parts):
+                log.warning('Skipping malformed TOUR_SLIDES entry in %s: %r',
+                            file_path, raw)
+                continue
+            discovered.append((parts[0], parts[1], parts[2]))
+    return discovered
+
+
 def load_runtime_capability_class(capability: DropinRuntimeCapability) -> type:
     """Load the class backing a runtime capability declaration."""
     cls = load_dropin_symbol(capability.relative_file, capability.class_symbol)

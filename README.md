@@ -544,6 +544,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.11** — Tour P2 (partial): drop-ins can now contribute slides
+  to the first-run tour via module-level `TOUR_SLIDES` (discovered the same
+  way as `HELP_ENTRIES`, appended after the core deck when the tour opens).
+  control-room-01 0.9.0 ships the first two drop-in slides. Discovery is
+  fully fault-isolated: a broken drop-in never breaks the tour.
 - **1.0.0-beta.10** — **First-run tour** (v1): a centered slide dialog that
   walks new operators through the core surface — effects, audio sources, the
   help overlay, multi-display, and the right-click menu. Offered automatically

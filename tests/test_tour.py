@@ -267,8 +267,11 @@ def test_close_tour_persists_slide_and_startup_toggle() -> None:
 
 
 def test_tour_advance_on_last_slide_completes_and_persists_reset() -> None:
-    store: dict[str, object] = {STATE_LAST_SLIDE: len(CORE_TOUR_SLIDES) - 1}
-    app = _bare_app(store)
+    app = _bare_app({})
+    # The live deck may include discovered drop-in slides beyond the core set.
+    store: dict[str, object] = {STATE_LAST_SLIDE: len(app._tour_deck()) - 1}
+    app.get_runtime_state = lambda key, default=None: store.get(key, default)
+    app.set_runtime_state = lambda key, value: store.__setitem__(key, value)
     app.open_tour()
     app.tour_advance()
     assert not app._overlays.tour_visible
@@ -296,6 +299,82 @@ def test_startup_trigger_respects_disabled_toggle() -> None:
     app = _bare_app(store)
     app._maybe_open_tour_on_startup()
     assert not app._overlays.tour_visible
+
+
+# --------------------------------------------------------------------------- #
+# Drop-in TOUR_SLIDES discovery (P2)
+# --------------------------------------------------------------------------- #
+
+
+def test_discovery_normalises_and_skips_malformed_entries(tmp_path, monkeypatch) -> None:
+    import unicornviz.dropins as dropins
+
+    mod_dir = tmp_path / 'demo-01'
+    mod_dir.mkdir()
+    (mod_dir / 'demo.py').write_text(
+        "TOUR_SLIDES = [\n"
+        "    ('Demo', 'Good tuple', 'Body one'),\n"
+        "    {'section': 'Demo', 'title': 'Good dict', 'body': 'Body two'},\n"
+        "    ('Missing body',),\n"
+        "    {'section': 'Demo', 'title': '', 'body': 'empty title'},\n"
+        "    'not a slide',\n"
+        "]\n"
+    )
+    monkeypatch.setattr(dropins, '_dropins_root', lambda: tmp_path)
+    monkeypatch.setattr(dropins, '_is_dropin_excluded', lambda name: False)
+    slides = dropins.discover_dropin_tour_slides()
+    assert slides == [
+        ('Demo', 'Good tuple', 'Body one'),
+        ('Demo', 'Good dict', 'Body two'),
+    ]
+
+
+def test_real_dropin_tour_slides_are_wellformed_and_tokens_resolve() -> None:
+    import re
+
+    from unicornviz.dropins import (
+        discover_dropin_help_entries,
+        discover_dropin_tour_slides,
+    )
+
+    slides = discover_dropin_tour_slides()
+    known = {
+        desc.strip().lower()
+        for _, entries in Overlays.CORE_HELP_SECTIONS
+        for _, desc in entries
+    }
+    known.update(
+        desc.strip().lower() for _, _, desc in discover_dropin_help_entries()
+    )
+    for section, title, body in slides:
+        assert section and title and body
+        for match in re.finditer(r'\{key:([^}]+)\}', body):
+            assert match.group(1).strip().lower() in known, (title, match.group(1))
+
+
+def test_tour_deck_appends_discovered_slides(monkeypatch) -> None:
+    import unicornviz.app as app_mod
+
+    monkeypatch.setattr(
+        app_mod,
+        'discover_dropin_tour_slides',
+        lambda: [('Demo', 'Extra', 'Extra body')],
+    )
+    app = _bare_app({})
+    deck = app._tour_deck()
+    assert deck[: len(CORE_TOUR_SLIDES)] == CORE_TOUR_SLIDES
+    assert deck[-1] == TourSlide('Demo', 'Extra', 'Extra body')
+
+
+def test_tour_deck_survives_discovery_failure(monkeypatch) -> None:
+    import unicornviz.app as app_mod
+
+    def _boom() -> list[tuple[str, str, str]]:
+        raise RuntimeError('scan exploded')
+
+    monkeypatch.setattr(app_mod, 'discover_dropin_tour_slides', _boom)
+    app = _bare_app({})
+    assert app._tour_deck() == CORE_TOUR_SLIDES
 
 
 def test_toggle_tour_opens_and_closes() -> None:

@@ -9,7 +9,13 @@ buttons carry **no tooltips** (they are self-labeled; §2.4 simplification)
 and the context-menu label is **"Open Tour"**, not "Take the Tour", to keep
 the enforced `Open <context>` modal-label convention. P2 (drop-in
 `TOUR_SLIDES` + help-rail tile — needs an icon asset) and P3 (CR mirroring)
-remain open. The interactive spotlight tour remains the v2 vision in
+remain open. **P2 update 2026-07-20** (core 1.0.0-beta.11): the
+`TOUR_SLIDES` discovery scan (`discover_dropin_tour_slides` in
+`dropins.py`, merged in `App._tour_deck`) and control-room-01's two
+slides (0.9.0) are shipped; still open in P2 are the help-rail Tour tile
+(**blocked on the icon asset** — owner is batching all image work) and
+dj-mixer-01's slides (**deferred** — mixer repo has another team's work
+in flight). The interactive spotlight tour remains the v2 vision in
 [`guided-tour-plan.md`](guided-tour-plan.md) (backlog), which this
 supersedes *for sequencing only* — v1 ships first, v2 builds on its
 trigger/persistence/entry points.

@@ -43,6 +43,7 @@ from unicornviz._null_controllers import (
 from unicornviz.dropins import (
     load_dropin_symbol,
     discover_dropin_help_entries,
+    discover_dropin_tour_slides,
     load_runtime_capability_class,
     register_runtime_capability,
     unregister_runtime_capability,
@@ -56,6 +57,7 @@ from unicornviz.tour import (
     CORE_TOUR_SLIDES,
     STATE_LAST_SLIDE,
     STATE_SHOW_ON_STARTUP,
+    TourSlide,
     clamp_slide_index,
     should_show_on_startup,
 )
@@ -3146,6 +3148,21 @@ void main() {
     # Persistence lives here, in the runtime state store.                 #
     # ------------------------------------------------------------------ #
 
+    def _tour_deck(self) -> tuple[TourSlide, ...]:
+        """Core slides plus any drop-in TOUR_SLIDES contributions.
+
+        Drop-in discovery must never break the tour (independence rules):
+        on any failure the core deck ships alone. Modules are already in
+        the drop-in loader cache from help discovery, so the scan is cheap.
+        """
+        slides = list(CORE_TOUR_SLIDES)
+        try:
+            for section, title, body in discover_dropin_tour_slides():
+                slides.append(TourSlide(section, title, body))
+        except Exception as exc:
+            log.debug('Drop-in tour slides skipped: %s', exc)
+        return tuple(slides)
+
     def open_tour(self) -> None:
         """Open the tour dialog at the persisted resume position."""
         overlays = self._overlays
@@ -3154,9 +3171,10 @@ void main() {
         if overlays.blocking_modal_open:
             overlays.flash_message('Close the current panel first', 1.5)
             return
-        overlays.set_tour_slides(CORE_TOUR_SLIDES)
+        deck = self._tour_deck()
+        overlays.set_tour_slides(deck)
         slide = clamp_slide_index(
-            self.get_runtime_state(STATE_LAST_SLIDE, 0), len(CORE_TOUR_SLIDES),
+            self.get_runtime_state(STATE_LAST_SLIDE, 0), len(deck),
         )
         show = bool(self.get_runtime_state(STATE_SHOW_ON_STARTUP, True))
         overlays.open_tour(slide, show)
