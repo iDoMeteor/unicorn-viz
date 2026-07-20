@@ -19,6 +19,7 @@ from unicornviz.catalog_browser import CatalogBrowser, PANE_CATEGORIES, PANE_LIS
 from unicornviz.cta_overlay import CTAOverlay, _CTA_SHOW_DURATION, _CTA_SLOTS
 from unicornviz.paths import resolve_path
 from unicornviz.tooltips import TooltipHoverTracker, TooltipRegion, wrap_tooltip_text
+from unicornviz.tour import resolve_slide_body as _tour_resolve
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -354,6 +355,14 @@ class Overlays:
     _rail_tooltip_tracker: TooltipHoverTracker | None = None
     _tooltip_surface = ''
 
+    # First-run tour modal — class-level defaults for the same shell reason.
+    _show_tour = False
+    _tour_slides: tuple = ()
+    _tour_slide = 0
+    _tour_show_on_startup = True
+    _tour_hover = ''
+    _tour_button_rects: tuple = ()
+
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
             'Help Usage',
@@ -364,6 +373,7 @@ class Overlays:
                 ('Shift+=', 'Expand all sections (all tabs)'),
                 ('Arrow keys', 'Move section focus (this tab)'),
                 ('H / ?', 'Toggle help overlay'),
+                ('F1', 'Take the tour'),
                 ('Shift+H', 'Notifications on/off'),
                 ('Enter', 'Expand/collapse focused section; cycles item-pages if already open'),
                 ('0 - 9', 'Same, for section 1-10 (this tab)'),
@@ -1995,6 +2005,7 @@ void main() {
             or self._show_audio
             or self._show_midi
             or self._show_config_editor
+            or self._show_tour
         )
 
     def dropin_help_entries(self) -> list[tuple[str, str, str]]:
@@ -2810,6 +2821,187 @@ void main() {
                             right_x + 16, body_y + body_h - 22.0, scale=1.7,
                             color=(0.5, 0.6, 0.72, 0.75))
 
+    # ------------------------------------------------------------------
+    # First-run tour modal (v1 slide dialog)
+    # See docs/planning/first-run-tour-plan-2026-07-18.md. Content and
+    # startup policy live in unicornviz/tour.py; this section owns only
+    # rendering and pointer input. Keyboard input is dispatched by
+    # HotkeyHandler (the in-modal branch), mirroring the other modals.
+    # ------------------------------------------------------------------
+
+    @property
+    def tour_visible(self) -> bool:
+        """Return whether the tour dialog is open."""
+        return self._show_tour
+
+    def set_tour_slides(self, slides) -> None:
+        """Install the slide deck (core + later drop-in contributions)."""
+        self._tour_slides = tuple(slides or ())
+        self._tour_slide = min(self._tour_slide, max(0, len(self._tour_slides) - 1))
+
+    def open_tour(self, slide: int = 0, show_on_startup: bool = True) -> None:
+        """Open the dialog at ``slide`` with the checkbox preset."""
+        if not self._tour_slides:
+            return
+        self._tour_slide = max(0, min(len(self._tour_slides) - 1, int(slide)))
+        self._tour_show_on_startup = bool(show_on_startup)
+        self._tour_hover = ''
+        self._show_tour = True
+
+    def close_tour(self) -> tuple[int, bool]:
+        """Close the dialog; return ``(slide, show_on_startup)`` to persist."""
+        self._show_tour = False
+        return self._tour_slide, self._tour_show_on_startup
+
+    def tour_state(self) -> tuple[int, bool]:
+        """Return ``(slide, show_on_startup)`` without closing."""
+        return self._tour_slide, self._tour_show_on_startup
+
+    def tour_next(self) -> bool:
+        """Advance one slide; return True when DONE (past the last slide)."""
+        if self._tour_slide >= len(self._tour_slides) - 1:
+            self._tour_slide = 0  # completion resets the resume position
+            return True
+        self._tour_slide += 1
+        return False
+
+    def tour_prev(self) -> None:
+        """Go back one slide (clamped at the first)."""
+        self._tour_slide = max(0, self._tour_slide - 1)
+
+    def tour_toggle_startup(self) -> bool:
+        """Flip the show-on-startup checkbox; return the new state."""
+        self._tour_show_on_startup = not self._tour_show_on_startup
+        return self._tour_show_on_startup
+
+    def _tour_layout(self) -> dict[str, tuple[float, float, float, float]]:
+        """Pure geometry for the tour panel and its controls.
+
+        Split from rendering so input handling and tests share exact rects
+        without a GL context (the config-editor tab-box pattern). Keys:
+        ``panel``, ``prev``, ``next``, ``close``, ``startup`` (checkbox +
+        label hit area).
+        """
+        pw = min(880.0, self._width * 0.9)
+        ph = min(560.0, self._height * 0.9)
+        px = (self._width - pw) * 0.5
+        py = (self._height - ph) * 0.5
+        btn_w, btn_h = 118.0, 42.0
+        gap = 12.0
+        by = py + ph - btn_h - 18.0
+        close_x = px + pw - btn_w - 18.0
+        next_x = close_x - btn_w - gap
+        prev_x = next_x - btn_w - gap
+        box = 20.0
+        sx = px + 18.0
+        sy = by + (btn_h - box) * 0.5
+        label_w = len('Show on startup') * 8.0 * 1.48 + 12.0
+        return {
+            'panel': (px, py, pw, ph),
+            'prev': (prev_x, by, btn_w, btn_h),
+            'next': (next_x, by, btn_w, btn_h),
+            'close': (close_x, by, btn_w, btn_h),
+            'startup': (sx, sy, box + label_w, box),
+        }
+
+    def handle_tour_motion(self, x: float, y: float) -> bool:
+        """Update hover state; return True while the dialog is open."""
+        if not self._show_tour:
+            return False
+        self._tour_hover = ''
+        layout = self._tour_layout()
+        for kind in ('prev', 'next', 'close', 'startup'):
+            bx, by, bw, bh = layout[kind]
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                self._tour_hover = kind
+                break
+        return True
+
+    def handle_tour_click(self, x: float, y: float) -> str:
+        """Return the control under a click: ``prev|next|close|startup|''``.
+
+        The caller (App) applies the action so persistence stays app-side.
+        """
+        if not self._show_tour:
+            return ''
+        layout = self._tour_layout()
+        for kind in ('prev', 'next', 'close', 'startup'):
+            bx, by, bw, bh = layout[kind]
+            if bx <= x <= bx + bw and by <= y <= by + bh:
+                return kind
+        return ''
+
+    def _render_tour(self) -> None:
+        """Draw the slide dialog: fixed-size centered panel, identical every
+        slide (footer: startup checkbox left, PREV / NEXT / CLOSE right)."""
+        if not self._tour_slides:
+            return
+        layout = self._tour_layout()
+        px, py, pw, ph = layout['panel']
+        self._draw_modal_underlay(px, py, pw, ph, 0.55, pad=60.0)
+        self._draw_rect(px, py, pw, ph, (0.03, 0.05, 0.09, 0.96))
+        self._draw_rect(px, py, pw, 3.0, (0.10, 0.94, 1.0, 0.85))
+        self._draw_rect(px, py + ph - 3.0, pw, 3.0, (0.78, 0.38, 1.0, 0.75))
+        self._draw_modal_frame_decor(px, py, pw, ph, 0.5)
+
+        idx = self._tour_slide
+        slide = self._tour_slides[idx]
+        total = len(self._tour_slides)
+        pad = 34.0
+
+        eyebrow = f'{slide.section}  ·  {idx + 1} / {total}'
+        self._draw_text(eyebrow, px + pad, py + 26.0, scale=1.48,
+                        color=(0.10, 0.94, 1.0, 0.85))
+        self._draw_text(slide.title, px + pad, py + 56.0, scale=3.0,
+                        color=(0.98, 0.98, 1.0, 0.98))
+
+        body = slide.body
+        if callable(getattr(self, 'lookup_help_key', None)):
+            body = _tour_resolve(body, self.lookup_help_key)
+        body_scale = 1.72
+        char_w = 8.0 * body_scale
+        wrap_w = int(pw - pad * 2.0)
+        lines = wrap_tooltip_text(body, None, wrap_w, lambda s: len(s) * char_w)
+        line_h = 8.0 * body_scale + 9.0
+        ty = py + 116.0
+        for line in lines:
+            if ty + line_h > py + ph - 84.0:
+                break  # content test keeps decks inside the panel; belt+braces
+            self._draw_text(line, px + pad, ty, scale=body_scale,
+                            color=(0.88, 0.92, 0.97, 0.96))
+            ty += line_h
+
+        hint = 'Arrows: navigate    Enter: next    S: startup toggle    Esc: close'
+        self._draw_text(hint, px + pad, py + ph - 76.0, scale=1.24,
+                        color=(0.55, 0.62, 0.72, 0.85))
+
+        # Footer controls.
+        for kind, label in (('prev', 'PREV'),
+                            ('next', 'DONE' if idx >= total - 1 else 'NEXT'),
+                            ('close', 'CLOSE')):
+            bx, by, bw, bh = layout[kind]
+            hovered = self._tour_hover == kind
+            disabled = kind == 'prev' and idx == 0
+            base = (0.10, 0.94, 1.0) if kind != 'close' else (0.78, 0.38, 1.0)
+            alpha = 0.30 if disabled else (0.85 if hovered else 0.55)
+            self._draw_rect(bx, by, bw, bh, (base[0] * 0.2, base[1] * 0.2, base[2] * 0.2, 0.85))
+            self._draw_rect(bx, by, bw, 2.0, (base[0], base[1], base[2], alpha))
+            self._draw_rect(bx, by + bh - 2.0, bw, 2.0, (base[0], base[1], base[2], alpha))
+            tw = len(label) * 8.0 * 1.72
+            self._draw_text(label, bx + (bw - tw) * 0.5, by + 13.0, scale=1.72,
+                            color=(0.95, 0.97, 1.0, 0.45 if disabled else 0.96))
+
+        sx, sy, sw, sh = layout['startup']
+        box = sh
+        checked = self._tour_show_on_startup
+        hover = self._tour_hover == 'startup'
+        self._draw_rect(sx, sy, box, box, (0.10, 0.94, 1.0, 0.85 if hover else 0.55))
+        self._draw_rect(sx + 2, sy + 2, box - 4, box - 4, (0.03, 0.05, 0.09, 1.0))
+        if checked:
+            self._draw_rect(sx + 5, sy + 5, box - 10, box - 10, (0.10, 0.94, 1.0, 0.95))
+        self._draw_text('Show on startup', sx + box + 10.0, sy + 3.0, scale=1.48,
+                        color=(0.88, 0.92, 0.97, 0.92))
+
     def render(self, dt: float, include_recording_indicator: bool = True) -> None:
         """Call each frame after the main effect renders."""
         self._hud_t += dt
@@ -2922,6 +3114,12 @@ void main() {
         self.tick_config_editor(dt)
         if self.config_editor_visible and not route_modals_elsewhere:
             self._render_config_editor()
+
+        # First-run tour dialog — above the other modals, below the context
+        # menu. Deliberately NOT gated on route_modals_elsewhere in P1: the
+        # tour always renders on the main window (CR mirroring is P3).
+        if self._show_tour:
+            self._render_tour()
 
         # Context menu floats above everything else (with open/close unroll).
         self.tick_context_menu(dt)

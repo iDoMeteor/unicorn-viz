@@ -544,6 +544,13 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.10** — **First-run tour** (v1): a centered slide dialog that
+  walks new operators through the core surface — effects, audio sources, the
+  help overlay, multi-display, and the right-click menu. Offered automatically
+  on the first-ever launch (show-on-startup checkbox controls every run after),
+  reopenable any time with **F1** or the context menu's "Open Tour" entry, and
+  it resumes at the slide you left off. Slide copy resolves hotkeys from the
+  help registry at display time, so bindings are never hardcoded in the tour.
 - **1.0.0-beta.9** — New core analyzer: **Audio Chromogram** — real pitch-class
   (chroma) analysis of the live FFT, folding every bin into one of the twelve
   equal-tempered pitch classes (C, C#, D, ... B) regardless of octave. Shown

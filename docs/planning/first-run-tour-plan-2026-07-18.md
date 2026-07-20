@@ -1,12 +1,19 @@
 # First-Run Tour (v1) — Slide Dialog Plan
 
 Owner: owner + Claude (planning)
-Status: proposed — owner-requested 2026-07-18. This is the **v1 slide
-dialog**; the interactive spotlight tour remains the v2 vision in
+Status: **P1 shipped 2026-07-20** (core 1.0.0-beta.10) — `unicornviz/tour.py`
+deck + policy, Overlays slide dialog, F1 + in-modal keys, startup trigger,
+context-menu "Open Tour" entry, runtime-state persistence, and
+`tests/test_tour.py`. Two deliberate deviations from this spec: the tour
+buttons carry **no tooltips** (they are self-labeled; §2.4 simplification)
+and the context-menu label is **"Open Tour"**, not "Take the Tour", to keep
+the enforced `Open <context>` modal-label convention. P2 (drop-in
+`TOUR_SLIDES` + help-rail tile — needs an icon asset) and P3 (CR mirroring)
+remain open. The interactive spotlight tour remains the v2 vision in
 [`guided-tour-plan.md`](guided-tour-plan.md) (backlog), which this
 supersedes *for sequencing only* — v1 ships first, v2 builds on its
 trigger/persistence/entry points.
-Last updated: 2026-07-18
+Last updated: 2026-07-20
 
 ---
 

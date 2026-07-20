@@ -52,6 +52,13 @@ from unicornviz.dropins import (
     POSTFX_RUNTIME_CAPABILITY,
 )
 from unicornviz.paths import resolve_path
+from unicornviz.tour import (
+    CORE_TOUR_SLIDES,
+    STATE_LAST_SLIDE,
+    STATE_SHOW_ON_STARTUP,
+    clamp_slide_index,
+    should_show_on_startup,
+)
 from unicornviz.runtime_state import RuntimeStateStore
 from unicornviz.presets import ShowPresetStore
 from unicornviz.config_profiles import ConfigProfileStore
@@ -2406,6 +2413,7 @@ void main() {
             'presets_visible',
             'context_menu_open',
             'config_editor_open',
+            'tour_visible',
         )
         for name in visibility_flags:
             if bool(getattr(overlays, name, False)):
@@ -2485,6 +2493,7 @@ void main() {
         entries.append(item('Open Audio Sources', K.SDLK_a, K.KMOD_SHIFT, 'modal', 'Shift+A'))
         entries.append(item('Open MIDI Devices', K.SDLK_m, K.KMOD_ALT, 'modal', 'Alt+M'))
         entries.append(item('Open Help', K.SDLK_h, 0, 'modal', 'H'))
+        entries.append(item('Open Tour', K.SDLK_F1, 0, 'modal', 'F1'))
 
         # Toggles — state-aware "<action> <context>".
         entries.append(header('Toggle'))
@@ -3130,6 +3139,78 @@ void main() {
         self._transition_phase = float(self._rng.uniform(0.0, 1.0))
         self._demo_timer = 0.0
 
+    # ------------------------------------------------------------------ #
+    # First-run tour (v1 slide dialog)                                     #
+    # Content + startup policy: unicornviz/tour.py.  Rendering + pointer  #
+    # input: Overlays.  Keyboard: HotkeyHandler (F1 + in-modal branch).   #
+    # Persistence lives here, in the runtime state store.                 #
+    # ------------------------------------------------------------------ #
+
+    def open_tour(self) -> None:
+        """Open the tour dialog at the persisted resume position."""
+        overlays = self._overlays
+        if overlays is None or overlays.tour_visible:
+            return
+        if overlays.blocking_modal_open:
+            overlays.flash_message('Close the current panel first', 1.5)
+            return
+        overlays.set_tour_slides(CORE_TOUR_SLIDES)
+        slide = clamp_slide_index(
+            self.get_runtime_state(STATE_LAST_SLIDE, 0), len(CORE_TOUR_SLIDES),
+        )
+        show = bool(self.get_runtime_state(STATE_SHOW_ON_STARTUP, True))
+        overlays.open_tour(slide, show)
+
+    def close_tour(self) -> None:
+        """Close the tour and persist its resume position + startup toggle."""
+        overlays = self._overlays
+        if overlays is None or not overlays.tour_visible:
+            return
+        slide, show = overlays.close_tour()
+        self.save_tour_state(slide=slide, show=show)
+
+    def toggle_tour(self) -> None:
+        """Open or close the tour dialog (hotkey / context menu entry)."""
+        overlays = self._overlays
+        if overlays is not None and overlays.tour_visible:
+            self.close_tour()
+        else:
+            self.open_tour()
+
+    def tour_advance(self) -> None:
+        """NEXT: advance a slide, or finish + close on the last one."""
+        overlays = self._overlays
+        if overlays is None or not overlays.tour_visible:
+            return
+        if overlays.tour_next():
+            self.close_tour()   # tour_next reset the resume position to 0
+        else:
+            self.save_tour_state()
+
+    def save_tour_state(self, slide: int | None = None, show: bool | None = None) -> None:
+        """Persist the tour's resume slide + show-on-startup toggle."""
+        overlays = self._overlays
+        if slide is None or show is None:
+            if overlays is None:
+                return
+            current_slide, current_show = overlays.tour_state()
+            slide = current_slide if slide is None else slide
+            show = current_show if show is None else show
+        self.set_runtime_state(STATE_LAST_SLIDE, int(slide))
+        self.set_runtime_state(STATE_SHOW_ON_STARTUP, bool(show))
+
+    def _maybe_open_tour_on_startup(self) -> None:
+        """Offer the tour at startup: first run, or the toggle left on."""
+        overlays = self._overlays
+        if overlays is None:
+            return
+        try:
+            if should_show_on_startup(self.get_runtime_state) \
+                    and not overlays.blocking_modal_open:
+                self.open_tour()
+        except Exception as exc:
+            log.debug('Tour startup offer skipped: %s', exc)
+
     def show_splash(self) -> None:
         """Replay the splash screen (hotkey U)."""
         if self._splash_config is None:
@@ -3739,6 +3820,9 @@ void main() {
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
         self._running = True
+        # First-run tour: offered on the first-ever launch (missing state key)
+        # and on every startup until its show-on-startup toggle is unchecked.
+        self._maybe_open_tour_on_startup()
 
         prev_time = time.perf_counter()
         self._session_started_at = time.monotonic()
@@ -3910,6 +3994,17 @@ void main() {
                         except Exception as exc:
                             log.warning('Context menu hover handling failed: %s', exc)
                         continue
+                    if self._overlays.tour_visible:
+                        try:
+                            hit = self._overlay_mouse_coords(
+                                float(event.motion.x), float(event.motion.y),
+                                self._primary_display_viewport(),
+                            )
+                            if hit is not None:
+                                self._overlays.handle_tour_motion(hit[0], hit[1])
+                        except Exception as exc:
+                            log.warning('Tour hover handling failed: %s', exc)
+                        continue
                     if self._overlays.config_editor_open:
                         try:
                             hit = self._overlay_mouse_coords(
@@ -3981,6 +4076,28 @@ void main() {
                         else:
                             # Right/middle click, or a click outside the canvas.
                             self._overlays.close_context_menu()
+                        continue
+                    if self._overlays.tour_visible:
+                        if event.button.button == sdl2.SDL_BUTTON_LEFT:
+                            try:
+                                hit = self._overlay_mouse_coords(
+                                    float(event.button.x), float(event.button.y),
+                                    self._primary_display_viewport(),
+                                )
+                            except Exception:
+                                hit = None
+                            if hit is not None:
+                                action = self._overlays.handle_tour_click(hit[0], hit[1])
+                                if action == 'prev':
+                                    self._overlays.tour_prev()
+                                    self.save_tour_state()
+                                elif action == 'next':
+                                    self.tour_advance()
+                                elif action == 'close':
+                                    self.close_tour()
+                                elif action == 'startup':
+                                    self._overlays.tour_toggle_startup()
+                                    self.save_tour_state()
                         continue
                     if self._overlays.config_editor_open:
                         if event.button.button == sdl2.SDL_BUTTON_LEFT:

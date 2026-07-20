@@ -913,6 +913,29 @@ class HotkeyHandler:
                     o.flash_message('Help: collapsed all sections', 1.2)
                     return
 
+        # First-run tour dialog — renders above the other modals, so it gets
+        # first refusal on keys while open. Swallows everything it doesn't
+        # handle (a slide deck should never leak keys into the show).
+        if getattr(o, 'tour_visible', False):
+            if sym in (sdl2.SDLK_LEFT, sdl2.SDLK_UP):
+                o.tour_prev()
+                a.save_tour_state()
+                return
+            if sym in (sdl2.SDLK_RIGHT, sdl2.SDLK_DOWN, sdl2.SDLK_RETURN,
+                       sdl2.SDLK_KP_ENTER, sdl2.SDLK_SPACE):
+                a.tour_advance()
+                return
+            if sym == sdl2.SDLK_s and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_SHIFT)):
+                o.tour_toggle_startup()
+                a.save_tour_state()
+                return
+            if sym in (sdl2.SDLK_ESCAPE, sdl2.SDLK_F1):
+                a.close_tour()
+                return
+            if is_modifier_key:
+                return
+            return
+
         # Audio selector navigation — active when the audio source picker is open.
         if o.audio_selector_visible:
             o.note_help_activity()
@@ -1426,6 +1449,10 @@ class HotkeyHandler:
             else:
                 # h — toggle help overlay
                 o.toggle_help()
+
+        elif sym == sdl2.SDLK_F1:
+            # F1 — first-run tour dialog (also reachable from the context menu).
+            a.toggle_tour()
 
         elif sym == sdl2.SDLK_k:
             if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
