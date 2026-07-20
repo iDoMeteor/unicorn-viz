@@ -80,7 +80,7 @@ _PREVIEW_MAX_WIDTH = 960
 # Historical default ceiling for the subsystem-preview glReadPixels throttle,
 # used when no active consumer exposes its own ``preview_fps_cap``.
 _DEFAULT_SUBSYSTEM_PREVIEW_FPS = 10.0
-_SPLASH_TOTAL_DURATION = 7.0  # 1s static + 6s animated
+_SPLASH_TOTAL_DURATION = 3.0  # ~0.75s static + ~2.25s animated (splash.py phases)
 _SPLASH_REPLAY_COOLDOWN_S = 1.25
 _TRANSITION_MODE_MAP = {
     'crossfade': 0,

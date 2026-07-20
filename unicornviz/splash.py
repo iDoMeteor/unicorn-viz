@@ -35,7 +35,9 @@ _CS = [b'\xd9\x74\xea\xf4\x01\x36\xa2\xcb', b'\x97\xd3\xf5\xf5\x0b\xb3\x7b\x3d',
 
 _FADE_IN  = 0.6
 _FADE_OUT = 0.8
-_STATIC_PHASE = 2.0  # First two seconds: fully static image
+# Fully static image before the animation kicks in.  Sized for the 3s default
+# total (app.py _SPLASH_TOTAL_DURATION): ~0.75s static + ~2.25s animated.
+_STATIC_PHASE = 0.75
 
 def _vk(p: Path) -> bool:
     """Verify palette key matches animation seed table."""
