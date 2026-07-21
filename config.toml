@@ -595,6 +595,17 @@ dark_brightness_threshold = 0.02
 # closing releases it. See drop-ins/dj-mixer-01/docs/ (feature-overview.md,
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
+# skip_silence: start a track at its first note and treat its last note as
+# the end, instead of sitting through the dead air many rips carry.  Bounds
+# only -- the audio is untouched and you can still scrub into the silence.
+# Toggleable live in the mixer's AUTOMATION settings tab.  Default true.
+# skip_silence = true
+# recording_format: master-mix capture format, settable live in the
+# RECORDING settings tab.  One of wav16 / wav24 / wav32f / aiff24 / flac24
+# (lossless) / mp3 / ogg.  Default wav16.
+# recording_format = "wav16"
+# recordings_dir: where mix recordings are written (empty = runtime/recordings/).
+# recordings_dir = ""
 enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = true   # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
