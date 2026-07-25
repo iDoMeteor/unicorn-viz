@@ -202,12 +202,22 @@ class BaseEffect(ABC):
         Handle a MIDI event.  Default: map CC numbers to self.parameters
         using the cc_to_param lookup from MidiManager.
         Effects may override to handle additional mappings.
+
+        Not currently reached: nothing in the runtime calls this hook, and no
+        caller populates the ``_midi_cc_map`` it reads.  Live CC handling runs
+        through ``HotkeyHandler._dispatch_midi_event`` instead.  The hook is kept
+        for effect authors, and shares ``CC_PARAM_RANGE`` with that path so an
+        override behaves identically if it is ever wired up.
         """
         if event.type == "cc":
             # Try to find a matching parameter by name from the app-injected map
             param_name = getattr(self, "_midi_cc_map", {}).get(event.number)
             if param_name and param_name in self.parameters:
-                lo, hi = 0.0, 4.0
+                # Imported here, not at module scope: a module-level import would
+                # pull rtmidi into every effect import for a hook that only runs
+                # when an effect author wires it up.
+                from unicornviz.midi import CC_PARAM_RANGE  # noqa: PLC0415
+                lo, hi = CC_PARAM_RANGE
                 self.parameters[param_name] = lo + event.value * (hi - lo)
 
     # ------------------------------------------------------------------ #

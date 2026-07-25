@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.11       BETA          MISMATCH (readme=1.0.0-beta.9)
+  core (unicornviz)             1.0.0-beta.12       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.116.0             alpha ▲       module
@@ -43,9 +43,9 @@
   color-grade-01                0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
   images-01                     0.8.0               alpha         module
+  midi-controllers-01           0.7.1               alpha         module
   sims-01                       0.7.1               alpha         module
   cta-01                        0.7.0               alpha         module
-  midi-controllers-01           0.7.0               alpha         module
   videos-01                     0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
@@ -63,5 +63,4 @@
 ────────────────────────────────────────────────────────────────────────────
 
   40 components total  ·  7 RC  1 beta  32 alpha  0 unversioned
-  ⚠  1 version mismatch(es): core (unicornviz)
 

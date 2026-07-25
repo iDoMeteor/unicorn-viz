@@ -76,6 +76,17 @@ _CC_MAP_DEFAULT: dict[int, str] = {
     10: 'pan',
 }
 
+# Range a 0.0-1.0 CC value is scaled into before it is written to
+# ``effect.parameters[name]``.  Single source of truth: both CC consumers
+# (``HotkeyHandler._dispatch_midi_event`` and ``BaseEffect.on_midi``) read it
+# from here.  They previously carried their own literals — 0.1-4.0 and 0.0-4.0 —
+# so the same fader landed on a different value depending on which path ran.
+#
+# One range covers every parameter name today.  Per-parameter ranges belong here
+# too when they arrive; keeping the constant in one place is what makes that a
+# single edit rather than a hunt through two modules.
+CC_PARAM_RANGE: tuple[float, float] = (0.1, 4.0)
+
 # Fallback generic note → action name mapping
 _NOTE_MAP_DEFAULT: dict[int, str] = {
     60: 'next',          # C4
@@ -196,7 +207,7 @@ class MidiManager:
         """Register a named preset so it can be selected via ``config.toml``.
 
         Call this before ``MidiManager.__init__`` (typically from a drop-in
-        initialiser).  Silently overwrites any existing preset of the same name.
+        initializer).  Silently overwrites any existing preset of the same name.
         """
         BUILTIN_PRESETS[name] = mapping
         log.debug('MIDI: registered preset %r', name)

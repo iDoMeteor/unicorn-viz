@@ -247,3 +247,41 @@ def test_escape_closes_without_commit():
     handler.handle(sdl2.SDLK_ESCAPE, 0)
     assert ('close', False) in app.calls
     assert not overlay.effects_browser_visible
+
+
+def test_context_slot_2_navigates_instead_of_pinning():
+    """Slot 2 must move the selection, never re-pin the selected effect.
+
+    The 'effects_browser' context had no slot table, so slots fell back to the
+    performance bindings and the chord was re-dispatched into the open browser.
+    Performance slot 2 is 'p' — which the browser consumes as pin/unpin — so an
+    operator reaching for "move down" silently pinned the selected effect.
+    """
+    from unicornviz.catalog_browser import PANE_LIST
+    handler, app, overlay = _setup()
+    overlay.effects_browser_visible = True
+    overlay.effects_browser.set_focus_pane(PANE_LIST)
+    overlay.effects_browser.move_selection(1)
+
+    before = overlay.effects_browser.selected_entry()['display_name']
+    assert handler._dispatch_context_slot(2) is True    # slot 2 -> down
+
+    assert app.pinned == ''
+    assert not any(kind == 'pin' for kind, _ in app.calls)
+    assert overlay.effects_browser.selected_entry()['display_name'] != before
+
+
+def test_context_slot_4_navigates_instead_of_toggling_enabled():
+    """Slot 4 must move the selection, never toggle the effect's enabled state.
+
+    Performance slot 4 is Space, which the browser consumes as toggle-enabled.
+    """
+    from unicornviz.catalog_browser import PANE_LIST
+    handler, app, overlay = _setup()
+    overlay.effects_browser_visible = True
+    overlay.effects_browser.set_focus_pane(PANE_LIST)
+
+    assert handler._dispatch_context_slot(4) is True    # slot 4 -> right
+
+    assert not any(kind == 'toggle_enabled' for kind, _ in app.calls)
+    assert all(e.get('enabled', True) for e in overlay.effects_browser.entries())

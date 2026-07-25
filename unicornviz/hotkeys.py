@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import sdl2
 
 from unicornviz.catalog_browser import PANE_CATEGORIES, PANE_LIST
+from unicornviz.midi import CC_PARAM_RANGE
 from unicornviz.paths import resolve_path
 
 if TYPE_CHECKING:
@@ -175,7 +176,7 @@ def chord_label(sym: int, mod: int) -> str:
 # chord before the (unmodified) global dispatch chain in handle() runs, so no
 # dispatch logic needs to change for a rebind to take effect. Only applied in
 # the global tail (after every modal has had first refusal), so a rebind never
-# changes in-modal key behaviour.
+# changes in-modal key behavior.
 _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'next': (sdl2.SDLK_n, 0),
     'prev': (sdl2.SDLK_p, 0),
@@ -323,6 +324,32 @@ _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
         7: (sdl2.SDLK_ESCAPE, 0),
         8: (sdl2.SDLK_h, sdl2.KMOD_CTRL | sdl2.KMOD_ALT),
     },
+    # Presets modal context.  The modal only implements up/down/load/close, so
+    # slots 3/4 are bound to left/right anyway (the modal swallows them) to keep
+    # one physical pad meaning one intent across every context.  Slot 6 is left
+    # deliberately unbound: the only remaining modal keys are 'd' (delete a
+    # preset — too destructive to sit under an unlabeled pad) and 's' (save-as,
+    # which opens a text field a pad cannot type into).
+    'presets': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        7: (sdl2.SDLK_ESCAPE, 0),
+    },
+    # Effects browser context — mirrors 'projectm_manager', the closest
+    # analog (two panes, a search field, and a commit action).
+    'effects_browser': {
+        1: (sdl2.SDLK_UP, 0),
+        2: (sdl2.SDLK_DOWN, 0),
+        3: (sdl2.SDLK_LEFT, 0),
+        4: (sdl2.SDLK_RIGHT, 0),
+        5: (sdl2.SDLK_RETURN, 0),
+        6: (sdl2.SDLK_TAB, 0),
+        7: (sdl2.SDLK_SLASH, 0),
+        8: (sdl2.SDLK_ESCAPE, 0),
+    },
     # Webcam editor context.
     'webcam_editor': {
         1: (sdl2.SDLK_UP, 0),
@@ -431,7 +458,7 @@ class HotkeyHandler:
             if effect is not None:
                 param = a.midi_param_for_cc(event.number)
                 if param and param in effect.parameters:
-                    lo, hi = 0.1, 4.0
+                    lo, hi = CC_PARAM_RANGE
                     effect.parameters[param] = lo + event.value * (hi - lo)
                     o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
                     if ks_log is not None:
@@ -499,15 +526,31 @@ class HotkeyHandler:
         return 'performance'
 
     def _dispatch_context_slot(self, slot: int) -> bool:
-        """Dispatch a context slot action based on the active UI/runtime mode."""
+        """Dispatch a context slot action based on the active UI/runtime mode.
+
+        A context that has its own table owns all eight slots: a slot that table
+        leaves unbound is swallowed rather than falling through to the
+        performance bindings.  Only a context with no table at all falls back to
+        performance.
+
+        Why: the presets and effects-browser contexts had no table, so every
+        slot fell through to performance, and the performance chord was then
+        re-dispatched into the open modal.  Most were inert (each modal swallows
+        keys it does not recognise), but the two that collided were destructive
+        — in the effects browser, performance slot 2 is 'p' (pin/unpin the
+        selected effect) and slot 4 is Space (toggle it enabled).  An operator
+        reaching for "move down the list" silently re-pinned or disabled an
+        effect instead.
+        """
         if slot < 1 or slot > 8:
             return False
         context = self._active_midi_context()
-        binding = _MIDI_CONTEXT_SLOT_BINDINGS.get(context, {}).get(slot)
+        table = _MIDI_CONTEXT_SLOT_BINDINGS.get(context)
+        if table is None:
+            table = _MIDI_CONTEXT_SLOT_BINDINGS['performance']
+        binding = table.get(slot)
         if binding is None:
-            binding = _MIDI_CONTEXT_SLOT_BINDINGS['performance'].get(slot)
-        if binding is None:
-            return False
+            return True
         self.handle(binding[0], binding[1])
         return True
 

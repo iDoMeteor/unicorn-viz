@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.9**
+**Version 1.0.0-beta.12**
 
 ## Contact Me!
 
@@ -544,6 +544,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.12** — MIDI context-slot fix: the presets browser and effects
+  browser now have their own context-slot tables, and a slot a context
+  deliberately leaves unbound is swallowed instead of falling back to the
+  performance bindings. Previously both modals fell through to performance,
+  which re-dispatched the performance chord into the open modal — mostly inert,
+  but in the effects browser slot 2 landed on `p` (pin/unpin the selected
+  effect) and slot 4 on Space (toggle it enabled), so reaching for "move down
+  the list" silently re-pinned or disabled an effect. CC→parameter scaling now
+  reads one shared `CC_PARAM_RANGE` constant instead of two divergent literals
+  (0.1–4.0 and 0.0–4.0). Core no longer carries its own dead, hardcoded copy of
+  the APC controller-help modal.
 - **1.0.0-beta.11** — Tour P2 (partial): drop-ins can now contribute slides
   to the first-run tour via module-level `TOUR_SLIDES` (discovered the same
   way as `HELP_ENTRIES`, appended after the core deck when the tour opens).

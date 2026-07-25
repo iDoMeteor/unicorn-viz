@@ -193,3 +193,36 @@ def test_escape_closes_presets():
     handler.handle(sdl2.SDLK_ESCAPE, 0)
     assert ('close', None) in app.calls
     assert not overlay.presets_visible
+
+
+def test_context_slot_navigates_presets():
+    """Slot 1 must drive the open modal.
+
+    The 'presets' context had no slot table, so every slot fell back to the
+    performance bindings; the modal then swallowed those chords, leaving all
+    eight slots inert while the modal was open.
+    """
+    handler, app, overlay = _setup()
+    overlay.presets_visible = True
+    overlay.presets_browser.move_selection(1)          # start on 'Streaming'
+
+    assert handler._dispatch_context_slot(1) is True    # slot 1 -> up
+
+    assert overlay.presets_browser.selected_entry()['display_name'] == 'Ambient'
+    assert not any(kind == 'load' for kind, _ in app.calls)
+
+
+def test_unbound_presets_context_slot_is_swallowed():
+    """A slot the context leaves unbound must not leak a performance action.
+
+    Slot 6 is deliberately unbound in the presets context (its only candidates
+    were destructive delete / a text field). It must no-op rather than firing
+    performance slot 6.
+    """
+    handler, app, overlay = _setup()
+    overlay.presets_visible = True
+
+    assert handler._dispatch_context_slot(6) is True    # handled, but a no-op
+
+    assert app.calls == []
+    assert overlay.presets_visible
