@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.12       BETA          module
+  core (unicornviz)             1.0.0-beta.13       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.117.0             alpha ▲       module
@@ -43,7 +43,7 @@
   color-grade-01                0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
   images-01                     0.8.0               alpha         module
-  midi-controllers-01           0.7.1               alpha         module
+  midi-controllers-01           0.8.0               alpha         module
   sims-01                       0.7.1               alpha         module
   cta-01                        0.7.0               alpha         module
   videos-01                     0.7.0               alpha         module

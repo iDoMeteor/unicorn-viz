@@ -109,6 +109,7 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/midi-controllers-01/docs/configuration.md)
   - [Integration](../drop-ins/midi-controllers-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/midi-controllers-01/docs/troubleshooting.md)
+  - [Profiles](../drop-ins/midi-controllers-01/docs/profiles.md)
   - [APC Remap Plan](../drop-ins/midi-controllers-01/docs/apc-remap-plan.md) (draft proposal)
 - lyrics-01
   - [Operations](../drop-ins/lyrics-01/docs/operations.md)

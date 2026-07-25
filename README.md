@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.12**
+**Version 1.0.0-beta.13**
 
 ## Contact Me!
 
@@ -544,6 +544,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.13** — `MidiManager.apply_preset()`: switch the live CC/note maps
+  to a different registered preset at runtime without reopening ports. Rebuilds
+  through the same layering `__init__` uses, so a switch never silently drops
+  the operator's `[midi.cc_map]` / `[midi.note_map]` overrides. This is the core
+  half of controller profiles (see midi-controllers-01 0.8.0).
 - **1.0.0-beta.12** — MIDI context-slot fix: the presets browser and effects
   browser now have their own context-slot tables, and a slot a context
   deliberately leaves unbound is swallowed instead of falling back to the

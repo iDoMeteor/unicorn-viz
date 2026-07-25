@@ -244,6 +244,11 @@ class MidiManager:
         self._last_maintenance_attempt = 0.0
         self._maintenance_interval_s = 2.0
         self._lock = threading.Lock()
+        # Retained so :meth:`apply_preset` can rebuild the maps with the same
+        # layering __init__ used.  Without them a runtime preset switch would
+        # silently drop the operator's [midi.cc_map] / [midi.note_map] entries.
+        self._cc_map_override = dict(cc_map_override or {})
+        self._note_map_override = dict(note_map_override or {})
         self._cc_map, self._note_map = self._build_maps(preset, cc_map_override, note_map_override)
         self._preset = preset
 
@@ -289,6 +294,39 @@ class MidiManager:
         """Remove a named listener previously added via add_named_listener."""
         with self._lock:
             self._named_listeners.pop(str(name), None)
+
+    def apply_preset(self, preset: str) -> bool:
+        """Switch the live CC/note maps to a different registered preset.
+
+        Rebuilds through the same layering ``__init__`` uses — built-in
+        defaults, then the named preset, then the ``[midi.cc_map]`` /
+        ``[midi.note_map]`` overrides retained from construction — so a switch
+        never silently drops the operator's config overrides.
+
+        Runtime bindings taught through MIDI Learn are *not* preserved: they are
+        scratch on top of a preset, and carrying them across a deliberate switch
+        would leave the new surface quietly contaminated by the old one.
+
+        Ports are untouched, so this does not interrupt input.  Returns False
+        (leaving the current maps intact) when *preset* is not registered.
+        """
+        name = str(preset)
+        if name and name not in BUILTIN_PRESETS:
+            log.warning('MIDI: cannot apply unknown preset %r', name)
+            return False
+        cc, note = self._build_maps(
+            name, self._cc_map_override, self._note_map_override,
+        )
+        with self._lock:
+            self._cc_map, self._note_map = cc, note
+            self._preset = name
+        log.info('MIDI: applied preset %r (%d notes, %d CCs)', name, len(note), len(cc))
+        return True
+
+    @property
+    def preset(self) -> str:
+        """Return the name of the currently applied preset ('' when none)."""
+        return self._preset
 
     def set_note_binding(self, note: int, action: str) -> None:
         """Bind *note* to *action*, overriding any preset mapping."""
