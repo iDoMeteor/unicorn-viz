@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.13**
+**Version 1.0.0-beta.14**
 
 ## Contact Me!
 
@@ -544,6 +544,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.14** — Two `VJApi` passthroughs for controller profiles:
+  `midi_preset_name()` (read the active preset) and `midi_apply_preset(name)`
+  (switch it). Drop-ins cannot reach the MIDI manager directly, so without
+  these a drop-in could neither tell which profile is live at startup nor offer
+  a profile switcher. See midi-controllers-01 0.9.0.
 - **1.0.0-beta.13** — `MidiManager.apply_preset()`: switch the live CC/note maps
   to a different registered preset at runtime without reopening ports. Rebuilds
   through the same layering `__init__` uses, so a switch never silently drops

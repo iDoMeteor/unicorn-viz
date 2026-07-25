@@ -338,3 +338,120 @@ def test_apply_preset_discards_runtime_learn_bindings() -> None:
 
     mgr.apply_preset('akai_apc_mini_mk2')
     assert mgr.note_to_action(7) == 'postfx_10'         # back to the preset value
+
+
+# ---------------------------------------------------------------------------
+# LED palette layering (apc_leds)
+# ---------------------------------------------------------------------------
+
+def _leds_module():
+    return _load_dropin_module('_uv_apc_leds', 'apc_leds.py')
+
+
+class _FakeVJ:
+    """Minimal VJApi stand-in for LED construction (no hardware touched)."""
+
+    def midi_inject_event(self, _raw):
+        pass
+
+    def midi_list_output_ports(self):
+        return []
+
+    def midi_send_output(self, _hint, _msg):
+        return True
+
+
+def _leds_instance(monkeypatch):
+    leds_mod = _leds_module()
+    # Never let the LED object reach real hardware during tests.
+    monkeypatch.setattr(leds_mod, '_apc_libusb_io', None, raising=False)
+    monkeypatch.setattr(leds_mod, '_apc_rawmidi_io', None, raising=False)
+    monkeypatch.setattr(leds_mod, '_find_apc_rawmidi_hw_path', lambda: None)
+    return leds_mod, leds_mod.APCLedFeedback(_FakeVJ())
+
+
+def test_profile_colors_win_over_the_builtin_table(monkeypatch) -> None:
+    leds_mod, leds = _leds_instance(monkeypatch)
+    builtin = leds_mod._ACTION_COLORS['next']
+
+    leds.set_profile_colors({'next': (7, 8)})
+
+    assert leds.action_colors('next') == (7, 8)
+    assert leds.action_colors('next') != builtin
+
+
+def test_actions_the_profile_omits_fall_back_to_the_builtin_table(monkeypatch) -> None:
+    leds_mod, leds = _leds_instance(monkeypatch)
+    leds.set_profile_colors({'next': (7, 8)})
+
+    assert leds.action_colors('pause') == leds_mod._ACTION_COLORS['pause']
+
+
+def test_unknown_action_falls_back_to_the_generic_default(monkeypatch) -> None:
+    leds_mod, leds = _leds_instance(monkeypatch)
+    leds.set_profile_colors({'next': (7, 8)})
+
+    assert leds.action_colors('some_dropin_action_that_does_not_exist') == (
+        leds_mod._DEFAULT_IDLE, leds_mod._DEFAULT_ACTIVE,
+    )
+
+
+def test_switching_profiles_clears_stale_learn_color_overrides(monkeypatch) -> None:
+    """Overrides were tuned against the old palette; carrying them looks wrong."""
+    _leds_mod, leds = _leds_instance(monkeypatch)
+    leds.set_action_idle('next', 53)
+    assert leds.get_action_idle('next') == 53
+
+    leds.set_profile_colors({'next': (7, 8)})
+
+    assert leds.get_action_idle('next') == 7
+
+
+def test_setting_profile_colors_forces_a_full_repaint(monkeypatch) -> None:
+    _leds_mod, leds = _leds_instance(monkeypatch)
+    leds._sent = {0: 29, 1: 45}
+
+    leds.set_profile_colors({'next': (7, 8)})
+
+    assert leds._sent == {}, 'stale sent-cache would suppress the repaint'
+
+
+# ---------------------------------------------------------------------------
+# Bundled alt-01 zone profile
+# ---------------------------------------------------------------------------
+
+def _alt01():
+    path = _DROPIN / 'profiles' / 'apc-mini-mk2-alt-01.toml'
+    return path, cprof.parse_profile(path.read_text(encoding='utf-8'), source=str(path))
+
+
+def test_alt01_profile_ships_and_parses() -> None:
+    path, profile = _alt01()
+    assert path.is_file()
+    assert profile.key == 'apc-mini-mk2-alt-01'
+    for required in ('name', 'description', 'author', 'version', 'date'):
+        assert profile.meta.to_dict()[required], f'meta.{required} is empty'
+
+
+def test_alt01_binds_no_action_twice() -> None:
+    """The whole point of the remap: no duplicate pads."""
+    _path, profile = _alt01()
+    actions = list(profile.note_map.values())
+    assert len(actions) == len(set(actions))
+
+
+def test_alt01_every_bound_action_has_a_color() -> None:
+    _path, profile = _alt01()
+    assert set(profile.note_map.values()) <= set(profile.colors)
+
+
+def test_alt01_leaves_four_grid_pads_unlit() -> None:
+    _path, profile = _alt01()
+    grid = {n for n in profile.note_map if n < 64}
+    assert sorted(set(range(64)) - grid) == [6, 7, 62, 63]
+
+
+def test_alt01_covers_both_button_strips() -> None:
+    _path, profile = _alt01()
+    assert all(n in profile.note_map for n in range(112, 120))   # scene strip
+    assert all(n in profile.note_map for n in range(100, 106))   # track strip

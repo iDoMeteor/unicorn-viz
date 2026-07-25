@@ -1093,6 +1093,33 @@ class VJApi:
             return {}
         return dict(getattr(m, '_note_map', {}))
 
+    def midi_preset_name(self) -> str:
+        """Return the name of the active MIDI preset/profile ('' when none).
+
+        Drop-ins need this to know which controller profile is live — at
+        startup the preset comes from ``config.toml``, so the drop-in that owns
+        the surface has no other way to find out which profile's LED palette to
+        paint with.
+        """
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return ''
+        return str(getattr(m, 'preset', '') or '')
+
+    def midi_apply_preset(self, name: str) -> bool:
+        """Switch the live MIDI maps to a registered preset/profile.
+
+        Ports are left open, so switching does not interrupt input.  Returns
+        False when *name* is not registered or MIDI is unavailable.
+        """
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return False
+        fn = getattr(m, 'apply_preset', None)
+        if not callable(fn):
+            return False
+        return bool(fn(str(name)))
+
     def midi_bind_note(self, note: int, action: str) -> None:
         """Bind MIDI note *note* to *action*, overriding any preset mapping."""
         m = getattr(self._app, '_midi_manager', None)
