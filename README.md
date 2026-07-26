@@ -544,6 +544,10 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.15** — **Shift+Delete** re-activates the last Delete-key
+  deactivation (running session only, LIFO): a disabled effect is re-enabled
+  and jumped straight back to; a disabled ProjectM preset is re-enabled while
+  ProjectM is still active. For when you fat-finger Delete mid-set.
 - **1.0.0-beta.14** — Two `VJApi` passthroughs for controller profiles:
   `midi_preset_name()` (read the active preset) and `midi_apply_preset(name)`
   (switch it). Drop-ins cannot reach the MIDI manager directly, so without

@@ -1660,7 +1660,10 @@ class HotkeyHandler:
             o.flash_message(f"Playlist: {mode}", 1.5)
 
         elif sym == sdl2.SDLK_DELETE:
-            msg = a.disable_current_effect_and_advance()
+            if mod & sdl2.KMOD_SHIFT:
+                msg = a.reactivate_last_disabled_effect()
+            else:
+                msg = a.disable_current_effect_and_advance()
             if msg:
                 o.flash_message(msg, 1.8)
 

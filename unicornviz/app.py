@@ -585,6 +585,9 @@ class App:
         # mirrored live to logs/deleted-effects_<stamp>.log when logging is on.
         self._deleted_effects_session: list[tuple[str, str]] = []
         self._deleted_effects_log_path: Path | None = self._compute_deleted_effects_log_path(self.cfg)
+        # Shift+Delete undo stack for Delete-key deactivations, newest last:
+        # ('effect', NAME) or ('preset', path). Session-only by design.
+        self._disable_undo_stack: list[tuple[str, str]] = []
         # Numeric-hotkey slot pins: {slot_index (0-39): effect name} (persisted).
         self._hotkey_pins: dict[int, str] = {
             int(k): str(v)
@@ -6345,6 +6348,7 @@ void main() {
             if not current_path:
                 return 'ProjectM: no active preset to disable'
             effect.set_presets_enabled([current_path], False)
+            self._disable_undo_stack.append(('preset', current_path))
             label = effect.next_preset()
             return f'Preset disabled -> {label}' if label else 'Preset disabled (none remaining)'
 
@@ -6352,6 +6356,7 @@ void main() {
         if self._effect_lock == name:
             self.unlock_effect()
         self.set_effect_enabled(name, False)
+        self._disable_undo_stack.append(('effect', name))
         self._record_deleted_effect(name)
         playlist = self._playlist
         if playlist is None:
@@ -6359,6 +6364,42 @@ void main() {
         cls = playlist.advance()  # skips disabled effects in both modes
         self.goto_effect(cls)
         return f'{name}: disabled -> {cls.NAME}'
+
+    def reactivate_last_disabled_effect(self) -> str:
+        """Shift+Delete action: undo the most recent Delete-key deactivation.
+
+        Session-only by design — the undo stack is never persisted, so a
+        restart forgets it (the effects browser remains the way to re-enable
+        things from prior sessions). Restoring a rotation effect re-enables
+        it and jumps straight back to it; restoring a ProjectM preset
+        re-enables the preset, which is only possible while a ProjectM-style
+        effect is still active (presets belong to it), so the entry is kept
+        for a later retry if ProjectM was left in the meantime. Entries whose
+        effect was already re-enabled elsewhere (e.g. the effects browser)
+        are skipped rather than treated as the undo target.
+        """
+        stack = self._disable_undo_stack
+        while stack:
+            kind, name = stack[-1]
+            if kind == 'preset':
+                effect = self._current_effect
+                if not (hasattr(effect, 'set_presets_enabled')
+                        and hasattr(effect, 'current_preset_path')):
+                    return 'ProjectM not active - preset not restored'
+                stack.pop()
+                effect.set_presets_enabled([name], True)
+                return f'Preset re-enabled: {Path(name).name}'
+            stack.pop()
+            if self.effect_enabled(name):
+                continue  # re-enabled some other way since; not an undo target
+            self.set_effect_enabled(name, True)
+            playlist = self._playlist
+            cls = playlist.find_by_name(name) if playlist is not None else None
+            if cls is not None:
+                self.goto_effect(cls)
+                return f'{name}: re-enabled -> back on'
+            return f'{name}: re-enabled'
+        return 'Nothing to re-activate'
 
     @staticmethod
     def _compute_deleted_effects_log_path(cfg: Config) -> Path | None:

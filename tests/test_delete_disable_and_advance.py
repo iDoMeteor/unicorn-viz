@@ -7,6 +7,10 @@ applies to the *current preset* and playback stays within ProjectM rather than
 leaving it; any other effect is disabled from rotation (same persisted set
 the effects browser's Space toggle uses) and playback advances to the next
 *enabled* effect.
+
+Shift+Delete undoes the most recent Delete-key deactivation (session-only
+stack, LIFO): a rotation effect is re-enabled and jumped back to; a ProjectM
+preset is re-enabled while a ProjectM-style effect is still active.
 """
 from __future__ import annotations
 
@@ -45,6 +49,7 @@ def _app_with_playlist(tmp_path: Path, names: list[str], start: str | None = Non
     app._current_effect = playlist.current()
     app._deleted_effects_session = []
     app._deleted_effects_log_path = None
+    app._disable_undo_stack = []
 
     def _goto(cls):
         app._current_effect = cls
@@ -142,7 +147,12 @@ class _FakeProjectM:
         return self._presets[self._idx] if self._presets else ''
 
     def set_presets_enabled(self, paths: list[str], enabled: bool) -> int:
-        if not enabled:
+        if enabled:
+            for p in paths:
+                if p in self.disabled:
+                    self.disabled.remove(p)
+                    self._presets.append(p)
+        else:
             for p in paths:
                 if p in self._presets:
                     self._presets.remove(p)
@@ -166,6 +176,7 @@ def _app_with_projectm(tmp_path: Path, presets: list[str]):
     app._effect_lock = None
     app._overlays = None
     app._current_effect = _FakeProjectM(presets)
+    app._disable_undo_stack = []
     return app
 
 
@@ -201,6 +212,75 @@ def test_projectm_lock_is_untouched(tmp_path: Path) -> None:
     app._effect_lock = 'ProjectM Presets'
     app.disable_current_effect_and_advance()
     assert app._effect_lock == 'ProjectM Presets'
+
+
+# --------------------------------------------------------------------------- #
+# Shift+Delete: re-activate the last Delete-key deactivation (session-only)
+# --------------------------------------------------------------------------- #
+
+def test_reactivate_restores_effect_and_jumps_back(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B', 'C'], start='A')
+    app.disable_current_effect_and_advance()
+    msg = app.reactivate_last_disabled_effect()
+    assert 'A: re-enabled' in msg
+    assert app.effect_enabled('A') is True
+    assert app._current_effect.NAME == 'A'
+
+
+def test_reactivate_with_empty_stack_is_a_safe_noop(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B'], start='A')
+    assert app.reactivate_last_disabled_effect() == 'Nothing to re-activate'
+
+
+def test_reactivate_pops_in_lifo_order(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B', 'C'], start='A')
+    app.disable_current_effect_and_advance()  # disables A
+    first_disabled = 'A'
+    second_disabled = app._current_effect.NAME
+    app.disable_current_effect_and_advance()  # disables whatever we landed on
+    msg1 = app.reactivate_last_disabled_effect()
+    assert f'{second_disabled}: re-enabled' in msg1
+    msg2 = app.reactivate_last_disabled_effect()
+    assert f'{first_disabled}: re-enabled' in msg2
+    assert app.effect_enabled('A') is True
+    assert app.effect_enabled(second_disabled) is True
+
+
+def test_reactivate_skips_entries_already_reenabled_elsewhere(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B', 'C'], start='A')
+    app.disable_current_effect_and_advance()  # disables A
+    landed = app._current_effect.NAME
+    app.disable_current_effect_and_advance()  # disables `landed`
+    app.set_effect_enabled(landed, True)  # operator re-enabled it in the browser
+    msg = app.reactivate_last_disabled_effect()
+    assert 'A: re-enabled' in msg  # skipped the already-restored entry
+
+
+def test_reactivate_undo_stack_is_session_only(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B'], start='A')
+    app.disable_current_effect_and_advance()
+    state_file = tmp_path / 'state.json'
+    if state_file.exists():  # the disable itself persists effects.disabled
+        assert 'undo' not in state_file.read_text(encoding='utf-8')
+
+
+def test_reactivate_restores_projectm_preset(tmp_path: Path) -> None:
+    app = _app_with_projectm(tmp_path, ['/a.milk', '/b.milk'])
+    effect = app._current_effect
+    app.disable_current_effect_and_advance()  # disables /a.milk
+    msg = app.reactivate_last_disabled_effect()
+    assert 'Preset re-enabled' in msg and 'a.milk' in msg
+    assert '/a.milk' not in effect.disabled
+    assert '/a.milk' in effect._presets
+
+
+def test_reactivate_preset_kept_when_projectm_not_active(tmp_path: Path) -> None:
+    app = _app_with_projectm(tmp_path, ['/a.milk', '/b.milk'])
+    app.disable_current_effect_and_advance()
+    app._current_effect = _fx('SomethingElse')  # operator left ProjectM
+    msg = app.reactivate_last_disabled_effect()
+    assert msg == 'ProjectM not active - preset not restored'
+    assert app._disable_undo_stack  # entry retained for a later retry
 
 
 # --------------------------------------------------------------------------- #
@@ -255,3 +335,18 @@ def test_end_to_end_delete_key_dispatches(tmp_path: Path) -> None:
 
     assert app.effect_enabled('A') is False
     assert app._current_effect.NAME != 'A'
+
+
+def test_end_to_end_shift_delete_reactivates(tmp_path: Path) -> None:
+    app, _playlist = _app_with_playlist(tmp_path, ['A', 'B', 'C'], start='A')
+    app._auto_vj = None
+    app._keystroke_logger = None
+    app.vj_api = _VJApi()
+    app.hotkey_overrides = lambda: {}
+
+    handler = HotkeyHandler(app, _playlist, _Overlay(), _Audio())
+    handler.handle(sdl2.SDLK_DELETE, 0)
+    assert app.effect_enabled('A') is False
+    handler.handle(sdl2.SDLK_DELETE, sdl2.KMOD_SHIFT)
+    assert app.effect_enabled('A') is True
+    assert app._current_effect.NAME == 'A'

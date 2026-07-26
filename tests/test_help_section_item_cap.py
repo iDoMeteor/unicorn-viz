@@ -1,8 +1,8 @@
 """Help overlay per-section item accordion — regression tests.
 
 Sections stay grouped up to HELP_SECTIONS_PER_TAB per tab (10) AND stay a
-single card/heading each — a section with many items (e.g. 'Tweakables' has
-15, 'Basics' has 14) is not split into separate top-level sections (that
+single card/heading each — a section with many items (e.g. 'Tweakables',
+'Basics') is not split into separate top-level sections (that
 was tried and reverted: it disrupted the section list/pagination for
 something that should stay a per-section concern).
 
@@ -75,9 +75,9 @@ def test_empty_entries_is_a_single_empty_page() -> None:
 # --------------------------------------------------------------------------- #
 
 def test_iter_help_sections_does_not_split_oversized_sections() -> None:
-    """'Basics' (14) and 'Tweakables' (15) exceed the cap today, but must
-    stay single sections — pagination happens inside the card, not by
-    creating 'Basics (2)' as its own top-level section."""
+    """'Basics' and 'Tweakables' exceed the cap, but must stay single
+    sections — pagination happens inside the card, not by creating
+    'Basics (2)' as its own top-level section."""
     overlays = _stub_overlays()
     overlays._dynamic_help_sections = {}
     overlays._dynamic_help_order = []
@@ -88,8 +88,12 @@ def test_iter_help_sections_does_not_split_oversized_sections() -> None:
     assert names.count('Basics') == 1
     assert 'Basics (2)' not in names
     assert 'Tweakables (2)' not in names
+    source_basics = next(
+        e for n, e in Overlays.CORE_HELP_SECTIONS if n == 'Basics'
+    )
+    assert len(source_basics) > CAP  # precondition: genuinely oversized
     basics_entries = next(e for n, e in sections if n == 'Basics')
-    assert len(basics_entries) == 14  # still whole, not truncated to CAP
+    assert len(basics_entries) == len(source_basics)  # whole, not truncated
 
 
 # --------------------------------------------------------------------------- #

@@ -119,6 +119,13 @@ class Playlist:
     def current(self) -> Type[BaseEffect]:
         return self._effects[self._index]
 
+    def find_by_name(self, name: str) -> Type[BaseEffect] | None:
+        """Return the effect class matching a display NAME or class name."""
+        for cls in self._effects:
+            if cls.NAME == name or cls.__name__ == name:
+                return cls
+        return None
+
     def _step_to_enabled(self, direction: int) -> None:
         """Move ``_index`` to the next enabled effect in ``direction`` (+1/-1).
 

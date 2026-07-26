@@ -390,6 +390,7 @@ class Overlays:
                 ('n / Right', 'Next effect'),
                 ('p / Left', 'Prev effect'),
                 ('Delete', 'Disable current effect & skip (ProjectM: disable preset)'),
+                ('Shift+Delete', 'Re-enable last disabled effect (this session)'),
                 ('Right Click', 'Open context menu'),
                 ('ESC', 'Quit'),
                 ('u', 'Replay splash'),
