@@ -1,16 +1,27 @@
 ---
 Owner: Planning
-Status: REV1 fully wired (M-1..M-4, scratch, cues, manual+auto loops incl. the
-corner LOOP IN/OUT/1/2X/2X buttons, FX, BPM/SYNC, lighting, browser). All 8 pad
-modes (mouse + hardware). Mouse M-mouse 1/3/4 done; transport bar (BACK/PLAY/
-CUE/LOOP/IN/OUT/CLR), session recall (state.py), **hash-keyed track store**
-(track_store.py: BPM/cues/loops/grid remembered forever), beat-grid v1
-(beat_offset + zoom grid lines + right-click set-downbeat), library manager
-(BPM column, sort, analyze all/filtered, context menu, keyboard nav), platter
-indicator all landed (0.21.0). Planning: bigger platter viz (collapsed decks),
-accordion crate browser, streaming sources. Pending: hardware bring-up, mouse
-M-mouse 2 remainder, feature backlog.
-Last updated: 2026-07-15
+Status: **feature-complete for 1.0 on capability; gated on hardware bring-up.**
+As of drop-in 0.122.0 the scorecard's flip list is empty — every competitor A in
+the scored table is matched or beaten (see `drop-ins/dj-mixer-01/docs/
+scorecard.md`).
+
+Landed well beyond the original M-1..M-4 plan: four-deck engine, full REV1
+wiring + LED feedback, all pad modes (mouse + hardware) including **SONG LOOP**
+and **STEM LOOP**, stems (extract/cache/per-stem FX/blend), **multi-FX chains**,
+quantize + snap (incl. downbeats-only), **beat-grid editing** (tap / nudge /
+half-double / fine BPM / set-downbeat / reset — v1 constant-tempo, shipped),
+**auto-cues + auto-loops on analyze** with provenance and analyzer versioning,
+Smart Fader auto-play (green / magenta / cyan stem blend / slam, downbeat-aware
+starts), Smart Playlist, recording (multi-format + split-by-track + CUE sheets),
+hash-keyed track store, session recall, stacked beatmatch view.
+
+**Pending for 1.0:** hardware bring-up (`docs/hardware-bringup.md` — the gate).
+**Next initiative:** AI DJ / `dj-mixer-pro` (`docs/planning/
+ai-dj-public-interface-plan.md`, approved, no code).
+**Also open:** mixer-only boot mode (approved direction, unbuilt), variable
+("warp") beat grids (deliberately post-v1), battle mode (rides on AI DJ).
+**Non-compete (decided):** streaming catalogs, hardware breadth, DVS.
+Last updated: 2026-07-26 (drop-in 0.122.0)
 ---
 
 # DJ Mixer Drop-In Plan — `dj-mixer-01` (Pioneer DDJ-REV1)
