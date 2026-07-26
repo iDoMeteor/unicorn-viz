@@ -306,6 +306,32 @@ user-visible change.
 component's version per the rules above, add the changelog line, and keep the
 README header in sync.  Purely internal refactors, tests, or docs need no bump.
 
+## Analyzer Versioning (track analysis)
+
+Analyzed tracks record the analyzer that produced them
+(`analysis_version` in the track store, from `deck.ANALYSIS_VERSION` in
+`drop-ins/dj-mixer-01/`).  Without it a library analyzed by an older build is
+indistinguishable from a current one, and stale results are silently trusted.
+
+**Agents must bump `ANALYSIS_VERSION` in the same commit** as any change that
+would make a previously-analyzed track's stored results different, including:
+
+- a new or changed **detector** — BPM, key, onset/silence bounds, structural
+  cue detection, or the beat-grid/downbeat derivation;
+- a change to **what auto-cue writes** — cue placement, the load-in cue, the
+  structural cap, provenance flags;
+- a change to **what auto-loop writes** — loop length, which cue points get
+  loops, the stem mask defaults;
+- a **new field** that downstream code expects analysis to have produced.
+
+Do **not** bump it for changes that cannot alter the numbers: refactors,
+renames, logging, UI, tests, or docs.
+
+When bumping, add a one-line entry to the constant's comment block saying what
+changed and at which drop-in version, so the history explains why a given
+library reads as stale.  Never re-analyze a user's library automatically — old
+results still play; surface the stale count and let the owner decide.
+
 ## Regression Test Discipline
 
 - Any commit that changes runtime behavior must include corresponding updates to
