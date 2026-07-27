@@ -3,7 +3,7 @@ Owner: Planning
 Status: APPROVED (architecture + owner decisions §10 recorded 2026-07-17); no
 code yet, M0 not started. Ships as the commercial `dj-mixer-pro` drop-in.
 Supersedes the "AI v Human mode" placeholder noted in the dj-mixer plan.
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 ---
 
 # AI DJ + Public System Interface — Plan
@@ -180,6 +180,35 @@ Both consume audio and make musical decisions; they must not fight or double up.
   the drop-in independence rule). auto-vj already degrades without postfx-01 /
   unicorn-tears-01; the DJ↔VJ link follows the same discipline.
 
+### 5.1 Audit finding — the BPM bus is write-only today (2026-07-18)
+
+Mixer-team code audit, confirmed independently against the working tree:
+`publish_bpm` is called exactly once in `auto_vj.py` (on every detector
+tick); `get_bpm` is never called anywhere in it. `vj_api.py` has no bus
+method for phase or downbeat at all — only `publish_bpm`/`get_bpm` exist,
+so there is nowhere for `beat_phase()`/`bar_phase()` to go even if the
+mixer wanted to publish them today.
+
+Concretely: `auto-vj-01`'s `BeatGridTracker` re-converges its own
+onset-based tempo estimate from the captured room audio on every track
+change, when `dj-mixer-01` already knows the exact BPM per track (to two
+decimals, drift-corrected against the audio as of dj-mixer-01 0.123.0) the
+moment a deck loads it. This is the gap M3 ("DJ↔VJ coordination bus")
+below is meant to close — not scheduled now, logged here so it isn't lost.
+
+Two concrete, scoped actions when M3 starts (deliberately *not* a rewrite):
+
+1. **auto-vj reads the bus as a strong prior.** `BeatTracker`/`BeatTrackerV3`
+   already take a BPM prior via `set_profile()` (`bpm_prior_mu`/
+   `bpm_prior_sigma` — see `docs/adr/vj-system.md`); feeding a known-exact
+   mixer tempo through the same mechanism as a very tight prior (not a
+   forced value) is a natural fit, not new plumbing.
+2. **Extend the bus to carry phase**, so downbeat-locked effects are
+   genuinely locked rather than inferred from auto-vj's own oscillator.
+   Not just "add a float" — a phase value is meaningless without the
+   timestamp/sample-rate context to interpolate against between publishes,
+   so this needs its own small design pass, not a one-line addition.
+
 ---
 
 ## 6. The controller: heuristic first, LLM later
@@ -256,7 +285,9 @@ Both consume audio and make musical decisions; they must not fight or double up.
   purely through `DjApi`. Cooldowns + manual grace. The first hands-free set.
 - [ ] **M3 — DJ↔VJ coordination bus.** Structure/energy/section channel +
   director hints; analysis-authority handoff; auto-vj consumes DJ hints and
-  vice-versa. Both still run independently.
+  vice-versa. Both still run independently. First concrete item: the §5.1
+  audit finding — auto-vj reads the mixer's exact per-track BPM as a prior
+  instead of re-converging by ear, and the bus gains a phase/downbeat channel.
 - [ ] **M4 — LLM planner.** High-level intent planning on a slow loop over the
   telemetry + candidate snapshot; deterministic layer executes beat-accurately.
 - [ ] **M5 — external/public interface.** Out-of-process access (local IPC /
