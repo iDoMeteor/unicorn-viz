@@ -182,6 +182,12 @@ def _setup_logging(cfg: Config) -> None:
     log_path = log_dir / f"unicornviz_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     formatter = logging.Formatter('%(levelname)s [%(name)s] %(message)s')
+    # The file gets wall-clock stamps; the console stays terse.  Reports come
+    # in as "around 19:50 the volume dipped", and without a stamp there is no
+    # way to line that up against the log at all.
+    file_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        datefmt='%H:%M:%S')
 
     console = logging.StreamHandler()
     console.setLevel(level)
@@ -191,7 +197,7 @@ def _setup_logging(cfg: Config) -> None:
 
     file_handler = logging.FileHandler(log_path, encoding='utf-8')
     file_handler.setLevel(level)
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(file_formatter)
     if band_filter is not None:
         file_handler.addFilter(band_filter)
 
