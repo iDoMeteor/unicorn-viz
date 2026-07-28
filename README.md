@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.14**
+**Version 1.0.0-beta.16**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.16** — **Fix: a silent audio source collapsed the frame rate.**  The capture auto-fallback probes a candidate device by spawning a Python subprocess (numpy + sounddevice + opening the device, ~200–800 ms), and `maybe_fallback()` runs from the audio manager's **per-frame** update.  Its cooldown was stamped only after a *successful switch*, so when every candidate was silent — the exact case the fallback exists for — the gate never closed and a probe ran **on every frame, inline on the render thread**.  The cooldown is now stamped when a probe is *attempted*, and the probe runs on a worker thread whose result is collected on a later frame, so the render thread is never blocked by it at all.
 - **1.0.0-beta.15** — **Shift+Delete** re-activates the last Delete-key
   deactivation (running session only, LIFO): a disabled effect is re-enabled
   and jumped straight back to; a disabled ProjectM preset is re-enabled while

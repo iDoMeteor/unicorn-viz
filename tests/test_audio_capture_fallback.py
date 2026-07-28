@@ -38,6 +38,22 @@ def _make_capture() -> AudioCapture:
     return c
 
 
+def _run_fallback(c) -> None:
+    """Drive a full fallback cycle.
+
+    The probe spawns a subprocess (numpy + sounddevice + opening a device), so
+    it runs on a worker thread and its result is acted on by a later call --
+    the audio manager calls this every frame.  Two calls plus a join is what
+    two frames look like.
+    """
+    c.maybe_fallback()                      # frame 1: starts the probe
+    t = c._probe_thread
+    if t is not None:
+        t.join(timeout=5.0)
+    c._last_fallback_time = 0.0             # the cooldown is not under test
+    c.maybe_fallback()                      # frame 2: acts on the result
+
+
 def test_fallback_moves_to_next_candidate_on_success(monkeypatch) -> None:
     monkeypatch.setattr(capture_mod, 'sd', _FakeSD())
     c = _make_capture()
@@ -51,7 +67,7 @@ def test_fallback_moves_to_next_candidate_on_success(monkeypatch) -> None:
 
     c._open_stream = _open
     c._probe_source_rms = lambda _device: 0.05
-    c.maybe_fallback()
+    _run_fallback(c)
 
     assert opened == [2]
     assert c._candidate_index == 1
@@ -63,7 +79,7 @@ def test_fallback_marks_inactive_when_switch_and_restore_fail(monkeypatch) -> No
     c = _make_capture()
 
     c._probe_source_rms = lambda _device: 0.0
-    c.maybe_fallback()
+    _run_fallback(c)
 
     assert c._candidate_index == 0
     assert c._stream is not None
@@ -85,7 +101,7 @@ def test_fallback_restores_previous_source_when_reopen_fails(monkeypatch) -> Non
 
     c._open_stream = _open
     c._probe_source_rms = lambda _device: 0.05
-    c.maybe_fallback()
+    _run_fallback(c)
 
     assert calls == [2, 1]
     assert c._candidate_index == 0
@@ -113,7 +129,7 @@ def test_fallback_ignores_untagged_targets(monkeypatch) -> None:
     c._open_stream = _open
     c._probe_source_rms = lambda _device: 0.05
 
-    c.maybe_fallback()
+    _run_fallback(c)
 
     assert opened == [3]
     assert c._candidate_index == 2
@@ -186,3 +202,54 @@ def test_candidate_order_prefers_default_input_first(monkeypatch) -> None:
     candidates = capture_mod._candidate_monitor_devices('', prefer_default_input=True)
 
     assert candidates[0] is None
+
+
+def test_a_silent_source_does_not_probe_every_frame(monkeypatch) -> None:
+    """The framerate collapse.
+
+    maybe_fallback() runs from the audio manager's per-frame update, and the
+    probe behind it spawns a Python subprocess (numpy + sounddevice + opening
+    a device, ~200-800 ms).  The cooldown was stamped only after a *successful
+    switch*, so when every candidate was silent -- the exact case this code
+    exists for -- the gate never closed and a probe ran on every frame, inline,
+    on the render thread.
+    """
+    monkeypatch.setattr(capture_mod, 'sd', _FakeSD())
+    c = _make_capture()
+    c._fallback_cooldown_seconds = 8.0
+    c._last_fallback_time = 0.0
+    probes: list = []
+
+    def _probe(device):
+        probes.append(device)
+        return 0.0                      # every candidate is silent too
+
+    c._probe_source_rms = _probe
+    for _ in range(120):                # two seconds of frames
+        c.maybe_fallback()
+        t = c._probe_thread
+        if t is not None:
+            t.join(timeout=5.0)
+    assert len(probes) == 1, f'probed {len(probes)} times in 120 frames'
+    assert c._candidate_index == 0      # nothing to switch to, so no switch
+
+
+def test_the_probe_never_runs_on_the_calling_thread(monkeypatch) -> None:
+    """It must not block the render thread even once."""
+    import threading as _th
+    monkeypatch.setattr(capture_mod, 'sd', _FakeSD())
+    c = _make_capture()
+    caller = _th.current_thread()
+    ran_on: list = []
+
+    def _probe(device):
+        ran_on.append(_th.current_thread())
+        return 0.05
+
+    c._probe_source_rms = _probe
+    c._open_stream = lambda device: None
+    c.maybe_fallback()
+    t = c._probe_thread
+    assert t is not None
+    t.join(timeout=5.0)
+    assert ran_on and ran_on[0] is not caller

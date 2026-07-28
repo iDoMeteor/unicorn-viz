@@ -288,6 +288,10 @@ class AudioCapture:
         self._auto_fallback_enabled = bool(auto_fallback_enabled)
         self._prefer_default_input = bool(prefer_default_input)
         self._last_fallback_time = 0.0
+        # Candidate probing runs off the caller's thread; see maybe_fallback.
+        self._probe_thread: threading.Thread | None = None
+        self._probe_lock = threading.Lock()
+        self._probe_result: tuple | None = None
         self._state_store = state_store
         self._selected_source_key: str | None = None
         self._viable_source_keys: set[str] = set()
@@ -765,14 +769,34 @@ class AudioCapture:
             return None
 
     def maybe_fallback(self) -> None:
-        """Switch between viable sources when current source remains silent."""
+        """Switch between viable sources when current source remains silent.
+
+        Called from the audio manager's per-frame update, so it must be cheap
+        and must never block: the probe behind it spawns a Python subprocess
+        (numpy + sounddevice + opening a device, ~200-800 ms), which is far
+        too expensive to sit on the render thread.
+
+        Two things kept it from being either.  The cooldown was stamped only
+        after a *successful* switch, so when every candidate was silent -- the
+        exact case this code exists for -- the gate never closed and a probe
+        ran on **every frame**.  And the probe ran inline, so each of those
+        frames blocked.  The result was a frame rate collapse whenever a quiet
+        source was selected, which is the opposite of what a fallback is for.
+
+        Now the cooldown is stamped when a probe is *attempted*, and the probe
+        itself runs on a worker thread whose result is picked up on a later
+        call.
+        """
         if not self._auto_fallback_enabled:
             return
+        self._collect_probe_result()
         if not self._is_warmed_up():
             log.debug('Audio: fallback check suppressed during warmup')
             return
         if len(self._candidate_devices) <= 1:
             return
+        if self._probe_thread is not None and self._probe_thread.is_alive():
+            return                      # one in flight is enough
         if self._fallback_cooldown_seconds > 0.0:
             now = time.time()
             if now - self._last_fallback_time < self._fallback_cooldown_seconds:
@@ -781,13 +805,42 @@ class AudioCapture:
         if silent_time < self._fallback_silence_seconds:
             return
 
-        current_idx = self._candidate_index
-        target_idx = self._next_viable_candidate_index(current_idx)
+        target_idx = self._next_viable_candidate_index(self._candidate_index)
         if target_idx is None:
             return
 
+        # Stamp before probing, not after switching: the probe is the
+        # expensive part, so that is what the cooldown has to rate-limit --
+        # including the probes that decide *not* to switch.
+        self._last_fallback_time = time.time()
+        self._start_probe(target_idx, silent_time)
+
+    def _start_probe(self, target_idx: int, silent_time: float) -> None:
+        """Run the candidate probe off the caller's thread."""
+        device = self._candidate_devices[target_idx]
+
+        def _work() -> None:
+            rms = self._probe_source_rms(device)
+            with self._probe_lock:
+                self._probe_result = (target_idx, rms, silent_time)
+
+        with self._probe_lock:
+            self._probe_result = None
+        self._probe_thread = threading.Thread(
+            target=_work, name='AudioFallbackProbe', daemon=True)
+        self._probe_thread.start()
+
+    def _collect_probe_result(self) -> None:
+        """Act on a finished probe, if one is waiting."""
+        with self._probe_lock:
+            result = self._probe_result
+            self._probe_result = None
+        if result is None:
+            return
+        target_idx, target_rms, silent_time = result
+        if not (0 <= target_idx < len(self._candidate_devices)):
+            return
         target_device = self._candidate_devices[target_idx]
-        target_rms = self._probe_source_rms(target_device)
         if target_rms is None or target_rms < self._fallback_rms_threshold:
             log.debug(
                 'Audio: candidate %s probe rms=%s below threshold %.5f; staying on current source',
@@ -796,7 +849,6 @@ class AudioCapture:
                 self._fallback_rms_threshold,
             )
             return
-
         log.info(
             'Audio capture: current source silent for %.2fs; switching to viable source %s (probe rms=%.5f)',
             silent_time,
