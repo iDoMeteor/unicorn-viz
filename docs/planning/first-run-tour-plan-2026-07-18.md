@@ -19,7 +19,7 @@ in flight). The interactive spotlight tour remains the v2 vision in
 [`guided-tour-plan.md`](guided-tour-plan.md) (backlog), which this
 supersedes *for sequencing only* — v1 ships first, v2 builds on its
 trigger/persistence/entry points.
-Last updated: 2026-07-20
+Last updated: 2026-07-29
 
 ---
 
@@ -179,6 +179,54 @@ hardcoded — same single-source-of-truth rule as tooltips.
 - **v2** — the spotlight tour per `guided-tour-plan.md`, reusing this
   trigger, persistence, and entry points; its T0 framework supersedes
   the slide renderer only if/when it lands.
+
+## 6b) v1.1 — per-drop-in first-load injection + media slides (owner-requested 2026-07-29)
+
+Owner direction: each drop-in owns its tour slides, and those slides
+**inject themselves on the drop-in's first load** — not only when the
+app-level tour happens to run. Not every drop-in will have slides (already
+true: discovery finding nothing is the normal case). Slides should also be
+able to carry **images or video**.
+
+**Deck ordering (shipped in 1.0.0-beta.17).** Core slides, then drop-ins in
+alphabetical order (the discovery scan is directory-sorted), then the final
+core slide — the good-bye slide is the only one that "says good-bye" and
+always closes the tour, full deck or not.
+
+**First-load tracking (proposed).**
+
+- New runtime-state key `tour.seen_dropins`: list of drop-in directory
+  names whose slides have been shown at least once.
+- Discovery gains per-drop-in attribution (return the contributing drop-in
+  dir name alongside each slide) so contributors can be grouped, ordered,
+  and marked seen.
+- Startup decision tree:
+  1. App tour auto-opens (first run, or toggle on) → full deck as above;
+     on close, mark **all** current contributors seen.
+  2. Otherwise, if discovery finds contributors not in `tour.seen_dropins`
+     → auto-open a **mini-deck** of just the new drop-ins' slides
+     (alphabetical), no core slides, no good-bye. Mark them seen on close.
+     Proposed: this fires even when "Show on startup" is unchecked — the
+     checkbox governs the *app* tour; a newly installed drop-in's intro is
+     a one-time event with an obvious CLOSE. **Owner to confirm.**
+  3. Manual F1 → always the full deck; marks contributors seen.
+- Mini-deck sessions do not touch `tour.last_slide` (that key belongs to
+  the full deck's resume position).
+
+**Media slides (proposed).**
+
+- `TourSlide` gains optional `media` (path; kind inferred from extension:
+  png/jpg = image, mp4/webm = video). Core media resolves under `assets/`;
+  drop-in media resolves relative to the contributing drop-in's directory.
+- Layout: fixed letterboxed media box between the title and the body text;
+  slides without media keep the current all-text layout.
+- Images: PIL → GL texture, loaded lazily when the slide first shows,
+  cached for the dialog's lifetime, released on close. Core-native.
+- Video: core must not hard-depend on PyAV (videos-01's decoder), so video
+  playback loads through `load_dropin_symbol()` with a graceful fallback —
+  no decoder present → render a still poster/placeholder. Playback silent
+  and looped. Ships as a follow-up phase after images. **Owner to confirm
+  the videos-01 dependency route.**
 
 ## 7) Risks / notes
 
