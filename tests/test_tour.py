@@ -352,7 +352,7 @@ def test_real_dropin_tour_slides_are_wellformed_and_tokens_resolve() -> None:
             assert match.group(1).strip().lower() in known, (title, match.group(1))
 
 
-def test_tour_deck_appends_discovered_slides(monkeypatch) -> None:
+def test_tour_deck_inserts_discovered_slides_before_goodbye(monkeypatch) -> None:
     import unicornviz.app as app_mod
 
     monkeypatch.setattr(
@@ -362,8 +362,10 @@ def test_tour_deck_appends_discovered_slides(monkeypatch) -> None:
     )
     app = _bare_app({})
     deck = app._tour_deck()
-    assert deck[: len(CORE_TOUR_SLIDES)] == CORE_TOUR_SLIDES
-    assert deck[-1] == TourSlide('Demo', 'Extra', 'Extra body')
+    assert deck[: len(CORE_TOUR_SLIDES) - 1] == CORE_TOUR_SLIDES[:-1]
+    assert deck[-2] == TourSlide('Demo', 'Extra', 'Extra body')
+    # The core good-bye slide always closes the tour.
+    assert deck[-1] == CORE_TOUR_SLIDES[-1]
 
 
 def test_tour_deck_survives_discovery_failure(monkeypatch) -> None:

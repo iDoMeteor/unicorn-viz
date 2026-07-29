@@ -2773,7 +2773,7 @@ void main() {
             return
         layout = self._tour_layout()
         px, py, pw, ph = layout['panel']
-        self._draw_modal_underlay(px, py, pw, ph, 0.55, pad=60.0)
+        self._draw_modal_underlay(px, py, pw, ph, 0.55, pad=8.0)
         self._draw_rect(px, py, pw, ph, (0.03, 0.05, 0.09, 0.96))
         self._draw_rect(px, py, pw, 3.0, (0.10, 0.94, 1.0, 0.85))
         self._draw_rect(px, py + ph - 3.0, pw, 3.0, (0.78, 0.38, 1.0, 0.75))

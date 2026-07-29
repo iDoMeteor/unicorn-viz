@@ -3154,14 +3154,20 @@ void main() {
     def _tour_deck(self) -> tuple[TourSlide, ...]:
         """Core slides plus any drop-in TOUR_SLIDES contributions.
 
-        Drop-in discovery must never break the tour (independence rules):
-        on any failure the core deck ships alone. Modules are already in
-        the drop-in loader cache from help discovery, so the scan is cheap.
+        Drop-in slides land in alphabetical drop-in order (the discovery
+        scan is directory-sorted) *before* the final core slide, so the
+        good-bye slide always closes the tour. Discovery must never break
+        the tour (independence rules): on any failure the core deck ships
+        alone. Modules are already in the drop-in loader cache from help
+        discovery, so the scan is cheap.
         """
         slides = list(CORE_TOUR_SLIDES)
         try:
-            for section, title, body in discover_dropin_tour_slides():
-                slides.append(TourSlide(section, title, body))
+            extras = [
+                TourSlide(section, title, body)
+                for section, title, body in discover_dropin_tour_slides()
+            ]
+            slides[-1:-1] = extras
         except Exception as exc:
             log.debug('Drop-in tour slides skipped: %s', exc)
         return tuple(slides)
