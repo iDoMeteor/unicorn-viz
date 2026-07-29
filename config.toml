@@ -3,7 +3,7 @@ level = "info"
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
-display_index  = 1
+display_index  = 2
 exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span_all / mirror_all
 
 [ansi]
@@ -595,6 +595,15 @@ dark_brightness_threshold = 0.02
 # closing releases it. See drop-ins/dj-mixer-01/docs/ (feature-overview.md,
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
+# pad_face_cache: render each distinct pad face once and paste it, instead of
+# drawing all 32 pads x 4 decks every frame.  Measured ~25-49% off a mixer
+# frame depending on scene.  OFF by default because it is not purely a
+# performance change: the raster path overwrites rather than blends, so drawn
+# directly the pads' glow and top-light land as literal translucent values,
+# while a cached tile composites them -- lit pads come out calmer, and the
+# frame stops going semi-transparent where a highlight sits.  Turn it on if
+# you prefer that look and want the frame time back.
+# pad_face_cache = true
 # tooltips: hover tooltips across the whole mixer.  A learning aid; once you
 # know the surface they are in the way.  Toggleable live in the GENERAL
 # settings tab (which remembers your choice and wins over this seed), and off
