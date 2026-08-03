@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-07-18
+Last updated: 2026-08-03
 
 This document records architectural decisions for the Auto VJ training pipeline:
 corpus design, scoring, packager logic, headless session infrastructure, and
@@ -195,6 +195,7 @@ unreliable.
 | Classic / tech house | `house` | 120–128 | — |
 | Chillstep / downtempo | `chillstep` | 85–105 | 108 |
 | Trance | `trance` | 130–142 | — |
+| Synthwave / retrowave | `synthwave` | 90–110 | 118 |
 
 Set in the training deploy's `config.toml`.  Recovery: `Alt+A` cycles profiles
 in-session, recorded in the corpus `audio_profile_key` field.

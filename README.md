@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.17**
+**Version 1.0.0-beta.18**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.18** — New `synthwave` audio profile (`unicornviz/audio/profiles.py`): warm analog bass, gated-reverb drums, and a bright 1.4-2.4 kHz lead-synth peak at 85-118 BPM, selectable via `Alt+A` like any other genre profile. First-pass, added after a livestream synthwave training session ran under `generic` all night and sagged into psytrance/trance whenever detected BPM ran hot -- see `docs/adr/training-model.md`.
 - **1.0.0-beta.17** — Tour polish: the dim scrim now hugs the dialog like
   every other modal (was a floating 60px skirt), and drop-in slides slot in
   alphabetically *before* the core good-bye slide so "Have a great show!"

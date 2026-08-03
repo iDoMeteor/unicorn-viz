@@ -984,6 +984,74 @@ PROFILES: Dict[str, AudioProfile] = {
             0.880, 0.900, 0.800, 0.700, 0.600, 0.620, 0.640, 0.660,
         ],
     ),
+    # 2026-08-03: first-pass profile, added after a ~5 hour livestream training
+    # session (assets/training/sets/20260803-synthtrax-kavinsky-tribute-20260731/,
+    # ../unicorn-viz-training deploy) ran the whole night as "generic" and
+    # sagged into psytrance/trance (~30% of rows) whenever detected BPM ran
+    # hot -- exactly the kind of mismatch a dedicated profile with the right
+    # tempo prior and search-range clamp exists to prevent. Not yet validated
+    # against real session data the way house/chillstep have been (see the
+    # ADR-tracked tuning history on those two) -- recalibrate once a
+    # dedicated, more formal synthwave session has been packaged and scored.
+    "synthwave": AudioProfile(
+        name="Synthwave / Retrowave",
+        description=(
+            "Retro 80s-style synth-driven electronic: warm analog bass, "
+            "gated-reverb drums, and bright melodic lead synths at 85-118 BPM"
+        ),
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.0,
+        # Mid-weighted, unlike chillstep's pad/bass-led balance: the lead
+        # synth hook is the genre's defining, most recognizable element.
+        mid_weight=1.25,
+        treble_weight=0.85,
+        beat_threshold=1.3,
+        smoothing=0.14,
+        curve="warm",
+        # Gated-reverb kick/snare is present but not the dominant onset
+        # driver the way a house kick is -- weight mid higher than bass so
+        # snare hits and arpeggio notes register instead of only the kick,
+        # mirroring chillstep's "don't over-weight bass" rationale.
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.5,
+        onset_treble_emphasis=1.0,
+        # Classic/melodic synthwave tempo pocket -- grounded in real Kavinsky
+        # tempos (Nightcall ~104-107 BPM, Odd Look ~93 BPM, Deadcruiser
+        # ~90-100 BPM). Sigma/hint width matches chillstep's real-world
+        # tempo scatter rather than a tightly-quantized genre like tech_house.
+        bpm_prior_mu=100.0,
+        bpm_prior_sigma=0.40,
+        bpm_hint_min=85.0,
+        bpm_hint_max=118.0,
+        # Brightness sits between chillstep's pad-only atmosphere (900 Hz)
+        # and house's percussion-driven brightness (1500 Hz) -- present lead
+        # synths without a hi-hat-driven treble floor.
+        spectral_centroid_mu=1200.0,
+        zcr_mu=0.050,
+        onset_density_mu=1.9,
+        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: classic
+        # synthwave (Kavinsky et al.) is predominantly instrumental, and a
+        # fabricated target would be worse than no signal on this dimension.
+        # Fingerprint: smooth single peak at bands 39-40 (~1.4-1.6 kHz, the
+        # lead-synth register), tapering into a rolled-off extreme-high tail
+        # -- distinguishes it from trance/psytrance's near-constant high-
+        # frequency energy and from house's jagged percussion-transient shape.
+        expected_bands=[
+            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
+            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
+            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
+            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
+            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
+            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
+            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
+            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+        ],
+    ),
 }
 
 

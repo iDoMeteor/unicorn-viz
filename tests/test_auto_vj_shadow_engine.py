@@ -54,7 +54,8 @@ def _bare_controller(grid, shadow_grid) -> AutoVJController:
 
 def test_detector_snapshot_omits_shadow_fields_when_disabled() -> None:
     grid = SimpleNamespace(bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
-                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1)
+                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+                            ENGINE_VERSION='3.0.0')
     inst = _bare_controller(grid, None)
 
     snap = inst._detector_snapshot()
@@ -62,11 +63,13 @@ def test_detector_snapshot_omits_shadow_fields_when_disabled() -> None:
     assert 'bpm_shadow' not in snap
     assert 'confidence_shadow' not in snap
     assert 'shadow_engine' not in snap
+    assert snap['engine_version'] == '3.0.0'
 
 
 def test_detector_snapshot_includes_shadow_fields_when_enabled() -> None:
     grid = SimpleNamespace(bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
-                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1)
+                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+                            ENGINE_VERSION='3.0.0')
     shadow = SimpleNamespace(bpm=146.3, confidence=0.58, ENGINE_VERSION='3.0.0')
     inst = _bare_controller(grid, shadow)
 
@@ -85,7 +88,7 @@ def _row_args(shadow_grid):
     audio = SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bands=None, waveform=[], spectral_flux=0.1)
     spotify: dict = {}
     state = SimpleNamespace(audio_source='spotify', playlist_mode='')
-    grid = SimpleNamespace(bpm=124.0, confidence=0.6)
+    grid = SimpleNamespace(bpm=124.0, confidence=0.6, ENGINE_VERSION='2.0.0')
     return audio, spotify, state, None, grid, shadow_grid
 
 
@@ -95,6 +98,7 @@ def test_build_live_training_row_omits_shadow_fields_when_disabled() -> None:
     assert 'bpm_shadow' not in row
     assert 'confidence_shadow' not in row
     assert 'shadow_engine' not in row
+    assert row['engine_version'] == '2.0.0'
 
 
 def test_build_live_training_row_includes_shadow_fields_when_enabled() -> None:
@@ -105,3 +109,4 @@ def test_build_live_training_row_includes_shadow_fields_when_enabled() -> None:
     assert row['confidence_shadow'] == 0.58
     assert row['shadow_engine'] == '3.0.0'
     assert row['bpm'] == 124.0
+    assert row['engine_version'] == '2.0.0'   # active engine, distinct from shadow_engine

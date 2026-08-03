@@ -29,6 +29,7 @@ _build_combined_prompt = _MOD._build_combined_prompt
 _format_reco_weights_line = _MOD._format_reco_weights_line
 _RECO_WEIGHT_DEFAULTS = _MOD._RECO_WEIGHT_DEFAULTS
 _build_shadow_comparison = _MOD._build_shadow_comparison
+_summarize_engine_versions = _MOD._summarize_engine_versions
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -299,6 +300,37 @@ def test_build_detector_payload_shadow_comparison_absent_without_shadow_data() -
     rows = [_make_seq_row() for _ in range(3)]
     payload = _build_detector_payload(rows, 'set-a', 'a')
     assert payload['shadow_engine_comparison'] is None
+
+
+def test_summarize_engine_versions_none_for_older_corpus_without_the_field() -> None:
+    rows = [_make_seq_row() for _ in range(3)]   # no engine_version key at all
+    assert _summarize_engine_versions(rows) is None
+
+
+def test_summarize_engine_versions_single_engine() -> None:
+    rows = [{**_make_seq_row(), 'engine_version': '3.0.0'} for _ in range(4)]
+    summary = _summarize_engine_versions(rows)
+    assert summary is not None
+    assert summary['primary'] == '3.0.0'
+    assert summary['versions'] == {'3.0.0': 4}
+    assert summary['coverage_pct'] == pytest.approx(100.0)
+
+
+def test_summarize_engine_versions_mixed_engines_within_one_session() -> None:
+    rows = (
+        [{**_make_seq_row(), 'engine_version': '2.0.0'} for _ in range(3)]
+        + [{**_make_seq_row(), 'engine_version': '3.0.0'} for _ in range(1)]
+    )
+    summary = _summarize_engine_versions(rows)
+    assert summary['primary'] == '2.0.0'
+    assert summary['versions'] == {'2.0.0': 3, '3.0.0': 1}
+    assert summary['coverage_pct'] == pytest.approx(100.0)
+
+
+def test_build_detector_payload_includes_engine_versions_key() -> None:
+    rows = [{**_make_seq_row(), 'engine_version': '3.0.0'} for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['engine_versions']['primary'] == '3.0.0'
 
 
 def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> None:

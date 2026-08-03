@@ -250,6 +250,26 @@ _PROFILE_META: dict[str, dict] = {
             "centroid ~900 Hz reflecting atmospheric and bass-dominant balance."
         ),
     },
+    # 2026-08-03: added to the catalogue for provenance consistency when this
+    # batch tool is next re-run; the live expected_bands currently in
+    # profiles.py for this key were hand-authored (not generated via this
+    # script's LLM call) -- see the "synthwave" entry's own comment in
+    # unicornviz/audio/profiles.py for the full first-pass rationale.
+    "synthwave": {
+        "name": "Synthwave / Retrowave",
+        "bpm": "85–118 (classic/melodic; Kavinsky-style)",
+        "acoustic_notes": (
+            "Retro 80s electronic: warm analog bassline 40–100 Hz, not a "
+            "modern sub-bass floor; gated-reverb drum kit with snare body "
+            "150–400 Hz and a bright noise 'snap' 2–6 kHz; lush pad/string "
+            "synths 200–1500 Hz; bright melodic lead synth is the genre's "
+            "defining register, 1.4–2.4 kHz, often the strongest peak in "
+            "the spectrum; analog/vintage character rolls off well before "
+            "psytrance/trance's harsh digital extreme-treble extension; "
+            "moderate onset density from arpeggios/hooks, clearly above "
+            "ambient/chillstep but below house/trance's percussion density."
+        ),
+    },
 }
 
 
@@ -306,7 +326,7 @@ fingerprints for a real-time audio visualization system.
 
 ## Task
 
-For each of the 22 music genre profiles listed below, produce a 64-element
+For each of the {len(_PROFILE_META)} music genre profiles listed below, produce a 64-element
 vector of normalized spectral magnitudes (values 0.0–1.0).  Each element
 corresponds to one log-spaced frequency band covering 30 Hz to 16 kHz.
 
