@@ -495,6 +495,13 @@ class App:
         self._subsys_present_skips: int = 0
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
+        # Crash containment: per-class crash counts, the session quarantine
+        # list, and the flag asking the main loop to advance off a crashed
+        # current effect on the next frame.
+        self._effect_crash_counts: dict[str, int] = {}
+        self._effect_blocklist: set[str] = set()
+        self._effect_crash_recover: bool = False
+        self._shutdown_complete: bool = False
         self._midi_out: MidiOut | None = None
         self._overlays: Overlays | None = None
         self._recorder: Recorder | None = None
@@ -3087,13 +3094,29 @@ void main() {
                 log.debug('Effect switch blocked by lock (%s): %s', lock,
                           getattr(cls, 'NAME', cls))
             return
+        resolved = self._resolve_unblocked_effect(cls)
+        if resolved is None:
+            return
+        cls = resolved
         # Invert does not carry through transitions.
         self._invert_colors = False
         if self._current_effect is not None:
             self._previous_effect_name = self._current_effect.NAME
+        # Instantiate the incoming effect before destroying the pending one:
+        # a constructor/shader failure must not leave a destroyed instance
+        # wired in as _next_effect.
+        try:
+            incoming = self._instantiate(cls)
+        except Exception:
+            log.exception(
+                'Effect %s failed to instantiate — switch skipped',
+                getattr(cls, 'NAME', cls.__name__),
+            )
+            self._register_effect_crash(cls.__name__)
+            return
         if self._next_effect is not None:
             self._next_effect.destroy()
-        self._next_effect = self._instantiate(cls)
+        self._next_effect = incoming
 
         requested = str(self.cfg.get("demo", "transition", default="shuffle")).lower()
         transition_types = [
@@ -3143,6 +3166,74 @@ void main() {
         self._transition_dir = (float(np.cos(a)), float(np.sin(a)))
         self._transition_phase = float(self._rng.uniform(0.0, 1.0))
         self._demo_timer = 0.0
+
+    _EFFECT_CRASH_LIMIT = 2
+
+    def _register_effect_crash(self, cls_name: str) -> bool:
+        """Count a crash for an effect class; quarantine it at the limit.
+
+        Returns True when the class is (now) quarantined for this session.
+        """
+        count = self._effect_crash_counts.get(cls_name, 0) + 1
+        self._effect_crash_counts[cls_name] = count
+        if count >= self._EFFECT_CRASH_LIMIT and cls_name not in self._effect_blocklist:
+            self._effect_blocklist.add(cls_name)
+            log.error(
+                'Effect %s crashed %d times — quarantined for this session',
+                cls_name, count,
+            )
+        return cls_name in self._effect_blocklist
+
+    def _resolve_unblocked_effect(
+        self, cls: Type[BaseEffect]
+    ) -> Type[BaseEffect] | None:
+        """Redirect a switch away from session-quarantined effect classes."""
+        if cls.__name__ not in self._effect_blocklist:
+            return cls
+        playlist = self._playlist
+        if playlist is None:
+            log.warning(
+                'Effect %s is quarantined and no playlist is available to '
+                'pick a replacement', cls.__name__,
+            )
+            return None
+        for _ in range(64):
+            candidate = playlist.advance()
+            if candidate.__name__ not in self._effect_blocklist:
+                log.info(
+                    'Effect %s is quarantined — advancing to %s instead',
+                    cls.__name__,
+                    getattr(candidate, 'NAME', candidate.__name__),
+                )
+                return candidate
+        log.error('All playlist effects are quarantined; keeping current effect')
+        return None
+
+    def _handle_effect_crash(self, effect: BaseEffect, phase: str) -> None:
+        """Contain a crashing effect instead of letting it kill the show.
+
+        Called from an ``except`` block (``log.exception`` relies on the
+        active exception). Logs, counts toward quarantine, detaches the
+        instance from the render pipeline, destroys it, and — when the
+        current effect died — asks the main loop to advance next frame.
+        """
+        cls_name = type(effect).__name__
+        log.exception(
+            'Effect %s crashed in %s() — containing', cls_name, phase
+        )
+        self._register_effect_crash(cls_name)
+        if effect is self._next_effect:
+            self._next_effect = None
+            self._transition_t = 0.0
+        if effect is self._current_effect:
+            self._current_effect = None
+            self._effect_crash_recover = True
+        try:
+            effect.destroy()
+        except Exception:
+            log.debug(
+                'Destroy of crashed effect %s failed', cls_name, exc_info=True
+            )
 
     # ------------------------------------------------------------------ #
     # First-run tour (v1 slide dialog)                                     #
@@ -3963,7 +4054,14 @@ void main() {
                         continue
                     self._update_ctrl_state(event.key.keysym.sym, True)
                     if not event.key.repeat:
-                        hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
+                        try:
+                            hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
+                        except Exception:
+                            log.exception(
+                                'Hotkey handler crashed (sym=%d mod=%d) — '
+                                'keypress dropped',
+                                event.key.keysym.sym, event.key.keysym.mod,
+                            )
                 elif event.type == sdl2.SDL_KEYUP:
                     self._update_ctrl_state(event.key.keysym.sym, False)
                 elif event.type == sdl2.SDL_TEXTINPUT and self._text_input_handlers:
@@ -4243,6 +4341,14 @@ void main() {
             # Debounced live preview while the effects browser is open.
             self.tick_effects_browser_preview()
 
+            # Recover from a crashed current effect: advance to the next
+            # non-quarantined effect instead of holding a black frame.
+            if self._effect_crash_recover:
+                self._effect_crash_recover = False
+                if self._current_effect is None and self._next_effect is None:
+                    self._demo_timer = 0.0
+                    self._switch_effect(playlist.advance())
+
             # Auto-playlist advance (suppressed while locked to one effect)
             if (not manager_modal_active and not eb_active and not presets_active
                     and not self._paused
@@ -4374,7 +4480,10 @@ void main() {
                         self._current_effect,
                         self._audio_scratch_current,
                     )
-                    self._current_effect.update(dt, audio_cur)
+                    try:
+                        self._current_effect.update(dt, audio_cur)
+                    except Exception:
+                        self._handle_effect_crash(self._current_effect, 'update')
                 if self._next_effect and allow_next_effect_update:
                     auto_vj_profile = ''
                     if self._auto_vj is not None:
@@ -4387,7 +4496,10 @@ void main() {
                         self._next_effect,
                         self._audio_scratch_next,
                     )
-                    self._next_effect.update(dt, audio_next)
+                    try:
+                        self._next_effect.update(dt, audio_next)
+                    except Exception:
+                        self._handle_effect_crash(self._next_effect, 'update')
             if perf_debug_enabled:
                 perf_after_effect_update = time.perf_counter()
 
@@ -4954,7 +5066,24 @@ void main() {
                     self._control_room_startup_cfg = None
                     _active, _msg = self._create_control_room(_cfg)
 
-        # Cleanup
+        # Cleanup (also reachable via ensure_shutdown() if run() raises)
+        self._shutdown_runtime()
+
+    def ensure_shutdown(self) -> None:
+        """Idempotent runtime teardown for abnormal exits.
+
+        ``run()`` calls ``_shutdown_runtime()`` on its normal path; callers
+        (``__main__``) invoke this in a ``finally`` so audio/MIDI/recorder
+        threads and SDL are torn down even when ``run()`` raises.
+        """
+        if not self._shutdown_complete:
+            self._shutdown_runtime()
+
+    def _shutdown_runtime(self) -> None:
+        """Tear down subsystems, GL resources, and SDL. Runs at most once."""
+        if self._shutdown_complete:
+            return
+        self._shutdown_complete = True
         if self._recorder:
             self._recorder.stop()
         if self._streamer is not None:
@@ -4988,51 +5117,67 @@ void main() {
             self._keystroke_logger.close()
             self._keystroke_logger = None
         self._log_deleted_effects_summary()
-        audio_manager.stop()
-        midi_manager.stop()
+        if self._audio_manager is not None:
+            self._audio_manager.stop()
+        if self._midi_manager is not None:
+            self._midi_manager.stop()
         if self._webcam_system is not None:
             self._persist_webcam_runtime_state()
             self._webcam_system.destroy()
             self._webcam_system = None
-        if self._candy_frame is not None:
-            self._candy_frame.destroy()
-            self._candy_frame = None
-        if self._postfx_controller is not None:
-            self._postfx_controller.destroy()
-            self._postfx_controller = None
-        if self._color_grade is not None:
-            self._color_grade.destroy()
-            self._color_grade = None
-        if self._beat_flash is not None:
-            self._beat_flash.destroy()
-            self._beat_flash = None
-        if self._current_effect:
-            self._current_effect.destroy()
-        if self._next_effect:
-            self._next_effect.destroy()
-        overlays.destroy()
-        if self._invert_vao:
-            self._invert_vao.release()
-        if self._invert_vbo:
-            self._invert_vbo.release()
-        if self._invert_prog:
-            self._invert_prog.release()
-        if self._present_vao:
-            self._present_vao.release()
-        if self._present_vbo:
-            self._present_vbo.release()
-        if self._present_prog:
-            self._present_prog.release()
-        if self._burst_vao:
-            self._burst_vao.release()
-        if self._burst_vbo:
-            self._burst_vbo.release()
-        if self._burst_prog:
-            self._burst_prog.release()
-        self._release_readback_pbos()
-        self._runtime_state.save()
-        sdl2.SDL_GL_DeleteContext(self._gl_context)
-        sdl2.SDL_DestroyWindow(self._window)
+        # GL teardown can fail when shutting down after a crash (dead
+        # context); contain it so SDL teardown below still runs.
+        try:
+            if self._candy_frame is not None:
+                self._candy_frame.destroy()
+                self._candy_frame = None
+            if self._postfx_controller is not None:
+                self._postfx_controller.destroy()
+                self._postfx_controller = None
+            if self._color_grade is not None:
+                self._color_grade.destroy()
+                self._color_grade = None
+            if self._beat_flash is not None:
+                self._beat_flash.destroy()
+                self._beat_flash = None
+            if self._current_effect:
+                self._current_effect.destroy()
+            if self._next_effect:
+                self._next_effect.destroy()
+            overlays = getattr(self, '_overlays', None)
+            if overlays is not None:
+                overlays.destroy()
+            if self._invert_vao:
+                self._invert_vao.release()
+            if self._invert_vbo:
+                self._invert_vbo.release()
+            if self._invert_prog:
+                self._invert_prog.release()
+            if self._present_vao:
+                self._present_vao.release()
+            if self._present_vbo:
+                self._present_vbo.release()
+            if self._present_prog:
+                self._present_prog.release()
+            if self._burst_vao:
+                self._burst_vao.release()
+            if self._burst_vbo:
+                self._burst_vbo.release()
+            if self._burst_prog:
+                self._burst_prog.release()
+            self._release_readback_pbos()
+        except Exception:
+            log.warning('GL teardown failed during shutdown', exc_info=True)
+        try:
+            self._runtime_state.save()
+        except Exception:
+            log.warning('Runtime state save failed during shutdown', exc_info=True)
+        if self._gl_context:
+            sdl2.SDL_GL_DeleteContext(self._gl_context)
+            self._gl_context = None
+        if self._window:
+            sdl2.SDL_DestroyWindow(self._window)
+            self._window = None
         sdl2.SDL_Quit()
 
     def _effect_viewport_for_target(
@@ -5095,6 +5240,8 @@ void main() {
             self._ctx.scissor = viewport
         try:
             effect.render()
+        except Exception:
+            self._handle_effect_crash(effect, 'render')
         finally:
             if use_scissor:
                 self._ctx.scissor = prev_scissor

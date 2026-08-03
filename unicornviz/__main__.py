@@ -287,7 +287,12 @@ def main() -> None:
     from unicornviz.app import App
     app = App(cfg)
     try:
-        app.run()
+        try:
+            app.run()
+        finally:
+            # Teardown must run even when run() raises: audio/MIDI/recorder
+            # threads and SDL are otherwise left dangling on a crash.
+            app.ensure_shutdown()
     except RuntimeError as exc:
         if 'audio startup failed' in str(exc).lower() or 'audio capture' in str(exc).lower():
             print(
