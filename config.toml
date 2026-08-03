@@ -595,6 +595,13 @@ dark_brightness_threshold = 0.02
 # closing releases it. See drop-ins/dj-mixer-01/docs/ (feature-overview.md,
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
+# dial_reset_on_load: recentre a deck's EQ / TRIM / FILTER when a new track
+# loads, so a fresh tune starts flat instead of inheriting the last one's tone.
+# Off keeps them where they are, which is what you want when you ride the
+# physical knobs -- the screen then agrees with your hands.  The per-deck LOCK
+# chip overrides this either way, and TEMPO / KEY always reset regardless.
+# Toggleable live in the GENERAL settings tab.  Default true.
+# dial_reset_on_load = true
 # pad_face_cache: render each distinct pad face once and paste it, instead of
 # drawing all 32 pads x 4 decks every frame.  Measured ~25-49% off a mixer
 # frame depending on scene.  OFF by default because it is not purely a
