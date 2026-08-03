@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-07-08
+Last updated: 2026-08-03
 
 This is the canonical map for project documentation.
 
@@ -27,6 +27,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **v1.0-RC1 release task list (2026-08-03, active):** [docs/planning/rc1-release-task-list-2026-08-03.md](planning/rc1-release-task-list-2026-08-03.md)
 - AI DJ + public system interface plan (draft, 2026-07-17): [docs/planning/ai-dj-public-interface-plan.md](planning/ai-dj-public-interface-plan.md)
 - Program feed — every audio source tells the VJ what is coming (draft, 2026-07-18): [docs/planning/program-feed-plan.md](planning/program-feed-plan.md)
 - "Give me a tour" guided onboarding plan (backlog v2 vision, 2026-07-18): [docs/planning/guided-tour-plan.md](planning/guided-tour-plan.md)
@@ -57,6 +58,8 @@ This is the canonical map for project documentation.
 - Second-window Linux mitigation strategies (2026-07-09, closed — SDL2 texture-framebuffer + moderngl/Wayland root-cause audit, explicit-GL fix implemented and owner-confirmed): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 - Tooltip system plan — control room / mixer / overlays full-surface audit + shared architecture (2026-07-13): [docs/planning/tooltip-system-plan-2026-07-13.md](planning/tooltip-system-plan-2026-07-13.md)
 - Active audit tracker: [docs/audits](audits)
+  - **Full system audit — final pre-RC1 (2026-08-03):** [docs/audits/2026-08-03-full-system-audit.md](audits/2026-08-03-full-system-audit.md)
+  - Windows platform report (2026-08-03): [docs/audits/2026-08-03-windows-platform-report.md](audits/2026-08-03-windows-platform-report.md)
   - Video render pipeline & platform audit (2026-07-08): [docs/audits/2026-07-08-render-pipeline-platform-audit.md](audits/2026-07-08-render-pipeline-platform-audit.md)
   - Feature review tracker (active): [docs/audits/feature-review.md](audits/feature-review.md)
   - Full system audit (2026-07-01): [docs/audits/2026-07-01-full-system-audit.md](audits/2026-07-01-full-system-audit.md)
