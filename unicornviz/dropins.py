@@ -26,6 +26,7 @@ _EXCLUDE_CACHE_SIG: tuple[float, int] | None = None
 _EXCLUDE_CACHE: tuple[bool, set[str]] = (False, set())
 _REGISTERED_VALIDATOR_FILES: set[str] = set()
 _MODULE_CACHE: dict[Path, ModuleType] = {}
+_PKG_CACHE: dict[str, ModuleType] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,13 +225,54 @@ def _stable_dropin_module_name(file_path: Path) -> str:
     return f"unicornviz_dropins_{'_'.join(parts)}"
 
 
+def _dropin_package_for(file_path: Path) -> str | None:
+    """Register (once) a synthetic parent package for file_path's drop-in
+    directory, with ``__path__`` pointing at that directory, and return its
+    dotted name.
+
+    Drop-in files are executed via ``spec_from_file_location`` rather than a
+    real package import, so without this a module-level or lazy relative
+    import between sibling files in the same drop-in (``from .foo import
+    Bar``) always raises "attempted relative import with no known parent
+    package" -- the module has no resolvable parent. Giving each drop-in
+    directory a real (if empty) package entry in ``sys.modules`` with a
+    correct ``__path__`` lets the standard import machinery resolve those
+    siblings normally. Returns None for files not exactly one level under
+    ``drop-ins/`` (deeper nesting isn't used by any current drop-in).
+    """
+    try:
+        rel = file_path.resolve().relative_to(_dropins_root().resolve())
+    except Exception:
+        return None
+    if len(rel.parts) != 2:
+        return None
+    dropin_dir = rel.parts[0]
+    pkg_name = f"unicornviz_dropins_{re.sub(r'[^0-9a-zA-Z_]', '_', dropin_dir)}"
+    existing = sys.modules.get(pkg_name)
+    if isinstance(existing, ModuleType) and hasattr(existing, '__path__'):
+        return pkg_name
+    pkg = ModuleType(pkg_name)
+    pkg.__path__ = [str((_dropins_root() / dropin_dir).resolve())]
+    pkg.__package__ = pkg_name
+    sys.modules[pkg_name] = pkg
+    _PKG_CACHE[pkg_name] = pkg
+    return pkg_name
+
+
 def _load_module_from_file(file_path: Path, module_name: str | None = None) -> ModuleType:
     resolved = file_path.resolve()
     cached = _MODULE_CACHE.get(resolved)
     if cached is not None:
         return cached
 
-    name = module_name or _stable_dropin_module_name(resolved)
+    name = module_name
+    if name is None:
+        pkg_name = _dropin_package_for(resolved)
+        if pkg_name:
+            stem = re.sub(r'[^0-9a-zA-Z_]', '_', resolved.stem)
+            name = f'{pkg_name}.{stem}'
+        else:
+            name = _stable_dropin_module_name(resolved)
     existing = sys.modules.get(name)
     if isinstance(existing, ModuleType):
         _MODULE_CACHE[resolved] = existing
