@@ -41,6 +41,26 @@ def test_vj_api_clear_postfx_returns_false_when_method_missing() -> None:
     assert app.vj_api.clear_postfx() is False
 
 
+def test_vj_api_active_now_playing_returns_registered_source() -> None:
+    app = App(_default_cfg())
+    app.vj_api.register_now_playing(
+        'dj_mixer', lambda: {'available': True, 'is_playing': True, 'title': 'Test'},
+        priority=30)
+
+    result = app.vj_api.active_now_playing()
+
+    assert result is not None
+    name, snap = result
+    assert name == 'dj_mixer'
+    assert snap['title'] == 'Test'
+
+
+def test_vj_api_active_now_playing_none_when_nothing_registered() -> None:
+    app = App(_default_cfg())
+
+    assert app.vj_api.active_now_playing() is None
+
+
 def test_vj_api_camera_navigation_delegates_to_webcam_system() -> None:
     class _FakeWebcamSystem:
         def next_camera(self) -> str:

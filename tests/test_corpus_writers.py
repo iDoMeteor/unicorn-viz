@@ -213,6 +213,27 @@ class TestLiveCorpusWriter:
         key = cw_mod.LiveCorpusWriter._row_key(row)
         assert key == 'moon | sun | sky'
 
+    def test_row_key_falls_back_to_audio_source_when_metadata_empty(self, cw_mod) -> None:
+        """Livestream/interactive-DJ sessions carry no track_id/title/artist/album
+        at all; the key must still be non-empty so upsert() doesn't silently drop
+        every row (this previously produced zero output for a whole session)."""
+        row = {'audio_source': 'Loopback'}
+        key = cw_mod.LiveCorpusWriter._row_key(row)
+        assert key == '__live__:loopback'
+
+    def test_row_key_never_empty_with_completely_blank_row(self, cw_mod) -> None:
+        key = cw_mod.LiveCorpusWriter._row_key({})
+        assert key == '__live__:unknown'
+
+    def test_upsert_persists_row_with_no_track_metadata(self, cw_mod, tmp_path: Path) -> None:
+        path = tmp_path / 'live.jsonl'
+        w = cw_mod.LiveCorpusWriter(path, enabled=True, min_interval_s=0.0)
+        row = {'audio_source': 'Mic', 'bpm': 128.0}
+        assert w.upsert(row, force_flush=True) is True
+        rows = [json.loads(ln) for ln in path.read_text(encoding='utf-8').splitlines() if ln.strip()]
+        assert len(rows) == 1
+        assert rows[0]['bpm'] == 128.0
+
     def test_shutdown_flushes_pending_rows(self, cw_mod, tmp_path: Path) -> None:
         path = tmp_path / 'live.jsonl'
         w = cw_mod.LiveCorpusWriter(path, enabled=True, min_interval_s=9999.0)

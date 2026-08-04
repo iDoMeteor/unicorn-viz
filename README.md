@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.21**
+**Version 1.0.0-beta.22**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.22** — New `VjApi.active_now_playing()` wraps the existing now-playing hub (`unicornviz.now_playing.NowPlayingHub.active()`) with a read accessor -- the hub already had a write side (`register_now_playing`/`unregister_now_playing`) but nothing to read the currently-active source back, so drop-ins had to reach into `app._private` state to know what's playing. Degrades to `None` on older cores/when nothing is registered.
 - **1.0.0-beta.21** — Windows platform P0s: new shared `unicornviz.fonts` resolver (bundled ui-font.ttf first, then per-platform system dirs incl. `C:\Windows\Fonts` and `seguiemj.ttf` for emoji) adopted across core and the control-room/media/banner drop-ins; per-monitor-v2 DPI awareness on Windows (crisp output on scaled displays, correct 76/152px icon bucket); recording remaps the Linux `pulse` default to DirectShow with loopback-device discovery on Windows (video-only degrade when none) and stops ffmpeg via CTRL_BREAK_EVENT + kill escalation instead of the Windows-unsupported SIGINT; pyproject version now single-sourced from `unicornviz.__version__` with the four missing runtime deps added.
 - **1.0.0-beta.20** — New `deep_house` audio profile (118-124 BPM, warmer/lower-centroid than `house`, chord-stab-driven fingerprint) -- the house family previously only had `house`/`tech_house`, leaving the slower/warmer end uncovered. `AudioProfile` gains a capability-aware `enabled` flag (disable, don't delete -- still resolvable by direct lookup); `generic` is now disabled from discovery (`Alt+A` cycling and the Auto VJ recommender's candidate pool) since it was competing with, and getting confused with, genuinely calibrated genre profiles.
 - **1.0.0-beta.19** — Crash containment: a broken effect (constructor, `update()`, or `render()`) is quarantined and the show advances instead of dying; hotkey handler crashes drop the keypress instead of the app; teardown now runs even when the main loop raises (`ensure_shutdown()`), so audio/MIDI/recorder threads and SDL are never left dangling.

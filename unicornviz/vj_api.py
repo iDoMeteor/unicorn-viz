@@ -137,6 +137,24 @@ class VJApi:
         if hub is not None:
             hub.unregister(name)
 
+    def active_now_playing(self) -> tuple[str, dict] | None:
+        """Return ``(name, snapshot)`` for whichever now-playing source is
+        currently audible, or None when nothing is registered/playing.
+
+        Playing sources win by priority (dj mixer 30, media player 20,
+        spotify 10); falls back to an ambient-available source when nothing
+        is playing. See :meth:`unicornviz.now_playing.NowPlayingHub.active`.
+        Degrades to None on older cores.
+        """
+        hub = getattr(self._app, 'now_playing', None)
+        active = getattr(hub, 'active', None)
+        if not callable(active):
+            return None
+        try:
+            return active()
+        except Exception:
+            return None
+
     def set_now_spinning(self, enabled: bool) -> bool:
         """Enable/disable the core Now Spinning corner-platter overlay."""
         self._app.now_spinning_enabled = bool(enabled)

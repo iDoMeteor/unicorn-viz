@@ -123,6 +123,54 @@ def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
     assert rows[0]['track_artist'] == 'DJ Test'
 
 
+def test_spotify_snapshot_prefers_active_now_playing_hub() -> None:
+    """_spotify_snapshot() must read the aggregated now-playing hub first, so
+    a dj-mixer or media session trains the same as a Spotify one."""
+    class FakeVjApi:
+        def active_now_playing(self):
+            return ('dj_mixer', {'title': 'Test Track', 'source': 'dj_mixer'})
+
+        def get_subsystem(self, name):
+            raise AssertionError('must not fall back when the hub has an active source')
+
+    stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApi()))
+    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    assert snap == {'title': 'Test Track', 'source': 'dj_mixer'}
+
+
+def test_spotify_snapshot_falls_back_to_spotify_subsystem_when_hub_empty() -> None:
+    class FakeSpotifySubsystem:
+        def snapshot(self):
+            return {'title': 'Fallback', 'source': 'spotify'}
+
+    class FakeVjApi:
+        def active_now_playing(self):
+            return None
+
+        def get_subsystem(self, name):
+            assert name == 'spotify'
+            return FakeSpotifySubsystem()
+
+    stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApi()))
+    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    assert snap == {'title': 'Fallback', 'source': 'spotify'}
+
+
+def test_spotify_snapshot_falls_back_on_older_core_without_hub_accessor() -> None:
+    """Degrades gracefully when vj_api has no active_now_playing() (older core)."""
+    class FakeSpotifySubsystem:
+        def snapshot(self):
+            return {'title': 'Old Core'}
+
+    class FakeVjApiNoHub:
+        def get_subsystem(self, name):
+            return FakeSpotifySubsystem()
+
+    stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApiNoHub()))
+    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    assert snap == {'title': 'Old Core'}
+
+
 def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> None:
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
