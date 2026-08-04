@@ -2384,6 +2384,36 @@ void main() {
         )
         self._blend_vbo = vbo  # keep ref so it's not GC'd
 
+    def _release_fbo(self, fbo: 'moderngl.Framebuffer | None') -> None:
+        """Release an FBO together with its color/depth attachments.
+
+        No ``ctx.gc_mode`` is set anywhere, so releasing only the
+        Framebuffer object leaks its color texture and depth renderbuffer
+        (~16 MB per rebuild at 1080p) — render-scale scrubbing and window
+        resizes previously accumulated those until VRAM exhaustion.
+        """
+        if fbo is None:
+            return
+        try:
+            attachments = list(getattr(fbo, 'color_attachments', ()) or ())
+        except Exception:
+            attachments = []
+        for tex in attachments:
+            try:
+                tex.release()
+            except Exception:
+                pass
+        depth = getattr(fbo, 'depth_attachment', None)
+        if depth is not None:
+            try:
+                depth.release()
+            except Exception:
+                pass
+        try:
+            fbo.release()
+        except Exception:
+            log.debug('FBO release failed', exc_info=True)
+
     def _make_fbo(self) -> moderngl.Framebuffer:
         # Clamp to GL_MAX_TEXTURE_SIZE just in case the render scale or
         # display size produces an out-of-range dimension during transitions
@@ -4979,8 +5009,16 @@ void main() {
                 self._normalize_gl_render_state()
                 self._render_subsystem_overlays(dt, self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
-            if self._recorder is not None and self._recorder.is_recording:
-                self._capture_recording_frame()
+            if self._recorder is not None:
+                _rec_failure = self._recorder.consume_failure()
+                if _rec_failure:
+                    overlays.flash_message(
+                        f'RECORDING FAILED — {_rec_failure}', 6.0
+                    )
+                    self._recorder.stop()
+                    self._sync_recording_overlay()
+                elif self._recorder.is_recording:
+                    self._capture_recording_frame()
 
             stream_frame: bytes | None = None
             need_frame_for_streaming = (
@@ -5521,8 +5559,7 @@ void main() {
             tex = existing.color_attachments[0]
             if tex.size == (self._render_width, self._render_height):
                 return existing
-            existing.release()
-            tex.release()
+            self._release_fbo(existing)
         self._mirror_composite_fbo = self._make_fbo()
         return self._mirror_composite_fbo
 
@@ -5609,10 +5646,8 @@ void main() {
                     pass
                 self._mirror_composite_fbo = None
         # Rebuild FBOs at new size
-        if self._fbo_a:
-            self._fbo_a.release()
-        if self._fbo_b:
-            self._fbo_b.release()
+        self._release_fbo(self._fbo_a)
+        self._release_fbo(self._fbo_b)
         self._fbo_a = self._make_fbo()
         self._fbo_b = self._make_fbo()
 
@@ -6202,10 +6237,8 @@ void main() {
         self._update_render_target_size()
         if self._postfx_controller is not None:
             self._postfx_controller.resize(self._render_width, self._render_height)
-        if self._fbo_a:
-            self._fbo_a.release()
-        if self._fbo_b:
-            self._fbo_b.release()
+        self._release_fbo(self._fbo_a)
+        self._release_fbo(self._fbo_b)
         self._fbo_a = self._make_fbo()
         self._fbo_b = self._make_fbo()
 
@@ -6284,8 +6317,7 @@ void main() {
         w = max(1, int(width))
         h = max(1, int(height))
         if self._preview_fbo is None or (self._preview_fbo.width, self._preview_fbo.height) != (w, h):
-            if self._preview_fbo is not None:
-                self._preview_fbo.release()
+            self._release_fbo(self._preview_fbo)
             tex = self._ctx.texture((w, h), 4)
             self._preview_fbo = self._ctx.framebuffer(color_attachments=[tex])
         return self._preview_fbo
@@ -7008,8 +7040,7 @@ void main() {
         w = max(1, int(width if width is not None else self._width))
         h = max(1, int(height if height is not None else self._height))
         if self._screen_copy_fbo is None or (self._screen_copy_fbo.width, self._screen_copy_fbo.height) != (w, h):
-            if self._screen_copy_fbo is not None:
-                self._screen_copy_fbo.release()
+            self._release_fbo(self._screen_copy_fbo)
             tex = self._ctx.texture((w, h), 4)
             # copy_framebuffer()/glBlitFramebuffer always blits
             # GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT (moderngl does not

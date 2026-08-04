@@ -1,16 +1,19 @@
-moderngl>=5.10
-pysdl2>=0.9.16
-pysdl2-dll>=2.28
-numpy>=1.26
-scipy>=1.12
-sounddevice>=0.4.6
-python-rtmidi>=1.5
-Pillow>=10.0
-psutil>=5.9
-opencv-python-headless>=4.9   # camera overlay + WebcamOverlay effect
-soundfile>=0.12               # audio-out-01 drop-in: load music bed + folley SFX
-python-osc>=1.8               # osc-bridge-01 drop-in: OSC control surface
+# Pinned for reproducible RC installs (versions = the validated dev
+# environment, 2026-08-04). Compatible-range floors live in pyproject.toml
+# [project] dependencies; refresh these pins deliberately, not ad hoc.
+moderngl==5.12.0
+PySDL2==0.9.17
+pysdl2-dll==2.32.0
+numpy==2.4.4
+scipy==1.17.1
+sounddevice==0.5.5
+python-rtmidi==1.5.8
+Pillow==12.2.0
+psutil==7.2.2
+opencv-python-headless==4.13.0.92   # camera overlay + WebcamOverlay effect
+soundfile==0.14.0                   # audio-out-01 drop-in: load music bed + folley SFX
+python-osc==1.10.2                  # osc-bridge-01 drop-in: OSC control surface
 # Optional — required only for LLM detector scoring in tools/package_training_set.py.
 # Install whichever provider you have an API key for.
-openai>=1.30                  # set OPENAI_API_KEY in environment
-anthropic>=0.28               # set ANTHROPIC_API_KEY in environment
+openai==2.43.0                      # set OPENAI_API_KEY in environment
+anthropic==0.112.0                  # set ANTHROPIC_API_KEY in environment

@@ -75,7 +75,12 @@ def _build_parser() -> argparse.ArgumentParser:
     demo.add_argument('--effect-duration', type=float, help='Seconds per effect in auto-play mode.')
     demo.add_argument(
         '--transition',
-        choices=['crossfade', 'smoothfade', 'scanwipe', 'scanwipe_x', 'scanwipe_y', 'dissolve', 'zoomblend', 'shuffle', 'random'],
+        choices=[
+            'crossfade', 'smoothfade', 'scanwipe', 'scanwipe_x', 'scanwipe_y',
+            'dissolve', 'zoomblend', 'radialwipe', 'lumawipe', 'stripewipe',
+            'anglesweep', 'glitchsoft', 'prismsplit', 'radial', 'cut',
+            'shuffle', 'random',
+        ],
         help='Transition type or shuffled/randomized transitions.',
     )
     demo.add_argument('--transition-duration', type=float, help='Transition duration in seconds.')

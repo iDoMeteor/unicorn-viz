@@ -140,6 +140,9 @@ _DISPLAY_MODE_ALIASES = {
     'mirror': 'mirror_included',
 }
 _DEMO_MODES = {'sequential', 'random'}
+# Must cover every transition the engine implements plus its runtime
+# aliases — see App._switch_effect's transition_types list, which is the
+# authoritative set (validation drift here made valid configs fail to boot).
 _TRANSITIONS = {
     'crossfade',
     'smoothfade',
@@ -148,6 +151,14 @@ _TRANSITIONS = {
     'scanwipe_y',
     'dissolve',
     'zoomblend',
+    'radialwipe',
+    'lumawipe',
+    'stripewipe',
+    'anglesweep',
+    'glitchsoft',
+    'prismsplit',
+    'radial',
+    'cut',
     'shuffle',
     'random',
 }

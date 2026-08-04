@@ -2,7 +2,7 @@
 
 Owner: owner (solo studio) + agents
 Status: Active — the working checklist for the first public release
-Last updated: 2026-08-04 (all non-decision P0s complete)
+Last updated: 2026-08-04 (all non-decision P0s + 10 P1s complete)
 
 Sources: [2026-08-03 full-system audit](../audits/2026-08-03-full-system-audit.md),
 [2026-08-03 Windows platform report](../audits/2026-08-03-windows-platform-report.md),
@@ -27,15 +27,15 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       the recording.py pattern). (`rtmp_streamer.py:274`) *(done — streaming-01 0.5.1)*
 - [x] **[P1][S]** streaming-01 `stop()`: escalate to `kill()` after the
       SIGINT/timeout rung so a wedged ffmpeg can't keep streaming. *(done — streaming-01 0.5.1)*
-- [ ] **[P1][S]** Surface recorder death: writer thread sets a failed flag;
+- [x] **[P1][S]** Surface recorder death: writer thread sets a failed flag;
       `is_recording`/HUD shows it instead of a lit REC over dropped frames.
-      (`recording.py:78/267`)
-- [ ] **[P1][M]** Fix FBO rebuild leaks (release color texture + depth
+      (`recording.py:78/267`) *(done — beta.23)*
+- [x] **[P1][M]** Fix FBO rebuild leaks (release color texture + depth
       renderbuffer everywhere `_rebuild_fbos`/`_ensure_*_fbo` recreate, or
-      set `ctx.gc_mode`). (`app.py:5440/6033/6114/6838`)
-- [ ] **[P1][S]** Transition validation drift: add the six implemented
+      set `ctx.gc_mode`). (`app.py:5440/6033/6114/6838`) *(done — beta.23: _release_fbo helper at all rebuild sites)*
+- [x] **[P1][S]** Transition validation drift: add the six implemented
       transitions + aliases to `config.py` `_TRANSITIONS` and the CLI
-      choices. (`config.py:143`)
+      choices. (`config.py:143`) *(done — beta.23)*
 - [ ] **[P1][M]** videos-01: fix decoder-thread EOF blocking-put leak, the
       no-audio-device frozen-clock path, and the dead `reached_bottom`
       contract (auto-advance parks otherwise).
@@ -80,8 +80,8 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - [ ] **[P0][D]** Repo identity: resolve the README dev-repo vs
       `djunicorntears` canonical-repo confusion and the "repo will move"
       banner before strangers read it.
-- [ ] **[P1][S]** Pin `requirements.txt` (`==` or constraints file) for the
-      RC; keep `>=` floors in pyproject.
+- [x] **[P1][S]** Pin `requirements.txt` (`==` or constraints file) for the
+      RC; keep `>=` floors in pyproject. *(done — beta.23: == pins, floors stay in pyproject)*
 - [ ] **[P1][L]** Windows installer ★1 → ★3 per installers.md P3: curated
       payload, embedded Python 3.11/3.12 (dodges the cp314 wheel gap in the
       field notes), bundled ffmpeg, prebuilt rtmidi/moderngl wheels; or, as
@@ -96,15 +96,15 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 
 ## D. Security & tests
 
-- [ ] **[P1][S]** chat-01: add the inbound-text-is-inert regression test
-      (SECURITY.md asserts it in writing; nothing encodes it).
-- [ ] **[P1][S]** spotify-01: handle HTTP 429 + `Retry-After` with backoff;
-      chmod the token store 0600.
-- [ ] **[P1][S]** webcam-01: don't open the camera while nothing renders
+- [x] **[P1][S]** chat-01: add the inbound-text-is-inert regression test
+      (SECURITY.md asserts it in writing; nothing encodes it). *(done — chat-01 0.5.1)*
+- [x] **[P1][S]** spotify-01: handle HTTP 429 + `Retry-After` with backoff;
+      chmod the token store 0600. *(done — spotify-01 1.0.0-rc.3)*
+- [x] **[P1][S]** webcam-01: don't open the camera while nothing renders
       (`pip_position = "hidden"` + enabled default = webcam LED on at first
-      boot — privacy optics for a public release).
-- [ ] **[P1][M]** CI: add a push/PR workflow running the core pytest suite
-      (1,083 tests, 8 s — this is cheap); keep the nightly installer smoke.
+      boot — privacy optics for a public release). *(done — webcam-01 1.0.0-rc.2)*
+- [x] **[P1][M]** CI: add a push/PR workflow running the core pytest suite
+      (1,083 tests, 8 s — this is cheap); keep the nightly installer smoke. *(done — .github/workflows/tests.yml; drop-in-dependent test files excluded, see workflow comment)*
 - [ ] **[P2][S]** images-01: cap the image cache (count/resolution) before
       strangers point it at photo libraries.
 - [ ] **[P2][S]** Clean the stale `# nosec` (training_daemon.py:203) and
@@ -121,8 +121,8 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       reactor_breach, vector, alien_invasion, cosmos, cloud_surfer,
       america_250, van_gogh. Several currently ship with their signature
       layer dead or strobing.
-- [ ] **[P1][S]** cyber_war: replace `np.random.seed(42)` global reseed with
-      `self.rng`; randomize the node board.
+- [x] **[P1][S]** cyber_war: replace `np.random.seed(42)` global reseed with
+      `self.rng`; randomize the node board. *(done — tech-01 0.9.1)*
 - [ ] **[P2][S]** hacker_terminal_v2: dirty-flag the glyph upload (~2,560
       allocs/frame today); consider an integer texture (uniform-component
       limit risk).
@@ -135,8 +135,8 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 
 ## F. Docs & governance
 
-- [ ] **[P1][S]** docs/drop-ins.md: add the 4 missing drop-ins
-      (candy-frame-01, chat-01, cta-01, training-kit-01).
+- [x] **[P1][S]** docs/drop-ins.md: add the 4 missing drop-ins
+      (candy-frame-01, chat-01, cta-01, training-kit-01). *(done — beta.23)*
 - [ ] **[P1][S]** Review the 11 help-less named hotkeys — bless or document
       each (H overlay is the single source of truth).
 - [ ] **[P2][S]** Update CLAUDE.md: requirements "pinned" claim, primary

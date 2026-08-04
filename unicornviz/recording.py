@@ -75,6 +75,11 @@ class Recorder:
         self._frame_queue: queue.Queue[bytes | None] | None = None
         self._writer_thread: threading.Thread | None = None
         self._recording_stopping: bool = False
+        # Set by the writer thread when ffmpeg dies mid-recording; consumed
+        # once by the app loop so the operator sees the failure instead of a
+        # lit REC indicator silently dropping every frame.
+        self._write_failed: bool = False
+        self._failure_reported: bool = False
         # Max frames queued before drops occur.  At 60 fps this is ~270 ms.
         self._max_queued_frames: int = 16
 
@@ -92,7 +97,27 @@ class Recorder:
 
     @property
     def is_recording(self) -> bool:
-        return self._process is not None and self._process.stdin is not None
+        return (
+            self._process is not None
+            and self._process.stdin is not None
+            and not self._write_failed
+        )
+
+    @property
+    def has_failed(self) -> bool:
+        """True when the writer thread hit a fatal ffmpeg write failure."""
+        return self._write_failed
+
+    def consume_failure(self) -> str | None:
+        """Return the failure message once after a writer-thread death.
+
+        Subsequent calls return None until the next failure; lets the app
+        loop flash exactly one operator-facing notice per incident.
+        """
+        if self._write_failed and not self._failure_reported:
+            self._failure_reported = True
+            return self._last_error or 'recording writer failed'
+        return None
 
     @property
     def current_path(self) -> Path | None:
@@ -288,6 +313,8 @@ class Recorder:
             self._last_error = ''
             # Start the async writer thread.
             self._recording_stopping = False
+            self._write_failed = False
+            self._failure_reported = False
             self._frame_queue = queue.Queue(maxsize=self._max_queued_frames)
             self._writer_thread = threading.Thread(
                 target=self._frame_writer_worker,
@@ -339,6 +366,7 @@ class Recorder:
             except (BrokenPipeError, OSError) as exc:
                 if not self._recording_stopping:
                     self._last_error = f'Recording write failed: {exc}'
+                    self._write_failed = True
                     log.error(self._last_error)
                 break
         log.debug('Recording writer thread exited')

@@ -27,9 +27,12 @@ Complex drop-ins should also include:
 | auto-vj-01 | Yes | Yes | Automation subsystem |
 | banner-01 | Yes | Yes | Bottom marquee/banner subsystem |
 | beat-flash-01 | Yes | Yes | BPM-locked strobe (safety-governed) post subsystem |
+| candy-frame-01 | Yes | Not required | Candy frame border overlay subsystem |
+| chat-01 | Yes | Yes | Live chat overlay subsystem (Ably Realtime; opt-in) |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
 | cosmic-01 | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion, Sun Ship 3000 |
+| cta-01 | Yes | Not required | Call-to-action overlay subsystem (extracted CTA editor/slots) |
 | dj-mixer-01 | Yes | Yes | Two-deck DJ mixer window + Pioneer DDJ-REV1 input |
 | feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
 | flying-01 | Yes | Not required | Effect pack: Warp Drive, Cloud Surfer, Canyon Run, Wingsuit Dive, Nebula Drift, Asteroid Run, Portal Flight |
@@ -53,6 +56,7 @@ Complex drop-ins should also include:
 | streaming-01 | Yes | Yes | Streaming subsystem |
 | tech-01 | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0, Threat Matrix |
 | textures-01 | Yes | Not required | Media effect drop-in |
+| training-kit-01 | Yes | Yes | Auto VJ training tools: corpus packaging, scoring, daemon |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
 | video-clips-01 | Yes | Not required | Video Clips: audio-reactive clip montage (directory-group selection) |

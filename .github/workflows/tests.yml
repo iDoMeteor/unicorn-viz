@@ -1,0 +1,47 @@
+name: Tests
+
+# The core suite is the only automatic quality gate besides local pre-commit
+# hooks; a contributor bypassing hooks previously landed untested (RC1 audit
+# §9.4). Submodules are intentionally NOT checked out: the suite must stay
+# green on a drop-in-free tree (drop-in independence contract), and the
+# drop-in repos are private.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (no submodules)
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest ruff
+
+      - name: Ruff
+        run: ruff check unicornviz/ tests/
+
+      # The ignored files read drop-ins/* sources directly and require the
+      # (private) submodules; everything else must pass on a bare core tree.
+      - name: Core test suite (drop-in-free tree)
+        run: >
+          python -m pytest tests/ -q
+          --ignore=tests/test_dropin_boundary.py
+          --ignore=tests/test_corpus_writers.py
+          --ignore=tests/test_effects_consolidation.py
+          --ignore=tests/test_fire_dj_celebration.py
+          --ignore=tests/test_keystroke_logger.py
+          --ignore=tests/test_training_sync_corpus.py
