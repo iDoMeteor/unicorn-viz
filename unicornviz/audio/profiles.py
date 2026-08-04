@@ -107,6 +107,15 @@ class AudioProfile:
     # yields spectral_shape_fit used by the recommender. None = not yet calibrated.
     expected_bands: list[float] | None = None
 
+    # Capability-aware disable, not delete (mirrors unicorn-horn ADR-0003's
+    # pattern for stem toggles): a disabled profile is excluded from
+    # discovery -- list_profiles() (Alt+A cycling) and the auto-vj
+    # recommender's candidate pool (enabled_profiles()) -- but get_profile()
+    # still resolves it directly by name. Existing config referencing a
+    # disabled profile by key, or any other explicit lookup, keeps working;
+    # only random/automatic discovery skips it.
+    enabled: bool = True
+
     def preferred_bpm_range(self) -> tuple[int, int]:
         """Return a concise user-facing BPM sweet-spot range.
 
@@ -173,6 +182,60 @@ PROFILES: Dict[str, AudioProfile] = {
             0.850, 0.900, 1.000, 0.950, 0.900, 0.850, 0.800, 0.850,
             0.900, 0.950, 0.700, 0.750, 0.800, 0.850, 0.900, 0.950,
             0.800, 0.750, 0.700, 0.650, 0.600, 0.550, 0.500, 0.450,
+        ],
+    ),
+    # 2026-08-03: added alongside 'synthwave' -- 'house' and 'tech_house'
+    # were the only two points on the house-family spectrum, leaving the
+    # warmer/slower/chord-driven end uncovered and prone to landing on
+    # 'house' with a poor spectral match.
+    "deep_house": AudioProfile(
+        name="Deep House",
+        description=(
+            "Warm rolling sub-bass, soulful/jazzy chord stabs, and soft "
+            "filtered hats at 118-124 BPM -- slower and mellower than house"
+        ),
+        bass_min=20.0,
+        bass_max=200.0,
+        mid_min=200.0,
+        mid_max=2200.0,
+        treble_min=2200.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        # Elevated vs house's 1.0: the soulful chord stab (not just the
+        # kick) is a defining, identifiable element of this genre.
+        mid_weight=1.15,
+        treble_weight=0.75,
+        beat_threshold=1.2,
+        smoothing=0.13,
+        curve="warm",
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.8,
+        # Deep house sits clearly below house's 120-128 pocket -- centered
+        # lower and narrower, reflecting a more tempo-consistent genre.
+        bpm_prior_mu=121.0,
+        bpm_prior_sigma=0.30,
+        bpm_hint_min=118.0,
+        bpm_hint_max=124.0,
+        # Warmer/less bright than house (1500 Hz) -- the chord stabs and
+        # rolled-off hats keep energy lower in the spectrum.
+        spectral_centroid_mu=1150.0,
+        zcr_mu=0.048,
+        onset_density_mu=2.0,
+        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: soulful
+        # vocal chops are common but not as reliably continuous as
+        # rap/hyphy/r&b's genuinely vocal-forward material -- a fabricated
+        # target would be worse than no signal here.
+        expected_bands=[
+            0.800, 0.830, 0.860, 0.880, 0.900, 0.870, 0.840, 0.800,
+            0.780, 0.750, 0.720, 0.700, 0.680, 0.650,
+            0.620, 0.600, 0.580, 0.600, 0.630,
+            0.680, 0.720, 0.760, 0.800, 0.830, 0.860, 0.880, 0.850,
+            0.800, 0.750, 0.700, 0.660, 0.620, 0.600, 0.580, 0.560,
+            0.550, 0.540, 0.530, 0.520, 0.530, 0.550, 0.580,
+            0.620, 0.650, 0.620, 0.580, 0.540, 0.500, 0.460, 0.420,
+            0.380, 0.340, 0.300, 0.270, 0.240, 0.220, 0.200, 0.180,
+            0.160, 0.150, 0.140, 0.130, 0.120, 0.120,
         ],
     ),
     "tech_house": AudioProfile(
@@ -858,9 +921,18 @@ PROFILES: Dict[str, AudioProfile] = {
             0.360, 0.340, 0.320, 0.300, 0.280, 0.260, 0.240, 0.220,
         ],
     ),
+    # 2026-08-03: disabled from discovery (Alt+A cycling, auto-vj recommender
+    # candidate pool) now that a real genre roster covers the material this
+    # was standing in for -- a flat, no-bias "unknown content" fallback was
+    # actively competing against, and getting confused with, genuinely
+    # calibrated profiles. Left in PROFILES (not deleted) so get_profile()'s
+    # own fallback-on-unknown-key behaviour and any existing config
+    # referencing it by name keep working. See enabled_profiles()/
+    # AudioProfile.enabled.
     "generic": AudioProfile(
         name="Generic",
         description="Balanced profile for unknown or mixed content",
+        enabled=False,
         bass_min=20.0,
         bass_max=250.0,
         mid_min=250.0,
@@ -1056,10 +1128,25 @@ PROFILES: Dict[str, AudioProfile] = {
 
 
 def get_profile(name: str) -> AudioProfile:
-    """Get a profile by name. Falls back to 'generic' if not found."""
+    """Get a profile by name. Falls back to 'generic' if not found.
+
+    Direct-lookup path: resolves a disabled profile too (e.g. 'generic'
+    itself, or any explicit config reference) -- only discovery
+    (list_profiles() / enabled_profiles()) hides disabled profiles.
+    """
     return PROFILES.get(name, PROFILES["generic"])
 
 
+def enabled_profiles() -> Dict[str, AudioProfile]:
+    """Return {key: profile} for discoverable profiles only.
+
+    Used by both list_profiles() (Alt+A cycling) and the auto-vj
+    recommender's candidate pool, so "disabled" consistently means
+    "excluded from discovery" in both places -- not just hidden from one.
+    """
+    return {key: profile for key, profile in PROFILES.items() if profile.enabled}
+
+
 def list_profiles() -> list[str]:
-    """Return list of available profile names."""
-    return sorted(PROFILES.keys())
+    """Return list of discoverable (enabled) profile names."""
+    return sorted(enabled_profiles().keys())

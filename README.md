@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.19**
+**Version 1.0.0-beta.20**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.20** — New `deep_house` audio profile (118-124 BPM, warmer/lower-centroid than `house`, chord-stab-driven fingerprint) -- the house family previously only had `house`/`tech_house`, leaving the slower/warmer end uncovered. `AudioProfile` gains a capability-aware `enabled` flag (disable, don't delete -- still resolvable by direct lookup); `generic` is now disabled from discovery (`Alt+A` cycling and the Auto VJ recommender's candidate pool) since it was competing with, and getting confused with, genuinely calibrated genre profiles.
 - **1.0.0-beta.19** — Crash containment: a broken effect (constructor, `update()`, or `render()`) is quarantined and the show advances instead of dying; hotkey handler crashes drop the keypress instead of the app; teardown now runs even when the main loop raises (`ensure_shutdown()`), so audio/MIDI/recorder threads and SDL are never left dangling.
 - **1.0.0-beta.18** — New `synthwave` audio profile (`unicornviz/audio/profiles.py`): warm analog bass, gated-reverb drums, and a bright 1.4-2.4 kHz lead-synth peak at 85-118 BPM, selectable via `Alt+A` like any other genre profile. First-pass, added after a livestream synthwave training session ran under `generic` all night and sagged into psytrance/trance whenever detected BPM ran hot -- see `docs/adr/training-model.md`.
 - **1.0.0-beta.17** — Tour polish: the dim scrim now hugs the dialog like

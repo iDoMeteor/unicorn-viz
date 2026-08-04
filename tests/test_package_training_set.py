@@ -338,6 +338,6 @@ def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> Non
     detector_payload = {'essentia_available': False}
     director_payload = {}
     prompt = _build_combined_prompt(detector_payload, director_payload, None)
-    for stale_name in ('lofi:', 'jazz:', 'classical:', 'deep_house:', 'metal:', 'industrial:', 'reggae:'):
+    for stale_name in ('lofi:', 'jazz:', 'classical:', 'minimal:', 'metal:', 'industrial:', 'reggae:'):
         assert stale_name not in prompt, f'stale profile {stale_name!r} leaked into prompt'
     assert 'house:' in prompt

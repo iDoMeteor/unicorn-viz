@@ -4,15 +4,15 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.18       BETA          module
+  core (unicornviz)             1.0.0-beta.20       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.139.0             alpha ▲       module
+  dj-mixer-01                   0.140.0             alpha ▲       module
   media-01                      0.16.0              alpha ▲       module
   games-01                      0.11.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.4          RC            module
+  auto-vj-01                    1.0.0-rc.5          RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -49,9 +49,9 @@
   videos-01                     0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
+  streaming-01                  0.5.1               alpha ▼       module
   chat-01                       0.5.0               alpha ▼       module
   holiday-01                    0.5.0               alpha ▼       module
-  streaming-01                  0.5.0               alpha ▼       module
   training-kit-01               0.5.0               alpha ▼       module
   video-clips-01                0.5.0               alpha ▼       module
 

@@ -193,9 +193,16 @@ unreliable.
 | Genre | `[audio] profile` | Expected BPM median | bpm_hint_max |
 | ----- | ----------------- | ------------------- | ------------ |
 | Classic / tech house | `house` | 120–128 | — |
+| Deep house | `deep_house` | 118–124 | 124 |
 | Chillstep / downtempo | `chillstep` | 85–105 | 108 |
 | Trance | `trance` | 130–142 | — |
 | Synthwave / retrowave | `synthwave` | 90–110 | 118 |
+
+`generic` is disabled from discovery (2026-08-03; see `AudioProfile.enabled` /
+`enabled_profiles()` in `unicornviz/audio/profiles.py`) -- do not set it as a
+training session's `[audio] profile` going forward; pick the closest real
+genre profile instead. It remains resolvable by direct config reference if
+something still needs it explicitly.
 
 Set in the training deploy's `config.toml`.  Recovery: `Alt+A` cycles profiles
 in-session, recorded in the corpus `audio_profile_key` field.

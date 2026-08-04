@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-07-18
+Last updated: 2026-08-03
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -239,6 +239,32 @@ Controls director visual intensity and transition aggression.
 **Has no effect on BPM prior or detection range.**
 
 These systems are independent.  Audio profile ≠ VJ mood.
+
+### Capability-aware disable + two new profiles (2026-08-03)
+
+`AudioProfile` gained an `enabled: bool = True` field (mirrors unicorn-horn
+ADR-0003's stem-toggle pattern: disable, don't delete). `enabled_profiles()`
+in `unicornviz/audio/profiles.py` filters by it; both `list_profiles()`
+(`Alt+A` cycling) and the recommender's candidate-scoring loop
+(`_update_profile_recommendation` in `auto_vj.py`, previously iterating
+`PROFILES.items()` directly) now go through it, so "disabled" consistently
+means excluded from *both* manual cycling and automatic recommendation —
+not just hidden from one. `get_profile(name)` is unaffected: direct lookup
+by key still resolves a disabled profile, so existing config referencing
+one by name, or `get_profile()`'s own fallback-on-unknown-key path, keep
+working.
+
+`generic` is the first (and so far only) profile disabled this way — it was
+actively competing with, and getting confused with, genuinely calibrated
+genre profiles once enough of the roster existed to cover real material.
+
+Also added `deep_house` (118-124 BPM, warmer/lower-centroid than `house`,
+chord-stab-driven fingerprint) — the house family previously only had two
+points (`house`, `tech_house`), leaving the slower/warmer end uncovered.
+Built with the same MIR-literature-grounded methodology as `synthwave`
+(added earlier the same session, see `tools/gen_spectral_fingerprints.py`
+and the profile's own code comment) — not yet validated against real
+session data.
 
 ---
 

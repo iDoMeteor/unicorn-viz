@@ -52,6 +52,22 @@ _PROFILE_META: dict[str, dict] = {
             "modest low-mid energy; moderate presence 1–3 kHz from percussion tail."
         ),
     },
+    # 2026-08-03: added alongside 'synthwave' -- house/tech_house were the
+    # only two points on the house-family spectrum, leaving the warmer/
+    # slower/chord-driven end uncovered.
+    "deep_house": {
+        "name": "Deep House",
+        "bpm": "118–124",
+        "acoustic_notes": (
+            "Warm rolling sub-bass 30–60 Hz, rounder and less punchy than "
+            "house's kick; soulful/jazzy chord stabs 200–500 Hz are the "
+            "genre's defining melodic element, more prominent than in "
+            "house or tech_house; soft filtered hats and percussion "
+            "6–10 kHz, rolled off well before tech_house's bright "
+            "8–16 kHz hat energy; lower spectral centroid and ZCR than "
+            "both neighbors, reflecting an overall warmer, mellower mix."
+        ),
+    },
     "tech_house": {
         "name": "Tech House",
         "bpm": "122–130",
