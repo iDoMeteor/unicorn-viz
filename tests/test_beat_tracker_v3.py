@@ -7,6 +7,12 @@ profile recommender auto-applies a new genre profile mid-track -- dragging an
 already-locked BPM toward the new profile's prior even though the track's
 real tempo never changed. v3 only inherits set_profile() differently; every
 other method (update(), the ACF/phase-lock machinery) is unchanged from v2.
+
+As of P0-A/P1-D (docs/audits/2026-08-04-bpm-detector-audit.md), v2's
+set_profile() no longer narrows the ACF search range at all -- only the
+Gaussian prior. So v3's own set_profile() override is now a complete no-op
+while confidently locked (freezing "nothing" was previously "freeze the
+prior but still apply the range clamp"; now there is no clamp to apply).
 """
 from __future__ import annotations
 
@@ -83,17 +89,20 @@ def test_set_profile_freezes_prior_when_confidently_locked() -> None:
     assert tr._bpm == 124.0            # bpm itself never touched by set_profile
 
 
-def test_set_profile_still_applies_range_clamp_when_locked() -> None:
-    """A genuinely wrong tempo must still be correctable/boundable even while
-    the prior itself is frozen -- only the Gaussian mu/sigma are protected."""
+def test_set_profile_is_a_full_noop_when_locked() -> None:
+    """P1-D: once v2's set_profile() no longer narrows the search range at
+    all (P0-A), there is nothing left for a locked v3 switch to apply --
+    set_profile() is a complete no-op while confidently locked, not just a
+    partial prior freeze. See docs/audits/2026-08-04-bpm-detector-audit.md."""
     tr = BeatTrackerV3({})
     tr._bpm = 124.0
     tr._confidence = 0.65
+    bpm_min_before, bpm_max_before = tr._bpm_min, tr._bpm_max
 
     tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16, hint_min=140.0, hint_max=149.0))
 
-    assert tr._bpm_min == 140.0
-    assert tr._bpm_max == 149.0
+    assert tr._bpm_min == bpm_min_before
+    assert tr._bpm_max == bpm_max_before
 
 
 def test_set_profile_fully_reprimes_when_not_locked_low_confidence() -> None:

@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-03
+Last updated: 2026-08-04
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -102,6 +102,104 @@ Comparison" for the packager-side reporting.  Ignored if set equal to the
 active `beat_tracker_engine`. All shadow calls are wrapped in try/except
 that only logs at debug level — a shadow-engine failure can never affect
 the active engine or director.
+
+---
+
+## BPM Detector Audit — Hard Clamp Removal + Mixer-BPM Hint Bus (2026-08-04)
+
+Decision: `set_profile()` in all three tracker engines (v1/v2/v3) no longer
+narrows the ACF/IOI candidate search range (`_bpm_min`/`_bpm_max`) from a
+profile's `bpm_hint_min`/`bpm_hint_max` — only the soft log2-Gaussian prior
+(`_prior_mu`/`_prior_sigma`) is applied. `_update_profile_recommendation()`
+now reads `vj_api.get_bpm(exclude='auto_vj')` each recommender cycle and,
+when a fresh `dj_mixer` hint exists, primes the tracker to it (new
+`prime_tempo()` on `BeatGridTracker`/`BeatTracker`, inherited by
+`BeatTrackerV3`) and adds it as a top-weighted hypothesis to the
+recommender's tempo evidence. Full audit: `docs/audits/2026-08-04-bpm-detector-audit.md`.
+
+**Root cause — this supersedes, not just extends, the 2026-07-18 v3 fix
+above.** That investigation correctly identified the *prior* re-prime as a
+feedback-loop mechanism and froze it in v3 while locked. It missed a second,
+dominant mechanism in the *same* `set_profile()` call, present in **all
+three engines since 2026-06-20** (not just v2/v3): `bpm_hint_min`/
+`bpm_hint_max` hard-clamp `_bpm_min`/`_bpm_max`, which bound the ACF's
+candidate array itself (`_setup_acf_arrays()`) and the v1 IOI-median
+candidate filter. Once a profile narrows that range, the true tempo — if
+outside it — can **never again be represented as a candidate**, so the
+next estimate is forced inside the wrong window; that estimate then
+"confirms" the wrong profile to the recommender, which re-applies it. v3's
+2026-07-18 fix left this clamp in place (`set_profile()`'s locked branch
+still applied `bpm_hint_min`/`bpm_hint_max`, per that entry's own text
+above) — it fixed the prior-drift symptom while leaving the mechanism that
+actually explains a hard "stuck at a wrong lane" lock unaddressed. Live
+evidence: `logs/unicornviz_20260804_082732.log` showed `Generic → Psytrance
+→ Generic → Psytrance` profile thrash within 80s, each Psytrance apply
+priming a `[140, 149]` search window, during a session the operator
+independently reported as "32 over."
+
+**Fix — P0-A (search-range clamp removed):** `set_profile()` in
+`BeatGridTracker`, `BeatTracker`, and `BeatTrackerV3` now only ever updates
+`_prior_mu`/`_prior_sigma` (and, for v2/v3, recomputes `_acf_prior` over the
+*existing* `_acf_bpms` array — never rebuilds it). `_bpm_min`/`_bpm_max` are
+set once at construction from config and never touched again by a profile
+switch, so the ACF/IOI search always covers the full configured range.
+`bpm_hint_min`/`bpm_hint_max` remain on `AudioProfile` (used only by
+`preferred_bpm_range()` for HUD display) but are no longer read by any
+tracker. Consequence for v3 (**P1-D**): with no clamp left to apply, a
+profile switch while confidently locked is now a **complete no-op** (not a
+partial freeze) — and `_reset_tempo_lock()` needs no range-restoration
+logic, since there is no longer a narrowed range to go stale.
+
+**Fix — P0-B (mixer BPM as ground truth):** the shared BPM hint bus
+(`app.publish_bpm()`/`get_bpm()`, 5 s TTL — see "Recommender → Tracker
+Profile Apply" below for `dj_mixer`'s existing borrow-when-idle consumer)
+already let `dj_mixer` borrow *our* estimate; this closes the loop the
+other direction. Each `_update_profile_recommendation()` cycle (gated by
+`profile_auto_reco_eval_interval_s`, default 8 s), if `get_bpm(exclude=
+'auto_vj')` returns a fresh nonzero value, calls `grid.prime_tempo(bpm)` —
+which sets `_bpm` directly, raises (never lowers) `_confidence` /
+`_acf_confidence` / `_phase_confidence`, and refreshes `_tempo_hold_until_t`
+so the ACF's own continuity guards don't immediately fight the primed
+value — and appends it to `top_cand_log2s` at full weight so profile
+scoring considers it directly. The deck's own per-track analysis is
+authoritative when present; this is intentionally a short-circuit, not
+another vote for the ACF to weigh.
+
+**Fix — P1-C (recommender evidence unclamped from the *active* prior
+too):** `top_candidates` (read by the recommender for `top_cand_fit`
+multi-hypothesis scoring, across *every* candidate profile being
+evaluated) was computed from the prior-weighted `score` array — meaning
+even with P0-A's range fix, the top-3 hypotheses were still biased toward
+whichever profile happened to be *currently* active, potentially
+suppressing a tempo lane a different candidate profile would have scored
+well. Now sourced from the raw, prior-free `comb_score` array (still
+range-limited only by the — now never-narrowed — configured bounds); the
+lock decision itself (`peak_idx`, tactus descent, EMA) is unchanged and
+still uses the prior-weighted `score`.
+
+**Fix — P2-E (profile data hygiene):** `generic`'s `bpm_hint_min`/
+`bpm_hint_max` removed (it's a disabled catch-all fallback, not a genre —
+see "Capability-aware disable" below — so it has no real tempo sweet spot
+to display). Separately, the recommender's own `_profile_score()` sigma
+floor (`max(0.08, ...)`) was six times looser than the live detector's
+`_MIN_PROFILE_PRIOR_SIGMA` (0.45) — meaning several genres' raw
+`bpm_prior_sigma` (0.16-0.22, tighter than what the detector itself ever
+actually applies) drove sharp, brittle `tempo_fit` differentiation between
+adjacent-tempo profiles during *scoring*, even though the live tracker's
+own prior was always floored at 0.45. Recommender floor raised to match
+(0.45) so scoring and live detection agree on how tight a genre prior is
+allowed to be.
+
+**Verified:** `tests/test_bpm_detector_audit_regressions.py` — (1) locked
+at 124 BPM, apply a Psytrance-like profile (mu=145, σ=0.16), continue
+feeding steady 124 BPM audio → reported BPM stays within ±2 of 124; (2)
+silence-reset after that same mismatched profile → next lock on a fresh
+100 BPM click track lands within ±2 of 100; (3) the recommender decider
+never double-applies within its cooldown; (4)/(5) a recommender cycle
+calls `prime_tempo()` exactly when a fresh mixer hint exists, not
+otherwise. Plus per-engine unit coverage in `test_beat_grid_tracker_v1.py`
+/ `test_beat_tracker_v2.py` / `test_beat_tracker_v3.py` for the new
+`prime_tempo()` method and the never-narrows-range contract.
 
 ---
 
@@ -745,6 +843,8 @@ training-pipeline concern; this entry exists here only because both touch
 | 2026-05-22–2026-07-06 | `_compute_downbeat_confidence()` reading `base = self._confidence` | Identical to `coh` in practice — never an independent third signal; replaced with genuinely independent `_acf_confidence` (see Confidence Blend Bug section) |
 | — | `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN = 0.55` | Never validated against real data; real coherence medians run 0.41-0.47, so 0.55 would have gated `is_downbeat` closed on roughly half of all beats. Lowered to 0.42 as a training-start value (see Analysis Mode section) |
 | — | `profile_auto_reco_score_margin` / `_decider_min_margin = 0.25` (additive score gap) | Unbounded scale meant different things across genres (real margins observed 0.06-2.17); replaced with a softmax probability margin, rescaled to 0.09 at the equivalent historical percentile (see Recommender Confirm/Decider Margin section) |
+| 2026-07-18–2026-08-04 | `set_profile()` narrowing `_bpm_min`/`_bpm_max` from `bpm_hint_min`/`bpm_hint_max` (all engines; v3 kept applying it even while confidently locked) | The dominant "BPM tending hot" mechanism, not the prior re-prime the 2026-07-18 fix addressed — a wrongly-applied profile could permanently hide the true tempo from the search, self-confirming the wrong profile. Removed entirely (P0-A); see BPM Detector Audit section above |
+| 2026-08-04 | Recommender `_profile_score()` sigma floor `max(0.08, ...)` | Six times looser than the live detector's own `_MIN_PROFILE_PRIOR_SIGMA` (0.45), so several genres' raw 0.16-0.22 sigmas drove scoring the live tracker never actually applied; raised to 0.45 to match (P2-E) |
 
 ---
 

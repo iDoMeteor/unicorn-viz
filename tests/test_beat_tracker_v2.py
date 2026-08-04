@@ -320,8 +320,14 @@ def test_tempo_hold_freezes_bpm_once_confidence_clears_the_hold_gate() -> None:
 # set_profile()
 # ---------------------------------------------------------------------------
 
-def test_set_profile_applies_prior_and_bpm_range() -> None:
+def test_set_profile_applies_prior_only() -> None:
+    """set_profile() must NOT narrow _bpm_min/_bpm_max (P0-A): a genre
+    profile is soft evidence via the ACF prior, not a hard search-range
+    clamp -- see docs/audits/2026-08-04-bpm-detector-audit.md. bpm_hint_min/
+    max are still accepted on the profile (used elsewhere for HUD display)
+    but no longer read here."""
     bt = BeatTracker({})
+    bpm_min_before, bpm_max_before = bt._bpm_min, bt._bpm_max
     profile = SimpleNamespace(
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.50,  # above _MIN_PROFILE_PRIOR_SIGMA so it passes through unclamped
@@ -332,8 +338,8 @@ def test_set_profile_applies_prior_and_bpm_range() -> None:
 
     assert bt._prior_mu == 95.0
     assert bt._prior_sigma == 0.50
-    assert bt._bpm_min == 90.0
-    assert bt._bpm_max == 110.0
+    assert bt._bpm_min == bpm_min_before
+    assert bt._bpm_max == bpm_max_before
 
 
 def test_set_profile_ignores_none() -> None:
@@ -362,6 +368,59 @@ def test_set_profile_without_hints_leaves_bpm_range_unconstrained() -> None:
 
     assert bt._bpm_min == bpm_min_before
     assert bt._bpm_max == bpm_max_before
+
+
+# ---------------------------------------------------------------------------
+# prime_tempo() -- P0-B external ground-truth BPM (e.g. dj-mixer)
+# ---------------------------------------------------------------------------
+
+def test_prime_tempo_sets_bpm_and_raises_confidence_components() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 0.0
+    bt._acf_confidence = 0.0
+    bt._phase_confidence = 0.0
+    bt._confidence = 0.0
+
+    bt.prime_tempo(128.0)
+
+    assert bt._bpm == 128.0
+    assert bt._acf_confidence == pytest.approx(0.9)
+    assert bt._phase_confidence == pytest.approx(0.9)
+    assert bt._confidence == pytest.approx(0.9)
+
+
+def test_prime_tempo_never_lowers_existing_confidence() -> None:
+    bt = BeatTracker({})
+    bt._acf_confidence = 0.95
+    bt._phase_confidence = 0.95
+    bt._confidence = 0.95
+
+    bt.prime_tempo(128.0, confidence=0.5)
+
+    assert bt._confidence == pytest.approx(0.95)
+
+
+def test_prime_tempo_clamps_to_valid_bpm_range() -> None:
+    bt = BeatTracker({})
+    bt.prime_tempo(9999.0)
+    assert bt._bpm == bt._bpm_max
+
+
+def test_prime_tempo_ignores_non_positive_bpm() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+
+    bt.prime_tempo(0.0)
+    bt.prime_tempo(-5.0)
+
+    assert bt._bpm == 124.0
+
+
+def test_prime_tempo_refreshes_tempo_hold_window() -> None:
+    bt = BeatTracker({})
+    bt._last_t = 100.0
+    bt.prime_tempo(128.0)
+    assert bt._tempo_hold_until_t == pytest.approx(100.0 + bt._tempo_hold_s)
 
 
 # ---------------------------------------------------------------------------

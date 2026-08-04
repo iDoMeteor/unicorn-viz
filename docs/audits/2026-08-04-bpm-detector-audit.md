@@ -1,7 +1,11 @@
 # Unicorn Viz — BPM Detector Audit: the "Consistently 20 Hot" Bug (2026-08-04)
 
 Owner: owner + Claude (master coordinator)
-Status: Complete — root cause identified with evidence; fixes proposed, none applied
+Status: Fixes landed (P0-A, P0-B, P1-C, P1-D, P2-E) — see
+  [docs/adr/vj-system.md § "BPM Detector Audit — Hard Clamp Removal +
+  Mixer-BPM Hint Bus"](../adr/vj-system.md#bpm-detector-audit--hard-clamp-removal--mixer-bpm-hint-bus-2026-08-04)
+  for the implementation record. P2-F regression tests:
+  `tests/test_bpm_detector_audit_regressions.py`.
 Last updated: 2026-08-04
 
 Symptom (owner-reported): live BPM consistently ~20 high, spiking to +32

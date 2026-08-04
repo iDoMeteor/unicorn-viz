@@ -37,6 +37,19 @@ def test_generic_still_resolvable_by_direct_lookup() -> None:
     assert p is PROFILES['generic']
 
 
+def test_generic_has_no_bpm_hint_range() -> None:
+    """P2-E hygiene: Generic is a disabled catch-all fallback, not a genre
+    with a real tempo 'sweet spot' -- it should not carry bpm_hint_min/max.
+    See docs/audits/2026-08-04-bpm-detector-audit.md."""
+    p = PROFILES['generic']
+    assert p.bpm_hint_min is None
+    assert p.bpm_hint_max is None
+    # preferred_bpm_range() must still degrade gracefully (derives from the
+    # prior mu/sigma instead of the removed hints).
+    lo, hi = p.preferred_bpm_range()
+    assert lo < hi
+
+
 def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     enabled = enabled_profiles()
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}

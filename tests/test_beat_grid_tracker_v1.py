@@ -172,8 +172,12 @@ def test_off_grid_onset_does_not_advance_bar_count() -> None:
 # set_profile()
 # ---------------------------------------------------------------------------
 
-def test_set_profile_applies_prior_and_bpm_range() -> None:
+def test_set_profile_applies_prior_only() -> None:
+    """set_profile() must NOT narrow _bpm_min/_bpm_max (P0-A): a genre
+    profile is soft evidence via the prior, not a hard search-range clamp
+    -- see docs/audits/2026-08-04-bpm-detector-audit.md."""
     bg = BeatGridTracker({})
+    bpm_min_before, bpm_max_before = bg._bpm_min, bg._bpm_max
     profile = SimpleNamespace(
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.50,
@@ -184,8 +188,8 @@ def test_set_profile_applies_prior_and_bpm_range() -> None:
 
     assert bg._prior_mu == 95.0
     assert bg._prior_sigma == 0.50
-    assert bg._bpm_min == 90.0
-    assert bg._bpm_max == 110.0
+    assert bg._bpm_min == bpm_min_before
+    assert bg._bpm_max == bpm_max_before
 
 
 def test_set_profile_ignores_none() -> None:
@@ -195,15 +199,38 @@ def test_set_profile_ignores_none() -> None:
     assert bg._prior_mu == mu_before
 
 
-def test_set_profile_hint_range_is_clamped_to_absolute_bounds() -> None:
-    """bpm_min is floored at 40, bpm_max is capped at 250, regardless of
-    what the profile requests."""
-    bg = BeatGridTracker({})
-    profile = SimpleNamespace(bpm_prior_mu=120.0, bpm_prior_sigma=0.5, bpm_hint_min=10.0, bpm_hint_max=999.0)
-    bg.set_profile(profile)
+# ---------------------------------------------------------------------------
+# prime_tempo() -- P0-B external ground-truth BPM (e.g. dj-mixer)
+# ---------------------------------------------------------------------------
 
-    assert bg._bpm_min == 40.0
-    assert bg._bpm_max == 250.0
+def test_prime_tempo_sets_bpm_and_raises_confidence() -> None:
+    bg = BeatGridTracker({})
+    bg._bpm = 0.0
+    bg._confidence = 0.0
+
+    bg.prime_tempo(128.0)
+
+    assert bg._bpm == 128.0
+    assert bg._confidence == pytest.approx(0.9)
+
+
+def test_prime_tempo_never_lowers_existing_confidence() -> None:
+    bg = BeatGridTracker({})
+    bg._confidence = 0.95
+
+    bg.prime_tempo(128.0, confidence=0.5)
+
+    assert bg._confidence == pytest.approx(0.95)
+
+
+def test_prime_tempo_ignores_non_positive_bpm() -> None:
+    bg = BeatGridTracker({})
+    bg._bpm = 124.0
+
+    bg.prime_tempo(0.0)
+    bg.prime_tempo(-5.0)
+
+    assert bg._bpm == 124.0
 
 
 # ---------------------------------------------------------------------------

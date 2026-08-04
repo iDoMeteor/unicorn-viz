@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.23**
+**Version 1.0.0-beta.24**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.24** — `generic` audio profile's `bpm_hint_min`/`bpm_hint_max` removed -- it's a disabled catch-all fallback (not a genre) and those fields are no longer read by any BPM tracker engine as of auto-vj-01 1.0.0-rc.7's [BPM detector audit fixes](docs/audits/2026-08-04-bpm-detector-audit.md).
 - **1.0.0-beta.23** — RC1 P1 stability/hygiene batch: a dead ffmpeg no longer leaves REC lit silently dropping frames (writer-thread failure latch, flashed once + recorder stopped); FBO rebuilds release their color/depth attachments (`_release_fbo`) instead of leaking ~16 MB per render-scale change; all six implemented transitions + `radial`/`cut` aliases now pass config/CLI validation; `requirements.txt` pinned to the validated versions (floors stay in pyproject); push/PR CI now runs ruff + the core suite (`.github/workflows/tests.yml`); drop-in registry gains its 4 missing entries. Drop-in pointer bumps: chat-01 0.5.1 (inbound-text-inert tests), spotify-01 1.0.0-rc.3 (429/Retry-After + 0600 token store), webcam-01 1.0.0-rc.2 (no camera while hidden), tech-01 0.9.1 (cyber_war seed fix).
 - **1.0.0-beta.22** — New `VjApi.active_now_playing()` wraps the existing now-playing hub (`unicornviz.now_playing.NowPlayingHub.active()`) with a read accessor -- the hub already had a write side (`register_now_playing`/`unregister_now_playing`) but nothing to read the currently-active source back, so drop-ins had to reach into `app._private` state to know what's playing. Degrades to `None` on older cores/when nothing is registered.
 - **1.0.0-beta.21** — Windows platform P0s: new shared `unicornviz.fonts` resolver (bundled ui-font.ttf first, then per-platform system dirs incl. `C:\Windows\Fonts` and `seguiemj.ttf` for emoji) adopted across core and the control-room/media/banner drop-ins; per-monitor-v2 DPI awareness on Windows (crisp output on scaled displays, correct 76/152px icon bucket); recording remaps the Linux `pulse` default to DirectShow with loopback-device discovery on Windows (video-only degrade when none) and stops ffmpeg via CTRL_BREAK_EVENT + kill escalation instead of the Windows-unsupported SIGINT; pyproject version now single-sourced from `unicornviz.__version__` with the four missing runtime deps added.

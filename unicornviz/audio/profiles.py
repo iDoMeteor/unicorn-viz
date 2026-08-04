@@ -952,8 +952,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=1.0,
         bpm_prior_mu=120.0,
         bpm_prior_sigma=0.55,
-        bpm_hint_min=108.0,
-        bpm_hint_max=132.0,
+        # No bpm_hint_min/max: Generic is a disabled (enabled=False) catch-all
+        # fallback, not a genre with a real "sweet spot" tempo range to
+        # display -- see P2-E in docs/audits/2026-08-04-bpm-detector-audit.md.
         spectral_centroid_mu=1600.0,
         zcr_mu=0.065,
         onset_density_mu=2.5,
