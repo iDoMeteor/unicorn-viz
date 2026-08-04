@@ -202,6 +202,11 @@ Python.
 
 ### Short-term: `tools/install/windows_deps.ps1`
 
+> **Shipped 2026-08-04** — [`tools/install/windows_deps.ps1`](../../tools/install/windows_deps.ps1)
+> implements the steps below, transcribed from this session's validated
+> sequence. Not yet re-verified on a clean Windows machine; run it on the
+> next Windows session and fold findings back here.
+
 A single PowerShell script that automates everything discovered in this session.
 It would:
 

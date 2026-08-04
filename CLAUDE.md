@@ -16,9 +16,12 @@ It renders fullscreen OpenGL 3.3 core effects via `moderngl`, captures live
 audio from PipeWire/ALSA via `sounddevice`, supports MIDI control via
 `python-rtmidi`, and displays authentic CP437 ANSI art from the BBS artscene.
 
-Primary target: Fedora / Arch Linux, Wayland compositor, PipeWire audio.
-Secondary target: any POSIX system running X11 + ALSA.
-Windows and macOS support is planned but not yet primary.
+Primary RELEASE target: **Windows** (the first public release ships
+Windows-first) — check Windows behavior first for fonts, DPI, subprocess,
+signals, and paths; prefer bundled assets over system paths (see
+`unicornviz/fonts.py` and `docs/audits/2026-08-03-windows-platform-report.md`).
+Primary DEVELOPMENT platform: Fedora / Arch Linux, Wayland, PipeWire.
+Secondary: any POSIX system running X11 + ALSA. macOS is planned.
 
 ---
 
@@ -38,7 +41,9 @@ unicornviz/          Python package (all source code)
 assets/
   ansi/              Generated demo .ANS files
   ansi/acid/         Downloaded ACiD Productions .ANS files (16colo.rs)
-  fonts/             Optional font8x16.bin (CP437 8×16 VGA font atlas)
+  fonts/             ui-font.ttf (bundled UI font — always the first
+                     candidate, see unicornviz/fonts.py), font8x16.bin
+                     (CP437 8×16 VGA atlas), font8x8.bin (8×8 fallback)
 docs/                User guide, developer guide, config reference
 tools/               Standalone helper scripts (not part of the package)
 config.toml          Runtime configuration

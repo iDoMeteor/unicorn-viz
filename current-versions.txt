@@ -4,55 +4,65 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.20       BETA          module
+  core (unicornviz)             1.0.0-beta.25       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.140.0             alpha ▲       module
-  media-01                      0.16.0              alpha ▲       module
+  dj-mixer-01                   0.142.0             alpha ▲       module
+  media-01                      0.16.1              alpha ▲       module
   games-01                      0.11.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.5          RC            module
+  auto-vj-01                    1.0.0-rc.7          RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  control-room-01               0.9.1               alpha ▲       module
   cosmic-01                     0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
-  spotify-01                    1.0.0-rc.2          RC            module
-  unicorn-tears-01              1.0.0-rc.1          RC            module
-  webcam-01                     1.0.0-rc.1          RC            module
+  spotify-01                    1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  control-room-01               0.9.0               alpha ▲       module
+  tech-01                       0.10.0              alpha ▲       module
+
+  ── RC ────────────────────────────────────────────────────────────────────
+  unicorn-tears-01              1.0.0-rc.1          RC            module
+  webcam-01                     1.0.0-rc.2          RC            module
+
+  ── alpha ─────────────────────────────────────────────────────────────────
+  banner-01                     0.8.1               alpha         module
+
+  ── alpha ▲ ───────────────────────────────────────────────────────────────
   feature-01                    0.9.0               alpha ▲       module
+
+  ── alpha ─────────────────────────────────────────────────────────────────
+  images-01                     0.8.1               alpha         module
+
+  ── alpha ▲ ───────────────────────────────────────────────────────────────
   immersive-01                  0.9.0               alpha ▲       module
   midi-controllers-01           0.9.0               alpha ▲       module
   particles-01                  0.9.0               alpha ▲       module
   projectm-01                   0.9.0               alpha ▲       module
   psychedelic-01                0.9.0               alpha ▲       module
   retro-01                      0.9.0               alpha ▲       module
-  tech-01                       0.9.0               alpha ▲       module
   textures-01                   0.9.0               alpha ▲       module
   vector-01                     0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
-  banner-01                     0.8.0               alpha         module
   beat-flash-01                 0.8.0               alpha         module
   color-grade-01                0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
-  images-01                     0.8.0               alpha         module
   sims-01                       0.7.1               alpha         module
+  videos-01                     0.7.1               alpha         module
   cta-01                        0.7.0               alpha         module
-  videos-01                     0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
-  streaming-01                  0.5.1               alpha ▼       module
-  chat-01                       0.5.0               alpha ▼       module
+  chat-01                       0.5.1               alpha ▼       module
+  streaming-01                  0.5.2               alpha ▼       module
+  training-kit-01               0.6.0               alpha ▼       module
   holiday-01                    0.5.0               alpha ▼       module
-  training-kit-01               0.5.0               alpha ▼       module
   video-clips-01                0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────

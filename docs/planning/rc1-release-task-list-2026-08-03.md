@@ -36,9 +36,9 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - [x] **[P1][S]** Transition validation drift: add the six implemented
       transitions + aliases to `config.py` `_TRANSITIONS` and the CLI
       choices. (`config.py:143`) *(done — beta.23)*
-- [ ] **[P1][M]** videos-01: fix decoder-thread EOF blocking-put leak, the
+- [x] **[P1][M]** videos-01: fix decoder-thread EOF blocking-put leak, the
       no-audio-device frozen-clock path, and the dead `reached_bottom`
-      contract (auto-advance parks otherwise).
+      contract (auto-advance parks otherwise). *(done — videos-01 0.7.1)*
 - [ ] **[P2][M]** Recording capture: reuse the existing streaming PBO path
       instead of the synchronous per-frame drawable read.
 - [ ] **[P2][S]** video-clips-01: move `cap.read()`/seek off `render()`.
@@ -58,7 +58,7 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       `send_signal(SIGINT)`). *(done — beta.21 + streaming-01 0.5.2)*
 - [ ] **[P1][M]** Multi-head state re-derivation: handle
       `SDL_WINDOWEVENT_MOVED`/`DISPLAY_CHANGED`, re-derive display/origin on
-      `FOCUS_GAINED` (July item 5); re-test span/mirror under mixed DPI.
+      `FOCUS_GAINED` (July item 5); re-test span/mirror under mixed DPI. *(code landed — beta.25, conservative/validity-gated; NEEDS owner multi-monitor verification)*
 - [ ] **[P1][—]** Run the Windows test protocol (report §3) end-to-end on a
       mixed-DPI two-monitor machine; file whatever it shakes out.
 - [ ] **[P2][—]** Verify WASAPI system-audio loopback capture on real
@@ -85,7 +85,7 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - [ ] **[P1][L]** Windows installer ★1 → ★3 per installers.md P3: curated
       payload, embedded Python 3.11/3.12 (dodges the cp314 wheel gap in the
       field notes), bundled ffmpeg, prebuilt rtmidi/moderngl wheels; or, as
-      the bridge, ship `tools/install/windows_deps.ps1` from the field notes.
+      the bridge, ship `tools/install/windows_deps.ps1` from the field notes. *(bridge shipped — tools/install/windows_deps.ps1, untested on real Windows; ★3 payload work remains)*
 - [ ] **[P1][S]** Scrub `config.toml` shipped defaults for first-boot on a
       stranger's machine: `display_index = 3`, hardware device strings,
       dj-mixer `enabled/start_enabled = true`, `"DDJ-REV1, Windows WASAPI"`.
@@ -105,8 +105,8 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       boot — privacy optics for a public release). *(done — webcam-01 1.0.0-rc.2)*
 - [x] **[P1][M]** CI: add a push/PR workflow running the core pytest suite
       (1,083 tests, 8 s — this is cheap); keep the nightly installer smoke. *(done — .github/workflows/tests.yml; drop-in-dependent test files excluded, see workflow comment)*
-- [ ] **[P2][S]** images-01: cap the image cache (count/resolution) before
-      strangers point it at photo libraries.
+- [x] **[P2][S]** images-01: cap the image cache (count/resolution) before
+      strangers point it at photo libraries. *(done — images-01 0.8.1)*
 - [ ] **[P2][S]** Clean the stale `# nosec` (training_daemon.py:203) and
       justify the four bare `# nosec B310` (spotify ×3, lyrics ×1). **(D —
       report-only per CLAUDE.md until owner approves.)**
@@ -123,9 +123,9 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       layer dead or strobing.
 - [x] **[P1][S]** cyber_war: replace `np.random.seed(42)` global reseed with
       `self.rng`; randomize the node board. *(done — tech-01 0.9.1)*
-- [ ] **[P2][S]** hacker_terminal_v2: dirty-flag the glyph upload (~2,560
+- [x] **[P2][S]** hacker_terminal_v2: dirty-flag the glyph upload (~2,560
       allocs/frame today); consider an integer texture (uniform-component
-      limit risk).
+      limit risk). *(done — tech-01 0.10.0)*
 - [ ] **[P2][S-M]** wormhole: fix shell occlusion (dead core/materials) and
       drop the dead soft-shadow pass; fractal_zoom: lower `_zoom_ceiling` to
       ~3×10⁴ pending a perturbation path.

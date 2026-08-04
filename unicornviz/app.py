@@ -558,6 +558,7 @@ class App:
         # the logical canvas that effects render into.
         self._window_width = self._width
         self._window_height = self._height
+        self._display_refresh_last_t = 0.0
         self._window_origin_x = 0
         self._window_origin_y = 0
         self._mirror_rects: list[tuple[int, int, int, int]] = []
@@ -1168,6 +1169,61 @@ class App:
         sdl2.SDL_GetWindowPosition(self._window, wx, wy)
         self._window_origin_x = int(wx.value)
         self._window_origin_y = int(wy.value)
+
+    # Min interval between event-driven display-state refreshes: MOVED spams
+    # continuously during a window drag.
+    _DISPLAY_REFRESH_MIN_S = 0.5
+
+    def _refresh_display_state(self, reason: str) -> None:
+        """Re-derive display index + window origin from live SDL state.
+
+        Compositors move/restack the window without a resize event (GNOME
+        workspace switches, Windows monitor drags/wake), and the cached
+        origin/display index previously refreshed only on monitor hotplug —
+        overlays and mirror tiling then ran against stale geometry
+        (2026-07-08 audit item 5). Conservative by design: the origin is
+        committed only when it lies inside a known display layout, honoring
+        the original compositor-drift concern in
+        _primary_display_viewport(); an implausible query keeps the cache.
+        """
+        if self._window is None:
+            return
+        now = time.monotonic()
+        if (now - self._display_refresh_last_t) < self._DISPLAY_REFRESH_MIN_S:
+            return
+        self._display_refresh_last_t = now
+        try:
+            disp = int(sdl2.SDL_GetWindowDisplayIndex(self._window))
+        except Exception:
+            disp = -1
+        if disp >= 0 and disp != self._display_index:
+            log.info(
+                'Display state refresh (%s): display %d -> %d',
+                reason, self._display_index, disp,
+            )
+            self._display_index = disp
+        wx = ctypes.c_int(0)
+        wy = ctypes.c_int(0)
+        sdl2.SDL_GetWindowPosition(self._window, wx, wy)
+        ox, oy = int(wx.value), int(wy.value)
+        if (ox, oy) == (self._window_origin_x, self._window_origin_y):
+            return
+        layouts = self._multihead_layouts()
+        if layouts and not any(
+            lx <= ox < lx + lw and ly <= oy < ly + lh
+            for lx, ly, lw, lh in layouts
+        ):
+            log.debug(
+                'Display state refresh (%s): origin (%d,%d) outside known '
+                'layouts — keeping cached origin', reason, ox, oy,
+            )
+            return
+        log.info(
+            'Display state refresh (%s): origin (%d,%d) -> (%d,%d)',
+            reason, self._window_origin_x, self._window_origin_y, ox, oy,
+        )
+        self._window_origin_x = ox
+        self._window_origin_y = oy
 
     def _primary_display_viewport(self) -> tuple[int, int, int, int] | None:
         """Return window-local viewport for the primary display in multi-display modes.
@@ -4140,6 +4196,12 @@ void main() {
                         self._set_cursor_visible(False)
                     elif event.window.event == sdl2.SDL_WINDOWEVENT_FOCUS_GAINED:
                         self._set_cursor_visible(self._cursor_should_be_visible())
+                        self._refresh_display_state('focus gained')
+                    elif event.window.event in (
+                        getattr(sdl2, 'SDL_WINDOWEVENT_MOVED', -1),
+                        getattr(sdl2, 'SDL_WINDOWEVENT_DISPLAY_CHANGED', -1),
+                    ):
+                        self._refresh_display_state('window moved')
                 elif event.type == sdl2.SDL_MOUSEWHEEL:
                     dy = int(event.wheel.y)
                     if self._overlays.config_editor_open:
