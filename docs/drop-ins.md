@@ -101,6 +101,8 @@ Complex drop-ins should also include:
   - [Troubleshooting](../drop-ins/dj-mixer-01/docs/troubleshooting.md)
   - [Feature Overview](../drop-ins/dj-mixer-01/docs/feature-overview.md)
   - [Hardware Bring-up](../drop-ins/dj-mixer-01/docs/hardware-bringup.md)
+  - [S4 MK3 Protocol Research](../drop-ins/dj-mixer-01/docs/s4mk3-protocol.md)
+  - [Upcoming Work](../drop-ins/dj-mixer-01/docs/upcoming-work.md)
   - [Smart DJ Plan](../drop-ins/dj-mixer-01/docs/smart-dj-plan.md)
   - [AI DJ Plan](../drop-ins/dj-mixer-01/docs/ai-dj-plan.md)
   - [Stems FX Plan](../drop-ins/dj-mixer-01/docs/stems-fx-plan.md)
