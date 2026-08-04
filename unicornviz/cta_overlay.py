@@ -269,18 +269,8 @@ void main() {
         except Exception:
             pass
         try:
-            icon_font_path = next(
-                (p for p in [
-                    Path('/usr/share/fonts/gdouros-symbola/Symbola.ttf'),
-                    Path('/usr/share/fonts/gdouros-symbola/Symbola.otf'),
-                    Path('/usr/share/fonts/google-noto-emoji/NotoColorEmoji.ttf'),
-                    Path('/usr/share/fonts/google-noto-emoji-fonts/NotoColorEmoji.ttf'),
-                    Path('/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf'),
-                ] if p.exists()),
-                None,
-            )
-            if icon_font_path is not None:
-                emoji_font = ImageFont.truetype(str(icon_font_path), size=140)
+            from unicornviz.fonts import load_emoji_font
+            emoji_font = load_emoji_font(140)
         except Exception:
             pass
 

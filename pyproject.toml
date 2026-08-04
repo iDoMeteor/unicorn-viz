@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unicorn-viz"
-version = "1.0.0-beta.1"
+# Version is single-sourced from unicornviz.__version__ (see
+# [tool.setuptools.dynamic]) so packaged installs can never drift from the
+# runtime version again.
+dynamic = ["version"]
 description = "Modern demoscene visualizer — Razor 1911 vibes, Wayland-native"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,6 +19,10 @@ dependencies = [
     "sounddevice>=0.4.6",
     "python-rtmidi>=1.5",
     "Pillow>=10.0",
+    "psutil>=5.9",
+    "opencv-python-headless>=4.9",
+    "soundfile>=0.12",
+    "python-osc>=1.8",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +40,9 @@ dev = [
 
 [project.scripts]
 unicorn-viz = "unicornviz.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "unicornviz.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]

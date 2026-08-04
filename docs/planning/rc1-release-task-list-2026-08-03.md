@@ -2,7 +2,7 @@
 
 Owner: owner (solo studio) + agents
 Status: Active — the working checklist for the first public release
-Last updated: 2026-08-03
+Last updated: 2026-08-04 (all non-decision P0s complete)
 
 Sources: [2026-08-03 full-system audit](../audits/2026-08-03-full-system-audit.md),
 [2026-08-03 Windows platform report](../audits/2026-08-03-windows-platform-report.md),
@@ -17,16 +17,16 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 
 ## A. Stability — crash/data-loss fixes (code)
 
-- [ ] **[P0][M]** Crash-isolate the main loop: wrap effect
+- [x] **[P0][M]** Crash-isolate the main loop: wrap effect
       `update()`/`render()`/instantiation and hotkey dispatch in per-call
       guards that skip/advance past a broken effect instead of killing the
       show; put post-loop cleanup in `try/finally`; fix `_switch_effect`
-      destroy-before-instantiate ordering. (`app.py:4377/5097/3965/3094/4957`)
-- [ ] **[P0][S-M]** streaming-01: move the ffmpeg stdin write off the render
+      destroy-before-instantiate ordering. (`app.py:4377/5097/3965/3094/4957`) *(done — beta.19)*
+- [x] **[P0][S-M]** streaming-01: move the ffmpeg stdin write off the render
       thread onto a bounded-queue writer thread with frame dropping (clone
-      the recording.py pattern). (`rtmp_streamer.py:274`)
-- [ ] **[P1][S]** streaming-01 `stop()`: escalate to `kill()` after the
-      SIGINT/timeout rung so a wedged ffmpeg can't keep streaming.
+      the recording.py pattern). (`rtmp_streamer.py:274`) *(done — streaming-01 0.5.1)*
+- [x] **[P1][S]** streaming-01 `stop()`: escalate to `kill()` after the
+      SIGINT/timeout rung so a wedged ffmpeg can't keep streaming. *(done — streaming-01 0.5.1)*
 - [ ] **[P1][S]** Surface recorder death: writer thread sets a failed flag;
       `is_recording`/HUD shows it instead of a lit REC over dropped frames.
       (`recording.py:78/267`)
@@ -45,17 +45,17 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 
 ## B. Windows platform (primary target — see the Windows report)
 
-- [ ] **[P0][S]** Fonts: shared font-resolver that tries bundled
+- [x] **[P0][S]** Fonts: shared font-resolver that tries bundled
       `assets/fonts/ui-font.ttf` first, then platform dirs incl.
       `C:\Windows\Fonts` (+ `seguiemj.ttf` for the emoji path); adopt in
-      dj-mixer/control-room/media/banner/now-spinning/CTA/tour loaders.
-- [ ] **[P0][S-M]** DPI awareness: `SDL_HINT_WINDOWS_DPI_AWARENESS=
+      dj-mixer/control-room/media/banner/now-spinning/CTA/tour loaders. *(done — beta.21 + control-room 0.9.1 / media 0.16.1 / banner 0.8.1; dj-mixer adoption handed to the mixer team — their tree is in flight)*
+- [x] **[P0][S-M]** DPI awareness: `SDL_HINT_WINDOWS_DPI_AWARENESS=
       "permonitorv2"` + `SDL_WINDOW_ALLOW_HIGHDPI` + drawable-size audit;
-      re-verify the 3840 icon-bucket threshold.
-- [ ] **[P0][M]** ffmpeg audio capture on Windows: platform-aware default
+      re-verify the 3840 icon-bucket threshold. *(done — beta.21; verify on scaled display per test protocol)*
+- [x] **[P0][M]** ffmpeg audio capture on Windows: platform-aware default
       (`dshow`), device resolution without `pactl`, and a Windows-safe
       graceful stop (`CREATE_NEW_PROCESS_GROUP` + `CTRL_BREAK_EVENT` — no
-      `send_signal(SIGINT)`).
+      `send_signal(SIGINT)`). *(done — beta.21 + streaming-01 0.5.2)*
 - [ ] **[P1][M]** Multi-head state re-derivation: handle
       `SDL_WINDOWEVENT_MOVED`/`DISPLAY_CHANGED`, re-derive display/origin on
       `FOCUS_GAINED` (July item 5); re-test span/mirror under mixed DPI.
@@ -74,9 +74,9 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       mirrors, HTTPS deploy keys, or the installers.md model (core tarball +
       per-channel drop-in packages via `unicorn-viz dropins install`). Then
       build the chosen path.
-- [ ] **[P0][S]** Fix `pyproject.toml`: version → current (single-source it
+- [x] **[P0][S]** Fix `pyproject.toml`: version → current (single-source it
       from `unicornviz.__version__` if possible); add missing deps (psutil,
-      opencv-python-headless, soundfile, python-osc).
+      opencv-python-headless, soundfile, python-osc). *(done — beta.21: dynamic version from unicornviz.__version__, deps added)*
 - [ ] **[P0][D]** Repo identity: resolve the README dev-repo vs
       `djunicorntears` canonical-repo confusion and the "repo will move"
       banner before strangers read it.

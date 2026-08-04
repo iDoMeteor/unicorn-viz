@@ -773,6 +773,23 @@ class App:
         """Unregister a text-input handler registered via register_text_input_handler."""
         self._text_input_handlers.pop(str(name), None)
 
+    def _apply_windows_dpi_hints(self) -> None:
+        """Make the process per-monitor DPI-aware on Windows (no-op elsewhere).
+
+        Without this, Windows renders the app at logical size and
+        bitmap-stretches it on any display scaled above 100% — blurry
+        text/icons, and window sizes reported in virtualized points (which
+        also mis-picks the 76px-vs-152px help-icon bucket on scaled 4K).
+        Must run before SDL_Init. The hint name is passed as a literal so
+        older pysdl2 builds without the constant still work.
+        """
+        if sys.platform != 'win32':
+            return
+        try:
+            sdl2.SDL_SetHint(b'SDL_WINDOWS_DPI_AWARENESS', b'permonitorv2')
+        except Exception as exc:
+            log.warning('Failed to set Windows DPI awareness hint: %s', exc)
+
     def rebind_main_gl_context(self) -> bool:
         """Re-bind the main audience window's GL context as current.
 
@@ -1397,6 +1414,7 @@ class App:
         return self._multihead.read_shared_frame(self._ctx, self._width, self._height)
 
     def _init_sdl(self) -> None:
+        self._apply_windows_dpi_hints()
         if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO | sdl2.SDL_INIT_EVENTS) != 0:
             # Wayland may have failed — retry with x11
             os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -1438,6 +1456,13 @@ class App:
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_DEPTH_SIZE, 24)
 
         flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_RESIZABLE
+        if sys.platform == 'win32':
+            # Pairs with the per-monitor-v2 hint in _apply_windows_dpi_hints():
+            # with the process DPI-aware, sizes are physical pixels and this
+            # flag keeps SDL from ever creating a DPI-virtualized surface.
+            # Win32-only: on Wayland/macOS this flag changes drawable-vs-window
+            # size semantics the rest of the pipeline doesn't expect.
+            flags |= sdl2.SDL_WINDOW_ALLOW_HIGHDPI
         self._display_mode = self._resolve_display_mode()
         if self._display_mode in ('span_included', 'span_all', 'mirror_included', 'mirror_all') and self._fullscreen:
             flags = sdl2.SDL_WINDOW_OPENGL | sdl2.SDL_WINDOW_BORDERLESS

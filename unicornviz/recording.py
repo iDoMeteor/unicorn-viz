@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import logging
 import queue
+import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -24,6 +26,20 @@ from unicornviz.config import Config
 from unicornviz.paths import resolve_path
 
 log = logging.getLogger(__name__)
+
+
+def _send_graceful_stop(process: subprocess.Popen) -> None:
+    """Ask ffmpeg to finalize its output, portably.
+
+    ``send_signal(SIGINT)`` raises ValueError on Windows Popen objects —
+    which previously aborted the stop path, orphaning ffmpeg with an
+    unfinalized (unplayable) MP4. Windows uses CTRL_BREAK_EVENT, which
+    requires the process to have been started with CREATE_NEW_PROCESS_GROUP.
+    """
+    if sys.platform == 'win32':
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        process.send_signal(signal.SIGINT)
 
 
 class Recorder:
@@ -121,9 +137,57 @@ class Recorder:
             log.debug('Could not resolve default sink monitor via pactl: %s', exc)
         return 'default'
 
-    def _resolve_audio_input(self) -> tuple[str, str]:
-        """Return the ffmpeg audio input format and device string."""
+    def _resolve_windows_dshow_device(self) -> str | None:
+        """Enumerate DirectShow audio devices; pick a loopback-style source.
+
+        Only loopback-class devices (Stereo Mix / virtual cables) are
+        accepted — falling back to a microphone would silently record room
+        noise instead of the show audio.
+        """
+        try:
+            proc = subprocess.run(
+                [self._ffmpeg_path, '-hide_banner', '-list_devices', 'true',
+                 '-f', 'dshow', '-i', 'dummy'],
+                capture_output=True,
+                text=True,
+                timeout=10.0,
+            )
+            listing = (proc.stderr or '') + (proc.stdout or '')
+        except Exception as exc:
+            log.warning('Recording: dshow device enumeration failed: %s', exc)
+            return None
+        devices = re.findall(r'"([^"]+)"\s*\(audio\)', listing)
+        for pattern in ('stereo mix', 'loopback', 'virtual-audio-capturer',
+                        'cable output', 'what u hear'):
+            for name in devices:
+                if pattern in name.lower():
+                    return name
+        return None
+
+    def _resolve_audio_input(self) -> tuple[str, str] | None:
+        """Return the ffmpeg audio input (format, device), or None to skip audio.
+
+        On Windows the Linux default 'pulse' is remapped to DirectShow with
+        loopback-device discovery; when no loopback device exists the
+        recording proceeds video-only (with an operator-facing warning)
+        instead of failing to spawn ffmpeg at all.
+        """
         input_format = self._audio_input_format.lower()
+        if sys.platform == 'win32' and input_format in ('pulse', 'dshow', 'auto', ''):
+            device = self._audio_input_device
+            if device and not device.startswith(('audio=', 'video=')):
+                device = f'audio={device}'
+            if not device:
+                found = self._resolve_windows_dshow_device()
+                if found is None:
+                    log.warning(
+                        'Recording: no loopback audio device found — enable '
+                        '"Stereo Mix" or install a virtual audio cable, or set '
+                        '[recording] audio_input_device. Recording video-only.'
+                    )
+                    return None
+                device = f'audio={found}'
+            return 'dshow', device
         if input_format == 'pulse':
             return 'pulse', self._resolve_pulse_source()
         return input_format, self._audio_input_device or 'default'
@@ -146,17 +210,17 @@ class Recorder:
             '-i',
             '-',
         ]
-        if self._capture_audio:
-            audio_format, audio_device = self._resolve_audio_input()
-            self._resolved_audio_input = (audio_format, audio_device)
+        self._resolved_audio_input = (
+            self._resolve_audio_input() if self._capture_audio else None
+        )
+        if self._resolved_audio_input is not None:
+            audio_format, audio_device = self._resolved_audio_input
             command += [
                 '-f',
                 audio_format,
                 '-i',
                 audio_device,
             ]
-        else:
-            self._resolved_audio_input = None
         command += [
             '-vf',
             'vflip',
@@ -171,7 +235,7 @@ class Recorder:
             '-movflags',
             '+faststart',
         ]
-        if self._capture_audio:
+        if self._resolved_audio_input is not None:
             command += [
                 '-c:a',
                 self._audio_codec,
@@ -212,6 +276,12 @@ class Recorder:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                # New process group so the Windows graceful-stop path
+                # (CTRL_BREAK_EVENT in _send_graceful_stop) can target ffmpeg.
+                creationflags=(
+                    subprocess.CREATE_NEW_PROCESS_GROUP
+                    if sys.platform == 'win32' else 0
+                ),
             )
             self._current_path = output_path
             self._started_at = time.monotonic()
@@ -311,9 +381,15 @@ class Recorder:
             try:
                 return_code = process.wait(timeout=10.0)
             except subprocess.TimeoutExpired:
-                log.debug('Recording stop timed out; sending SIGINT to ffmpeg for graceful finalize')
-                process.send_signal(signal.SIGINT)
-                return_code = process.wait(timeout=10.0)
+                log.debug('Recording stop timed out; asking ffmpeg to finalize gracefully')
+                _send_graceful_stop(process)
+                try:
+                    return_code = process.wait(timeout=10.0)
+                except subprocess.TimeoutExpired:
+                    log.warning('Recording: ffmpeg ignored graceful stop — killing '
+                                '(output may be missing its final index)')
+                    process.kill()
+                    return_code = process.wait(timeout=5.0)
             if return_code != 0:
                 self._last_error = f'Recording exited with code {return_code}'
                 log.warning(self._last_error)

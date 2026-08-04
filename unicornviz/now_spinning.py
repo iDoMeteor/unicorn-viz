@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 try:
     import moderngl
     import numpy as np
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     _GL_OK = True
 except Exception:  # pragma: no cover - headless guard
     _GL_OK = False
@@ -51,20 +51,9 @@ _REBUILD_S = 1.0 / 12.0
 _TITLE_CHARS = 22          # per-line trim (owner-approved width)
 _ARTIST_CHARS = 24
 
-_FONT_CANDIDATES = (
-    '/usr/share/fonts/liberation-mono-fonts/LiberationMono-Bold.ttf',
-    '/usr/share/fonts/liberation-mono/LiberationMono-Bold.ttf',
-    '/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf',
-)
-
-
 def _font(size: int):
-    for p in _FONT_CANDIDATES:
-        try:
-            return ImageFont.truetype(p, size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
+    from unicornviz.fonts import load_font
+    return load_font(size)
 
 
 def _two_lines(text: str, per: int) -> list[str]:
