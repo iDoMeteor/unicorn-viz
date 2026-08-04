@@ -595,6 +595,13 @@ dark_brightness_threshold = 0.02
 # closing releases it. See drop-ins/dj-mixer-01/docs/ (feature-overview.md,
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
+# auto_stem_on_load: extract stems for a track the moment it lands on a deck,
+# instead of waiting for a library batch.  It goes to the FRONT of the queue,
+# so the tune you are about to play beats a run that might be hours long.
+# Default false -- it starts a heavy background job on every load, which is a
+# choice worth making deliberately.  Never interrupts a separation already
+# running.  Toggleable live in the STEMS settings tab.
+# auto_stem_on_load = false
 # dial_reset_on_load: recentre a deck's EQ / TRIM / FILTER when a new track
 # loads, so a fresh tune starts flat instead of inheriting the last one's tone.
 # Off keeps them where they are, which is what you want when you ride the
