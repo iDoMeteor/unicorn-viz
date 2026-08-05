@@ -6,14 +6,13 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   auto-vj-01 1.0.0-rc.11) — see [docs/adr/vj-system.md § "Phrase-Aware
   Director: Bar-Relative Bias + IMPACT Fold-In"](../adr/vj-system.md#phrase-aware-director-bar-relative-bias--impact-fold-in-2026-08-05)
   for both records and `tests/test_auto_vj_phrase_structure.py` /
-  `tests/test_section_bus.py` for regression coverage. **Not yet done:**
-  §6.b (publishing the *next* role) -- `structure.to_wire()` does not
-  return it yet as of this implementation (dj-mixer-01 team still
-  finishing up); the consumer side is written defensively against its
-  absence and will pick it up automatically once shipped, but the "arm a
-  transition ahead of it" behavior itself isn't built. dj-mixer-01 wiring
-  `structure.to_wire()`'s output into `vj_api.publish_section()` is that
-  team's remaining step -- the channel is ready to receive it.
+  `tests/test_section_bus.py` for regression coverage. The **mixer
+  publisher side is now implemented too** (2026-08-05, dj-mixer-01
+  0.145.0): `structure.wire_for()` returns `next_role`/`next_tier`/
+  `next_label`/`bars_to_next` per §6.b, and the controller publishes for
+  the live deck every frame via `vj_api.publish_section()`. **Remaining:**
+  the director's own "arm a transition ahead of the next role" behaviour
+  -- the data is on the wire now, the consumer does not act on it yet.
 Last updated: 2026-08-05
 
 ## 1. Objective
@@ -273,6 +272,14 @@ away it is. This is the amendment with the most reach: it lets the director
 mixer-sourced audio it does not have to guess -- an 8-bar build into a known
 `PEAK` can be prepared on bar 1 instead of recognised on bar 6.
 
+Shipped as `next_role`, `next_tier`, `next_label` and `bars_to_next`
+(dj-mixer-01 0.145.0).  They are **omitted entirely on the final section**
+rather than sent as nulls, so a consumer can read "absent" as "nothing known
+about what follows" without distinguishing that from "explicitly nothing
+follows".  `bars_to_next` equals the current section's `bars_left` -- stated
+separately because a consumer arming a transition reasons about "how long
+until the next thing", not "how long is this thing".
+
 ### 6.c Confidence is on the wire and scales the bias (amendment 3)
 
 The draft had the director treat a fresh mixer hint as ground truth, by
@@ -354,9 +361,13 @@ absent entirely -- rather than as the answer.
 Two decks playing means two different sections, and the bus carries one
 value. The mixer already had to answer this for its browser row colours,
 where it settled on auto-play's live deck while that is driving and
-otherwise the loudest with a 1.4x hysteresis margin (`ui._mix_reference()`)
--- the same definition should publish here so "live" means one thing across
-the app.
+otherwise the loudest with a 1.4x hysteresis margin -- the same definition
+publishes here so "live" means one thing across the app.  **Settled in code
+(2026-08-05):** that answer moved out of the UI onto `MixerEngine.
+live_deck_key(exclude=, prefer=)`, a public surface both callers share.  It
+carries hysteresis state that cannot be recomputed independently without the
+two drifting apart, which is exactly the failure the browser colours already
+had once.
 
 What is genuinely undecided is whether that is the *right* answer for
 visuals during a long blend. For thirty seconds of crossfade the room is
@@ -436,8 +447,15 @@ in this file's history (see `docs/adr/vj-system.md`).
   per §6.c; `_maybe_sync_phrase_clock_from_section_hint()` resolves the
   hard-cut edge case per §6.1's "Resolved by amendment 6.a" -- during the
   post-track-change neutral window, a fresh hint sets `bars_in`/tier from
-  real data instead of waiting the window out blind. **Remaining:** §6.b
-  (next-role arming) is not implemented -- not yet on the wire to build
-  against (see Status above); dj-mixer-01 actually calling
-  `publish_section()` with `structure.to_wire()`'s output is that team's
-  side, proceeding independently.
+  real data instead of waiting the window out blind.
+- **Phase 2 — mixer publisher done (2026-08-05, dj-mixer-01 0.145.0):**
+  `structure.wire_for()` builds the payload including §6.b's next-role
+  fields, and `DjMixerController._publish_section()` publishes it each
+  frame for the live deck. "Live" is now `MixerEngine.live_deck_key()`, a
+  public surface the browser's mix colours and the hint share, so §6.2's
+  answer cannot drift between the two. Verified end to end against the
+  real `App.publish_section()`/`get_section()`: every role the detector
+  emits survives the core's canonical-role validation.
+  **Remaining:** §6.b's *consumer* half -- the director arming a
+  transition on `next_role`/`bars_to_next` rather than only reacting.
+  The fields are on the wire and json-safe; nothing reads them yet.
