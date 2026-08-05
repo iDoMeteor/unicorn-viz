@@ -8,7 +8,7 @@ numpy==2.4.4
 scipy==1.17.1
 sounddevice==0.5.5
 python-rtmidi==1.5.8
-Pillow==12.2.0
+Pillow==12.3.0
 psutil==7.2.2
 opencv-python-headless==4.13.0.92   # camera overlay + WebcamOverlay effect
 soundfile==0.14.0                   # audio-out-01 drop-in: load music bed + folley SFX
