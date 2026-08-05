@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -200,6 +200,105 @@ calls `prime_tempo()` exactly when a fresh mixer hint exists, not
 otherwise. Plus per-engine unit coverage in `test_beat_grid_tracker_v1.py`
 / `test_beat_tracker_v2.py` / `test_beat_tracker_v3.py` for the new
 `prime_tempo()` method and the never-narrows-range contract.
+
+---
+
+## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
+
+Decision: the director gains a bar-relative phrase clock and a soft
+threshold bias (docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md,
+Phase 1), and `IMPACT` is removed as a held state -- folded into `DROP` as
+a fixed-duration entry flourish for a later drop, with `CLIMAX` demoted
+from "the thing every drop tries to escalate into" to a rarer,
+final-peak-only decision. This is a director/state-machine change, not a
+detector change -- logged here per this doc's own header
+("`[auto_vj]` config keys" is explicitly in scope) since no separate
+director ADR exists.
+
+**Root cause this addresses:** the director had zero structural model of a
+song -- every transition was purely audio-reactive (energy slope,
+`drop_score`) plus wall-clock/BPM-scaled timers, with a single exception
+(`_current_song_progress()` gating `CLIMAX` at 50% track duration, see the
+BPM Detector Audit section above). Real training data
+(`2-hour-deep-house-dj-smart-list/a`, 2026-08-05 session, 179 min) showed
+the concrete symptom: the LLM director score flagged "good use of build
+opportunities but frequent reversals prevent fruition into drops"
+(Opportunity Usage 3/5, Drop Quality 2/5) -- BUILD was being cut off before
+resolving into DROP at the same rate regardless of how many bars it had
+already run.
+
+**Fix -- phrase clock (`_bars_since_track_start`/`_bars_since_phase_entry`/
+`_drop_cycle_count`):** three counters driven purely by the beat tracker's
+`is_downbeat` firing (`_maybe_log_downbeat_event()` → `_advance_phrase_clock()`),
+so they need no track metadata and work identically for Spotify, the
+mixer, media, or a raw live source. `_bars_since_phase_entry` resets inside
+`_mark_mode_transition()` itself (every real transition goes through it),
+so no transition site needed individual updating. `_bars_since_track_start`/
+`_drop_cycle_count` reset on a `change_counter`-detected track-identity
+change (`_reset_phrase_clock_for_track_change()`), which also opens a
+short neutral-bias window -- a hard DJ deck-cut looks identical to a
+genuinely fresh track from here, so bias is withheld rather than guessed
+either way (plan section 6.1, Phase 1 mitigation; Phase 2 needs the
+dj-mixer-01 section detector to resolve this properly).
+
+**Fix -- `_phrase_bias(role)`:** a soft additive term (bounded to
+`±phrase_bias_max`, default 0.15) from three components -- how
+`_bars_since_phase_entry` compares to that role's expected bar range (new
+per-profile `phrase_*_expected_min/max_bars` keys), a small bonus near a
+`phrase_boundary_bar_unit`-bar boundary, and a `_drop_cycle_count`/
+`song_progress` position term. Applied as `effective_threshold =
+base_threshold - bias` at three sites: CRUISE's build-sustain requirement
+(`_phrase_bias('HOLD')`), BUILD's min-hold-before-resolving-to-DROP
+(`_phrase_bias('RISE')` -- the one that directly targets the training-data
+finding above), and BREAKDOWN's recovery-to-BUILD energy bar
+(`_phrase_bias('FALL')`, deliberately *not* touching the timeout deadline
+itself, which stays locked at breakdown-entry per the existing anti-drift
+design). Never a hard gate -- strong audio evidence always wins regardless
+of bias sign.
+
+**Fix -- IMPACT fold-in + `peak_tier`:** `_infer_peak_tier()` decides
+`'major'`/`'minor'` once, at `_fire_drop()` time, from
+`_drop_cycle_count >= phrase_peak_flourish_min_cycle` (default 2) plus a
+guard against a fizzle-retry counting as real setup (prior phase must have
+run at least half of `RISE`'s expected minimum). A `'major'` drop calls
+`_enter_impact()` immediately (reusing its existing richer postfx/effect/
+burst entry treatment) instead of DROP's own weaker entry hit; a
+`'minor'` drop gets DROP's normal entry unchanged. The `IMPACT` tick
+branch no longer extends indefinitely while "still hot" -- it holds for a
+fixed `impact_hold_s`, then decides once whether this is also the
+set-defining `CLIMAX` moment (`peak_tier == 'major'` AND downbeat
+confidence AND (score clears `climax_entry_score` with song progress
+favoring it, OR score alone clears the generalized
+`climax_early_override_score` escape hatch)) or simply settles back into
+DROP's normal groove. Superseded/removed as genuinely dead once the
+mid-groove escalation check no longer exists: `impact_trigger_score`,
+`impact_min_delay_s`, `impact_max_delay_s`, `impact_timeout_score_floor`,
+`impact_min_downbeat_confidence`, `climax_entry_score_floor`,
+`impact_extend_max_factor` -- all three profile presets and the loading
+section.
+
+**Root cause this supersedes (partially):** the 2026-06-18 archived plan
+(`docs/planning/auto-vj-breakdown-impact-climax-plan.md`) introduced
+`IMPACT` as a mid-groove-earned escalation gate; a 2026-06-28 follow-up
+(comment-only, no doc) pushed its trigger later but kept the same
+structural gap. Neither had any notion of phrase length or drop-cycle
+position -- see the plan doc's §3 for the full history.
+
+**Verified:** `tests/test_auto_vj_phrase_structure.py` -- phrase-clock
+counter increment/reset behavior, `_phrase_bias()` bounds/sign/neutral-window
+override, `_infer_peak_tier()`'s cycle+setup-length gating, `_fire_drop()`
+routing minor-tier drops straight to DROP vs major-tier drops through
+`_enter_impact()`, and the IMPACT tick branch's climax-worthy decision
+across major/minor tier, known/unknown song progress, and the early-override
+path. Full existing `tests/test_auto_vj_*.py` suite (auto-vj-01) and
+`tests/test_auto_vj_downbeat_pulse.py` (updated for the new counters) pass
+unchanged.
+
+**Scope note:** this is Phase 1 only (self-contained in auto-vj-01, per
+the plan's §9 staging) -- the dj-mixer-01 section-detector integration
+(plan §6) is pending that team's review and not implemented here. The
+`phrase_*_expected_*_bars` starting defaults are general dance-music
+convention, not yet corpus-validated (plan §7).
 
 ---
 
@@ -845,6 +944,7 @@ training-pipeline concern; this entry exists here only because both touch
 | — | `profile_auto_reco_score_margin` / `_decider_min_margin = 0.25` (additive score gap) | Unbounded scale meant different things across genres (real margins observed 0.06-2.17); replaced with a softmax probability margin, rescaled to 0.09 at the equivalent historical percentile (see Recommender Confirm/Decider Margin section) |
 | 2026-07-18–2026-08-04 | `set_profile()` narrowing `_bpm_min`/`_bpm_max` from `bpm_hint_min`/`bpm_hint_max` (all engines; v3 kept applying it even while confidently locked) | The dominant "BPM tending hot" mechanism, not the prior re-prime the 2026-07-18 fix addressed — a wrongly-applied profile could permanently hide the true tempo from the search, self-confirming the wrong profile. Removed entirely (P0-A); see BPM Detector Audit section above |
 | 2026-08-04 | Recommender `_profile_score()` sigma floor `max(0.08, ...)` | Six times looser than the live detector's own `_MIN_PROFILE_PRIOR_SIGMA` (0.45), so several genres' raw 0.16-0.22 sigmas drove scoring the live tracker never actually applied; raised to 0.45 to match (P2-E) |
+| 2026-06-18–2026-08-05 | `IMPACT` as a held state, earned via a mid-groove score re-check after a delay (`impact_trigger_score`/`impact_min_delay_s`/`impact_max_delay_s`) | Didn't correspond to anything in real song structure — imposed a fixed DROP→IMPACT→CLIMAX staircase on every drop cycle regardless of the track. Folded into DROP as a fixed-duration entry flourish for a later drop, decided once at fire time; see Phrase-Aware Director section above |
 
 ---
 

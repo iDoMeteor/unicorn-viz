@@ -1,8 +1,12 @@
 # Auto VJ — Phrase-Aware Song Structure Plan
 
 Owner: unicorn-viz maintainers (auto-vj-01) + dj-mixer-01 team (§6 review)
-Status: draft — design agreed with owner; §6 (Mixer Integration) pending
-  dj-mixer-01 team review before implementation starts
+Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8) — see
+  [docs/adr/vj-system.md § "Phrase-Aware Director: Bar-Relative Bias +
+  IMPACT Fold-In"](../adr/vj-system.md#phrase-aware-director-bar-relative-bias--impact-fold-in-2026-08-05)
+  for the implementation record and `tests/test_auto_vj_phrase_structure.py`
+  for regression coverage. §6 (Mixer Integration, Phase 2) still pending
+  dj-mixer-01 team review before that part starts.
 Last updated: 2026-08-05
 
 ## 1. Objective
@@ -116,11 +120,16 @@ should hit harder than the first -- is folded directly into `DROP` as an
 entry-time flourish flag, computed once when `DROP` is entered:
 
 ```
-flourish = (
-    _drop_cycle_count >= phrase_peak_flourish_min_cycle   # default 2
-    and preceding BREAKDOWN/BUILD lasted a real number of bars
-        (guards against a fizzle-retry counting as "real setup")
+peak_tier = (
+    external_tier                                          # from the mixer
+    if external_tier is not None else
+    'major' if (
+        _drop_cycle_count >= phrase_peak_flourish_min_cycle   # default 2
+        and preceding BREAKDOWN/BUILD lasted a real number of bars
+            (guards against a fizzle-retry counting as "real setup")
+    ) else 'minor'
 )
+flourish = (peak_tier == 'major')
 ```
 
 When `flourish` is true, `DROP`'s first ~2 bars get what `IMPACT` used to do
@@ -157,11 +166,11 @@ or reasoned about independent of genre convention:
 | `BREAKDOWN` | `FALL` | breakdown | bridge |
 | `CRUISE` (after the final peak) | `CLOSE` | outro | outro |
 
-Open question (owner still deciding, §8): should `PEAK` carry an optional
-tier/rank ("is this the major peak") supplied by an external detector that
-has pre-analyzed the full track, rather than always inferring it from our
-own live `_drop_cycle_count`? Defaults to the inferred value when a source
-doesn't supply one either way -- this is additive, not a blocking decision.
+`PEAK` carries an optional `minor`/`major` tier (decided 2026-08-05, §8) --
+`major` drives the entry flourish (§4.3). Locally inferred from
+`_drop_cycle_count` by default; an external detector that has pre-analyzed
+the full track (the future mixer integration, §6) may supply the tier
+directly, overriding the local inference for that occurrence.
 
 ### 4.5 Degradation without metadata
 
@@ -269,19 +278,32 @@ bar-length defaults actually match real sessions, before spending a live
 tuning pass on them -- same validation path used for every other threshold
 in this file's history (see `docs/adr/vj-system.md`).
 
-## 8. Open questions
+## 8. Decided / open questions
+
+**Decided (owner, 2026-08-05):**
+
+- **`PEAK` tiering: adopted.** `PEAK` carries an optional tier (`minor` /
+  `major`) alongside the neutral role. Locally, `_drop_cycle_count >=
+  phrase_peak_flourish_min_cycle` infers `major` (this is what drives the
+  flourish, §4.3); an external source (the future mixer detector, §6) may
+  supply the tier directly, which then overrides the local inference for
+  that `PEAK`. Wire format: `(role='PEAK', tier='major'|'minor'|None)` --
+  `None` means "use local inference," not "definitely minor."
+- **`HOLD`/verse distinction: not pursuing.** No dedicated mechanism to
+  distinguish a true intro from a mid-song verse beyond what the
+  position/cycle bias terms already do implicitly. Left as a listed
+  possibility below only in case the mixer's detector ends up drawing that
+  line anyway and it turns out to matter for visual treatment -- not
+  something to build toward now.
+
+**Still open:**
 
 - Should the neutral vocabulary (§4.4) wait for the mixer team's actual
   label set rather than being fixed here first? Owner is still deciding
   whether the mixer will emit genre-specific labels only, dual-mode, or
   send/receive neutral directly.
-- Should `PEAK` carry an optional major/minor tier from an external source
-  (§4.4), or stay purely locally inferred from `_drop_cycle_count`?
-- Does `HOLD` need to distinguish a true intro (never had a peak yet) from a
-  mid-song verse (between peaks) for anything beyond the position/cycle bias
-  term already handling that implicitly? No known need yet -- flagging in
-  case the mixer's detector ends up distinguishing them and it turns out to
-  matter for visual treatment.
+- (Not pursuing, see above) Does `HOLD` need to distinguish a true intro
+  from a mid-song verse for anything beyond the position/cycle bias term?
 - The old archived plan's "Optionally add a `RECOVERY` micro-state if
   `CLIMAX -> CRUISE` feels abrupt" (§ Near-Term Next Steps) was never
   picked up. Worth revisiting once `CLIMAX` is demoted to a rarer event --
@@ -290,10 +312,12 @@ in this file's history (see `docs/adr/vj-system.md`).
 
 ## 9. Staging
 
-- **Phase 1** (deliverable now, self-contained in auto-vj-01): phrase clock
+- **Phase 1 — done (2026-08-05, auto-vj-01 1.0.0-rc.8):** phrase clock
   (§4.1), phrase-bias mechanism (§4.2), `IMPACT` fold-in + `CLIMAX` demotion
   (§4.3), hard-cut neutral-bias mitigation (§6.1 Phase 1), config surface
-  (§5), corpus-based validation (§7).
+  (§5). Not yet done: corpus-based validation of the starting bar-length
+  defaults (§7) -- shipped as-is, pending a real-session tuning pass the
+  way every other threshold in this file has gone through.
 - **Phase 2** (blocked on dj-mixer-01's section detector): hint-bus channel
   + canonical vocabulary contract (§6), hard-cut authoritative resolution
   (§6.1 Phase 2).

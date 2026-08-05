@@ -128,6 +128,9 @@ def _event_controller(*, is_downbeat: bool, bpm: float = 128.0, downbeat_confide
     inst._engine = _FakeEngine()
     inst._mode = 'DROP'
     inst._profile = 'house'
+    inst._bars_since_track_start = 0
+    inst._bars_since_phase_entry = 0
+    inst._phrase_neutral_bars_left = 0
     return inst
 
 
