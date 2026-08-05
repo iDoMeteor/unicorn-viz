@@ -835,6 +835,7 @@ class VJApi:
                 'action_in': str(hud.get('auto_vj_action_in', '--') or '--'),
                 'audio_profile': str(hud.get('audio_profile', '-') or '-'),
                 'audio_profile_reco': str(hud.get('audio_profile_reco', '-') or '-'),
+                'audio_profile_score': str(hud.get('audio_profile_score', '') or ''),
             }
         except Exception:
             return {
@@ -849,6 +850,7 @@ class VJApi:
                 'action_in': '--',
                 'audio_profile': '-',
                 'audio_profile_reco': '-',
+                'audio_profile_score': '',
             }
 
     def sync_projectm_manager(self) -> bool:

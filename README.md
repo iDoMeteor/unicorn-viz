@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.26**
+**Version 1.0.0-beta.27**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.27** — HUD/Monitor tab surfaces the active audio profile's own recommender score (`audio_profile_score`) alongside the existing recommendation, in the overlay's `BPM PROF` line, the `Auto VJ` Monitor tab's new "Profile score" row, and `vj_api.auto_vj_snapshot()` for control-room/operator surfaces -- previously only the alternate ("what would the recommender switch to") was visible, not what the current pick's own score is. Also fixed the overlay's stale `'house'` fallback default (now `'generic'`, matching `1.0.0-beta.26`).
 - **1.0.0-beta.26** — `[audio] profile` now defaults to `"generic"` (a wide/uninformative prior) instead of a hardcoded `"house"` -- seeding a real genre's tight prior at startup meant a mismatched profile had to be actively argued out of by auto-vj-01's recommender, and the documented workaround (manually set/restore `[audio] profile` per session) was easy to forget. Mirrors how the BPM detector itself starts with no lock rather than a seeded guess; the recommender converges onto the real genre from evidence within its first eval cycle regardless. `config.full.example.toml`'s misplaced `profile` example (previously under `[midi]`, a documentation bug) moved to `[audio]` and updated.
 - **1.0.0-beta.25** — event-driven display-state refresh (July item 5, finally): `SDL_WINDOWEVENT_MOVED`/`DISPLAY_CHANGED`/`FOCUS_GAINED` now re-derive the display index and window origin from live SDL state, validity-gated against known display layouts and throttled — fixes stale overlays/tiling after workspace switches and monitor drags (needs owner multi-monitor verification). Ships `tools/install/windows_deps.ps1` (the field-notes bridge installer) and CLAUDE.md platform/font-asset updates. Drop-in pointer bumps: videos-01 0.7.1 (EOF sentinel leak, no-audio clock, observable reached_bottom), images-01 0.8.1 (cache caps), tech-01 0.10.0 (three precision-dead layers restored + glyph dirty-flag).
 - **1.0.0-beta.24** — `generic` audio profile's `bpm_hint_min`/`bpm_hint_max` removed -- it's a disabled catch-all fallback (not a genre) and those fields are no longer read by any BPM tracker engine as of auto-vj-01 1.0.0-rc.7's [BPM detector audit fixes](docs/audits/2026-08-04-bpm-detector-audit.md).

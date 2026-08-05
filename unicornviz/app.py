@@ -2897,6 +2897,7 @@ void main() {
             rows.append(info('BPM', lab('hud_bpm_label')))
             rows.append(info('BPM confidence', lab('hud_bpm_confidence_label')))
             rows.append(info('Action in', lab('hud_action_in_label')))
+            rows.append(info('Profile score', lab('current_profile_score_hud')))
             rows.append(info('Profile rec', lab('profile_recommendation_hud')))
         return rows
 
@@ -4829,6 +4830,11 @@ void main() {
                     getattr(self._auto_vj, 'profile_recommendation_hud', '-')
                     if self._auto_vj is not None
                     else '-'
+                ),
+                'audio_profile_score': (
+                    getattr(self._auto_vj, 'current_profile_score_hud', '')
+                    if self._auto_vj is not None
+                    else ''
                 ),
                 'auto_vj_label': 'AUTO VJ',
                 'auto_vj_training_badge': auto_vj_badge,

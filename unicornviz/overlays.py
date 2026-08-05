@@ -1294,7 +1294,7 @@ void main() {
             f"RES         {self._hud_state.get('resolution', '-')}",
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
-            f"BPM PROF    {self._hud_state.get('audio_profile', 'house')}",
+            f"BPM PROF    {self._hud_state.get('audio_profile', 'generic')} {self._hud_state.get('audio_profile_score', '')}".rstrip(),
             f"REC PROF    {self._hud_state.get('audio_profile_reco', '-')}",
             '',
             '[ TWEAKABLES ]',
