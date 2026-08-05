@@ -5,8 +5,11 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8) — see
   [docs/adr/vj-system.md § "Phrase-Aware Director: Bar-Relative Bias +
   IMPACT Fold-In"](../adr/vj-system.md#phrase-aware-director-bar-relative-bias--impact-fold-in-2026-08-05)
   for the implementation record and `tests/test_auto_vj_phrase_structure.py`
-  for regression coverage. §6 (Mixer Integration, Phase 2) still pending
-  dj-mixer-01 team review before that part starts.
+  for regression coverage. §6 (Mixer Integration, Phase 2) reviewed and
+  agreed by the dj-mixer-01 team 2026-08-05 -- four amendments accepted by
+  the owner, folded into §6.a-6.d; the mixer-side detector has landed as
+  groundwork (`drop-ins/dj-mixer-01/structure.py`) and Phase 2 is unblocked
+  on the bus channel itself.
 Last updated: 2026-08-05
 
 ## 1. Objective
@@ -172,6 +175,12 @@ or reasoned about independent of genre convention:
 the full track (the future mixer integration, §6) may supply the tier
 directly, overriding the local inference for that occurrence.
 
+This table reads as one-to-one; the mixer's side of it is **many-to-one**.
+Its display vocabulary is a superset that collapses onto these five roles --
+notably an *intro* and a mid-track *groove* or *verse* are both `HOLD`. See
+§6.d for the full mapping and why the distinction is worth drawing on screen
+but not on the wire.
+
 ### 4.5 Degradation without metadata
 
 This is the property that matters most for a live stream / no-metadata
@@ -211,29 +220,89 @@ bars at 90 BPM") were reasoning about "before any escalation," not "the
 whole chorus," so `phrase_peak_expected_max_bars` is deliberately wider here
 (16-32) to match how long a real chorus/drop section actually runs.
 
-## 6. Mixer integration (Phase 2 -- for dj-mixer-01 team review)
+## 6. Mixer integration (Phase 2 -- reviewed, contract agreed)
 
-dj-mixer-01 will gain its own phrase/section detector, more authoritative
-than anything derivable from live audio alone (pre-analyzed against the
-full file, not inferred incrementally). Two integration decisions, agreed
-with the owner 2026-08-05:
+**Review status: complete (dj-mixer-01 team, 2026-08-05).** The detector
+exists -- `drop-ins/dj-mixer-01/structure.py`, shipped as groundwork with 18
+tests -- and segments real library tracks into labelled sections in 0.4-1.0 s
+per track during analysis. The §4.4 vocabulary survived contact with it
+unchanged. Four amendments were requested against the draft contract below
+and **all four were accepted by the owner (2026-08-05)**; they are folded in.
+
+dj-mixer-01's detector is more authoritative than anything derivable from
+live audio alone because it is pre-analyzed against the complete file rather
+than inferred incrementally. Concretely, it knows three things the director
+structurally cannot: which peak is the *biggest* (so which is `major`), that
+a given peak was the *last* one (so `CLOSE` is knowable at all), and how many
+bars the current section has *left*.
 
 1. **New hint-bus channel, symmetric to the existing BPM bus.** Mirrors
    `vj_api.publish_bpm()`/`get_bpm()` (5s TTL, `app.py:_bpm_hints`): a new
-   `publish_section(source, role, ...)` / `get_section(exclude=...)`. When a
-   fresh mixer hint exists, the director treats it as ground truth for
-   *which phrase role we're in*, the same way P0-B (BPM audit fixes,
-   2026-08-04) treats a fresh mixer BPM as ground truth for tempo. The
-   director keeps counting bars itself for *how long we've been in that
-   role* -- the label disambiguates the phrase clock, it doesn't replace it.
-2. **Canonical neutral vocabulary is the wire contract.** The mixer may
-   detect and *display* genre-appropriate labels (EDM intro/build/drop/
-   breakdown/outro, or pop intro/verse/chorus/bridge/outro, or both selected
-   by genre) but must publish into the `HOLD`/`RISE`/`PEAK`/`FALL`/`CLOSE`
-   vocabulary from §4.4 on the bus. This is the artifact for the mixer team
-   to review -- the mapping table needs to hold for whatever genre-specific
-   detection they build, not just the EDM case this plan was designed
-   against.
+   `publish_section(source, ...)` / `get_section(exclude=...)`.
+2. **Canonical neutral vocabulary is the wire contract.** The mixer detects
+   and *displays* genre-appropriate labels but publishes only the
+   `HOLD`/`RISE`/`PEAK`/`FALL`/`CLOSE` vocabulary from §4.4.
+
+### 6.a Payload carries extent, not just a role (amendment 1)
+
+The draft had the mixer publish which role we are in and the director keep
+counting bars itself. That discards the reason for asking the mixer at all:
+having analyzed the whole file we can say how far *into* the section the
+playhead is and how many bars remain, which a live listener can never know.
+The payload (`structure.to_wire()`) is:
+
+```python
+{'role': 'PEAK', 'tier': 'major', 'label': 'drop',
+ 'bars_in': 12.0, 'bars_left': 20.0, 'confidence': 0.72}
+```
+
+`label` is advisory -- for logs and operator-facing display. The director
+must key only off `role`/`tier`, so a new display label can never change
+director behaviour.
+
+### 6.b Publish the *next* role too (amendment 2)
+
+The mixer also publishes what comes after the current section and how far
+away it is. This is the amendment with the most reach: it lets the director
+**arm** a transition rather than react to one, which goes at the root of the
+§2 complaint that the director "jumps around trying to guess scenes." For
+mixer-sourced audio it does not have to guess -- an 8-bar build into a known
+`PEAK` can be prepared on bar 1 instead of recognised on bar 6.
+
+### 6.c Confidence is on the wire and scales the bias (amendment 3)
+
+The draft had the director treat a fresh mixer hint as ground truth, by
+analogy with P0-B's treatment of mixer BPM. That is right for a confident
+hint and wrong for a shrug: per-section confidence runs roughly 0.50-0.99 on
+real tracks, and a 0.53 section should not move the director as hard as a
+0.95 one. `_phrase_bias` scales its external term by the published
+confidence rather than switching on presence alone.
+
+### 6.d The vocabulary mapping is many-to-one (amendment 4)
+
+§4.4's table reads as 1:1. The mixer's display set is deliberately a
+**superset** that collapses onto those five roles:
+
+| Display label | Wire role | Note |
+|---|---|---|
+| intro | `HOLD` | the *first* hold only |
+| groove / verse | `HOLD` | every later hold |
+| build / pre-chorus | `RISE` | |
+| drop / chorus | `PEAK` | carries `minor`/`major` |
+| breakdown / bridge | `FALL` | |
+| outro | `CLOSE` | |
+
+Intro and groove are the same role to a lighting decision and emphatically
+not the same thing to a DJ, since only one of them is where you mix in. A
+strip that wrote "intro" across the middle of a track would be lying about
+the thing it is most used for. This closes the §8 open question about the
+`HOLD`/verse distinction from the mixer side: the five roles are right, and
+display carries the distinction instead of the wire.
+
+A test in dj-mixer-01 (`test_every_display_label_maps_to_a_wire_role`) fails
+if any display label lacks a mapping, so a label added later cannot become a
+section the director silently drops. It caught exactly that during
+development.
 
 ### 6.1 Known edge case: hard deck cuts
 
@@ -268,6 +337,31 @@ deserves for a few bars.
   This is one of the strongest concrete cases for why §6 matters beyond
   "nicer than guessing."
 
+**Resolved by amendment 6.a (dj-mixer-01 review, 2026-08-05).** With
+`bars_in` on the wire this stops being a mitigation and becomes a fix: on
+the cut the mixer publishes deck B's real role, tier *and* position, so the
+director sets its phrase clock from the hint instead of counting up from a
+zero that was never true. The Phase 1 near-neutral hold stays as the
+fallback for a source with no mixer hint -- a bare stream, or the mixer
+absent entirely -- rather than as the answer.
+
+### 6.2 Which deck publishes during a blend (open)
+
+Two decks playing means two different sections, and the bus carries one
+value. The mixer already had to answer this for its browser row colours,
+where it settled on auto-play's live deck while that is driving and
+otherwise the loudest with a 1.4x hysteresis margin (`ui._mix_reference()`)
+-- the same definition should publish here so "live" means one thing across
+the app.
+
+What is genuinely undecided is whether that is the *right* answer for
+visuals during a long blend. For thirty seconds of crossfade the room is
+hearing both, and the lights arguably want to follow where the mix is
+*going* rather than where it has been -- which would argue for publishing
+the incoming deck once the crossfader passes some point, or for publishing
+both and letting the director weigh them. Deferred until the bus exists and
+we can watch it against a real transition.
+
 ## 7. Validation plan
 
 Sequence-corpus rows already record `bpm`/`beat_index`/`mode` per row
@@ -296,12 +390,23 @@ in this file's history (see `docs/adr/vj-system.md`).
   line anyway and it turns out to matter for visual treatment -- not
   something to build toward now.
 
+- **Mixer integration amendments: all four adopted (owner, 2026-08-05).**
+  The payload carries extent rather than a bare role (§6.a); the mixer also
+  publishes the *next* role and its distance (§6.b); confidence rides the
+  wire and scales the director's external bias term rather than gating on
+  presence (§6.c); and the label->role mapping is many-to-one, with display
+  carrying distinctions the wire does not (§6.d).
+- **Neutral vocabulary (§4.4): fixed as drafted -- closed.** It did not need
+  to wait for the mixer's label set. The detector was built against these
+  five roles and they held; the mixer emits genre-specific labels for
+  display and publishes neutral roles on the bus, which was option three of
+  the three the owner was weighing.
+
 **Still open:**
 
-- Should the neutral vocabulary (§4.4) wait for the mixer team's actual
-  label set rather than being fixed here first? Owner is still deciding
-  whether the mixer will emit genre-specific labels only, dual-mode, or
-  send/receive neutral directly.
+- Which deck publishes during a long blend (§6.2). The live-deck definition
+  is settled; whether visuals should follow the *incoming* deck mid-crossfade
+  is not.
 - (Not pursuing, see above) Does `HOLD` need to distinguish a true intro
   from a mid-song verse for anything beyond the position/cycle bias term?
 - The old archived plan's "Optionally add a `RECOVERY` micro-state if
@@ -318,6 +423,9 @@ in this file's history (see `docs/adr/vj-system.md`).
   (§5). Not yet done: corpus-based validation of the starting bar-length
   defaults (§7) -- shipped as-is, pending a real-session tuning pass the
   way every other threshold in this file has gone through.
-- **Phase 2** (blocked on dj-mixer-01's section detector): hint-bus channel
-  + canonical vocabulary contract (§6), hard-cut authoritative resolution
-  (§6.1 Phase 2).
+- **Phase 2** (detector landed 2026-08-05; the bus channel is what remains):
+  hint-bus channel + canonical vocabulary contract (§6, amended by
+  §6.a-6.d), hard-cut authoritative resolution (§6.1). The mixer side --
+  detection, the wire payload builder (`structure.to_wire()`), and the
+  operator-facing section strip -- does not depend on auto-vj-01 and is
+  proceeding independently.
