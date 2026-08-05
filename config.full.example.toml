@@ -36,13 +36,18 @@ latency = "high"
 # Raise these if quiet background noise registers as signal.
 silence_rms_floor = 0.0060
 silence_rms_span  = 0.045
+# 2026-08-05: defaults to "generic" in code (a wide/uninformative prior) --
+# you should not need to set this. The auto-vj-01 recommender converges
+# onto the real genre from evidence within its first eval cycle (~8s). Only
+# set this to force a specific genre's tuned prior/fingerprint regardless
+# of what the recommender would pick. See unicornviz/audio/profiles.py
+# PROFILES for the full, current key list (house, deep_house, tech_house,
+# trance, psytrance, hardstyle, chillstep, ambient, etc.).
+# profile = "house"
 
 [midi]
 # empty string disables MIDI
 # set a substring to match/open a specific input device
-# Audio frequency response profile: house (default), trance, electronic, rap,
-# hyphy, r&b, rock, generic, classical, ambient, pop, metal
-profile = "house"
 device = ""
 
 [logging]

@@ -19,6 +19,13 @@ _BANDS = 512
 _RATE = 48000
 
 
+def test_analyzer_defaults_to_generic_profile_when_none_given() -> None:
+    """2026-08-05: matches AudioManager's own default -- 'generic' (wide/
+    uninformative prior), not a hardcoded real genre."""
+    analyzer = Analyzer(fft_bands=_BANDS)
+    assert analyzer._profile.name == 'Generic'
+
+
 def _make_sine_block(freq: float = 440.0, n: int = 1024, amp: float = 0.5) -> np.ndarray:
     t = np.arange(n, dtype=np.float32) / _RATE
     return (amp * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)

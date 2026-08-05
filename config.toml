@@ -273,7 +273,9 @@ beat_tracker_engine = "v3"   # freezes the tempo prior while confidently locked 
 # profile_auto_reco_decider_min_margin = 0.09
 # profile_auto_reco_decider_min_confidence = 0.35
 # profile_auto_reco_decider_cooldown_s = 20.0
-# Fast override path (strong candidate can replace weak current profile)
+# Fast override path (strong candidate can replace weak current profile) --
+# implemented 2026-08-05; bypasses confirm-wins/margin/confidence (the raw
+# score gap itself is the evidence bar) but still applies force_cooldown_s.
 # profile_auto_reco_decider_force_recommended_score = 2.25
 # profile_auto_reco_decider_force_current_score_cap = 1.80
 # profile_auto_reco_decider_force_cooldown_s = 6.0
@@ -317,11 +319,12 @@ analysis_downbeat_confidence_min = 0.30
 #   instead of lowering this ratio globally.
 # tactus_preference_ratio = 0.55   # (default; uncomment only to override)
 
-# Audio profile for chillstep/downtempo sessions — uncomment to activate.
-# Set [audio] profile = "chillstep" before recording downtempo training sets
-# so the beat tracker uses a 90 BPM prior (78-108 BPM range) instead of the
-# default house prior (124 BPM), preventing double-time detection.
-# Remember to restore profile = "house" for house/techno sessions.
+# 2026-08-05: [audio] profile now defaults to "generic" (wide/uninformative
+# prior) in code -- you should not need to set this at all. The recommender
+# converges onto the real genre from evidence within the first eval cycle
+# (~8s). Only set [audio] profile explicitly if you want to force a specific
+# genre's tuned prior/fingerprint for a session regardless of what the
+# recommender would otherwise pick, e.g.:
 # [audio]
 # profile = "chillstep"
 # With auto_profile_enabled = false, explicit tuning keys below create manual

@@ -107,7 +107,7 @@ class Analyzer:
         silence_rms_span: float = 0.045,
     ) -> None:
         if profile is None:
-            profile = get_profile("house")
+            profile = get_profile("generic")
         self._profile = profile
         self._bands = fft_bands
         self._smoothed = np.zeros(fft_bands, dtype=np.float32)

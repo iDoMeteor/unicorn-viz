@@ -60,6 +60,17 @@ def _manager() -> AudioManager:
     return AudioManager(Config(Path('tests') / '_missing_config_for_tests.toml'))
 
 
+def test_default_audio_profile_is_generic_not_a_specific_genre() -> None:
+    """2026-08-05: defaults to 'generic' (wide/uninformative prior) instead
+    of a real genre -- a genre-specific default meant a mismatched profile
+    had to be actively argued out of by the recommender, and the documented
+    workaround (manually set/restore [audio] profile per session) was easy
+    to forget. Mirrors how the BPM detector itself starts with no lock
+    rather than a seeded guess."""
+    manager = _manager()
+    assert manager.get_profile_key() == 'generic'
+
+
 def test_start_times_out_when_capture_hangs() -> None:
     manager = _manager()
     manager._capture = _CaptureSlowStart()

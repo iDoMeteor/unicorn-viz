@@ -47,7 +47,9 @@ _DEFAULTS: dict[str, Any] = {
         "device": "",
         "fft_bands": 512,
         "buffer_seconds": 10.0,  # Large buffer for GPU rendering stalls and resolution flexibility
-        "profile": "house",
+        # 2026-08-05: "generic" (wide/uninformative prior), not a real genre --
+        # see AudioManager.__init__'s field comment for why.
+        "profile": "generic",
         "reactivity": 1.0,
         "latency": "high",
         "prefer_default_input": True,

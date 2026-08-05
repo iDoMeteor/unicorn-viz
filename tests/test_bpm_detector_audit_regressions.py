@@ -178,6 +178,9 @@ def _make_recommender_stub(**overrides) -> SimpleNamespace:
         _profile_auto_reco_decider_min_margin=0.0,
         _profile_auto_reco_decider_min_confidence=0.0,
         _profile_auto_reco_decider_cooldown_s=20.0,
+        _profile_auto_reco_decider_force_recommended_score=2.25,
+        _profile_auto_reco_decider_force_current_score_cap=1.80,
+        _profile_auto_reco_decider_force_cooldown_s=6.0,
         _profile_auto_reco_last_apply_t=-1e9,
         _audio_profile_candidate_key=None,
         _audio_profile_candidate_since_t=-1e9,
@@ -261,12 +264,63 @@ def test_recommender_decider_does_not_double_apply_within_cooldown() -> None:
     manager = _FakeManager('tech_house')
 
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
-        stub, manager=manager, recommended_key='psytrance', score_margin=1.0, mean_confidence=1.0)
+        stub, manager=manager, recommended_key='psytrance', recommended_score=1.0,
+        current_score=0.5, score_margin=1.0, mean_confidence=1.0)
     assert manager.set_calls == ['psytrance']
 
     # Immediately try again (steady track keeps recommending the same
     # switch) -- must be a no-op because the cooldown window hasn't elapsed.
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
-        stub, manager=manager, recommended_key='hardstyle', score_margin=1.0, mean_confidence=1.0)
+        stub, manager=manager, recommended_key='hardstyle', recommended_score=1.0,
+        current_score=0.5, score_margin=1.0, mean_confidence=1.0)
 
     assert manager.set_calls == ['psytrance']
+
+
+# ---------------------------------------------------------------------------
+# Fast-override path: a strong candidate can replace an obviously weak
+# current profile without waiting out the full cooldown (documented in
+# config.toml since 2026-07-06, never actually implemented until now).
+# ---------------------------------------------------------------------------
+
+def test_fast_override_applies_despite_unconfirmed_recommendation() -> None:
+    """The fast path bypasses confirm-wins/margin/confidence -- only the raw
+    score gap matters -- but still applies the (shorter) force cooldown."""
+    stub = _make_recommender_stub(
+        _recommended_profile_confirmed=False,
+        _profile_auto_reco_decider_min_margin=0.99,
+        _profile_auto_reco_decider_min_confidence=0.99,
+    )
+    manager = _FakeManager('generic')
+
+    _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
+        stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
+        current_score=1.5, score_margin=0.0, mean_confidence=0.0)
+
+    assert manager.set_calls == ['deep_house']
+
+
+def test_fast_override_does_not_fire_when_current_score_not_capped() -> None:
+    """Recommended score alone clearing the bar isn't enough -- current must
+    also be genuinely weak, else this falls through to the normal path."""
+    stub = _make_recommender_stub(_recommended_profile_confirmed=False)
+    manager = _FakeManager('house')
+
+    _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
+        stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
+        current_score=2.0,  # above the 1.80 cap
+        score_margin=0.0, mean_confidence=0.0)
+
+    assert manager.set_calls == []
+
+
+def test_fast_override_uses_shorter_cooldown_than_normal_path() -> None:
+    stub = _make_recommender_stub(_profile_auto_reco_last_apply_t=time.monotonic() - 10.0)
+    manager = _FakeManager('generic')
+
+    # 10s ago clears the 6s force cooldown but not the normal 20s cooldown.
+    _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
+        stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
+        current_score=1.5, score_margin=1.0, mean_confidence=1.0)
+
+    assert manager.set_calls == ['deep_house']
