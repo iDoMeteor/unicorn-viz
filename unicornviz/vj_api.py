@@ -189,6 +189,34 @@ class VJApi:
         fn = getattr(self._app, 'get_bpm', None)
         return float(fn(str(exclude))) if callable(fn) else 0.0
 
+    def publish_section(self, source: str, payload: dict) -> None:
+        """Publish a song-structure hint on the shared hint bus (under *source*).
+
+        *payload* is the wire contract from
+        docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md section
+        6.a: at minimum ``role`` (HOLD/RISE/PEAK/FALL/CLOSE), plus
+        ``tier``/``label``/``bars_in``/``bars_left``/``confidence`` when
+        known. A source that has pre-analyzed the whole track (dj-mixer's
+        structure detector) publishes here so a phrase-aware consumer
+        (auto-vj) may read it via :meth:`get_section` without either
+        depending on the other. Degrades to a no-op on older cores.
+        """
+        fn = getattr(self._app, 'publish_section', None)
+        if callable(fn):
+            fn(str(source), payload)
+
+    def get_section(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale song-structure hint from a source
+        != *exclude*, or None when no usable hint exists.
+
+        Degrades to None on older cores.
+        """
+        fn = getattr(self._app, 'get_section', None)
+        if not callable(fn):
+            return None
+        result = fn(str(exclude))
+        return result if isinstance(result, dict) else None
+
     def get_runtime_state(self, dotted_path: str = '', default: object | None = None) -> object:
         """Read a value from shared runtime state using dotted-path keys."""
         return self._app.get_runtime_state(str(dotted_path), default)

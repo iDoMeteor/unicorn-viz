@@ -61,6 +61,22 @@ def test_vj_api_active_now_playing_none_when_nothing_registered() -> None:
     assert app.vj_api.active_now_playing() is None
 
 
+def test_vj_api_publish_and_get_section() -> None:
+    app = App(_default_cfg())
+    payload = {'role': 'PEAK', 'tier': 'major', 'bars_in': 4.0, 'confidence': 0.9}
+
+    app.vj_api.publish_section('dj_mixer', payload)
+
+    assert app.vj_api.get_section() == payload
+    assert app.vj_api.get_section(exclude='dj_mixer') is None
+
+
+def test_vj_api_get_section_none_when_nothing_published() -> None:
+    app = App(_default_cfg())
+
+    assert app.vj_api.get_section() is None
+
+
 def test_vj_api_camera_navigation_delegates_to_webcam_system() -> None:
     class _FakeWebcamSystem:
         def next_camera(self) -> str:

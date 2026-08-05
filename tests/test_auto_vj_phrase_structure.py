@@ -39,9 +39,10 @@ class _FakeEngine:
 
 
 class _FakeVjApi:
-    def __init__(self) -> None:
+    def __init__(self, section_hint: dict | None = None) -> None:
         self.postfx_calls: list[int] = []
         self.reactivity_calls: list[float] = []
+        self.section_hint = section_hint
 
     def set_postfx_slot(self, slot: int) -> bool:
         self.postfx_calls.append(slot)
@@ -58,6 +59,9 @@ class _FakeVjApi:
 
     def is_user_busy(self) -> bool:
         return False
+
+    def get_section(self, exclude: str = '') -> dict | None:
+        return self.section_hint
 
 
 _PHRASE_DEFAULTS = dict(
@@ -79,15 +83,17 @@ _PHRASE_DEFAULTS = dict(
     _phrase_peak_flourish_min_cycle=2,
     _phrase_outro_song_progress=0.85,
     _phrase_track_change_neutral_bars=4,
+    _phrase_external_tier_min_confidence=0.6,
 )
 
 
-def _bare_controller(**overrides) -> AutoVJController:
+def _bare_controller(*, section_hint: dict | None = None, **overrides) -> AutoVJController:
     inst = object.__new__(AutoVJController)
     for k, v in _PHRASE_DEFAULTS.items():
         setattr(inst, k, v)
     inst._spotify_snapshot = lambda: None
     inst._climax_song_progress_min_duration_s = 75.0
+    inst._app = SimpleNamespace(vj_api=_FakeVjApi(section_hint=section_hint))
     for k, v in overrides.items():
         setattr(inst, k, v)
     return inst
@@ -129,6 +135,131 @@ def test_reset_phrase_clock_for_track_change_zeroes_track_scope_and_opens_neutra
     assert inst._bars_since_track_start == 0
     assert inst._drop_cycle_count == 0
     assert inst._phrase_neutral_bars_left == 4
+
+
+# ---------------------------------------------------------------------------
+# Mixer section-hint consumption (plan section 6, amendments 6.a-6.c)
+# ---------------------------------------------------------------------------
+
+def test_get_section_hint_returns_none_when_vj_api_lacks_get_section() -> None:
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=SimpleNamespace())  # no get_section at all
+    assert inst._get_section_hint() is None
+
+
+def test_get_section_hint_returns_none_on_lookup_error() -> None:
+    class _Raising:
+        def get_section(self, exclude=''):
+            raise RuntimeError('boom')
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=_Raising())
+    assert inst._get_section_hint() is None
+
+
+def test_get_section_hint_passes_through_a_valid_hint() -> None:
+    hint = {'role': 'PEAK', 'tier': 'major', 'confidence': 0.9}
+    inst = _bare_controller(section_hint=hint)
+    assert inst._get_section_hint() == hint
+
+
+def test_sync_phrase_clock_from_section_hint_sets_bars_in_and_tier() -> None:
+    hint = {'role': 'PEAK', 'tier': 'major', 'bars_in': 12.5, 'confidence': 0.9}
+    inst = _bare_controller(section_hint=hint, _phrase_neutral_bars_left=3, _peak_tier='minor')
+
+    inst._maybe_sync_phrase_clock_from_section_hint()
+
+    assert inst._bars_since_phase_entry == 12.5
+    assert inst._peak_tier == 'major'
+    assert inst._phrase_neutral_bars_left == 0
+
+
+def test_sync_phrase_clock_from_section_hint_noop_when_no_hint() -> None:
+    inst = _bare_controller(section_hint=None, _phrase_neutral_bars_left=3, _bars_since_phase_entry=1)
+
+    inst._maybe_sync_phrase_clock_from_section_hint()
+
+    assert inst._bars_since_phase_entry == 1
+    assert inst._phrase_neutral_bars_left == 3  # left alone -- Phase 1 fallback still applies
+
+
+def test_sync_phrase_clock_from_section_hint_ignores_unknown_role() -> None:
+    hint = {'role': 'BOGUS', 'bars_in': 9.0}
+    inst = _bare_controller(section_hint=hint, _phrase_neutral_bars_left=3)
+
+    inst._maybe_sync_phrase_clock_from_section_hint()
+
+    assert inst._phrase_neutral_bars_left == 3
+
+
+def test_advance_phrase_clock_syncs_from_hint_while_in_neutral_window() -> None:
+    """End-to-end: a downbeat during the post-cut neutral window, with a
+    fresh mixer hint available, corrects the clock instead of just
+    counting up from the reset zero."""
+    hint = {'role': 'FALL', 'bars_in': 5.0, 'confidence': 0.8}
+    inst = _bare_controller(section_hint=hint, _phrase_neutral_bars_left=4, _bars_since_phase_entry=0)
+
+    inst._advance_phrase_clock()
+
+    assert inst._bars_since_phase_entry == 5.0
+    assert inst._phrase_neutral_bars_left == 0
+
+
+def test_phrase_bias_boosted_by_confident_matching_external_role() -> None:
+    hint = {'role': 'RISE', 'confidence': 0.9}
+    with_hint = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
+    without_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=12)
+
+    assert with_hint._phrase_bias('RISE') > without_hint._phrase_bias('RISE')
+
+
+def test_phrase_bias_lowered_by_confident_mismatched_external_role() -> None:
+    hint = {'role': 'PEAK', 'confidence': 0.9}
+    with_hint = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
+    without_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=12)
+
+    assert with_hint._phrase_bias('RISE') < without_hint._phrase_bias('RISE')
+
+
+def test_phrase_bias_external_term_scales_with_confidence() -> None:
+    strong = _bare_controller(section_hint={'role': 'RISE', 'confidence': 0.9}, _bars_since_phase_entry=12)
+    weak = _bare_controller(section_hint={'role': 'RISE', 'confidence': 0.1}, _bars_since_phase_entry=12)
+
+    assert strong._phrase_bias('RISE') > weak._phrase_bias('RISE')
+
+
+def test_phrase_bias_still_bounded_with_external_hint() -> None:
+    hint = {'role': 'PEAK', 'confidence': 1.0}
+    inst = _bare_controller(section_hint=hint, _bars_since_phase_entry=10_000)
+    assert -0.15 <= inst._phrase_bias('PEAK') <= 0.15
+
+
+def test_infer_peak_tier_uses_confident_external_tier_override() -> None:
+    """A confident external PEAK/major overrides local inference even on a
+    first cycle that would otherwise always be 'minor'."""
+    hint = {'role': 'PEAK', 'tier': 'major', 'confidence': 0.9}
+    inst = _bare_controller(section_hint=hint, _drop_cycle_count=0)
+    assert inst._infer_peak_tier() == 'major'
+
+
+def test_infer_peak_tier_ignores_unconfident_external_tier() -> None:
+    """Below phrase_external_tier_min_confidence, falls through to local
+    inference instead of trusting a shrug."""
+    hint = {'role': 'PEAK', 'tier': 'major', 'confidence': 0.2}
+    inst = _bare_controller(
+        section_hint=hint, _drop_cycle_count=0, _phrase_external_tier_min_confidence=0.6,
+    )
+    assert inst._infer_peak_tier() == 'minor'
+
+
+def test_infer_peak_tier_ignores_hint_for_a_different_role() -> None:
+    """A hint for FALL (we're mid-drop, mixer thinks we're in a breakdown --
+    stale/wrong) must not influence a PEAK tier decision."""
+    hint = {'role': 'FALL', 'tier': 'major', 'confidence': 0.9}
+    inst = _bare_controller(
+        section_hint=hint, _drop_cycle_count=2, _bars_since_phase_entry=12,
+        _phrase_peak_flourish_min_cycle=2, _phrase_rise_expected_min_bars=8.0,
+    )
+    assert inst._infer_peak_tier() == 'major'  # falls through to local inference, which says major here
 
 
 # ---------------------------------------------------------------------------

@@ -300,6 +300,71 @@ the plan's §9 staging) -- the dj-mixer-01 section-detector integration
 `phrase_*_expected_*_bars` starting defaults are general dance-music
 convention, not yet corpus-validated (plan §7).
 
+### Phase 2: mixer section-hint bus (2026-08-05)
+
+Decision: a new song-structure hint bus (`App.publish_section()`/
+`get_section()`, `VjApi` wrappers), symmetric to the existing BPM bus, plus
+the auto-vj-01 consumer side wired against the wire contract dj-mixer-01's
+team reviewed and agreed (plan §6, amendments §6.a-6.d). dj-mixer-01's
+`structure.py` (the detector itself, 661 lines, 18 tests) landed as
+groundwork the same day; this entry covers the channel and consumer side,
+not the detector.
+
+**Bus (`unicornviz/app.py`/`vj_api.py`):** `_section_hints: dict[str,
+tuple[dict, float]]`, `_SECTION_HINT_TTL_S = 5.0`, `_SECTION_ROLES =
+('HOLD', 'RISE', 'PEAK', 'FALL', 'CLOSE')` -- line-for-line the same shape
+as `_bpm_hints`/`_BPM_HINT_TTL_S`. `publish_section()` validates `role`
+against the canonical set and drops anything else rather than storing a
+payload a consumer would have to re-validate; both `publish_section()` and
+`get_section()` deep-copy the dict so neither side can mutate the other's
+state through a shared reference.
+
+**Consumer (`drop-ins/auto-vj-01/auto_vj.py`):**
+
+- `_get_section_hint()` wraps `vj_api.get_section(exclude='auto_vj')`
+  defensively (missing method / lookup error / non-dict → `None`), same
+  pattern as `_current_song_progress()`.
+- `_infer_peak_tier()` (plan §6.a): a confident external `PEAK` tier
+  (`confidence >= phrase_external_tier_min_confidence`, default 0.6)
+  overrides local cycle-count inference outright -- the mixer knows which
+  peak is genuinely biggest from the whole file; the director can only
+  ever guess from how many drops it's seen so far live.
+- `_phrase_bias()` (plan §6.c): a confidence-*scaled* external term, not a
+  presence-gated switch -- a role match adds `phrase_bias_max * confidence`;
+  a confident mismatch subtracts half that. A 0.53 hint barely nudges
+  anything; a 0.95 one nearly maxes out the term. This was the amendment
+  that mattered most for not overreacting to a shrug.
+- `_maybe_sync_phrase_clock_from_section_hint()` (plan §6.1, "Resolved by
+  amendment 6.a"): during the post-track-change neutral window opened by
+  `_reset_phrase_clock_for_track_change()`, a fresh hint sets
+  `_bars_since_phase_entry` from `bars_in` and `_peak_tier` from `tier`
+  directly, closing the neutral window early -- this is what turns the
+  hard-deck-cut *mitigation* (Phase 1: wait a few bars blind) into an
+  actual *fix* (Phase 2: the mixer already knows exactly where deck B's
+  playhead is). Called from `_advance_phrase_clock()` on every downbeat
+  while the window is still open; the Phase 1 blind-wait behavior is the
+  automatic fallback whenever no hint is available (bare stream, or the
+  mixer not running).
+
+**Not implemented:** plan §6.b ("publish the *next* role too", the
+transition-arming amendment). `structure.to_wire()` does not return next-role
+fields as of this commit -- the mixer team was still finishing that piece
+("wrapping up... pretty much done" per the owner, 2026-08-05). Building
+consumer logic against undocumented, not-yet-shipped field names was judged
+worse than shipping the rest and picking this up once the wire payload
+actually carries it; nothing here needs to change to add it later, since
+`_get_section_hint()`/callers already read the payload via `.get()` and
+silently ignore keys they don't recognize.
+
+**Verified:** `tests/test_section_bus.py` (bus-level: publish/get,
+copy-not-reference semantics, role validation, TTL expiry, all five
+canonical roles) and new cases in
+`tests/test_auto_vj_phrase_structure.py` (`_get_section_hint()` error
+handling, the neutral-window sync, `_phrase_bias()`'s external term sign
+and confidence scaling, `_infer_peak_tier()`'s confidence floor and
+role-mismatch rejection) plus `test_vj_api_postfx.py` (the `VjApi`
+wrappers against a real `App`).
+
 ---
 
 ## Confidence Model

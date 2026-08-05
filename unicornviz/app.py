@@ -451,6 +451,14 @@ class App:
         # tempo-aware drop-ins (dj-mixer, auto-vj, ...) publish/read a tempo and
         # interact without depending on one another.
         self._bpm_hints: dict[str, tuple[float, float]] = {}
+        # Shared song-structure hint bus: source -> (payload, monotonic
+        # timestamp). Mirrors _bpm_hints -- lets a source that has
+        # pre-analyzed a track (dj-mixer's structure.py) publish where the
+        # playhead is in the song's phrase structure for phrase-aware
+        # consumers (auto-vj) to read, without either depending on the
+        # other. See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
+        # section 6.
+        self._section_hints: dict[str, tuple[dict, float]] = {}
         self._lyrics = None
         self._grand_finale = None
         self._control_room = None
@@ -713,6 +721,47 @@ class App:
             if ts > best_t:
                 best_bpm, best_t = bpm, ts
         return best_bpm
+
+    # -- shared song-structure hint bus (phrase interop between drop-ins) ----
+
+    _SECTION_HINT_TTL_S = 5.0
+    _SECTION_ROLES = ('HOLD', 'RISE', 'PEAK', 'FALL', 'CLOSE')
+
+    def publish_section(self, source: str, payload: dict) -> None:
+        """Publish a song-structure hint under *source* for other drop-ins.
+
+        *payload* is the wire contract from
+        docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md section
+        6.a (``structure.to_wire()`` in dj-mixer-01): at minimum ``role``
+        (one of HOLD/RISE/PEAK/FALL/CLOSE), plus ``tier``/``label``/
+        ``bars_in``/``bars_left``/``confidence`` when known. Malformed or
+        unrecognized-role payloads are dropped rather than stored, so a
+        consumer never has to re-validate what it reads back.
+        """
+        if not str(source) or not isinstance(payload, dict):
+            return
+        role = payload.get('role')
+        if role not in self._SECTION_ROLES:
+            return
+        self._section_hints[str(source)] = (dict(payload), time.monotonic())
+
+    def get_section(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale song-structure hint from a source
+        != *exclude*, or None when no usable hint exists.
+
+        Lets a phrase-aware consumer (auto-vj) prefer a source that has
+        pre-analyzed the whole track (dj-mixer's structure detector) over
+        its own live-only reasoning, without either depending on the other.
+        """
+        now = time.monotonic()
+        best_payload: dict | None = None
+        best_t = -1.0
+        for src, (payload, ts) in self._section_hints.items():
+            if src == exclude or (now - ts) > self._SECTION_HINT_TTL_S:
+                continue
+            if ts > best_t:
+                best_payload, best_t = payload, ts
+        return dict(best_payload) if best_payload is not None else None
 
     def unregister_subsystem(self, name: str) -> None:
         """Unregister a runtime subsystem from the app loop."""

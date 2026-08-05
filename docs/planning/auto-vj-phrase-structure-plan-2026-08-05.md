@@ -1,15 +1,19 @@
 # Auto VJ — Phrase-Aware Song Structure Plan
 
 Owner: unicorn-viz maintainers (auto-vj-01) + dj-mixer-01 team (§6 review)
-Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8) — see
-  [docs/adr/vj-system.md § "Phrase-Aware Director: Bar-Relative Bias +
-  IMPACT Fold-In"](../adr/vj-system.md#phrase-aware-director-bar-relative-bias--impact-fold-in-2026-08-05)
-  for the implementation record and `tests/test_auto_vj_phrase_structure.py`
-  for regression coverage. §6 (Mixer Integration, Phase 2) reviewed and
-  agreed by the dj-mixer-01 team 2026-08-05 -- four amendments accepted by
-  the owner, folded into §6.a-6.d; the mixer-side detector has landed as
-  groundwork (`drop-ins/dj-mixer-01/structure.py`) and Phase 2 is unblocked
-  on the bus channel itself.
+Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
+  bus channel + auto-vj-01 consumer side implemented (2026-08-05, core +
+  auto-vj-01 1.0.0-rc.11) — see [docs/adr/vj-system.md § "Phrase-Aware
+  Director: Bar-Relative Bias + IMPACT Fold-In"](../adr/vj-system.md#phrase-aware-director-bar-relative-bias--impact-fold-in-2026-08-05)
+  for both records and `tests/test_auto_vj_phrase_structure.py` /
+  `tests/test_section_bus.py` for regression coverage. **Not yet done:**
+  §6.b (publishing the *next* role) -- `structure.to_wire()` does not
+  return it yet as of this implementation (dj-mixer-01 team still
+  finishing up); the consumer side is written defensively against its
+  absence and will pick it up automatically once shipped, but the "arm a
+  transition ahead of it" behavior itself isn't built. dj-mixer-01 wiring
+  `structure.to_wire()`'s output into `vj_api.publish_section()` is that
+  team's remaining step -- the channel is ready to receive it.
 Last updated: 2026-08-05
 
 ## 1. Objective
@@ -423,9 +427,17 @@ in this file's history (see `docs/adr/vj-system.md`).
   (§5). Not yet done: corpus-based validation of the starting bar-length
   defaults (§7) -- shipped as-is, pending a real-session tuning pass the
   way every other threshold in this file has gone through.
-- **Phase 2** (detector landed 2026-08-05; the bus channel is what remains):
-  hint-bus channel + canonical vocabulary contract (§6, amended by
-  §6.a-6.d), hard-cut authoritative resolution (§6.1). The mixer side --
-  detection, the wire payload builder (`structure.to_wire()`), and the
-  operator-facing section strip -- does not depend on auto-vj-01 and is
-  proceeding independently.
+- **Phase 2 — bus channel + consumer side done (2026-08-05, core + auto-vj-01
+  1.0.0-rc.11):** `App.publish_section()`/`get_section()` (mirrors the BPM
+  bus exactly, 5s TTL, `_SECTION_ROLES` validates against the canonical
+  five) and the matching `VjApi` wrappers; `_infer_peak_tier()` accepts a
+  confident external tier override (`phrase_external_tier_min_confidence`,
+  default 0.6); `_phrase_bias()` gains a confidence-scaled external term
+  per §6.c; `_maybe_sync_phrase_clock_from_section_hint()` resolves the
+  hard-cut edge case per §6.1's "Resolved by amendment 6.a" -- during the
+  post-track-change neutral window, a fresh hint sets `bars_in`/tier from
+  real data instead of waiting the window out blind. **Remaining:** §6.b
+  (next-role arming) is not implemented -- not yet on the wire to build
+  against (see Status above); dj-mixer-01 actually calling
+  `publish_section()` with `structure.to_wire()`'s output is that team's
+  side, proceeding independently.
