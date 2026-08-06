@@ -17,7 +17,13 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   consumed end to end. Since 2026-08-06 the mixer's sections are also
   **hand-editable** and corrections republish mid-track (§6.e) -- no wire
   change, and the consumer was verified clear of the one staleness hazard
-  it raised, so nothing is outstanding on that amendment either.
+  it raised, so nothing is outstanding on that amendment either. A
+  **second, separate bus channel** landed the same day (§6.3): `publish_
+  session()`/`get_session()` for set-level clock/grand-finale timing,
+  mirroring the section bus exactly. Mixer side (dj-mixer-01 0.152.0)
+  was already written and guarded; the core channel now exists too.
+  **Outstanding:** the auto-vj-01 consumer side of §6.3 -- nothing reads
+  `get_session()` yet.
 Last updated: 2026-08-06
 
 ## 1. Objective
@@ -417,8 +423,20 @@ we can watch it against a real transition.
 
 ## 6.3 Set clock and the grand finale (dj-mixer-01 -> director, 2026-08-06)
 
-**Needed from the auto-vj-01 / core team: a `publish_session()` /
-`get_session()` pair on `vj_api`, mirroring `publish_section()` exactly** (same
+**Bus channel shipped (2026-08-06, core).** `publish_session()`/
+`get_session()` now exist on `App`/`VjApi`, mirroring `publish_section()`
+exactly (same 5 s TTL, same deep-copy on both sides, same
+degrade-to-no-op on an older core). The mixer side was already written
+and guarded -- it calls `publish_session` only when the attribute exists
+(dj-mixer-01 0.152.0) -- so it lit up with no further coordination
+needed. See `docs/adr/vj-system.md` § "Set-Clock Hint Bus:
+`publish_session()`/`get_session()`". **Not yet done:** the auto-vj-01
+consumer side -- nothing reads `get_session()` yet (e.g. arming the
+grand-finale sequence off `final_peak_in_s`). The channel exists; using
+it is the next natural piece.
+
+**Original ask, for reference:** a `publish_session()` /
+`get_session()` pair on `vj_api`, mirroring `publish_section()` exactly (same
 5 s TTL, same deep-copy on both sides, same degrade-to-no-op on an older core).
 The mixer side is already written and guarded -- it calls `publish_session` only
 when the attribute exists, so shipping the channel lights it up with no further

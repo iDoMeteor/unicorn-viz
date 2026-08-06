@@ -459,6 +459,14 @@ class App:
         # other. See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
         # section 6.
         self._section_hints: dict[str, tuple[dict, float]] = {}
+        # source -> (payload dict, monotonic timestamp). Mirrors
+        # _section_hints exactly, one level up: sections say where you are
+        # in a *track*, this says where you are in the *night* -- the set
+        # clock / grand-finale timing dj-mixer-01 is the only source that
+        # can know (it knows when the set ends; the director does not).
+        # See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
+        # section 6.3.
+        self._session_hints: dict[str, tuple[dict, float]] = {}
         # name -> callable(playlist_name, paths) -> accepted count.
         # Destinations a playlist can be handed to (see
         # register_playlist_sink); lets one drop-in send a set to
@@ -769,6 +777,49 @@ class App:
         best_t = -1.0
         for src, (payload, ts) in self._section_hints.items():
             if src == exclude or (now - ts) > self._SECTION_HINT_TTL_S:
+                continue
+            if ts > best_t:
+                best_payload, best_t = payload, ts
+        return dict(best_payload) if best_payload is not None else None
+
+    # -- shared set-clock hint bus (grand-finale interop between drop-ins) --
+
+    _SESSION_HINT_TTL_S = 5.0
+    _SESSION_PHASES = ('running', 'closing', 'final', 'over')
+
+    def publish_session(self, source: str, payload: dict) -> None:
+        """Publish a set-clock hint under *source* for other drop-ins.
+
+        *payload* is the wire contract from
+        docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md section
+        6.3 (dj-mixer-01's set clock): at minimum ``phase`` (one of
+        running/closing/final/over), plus ``source`` (clock|last_track --
+        a payload field, distinct from this method's *source* publisher-id
+        parameter), ``seconds_left``/``minutes_left``, and finale-timing
+        fields (``final_peak_s``/``final_peak_in_s``) when known.
+        Malformed or unrecognized-phase payloads are dropped rather than
+        stored, so a consumer never has to re-validate what it reads back.
+        """
+        if not str(source) or not isinstance(payload, dict):
+            return
+        phase = payload.get('phase')
+        if phase not in self._SESSION_PHASES:
+            return
+        self._session_hints[str(source)] = (dict(payload), time.monotonic())
+
+    def get_session(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale set-clock hint from a source !=
+        *exclude*, or None when no usable hint exists.
+
+        Lets a finale-aware consumer (auto-vj) know where it is in the
+        *night* -- not just the current track -- without depending on the
+        mixer directly. Same shape as get_section(); a different bus.
+        """
+        now = time.monotonic()
+        best_payload: dict | None = None
+        best_t = -1.0
+        for src, (payload, ts) in self._session_hints.items():
+            if src == exclude or (now - ts) > self._SESSION_HINT_TTL_S:
                 continue
             if ts > best_t:
                 best_payload, best_t = payload, ts

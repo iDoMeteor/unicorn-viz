@@ -667,6 +667,51 @@ the legacy `BeatGridTracker` (v1, fallback-only, not the configured
 default) has a simpler single-confidence model without the same failure
 mode structure and was left alone. `_VJ_WEIGHTS_DOC_VERSION` bumped to 7.
 
+### Set-Clock Hint Bus: `publish_session()`/`get_session()` (2026-08-06)
+
+Decision: new `App`/`VjApi` bus channel, `publish_session()`/`get_session()`,
+mirroring `publish_section()`/`get_section()` exactly (same 5s TTL, same
+deep-copy on both sides, same degrade-to-no-op on an older core). Requested
+by the dj-mixer-01 team as their last report of the day (plan §6.3): "the
+mixer knows when the set ends and the director does not."
+
+**Where this sits relative to the section bus.** `get_section()` says where
+you are in a *track* (role/tier/bars_left within the current song).
+`get_session()` says where you are in the *night* (phase/seconds_left
+across the whole set, plus grand-finale timing). Two different questions,
+same bus pattern, deliberately kept as separate channels rather than
+folded into one payload — a consumer that only cares about track structure
+shouldn't have to parse set-level fields it doesn't need, and vice versa.
+
+**Payload contract** (`phase` is the required, validated field, mirroring
+`role`'s job on the section bus): `phase` (`running`/`closing`/`final`/
+`over`), `source` (`clock`/`last_track` — a payload field, not to be
+confused with the bus's own publisher-id `source` parameter),
+`seconds_left`/`minutes_left`, and — present only when `phase == 'final'`
+— `track_total_s`/`track_remaining_s`/`final_peak_s`/`final_peak_in_s`.
+The mixer computes `final_peak_s` from its own structure analysis (the
+`major`-tier peak from §6, or the last peak of any tier if none is ahead
+of the playhead) so a finale can fire *on* the track's actual biggest drop
+rather than on a bare timer.
+
+**Shipped guarded on both ends already, so this "lights up" with no
+further coordination needed.** dj-mixer-01 0.152.0 was already calling
+`vj_api.publish_session(...)` conditionally (only if the attribute
+exists) before this landed — the exact same defensive pattern this
+project's own Drop-In Independence Rules require. Consuming
+`get_session()` on the auto-vj-01 side (e.g. arming the grand-finale
+sequence off `final_peak_in_s` instead of a guess) is not part of this
+change — the bus exists, nothing reads it yet. That is the next natural
+piece, symmetric to how §6.b's `next_role`/`bars_to_next` sat unread on
+the section bus until today.
+
+**Verified:** new `tests/test_session_bus.py` (mirrors
+`test_section_bus.py`'s coverage exactly: publish/get round-trip, deep-copy
+isolation both directions, missing-source/non-dict/unrecognized-phase/
+missing-phase all dropped silently, freshest-source-wins, stale-hint
+expiry, all four canonical phases accepted) and two new `VjApi`-level
+tests in `tests/test_vj_api_postfx.py`. Full suite green.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

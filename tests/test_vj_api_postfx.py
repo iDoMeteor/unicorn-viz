@@ -77,6 +77,22 @@ def test_vj_api_get_section_none_when_nothing_published() -> None:
     assert app.vj_api.get_section() is None
 
 
+def test_vj_api_publish_and_get_session() -> None:
+    app = App(_default_cfg())
+    payload = {'phase': 'final', 'source': 'last_track', 'seconds_left': 240.0}
+
+    app.vj_api.publish_session('dj_mixer', payload)
+
+    assert app.vj_api.get_session() == payload
+    assert app.vj_api.get_session(exclude='dj_mixer') is None
+
+
+def test_vj_api_get_session_none_when_nothing_published() -> None:
+    app = App(_default_cfg())
+
+    assert app.vj_api.get_session() is None
+
+
 def test_vj_api_camera_navigation_delegates_to_webcam_system() -> None:
     class _FakeWebcamSystem:
         def next_camera(self) -> str:

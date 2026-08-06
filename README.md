@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.35**
+**Version 1.0.0-beta.36**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.36** — New `publish_session()`/`get_session()` bus on `App`/`VjApi` (plan §6.3), mirroring `publish_section()`/`get_section()` exactly. Lets a source that knows when the set ends (dj-mixer-01's set clock, 0.152.0) publish set-level phase/timing and grand-finale cue data for a finale-aware consumer to read. Mixer side was already written and guarded, so it lit up with no further coordination. Consumer side (auto-vj-01 arming the finale off it) is not part of this change -- the channel exists, nothing reads it yet. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Set-Clock Hint Bus".
 - **1.0.0-beta.35** — The Now Spinning platter no longer flickers between
   tracks during DJ crossfades: it switches only after the new track has been
   reported continuously for `[now_spinning] switch_hold_s` (default 5 s), so

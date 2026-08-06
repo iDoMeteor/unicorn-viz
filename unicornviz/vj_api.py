@@ -217,6 +217,35 @@ class VJApi:
         result = fn(str(exclude))
         return result if isinstance(result, dict) else None
 
+    def publish_session(self, source: str, payload: dict) -> None:
+        """Publish a set-clock hint on the shared hint bus (under *source*).
+
+        *payload* is the wire contract from
+        docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md section
+        6.3: at minimum ``phase`` (running/closing/final/over), plus
+        ``source`` (clock|last_track), ``seconds_left``/``minutes_left``,
+        and finale-timing fields (``final_peak_s``/``final_peak_in_s``)
+        when known. Where :meth:`get_section` says where you are in a
+        *track*, this says where you are in the *night* -- the other half
+        of the same question, and what the grand finale depends on.
+        Degrades to a no-op on older cores.
+        """
+        fn = getattr(self._app, 'publish_session', None)
+        if callable(fn):
+            fn(str(source), payload)
+
+    def get_session(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale set-clock hint from a source !=
+        *exclude*, or None when no usable hint exists.
+
+        Degrades to None on older cores.
+        """
+        fn = getattr(self._app, 'get_session', None)
+        if not callable(fn):
+            return None
+        result = fn(str(exclude))
+        return result if isinstance(result, dict) else None
+
     def register_playlist_sink(self, name: str, fn) -> None:
         """Register this drop-in as a destination for playlists from others.
 
