@@ -13,7 +13,10 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   the live deck every frame via `vj_api.publish_section()`. **Remaining:**
   the director's own "arm a transition ahead of the next role" behaviour
   -- the data is on the wire now, the consumer does not act on it yet.
-Last updated: 2026-08-05
+  Since 2026-08-06 the mixer's sections are also **hand-editable** and
+  corrections republish mid-track (§6.e) -- no wire change, but worth a
+  read before the next run.
+Last updated: 2026-08-06
 
 ## 1. Objective
 
@@ -245,6 +248,36 @@ bars the current section has *left*.
 2. **Canonical neutral vocabulary is the wire contract.** The mixer detects
    and *displays* genre-appropriate labels but publishes only the
    `HOLD`/`RISE`/`PEAK`/`FALL`/`CLOSE` vocabulary from §4.4.
+
+### 6.e Sections are hand-editable, so hints can change mid-track (2026-08-06)
+
+Landed after the consumer side was written, so it is called out here rather
+than assumed: as of **dj-mixer-01 0.149.0** the DJ can correct the detected
+structure directly on the waveform strip -- drag a boundary, retype a block,
+merge, split, or reset the track to the detector's version. Corrections are
+persisted and **republished immediately**, so the director sees the new shape
+without waiting for a track change.
+
+**What this is worth to the director.** The hints get *better*, and a
+correction is a person's answer rather than a threshold's: an edited section
+publishes `confidence: 1.0`, which under §6.c means the external bias term
+applies at full strength. Hand-fixed structure should move the director harder
+than detected structure, and it now does, with no change needed on the
+consumer side.
+
+**The one thing to check.** `role`/`tier`/`bars_in` for a given playhead
+position are no longer guaranteed stable across a track -- a boundary dragged
+at 02:30 changes what the hint says about 02:45. Anything cached per-track
+rather than per-hint can go stale mid-track. The mixer's own publisher needed
+exactly this fix (it cached the rehydrated rows and had to be told to drop
+them), so it is worth confirming the consumer has no equivalent. If
+`get_section()` is read fresh each tick, there is nothing to do.
+
+**Not a wire change.** The payload shape from §6.a/§6.b is unchanged; only how
+often the values can move. `manual` is deliberately *not* on the wire: whether
+a person placed a boundary is provenance the mixer needs for re-analysis and
+the director does not need at all -- it already gets the part that matters, as
+full confidence.
 
 ### 6.a Payload carries extent, not just a role (amendment 1)
 
