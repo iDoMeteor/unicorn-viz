@@ -459,3 +459,13 @@ in this file's history (see `docs/adr/vj-system.md`).
   **Remaining:** §6.b's *consumer* half -- the director arming a
   transition on `next_role`/`bars_to_next` rather than only reacting.
   The fields are on the wire and json-safe; nothing reads them yet.
+- **Phase 2 — external-hint bias proximity fix (2026-08-06, auto-vj-01
+  1.0.0-rc.15):** live use turned up a real bug in the §6.c bias term --
+  it used `role`+`confidence` only, so a confident match right at the
+  *start* of a phase (e.g. BUILD) escalated the DROP threshold just as
+  hard as one right before the actual drop. Now gated by `bars_left`
+  proximity (new `phrase_external_proximity_bars`). This uses `bars_left`
+  (already consumed since §6.a), not the still-unread `next_role`/
+  `bars_to_next` from §6.b above -- that consumer gap is still open. See
+  `docs/adr/vj-system.md` § "External Section-Hint Bias Gated by
+  `bars_left` Proximity".

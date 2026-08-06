@@ -84,6 +84,7 @@ _PHRASE_DEFAULTS = dict(
     _phrase_outro_song_progress=0.85,
     _phrase_track_change_neutral_bars=4,
     _phrase_external_tier_min_confidence=0.6,
+    _phrase_external_proximity_bars=8.0,
 )
 
 
@@ -231,6 +232,43 @@ def test_phrase_bias_still_bounded_with_external_hint() -> None:
     hint = {'role': 'PEAK', 'confidence': 1.0}
     inst = _bare_controller(section_hint=hint, _bars_since_phase_entry=10_000)
     assert -0.15 <= inst._phrase_bias('PEAK') <= 0.15
+
+
+def test_phrase_bias_external_match_gated_by_bars_left_proximity() -> None:
+    """2026-08-06: a confident role match used to fire the external bias at
+    full strength regardless of how much of the mixer-analyzed phase was
+    left -- observed live catching the very start of a build and nearly
+    immediately favoring DROP. bars_left now gates it: far from the end of
+    the phase should barely move the bias; near the end should move it
+    close to the old full-strength behavior."""
+    far_from_end = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9, 'bars_left': 30.0},
+        _bars_since_phase_entry=1,
+    )
+    near_end = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9, 'bars_left': 1.0},
+        _bars_since_phase_entry=1,
+    )
+    no_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=1)
+
+    assert far_from_end._phrase_bias('RISE') < near_end._phrase_bias('RISE')
+    # Far-from-end should sit close to the no-hint baseline, not anywhere
+    # near the old full-strength (phrase_bias_max * confidence) behavior.
+    assert far_from_end._phrase_bias('RISE') == pytest.approx(no_hint._phrase_bias('RISE'), abs=0.01)
+
+
+def test_phrase_bias_external_match_no_bars_left_keeps_prior_full_strength_behavior() -> None:
+    """Older mixer payloads (or a hint missing bars_left) fall back to the
+    pre-2026-08-06 flat confidence-scaled behavior rather than silently
+    going neutral -- backward compatible, not a regression for anyone not
+    yet publishing extent data."""
+    hint = {'role': 'RISE', 'confidence': 0.9}  # no bars_left key at all
+    with_hint = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
+    without_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=12)
+
+    assert with_hint._phrase_bias('RISE') == pytest.approx(
+        min(0.15, without_hint._phrase_bias('RISE') + 0.15 * 0.9), abs=1e-9
+    )
 
 
 def test_infer_peak_tier_uses_confident_external_tier_override() -> None:

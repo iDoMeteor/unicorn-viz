@@ -354,6 +354,43 @@ above as an Open Question, and ships Tier 1 of the accuracy tracking spec
      hypothetical, though still unscoped and not started. See the spec
      doc's updated framing.
 
+### External Section-Hint Bias Gated by `bars_left` Proximity (2026-08-06)
+
+Decision: `_phrase_bias()`'s external-hint-match term (added Phase 2,
+2026-08-05) is gated by proximity to the mixer's own `bars_left`, instead
+of firing at full `phrase_bias_max × confidence` strength the instant the
+mixer's published role matched the role being evaluated.
+
+**Root cause, found live:** on a session running current code (auto-vj-01
+1.0.0-rc.14, mixer publishing real section hints), the owner observed the
+director catch a build at its very start and then favor DROP almost
+immediately — well before the mixer's actual analyzed drop point. Reading
+`_phrase_bias()`: the match term used only `role` and `confidence`,
+completely ignoring `bars_left` (published specifically for this, plan
+§6 amendment 6.a). "Mixer confirms we're in BUILD" was identical evidence
+at bar 1 of a 32-bar build and bar 31 -- a confident hint right as BUILD
+*started* lowered the DROP threshold just as hard as one right before the
+mixer's own analyzed drop. That's backwards: confirming the *current*
+role early in a long phase is evidence the director is tracking the song
+correctly, not evidence a transition is imminent.
+
+**Fix:** new `phrase_external_proximity_bars` (default `8.0`). When the
+hint includes `bars_left`, the match term's strength ramps
+`0.0 → 1.0` as `bars_left` goes from `phrase_external_proximity_bars` down
+to `1`, so it only escalates as the mixer's own analyzed phase is actually
+ending. A hint with no `bars_left` (older mixer payload) falls back to the
+prior flat behavior (`proximity = 1.0`) rather than going silently inert.
+The mismatch term is unchanged -- a confident disagreement is real
+evidence regardless of proximity, unlike a match.
+
+**Verified:** `tests/test_auto_vj_phrase_structure.py` -- a far-from-end
+hint (`bars_left=30`) sits close to the no-hint baseline where a
+near-end hint (`bars_left=1`) sits close to the old full-strength value;
+a hint with no `bars_left` key reproduces the exact pre-fix flat-strength
+number. `_VJ_WEIGHTS_DOC_VERSION` bumped to 3; see
+`weights-and-thresholds.md`'s Director section for the updated term
+description.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
