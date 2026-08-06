@@ -27,18 +27,28 @@ class _Writer:
         return self.enabled
 
 
+class _FakeEngine:
+    def __init__(self) -> None:
+        self.log_decisions_calls: list[bool] = []
+
+    def set_log_decisions(self, enabled: bool) -> bool:
+        self.log_decisions_calls.append(enabled)
+        return enabled
+
+
 def _controller(live_enabled: bool = False, sequence_enabled: bool = False) -> AutoVJController:
     inst = object.__new__(AutoVJController)
     inst._live_corpus_writer = _Writer(live_enabled)
     inst._sequence_corpus_writer = _Writer(sequence_enabled)
+    inst._engine = _FakeEngine()
     return inst
 
 
 def test_training_help_entries_include_new_shortcuts() -> None:
     entries = set(AutoVJController.HELP_ENTRIES)
 
-    assert ('Auto VJ', 'Ctrl+T', 'Turn both trainers on') in entries
-    assert ('Auto VJ', 'Alt+T', 'Turn both trainers off') in entries
+    assert ('Auto VJ', 'Ctrl+T', 'Turn trainers + decision log on') in entries
+    assert ('Auto VJ', 'Alt+T', 'Turn trainers + decision log off') in entries
     assert ('Auto VJ', 'Ctrl+Shift+T', 'Toggle live training') in entries
     assert ('Auto VJ', 'Alt+Shift+T', 'Toggle sequence training') in entries
 
@@ -52,6 +62,17 @@ def test_ctrl_t_enables_both_trainers() -> None:
     assert controller._sequence_corpus_writer.calls == [True]
 
 
+def test_ctrl_t_also_enables_decision_log() -> None:
+    """2026-08-06: Ctrl+T now enables the JSONL decision log too, so it's
+    never forgotten before a real training session (previously
+    config.toml-only)."""
+    controller = _controller()
+
+    controller.handle_key(sdl2.SDLK_t, sdl2.KMOD_CTRL)
+
+    assert controller._engine.log_decisions_calls == [True]
+
+
 def test_alt_t_disables_both_trainers() -> None:
     controller = _controller(True, True)
 
@@ -59,6 +80,14 @@ def test_alt_t_disables_both_trainers() -> None:
     assert controller.training_badge() == ''
     assert controller._live_corpus_writer.calls == [False]
     assert controller._sequence_corpus_writer.calls == [False]
+
+
+def test_alt_t_also_disables_decision_log() -> None:
+    controller = _controller(True, True)
+
+    controller.handle_key(sdl2.SDLK_t, sdl2.KMOD_ALT)
+
+    assert controller._engine.log_decisions_calls == [False]
 
 
 def test_ctrl_shift_t_toggles_live_training() -> None:
