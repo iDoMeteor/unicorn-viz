@@ -587,6 +587,18 @@ honest ceiling above means no clean target exists). New tests in
 `_VJ_WEIGHTS_DOC_VERSION` bumped to 5 (see `weights-and-thresholds.md`'s
 own Changelog entry).
 
+### `centroid_fit` Weight Trimmed 1.5 → 1.3 (2026-08-06)
+
+Decision: `centroid_fit` trimmed from `1.5` to `1.3` (owner request, part
+of the same broader hand-tune pass as the `rap`/`r&b` merge and
+`hyphy`/`chillstep` regeneration above — not a revert of the earlier
+`0.8` → `1.5` raise, which stands on its own evidence). No new
+diagnostic finding prompted this one; a plausible "the raise is causing
+bad flips" theory was checked against a live session earlier the same day
+and did *not* hold up (the flip in question turned out to be a musically
+correct read of the track, not a bug — see the Fire DJ / `electronic`
+section above for that finding). `_VJ_WEIGHTS_DOC_VERSION` bumped to 6.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
