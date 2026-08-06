@@ -47,9 +47,15 @@ _DEFAULTS: dict[str, Any] = {
         "device": "",
         "fft_bands": 512,
         "buffer_seconds": 10.0,  # Large buffer for GPU rendering stalls and resolution flexibility
-        # 2026-08-05: "generic" (wide/uninformative prior), not a real genre --
-        # see AudioManager.__init__'s field comment for why.
-        "profile": "generic",
+        # 2026-08-06: reverted to "house" (2026-08-05 briefly defaulted this
+        # to "generic" -- a wide/uninformative prior meant to need zero setup
+        # like the BPM detector's own no-lock start state). Owner reverted
+        # live: "generic" is enabled=False in PROFILES for good reason (its
+        # loose targets make for a weak starting point, especially noticeable
+        # at the top of a training session before the recommender has
+        # converged) and was never meant to be a real analyzer profile in
+        # active use, just a startup placeholder -- see AudioManager.__init__.
+        "profile": "house",
         "reactivity": 1.0,
         "latency": "high",
         "prefer_default_input": True,

@@ -61,15 +61,13 @@ class AudioManager:
         self._reactivity = max(0.1, min(5.0, self._reactivity))
         self._reactivity_default = self._reactivity
         
-        # Audio profile selection. Defaults to "generic" (a wide,
-        # uninformative prior) rather than a real genre: seeding a specific
-        # genre's tight prior at startup meant a mismatched profile had to
-        # be actively argued out of by the recommender, and the documented
-        # workaround (manually set/restore [audio] profile per session) was
-        # easy to forget. "generic" behaves like the BPM detector's own
-        # "no lock yet" starting state -- the recommender converges onto a
-        # real genre from evidence within the first eval cycle regardless.
-        self._profile_key = str(cfg.get("audio", "profile", default="generic"))
+        # Audio profile selection. Defaults to "house" (2026-08-06, reverted
+        # from a brief "generic" default -- see config.py's DEFAULT_CONFIG
+        # comment for why "generic" didn't hold up: it's enabled=False in
+        # PROFILES on purpose, a loose/uninformative catch-all never meant
+        # to be a real starting analyzer profile, and its weak targets were
+        # a noticeably worse start for training sessions specifically).
+        self._profile_key = str(cfg.get("audio", "profile", default="house"))
         self._profile = get_profile(self._profile_key)
         
         self._capture = AudioCapture(

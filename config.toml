@@ -319,12 +319,14 @@ analysis_downbeat_confidence_min = 0.30
 #   instead of lowering this ratio globally.
 # tactus_preference_ratio = 0.55   # (default; uncomment only to override)
 
-# 2026-08-05: [audio] profile now defaults to "generic" (wide/uninformative
-# prior) in code -- you should not need to set this at all. The recommender
-# converges onto the real genre from evidence within the first eval cycle
-# (~8s). Only set [audio] profile explicitly if you want to force a specific
-# genre's tuned prior/fingerprint for a session regardless of what the
-# recommender would otherwise pick, e.g.:
+# 2026-08-06: [audio] profile defaults to "house" in code -- you should not
+# need to set this at all. The recommender converges onto the real genre from
+# evidence within the first eval cycle (~8s). (Briefly defaulted to "generic"
+# on 2026-08-05; reverted -- "generic" is a disabled, loose/uninformative
+# catch-all never meant to be a real starting profile, and made for a
+# noticeably weaker start to a training session.) Only set [audio] profile
+# explicitly if you want to force a specific genre's tuned prior/fingerprint
+# for a session regardless of what the recommender would otherwise pick, e.g.:
 # [audio]
 # profile = "chillstep"
 # With auto_profile_enabled = false, explicit tuning keys below create manual

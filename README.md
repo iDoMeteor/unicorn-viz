@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.30**
+**Version 1.0.0-beta.31**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.31** — `[audio] profile` default reverted `"generic"` → `"house"` (owner call, live during a training session): `"generic"` is `enabled=False` in `PROFILES` on purpose -- a disabled, loose/uninformative catch-all never meant to be a real starting analyzer profile, and it made for a noticeably weaker start to training sessions specifically. Reverts the `1.0.0-beta.26` default across all three sites (`config.py`'s `DEFAULT_CONFIG`, `AudioManager.__init__`'s kwarg default, `Analyzer.__init__`'s fallback) plus the HUD's stale-fallback string and both config file comments. No `config.toml` setting added -- this is a code-default-only fix.
 - **1.0.0-beta.30** — Per-profile `spectral_centroid_sigma` added to `unicornviz/audio/profiles.py` (tight/medium/wide tiers by genre feel) so the recommender's `centroid_fit` discriminates per genre instead of using one fixed 400 Hz sigma for all 22 profiles. Ships Tier 1 of the recommender accuracy-tracking spec ([docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md](docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md)) -- per-term signal-activity logging rolled up in `session_scorecard.py`. Drop-in pointer: auto-vj-01 1.0.0-rc.14.
 - **1.0.0-beta.29** — Recommender weight review: `breaks`/`rap`/`synthwave` `bpm_prior_sigma` tightened (`0.28`/`0.30`/`0.40` → `0.22`/`0.24`/`0.34`; `fire_dj` intentionally left at `0.32` -- its wide tempo span is by design, see [drop-ins/auto-vj-01/docs/weights-and-thresholds.md](drop-ins/auto-vj-01/docs/weights-and-thresholds.md)). New versioned reference doc covers every detector/director/recommender weight and threshold with a glossary up front, kept in sync with `_VJ_WEIGHTS_DOC_VERSION` in `auto_vj.py` per a new CLAUDE.md agent rule ("VJ Weights & Thresholds Documentation"). Also adds a spec for recommender accuracy tracking ([docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md](docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md)) covering a term-discrimination proxy and a future tag-genre-as-ground-truth tier. Drop-in pointer: auto-vj-01 1.0.0-rc.13 (`centroid_fit` weight raise).
 - **1.0.0-beta.28** — New shared song-structure hint bus (`App`/`VjApi` `publish_section()`/`get_section()`, mirrors the existing BPM bus exactly -- 5s TTL, validated against the canonical `HOLD`/`RISE`/`PEAK`/`FALL`/`CLOSE` role set) so a source that has pre-analyzed a whole track (dj-mixer-01's new section detector) can tell auto-vj-01's director where the playhead is in the song's phrase structure. See [docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md](docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md) §6 for the full contract and [docs/adr/vj-system.md](docs/adr/vj-system.md) for the implementation record. Drop-in pointer: auto-vj-01 1.0.0-rc.11 (the consumer side).
