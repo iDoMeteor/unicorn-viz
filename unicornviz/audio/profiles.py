@@ -541,7 +541,7 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.35,
         onset_treble_emphasis=1.15,
         bpm_prior_mu=138.0,
-        bpm_prior_sigma=0.28,
+        bpm_prior_sigma=0.22,
         bpm_hint_min=132.0,
         bpm_hint_max=145.0,
         spectral_centroid_mu=1900.0,
@@ -792,7 +792,7 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.80,
         bpm_prior_mu=88.0,
-        bpm_prior_sigma=0.30,
+        bpm_prior_sigma=0.24,
         # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
         # own tempo pocket being documented above ("70-100 BPM") -- without a
         # hint, the ACF search ran the full 60-200 BPM range unconstrained,
@@ -1098,7 +1098,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # ~90-100 BPM). Sigma/hint width matches chillstep's real-world
         # tempo scatter rather than a tightly-quantized genre like tech_house.
         bpm_prior_mu=100.0,
-        bpm_prior_sigma=0.40,
+        bpm_prior_sigma=0.34,
         bpm_hint_min=85.0,
         bpm_hint_max=118.0,
         # Brightness sits between chillstep's pad-only atmosphere (900 Hz)

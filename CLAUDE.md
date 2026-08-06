@@ -640,6 +640,50 @@ rewrite history — old decisions stay in the Superseded table with a reason.
 
 ---
 
+## VJ Weights & Thresholds Documentation
+
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` is the single reference
+for every tunable constant across the three VJ subsystems: the detector
+(`beat_grid.py`), the director (`auto_vj.py` phrase clock/bias), and the
+recommender (`auto_vj.py` `_profile_score()` and `unicornviz/audio/profiles.py`
+per-profile `bpm_prior_sigma`/`spectral_centroid_mu`/etc.). It opens with a
+glossary (prior, mu, sigma, floor, weight, term, threshold, bias, margin,
+confidence, cooldown) before the tables so the vocabulary is fixed for
+anyone consulting it, agent or human.
+
+**This document must be kept up to date at all times and is independently
+versioned from the drop-in's own `__version__`.** Its "Doc version" header
+must always equal `_VJ_WEIGHTS_DOC_VERSION` in `auto_vj.py`.
+
+**Agent duties — any commit that changes one of the following:**
+
+- a weight in `_DEFAULT_RECO_WEIGHTS` (`auto_vj.py`),
+- a detector constant in `beat_grid.py` (`_MIN_PROFILE_PRIOR_SIGMA`,
+  `_V2_*`, the ACF/phase confidence-blend ratio, comb-filter harmonic
+  weighting, tactus fold-down ratio, density-guard ratios, lock/release
+  confidence thresholds),
+- a director phrase-bias multiplier or threshold in `_phrase_bias()` /
+  `_PHRASE_ROLE_BARS` / the `phrase_*` config defaults,
+- a recommender decider threshold (`profile_auto_reco_*` config defaults,
+  the fast-override force thresholds), or
+- any profile's `bpm_prior_sigma`, `bpm_prior_mu`, or `spectral_centroid_mu`
+  in `unicornviz/audio/profiles.py`,
+
+must, in the same commit: (1) update the matching table/entry in
+`weights-and-thresholds.md`, (2) increment `_VJ_WEIGHTS_DOC_VERSION` in
+`auto_vj.py` by 1, (3) bump the doc's own "Doc version" header to match, and
+(4) add a one-line Changelog entry to the doc. This mirrors the
+`ANALYSIS_VERSION` discipline used for dj-mixer-01 track analysis — the goal
+is the same: a stale reference is worse than no reference, because nothing
+signals it went stale.
+
+This is a documentation-sync obligation, not a design gate — it does not
+require owner approval to change a weight or threshold value itself (that
+already follows the normal change-review process for the code touched);
+it only requires the doc and the version constant to move with the code.
+
+---
+
 ## VJ Training
 
 - Every packaged Auto VJ training bucket under `assets/training/sets/<set>/<bucket>/`

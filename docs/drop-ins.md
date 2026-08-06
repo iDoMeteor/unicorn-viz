@@ -75,6 +75,7 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/auto-vj-01/docs/configuration.md)
   - [Integration](../drop-ins/auto-vj-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/auto-vj-01/docs/troubleshooting.md)
+  - [Weights & Thresholds Reference](../drop-ins/auto-vj-01/docs/weights-and-thresholds.md)
   - [Training Pack Protocol](planning/auto-vj-training-pack-protocol.md)
 - banner-01
   - [Operations](../drop-ins/banner-01/docs/operations.md)

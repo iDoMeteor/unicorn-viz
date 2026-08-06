@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.28**
+**Version 1.0.0-beta.29**
 
 ## Contact Me!
 

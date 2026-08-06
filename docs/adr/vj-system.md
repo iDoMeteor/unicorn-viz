@@ -222,10 +222,12 @@ matter against the other ~12 weighted terms.
 `_update_profile_recommendation()` run (candidates restricted to
 `psytrance`/`deep_house` to keep it deterministic against the full
 20-profile field) reproducing the live session's shape: `bpm=120`,
-`centroid`/`zcr`/`onset_count` set to psytrance's own targets exactly (a
-plausible bright, dense mix). Confirmed directly against both floor values
-while building the fix: `deep_house` wins at 0.08, `psytrance` wins at
-0.45 — the test fails without the revert, not just after it.
+`centroid`/`zcr`/`onset_count` set partway toward psytrance's own targets
+(bright, moderately dense — see the 2026-08-06 recalibration note directly
+below for why not psytrance's exact targets). Confirmed directly against
+both floor values while building the fix: `deep_house` wins at 0.08,
+`psytrance` wins at 0.45 — the test fails without the revert, not just
+after it.
 
 **Verified:** `tests/test_bpm_detector_audit_regressions.py` — (1) locked
 at 124 BPM, apply a Psytrance-like profile (mu=145, σ=0.16), continue
@@ -237,6 +239,57 @@ calls `prime_tempo()` exactly when a fresh mixer hint exists, not
 otherwise. Plus per-engine unit coverage in `test_beat_grid_tracker_v1.py`
 / `test_beat_tracker_v2.py` / `test_beat_tracker_v3.py` for the new
 `prime_tempo()` method and the never-narrows-range contract.
+
+### Recommender Weight Review — `centroid_fit` Raise + Sigma Tightening (2026-08-06)
+
+Decision: following the sigma-floor revert above, the owner asked for a
+full weight/term inventory across the director, detector, and recommender,
+then requested two follow-on changes to the recommender:
+
+1. **`centroid_fit` weight raised `0.8` → `1.5`** in `_DEFAULT_RECO_WEIGHTS`
+   (`auto_vj.py`). With the sigma-floor bug fixed, live corpus data showed
+   `spectral_shape_fit`/`centroid_fit` were already discriminating correctly
+   (0.879 vs 0.776 cosine similarity, deep_house over psytrance) but were
+   underweighted relative to `tempo_fit` (2.0) given how reliable they'd
+   proven. Still kept below `tempo_fit`: tempo has a *per-genre* sigma
+   (tight for psytrance, wide for house); `centroid_fit`'s Gaussian uses a
+   **fixed 400 Hz sigma across every profile** regardless of how far apart
+   their `spectral_centroid_mu` targets actually sit — a real asymmetry
+   with `tempo_fit`'s per-profile mechanism, flagged but deliberately left
+   alone this pass (see Open Questions).
+2. **`bpm_prior_sigma` tightened for three of the four profiles flagged as
+   outliers** in the weight review (`unicornviz/audio/profiles.py`):
+   `breaks` `0.28` → `0.22`, `rap` `0.30` → `0.24`, `synthwave` `0.40` →
+   `0.34`. `fire_dj` (`0.32`) was explicitly **not** touched — its wide
+   36 BPM hint span (132-170) is intentional (it's the wide-tempo DJ-run
+   catch-all profile), unlike the other three where the sigma sat wide
+   relative to a comparatively narrow `bpm_hint_min`/`bpm_hint_max` span.
+   Values chosen by matching each profile's sigma-to-hint-span ratio against
+   comparable-span profiles already in a good place (e.g. `breaks`' new
+   0.22 lines up with `hard_techno`'s 0.22 at a similar 12-13 BPM span).
+
+**Recalibration note:** `test_recommender_prefers_deep_house_over_psytrance_at_120_bpm`
+originally used psytrance's *exact* `centroid`/`zcr`/`onset_count` targets
+as the adversarial input. After the `centroid_fit` raise, that exact match
+alone is enough to win psytrance the composite score regardless of the
+sigma floor — correctly, since a track with psytrance's literal spectral
+centroid should score higher on psytrance now. The test's synthetic values
+were dialed back to a still-adversarial but non-exact point (`centroid=2350`
+vs psytrance's `2500` target) so it keeps isolating the sigma-floor
+mechanism specifically rather than accidentally passing on the weight
+change alone. Verified both directions with `__pycache__` cleared before
+each run — a stale compiled `auto_vj.pyc` from mid-session sigma toggling
+was independently found to be silently serving pre-edit bytecode during
+manual verification, unrelated to but worth noting for anyone hand-testing
+this file with direct `sed` edits.
+
+**Terminology/weights reference:** the full glossary and per-model weight
+tables (director thresholds, detector confidence-blend terms, recommender
+`_DEFAULT_RECO_WEIGHTS`) referenced during this review now live in
+[`drop-ins/auto-vj-01/docs/weights-and-thresholds.md`](../../drop-ins/auto-vj-01/docs/weights-and-thresholds.md),
+which is versioned independently and must be kept in sync with
+`_RECO_WEIGHTS_DOC_VERSION` in `auto_vj.py` — see that doc's own header and
+the CLAUDE.md agent rule added alongside it.
 
 ---
 
@@ -1122,3 +1175,19 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
 
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
+- `centroid_fit`'s Gaussian (`auto_vj.py`, `_profile_score()`) uses a fixed
+  400 Hz sigma for every profile, unlike `tempo_fit`'s per-profile
+  `bpm_prior_sigma`. A genre with a naturally tight, well-separated centroid
+  target (e.g. `dubstep`) and one with a broad, overlapping one (e.g.
+  `electronic`) are judged with the same brightness tolerance today. Adding
+  a per-profile `spectral_centroid_sigma` (mirroring `bpm_prior_sigma`)
+  would let `centroid_fit` discriminate as sharply as `tempo_fit` does —
+  flagged during the 2026-08-06 weight review, not yet built.
+- Sigma tightening in the same review only covered 3 of the 4 originally
+  flagged outliers (`breaks`, `rap`, `synthwave`); `fire_dj` was
+  intentionally left alone. Whether the remaining ~17 profiles' sigmas
+  warrant a fuller consistency pass (beyond the ad hoc sigma-to-hint-span
+  comparison used this round) is still open — no fitted/measured accuracy
+  signal exists yet to validate against (see
+  `docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md`,
+  proposed but not yet implemented).

@@ -406,19 +406,21 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     like tech_house/electronic also fitting the tempo reasonably well,
     which obscures the specific psytrance-vs-deep_house comparison this
     fix is about) so the test is deterministic. centroid/zcr/onset_count
-    are set to psytrance's own targets exactly -- a bright, dense mix that
-    could plausibly belong to a real track -- while bpm=120 sits close to
-    deep_house's 121 mu and 25 BPM off psytrance's 145. With the old 0.45
-    sigma floor this combination scores psytrance higher despite the
-    tempo miss (verified directly while diagnosing the fix); with the
-    reverted 0.08 floor (i.e. each profile's own authored sigma -- 0.16
-    for psytrance) tempo_fit's now-real penalty flips the outcome."""
+    sit partway toward psytrance's own targets (bright, moderately dense --
+    not psytrance's exact centroid, since 2026-08-06's centroid_fit weight
+    bump to 1.5 makes an exact match win on brightness alone regardless of
+    the sigma floor) while bpm=120 sits close to deep_house's 121 mu and 25
+    BPM off psytrance's 145. With the old 0.45 sigma floor this combination
+    scores psytrance higher despite the tempo miss (verified directly while
+    diagnosing the fix, both before and after the centroid_fit reweight);
+    with the reverted 0.08 floor (i.e. each profile's own authored sigma --
+    0.16 for psytrance) tempo_fit's now-real penalty flips the outcome."""
     import unicornviz.audio.profiles as profiles_mod
     restricted = {k: profiles_mod.PROFILES[k] for k in ('psytrance', 'deep_house')}
     monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
     monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
 
-    stub = _make_full_reco_stub(bpm=120.0, centroid=2500.0, zcr=0.090, onset_count=1.6)
+    stub = _make_full_reco_stub(bpm=120.0, centroid=2350.0, zcr=0.085, onset_count=1.6)
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
