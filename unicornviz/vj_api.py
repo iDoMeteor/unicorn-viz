@@ -217,6 +217,47 @@ class VJApi:
         result = fn(str(exclude))
         return result if isinstance(result, dict) else None
 
+    def register_playlist_sink(self, name: str, fn) -> None:
+        """Register this drop-in as a destination for playlists from others.
+
+        *fn* takes ``(playlist_name, paths)`` and returns how many tracks it
+        accepted.  Lets one drop-in hand a list to another without either
+        importing the other.  Degrades to a no-op on older cores.
+        """
+        reg = getattr(self._app, 'register_playlist_sink', None)
+        if callable(reg):
+            reg(str(name), fn)
+
+    def unregister_playlist_sink(self, name: str) -> None:
+        """Stop offering this drop-in as a playlist destination."""
+        fn = getattr(self._app, 'unregister_playlist_sink', None)
+        if callable(fn):
+            fn(str(name))
+
+    def playlist_sinks(self) -> list:
+        """Names of every registered playlist destination (for a menu)."""
+        fn = getattr(self._app, 'playlist_sinks', None)
+        if not callable(fn):
+            return []
+        try:
+            return list(fn())
+        except Exception:                # pragma: no cover - defensive
+            return []
+
+    def export_playlist(self, target: str, name: str, paths) -> tuple:
+        """Send *paths* to a registered sink as a playlist called *name*.
+
+        Returns ``(ok, message)``; the message is written to be shown to a
+        person as-is.  ``(False, ...)`` on an older core or a missing sink.
+        """
+        fn = getattr(self._app, 'export_playlist', None)
+        if not callable(fn):
+            return (False, 'this build cannot export playlists')
+        try:
+            return tuple(fn(str(target), str(name), list(paths or [])))
+        except Exception as exc:         # pragma: no cover - defensive
+            return (False, str(exc))
+
     def get_runtime_state(self, dotted_path: str = '', default: object | None = None) -> object:
         """Read a value from shared runtime state using dotted-path keys."""
         return self._app.get_runtime_state(str(dotted_path), default)
