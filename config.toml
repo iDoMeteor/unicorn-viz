@@ -637,6 +637,17 @@ dark_brightness_threshold = 0.02
 # until re-analyzed.  Toggleable live in the GENERAL settings tab (which
 # remembers your choice and wins over this seed).  Default true.
 # sections = true
+# session_minutes: how long the set is meant to run, for the title-bar
+# countdown and the VJ hand-off.  The clock starts on the FIRST AUDIO, not
+# when the mixer window opens, so setting up and sound-checking do not count
+# against it.  Published to the VJ director so the visuals can build toward
+# the end of the night on their own.  Separately, and regardless of this
+# setting, the director is told the moment the LAST TRACK of a list starts --
+# the exact grand-finale cue, with that song's length and where its biggest
+# drop lands; that one needs loop (the auto-play infinity button) OFF, since
+# a looping list has no last track.  0 = no set clock.  Changeable live in
+# SETTINGS -> GENERAL -> SET LENGTH.  Default 0.
+# session_minutes = 120
 # skip_silence: start a track at its first note and treat its last note as
 # the end, instead of sitting through the dead air many rips carry.  Bounds
 # only -- the audio is untouched and you can still scrub into the silence.

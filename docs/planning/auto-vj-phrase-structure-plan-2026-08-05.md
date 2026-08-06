@@ -415,6 +415,78 @@ the incoming deck once the crossfader passes some point, or for publishing
 both and letting the director weigh them. Deferred until the bus exists and
 we can watch it against a real transition.
 
+## 6.3 Set clock and the grand finale (dj-mixer-01 -> director, 2026-08-06)
+
+**Needed from the auto-vj-01 / core team: a `publish_session()` /
+`get_session()` pair on `vj_api`, mirroring `publish_section()` exactly** (same
+5 s TTL, same deep-copy on both sides, same degrade-to-no-op on an older core).
+The mixer side is already written and guarded -- it calls `publish_session` only
+when the attribute exists, so shipping the channel lights it up with no further
+change here (dj-mixer-01 0.152.0).
+
+### Why the director wants this
+
+Song sections say where you are in a *track*.  This says where you are in the
+*night*, which is the other half of the same question and the one the finale
+depends on.  Coordinating a grand finale by shouting across a room is how it
+usually goes wrong; the mixer knows when the set ends and the director does
+not.
+
+### Payload
+
+```python
+{
+  'phase': 'running' | 'closing' | 'final' | 'over',
+  'source': 'clock' | 'last_track',
+  'seconds_left': 240.0,          # best estimate until the set ends
+  'minutes_left': 4.0,
+  # present when a set length is configured:
+  'elapsed_s': 5400.0, 'total_s': 7200.0, 'progress': 0.75, 'remaining_s': 1800.0,
+  # present when phase == 'final':
+  'track_total_s': 420.0,         # how long the last song is
+  'track_remaining_s': 240.0,     # ...and how much of it is left
+  'final_peak_s': 300.0,          # where its biggest drop starts, if analysed
+  'final_peak_in_s': 120.0,       # ...counting from now
+  # context, when a list is playing:
+  'track_index': 9, 'track_total': 10, 'list_name': 'Friday Peak',
+  'endless': False,
+}
+```
+
+### The two signals, and why both
+
+* **`source: 'last_track'`** -- the last track of the playing list has started.
+  Exact, and the strongest finale cue available.  **Unavailable under shuffle
+  or loop**, where the list genuinely has no last track; claiming a finale
+  followed by four more tunes is worse than claiming none, so those cases fall
+  back to the clock.  Note that **loop defaults ON** in dj-mixer-01, so in a
+  default setup this signal never fires -- the DJ turns ∞ off for a set with a
+  planned ending.
+* **`source: 'clock'`** -- a configured set length, counted from the first
+  audio (not from when the mixer opened).  Works regardless of shuffle or loop,
+  but only if the operator set one.
+
+`last_track` wins when both apply: the list knowing its own end beats an
+estimate, including a clock that still thinks there is an hour to go.
+
+### `final_peak_s` is the interesting one
+
+A director told only *"three minutes left"* still has to guess when to fire,
+and the guess is usually wrong because the tune's own biggest drop is not in
+the middle of what remains.  We already analysed the file, so we can say
+exactly when it lands -- the `major`-tier peak from §6's structure data, or the
+last peak of any tier if no major one is ahead of the playhead.  Firing the
+finale *on* that drop rather than on a timer is the whole point of the field.
+Absent when the last track has never been analysed, so treat it as a bonus and
+not a precondition.
+
+### Suggested consumer behaviour (not prescriptive)
+
+`closing` is the cue to stop opening new material and start converging;
+`final` with `final_peak_in_s` is the cue to schedule the biggest moment of
+the night at that offset.  `over` means the target passed and the set is
+running long -- probably a reason to hold, not to escalate again.
+
 ## 7. Validation plan
 
 Sequence-corpus rows already record `bpm`/`beat_index`/`mode` per row
