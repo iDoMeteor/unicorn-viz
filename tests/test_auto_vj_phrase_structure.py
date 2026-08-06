@@ -85,6 +85,7 @@ _PHRASE_DEFAULTS = dict(
     _phrase_track_change_neutral_bars=4,
     _phrase_external_tier_min_confidence=0.6,
     _phrase_external_proximity_bars=8.0,
+    _phrase_arm_proximity_bars=16.0,
 )
 
 
@@ -269,6 +270,51 @@ def test_phrase_bias_external_match_no_bars_left_keeps_prior_full_strength_behav
     assert with_hint._phrase_bias('RISE') == pytest.approx(
         min(0.15, without_hint._phrase_bias('RISE') + 0.15 * 0.9), abs=1e-9
     )
+
+
+def test_phrase_bias_arms_ahead_of_a_known_upcoming_role() -> None:
+    """2026-08-06: next_role/bars_to_next (plan section 6.b) let the
+    director arm a transition before it arrives, not just react once it
+    does. Currently in RISE (mismatch vs. PEAK), but the mixer says PEAK
+    is next and close -- the arm term should be enough to flip the net
+    bias positive despite the mismatch penalty."""
+    hint = {'role': 'RISE', 'confidence': 0.9, 'next_role': 'PEAK', 'bars_to_next': 2.0}
+    armed = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
+    no_next = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9}, _bars_since_phase_entry=12
+    )
+
+    assert armed._phrase_bias('PEAK') > no_next._phrase_bias('PEAK')
+
+
+def test_phrase_bias_arm_term_ramps_with_bars_to_next_proximity() -> None:
+    far = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9, 'next_role': 'PEAK', 'bars_to_next': 15.0},
+        _bars_since_phase_entry=12,
+    )
+    near = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9, 'next_role': 'PEAK', 'bars_to_next': 1.0},
+        _bars_since_phase_entry=12,
+    )
+
+    assert far._phrase_bias('PEAK') < near._phrase_bias('PEAK')
+
+
+def test_phrase_bias_arm_term_only_fires_for_the_matching_next_role() -> None:
+    """next_role='FALL' should not arm a PEAK evaluation."""
+    hint = {'role': 'RISE', 'confidence': 0.9, 'next_role': 'FALL', 'bars_to_next': 1.0}
+    with_wrong_next = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
+    no_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=12)
+
+    # Only the ordinary RISE-vs-PEAK mismatch penalty should apply -- no
+    # arm bonus, since next_role doesn't match the role being evaluated.
+    plain_mismatch = _bare_controller(
+        section_hint={'role': 'RISE', 'confidence': 0.9}, _bars_since_phase_entry=12
+    )
+    assert with_wrong_next._phrase_bias('PEAK') == pytest.approx(
+        plain_mismatch._phrase_bias('PEAK'), abs=1e-9
+    )
+    assert with_wrong_next._phrase_bias('PEAK') < no_hint._phrase_bias('PEAK')
 
 
 def test_infer_peak_tier_uses_confident_external_tier_override() -> None:

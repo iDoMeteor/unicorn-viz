@@ -423,6 +423,68 @@ def test_prime_tempo_refreshes_tempo_hold_window() -> None:
     assert bt._tempo_hold_until_t == pytest.approx(100.0 + bt._tempo_hold_s)
 
 
+def test_prime_tempo_sets_the_primed_confidence_floor() -> None:
+    bt = BeatTracker({})
+    bt.prime_tempo(128.0, confidence=0.9)
+    assert bt._primed_confidence == pytest.approx(0.9)
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-06: primed confidence floor -- prime_tempo()'s confidence boost
+# used to be purely cosmetic, overwritten by the very next onset's raw
+# ACF/phase recomputation with no memory a prime had just happened. Real
+# live-session evidence: primed bpm=125 conf=0.90 -> conf=0.23 within 0.5s,
+# same bpm, repeating roughly every recommender eval cycle (~8s) for the
+# whole session. See docs/adr/vj-system.md.
+# ---------------------------------------------------------------------------
+
+def test_confidence_floor_survives_an_onset_that_misses_phase() -> None:
+    """A real onset that lands outside phase_tol (a genuine miss against
+    the freshly-primed tempo, e.g. the phase oscillator hasn't resynced
+    yet) must not crash self._confidence below the primed floor while the
+    prime is still fresh."""
+    bt = BeatTracker({})
+    bt._last_t = 100.0
+    bt.prime_tempo(125.0, confidence=0.9)
+    assert bt._confidence == pytest.approx(0.9)
+
+    # Force a phase-coherence miss: phase far from 0, well outside phase_tol.
+    bt._phase = 0.5
+    bt._absorb_onset(100.1, 1.0)
+
+    assert bt._confidence >= 0.9 - 1e-9
+
+
+def test_confidence_floor_expires_with_the_hold_window() -> None:
+    """Once _tempo_hold_until_t has passed, the floor must stop applying --
+    this is a temporary bridge to the next prime, not a permanent override
+    of live evidence."""
+    bt = BeatTracker({})
+    bt._last_t = 100.0
+    bt.prime_tempo(125.0, confidence=0.9)
+
+    bt._phase = 0.5
+    bt._last_t = bt._tempo_hold_until_t + 1.0  # hold window has expired
+    bt._absorb_onset(bt._last_t, 1.0)
+
+    assert bt._confidence < 0.9
+
+
+def test_confidence_floor_does_not_apply_before_any_prime() -> None:
+    """_primed_confidence defaults to 0.0, so a tracker that was never
+    primed must behave exactly as before -- no accidental floor from an
+    uninitialized value."""
+    bt = BeatTracker({})
+    bt._last_t = 100.0
+    bt._tempo_hold_until_t = 200.0  # pretend a hold window is active
+    bt._acf_confidence = 0.1
+    bt._phase = 0.5
+
+    bt._absorb_onset(100.1, 1.0)
+
+    assert bt._confidence < 0.5
+
+
 # ---------------------------------------------------------------------------
 # Downbeat callback scheduling
 # ---------------------------------------------------------------------------

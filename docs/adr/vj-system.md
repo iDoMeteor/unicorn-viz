@@ -599,6 +599,74 @@ and did *not* hold up (the flip in question turned out to be a musically
 correct read of the track, not a bug — see the Fire DJ / `electronic`
 section above for that finding). `_VJ_WEIGHTS_DOC_VERSION` bumped to 6.
 
+### Director Arms Ahead of `next_role`; Detector's Primed-Confidence Floor (2026-08-06)
+
+Decision: two fixes shipped together, both closing gaps the owner
+identified while reviewing the same live-churn evidence used elsewhere
+this day.
+
+**Director arms ahead of `next_role`/`bars_to_next` (plan §6.b).** This
+field has been on the wire since dj-mixer-01 0.145.0 (2026-08-05) but
+nothing read it — the owner had assumed it already shipped ("i thought
+that was done already"). `_phrase_bias()` gains a new term: while in the
+current role, if the mixer's published `next_role` matches the role
+being evaluated, a proximity-scaled bonus (ramped over
+`phrase_arm_proximity_bars`, default `16.0` bars — wider than the
+`8.0`-bar window used for the current-role-match term, since "prepare
+early" should start further out than "confirmed, about to end") offsets
+the ordinary current-role mismatch penalty as the transition nears. This
+is the piece that most directly answers the plan's original §2 complaint
+("the director jumps around trying to guess scenes... it has no
+expectation of... what usually happens next") — an 8-bar build into a
+known `PEAK` can now be prepared on bar 1 instead of only recognised
+once `PEAK` actually arrives. Additive with the existing current-role
+terms, not a replacement; independently verified via
+`tests/test_auto_vj_phrase_structure.py` (arm term flips net bias
+positive despite an active mismatch penalty, ramps with `bars_to_next`
+proximity, only fires when `next_role` matches the evaluated role).
+
+**Detector: `prime_tempo()`'s confidence boost now actually holds.**
+Raised by the owner while discussing the beat-lock churn found in the
+`garbage` bucket-h scorecard: "shouldn't it just hold for the whole
+track really? ... isn't the underlying problem the detector's poor
+confidence levels?" Traced directly against real corpus data
+(`sequence-corpus-*.jsonl`, no `log_decisions` needed): lock-gained/
+lock-lost event pairs showed the *same* BPM value (`125.0`) each time,
+confidence spiking to `0.90` on gain and immediately collapsing to
+`~0.20-0.28` on loss, repeating roughly every recommender eval cycle
+(~8s) — not two different tempo estimates fighting for the lock slot, as
+first suspected, but `prime_tempo()`'s confidence boost being purely
+cosmetic. `self._confidence` gets unconditionally recomputed from the
+raw `0.4 × ACF + 0.6 × phase` blend at two sites (`_absorb_onset()` and
+the ACF-update path) on every single onset/tick, with no memory that a
+prime had just happened — so a single onset landing outside
+`phase_tol` (plausible right after a prime, since `prime_tempo()` moves
+`self._bpm` without resyncing the phase oscillator) was enough to crash
+it back down before the next prime arrived.
+
+**Fix:** new `self._primed_confidence` field, set by `prime_tempo()`
+alongside its existing behavior. Both `self._confidence` recomputation
+sites now floor the result at `self._primed_confidence` for as long as
+`self._last_t < self._tempo_hold_until_t` — i.e. for as long as the
+prime stays fresh (default `tempo_hold_s = 10.0`, refreshed by each new
+prime). Since the recommender re-primes roughly every 8s whenever a
+fresh mixer BPM exists, this now holds confidence continuously for the
+whole track in practice, matching the owner's "shouldn't it just hold"
+framing directly, without needing to touch the release/acquire
+thresholds themselves. Verified live-pattern reproduction in
+`tests/test_beat_tracker_v2.py`: a synthetic onset forced to miss
+`phase_tol` right after a prime no longer drops confidence (confirmed
+the fix is load-bearing by reverting it locally and reproducing the
+exact live crash, `0.90` → `0.36`, before re-applying); the floor
+correctly stops applying once the hold window expires; an unprimed
+tracker (`_primed_confidence` defaults to `0.0`) is unaffected.
+
+**Scope note:** only `BeatTracker` (v2) and `BeatTrackerV3` (which
+inherits `prime_tempo()`/`_absorb_onset()` unmodified) got this fix —
+the legacy `BeatGridTracker` (v1, fallback-only, not the configured
+default) has a simpler single-confidence model without the same failure
+mode structure and was left alone. `_VJ_WEIGHTS_DOC_VERSION` bumped to 7.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

@@ -10,13 +10,14 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   publisher side is now implemented too** (2026-08-05, dj-mixer-01
   0.145.0): `structure.wire_for()` returns `next_role`/`next_tier`/
   `next_label`/`bars_to_next` per §6.b, and the controller publishes for
-  the live deck every frame via `vj_api.publish_section()`. **Remaining:**
-  the director's own "arm a transition ahead of the next role" behaviour
-  -- the data is on the wire now, the consumer does not act on it yet.
-  Since 2026-08-06 the mixer's sections are also **hand-editable** and
-  corrections republish mid-track (§6.e) -- no wire change, and the
-  consumer was verified clear of the one staleness hazard it raised, so
-  nothing is outstanding on that amendment.
+  the live deck every frame via `vj_api.publish_section()`. **The
+  director's own "arm a transition ahead of the next role" behaviour is
+  now implemented too** (2026-08-06, auto-vj-01 1.0.0-rc.20) -- `_phrase_
+  bias()` reads `next_role`/`bars_to_next`, so §6.b's payload is fully
+  consumed end to end. Since 2026-08-06 the mixer's sections are also
+  **hand-editable** and corrections republish mid-track (§6.e) -- no wire
+  change, and the consumer was verified clear of the one staleness hazard
+  it raised, so nothing is outstanding on that amendment either.
 Last updated: 2026-08-06
 
 ## 1. Objective
@@ -493,16 +494,24 @@ in this file's history (see `docs/adr/vj-system.md`).
   answer cannot drift between the two. Verified end to end against the
   real `App.publish_section()`/`get_section()`: every role the detector
   emits survives the core's canonical-role validation.
-  **Remaining:** §6.b's *consumer* half -- the director arming a
-  transition on `next_role`/`bars_to_next` rather than only reacting.
-  The fields are on the wire and json-safe; nothing reads them yet.
+  **Remaining (closed 2026-08-06, see below):** §6.b's *consumer* half --
+  the director arming a transition on `next_role`/`bars_to_next` rather
+  than only reacting. The fields were on the wire and json-safe from the
+  start; nothing read them until now.
 - **Phase 2 — external-hint bias proximity fix (2026-08-06, auto-vj-01
   1.0.0-rc.15):** live use turned up a real bug in the §6.c bias term --
   it used `role`+`confidence` only, so a confident match right at the
   *start* of a phase (e.g. BUILD) escalated the DROP threshold just as
   hard as one right before the actual drop. Now gated by `bars_left`
   proximity (new `phrase_external_proximity_bars`). This uses `bars_left`
-  (already consumed since §6.a), not the still-unread `next_role`/
-  `bars_to_next` from §6.b above -- that consumer gap is still open. See
+  (already consumed since §6.a), not (at the time) the still-unread
+  `next_role`/`bars_to_next` from §6.b above. See
   `docs/adr/vj-system.md` § "External Section-Hint Bias Gated by
   `bars_left` Proximity".
+- **Phase 2 — §6.b consumer half done (2026-08-06, auto-vj-01
+  1.0.0-rc.20):** `_phrase_bias()` now reads `next_role`/`bars_to_next`
+  too, arming a transition ahead of time instead of only reacting once
+  the role has arrived -- the piece that most directly answers this
+  plan's original §2 complaint. Owner had assumed this already shipped;
+  it hadn't. See `docs/adr/vj-system.md` § "Director Arms Ahead of
+  `next_role`; Detector's Primed-Confidence Floor".
