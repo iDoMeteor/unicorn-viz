@@ -184,8 +184,6 @@ def _make_recommender_stub(**overrides) -> SimpleNamespace:
         _profile_auto_reco_last_apply_t=-1e9,
         _audio_profile_candidate_key=None,
         _audio_profile_candidate_since_t=-1e9,
-        _fire_dj_last_t=-1e9,
-        _fire_dj_cooldown_s=1200.0,
     )
     for k, v in overrides.items():
         setattr(stub, k, v)

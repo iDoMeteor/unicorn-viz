@@ -248,7 +248,6 @@ Different music genres have distinct frequency characteristics. Unicorn Viz incl
 | `hardstyle`     | Distorted/pitched kick, reverse-bass sweep, and euphoric screech leads           |
 | `drum_and_bass` | Fast break transients, subs, and bright hats at full sprint                      |
 | `dubstep`       | Half-time wobble bass, scooped growl mids, and sparse syncopated hits            |
-| `fire_dj`       | High-energy wide-tempo profile with heavy kick, active hats, and synth-mid drive |
 | `electronic`    | Balanced across all frequencies with emphasis on detail (broad catch-all)        |
 | `chillstep`     | Slow electronic groove: sub-bass kick, atmospheric pads, soft hi-hats            |
 | `ambient`       | Smooth, subtle reactivity with slight bass emphasis                              |

@@ -391,6 +391,54 @@ number. `_VJ_WEIGHTS_DOC_VERSION` bumped to 3; see
 `weights-and-thresholds.md`'s Director section for the updated term
 description.
 
+### Fire DJ Profile Removed, Replaced by a Wide-BPM-Range Easter Egg (2026-08-06)
+
+Decision: the dedicated `fire_dj` `AudioProfile` is removed entirely from
+`PROFILES` (owner call: "let's kill the fire dj profile"). The Fire DJ
+celebration effect itself is unaffected -- only its trigger condition
+changed.
+
+**Why:** `fire_dj` existed as a wide-tempo (132-170 BPM) catch-all genre
+profile specifically so the recommender could match "the DJ is running a
+fast, wide-tempo electronic set" and switch to it, which in turn fired the
+celebration. But that's a genre-classification detour for a fact that's
+directly observable: whether the DJ actually spanned a wide tempo range.
+Using a *profile* for it meant the celebration only fired when the
+recommender's composite score happened to prefer `fire_dj` over every
+other candidate that cycle -- an indirect, competable signal, not a direct
+measurement.
+
+**New mechanism:** `_maybe_check_wide_bpm_easter_egg()`
+(`auto_vj.py`, called every `update()` tick) samples locked BPM readings
+(confidence >= `_BPM_LOCK_CONFIDENCE`) into a rolling window, throttled to
+one sample per `wide_bpm_sample_interval_s` (default 2.0s) to keep the
+window cheap at frame rate. Once the max-min span across the surviving
+samples in the last `wide_bpm_window_s` (default 600s / 10 min) clears
+`wide_bpm_span_threshold` (default 30 BPM, owner-selected), it fires
+`_trigger_fire_dj_celebration()` -- the same celebration as before,
+unchanged. Retrigger gate reuses the existing `fire_dj_cooldown_s` /
+`_fire_dj_last_t` (default 1200s / 20 min) rather than adding a new
+cooldown constant, since the owner's own framing ("resets after
+triggering every 20mins") already matched the pre-existing celebration
+cooldown exactly.
+
+**Removal scope (owner chose "full removal" over disable-and-keep, unlike
+the `generic` pattern):** the `PROFILES` entry, its expected-bands
+fingerprint, and every current-state doc reference (weights-and-
+thresholds.md's two sigma tables, `AUDIO_PROFILE_CHEAT_SHEET.md`,
+`docs/audio-profile-reference.md`, `docs/user-guide.md`'s profile table)
+are gone. Historical references are left alone, per this ADR's own
+no-rewrite-history rule -- past `fire_dj` tuning entries in this document,
+old README changelog lines, and the training corpus's own generated
+scorecards still say what they said when they were written.
+
+**Verified:** new `tests/test_auto_vj_wide_bpm_easter_egg.py` covering:
+span below threshold does not fire; span at/above threshold fires once
+and respects the cooldown; unlocked/low-confidence BPM readings are not
+sampled; old samples outside the window are pruned before the span
+check. Full suite green; `fire_dj` no longer appears in
+`enabled_profiles()`/`PROFILES`/`get_profile()`.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

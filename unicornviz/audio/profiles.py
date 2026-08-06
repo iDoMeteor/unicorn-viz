@@ -81,7 +81,7 @@ class AudioProfile:
     #   around spectral_centroid_mu (Hz). Mirrors bpm_prior_sigma's role for
     #   tempo -- a genre with a very characteristic, consistent timbral
     #   signature (dubstep's wobble, psytrance's saw leads) should be tight;
-    #   a broad-church catch-all (house, generic, fire_dj) should be wide.
+    #   a broad-church catch-all (house, generic) should be wide.
     #   2026-08-06: added as a coarse tight/medium/wide tier assignment by
     #   genre feel (250/400/600), not a fitted value -- see
     #   drop-ins/auto-vj-01/docs/weights-and-thresholds.md and the accuracy
@@ -662,56 +662,6 @@ PROFILES: Dict[str, AudioProfile] = {
             0.950, 1.000, 1.000, 1.000, 0.920, 0.900, 0.900, 0.900,
             0.880, 0.850, 0.820, 0.780, 0.700, 0.680, 0.650, 0.600,
             0.400, 0.300, 0.200, 0.200, 0.180, 0.160, 0.150, 0.150,
-        ],
-    ),
-    "fire_dj": AudioProfile(
-        name="Fire DJ",
-        description=(
-            "High-energy electronic profile for fast, wide-tempo DJ sets with "
-            "heavy kick, active hats, and synth-mid drive"
-        ),
-        bass_min=24.0,
-        bass_max=240.0,
-        mid_min=240.0,
-        mid_max=4600.0,
-        treble_min=4600.0,
-        treble_max=20000.0,
-        bass_weight=1.18,
-        mid_weight=1.16,
-        treble_weight=1.12,
-        beat_threshold=1.00,
-        smoothing=0.085,
-        curve="aggressive",
-        # Electronic emphasis: strong kick + hats + synth mids. Less drum-kit
-        # bias than metal; more tolerant than narrow hard-techno/trance lanes.
-        onset_bass_emphasis=1.45,
-        onset_mid_emphasis=1.30,
-        onset_treble_emphasis=1.18,
-        # 2026-07-08: bpm_prior_mu 148 -> 152 (confusability pass, see ADR).
-        # This wide-tempo DJ-set catch-all (132-170 BPM) exactly copied
-        # hard_techno's center point (148), making it the closest competing
-        # match to a much narrower, specific genre profile. Shifted to sit
-        # nearer the true center of this profile's own declared range
-        # instead of duplicating a neighbor's.
-        bpm_prior_mu=152.0,
-        bpm_prior_sigma=0.32,
-        bpm_hint_min=132.0,
-        bpm_hint_max=170.0,
-        spectral_centroid_mu=2100.0,
-        spectral_centroid_sigma=600.0,
-        zcr_mu=0.076,
-        onset_density_mu=3.8,
-        vocal_hnr_mu=0.35,
-        vocal_fmr_mu=0.25,
-        expected_bands=[
-            0.920, 0.880, 0.850, 0.820, 0.780, 0.750, 0.800, 0.850,
-            0.900, 0.950, 0.800, 0.850, 0.900, 0.880, 0.850, 0.900,
-            0.920, 0.950, 0.850, 0.750, 0.800, 0.850, 0.880, 0.920,
-            0.950, 1.000, 0.950, 0.900, 0.850, 0.800, 0.750, 0.700,
-            0.650, 0.600, 0.550, 0.600, 0.650, 0.700, 0.750, 0.800,
-            0.850, 0.900, 0.950, 1.000, 0.950, 0.900, 0.850, 0.700,
-            0.750, 0.800, 0.850, 0.900, 0.920, 0.950, 0.850, 0.750,
-            0.800, 0.850, 0.880, 0.920, 0.950, 1.000, 0.950, 0.900,
         ],
     ),
     "drum_and_bass": AudioProfile(
