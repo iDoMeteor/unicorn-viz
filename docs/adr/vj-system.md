@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -189,6 +189,43 @@ adjacent-tempo profiles during *scoring*, even though the live tracker's
 own prior was always floored at 0.45. Recommender floor raised to match
 (0.45) so scoring and live detection agree on how tight a genre prior is
 allowed to be.
+
+> **Reverted 2026-08-06** — this specific change was wrong; see "Recommender
+> Sigma-Floor Revert" below. The two floors were never the same concern.
+
+### Recommender Sigma-Floor Revert (2026-08-06)
+
+Decision: the `_profile_score()` sigma floor from P2-E above is reverted
+from `max(0.45, ...)` back to `max(0.08, ...)` — its pre-P2-E value.
+
+**Root cause:** P2-E's premise — two sigma floors disagreeing is itself a
+bug — was wrong. The detector's floor (`beat_grid._MIN_PROFILE_PRIOR_SIGMA
+= 0.45`, unchanged, still correct) protects *live ACF search* from a
+profile's prior dominating real acoustic evidence. The recommender's floor
+governs something unrelated: how much a tempo mismatch counts as evidence
+*against* a candidate genre while scoring which profile to recommend.
+Unifying them under one constant quietly defanged the second job. Verified
+live (2026-08-06 training session, ~115 min, BPM 110-135 throughout,
+`recommender_score.md` unchanged at 1.75/5 across two consecutive
+sessions): the session's actual 64-band spectral fingerprint correctly
+favored `deep_house` over `psytrance` (cosine similarity 0.879 vs 0.776
+against the real corpus data) — `spectral_shape_fit` was doing its job —
+but `psytrance` (mu=145) still won the composite score, because at 0.45 a
+30 BPM miss cost `tempo_fit` only about -0.26 raw (~-0.5 weighted at 2.0);
+at the reverted 0.08 (i.e. each profile's own authored sigma — psytrance's
+real 0.16 — since 0.08 is below every profile's value and never actually
+binds), the same miss costs about -2.02 raw (~-4.0 weighted), enough to
+matter against the other ~12 weighted terms.
+
+**Verified:** new cases in `tests/test_bpm_detector_audit_regressions.py`
+— a source-text guard on the exact constant, and an end-to-end
+`_update_profile_recommendation()` run (candidates restricted to
+`psytrance`/`deep_house` to keep it deterministic against the full
+20-profile field) reproducing the live session's shape: `bpm=120`,
+`centroid`/`zcr`/`onset_count` set to psytrance's own targets exactly (a
+plausible bright, dense mix). Confirmed directly against both floor values
+while building the fix: `deep_house` wins at 0.08, `psytrance` wins at
+0.45 — the test fails without the revert, not just after it.
 
 **Verified:** `tests/test_bpm_detector_audit_regressions.py` — (1) locked
 at 124 BPM, apply a Psytrance-like profile (mu=145, σ=0.16), continue
@@ -1008,7 +1045,7 @@ training-pipeline concern; this entry exists here only because both touch
 | — | `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN = 0.55` | Never validated against real data; real coherence medians run 0.41-0.47, so 0.55 would have gated `is_downbeat` closed on roughly half of all beats. Lowered to 0.42 as a training-start value (see Analysis Mode section) |
 | — | `profile_auto_reco_score_margin` / `_decider_min_margin = 0.25` (additive score gap) | Unbounded scale meant different things across genres (real margins observed 0.06-2.17); replaced with a softmax probability margin, rescaled to 0.09 at the equivalent historical percentile (see Recommender Confirm/Decider Margin section) |
 | 2026-07-18–2026-08-04 | `set_profile()` narrowing `_bpm_min`/`_bpm_max` from `bpm_hint_min`/`bpm_hint_max` (all engines; v3 kept applying it even while confidently locked) | The dominant "BPM tending hot" mechanism, not the prior re-prime the 2026-07-18 fix addressed — a wrongly-applied profile could permanently hide the true tempo from the search, self-confirming the wrong profile. Removed entirely (P0-A); see BPM Detector Audit section above |
-| 2026-08-04 | Recommender `_profile_score()` sigma floor `max(0.08, ...)` | Six times looser than the live detector's own `_MIN_PROFILE_PRIOR_SIGMA` (0.45), so several genres' raw 0.16-0.22 sigmas drove scoring the live tracker never actually applied; raised to 0.45 to match (P2-E) |
+| 2026-08-04–2026-08-06 | Recommender `_profile_score()` sigma floor `max(0.45, ...)` | P2-E's premise (two disagreeing sigma floors is itself a bug) was wrong -- they're different concerns. Live session showed psytrance still winning at 30 BPM off its mu despite correctly-favoring spectral-shape fit; reverted to `max(0.08, ...)` (see Recommender Sigma-Floor Revert section) |
 | 2026-06-18–2026-08-05 | `IMPACT` as a held state, earned via a mid-groove score re-check after a delay (`impact_trigger_score`/`impact_min_delay_s`/`impact_max_delay_s`) | Didn't correspond to anything in real song structure — imposed a fixed DROP→IMPACT→CLIMAX staircase on every drop cycle regardless of the track. Folded into DROP as a fixed-duration entry flourish for a later drop, decided once at fire time; see Phrase-Aware Director section above |
 
 ---

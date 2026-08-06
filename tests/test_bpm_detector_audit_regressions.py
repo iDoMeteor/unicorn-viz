@@ -324,3 +324,104 @@ def test_fast_override_uses_shorter_cooldown_than_normal_path() -> None:
         current_score=1.5, score_margin=1.0, mean_confidence=1.0)
 
     assert manager.set_calls == ['deep_house']
+
+
+# ---------------------------------------------------------------------------
+# Recommender sigma-floor revert (2026-08-06): a large tempo mismatch must
+# actually cost a candidate profile real score, not be nearly free.
+#
+# P2-E (2026-08-04) raised the recommender's tempo_fit sigma floor from 0.08
+# to 0.45 to match beat_grid._MIN_PROFILE_PRIOR_SIGMA, reasoning that two
+# different sigma floors disagreeing was itself a bug. A live training
+# session (2026-08-06, ~115 min, BPM 110-135 throughout) showed this was
+# wrong: psytrance (mu=145) kept winning the composite score anyway --
+# spectral-shape fit correctly favored deep_house (cosine similarity 0.879
+# vs 0.776 against the session's actual band data) but couldn't overcome a
+# tempo_fit term that a 30 BPM miss barely dented under the 0.45 floor. The
+# detector's own sigma floor (kept at 0.45, unchanged) and the recommender's
+# scoring sigma are different concerns that happened to share a constant --
+# reverted to 0.08 here (below every profile's own authored sigma, so it
+# never actually binds -- the real per-profile values, e.g. psytrance 0.16,
+# are what apply).
+# ---------------------------------------------------------------------------
+
+def test_recommender_sigma_floor_source_is_0_08_not_0_45() -> None:
+    """Guard against silently re-introducing the P2-E floor. Deliberately a
+    source-text check, not a re-derivation of the scoring math: the point is
+    to catch the exact constant regressing, the same pattern
+    test_bpm_eval_beat_grid_path_points_to_auto_vj_01 uses in
+    test_corpus_writers.py."""
+    src = _AUTO_VJ_PATH.read_text(encoding='utf-8')
+    assert "sigma = max(0.08, float(getattr(profile, 'bpm_prior_sigma'" in src
+
+
+class _FakeVjApiNoBpm:
+    def get_bpm(self, exclude: str = '') -> float:
+        return 0.0
+
+
+def _make_full_reco_stub(*, bpm: float, centroid: float, zcr: float, onset_count: float,
+                          n_samples: int = 6) -> SimpleNamespace:
+    app = SimpleNamespace(vj_api=_FakeVjApiNoBpm(), _audio_manager=_FakeManager('house'))
+    now = time.monotonic()
+    samples = deque([
+        {'t': now - (n_samples - i) * 0.5, 'bpm': bpm, 'conf': 0.5, 'dconf': 0.4, 'locked': True,
+         'bass': 0.34, 'mid': 0.33, 'treble': 0.33, 'zcr': zcr, 'centroid': centroid,
+         'onset_count': onset_count, 'bands': None, 'spectral_flux': 0.1,
+         'vocal_hnr': 0.0, 'vocal_fmr': 0.0}
+        for i in range(n_samples)
+    ])
+    return SimpleNamespace(
+        _app=app,
+        _grid=SimpleNamespace(bpm=bpm, confidence=0.5, downbeat_confidence=0.4, top_candidates=[]),
+        _engine=_FakeEngine(),
+        _profile_auto_reco_enabled=True,
+        _profile_auto_reco_eval_interval_s=0.0,
+        _profile_auto_reco_window_s=60.0,
+        _profile_auto_reco_confirm_wins=1,
+        _profile_auto_reco_score_margin=0.0,
+        _reco_last_eval_t=-1e9,
+        _reco_samples=samples,
+        _reco_candidate_key='',
+        _reco_candidate_wins=0,
+        _recommended_profile_key='',
+        _recommended_profile_name='',
+        _recommended_profile_range='',
+        _recommended_profile_score=0.0,
+        _recommended_profile_confirmed=False,
+        _current_profile_score=0.0,
+        _current_profile_scored=False,
+        _last_onset_count=onset_count,
+        _kick_energies=deque(maxlen=16),
+        _reco_weights=dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS),
+        _has_bpm_lock=lambda *a, **kw: True,
+        _spotify_telemetry_snapshot=lambda: {},
+        _maybe_apply_recommended_audio_profile=lambda **kw: None,
+    )
+
+
+def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -> None:
+    """The 2026-08-06 live-session shape, reproduced directly: candidates
+    restricted to just these two (a 20-profile field introduces confounds
+    like tech_house/electronic also fitting the tempo reasonably well,
+    which obscures the specific psytrance-vs-deep_house comparison this
+    fix is about) so the test is deterministic. centroid/zcr/onset_count
+    are set to psytrance's own targets exactly -- a bright, dense mix that
+    could plausibly belong to a real track -- while bpm=120 sits close to
+    deep_house's 121 mu and 25 BPM off psytrance's 145. With the old 0.45
+    sigma floor this combination scores psytrance higher despite the
+    tempo miss (verified directly while diagnosing the fix); with the
+    reverted 0.08 floor (i.e. each profile's own authored sigma -- 0.16
+    for psytrance) tempo_fit's now-real penalty flips the outcome."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {k: profiles_mod.PROFILES[k] for k in ('psytrance', 'deep_house')}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    stub = _make_full_reco_stub(bpm=120.0, centroid=2500.0, zcr=0.090, onset_count=1.6)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+
+    assert stub._recommended_profile_key == 'deep_house'
