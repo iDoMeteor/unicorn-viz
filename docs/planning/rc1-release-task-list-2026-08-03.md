@@ -103,8 +103,9 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - [x] **[P1][S]** webcam-01: don't open the camera while nothing renders
       (`pip_position = "hidden"` + enabled default = webcam LED on at first
       boot — privacy optics for a public release). *(done — webcam-01 1.0.0-rc.2)*
-- [x] **[P1][M]** CI: add a push/PR workflow running the core pytest suite
-      (1,083 tests, 8 s — this is cheap); keep the nightly installer smoke. *(done — .github/workflows/tests.yml; drop-in-dependent test files excluded, see workflow comment)*
+- [ ] ~~CI: push/PR pytest workflow~~ **WITHDRAWN (2026-08-06, owner rule):**
+      **no GitHub workflows except by the installer team.** The tests.yml
+      added in beta.23 is removed; test gating stays local (pre-commit).
 - [x] **[P2][S]** images-01: cap the image cache (count/resolution) before
       strangers point it at photo libraries. *(done — images-01 0.8.1)*
 - [ ] **[P2][S]** Clean the stale `# nosec` (training_daemon.py:203) and
