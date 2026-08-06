@@ -232,7 +232,7 @@ This ensures that viewing the same effect twice never produces identical motion 
 
 ## Audio Profiles (Frequency-Response Tuning)
 
-Different music genres have distinct frequency characteristics. Unicorn Viz includes **20 audio profiles** that optimize bass/mid/treble detection, BPM priors, and spectral genre-matching for each style. The set is deliberately focused on electronic dance music and its closely adjacent DJ-culture genres (hip-hop, R&B) rather than covering every possible genre — this keeps the Auto VJ profile recommender's candidate pool tight and its matches confident, rather than diluted across genres the system will rarely encounter.
+Different music genres have distinct frequency characteristics. Unicorn Viz includes **21 audio profiles** that optimize bass/mid/treble detection, BPM priors, and spectral genre-matching for each style (19 discoverable via `Alt+A` cycling and the recommender; `generic` and `electronic` are disabled catch-alls kept resolvable by name only — see their rows below). The set is deliberately focused on electronic dance music and its closely adjacent DJ-culture genres (hip-hop, R&B) rather than covering every possible genre — this keeps the Auto VJ profile recommender's candidate pool tight and its matches confident, rather than diluted across genres the system will rarely encounter.
 
 | Profile         | Description                                                                      |
 |-----------------|----------------------------------------------------------------------------------|
@@ -248,7 +248,7 @@ Different music genres have distinct frequency characteristics. Unicorn Viz incl
 | `hardstyle`     | Distorted/pitched kick, reverse-bass sweep, and euphoric screech leads           |
 | `drum_and_bass` | Fast break transients, subs, and bright hats at full sprint                      |
 | `dubstep`       | Half-time wobble bass, scooped growl mids, and sparse syncopated hits            |
-| `electronic`    | Balanced across all frequencies with emphasis on detail (broad catch-all)        |
+| `electronic`    | Balanced across all frequencies with emphasis on detail (disabled -- see below)  |
 | `chillstep`     | Slow electronic groove: sub-bass kick, atmospheric pads, soft hi-hats            |
 | `ambient`       | Smooth, subtle reactivity with slight bass emphasis                              |
 | `rap`           | Heavy sub-bass (808 kick), sustained vocal presence, moderate treble             |
@@ -259,6 +259,8 @@ Different music genres have distinct frequency characteristics. Unicorn Viz incl
 **Switch profiles with `Alt+A` (next) / `Alt+Shift+A` (previous)** — profiles cycle with wraparound.
 
 **Set default profile in config:** `[audio] profile = "house"`
+
+**`generic` and `electronic` are disabled**, not deleted — excluded from `Alt+A` cycling and the Auto VJ recommender's candidate pool, but still resolvable if referenced directly (e.g. an explicit `[audio] profile` setting). `generic` was never a real genre, just a loose fallback. `electronic` was cut 2026-08-06 after a cosine-similarity audit against the rest of the catalog found its spectral fingerprint more similar to unrelated-tempo profiles than to its own close-tempo neighbors — a flat, non-discriminating catch-all rather than a genre with a real identity, and its BPM range was already fully covered by `house`/`tech_house`/`deep_house`/`peak_time`. See `docs/adr/vj-system.md` for the analysis.
 
 ### Where these numbers come from
 

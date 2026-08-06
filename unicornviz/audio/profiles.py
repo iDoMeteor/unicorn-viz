@@ -414,6 +414,19 @@ PROFILES: Dict[str, AudioProfile] = {
     "electronic": AudioProfile(
         name="Electronic",
         description="Balanced across all frequencies with emphasis on detail",
+        # 2026-08-06: disabled (owner call, confirmed by cosine-similarity
+        # audit against the whole catalog -- see docs/adr/vj-system.md
+        # "Wide-Tier Catch-All Profiles Disabled..."). expected_bands is
+        # >=0.95 cosine-similar to nearly every other profile, *higher* to
+        # far-tempo genres (trance 0.9962, hyphy 0.9950, psytrance 0.9871)
+        # than to its own close-tempo neighbors (deep_house 0.9547, house
+        # 0.9403) -- a flat fingerprint that doesn't discriminate, not a
+        # unique signal, layered on a bpm_hint range (118-132) already
+        # fully covered by house/tech_house/deep_house/peak_time. Same
+        # disable-not-delete pattern as 'generic': still resolvable
+        # directly by key, just excluded from the recommender pool and
+        # Alt+A cycling.
+        enabled=False,
         bass_min=20.0,
         bass_max=200.0,
         mid_min=200.0,

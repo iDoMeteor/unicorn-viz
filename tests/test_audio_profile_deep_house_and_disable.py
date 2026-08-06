@@ -3,6 +3,10 @@
 - AudioProfile.enabled / enabled_profiles() -- capability-aware disable
   (mirrors unicorn-horn ADR-0003's pattern: disable, don't delete).
 - 'generic' disabled from discovery 2026-08-03 (still resolvable directly).
+- 'electronic' disabled from discovery 2026-08-06 (cosine-similarity audit
+  found its expected_bands more similar to far-tempo profiles than its own
+  tempo neighbors -- a non-discriminating catch-all, same treatment as
+  'generic'; see docs/adr/vj-system.md).
 - The new 'deep_house' profile.
 """
 
@@ -54,16 +58,36 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     enabled = enabled_profiles()
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
+    assert 'electronic' not in enabled
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
 
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     """Every profile except the explicitly-disabled ones should default to
     enabled=True without having to set it themselves."""
+    _disabled = {'generic', 'electronic'}
     for key, profile in PROFILES.items():
-        if key == 'generic':
+        if key in _disabled:
             continue
         assert profile.enabled is True, f'{key} unexpectedly disabled'
+
+
+def test_electronic_is_disabled_but_still_in_profiles() -> None:
+    assert 'electronic' in PROFILES
+    assert PROFILES['electronic'].enabled is False
+
+
+def test_electronic_excluded_from_discovery() -> None:
+    assert 'electronic' not in list_profiles()
+    assert 'electronic' not in enabled_profiles()
+
+
+def test_electronic_still_resolvable_by_direct_lookup() -> None:
+    """Disabled means excluded from discovery, not deleted -- direct
+    reference (explicit config, internal fallback) must keep working."""
+    p = get_profile('electronic')
+    assert p.name == 'Electronic'
+    assert p is PROFILES['electronic']
 
 
 # ---- deep_house -------------------------------------------------------

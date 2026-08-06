@@ -439,6 +439,82 @@ sampled; old samples outside the window are pruned before the span
 check. Full suite green; `fire_dj` no longer appears in
 `enabled_profiles()`/`PROFILES`/`get_profile()`.
 
+### Wide-Tier Catch-All Profiles: `electronic` Disabled (2026-08-06)
+
+Decision: `electronic` is disabled (`enabled=False`, same disable-not-delete
+pattern as `generic`) after live evidence plus a cosine-similarity audit
+showed it winning the recommender by being broadly tolerable rather than
+being the best specific fit -- the same underlying pattern as the `fire_dj`
+removal above, this time surfaced by the owner's stated preference: "i'd
+rather not have any generics really."
+
+**Live evidence:** a training session running current code (post `fire_dj`
+removal) sat on `electronic` for most of ~18 minutes while the mixer's own
+logs showed every track playing at a consistent 122-125 BPM -- a range
+`deep_house` (mu=121) matches at least as well, yet `deep_house` won only
+once, briefly, before `electronic` took over and held.
+
+**Audit, to answer "is it catching a unique signal or just overlapping
+valid sub-genres":** computed cosine similarity between `electronic`'s
+`expected_bands` and every other profile's. Result: `electronic` is
+**more** similar to profiles with wildly different tempos --
+`trance` (0.9962, 13 BPM away), `hyphy` (0.9950, 30 BPM away),
+`psytrance` (0.9871, 20 BPM away), `drum_and_bass` (0.9840, 49 BPM away)
+-- than to its own close-tempo neighbors `deep_house` (0.9547) and
+`house` (0.9403). A profile whose spectral fingerprint doesn't
+discriminate by tempo-neighborhood isn't capturing anything specific; it
+reads as a near-flat vector that resembles the whole catalog roughly
+equally. Its `bpm_hint` range (118-132) was also already fully covered by
+`house`/`tech_house`/`deep_house`/`peak_time` -- no tempo gap either.
+Verdict: not a unique signal, not filling a gap -- a second `generic`
+wearing a narrower BPM label.
+
+**Same audit run against the other wide-tier profiles** (`rap`, `hyphy`,
+`r&b`, `ambient`, `chillstep`, plus `house` as a healthy-pattern
+reference), owner-requested as a "double checker" before committing to a
+broader cleanup:
+
+- `ambient` -- genuinely distinctive (0.83-0.93 similarity range, well
+  below everyone else's 0.95+). Real signal. Not touched.
+- `house` -- healthy pattern: its top matches are genuine close-tempo
+  siblings (`peak_time` gap 6 BPM, `tech_house` gap 2, `electronic` gap
+  1). High similarity concentrated among things that actually *are*
+  similar, unlike `electronic`'s scattered-across-random-tempos pattern.
+  Not touched -- also matches the owner's earlier, separately-justified
+  reasoning for keeping `house` wide (`bpm_prior_sigma=0.35`, the widest
+  BPM sigma of any profile, due to a genuinely wide house sub-genre set
+  in the training library).
+- `hyphy` and `chillstep` -- same red flag as `electronic`: top-5 matches
+  are almost all 30-50 BPM away at 0.97-0.99 similarity, nothing from
+  their own tempo neighborhood ranks near the top (`hyphy` and
+  `electronic` are even each other's #1 match despite a 30 BPM gap).
+  **Flagged as the same case as `electronic`, not yet acted on** --
+  owner has this evidence, decision pending.
+- `rap` and `r&b` -- borderline. Each other's #1 match is a genuine
+  sibling relationship (`r&b`↔`rap`, 3 BPM apart -- hip-hop and R&B do
+  share a sound), but further down their top-5 they also pick up
+  far-tempo noise. Weaker case than `hyphy`/`chillstep`; **not
+  recommended for automatic inclusion** in the same cleanup without
+  separately checking whether those specific matches are musically
+  justified, the way the Coolio-track trance flip below turned out to be.
+
+**A caution baked into this decision, from the same live session:** a
+`trance` flip that looked like thrashing in the logs turned out, on the
+owner actually listening, to be a musically correct read of a real
+trance-y section in the track -- not a bug. Flip *frequency* alone isn't
+evidence of a problem without knowing whether the room agreed with each
+flip. This is exactly the gap the accuracy-tracking spec's Tier 2 (tag-
+genre ground truth) is aimed at closing eventually; until then, disabling
+`electronic` rests on the cosine-similarity structural argument (a
+fingerprint that doesn't discriminate by tempo-neighborhood), not on flip
+frequency, which was independently shown to be an unreliable signal in
+this same session.
+
+**Verified:** `enabled_profiles()`/`list_profiles()` exclude `electronic`;
+`get_profile('electronic')` still resolves it directly. New tests in
+`tests/test_audio_profile_deep_house_and_disable.py` mirroring the
+existing `generic` coverage. Full suite green.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

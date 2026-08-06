@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.32**
+**Version 1.0.0-beta.33**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.33** — `electronic` audio profile disabled (owner call, confirmed by a cosine-similarity audit against the whole catalog): its spectral fingerprint was more similar to far-tempo profiles (`trance`, `hyphy`, `psytrance`) than to its own close-tempo neighbors, and its BPM range was already fully covered by `house`/`tech_house`/`deep_house`/`peak_time` -- a non-discriminating catch-all, not a genre with a real identity. Same disable-not-delete pattern as `generic`: excluded from `enabled_profiles()`/`Alt+A` cycling, still resolvable by direct key lookup. `hyphy` and `chillstep` flagged with the same audit finding but not yet acted on; `rap`/`r&b` checked and found borderline (real sibling relationship, not the same case). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Wide-Tier Catch-All Profiles: `electronic` Disabled".
 - **1.0.0-beta.32** — `fire_dj` audio profile removed entirely from `unicornviz/audio/profiles.py` (owner call). Its recommender-driven Fire DJ celebration trigger is replaced by a direct, profile-independent easter egg: fires when the DJ spans a wide BPM range within a rolling window. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Fire DJ Profile Removed, Replaced by a Wide-BPM-Range Easter Egg". Drop-in pointer: auto-vj-01 1.0.0-rc.16.
 - **1.0.0-beta.31** — `[audio] profile` default reverted `"generic"` → `"house"` (owner call, live during a training session): `"generic"` is `enabled=False` in `PROFILES` on purpose -- a disabled, loose/uninformative catch-all never meant to be a real starting analyzer profile, and it made for a noticeably weaker start to training sessions specifically. Reverts the `1.0.0-beta.26` default across all three sites (`config.py`'s `DEFAULT_CONFIG`, `AudioManager.__init__`'s kwarg default, `Analyzer.__init__`'s fallback) plus the HUD's stale-fallback string and both config file comments. No `config.toml` setting added -- this is a code-default-only fix.
 - **1.0.0-beta.30** — Per-profile `spectral_centroid_sigma` added to `unicornviz/audio/profiles.py` (tight/medium/wide tiers by genre feel) so the recommender's `centroid_fit` discriminates per genre instead of using one fixed 400 Hz sigma for all 22 profiles. Ships Tier 1 of the recommender accuracy-tracking spec ([docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md](docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md)) -- per-term signal-activity logging rolled up in `session_scorecard.py`. Drop-in pointer: auto-vj-01 1.0.0-rc.14.
