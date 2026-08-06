@@ -288,8 +288,71 @@ tables (director thresholds, detector confidence-blend terms, recommender
 `_DEFAULT_RECO_WEIGHTS`) referenced during this review now live in
 [`drop-ins/auto-vj-01/docs/weights-and-thresholds.md`](../../drop-ins/auto-vj-01/docs/weights-and-thresholds.md),
 which is versioned independently and must be kept in sync with
-`_RECO_WEIGHTS_DOC_VERSION` in `auto_vj.py` — see that doc's own header and
+`_VJ_WEIGHTS_DOC_VERSION` in `auto_vj.py` — see that doc's own header and
 the CLAUDE.md agent rule added alongside it.
+
+### Per-Profile Centroid Sigma + Accuracy Tracking Tier 1 (2026-08-06)
+
+Decision: resolves the `centroid_fit` fixed-400-Hz-sigma asymmetry flagged
+above as an Open Question, and ships Tier 1 of the accuracy tracking spec
+(`docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md`).
+
+1. **Per-profile `spectral_centroid_sigma`.** New `AudioProfile` field
+   (`unicornviz/audio/profiles.py`), default `400.0` (the old fixed
+   constant). `centroid_fit`'s Gaussian now reads it per candidate instead
+   of a hardcoded `400.0`, mirroring `tempo_fit`'s `bpm_prior_sigma`
+   mechanism exactly. Owner explicitly chose the cheap route over a fitted
+   one: three coarse tiers (`250`/`400`/`600`) assigned by genre feel —
+   tight for genres with a real, consistent timbral signature (`dubstep`'s
+   wobble, `psytrance`'s saw leads, `tech_house`'s stripped percussion),
+   wide for broad-church catch-alls (`house`, `electronic`, `fire_dj`,
+   `generic`, plus `rap`/`r&b`/`hyphy`/`ambient`/`chillstep` for their
+   sub-genre variance). `house`'s wide tier mirrors its already-wide
+   `bpm_prior_sigma` (`0.35`) for the same reason: the owner's library
+   carries a wide house genre set (tropical, afro, progressive, etc.) with
+   real spread, not a calibration gap. Full tier table in
+   `weights-and-thresholds.md`. Explicitly a first pass, not a fitted
+   result — the plan is to replace these three numbers with values fitted
+   from Tier 2's hit/miss data once that exists, not to treat them as
+   final.
+2. **Accuracy tracking spec, Tier 1 (signal activity) implemented.**
+   `_update_profile_recommendation()` now captures each candidate's raw
+   per-term values (via `_profile_score()` returning `(composite, terms)`
+   instead of just the composite) and logs `term_spread` — each term's
+   `max - min` across all scored candidates that cycle — on the existing
+   `profile_recommendation` decision-log event. `lock_rate`/`mean_conf`/
+   `mean_dconf` are structurally excluded from spread analysis: they're
+   computed once per cycle from the sample window, not per candidate, so
+   every candidate gets an identical value and their spread is always
+   `0` — that means "not a genre-fit term", not "this weight does
+   nothing", and treating it as the latter would be a real
+   misinterpretation risk. `training-kit-01/tools/session_scorecard.py`
+   rolls this up into a new "Signal Activity" section: per term, the
+   fraction of eval cycles across the scored sessions where its spread
+   cleared a `0.05` activity threshold.
+3. **Tier 2 open questions, answered by the owner (2026-08-06):**
+   - Genre-tag → profile-key mapping: proceed as spec'd (many-to-one
+     lookup table, explicit unmapped bucket) — the owner's training
+     library is expected to stay accurately and completely tagged, so the
+     mapping table is the main remaining risk, not tag data quality. Owner
+     additionally asked for a **fuzzy fallback**: a tag that doesn't match
+     any profile exactly (e.g. "Tropical House", "Afro House" — real
+     sub-genres in the library with no dedicated profile) should fall back
+     to a keyword match (e.g. ends in "house" → `house`) rather than
+     landing in the unmapped bucket. Two-pass lookup — exact/alias match
+     first, keyword fallback second, explicit-unmapped only if neither
+     hits — captured in the spec doc; not yet built (Tier 2 as a whole is
+     still unimplemented).
+   - Untagged tracks: **log them** (not silently skip) — visibility into
+     how much of a session's accuracy signal is actually usable matters,
+     even though untagged tracks still don't count toward the hit/miss
+     rate itself.
+   - Rollup location: confirmed, `scorecard.md` generation.
+   - Live vs. offline: owner said they're "kinda shootin' for" tag genre
+     eventually becoming a live ground-truth signal, not just a
+     packaging-time measurement — this is a real intended direction, not
+     hypothetical, though still unscoped and not started. See the spec
+     doc's updated framing.
 
 ---
 
@@ -1175,14 +1238,12 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
 
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
-- `centroid_fit`'s Gaussian (`auto_vj.py`, `_profile_score()`) uses a fixed
-  400 Hz sigma for every profile, unlike `tempo_fit`'s per-profile
-  `bpm_prior_sigma`. A genre with a naturally tight, well-separated centroid
-  target (e.g. `dubstep`) and one with a broad, overlapping one (e.g.
-  `electronic`) are judged with the same brightness tolerance today. Adding
-  a per-profile `spectral_centroid_sigma` (mirroring `bpm_prior_sigma`)
-  would let `centroid_fit` discriminate as sharply as `tempo_fit` does —
-  flagged during the 2026-08-06 weight review, not yet built.
+- ~~`centroid_fit`'s Gaussian used a fixed 400 Hz sigma for every profile~~
+  — **resolved 2026-08-06**, see "Per-Profile Centroid Sigma + Accuracy
+  Tracking Tier 1" above. Added `spectral_centroid_sigma` as a coarse
+  tight/medium/wide tier per profile, not yet a fitted value — replacing
+  the three tier numbers with fitted ones once Tier 2 accuracy data exists
+  is the follow-up, still open.
 - Sigma tightening in the same review only covered 3 of the 4 originally
   flagged outliers (`breaks`, `rap`, `synthwave`); `fire_dj` was
   intentionally left alone. Whether the remaining ~17 profiles' sigmas

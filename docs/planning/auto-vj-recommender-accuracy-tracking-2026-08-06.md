@@ -1,6 +1,6 @@
 # Auto VJ Recommender — Accuracy Tracking Spec
 
-Status: proposed, not yet implemented
+Status: Tier 1 implemented (auto-vj-01 1.0.0-rc.14); Tier 2 still proposed
 Owner: unicorn-viz maintainers
 Last updated: 2026-08-06
 
@@ -18,28 +18,37 @@ weight?") can't be answered from a single anecdote.
 
 Two tiers are proposed, buildable independently.
 
-## Tier 1 — signal activity (buildable now, no ground truth needed)
+## Tier 1 — signal activity (implemented, 2026-08-06)
 
-A diagnostic proxy for "is this term actually discriminating between
-candidates, or just adding noise to every score by a constant?" Per eval
-cycle, for each term (`tempo_fit`, `centroid_fit`, `band_fit`, …), compute
+**Status: shipped in `auto-vj-01` 1.0.0-rc.14.** A diagnostic proxy for "is
+this term actually discriminating between candidates, or just adding noise
+to every score by a constant?" Per eval cycle, for each term (`tempo_fit`,
+`centroid_fit`, `band_fit`, …), `_update_profile_recommendation()` computes
 the **spread** of that term's raw (pre-weight) value across all scored
-candidates — e.g. `max - min`, or standard deviation across the candidate
-set. A term with near-zero spread across candidates this cycle is
-contributing a constant offset to every score, not helping distinguish
-psytrance from deep_house *this cycle*, regardless of its weight.
+candidates (`max - min`) and logs it as `term_spread` on the existing
+`profile_recommendation` decision-log event. A term with near-zero spread
+across candidates this cycle is contributing a constant offset to every
+score, not helping distinguish psytrance from deep_house *this cycle*,
+regardless of its weight.
 
-Logged per cycle to the existing decision-log JSONL (same file
-`profile_auto_reco_*` events already land in), then rolled up by
-`session_scorecard.py` / `package_training_set.py` (training-kit-01) into a
-per-term "activity score" for the session: what fraction of cycles did this
-term have non-trivial spread. Over many sessions this becomes a real signal
-for "`kick_regularity_fit` has near-zero spread in 90% of cycles across the
+One correction from the original proposal: `lock_rate`/`mean_conf`/
+`mean_dconf` are computed once per cycle from the sample window, not per
+candidate — every candidate gets the identical value, so their spread is
+*structurally* always `0`. That's "not a genre-fit term", not "this weight
+does nothing"; `session_scorecard.py` excludes them from activity analysis
+rather than flagging them as dead.
+
+`session_scorecard.py` rolls this up into a "Signal Activity" section: per
+term, what fraction of a session's eval cycles cleared a `0.05` spread
+threshold. Over many sessions this becomes a real signal for
+"`kick_regularity_fit` has near-zero spread in 90% of cycles across the
 last 10 sessions — its weight is currently doing nothing" without needing
 to know which candidate was *correct*.
 
-This does not require the mixer's genre tags, does not require the owner to
-curate anything, and could ship as a training-kit-01 change alone.
+This did not require the mixer's genre tags or any owner curation — see
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md`'s Changelog entry **2**
+and `docs/adr/vj-system.md` § "Per-Profile Centroid Sigma + Accuracy
+Tracking Tier 1" for the full implementation record.
 
 ## Tier 2 — tag-based genre as ground truth (needs curated library)
 
@@ -64,31 +73,64 @@ training library managed this way going forward.
   this session (breaks/rap/synthwave) instead of leaving them as an
   ad hoc ratio comparison against other profiles' spans.
 
-**Open design questions, not yet resolved:**
+**Open design questions — answered by the owner, 2026-08-06:**
 
-1. **Genre-tag → profile-key mapping.** ID3 `GENRE` strings are free text
-   ("Progressive House", "Psy-Trance", "UK Garage / 2-Step") and won't map
-   1:1 onto the 21 `PROFILES` keys. Needs a lookup table (probably
-   many-to-one, several tag strings mapping to the same profile key) plus
-   an explicit "unmapped, skip this track for accuracy purposes" bucket
-   rather than guessing.
-2. **Partial/missing tags.** Not every track in a library will be tagged,
-   especially older or less-curated portions. Tier 2 must degrade
-   gracefully per-track (skip untagged tracks for accuracy purposes,
-   don't block or warn) rather than assume full coverage.
-3. **Where the rollup lives.** Likely a new section in the existing
-   `scorecard.md` generation (`package_training_set.py`), alongside the
-   existing lock/director quality summaries — not a new artifact type.
-4. **Tag genre as a *training* signal vs. a *live* signal.** This spec is
-   about post-hoc accuracy measurement during packaging/review, not about
-   feeding the tag back into the live recommender at runtime (that would be
-   a much bigger change — effectively a ground-truth override — and is out
-   of scope here unless the owner wants to open it).
+1. **Genre-tag → profile-key mapping — proceed as spec'd, plus a fuzzy
+   fallback.** ID3 `GENRE` strings are free text ("Progressive House",
+   "Psy-Trance", "UK Garage / 2-Step") and won't map 1:1 onto the 22
+   `PROFILES` keys. The owner confirmed the training library will be kept
+   accurately and completely tagged, so tag *quality* isn't the risk — the
+   mapping table is. Owner's addition: the library carries real house
+   sub-genres with no dedicated profile (tropical house, afro house, and
+   similar), and these should not fall into "unmapped" just because they
+   don't match an exact/alias entry. Proposed two-pass lookup:
+   - **Pass 1 — exact/alias match** against a curated table (e.g.
+     "Deep House" → `deep_house`, "Psy-Trance"/"Psytrance" → `psytrance`,
+     "UK Garage"/"2-Step" → `uk_garage`). Handles every tag that has a real
+     dedicated profile.
+   - **Pass 2 — keyword fallback.** A tag that misses pass 1 gets matched
+     on its last/most-generic word against a small keyword→profile table
+     (e.g. anything ending in "house" with no more specific match →
+     `house`; same idea for "techno" → closest techno profile or
+     `electronic`). This is what turns "Tropical House" into `house`
+     instead of unmapped.
+   - **Unmapped bucket** only if neither pass hits — explicit and visible,
+     never a silent guess.
+   Not yet built — the keyword table itself (which words route to which
+   profile) needs to be written before Tier 2 implementation starts.
+2. **Partial/missing tags — log them.** Owner's call: don't silently skip.
+   An untagged track still doesn't contribute to the hit/miss rate (no
+   ground truth to compare against), but it should be visibly counted
+   (e.g. "312/400 eval cycles had a usable tag this session") so a low
+   accuracy sample size is never mistaken for a low accuracy score.
+3. **Where the rollup lives — confirmed.** `scorecard.md` generation
+   (`package_training_set.py`), alongside the existing lock/director
+   quality summaries — not a new artifact type.
+4. **Tag genre as a *training* signal vs. a *live* signal — owner is
+   "kinda shootin' for" the live version eventually.** This is a real
+   intended direction, not a hypothetical — the owner wants tag genre to
+   become an actual ground-truth signal the live recommender can use, not
+   just a packaging-time measurement. That's a materially bigger change
+   than anything else in this spec (effectively teaching the recommender
+   to trust curated metadata over its own acoustic scoring when both are
+   available) and needs its own design pass once Tier 2's offline measurement
+   exists and the mapping table has real mileage on it — surfacing questions
+   like: does a tag match override the acoustic score outright, blend with
+   it, or just raise the confirm-wins/margin bar for anything the tag
+   disagrees with? Deliberately not scoped further here; revisit once Tier 2
+   offline data exists to ground the decision in something other than a
+   guess.
 
 ## Non-goals for this spec
 
-- Not building either tier yet — this document is the spec for review.
+- Tier 1 is done; Tier 2 is not being built yet — this document remains the
+  spec for Tier 2 review.
 - Not proposing to feed tag genre into the live `_profile_score()` composite
-  as a term; Tier 2 is an offline/packaging-time accuracy measurement.
-- Not proposing a specific genre-tag taxonomy/lookup table yet — question 1
-  above needs an answer before that table can be written.
+  as a term in *this* pass — Tier 2 as scoped here is an offline/
+  packaging-time accuracy measurement. The owner has signaled that's not
+  the end state (see question 4), but the live-feedback design is
+  explicitly deferred to its own pass, not folded in here.
+- Not proposing the actual keyword-fallback table (which words route to
+  which profile) yet — question 1's two-pass design is agreed, but the
+  table contents still need to be written before Tier 2 implementation
+  starts.

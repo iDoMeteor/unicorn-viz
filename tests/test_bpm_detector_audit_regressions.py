@@ -427,3 +427,40 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
 
     assert stub._recommended_profile_key == 'deep_house'
+
+
+def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
+    """2026-08-06: centroid_fit's Gaussian sigma used to be a fixed 400 Hz
+    for every profile. It now reads spectral_centroid_sigma per profile
+    (tight/medium/wide tiers), mirroring tempo_fit's per-profile mechanism.
+
+    Two variants of the same profile (identical bpm_prior_mu/sigma and
+    spectral_centroid_mu -- only spectral_centroid_sigma differs) isolate
+    the effect: a centroid reading equally far from mu for both should
+    score the *tight*-sigma variant lower, since a tight sigma penalizes
+    a given mismatch harder than a wide one."""
+    import dataclasses
+
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['psytrance']
+    tight = dataclasses.replace(base, spectral_centroid_sigma=250.0)
+    wide = dataclasses.replace(base, spectral_centroid_sigma=600.0)
+    restricted = {'tight_test': tight, 'wide_test': wide}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    # Centroid measured 300 Hz off both profiles' shared mu -- a real
+    # mismatch, but every other term (tempo, zcr, onset, mu) is identical
+    # between the two candidates, so any score difference is attributable
+    # to spectral_centroid_sigma alone.
+    off_target_centroid = float(base.spectral_centroid_mu) + 300.0
+    stub = _make_full_reco_stub(
+        bpm=float(base.bpm_prior_mu), centroid=off_target_centroid,
+        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
+    )
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+
+    assert stub._recommended_profile_key == 'wide_test'

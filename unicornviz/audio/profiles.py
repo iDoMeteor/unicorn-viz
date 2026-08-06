@@ -77,9 +77,22 @@ class AudioProfile:
     # Spectral features for the profile recommender.  Set to None to skip
     # scoring on that dimension (safe for profiles without calibrated values).
     # spectral_centroid_mu: frequency-weighted mean of spectrum (Hz) — "brightness"
+    # spectral_centroid_sigma: how tightly this genre's brightness clusters
+    #   around spectral_centroid_mu (Hz). Mirrors bpm_prior_sigma's role for
+    #   tempo -- a genre with a very characteristic, consistent timbral
+    #   signature (dubstep's wobble, psytrance's saw leads) should be tight;
+    #   a broad-church catch-all (house, generic, fire_dj) should be wide.
+    #   2026-08-06: added as a coarse tight/medium/wide tier assignment by
+    #   genre feel (250/400/600), not a fitted value -- see
+    #   drop-ins/auto-vj-01/docs/weights-and-thresholds.md and the accuracy
+    #   tracking spec for the plan to replace these with measured values
+    #   once real hit/miss data exists. 400 (the old fixed constant every
+    #   profile used before this field existed) is the default for any
+    #   profile that doesn't set it explicitly.
     # zcr_mu: zero-crossing rate per sample — correlates with harshness/noise content
     # onset_density_mu: expected onset events per second (with kick-biased weighting)
     spectral_centroid_mu: float | None = None
+    spectral_centroid_sigma: float = 400.0
     zcr_mu: float | None = None
     onset_density_mu: float | None = None
 
@@ -169,6 +182,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=120.0,
         bpm_hint_max=128.0,
         spectral_centroid_mu=1500.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.060,
         onset_density_mu=2.5,
         vocal_hnr_mu=0.35,
@@ -220,6 +234,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # Warmer/less bright than house (1500 Hz) -- the chord stabs and
         # rolled-off hats keep energy lower in the spectrum.
         spectral_centroid_mu=1150.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.048,
         onset_density_mu=2.0,
         # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: soulful
@@ -261,6 +276,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=122.0,
         bpm_hint_max=130.0,
         spectral_centroid_mu=1700.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.065,
         onset_density_mu=2.8,
         vocal_hnr_mu=0.35,
@@ -299,6 +315,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=126.0,
         bpm_hint_max=136.0,
         spectral_centroid_mu=2000.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.072,
         onset_density_mu=3.2,
         vocal_hnr_mu=0.35,
@@ -339,6 +356,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=134.0,
         bpm_hint_max=142.0,
         spectral_centroid_mu=2200.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.080,
         onset_density_mu=3.5,
         vocal_hnr_mu=0.35,
@@ -377,6 +395,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=140.0,
         bpm_hint_max=149.0,
         spectral_centroid_mu=2500.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.090,
         onset_density_mu=4.0,
         vocal_hnr_mu=0.35,
@@ -416,6 +435,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=118.0,
         bpm_hint_max=132.0,
         spectral_centroid_mu=1600.0,
+        spectral_centroid_sigma=600.0,
         # 2026-07-08: lowered 0.065 -> 0.052 (confusability pass, see ADR).
         # zcr_mu was an exact duplicate of both generic's (0.065) and
         # tech_house's (0.065) values, making this profile the closest
@@ -461,6 +481,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=132.0,
         bpm_hint_max=140.0,
         spectral_centroid_mu=1800.0,
+        spectral_centroid_sigma=400.0,
         # 2026-07-08: raised 0.068 -> 0.086 (confusability pass, see ADR).
         # Was tied exactly with uk_garage's zcr_mu and close to breaks',
         # making this the 2nd/3rd-closest competing pair in the whole
@@ -507,6 +528,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=128.0,
         bpm_hint_max=136.0,
         spectral_centroid_mu=1700.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.068,
         onset_density_mu=2.8,
         vocal_hnr_mu=0.35,
@@ -545,6 +567,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=132.0,
         bpm_hint_max=145.0,
         spectral_centroid_mu=1900.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.075,
         onset_density_mu=3.5,
         vocal_hnr_mu=0.35,
@@ -583,6 +606,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=142.0,
         bpm_hint_max=154.0,
         spectral_centroid_mu=2000.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.075,
         onset_density_mu=3.5,
         vocal_hnr_mu=0.35,
@@ -624,6 +648,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=145.0,
         bpm_hint_max=165.0,
         spectral_centroid_mu=1550.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.130,
         onset_density_mu=4.0,
         vocal_hnr_mu=0.35,
@@ -673,6 +698,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=132.0,
         bpm_hint_max=170.0,
         spectral_centroid_mu=2100.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.076,
         onset_density_mu=3.8,
         vocal_hnr_mu=0.35,
@@ -711,6 +737,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=168.0,
         bpm_hint_max=178.0,
         spectral_centroid_mu=2200.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.085,
         onset_density_mu=4.5,
         vocal_hnr_mu=0.35,
@@ -755,6 +782,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=138.0,
         bpm_hint_max=142.0,
         spectral_centroid_mu=950.0,
+        spectral_centroid_sigma=250.0,
         zcr_mu=0.095,
         onset_density_mu=1.8,
         vocal_hnr_mu=0.35,
@@ -801,6 +829,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=70.0,
         bpm_hint_max=100.0,
         spectral_centroid_mu=1600.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.060,
         onset_density_mu=2.0,
         vocal_hnr_mu=0.55,
@@ -853,6 +882,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=90.0,
         bpm_hint_max=110.0,
         spectral_centroid_mu=1800.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.068,
         onset_density_mu=2.5,
         vocal_hnr_mu=0.55,
@@ -900,6 +930,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=75.0,
         bpm_hint_max=100.0,
         spectral_centroid_mu=1400.0,
+        spectral_centroid_sigma=600.0,
         # Lowered slightly (0.052 -> 0.048): smooth, sustained vocals are the
         # least noisy signal of the three vocal-forward profiles.
         zcr_mu=0.048,
@@ -956,6 +987,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # fallback, not a genre with a real "sweet spot" tempo range to
         # display -- see P2-E in docs/audits/2026-08-04-bpm-detector-audit.md.
         spectral_centroid_mu=1600.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.065,
         onset_density_mu=2.5,
         expected_bands=[
@@ -996,6 +1028,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=84.0,
         bpm_hint_max=116.0,
         spectral_centroid_mu=800.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.030,
         onset_density_mu=0.4,
         expected_bands=[
@@ -1044,6 +1077,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_min=78.0,
         bpm_hint_max=112.0,
         spectral_centroid_mu=900.0,
+        spectral_centroid_sigma=600.0,
         zcr_mu=0.040,
         onset_density_mu=1.5,
         expected_bands=[
@@ -1105,6 +1139,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # and house's percussion-driven brightness (1500 Hz) -- present lead
         # synths without a hi-hat-driven treble floor.
         spectral_centroid_mu=1200.0,
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.050,
         onset_density_mu=1.9,
         # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: classic
