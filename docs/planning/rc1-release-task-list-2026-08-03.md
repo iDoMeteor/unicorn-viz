@@ -114,14 +114,14 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 
 ## E. Effects quality (one systemic pass)
 
-- [ ] **[P1][M]** Float32 time/hash pass across ~15 effects (audit §8): (a)
+- [x] **[P1][M]** Float32 time/hash pass across ~15 effects (audit §8): (a)
       integrate audio-modulated speeds in `update()` (nebula_drift pattern)
       — sun_ship_3000, asteroid_run, canyon_run, portal_flight, warp_drive,
       wingsuit_dive, tunnel; (b) `mod()` time-derived hash inputs
       (asteroid_run pattern) — threat_matrix, hacker_terminal_v2,
       reactor_breach, vector, alien_invasion, cosmos, cloud_surfer,
       america_250, van_gogh. Several currently ship with their signature
-      layer dead or strobing.
+      layer dead or strobing. *(done — flying-01 0.2.0, cosmic-01 0.11.0, immersive-01 0.10.0, holiday-01 0.5.1, retro-01 0.9.1, vector-01 0.9.1; tech-01 Class-B fixed earlier in 0.10.0. Fixes are pattern-faithful to nebula_drift but visual — worth one live eyeball pass.)*
 - [x] **[P1][S]** cyber_war: replace `np.random.seed(42)` global reseed with
       `self.rng`; randomize the node board. *(done — tech-01 0.9.1)*
 - [x] **[P2][S]** hacker_terminal_v2: dirty-flag the glyph upload (~2,560
