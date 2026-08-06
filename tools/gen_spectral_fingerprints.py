@@ -182,15 +182,6 @@ _PROFILE_META: dict[str, dict] = {
             "the distorted growl-bass texture."
         ),
     },
-    "fire_dj": {
-        "name": "Fire DJ (wide-tempo electronic)",
-        "bpm": "132–170",
-        "acoustic_notes": (
-            "High-energy wide-tempo electronic: strong kick 40–120 Hz; active hats "
-            "8–16 kHz; synth mid drive 200–3000 Hz; fills across full spectrum; "
-            "similar to peak_time but with wider tempo and more synth mid content."
-        ),
-    },
     "drum_and_bass": {
         "name": "Drum & Bass",
         "bpm": "168–178",
@@ -200,41 +191,42 @@ _PROFILE_META: dict[str, dict] = {
             "very fast transients; high treble energy from live-sounding break drums."
         ),
     },
-    "rap": {
-        "name": "Rap / Hip-Hop",
+    # 2026-08-06: 'rap' and 'r&b' merged into 'rap_rnb' (owner call: genuine
+    # siblings per a cosine-similarity audit, not distinct catch-alls). See
+    # docs/adr/vj-system.md for the merge record.
+    "rap_rnb": {
+        "name": "Rap / R&B",
         "bpm": "70–100",
         "acoustic_notes": (
-            "Heavy 808/sub kick 30–80 Hz; mid kick punch 80–150 Hz; rap vocals are "
-            "a SUSTAINED (not transient) signal emphasising 200–3000 Hz — the "
-            "fingerprint should show a broad, continuous plateau across that range "
-            "rather than a choppy percussion-style peak; hi-hats relatively subdued "
-            "6–12 kHz; low spectral centroid; strong sub dominance; AcousticBrainz "
-            "shows hip-hop centroids typically 800–1200 Hz."
+            "Merged hip-hop/R&B vocal-forward genre: heavy 808/sub kick 30–80 Hz "
+            "combined with smooth, warm bass 40–150 Hz; vocals are the most "
+            "SUSTAINED (not transient) signal in the catalog, spanning "
+            "150 Hz–3.2 kHz as a broad, continuous plateau rather than a choppy "
+            "percussion-style peak — reflecting both rap's spoken-word cadence "
+            "and R&B's held melodic lines; piano/keys and harmonic content add "
+            "texture 100–2000 Hz; hi-hats and cymbals relatively subdued 6–12 kHz "
+            "(not a bright/aggressive genre); low-to-moderate spectral centroid "
+            "(roughly 900–1300 Hz) and low ZCR (smooth, not noisy) reflecting "
+            "warmth over aggression — distinctly darker/smoother than hyphy."
         ),
     },
+    # 2026-08-06: acoustic_notes sharpened to explicitly emphasise the
+    # bright/prominent-hats feature that most separates hyphy from
+    # chillstep (a prior fingerprint generation left them nearly
+    # indistinguishable by cosine similarity — see docs/adr/vj-system.md).
     "hyphy": {
         "name": "Hyphy",
         "bpm": "90–110",
         "acoustic_notes": (
             "Aggressive Oakland hip-hop: heavier bass than rap 30–100 Hz; "
             "punchy mid synth hits 200–1500 Hz; hype vocal chops are a SUSTAINED "
-            "signal spanning 500–3000 Hz — broader and brighter than rap's vocal "
-            "plateau but still continuous, not choppy; bright hats and snare "
-            "4–12 kHz; more treble presence than classic rap."
-        ),
-    },
-    "r&b": {
-        "name": "R&B / Soul",
-        "bpm": "75–100",
-        "acoustic_notes": (
-            "Warm: smooth bass 40–150 Hz; vocal-forward 200–3000 Hz is the most "
-            "SUSTAINED vocal presence of the three vocal-forward genres — the "
-            "fingerprint should show the broadest, steadiest mid-band plateau of "
-            "the set (150 Hz–3.2 kHz), reflecting continuous, not choppy, vocal "
-            "and harmonic content; piano/keys add harmonic content 100–2000 Hz; "
-            "soft hi-hats 6–10 kHz; very low ZCR (smooth not noisy) — the lowest "
-            "of the three vocal genres; low spectral centroid ~1400 Hz; "
-            "low onset density — laid-back grooves."
+            "signal spanning 500–3000 Hz — broader and brighter than rap_rnb's "
+            "vocal plateau but still continuous, not choppy; BRIGHT, PROMINENT "
+            "hats and snare 4–12 kHz — this is the genre's most distinguishing "
+            "feature, give this band range noticeably more energy than any "
+            "downtempo/chill profile; more treble presence than rap_rnb or R&B; "
+            "moderate-high spectral centroid reflecting the punchy, "
+            "treble-forward character."
         ),
     },
     "generic": {
@@ -256,14 +248,24 @@ _PROFILE_META: dict[str, dict] = {
             "AcousticBrainz ambient centroid typically 600–1000 Hz; lowest ZCR of all genres."
         ),
     },
+    # 2026-08-06: acoustic_notes sharpened to explicitly emphasise the
+    # atmospheric-pad dominance and recessed hats that most separate
+    # chillstep from hyphy (a prior fingerprint generation left them
+    # nearly indistinguishable by cosine similarity — see
+    # docs/adr/vj-system.md).
     "chillstep": {
         "name": "Chillstep / Downtempo",
         "bpm": "78–112",
         "acoustic_notes": (
-            "Slow electronic: sub-bass kick 40–80 Hz; atmospheric pads 100–1200 Hz; "
-            "soft female vocal or vocal chops 200–2500 Hz; soft hi-hats 6–10 kHz; "
-            "higher treble than pure ambient but lower than club genres; "
-            "centroid ~900 Hz reflecting atmospheric and bass-dominant balance."
+            "Slow, atmospheric electronic: sub-bass kick 40–80 Hz; ATMOSPHERIC "
+            "PADS dominate 100–1200 Hz — this should be the most prominent "
+            "region, giving the fingerprint a dark, bass/low-mid-heavy shape; "
+            "soft female vocal or vocal chops 200–2500 Hz, present but not "
+            "prominent; SOFT, RECESSED hi-hats 6–10 kHz — deliberately low "
+            "energy here, the opposite of a bright/aggressive genre; higher "
+            "treble than pure ambient but clearly darker and calmer than any "
+            "club or hip-hop genre; low spectral centroid ~900 Hz reflecting "
+            "atmospheric, bass-dominant balance, not treble energy."
         ),
     },
     # 2026-08-03: added to the catalogue for provenance consistency when this

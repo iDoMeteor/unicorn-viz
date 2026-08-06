@@ -79,7 +79,7 @@ Aliases:
 | `device`         | str    | `""`    | Device name substring (empty = auto-detect PipeWire monitor) |
 | `fft_bands`      | int    | `512`   | Number of FFT frequency bins                                 |
 | `buffer_seconds` | float  | `10.0`  | Audio ring buffer length in seconds                          |
-| `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style: `house`, `chillstep`, `trance`, `electronic`, `rap`, `hyphy`, `r&b`, `rock`, `generic`, `classical`, `ambient`, `pop`, `metal`. Sets BPM prior and (for some profiles) caps the ACF search range via `bpm_hint_min`/`bpm_hint_max`. |
+| `profile`     | str     | `"house"`| Audio frequency-response profile for genre/style, e.g. `house`, `deep_house`, `tech_house`, `trance`, `psytrance`, `hard_techno`, `drum_and_bass`, `dubstep`, `chillstep`, `ambient`, `rap_rnb`. See `unicornviz/audio/profiles.py` `PROFILES` for the full current list. Sets BPM prior and (for some profiles) caps the ACF search range via `bpm_hint_min`/`bpm_hint_max`. |
 | `latency`        | str    | `"high"` | Audio stream latency: `"low"`, `"medium"`, `"high"`      |
 | `prefer_default_input` | bool | `true` | When true, startup prioritizes the current OS default input among candidates; when false, ranked monitor/app sources are preferred first. |
 | `require_startup` | bool | `false` | If true, Unicorn Viz exits when audio startup fails after retries. If false, startup continues without active audio and the visualizer runs in degraded mode. |

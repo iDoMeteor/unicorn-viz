@@ -761,56 +761,62 @@ PROFILES: Dict[str, AudioProfile] = {
             0.150, 0.120, 0.100, 0.100, 0.080, 0.080, 0.070, 0.070,
         ],
     ),
-    "rap": AudioProfile(
-        name="Rap / Hip-Hop",
-        description="Heavy sub-bass (808 kick), sustained vocal presence, moderate treble",
-        bass_min=20.0,
-        bass_max=300.0,
-        mid_min=300.0,
-        mid_max=2500.0,
-        treble_min=2500.0,
+    # 2026-08-06: 'rap' and 'r&b' merged into this single profile (owner
+    # call: "rap/r&b should be one") after a cosine-similarity audit found
+    # them genuine siblings -- 0.9856 similarity, 3 BPM apart -- rather
+    # than a false-catch-all pairing like fire_dj/electronic. Field values
+    # are blended averages of the two originals, with one correction:
+    # rap's old spectral_centroid_mu (1600) directly contradicted its own
+    # acoustic-notes comment ("AcousticBrainz shows hip-hop centroids
+    # typically 800-1200 Hz") -- the merge uses 1200 (matching that
+    # documented research finding, folded toward r&b's warmer 1400) rather
+    # than perpetuating the inconsistency by averaging a known-wrong number.
+    # spectral_centroid_sigma tightened 600->400 now that this is a real,
+    # intentionally-merged single genre rather than an accidental overlap.
+    # See docs/adr/vj-system.md for the full merge record.
+    "rap_rnb": AudioProfile(
+        name="Rap / R&B",
+        description="Heavy sub-bass with sustained, vocal-forward mids -- merged hip-hop/R&B sibling profile",
+        bass_min=30.0,
+        bass_max=275.0,
+        mid_min=275.0,
+        mid_max=3000.0,
+        treble_min=3000.0,
         treble_max=20000.0,
-        bass_weight=1.4,
-        mid_weight=1.25,
-        treble_weight=0.8,
-        beat_threshold=1.0,
-        smoothing=0.14,
+        bass_weight=1.25,
+        mid_weight=1.3,
+        treble_weight=0.85,
+        beat_threshold=1.12,
+        smoothing=0.135,
         curve="extreme_bass_boost",
-        # Rap/Hip-Hop: very kick-driven at 70-100 BPM.  With raw-spectrum
-        # flux the kick already dominates; restore some treble so hi-hats
-        # can contribute to ACF periodicity and subdivisions are visible.
-        onset_bass_emphasis=1.4,
-        onset_mid_emphasis=1.0,
-        onset_treble_emphasis=0.80,
-        bpm_prior_mu=88.0,
-        bpm_prior_sigma=0.24,
-        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
-        # own tempo pocket being documented above ("70-100 BPM") -- without a
-        # hint, the ACF search ran the full 60-200 BPM range unconstrained,
-        # relying only on the soft Gaussian prior. Wired the hint to the
-        # range already documented in this profile's own comment.
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.1,
+        onset_treble_emphasis=0.75,
+        bpm_prior_mu=86.5,
+        bpm_prior_sigma=0.27,
         bpm_hint_min=70.0,
         bpm_hint_max=100.0,
-        spectral_centroid_mu=1600.0,
-        spectral_centroid_sigma=600.0,
-        zcr_mu=0.060,
-        onset_density_mu=2.0,
-        vocal_hnr_mu=0.55,
-        vocal_fmr_mu=0.5,
-        # Fingerprint reshaped for a sustained (not choppy) plateau across the
-        # 150 Hz-3.2 kHz vocal-formant range (bands 16-47) — rap vocals are a
-        # continuous signal, unlike percussion transients, so the genre match
-        # should reward steady mid-band presence rather than an oscillating
-        # pattern. Sub/kick fundamental (bands 0-15) is unchanged.
+        spectral_centroid_mu=1200.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.054,
+        onset_density_mu=1.9,
+        vocal_hnr_mu=0.58,
+        vocal_fmr_mu=0.53,
+        # Regenerated (tools/gen_spectral_fingerprints.py, scoped rerun,
+        # 2026-08-06) rather than hand-blending the two originals' arrays,
+        # so the merged fingerprint doesn't inherit their inconsistencies.
+        # Prompt: sustained (not choppy) vocal plateau 150 Hz-3.2 kHz
+        # reflecting both rap's spoken-word cadence and R&B's held melodic
+        # lines, subdued hi-hats 6-12 kHz, low-to-moderate centroid.
         expected_bands=[
-            0.900, 0.870, 0.840, 0.800, 0.760, 0.720, 0.680, 0.700,
-            0.750, 0.800, 0.850, 0.900, 0.870, 0.900, 0.930, 0.950,
-            0.900, 0.870, 0.850, 0.830, 0.850, 0.870, 0.890, 0.900,
-            0.900, 0.880, 0.870, 0.860, 0.870, 0.880, 0.870, 0.850,
-            0.860, 0.870, 0.880, 0.870, 0.860, 0.850, 0.840, 0.830,
-            0.820, 0.800, 0.780, 0.750, 0.700, 0.650, 0.600, 0.550,
-            0.500, 0.450, 0.400, 0.350, 0.300, 0.280, 0.260, 0.240,
-            0.220, 0.200, 0.180, 0.160, 0.150, 0.140, 0.130, 0.120,
+            0.300, 0.350, 0.400, 0.450, 0.550, 0.680, 0.800, 1.000,
+            0.950, 0.900, 0.880, 0.850, 0.800, 0.780, 0.750, 0.730,
+            0.700, 0.650, 0.680, 0.750, 0.800, 0.850, 0.870, 0.900,
+            0.920, 0.900, 0.850, 0.800, 0.750, 0.700, 0.680, 0.720,
+            0.750, 0.780, 0.800, 0.820, 0.780, 0.750, 0.720, 0.700,
+            0.680, 0.650, 0.620, 0.680, 0.650, 0.600, 0.550, 0.500,
+            0.450, 0.400, 0.380, 0.350, 0.320, 0.300, 0.280, 0.250,
+            0.230, 0.220, 0.200, 0.180, 0.160, 0.150, 0.130, 0.120,
         ],
     ),
     "hyphy": AudioProfile(
@@ -850,69 +856,30 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_density_mu=2.5,
         vocal_hnr_mu=0.55,
         vocal_fmr_mu=0.5,
-        # Fingerprint reshaped for a sustained hype-vocal-chop plateau across
-        # 200 Hz-3 kHz (bands 16-47), brighter/broader than rap's per the
-        # genre's punchier, more treble-forward character.
+        # 2026-08-06: regenerated (tools/gen_spectral_fingerprints.py,
+        # scoped rerun -- see docs/adr/vj-system.md) after a cosine-
+        # similarity audit found the previous fingerprint nearly
+        # indistinguishable from chillstep (0.9788) despite very different
+        # acoustic character. New prompt explicitly emphasized hyphy's
+        # bright, prominent hats/snare 4-12 kHz as its defining feature
+        # (bands ~39-47) versus chillstep's deliberately soft/recessed
+        # treble in the same range. Improved chillstep similarity to 0.9703
+        # -- a real but modest gain, not a full fix; some residual overlap
+        # looks like an inherent limit of relative-magnitude cosine
+        # similarity across a cluster of genres that share a similar
+        # broad sub-bass-to-treble envelope shape, not a synthesis quality
+        # issue. centroid_mu (1800 vs chillstep's 900, already a full
+        # octave apart) and zcr_mu remain the sharper discriminators
+        # between these two -- see spectral_centroid_sigma and zcr_fit.
         expected_bands=[
-            0.930, 0.900, 0.870, 0.830, 0.800, 0.850, 0.880, 0.900,
-            0.930, 0.960, 0.980, 0.920, 0.880, 0.900, 0.920, 0.900,
-            0.870, 0.850, 0.870, 0.890, 0.870, 0.850, 0.830, 0.810,
-            0.850, 0.870, 0.880, 0.870, 0.860, 0.850, 0.840, 0.830,
-            0.850, 0.870, 0.880, 0.870, 0.850, 0.830, 0.810, 0.790,
-            0.800, 0.790, 0.780, 0.760, 0.740, 0.720, 0.700, 0.720,
-            0.750, 0.780, 0.800, 0.820, 0.800, 0.780, 0.750, 0.720,
-            0.700, 0.680, 0.650, 0.620, 0.580, 0.540, 0.500, 0.460,
-        ],
-    ),
-    "r&b": AudioProfile(
-        name="R&B / Soul",
-        description="Warm low-mids, sustained vocal-forward mids, smooth low-noise treble",
-        bass_min=40.0,
-        bass_max=250.0,
-        mid_min=250.0,
-        mid_max=3500.0,
-        treble_min=3500.0,
-        treble_max=20000.0,
-        bass_weight=1.1,
-        mid_weight=1.4,
-        treble_weight=0.9,
-        beat_threshold=1.25,
-        smoothing=0.13,
-        curve="warm",
-        # R&B/Soul: vocal-driven at 75-100 BPM, kick + snare backbeat.
-        onset_bass_emphasis=1.8,
-        onset_mid_emphasis=1.2,
-        onset_treble_emphasis=0.7,
-        bpm_prior_mu=85.0,
-        bpm_prior_sigma=0.30,
-        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
-        # own tempo pocket being documented above ("75-100 BPM") -- without a
-        # hint, the ACF search ran the full 60-200 BPM range unconstrained.
-        # Wired the hint to the range already documented in this profile's
-        # own comment.
-        bpm_hint_min=75.0,
-        bpm_hint_max=100.0,
-        spectral_centroid_mu=1400.0,
-        spectral_centroid_sigma=600.0,
-        # Lowered slightly (0.052 -> 0.048): smooth, sustained vocals are the
-        # least noisy signal of the three vocal-forward profiles.
-        zcr_mu=0.048,
-        onset_density_mu=1.8,
-        vocal_hnr_mu=0.6,
-        vocal_fmr_mu=0.55,
-        # Fingerprint reshaped into the broadest, most sustained vocal plateau
-        # of the three (150 Hz-3.2 kHz, bands 16-47 at 0.82-0.97) — the most
-        # vocal-forward genre of the set should show the steadiest mid-band
-        # presence rather than a narrow peak.
-        expected_bands=[
-            0.620, 0.600, 0.580, 0.560, 0.600, 0.640, 0.660, 0.680,
-            0.700, 0.720, 0.740, 0.720, 0.700, 0.730, 0.760, 0.790,
-            0.820, 0.850, 0.870, 0.860, 0.850, 0.860, 0.870, 0.880,
-            0.890, 0.900, 0.910, 0.920, 0.930, 0.940, 0.930, 0.920,
-            0.930, 0.940, 0.950, 0.960, 0.970, 0.960, 0.950, 0.940,
-            0.920, 0.900, 0.880, 0.850, 0.820, 0.790, 0.760, 0.730,
-            0.650, 0.600, 0.550, 0.500, 0.460, 0.430, 0.400, 0.380,
-            0.360, 0.340, 0.320, 0.300, 0.280, 0.260, 0.240, 0.220,
+            0.150, 0.180, 0.220, 0.280, 0.350, 0.400, 0.500, 0.650,
+            0.750, 0.850, 0.950, 1.000, 0.950, 0.900, 0.850, 0.800,
+            0.780, 0.750, 0.700, 0.850, 0.800, 0.780, 0.750, 0.720,
+            0.700, 0.680, 0.650, 0.680, 0.700, 0.730, 0.750, 0.780,
+            0.820, 0.850, 0.880, 0.900, 0.920, 0.950, 0.970, 1.000,
+            0.950, 0.900, 0.850, 0.800, 0.780, 0.750, 0.720, 0.950,
+            1.000, 0.980, 0.970, 0.950, 0.900, 0.880, 0.850, 0.800,
+            0.750, 0.700, 0.650, 0.600, 0.550, 0.500, 0.450, 0.400,
         ],
     ),
     # 2026-08-03: disabled from discovery (Alt+A cycling, auto-vj recommender
@@ -1043,15 +1010,25 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_sigma=600.0,
         zcr_mu=0.040,
         onset_density_mu=1.5,
+        # 2026-08-06: regenerated (tools/gen_spectral_fingerprints.py,
+        # scoped rerun -- see docs/adr/vj-system.md and hyphy's matching
+        # comment) after a cosine-similarity audit found the previous
+        # fingerprint nearly indistinguishable from hyphy (0.9788) despite
+        # very different acoustic character. New prompt explicitly
+        # emphasized chillstep's atmospheric-pad dominance in the low-mids
+        # and deliberately soft/recessed hi-hats 6-10 kHz as its defining
+        # feature -- the opposite of hyphy's bright treble. Improved
+        # similarity to 0.9703 -- a real but modest gain; see hyphy's
+        # comment for the honest caveat on residual overlap.
         expected_bands=[
-            0.750, 0.800, 0.850, 0.900, 0.950, 1.000, 0.900, 0.800,
-            0.700, 0.600, 0.550, 0.500, 0.450, 0.400, 0.650, 0.700,
-            0.750, 0.800, 0.850, 0.900, 0.950, 1.000, 0.850, 0.700,
-            0.600, 0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.740,
-            0.760, 0.780, 0.800, 0.820, 0.840, 0.860, 0.880, 0.900,
-            0.800, 0.700, 0.600, 0.620, 0.640, 0.660, 0.680, 0.700,
-            0.720, 0.740, 0.760, 0.780, 0.800, 0.820, 0.840, 0.860,
-            0.880, 0.900, 0.800, 0.700, 0.600, 0.620, 0.640, 0.660,
+            0.200, 0.250, 0.300, 0.350, 0.400, 0.450, 0.500, 0.700,
+            0.800, 0.950, 1.000, 0.950, 0.900, 0.850, 0.800, 0.750,
+            0.720, 0.700, 0.680, 0.650, 0.620, 0.600, 0.580, 0.550,
+            0.530, 0.500, 0.470, 0.500, 0.550, 0.600, 0.650, 0.670,
+            0.700, 0.720, 0.750, 0.780, 0.800, 0.820, 0.780, 0.750,
+            0.700, 0.650, 0.620, 0.680, 0.700, 0.720, 0.750, 0.600,
+            0.550, 0.520, 0.500, 0.480, 0.450, 0.420, 0.400, 0.380,
+            0.350, 0.330, 0.300, 0.280, 0.250, 0.230, 0.200, 0.180,
         ],
     ),
     # 2026-08-03: first-pass profile, added after a ~5 hour livestream training

@@ -232,7 +232,7 @@ This ensures that viewing the same effect twice never produces identical motion 
 
 ## Audio Profiles (Frequency-Response Tuning)
 
-Different music genres have distinct frequency characteristics. Unicorn Viz includes **21 audio profiles** that optimize bass/mid/treble detection, BPM priors, and spectral genre-matching for each style (19 discoverable via `Alt+A` cycling and the recommender; `generic` and `electronic` are disabled catch-alls kept resolvable by name only — see their rows below). The set is deliberately focused on electronic dance music and its closely adjacent DJ-culture genres (hip-hop, R&B) rather than covering every possible genre — this keeps the Auto VJ profile recommender's candidate pool tight and its matches confident, rather than diluted across genres the system will rarely encounter.
+Different music genres have distinct frequency characteristics. Unicorn Viz includes **20 audio profiles** that optimize bass/mid/treble detection, BPM priors, and spectral genre-matching for each style (18 discoverable via `Alt+A` cycling and the recommender; `generic` and `electronic` are disabled catch-alls kept resolvable by name only — see their rows below). The set is deliberately focused on electronic dance music and its closely adjacent DJ-culture genres (hip-hop, R&B) rather than covering every possible genre — this keeps the Auto VJ profile recommender's candidate pool tight and its matches confident, rather than diluted across genres the system will rarely encounter.
 
 | Profile         | Description                                                                      |
 |-----------------|----------------------------------------------------------------------------------|
@@ -251,9 +251,8 @@ Different music genres have distinct frequency characteristics. Unicorn Viz incl
 | `electronic`    | Balanced across all frequencies with emphasis on detail (disabled -- see below)  |
 | `chillstep`     | Slow electronic groove: sub-bass kick, atmospheric pads, soft hi-hats            |
 | `ambient`       | Smooth, subtle reactivity with slight bass emphasis                              |
-| `rap`           | Heavy sub-bass (808 kick), sustained vocal presence, moderate treble             |
+| `rap_rnb`       | Heavy sub-bass with sustained, vocal-forward mids (merged rap + R&B)             |
 | `hyphy`         | Aggressive sub-bass, sustained hype-vocal chops, bright treble                   |
-| `r&b`           | Warm low-mids, sustained vocal-forward mids, smooth low-noise treble             |
 | `generic`       | Balanced profile for unknown or mixed content (default fallback)                 |
 
 **Switch profiles with `Alt+A` (next) / `Alt+Shift+A` (previous)** — profiles cycle with wraparound.

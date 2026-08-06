@@ -515,6 +515,78 @@ this same session.
 `tests/test_audio_profile_deep_house_and_disable.py` mirroring the
 existing `generic` coverage. Full suite green.
 
+### `rap`/`r&b` Merged; `hyphy`/`chillstep` Fingerprints Regenerated (2026-08-06)
+
+Decision: following the double-checker audit above, `rap` and `r&b` are
+merged into a single `rap_rnb` profile (owner call: "rap/r&b should be
+one"), and `hyphy`/`chillstep` get freshly-generated `expected_bands`
+targeting their actual acoustic differences (owner call: "hyphy/chillstep
+should have distinctly different audio profiles but similar bpm").
+
+**`rap`/`r&b` merge.** The audit above found them genuine siblings (0.9856
+cosine similarity, 3 BPM apart, each other's #1 match) rather than a false
+catch-all pairing -- the right fix is consolidation, not disabling either
+one. `unicornviz/audio/profiles.py` field values are blended averages of
+the two originals, with one deliberate correction: `rap`'s old
+`spectral_centroid_mu` (1600) directly contradicted its own acoustic-notes
+comment ("AcousticBrainz shows hip-hop centroids typically 800-1200 Hz");
+the merge uses `1200` (honoring that documented research finding, folded
+toward `r&b`'s warmer 1400) rather than perpetuating the inconsistency by
+blindly averaging a known-wrong number. `spectral_centroid_sigma`
+tightened `600` → `400` (wide → medium tier) now that this is a real,
+intentionally-merged single genre rather than an accidental overlap.
+`bpm_hint_min` takes the union floor (`70.0`, from `rap`) since both
+originals agreed on the ceiling (`100.0`).
+
+**`hyphy`/`chillstep` regeneration.** Answering "is `electronic` catching a
+unique signal or overlapping valid sub-genres" (the question that started
+this whole audit) surfaced a second finding: `hyphy` and `chillstep`'s
+*own* acoustic_notes in `tools/gen_spectral_fingerprints.py` already
+described genuinely different genres (hyphy: aggressive, bright
+prominent hats 4-12 kHz; chillstep: atmospheric pads, soft recessed hats,
+centroid ~900 Hz) -- but the previously-generated `expected_bands` arrays
+didn't encode that difference (0.9788 cosine similarity, effectively
+indistinguishable). Owner chose to regenerate properly via the LLM tool
+(`tools/gen_spectral_fingerprints.py`, `gpt-4o`, real API cost) rather
+than hand-tune, for consistency with how the rest of the catalog was
+built.
+
+**Method:** rather than run the full-catalog tool (which would touch
+every profile and risk drift elsewhere), a scoped one-off script
+(scratchpad, not committed) imported the tool module and overrode its
+`_PROFILE_META` to just `hyphy`, `chillstep`, and a new `rap_rnb` entry,
+then called the same `_build_prompt()`/`_call_openai()`/`_extract_json()`
+pipeline. The tool's own tracked `_PROFILE_META` catalog was separately
+updated (`fire_dj` entry removed, `rap`/`r&b` merged into `rap_rnb`,
+`hyphy`/`chillstep` acoustic_notes sharpened to explicitly call out their
+distinguishing feature) so a *future* full-catalog rerun stays accurate
+without needing this ADR entry as a reminder.
+
+**Result, honestly assessed:** `hyphy`-`chillstep` cosine similarity
+improved `0.9788` → `0.9703` -- a real, measurable gain, not a full fix.
+Both profiles' regenerated fingerprints still show 0.96-0.97 similarity to
+several *other*, tempo-unrelated club genres (`hyphy` vs `breaks` 0.9728,
+`chillstep` vs `synthwave` 0.9714). This looks like a genuine structural
+ceiling on relative-magnitude cosine similarity across a cluster of
+genres that share a similar broad sub-bass-to-treble envelope shape
+(prominent low end, tapering through the mids, some treble presence),
+not a synthesis quality problem -- pushed further with more prompt
+iterations, but not chased past this point given the cost of repeated
+API calls for diminishing, uncertain returns. `centroid_mu`
+(`hyphy` 1800 vs `chillstep` 900, already a full octave apart) and
+`zcr_mu` remain the sharper discriminators between this specific pair;
+`spectral_shape_fit`/`expected_bands` is one term among ~13 weighted
+ones, not the only signal carrying the distinction.
+
+**Verified:** `rap_rnb` in `PROFILES`, `rap`/`r&b` no longer present;
+`bpm_prior_mu` (86.5) correctly averages the two originals. Regression
+guard on the `hyphy`/`chillstep` similarity improvement (asserts below the
+old 0.9788 baseline, not a specific "good enough" target, since the
+honest ceiling above means no clean target exists). New tests in
+`tests/test_audio_profile_deep_house_and_disable.py`. Full suite green.
+`_VJ_WEIGHTS_DOC_VERSION` bumped to 5 (see `weights-and-thresholds.md`'s
+own Changelog entry).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

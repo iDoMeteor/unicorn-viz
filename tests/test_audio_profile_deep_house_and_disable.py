@@ -7,6 +7,9 @@
   found its expected_bands more similar to far-tempo profiles than its own
   tempo neighbors -- a non-discriminating catch-all, same treatment as
   'generic'; see docs/adr/vj-system.md).
+- 'rap' and 'r&b' merged into 'rap_rnb' 2026-08-06 (owner call: genuine
+  siblings, 0.9856 cosine similarity, 3 BPM apart -- not a false
+  catch-all pairing like fire_dj/electronic).
 - The new 'deep_house' profile.
 """
 
@@ -90,6 +93,30 @@ def test_electronic_still_resolvable_by_direct_lookup() -> None:
     assert p is PROFILES['electronic']
 
 
+# ---- rap + r&b merged into rap_rnb (2026-08-06) ------------------------
+
+
+def test_rap_and_rnb_no_longer_exist_separately() -> None:
+    assert 'rap' not in PROFILES
+    assert 'r&b' not in PROFILES
+
+
+def test_rap_rnb_is_registered_and_discoverable() -> None:
+    assert 'rap_rnb' in PROFILES
+    assert 'rap_rnb' in list_profiles()
+    assert 'rap_rnb' in enabled_profiles()
+    assert PROFILES['rap_rnb'].enabled is True
+
+
+def test_rap_rnb_bpm_prior_is_a_blend_of_the_two_originals() -> None:
+    """86.5 = (88.0 rap + 85.0 r&b) / 2; the merge shouldn't silently pick
+    one side over the other."""
+    p = PROFILES['rap_rnb']
+    assert p.bpm_prior_mu == 86.5
+    assert p.bpm_hint_min == 70.0  # union: rap's wider floor
+    assert p.bpm_hint_max == 100.0  # both originals agreed here
+
+
 # ---- deep_house -------------------------------------------------------
 
 
@@ -127,3 +154,28 @@ def test_deep_house_vocal_fields_left_uncalibrated() -> None:
     p = get_profile('deep_house')
     assert p.vocal_hnr_mu is None
     assert p.vocal_fmr_mu is None
+
+
+# ---- hyphy/chillstep fingerprint regeneration (2026-08-06) -------------
+
+
+def _cosine_sim(a, b) -> float:
+    import math
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb)
+
+
+def test_hyphy_chillstep_similarity_improved_and_stays_bounded() -> None:
+    """Regression guard against silently reverting to the old,
+    near-indistinguishable arrays (0.9788 similarity) -- and against a
+    future edit accidentally making them *more* similar again. Doesn't
+    assert a specific 'good enough' number since cosine similarity across
+    this genre cluster has an honest structural ceiling (see
+    docs/adr/vj-system.md) -- just that today's regenerated pair is
+    measurably better than the pre-2026-08-06 baseline."""
+    hyphy = get_profile('hyphy')
+    chillstep = get_profile('chillstep')
+    sim = _cosine_sim(hyphy.expected_bands, chillstep.expected_bands)
+    assert sim < 0.975  # was 0.9788 before the scoped regeneration
