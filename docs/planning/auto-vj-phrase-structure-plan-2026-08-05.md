@@ -14,8 +14,9 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   the director's own "arm a transition ahead of the next role" behaviour
   -- the data is on the wire now, the consumer does not act on it yet.
   Since 2026-08-06 the mixer's sections are also **hand-editable** and
-  corrections republish mid-track (§6.e) -- no wire change, but worth a
-  read before the next run.
+  corrections republish mid-track (§6.e) -- no wire change, and the
+  consumer was verified clear of the one staleness hazard it raised, so
+  nothing is outstanding on that amendment.
 Last updated: 2026-08-06
 
 ## 1. Objective
@@ -265,13 +266,16 @@ applies at full strength. Hand-fixed structure should move the director harder
 than detected structure, and it now does, with no change needed on the
 consumer side.
 
-**The one thing to check.** `role`/`tier`/`bars_in` for a given playhead
-position are no longer guaranteed stable across a track -- a boundary dragged
-at 02:30 changes what the hint says about 02:45. Anything cached per-track
-rather than per-hint can go stale mid-track. The mixer's own publisher needed
-exactly this fix (it cached the rehydrated rows and had to be told to drop
-them), so it is worth confirming the consumer has no equivalent. If
-`get_section()` is read fresh each tick, there is nothing to do.
+**The one thing to check -- checked, and clear (auto-vj-01 team +
+dj-mixer-01, 2026-08-06).** `role`/`tier`/`bars_in` for a given playhead
+position are no longer guaranteed stable across a track: a boundary dragged at
+02:30 changes what the hint says about 02:45, so anything cached per-track
+rather than per-hint could go stale mid-track. The mixer's own publisher
+needed exactly that fix (it cached the rehydrated rows and had to be told to
+drop them). **The consumer does not have the equivalent problem:**
+`_get_section_hint()` calls `vj_api.get_section()` on every read and holds
+nothing between ticks, and all three of its call sites go through it. No
+change was required on either side.
 
 **Not a wire change.** The payload shape from §6.a/§6.b is unchanged; only how
 often the values can move. `manual` is deliberately *not* on the wire: whether
