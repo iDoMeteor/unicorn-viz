@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.34**
+**Version 1.0.0-beta.35**
 
 ## Contact Me!
 
@@ -544,6 +544,10 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.35** — The Now Spinning platter no longer flickers between
+  tracks during DJ crossfades: it switches only after the new track has been
+  reported continuously for `[now_spinning] switch_hold_s` (default 5 s), so
+  dominance flapping mid-fade never commits and a real change shows once.
 - **1.0.0-beta.34** — `rap` and `r&b` audio profiles merged into `rap_rnb` (owner call: genuine siblings, 0.9856 cosine similarity, 3 BPM apart -- not a false catch-all pairing). `hyphy` and `chillstep` got freshly-regenerated `expected_bands` (via `tools/gen_spectral_fingerprints.py`, scoped LLM rerun) targeting their real acoustic differences -- similarity improved 0.9788 → 0.9703 (real but modest gain; see the ADR for the honest caveat on a structural ceiling in cosine-similarity discrimination across this genre cluster). Drop-in pointer: auto-vj-01 1.0.0-rc.17 (`_VJ_WEIGHTS_DOC_VERSION` bump only). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "`rap`/`r&b` Merged; `hyphy`/`chillstep` Fingerprints Regenerated".
 - **1.0.0-beta.33** — `electronic` audio profile disabled (owner call, confirmed by a cosine-similarity audit against the whole catalog): its spectral fingerprint was more similar to far-tempo profiles (`trance`, `hyphy`, `psytrance`) than to its own close-tempo neighbors, and its BPM range was already fully covered by `house`/`tech_house`/`deep_house`/`peak_time` -- a non-discriminating catch-all, not a genre with a real identity. Same disable-not-delete pattern as `generic`: excluded from `enabled_profiles()`/`Alt+A` cycling, still resolvable by direct key lookup. `hyphy` and `chillstep` flagged with the same audit finding but not yet acted on; `rap`/`r&b` checked and found borderline (real sibling relationship, not the same case). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Wide-Tier Catch-All Profiles: `electronic` Disabled".
 - **1.0.0-beta.32** — `fire_dj` audio profile removed entirely from `unicornviz/audio/profiles.py` (owner call). Its recommender-driven Fire DJ celebration trigger is replaced by a direct, profile-independent easter egg: fires when the DJ spans a wide BPM range within a rolling window. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Fire DJ Profile Removed, Replaced by a Wide-BPM-Range Easter Egg". Drop-in pointer: auto-vj-01 1.0.0-rc.16.

@@ -73,6 +73,66 @@ def _lerp(a: tuple, b: tuple, t: float) -> tuple:
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 
+class TrackStabilityFilter:
+    """Debounce track-identity changes for the platter card.
+
+    During a DJ crossfade the now-playing hub can flip which deck it reports
+    as dominant many times before the fade completes, which made the card
+    flicker between the outgoing and incoming track. The filter keeps showing
+    the current track until a *different* identity has been reported
+    **continuously** for ``hold_s`` seconds — any bounce back to the shown
+    track restarts the challenger's clock, so crossfade flapping never
+    commits and a real track change shows exactly once, ``hold_s`` late.
+
+    ``update()`` is called once per rendered frame with the hub's active
+    snapshot and returns the snapshot to display. ``reset()`` forgets
+    everything (call when the card is hidden, e.g. playback stopped) so the
+    next track announces instantly. Config: ``[now_spinning] switch_hold_s``
+    (seconds, default 5.0; 0 disables the debounce).
+    """
+
+    def __init__(self, hold_s: float = 5.0) -> None:
+        self._hold_s = max(0.0, float(hold_s))
+        self._shown_key: tuple | None = None
+        self._shown_snap: dict[str, Any] = {}
+        self._candidate_key: tuple | None = None
+        self._candidate_since = 0.0
+
+    @staticmethod
+    def _identity(source: str, snap: dict[str, Any]) -> tuple:
+        return (
+            str(source),
+            str(snap.get('title', '') or '').strip().lower(),
+            str(snap.get('artist', '') or '').strip().lower(),
+        )
+
+    def update(self, source: str, snap: dict[str, Any],
+               now: float | None = None) -> dict[str, Any]:
+        """Return the snapshot the card should show this frame."""
+        now = time.monotonic() if now is None else float(now)
+        key = self._identity(source, snap)
+        if self._shown_key is None or key == self._shown_key:
+            self._shown_key = key
+            self._shown_snap = snap
+            self._candidate_key = None
+            return snap
+        if key != self._candidate_key:
+            self._candidate_key = key
+            self._candidate_since = now
+        if now - self._candidate_since >= self._hold_s:
+            self._shown_key = key
+            self._shown_snap = snap
+            self._candidate_key = None
+            return snap
+        return self._shown_snap
+
+    def reset(self) -> None:
+        """Forget shown/candidate state (card hidden, playback stopped)."""
+        self._shown_key = None
+        self._shown_snap = {}
+        self._candidate_key = None
+
+
 class NowSpinningOverlay:
     """Builds + blits the corner platter card on the app's GL context."""
 

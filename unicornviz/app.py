@@ -459,6 +459,11 @@ class App:
         # other. See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
         # section 6.
         self._section_hints: dict[str, tuple[dict, float]] = {}
+        # name -> callable(playlist_name, paths) -> accepted count.
+        # Destinations a playlist can be handed to (see
+        # register_playlist_sink); lets one drop-in send a set to
+        # another without either importing the other.
+        self._playlist_sinks: dict = {}
         self._lyrics = None
         self._grand_finale = None
         self._control_room = None
@@ -633,10 +638,16 @@ class App:
         # register snapshot callables; the render loop announces the audible
         # one (see unicornviz/now_playing.py).  Must exist before drop-ins load.
         from unicornviz.now_playing import NowPlayingHub
+        from unicornviz.now_spinning import TrackStabilityFilter
         self.now_playing = NowPlayingHub()
         self._now_spinning = None
         self.now_spinning_enabled = bool(
             self.cfg.get('now_spinning', 'enabled', default=True))
+        # Crossfade guard: the platter switches tracks only after the new
+        # identity has been reported continuously for switch_hold_s.
+        self._now_spinning_filter = TrackStabilityFilter(
+            float(self.cfg.get('now_spinning', 'switch_hold_s', default=5.0)
+                  or 0.0))
         self.vj_api = VJApi(self)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
@@ -762,6 +773,54 @@ class App:
             if ts > best_t:
                 best_payload, best_t = payload, ts
         return dict(best_payload) if best_payload is not None else None
+
+    def register_playlist_sink(self, name: str, fn) -> None:
+        """Register a destination that can receive a playlist from elsewhere.
+
+        A *sink*, not a hint bus: exporting a playlist is a delivery that
+        happens once and either works or does not, so unlike the BPM and
+        section channels there is nothing to time out and nothing to poll.
+        The receiver (media-01) registers here; the sender (dj-mixer-01) calls
+        :meth:`export_playlist`, and neither imports the other -- which is the
+        drop-in independence rule, and the reason this lives in core at all.
+
+        *fn* takes ``(playlist_name, paths)`` and returns how many tracks it
+        actually accepted, or raises.
+        """
+        if not str(name).strip() or not callable(fn):
+            return
+        self._playlist_sinks[str(name).strip()] = fn
+        log.info('playlist sinks: registered %r', name)
+
+    def unregister_playlist_sink(self, name: str) -> None:
+        """Drop a sink (its drop-in went away)."""
+        self._playlist_sinks.pop(str(name).strip(), None)
+
+    def playlist_sinks(self) -> list[str]:
+        """Names of every registered destination, for building a menu."""
+        return sorted(self._playlist_sinks)
+
+    def export_playlist(self, target: str, name: str, paths) -> tuple[bool, str]:
+        """Send *paths* to a registered sink as a playlist called *name*.
+
+        Returns ``(ok, message)`` rather than raising, because every caller is
+        a UI action that has to say something to a person either way.  A
+        missing sink is an ordinary outcome -- the receiving drop-in simply is
+        not installed -- not an error worth a traceback.
+        """
+        fn = self._playlist_sinks.get(str(target).strip())
+        if fn is None:
+            return False, f'{target} is not available'
+        rows = [str(p) for p in (paths or []) if p]
+        if not rows:
+            return False, 'nothing to send'
+        try:
+            took = fn(str(name), rows)
+        except Exception as exc:
+            log.warning('playlist sinks: %s refused %r: %s', target, name, exc)
+            return False, f'{target} could not take it: {exc}'
+        n = len(rows) if took is None else int(took)
+        return True, f'sent {n} track(s) to {target} as "{name}"'
 
     def unregister_subsystem(self, name: str) -> None:
         """Unregister a runtime subsystem from the app loop."""
@@ -926,10 +985,12 @@ class App:
             return
         active = self.now_playing.active()
         if active is None or not active[1].get('is_playing'):
+            self._now_spinning_filter.reset()
             return
         # A playing source that can't name its track yet (unknown metadata)
         # stays quiet — no platter until we know what's spinning.
         if not self.now_playing.is_identified(active[1]):
+            self._now_spinning_filter.reset()
             return
         if self._ctx is None:          # GL not up yet: try again next frame
             return
@@ -944,8 +1005,9 @@ class App:
                 self.now_spinning_enabled = False
                 log.warning('Now Spinning overlay unavailable: %s', exc)
                 return
+        snap = self._now_spinning_filter.update(active[0], active[1])
         try:
-            self._now_spinning.render(int(width), int(height), active[1])
+            self._now_spinning.render(int(width), int(height), snap)
         except Exception as exc:
             log.debug('Now Spinning render failed: %s', exc)
 
