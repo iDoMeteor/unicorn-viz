@@ -2,7 +2,7 @@
 
 Owner: owner + agents
 Status: **Phases 0-2 built** — frame tap + v4l2loopback (verified) +
-  PipeWire/DMA-BUF (**built, unverified on hardware**). core 1.0.0-beta.48,
+  PipeWire/DMA-BUF (**setup verified against a live daemon; pixels unproven**). core 1.0.0-beta.48,
   video-out-01 0.2.0. Phase 3 (NDI) is next. Phasing confirmed
   by owner 2026-08-07: v4l2loopback first, libfunnel pinned behind our own
   abstraction (PR upstream if it needs changes).
