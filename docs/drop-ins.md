@@ -58,6 +58,7 @@ Complex drop-ins should also include:
 | textures-01 | Yes | Not required | Media effect drop-in |
 | training-kit-01 | Yes | Yes | Auto VJ training tools: corpus packaging, scoring, daemon |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
+| video-out-01 | Yes | Not required | Video output interop: v4l2loopback virtual camera (PipeWire/NDI planned) |
 | vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
 | video-clips-01 | Yes | Not required | Video Clips: audio-reactive clip montage (directory-group selection) |
 | videos-01 | Yes | Not required | Video Player: whole videos with audio (ffpyplayer); manual-only |

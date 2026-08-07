@@ -4,10 +4,10 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.46       BETA          module
+  core (unicornviz)             1.0.0-beta.47       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.162.0             alpha ▲       module
+  dj-mixer-01                   0.163.0             alpha ▲       module
   media-01                      0.20.0              alpha ▲       module
   games-01                      0.13.1              alpha ▲       module
   cosmic-01                     0.11.1              alpha ▲       module
@@ -78,7 +78,8 @@
   flying-01                     0.2.1               early alpha   module
   lyrics-01                     0.2.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
+  video-out-01                  0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
-  40 components total  ·  7 RC  1 beta  32 alpha  0 unversioned
+  41 components total  ·  7 RC  1 beta  33 alpha  0 unversioned
 

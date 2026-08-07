@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.46**
+**Version 1.0.0-beta.47**
 
 ## Contact Me!
 
@@ -544,6 +544,8 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.47** — **The show can leave the window.** New `video-out-01` drop-in publishes the output as a virtual V4L2 camera (v4l2loopback), so OBS takes it as an ordinary *Video Capture Device* with **no plugin** — closing the worst row on the competitive scorecard, where every rival except projectM could already hand its output to another app and we could not. It rides the frame tap, so with recording or streaming already live it costs **no extra GPU readback at all**. Opt-in on both switches; a missing kernel module logs once and disables. First of four planned backends (PipeWire/DMA-BUF, NDI, Spout/Syphon to follow).
+  **Screenshots no longer freeze the show:** the PNG encode and disk write moved to a daemon thread (that was the half-second stall, not the readback), pixels come from the frame tap when one is already in hand, and the capture switched off `ctx.screen.read()` — the default-framebuffer path moderngl gets wrong and which the rest of the codebase already routes around.
 - **1.0.0-beta.46** — **One GPU readback per frame instead of one per consumer.** Recording and RTMP streaming each pulled the identical full-resolution frame off the GPU independently — with both live that was two transfers of the same picture every frame (~12 MB/frame at 1080p), and recording's was the *synchronous* path the 2026-08-03 audit flagged as a frame-budget problem. A new `unicornviz.frame_tap.FrameTap` now decides who is due (per-consumer rate caps included), the loop reads back **once**, and everyone due shares that buffer; the subsystem preview keeps reusing it when present. Recording moves onto the double-buffered PBO path as a side effect, which also fixes a latent size mismatch — it was fed drawable-sized bytes while ffmpeg was told the tracked canvas size, which differ under mixed-DPI scaling and mirror/span. Groundwork for the video-interop outputs (v4l2loopback, PipeWire/DMA-BUF, NDI), which would otherwise have made it four or five readbacks per frame.
 - **1.0.0-beta.45** — `--dj-mixer-source`/`--media-source` now automatically set `[auto_vj] auto_exit_after_finale = true` (`_build_overrides()`, `__main__.py`) -- a headless source *is* a headless run, so no separate flag or `config.toml` edit is needed to get the auto-exit behavior shipped in beta.44. The config key itself is unchanged and still available directly for non-headless-source use (e.g. a Spotify session with a configured `show_duration_min`).
 - **1.0.0-beta.44** — Closes `docs/planning/headless-auto-exit-plan-2026-08-07.md`: new `VjApi.grand_finale_active` property exposes the grand-finale sequence's active/idle completion edge, letting a consumer (auto-vj-01's new `auto_exit_after_finale`) request an unattended app exit once a *timed* finale actually finishes, instead of reaching into `app._grand_finale` directly. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Auto-Exit on Set End: the Grand-Finale Completion Watcher".

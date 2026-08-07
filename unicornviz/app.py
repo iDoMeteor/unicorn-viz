@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import subprocess
+import threading
 import time
 import ctypes
 import sys
@@ -235,6 +236,12 @@ def _load_rtmp_streamer_class() -> type:
     except Exception as exc:
         log.warning('RTMP streamer unavailable: %s', exc)
         return _NullRTMPStreamer
+
+
+def _load_video_out_controller_class() -> type:
+    """Load VideoOutController directly from the video-out-01 drop-in."""
+    return load_dropin_symbol(
+        'video-out-01/video_out_controller.py', 'VideoOutController')
 
 
 def _load_cta_controller_class() -> type:
@@ -508,6 +515,7 @@ class App:
         self._control_room_startup_cfg: dict[str, Any] | None = None
         self._control_room_startup_frames_remaining: int = 0
         self._streamer = None
+        self._video_out: Any = None
         self._cta_controller = None
         self._playlist: Playlist | None = None
         self._subsystems: dict[str, Any] = {}
@@ -579,6 +587,10 @@ class App:
         # One GPU->CPU readback per frame, fanned out to recording /
         # streaming (and reused by the subsystem preview when present).
         self._frame_tap = FrameTap()
+        # Most recent CPU-side output frame produced by the tap, reused by
+        # screenshots so they don't pay for their own readback.
+        self._last_output_frame: tuple[bytes, int, int] | None = None
+        self._last_output_frame_t: float = -1e9
         self._stream_pbos: list[moderngl.Buffer] = []
         self._stream_pbo_size: int = 0
         self._stream_pbo_index: int = 0
@@ -4289,6 +4301,20 @@ void main() {
                 self._effect_lock = 'ProjectM Presets'
                 log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
+        # Video output interop (v4l2loopback / future PipeWire, NDI).
+        # Guarded per the drop-in independence rules: absent drop-in, absent
+        # config, or a constructor failure all degrade to None and the app
+        # simply publishes nothing.
+        self._video_out = None
+        if not self._safe_mode:
+            _vo_cfg = self.cfg.get('video_out', default={}) or {}
+            if isinstance(_vo_cfg, dict) and bool(_vo_cfg.get('enabled', False)):
+                try:
+                    self._video_out = _load_video_out_controller_class()(self, _vo_cfg)
+                    self.register_subsystem('video_out', self._video_out)
+                except Exception as exc:
+                    log.warning('Video output interop unavailable: %s', exc)
+                    self._video_out = None
         stream_cls = (
             _NullRTMPStreamer
             if self._safe_mode or not self._profile_allows('streaming')
@@ -5431,6 +5457,17 @@ void main() {
             _tap_now = time.monotonic()
             self._frame_tap.sync('recording', need_frame_for_recording)
             self._frame_tap.sync('streaming', need_frame_for_streaming)
+            _vo = self._video_out
+            _vo_wants = False
+            if _vo is not None:
+                try:
+                    _vo_wants = bool(_vo.wants_frame())
+                except Exception:
+                    _vo_wants = False
+            self._frame_tap.sync(
+                'video_out', _vo_wants,
+                max_fps=(_vo.frame_fps_cap() if _vo_wants else 0.0),
+            )
             due = self._frame_tap.begin_frame(_tap_now)
             stream_frame: bytes | None = None
             if due:
@@ -5441,8 +5478,19 @@ void main() {
                     stream_frame = None
                 if stream_frame is not None:
                     self._frame_tap.commit(due, _tap_now)
+            if stream_frame is not None:
+                # Keep the frame for same-frame reuse (screenshots): it is
+                # already on the CPU, so a screenshot taken while recording
+                # or streaming costs no extra readback at all.
+                self._last_output_frame = (stream_frame, self._width, self._height)
+                self._last_output_frame_t = _tap_now
             if 'recording' in due and stream_frame is not None:
                 self._write_recording_frame(stream_frame)
+            if 'video_out' in due and stream_frame is not None and _vo is not None:
+                try:
+                    _vo.submit_frame(stream_frame, self._width, self._height)
+                except Exception as exc:
+                    log.warning('Video output publish failed: %s', exc)
 
             subsystem_capture_due = False
             if need_frame_for_subsystems:
@@ -6945,6 +6993,78 @@ void main() {
         self._stream_pbo_index = 0
         self._stream_pbo_frame_count = 0
         self._stream_pbo_disabled = True
+
+    _SCREENSHOT_FRAME_MAX_AGE_S = 0.25
+
+    def save_screenshot(self) -> 'Path | None':
+        """Capture a screenshot without stalling the show.
+
+        Two costs used to land on the render thread: a synchronous
+        full-resolution readback, and — the dominant one — PIL's PNG encode
+        plus the disk write, which on a large or spanned canvas is easily
+        a few hundred milliseconds of frozen visuals.
+
+        Now: pixels come from the frame tap when recording/streaming already
+        produced this frame (free), otherwise from one readback via the
+        correct FBO path (never ``ctx.screen.read()``, which moderngl gets
+        wrong for the default framebuffer). The flip, encode and write then
+        happen on a daemon thread, so the loop keeps rendering.
+
+        Returns the path the image *will* be written to, or None if the
+        pixels could not be captured. The write itself is asynchronous.
+        """
+        from pathlib import Path  # noqa: PLC0415
+
+        frame: tuple[bytes, int, int] | None = None
+        cached = self._last_output_frame
+        if (
+            cached is not None
+            and (time.monotonic() - self._last_output_frame_t)
+            <= self._SCREENSHOT_FRAME_MAX_AGE_S
+        ):
+            frame = cached
+        if frame is None:
+            try:
+                frame = self.read_screenshot_frame()
+            except Exception as exc:
+                log.error('Screenshot readback failed: %s', exc)
+                return None
+        if frame is None:
+            return None
+        data, w, h = frame
+        expected = max(1, int(w)) * max(1, int(h)) * 3
+        if len(data) < expected:
+            log.error(
+                'Screenshot readback short: got=%d expected=%d size=%dx%d',
+                len(data), expected, w, h,
+            )
+            return None
+        if len(data) > expected:
+            data = data[:expected]
+
+        out_dir = resolve_path('screenshots')
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            log.error('Screenshot directory unavailable: %s', exc)
+            return None
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        path = out_dir / f'unicornviz_{ts}.png'
+
+        def _encode_and_save() -> None:
+            try:
+                from PIL import Image  # noqa: PLC0415
+                img = Image.frombytes('RGB', (w, h), data)
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                img.save(path)
+                log.info('Screenshot saved: %s', path)
+            except Exception as exc:
+                log.error('Screenshot save failed: %s', exc)
+
+        threading.Thread(
+            target=_encode_and_save, name='uv-screenshot', daemon=True,
+        ).start()
+        return Path(path)
 
     def read_screenshot_frame(self) -> tuple[bytes, int, int] | None:
         """Read an RGB24 screenshot frame from the current drawable surface.

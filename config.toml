@@ -333,3 +333,25 @@ headphone_device = "DDJ-REV1: USB Audio"    # cue on the REV1's outputs 3-4 (the
                              # fader throw this long (~the spin's coast) instead
                              # of the full crossfade_s blend, and the transition
                              # fires late so the outgoing track isn't cut short
+
+# ---------------------------------------------------------------------------
+# Video output interop  (drop-ins/video-out-01)
+# ---------------------------------------------------------------------------
+# Publishes the rendered show to other applications so nothing has to
+# screen-capture a window.  The v4l2loopback backend appears in OBS as an
+# ordinary "Video Capture Device" with no plugin required.
+#
+# Setup (once):
+#   sudo dnf install v4l2loopback          # Fedora
+#   drop-ins/video-out-01/v4l2loopback_setup.sh
+#
+# Both switches must be true; frames ride core's shared frame tap, so this
+# costs no extra GPU readback when recording or streaming is already running.
+#
+# [video_out]
+# enabled = true
+#
+# [video_out.v4l2]
+# enabled = true
+# device = "/dev/video10"   # empty => first existing /dev/video1x node
+# fps_cap = 30              # 0 = every rendered frame

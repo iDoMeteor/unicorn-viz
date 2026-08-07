@@ -1,7 +1,8 @@
 # Video Output Interop Plan — PipeWire/DMA-BUF, v4l2loopback, NDI
 
 Owner: owner + agents
-Status: **Phase 0 (frame tap) DONE** — core 1.0.0-beta.46. Phasing confirmed
+Status: **Phase 0 (frame tap) + Phase 1 (v4l2loopback) DONE** — core
+  1.0.0-beta.47, video-out-01 0.1.0. Phase 2 (PipeWire/DMA-BUF) is next. Phasing confirmed
   by owner 2026-08-07: v4l2loopback first, libfunnel pinned behind our own
   abstraction (PR upstream if it needs changes).
 Last updated: 2026-08-07
@@ -109,7 +110,7 @@ The one thing that stays in core is the frame tap (§2), because recording
 and streaming — both core-adjacent and already shipping — need it too, and a
 drop-in must never be a hard dependency of core.
 
-## 3. Phase 1 — v4l2loopback (Linux, ships first)
+## 3. Phase 1 — v4l2loopback (Linux) — **SHIPPED 0.1.0**
 
 **Why first:** works with stock OBS, no plugin, no new GPU code, and reuses
 the frame tap we just built. It is the "works today" path.

@@ -1880,45 +1880,18 @@ class HotkeyHandler:
             o.flash_message(f"Now Spinning platter: {'ON' if on else 'OFF'}", 1.5)
 
     def _screenshot(self) -> None:
-        import datetime
-        from pathlib import Path
-        from PIL import Image
+        """Take a screenshot via the app's async capture path.
 
-        ctx = self._app.vj_api.ctx
-        if ctx is None:
+        The encode + disk write happen off the render thread (see
+        App.save_screenshot), so a screenshot mid-set no longer freezes the
+        visuals for the duration of a PNG compression.
+        """
+        save = getattr(self._app, 'save_screenshot', None)
+        if not callable(save):
+            self._overlays.flash_message('Screenshot unavailable', 2.0)
             return
-
-        # Use the actual screen framebuffer size for readback. In multi-head
-        # modes the logical render size can differ from the current screen size.
-        try:
-            w, h = ctx.screen.size
-            w = int(w)
-            h = int(h)
-        except Exception:
-            w = int(self._app.vj_api.render_width)
-            h = int(self._app.vj_api.render_height)
-
-        data = ctx.screen.read(components=3, alignment=1)
-        expected = max(1, int(w)) * max(1, int(h)) * 3
-        if len(data) < expected:
-            log.error(
-                'Screenshot readback short: got=%d expected=%d size=%dx%d',
-                len(data),
-                expected,
-                w,
-                h,
-            )
-            self._overlays.flash_message('Screenshot failed: short GPU readback', 2.0)
+        path = save()
+        if path is None:
+            self._overlays.flash_message('Screenshot failed: see log', 2.0)
             return
-        if len(data) > expected:
-            data = data[:expected]
-
-        img = Image.frombytes("RGB", (w, h), data)
-        img = img.transpose(Image.FLIP_TOP_BOTTOM)
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = resolve_path("screenshots")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"unicornviz_{ts}.png"
-        img.save(path)
-        self._overlays.flash_message(f"Screenshot: {path}", 3.0)
-        log.info("Screenshot saved: %s", path)
+        self._overlays.flash_message(f'Screenshot: {path}', 3.0)
