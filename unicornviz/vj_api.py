@@ -474,8 +474,24 @@ class VJApi:
         self._app.show_splash()  # noqa: SLF001
 
     def projectm_available(self) -> bool:
-        """Return True when a ProjectMEffect class is registered as a discoverable effect."""
-        return self.find_effect('ProjectMEffect', 'ProjectM Presets') is not None
+        """Return True when ProjectM is registered *and* operator-enabled.
+
+        The enablement half matters: Auto VJ's projectM-affinity path calls
+        ``goto_effect('ProjectM Presets')`` directly, and a direct goto bypasses
+        the playlist's disabled set (which only gates auto-rotation).  Without
+        checking here, disabling ProjectM in the effects browser did not stop
+        the director from pulling it back up.
+        """
+        if self.find_effect('ProjectMEffect', 'ProjectM Presets') is None:
+            return False
+        return self.effect_enabled('ProjectM Presets') and self.effect_enabled('ProjectMEffect')
+
+    def effect_enabled(self, name: str) -> bool:
+        """Return whether *name* (display or class name) is operator-enabled."""
+        try:
+            return bool(self._app.effect_enabled(str(name)))
+        except Exception:                      # pragma: no cover - defensive
+            return True
 
     def projectm_active(self) -> bool:
         """Return True when ProjectMEffect is the currently displayed effect."""

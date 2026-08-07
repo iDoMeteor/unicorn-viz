@@ -3726,7 +3726,7 @@ void main() {
         for _cls in _pre_effects:
             if getattr(_cls, 'NAME', '') == 'ProjectM Presets' and hasattr(_cls, 'prescan_catalog_async'):
                 _pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
-                if bool(_pm_cfg.get('enabled', True)):
+                if bool(_pm_cfg.get('enabled', True)) and self._projectm_operator_enabled():
                     try:
                         _cls.prescan_catalog_async(_pm_cfg)
                     except Exception as _exc:
@@ -3842,7 +3842,7 @@ void main() {
         for effect_cls in effects:
             if getattr(effect_cls, 'NAME', '') == 'ProjectM Presets' and hasattr(effect_cls, 'warm_up'):
                 pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
-                if bool(pm_cfg.get('enabled', True)):
+                if bool(pm_cfg.get('enabled', True)) and self._projectm_operator_enabled():
                     try:
                         effect_cls.warm_up(self._ctx, self._width, self._height, pm_cfg)
                     except Exception as exc:
@@ -6897,6 +6897,16 @@ void main() {
     def effect_enabled(self, name: str) -> bool:
         """Return whether the effect (display or class name) is rotation-enabled."""
         return str(name) not in self._disabled_effects
+
+    def _projectm_operator_enabled(self) -> bool:
+        """True unless the operator disabled ProjectM in the effects browser.
+
+        Gates the boot-time preset prescan and GL bridge warm-up.  Both are
+        expensive (a ~10k-file disk walk and a native projectM instance), and
+        a drop-in the operator has switched off should not be paying either.
+        """
+        return (self.effect_enabled('ProjectM Presets')
+                and self.effect_enabled('ProjectMEffect'))
 
     def set_effect_enabled(self, name: str, enabled: bool) -> None:
         """Enable/disable an effect for auto-rotation and persist the choice."""
