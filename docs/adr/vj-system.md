@@ -712,6 +712,49 @@ missing-phase all dropped silently, freshest-source-wins, stale-hint
 expiry, all four canonical phases accepted) and two new `VjApi`-level
 tests in `tests/test_vj_api_postfx.py`. Full suite green.
 
+### Grand-Finale Trigger Consumes the Set-Clock Hint (2026-08-06)
+
+Decision: `_check_timed_finale()` in `auto-vj-01` now reads
+`vj_api.get_session()` (the bus above) via a new `_get_session_hint()`
+helper, mirroring `_get_section_hint()`'s defensive pattern exactly
+(`getattr` + `callable()` + `try/except`, degrades to `None` on an older
+core, a missing/unavailable mixer, or any lookup error). This closes the
+consumer side that the previous entry explicitly left open.
+
+**Two-tier preference, falling back to the original wall-clock estimate.**
+In order:
+
+1. `final_peak_in_s` — the analysed final track's biggest drop, counted
+   from now. Fires `trigger_grand_finale()` when this drops to or below
+   a new `_finale_peak_lead_s` (default **43.0s**). That default is not
+   arbitrary: it is grand-finale-01's own documented buildup length
+   (INTRO 8s + BUILD 20s + PEAK 15s = 43s) up to its own climax, the DROP
+   phase. Firing this many seconds *before* the mixer's analysed peak
+   lands the finale sequence's visual climax right as the music's actual
+   drop hits, instead of firing on the drop directly and lagging behind
+   it by a full buildup. The constant is a locally-configured value
+   copied from grand-finale-01's docstring rather than an import or
+   attribute reach into that drop-in — see Drop-In Independence Rules.
+2. `seconds_left` — the mixer's own best estimate of when the *set* ends
+   (real playlist/clock, not a local guess). Used when peak timing isn't
+   available yet (last track not reached, or not analysed), compared
+   against the existing `_finale_lead_s` (default 45.0, unchanged).
+3. `state.session_remaining_s` — the original wall-clock path (config
+   `show_duration_min`/`show_duration_s`), unchanged, used only when no
+   mixer hint exists at all (bare stream, or mixer drop-in absent).
+
+Downbeat-quantized firing (`_grid.schedule_for_next_downbeat()` when a BPM
+lock exists, else immediate) is unchanged from the pre-existing mechanism.
+
+**Verified:** new `tests/test_auto_vj_timed_finale.py` — peak-timing fires
+within/outside its lead window, peak timing takes priority over
+`seconds_left` when both are present, `seconds_left` fires
+within/outside its own lead window, wall-clock fallback fires/doesn't/
+handles `None`, already-fired and auto-trigger-disabled are no-ops,
+`trigger_grand_finale()` returning falsy still one-shots without raising,
+downbeat-scheduled vs. immediate-fire branching. Full suite green (1282
+passed).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

@@ -22,8 +22,12 @@ Status: Phase 1 implemented (2026-08-05, auto-vj-01 1.0.0-rc.8). Phase 2's
   session()`/`get_session()` for set-level clock/grand-finale timing,
   mirroring the section bus exactly. Mixer side (dj-mixer-01 0.152.0)
   was already written and guarded; the core channel now exists too.
-  **Outstanding:** the auto-vj-01 consumer side of §6.3 -- nothing reads
-  `get_session()` yet.
+  **The auto-vj-01 consumer side of §6.3 is now implemented too**
+  (2026-08-06, auto-vj-01 1.0.0-rc.21) -- `_check_timed_finale()` reads
+  `get_session()` via `_get_session_hint()` and prefers `final_peak_in_s`
+  (fires 43s ahead, matching grand-finale-01's own buildup length) over
+  `seconds_left` over the original wall-clock estimate. §6.3 is fully
+  consumed end to end; nothing outstanding on this plan.
 Last updated: 2026-08-06
 
 ## 1. Objective
@@ -430,10 +434,19 @@ degrade-to-no-op on an older core). The mixer side was already written
 and guarded -- it calls `publish_session` only when the attribute exists
 (dj-mixer-01 0.152.0) -- so it lit up with no further coordination
 needed. See `docs/adr/vj-system.md` § "Set-Clock Hint Bus:
-`publish_session()`/`get_session()`". **Not yet done:** the auto-vj-01
-consumer side -- nothing reads `get_session()` yet (e.g. arming the
-grand-finale sequence off `final_peak_in_s`). The channel exists; using
-it is the next natural piece.
+`publish_session()`/`get_session()`".
+
+**Consumer side shipped too (2026-08-06, auto-vj-01 1.0.0-rc.21).**
+`_check_timed_finale()` reads `get_session()` via a new
+`_get_session_hint()` helper and prefers, in order: `final_peak_in_s`
+(fires `_finale_peak_lead_s` = 43s ahead of the analysed drop, matching
+grand-finale-01's own documented buildup length so the finale sequence's
+own climax lands with the music's), then `seconds_left` (the mixer's
+set-end estimate, same `_finale_lead_s` = 45s lead as before), then the
+original `state.session_remaining_s` wall-clock estimate when no mixer
+hint exists at all. See `docs/adr/vj-system.md` § "Grand-Finale Trigger
+Consumes the Set-Clock Hint" and `tests/test_auto_vj_timed_finale.py`.
+§6.3 is now fully consumed end to end.
 
 **Original ask, for reference:** a `publish_session()` /
 `get_session()` pair on `vj_api`, mirroring `publish_section()` exactly (same
