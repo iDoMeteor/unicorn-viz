@@ -2,7 +2,7 @@
 
 Owner: owner (solo studio) + agents
 Status: Active — the working checklist for the first public release
-Last updated: 2026-08-04 (all non-decision P0s + 10 P1s complete)
+Last updated: 2026-08-07 (platform priority corrected to Linux-first; video interop added)
 
 Sources: [2026-08-03 full-system audit](../audits/2026-08-03-full-system-audit.md),
 [2026-08-03 Windows platform report](../audits/2026-08-03-windows-platform-report.md),
@@ -43,7 +43,7 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       instead of the synchronous per-frame drawable read.
 - [ ] **[P2][S]** video-clips-01: move `cap.read()`/seek off `render()`.
 
-## B. Windows platform (primary target — see the Windows report)
+## B. Windows platform (second target as of 2026-08-07 — see the Windows report)
 
 - [x] **[P0][S]** Fonts: shared font-resolver that tries bundled
       `assets/fonts/ui-font.ttf` first, then platform dirs incl.
@@ -68,6 +68,13 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       DDJ-REV1 device naming under WASAPI.
 
 ## C. Distribution & packaging
+
+- [ ] **[P1][M]** **Video output interop** — no NDI/Spout/Syphon today; every
+      rival except projectM has at least one, and it is the worst row on the
+      scorecard. Linux-first: v4l2loopback (works with stock OBS) then
+      PipeWire/DMA-BUF, NDI after. Prerequisite: single shared frame tap in
+      core so recording/streaming/interop stop each doing their own readback.
+      See [video-output-interop-plan-2026-08-07.md](video-output-interop-plan-2026-08-07.md).
 
 - [ ] **[P0][D]** Decide the public drop-in channel: all 39 submodules are
       private SSH — a public clone gets zero drop-ins. Options: public

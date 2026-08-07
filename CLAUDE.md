@@ -16,12 +16,16 @@ It renders fullscreen OpenGL 3.3 core effects via `moderngl`, captures live
 audio from PipeWire/ALSA via `sounddevice`, supports MIDI control via
 `python-rtmidi`, and displays authentic CP437 ANSI art from the BBS artscene.
 
-Primary RELEASE target: **Windows** (the first public release ships
-Windows-first) — check Windows behavior first for fonts, DPI, subprocess,
-signals, and paths; prefer bundled assets over system paths (see
-`unicornviz/fonts.py` and `docs/audits/2026-08-03-windows-platform-report.md`).
-Primary DEVELOPMENT platform: Fedora / Arch Linux, Wayland, PipeWire.
-Secondary: any POSIX system running X11 + ALSA. macOS is planned.
+Platform priority (corrected 2026-08-07): **Linux first, Windows second,
+macOS third.** Linux (Fedora / Arch, Wayland, PipeWire) is both the
+development platform and the primary target — the project is Linux-first in
+every conceivable way, and notably **no paid competitor ships on Linux at
+all**. Windows is a real, supported second target: still check Windows
+behavior for fonts, DPI, subprocess, signals, and paths, and prefer bundled
+assets over system paths (see `unicornviz/fonts.py` and
+`docs/audits/2026-08-03-windows-platform-report.md`) — it just no longer
+outranks Linux when the two conflict. macOS is planned post-1.0; mobile
+after that. Secondary: any POSIX system running X11 + ALSA.
 
 ---
 

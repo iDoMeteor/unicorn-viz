@@ -29,6 +29,7 @@ This is the canonical map for project documentation.
 
 - Planning: [docs/planning](planning)
 - **v1.0-RC1 release task list (2026-08-03, active):** [docs/planning/rc1-release-task-list-2026-08-03.md](planning/rc1-release-task-list-2026-08-03.md)
+- **Video output interop plan — PipeWire/DMA-BUF, v4l2loopback, NDI (proposed, 2026-08-07):** [docs/planning/video-output-interop-plan-2026-08-07.md](planning/video-output-interop-plan-2026-08-07.md)
 - Auto VJ phrase-aware song structure plan (draft, 2026-08-05, pending dj-mixer-01 team review of §6): [docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md](planning/auto-vj-phrase-structure-plan-2026-08-05.md)
 - Auto VJ recommender accuracy tracking spec (proposed, 2026-08-06, not yet implemented): [docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md](planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md)
 - Auto-exit on set end — dj-mixer-01 + media-01 (proposed, 2026-08-07, pending mixer/media team implementation): [docs/planning/headless-auto-exit-plan-2026-08-07.md](planning/headless-auto-exit-plan-2026-08-07.md)
