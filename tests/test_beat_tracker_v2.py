@@ -16,6 +16,7 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 
@@ -102,6 +103,56 @@ def test_acf_confidence_reaches_near_maximum_on_unambiguous_signal() -> None:
     _run_steady_click_track(bt, bpm=120.0, duration_s=10.0)
 
     assert bt._acf_confidence > 0.9
+
+
+def test_acf_rival_score_excludes_harmonic_multiples_of_the_winning_lag() -> None:
+    """2026-08-07: a rival lag that is a near-integer multiple/divisor of
+    the winning lag (2x, 3x, 4x, or reciprocal) reflects the comb filter's
+    own harmonic summing agreeing with itself -- a mechanically regular
+    four-on-the-floor kick is the textbook case -- not a genuinely
+    competing tempo, so it must not suppress confidence."""
+    bt = BeatTracker({})
+    # 64 = 128/2, 128/3 ~= 42.67, 32 = 128/4 -- all near-exact harmonic
+    # divisors of the winning 128 BPM lag.
+    bpms = np.array([64.0, 128.0, 128.0 / 3.0, 32.0], dtype=np.float32)
+    score = np.array([0.95, 1.0, 0.9, 0.85], dtype=np.float32)
+
+    rival = bt._acf_rival_score(score, bpms, best_bpm=128.0)
+
+    assert rival == pytest.approx(bt._acf_score_floor)
+
+
+def test_acf_rival_score_still_penalizes_a_genuinely_unrelated_rival() -> None:
+    """A strong rival that is NOT a harmonic of the winning lag (a real,
+    independently periodic competing tempo) must still suppress confidence
+    -- only harmonically-related rivals are exempted."""
+    bt = BeatTracker({})
+    bpms = np.array([64.0, 128.0, 91.0], dtype=np.float32)
+    score = np.array([0.10, 1.0, 0.95], dtype=np.float32)
+
+    rival = bt._acf_rival_score(score, bpms, best_bpm=128.0)
+
+    assert rival == pytest.approx(0.95)
+
+
+def test_acf_rival_score_falls_back_to_score_floor_with_no_rivals() -> None:
+    bt = BeatTracker({})
+    bpms = np.array([128.0], dtype=np.float32)
+    score = np.array([1.0], dtype=np.float32)
+
+    rival = bt._acf_rival_score(score, bpms, best_bpm=128.0)
+
+    assert rival == pytest.approx(bt._acf_score_floor)
+
+
+def test_acf_rival_score_falls_back_to_score_floor_when_best_bpm_invalid() -> None:
+    bt = BeatTracker({})
+    bpms = np.array([64.0, 128.0], dtype=np.float32)
+    score = np.array([0.9, 1.0], dtype=np.float32)
+
+    rival = bt._acf_rival_score(score, bpms, best_bpm=0.0)
+
+    assert rival == pytest.approx(bt._acf_score_floor)
 
 
 def test_full_confidence_blend_eventually_converges_given_enough_steady_time() -> None:

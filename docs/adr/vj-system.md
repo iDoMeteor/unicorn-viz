@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -755,6 +755,62 @@ handles `None`, already-fired and auto-trigger-disabled are no-ops,
 downbeat-scheduled vs. immediate-fire branching. Full suite green (1282
 passed).
 
+### ACF Confidence Excludes Harmonically-Related Rivals (2026-08-07)
+
+Decision: `BeatTracker._acf_rival_score()` (new, `beat_grid.py`) excludes
+lags that are near-integer multiples/divisors of the winning lag (2x, 3x,
+4x, or their reciprocals, within new `_V2_HARMONIC_CONF_TOL = 0.04`) when
+finding the rival used for the ACF peak-ratio confidence
+(`acf_peak_ratio = score[peak] / rival_score`, feeding `acf_conf` and the
+0.4/0.6 ACF/phase confidence blend).
+
+**Why.** Owner observation during a live training session: a house track
+with very solid, mechanically regular kick timing scored confidence
+"crazy low" the entire way through, despite the tempo lock itself being
+correct throughout (confirmed by the eventual profile recommendation
+also landing correctly). The old metric compared the winning lag's score
+against whatever the second-highest score anywhere in the array happened
+to be. The comb-filter harmonic summing above it (see "Comb-filter
+harmonics" in `docs/weights-and-thresholds.md`) deliberately makes a lag
+score highly when it's a harmonic multiple/divisor of a genuinely strong
+periodicity -- and the *more* mechanically regular the underlying pulse
+(a tight four-on-the-floor kick being close to the ideal case), the
+*closer* those harmonic-lag scores sit to the fundamental's, since
+there's no timing slop to separate them. The metric was therefore
+systematically worst exactly when the beat was most unambiguous -- an
+inverted signal, not noise.
+
+**Fix, not a threshold nudge.** A rival is only allowed to suppress
+confidence if it is *not* harmonically related to the winning lag --
+i.e. it reflects an independently periodic, genuinely competing tempo
+interpretation, not the comb filter agreeing with its own summed
+harmonics. Verified against both directions: a synthetic peak with
+strong harmonic-multiple rivals at 2x/3x/4x now reports confidence
+identical to having no rival at all (`tests/test_beat_tracker_v2.py::
+test_acf_rival_score_excludes_harmonic_multiples_of_the_winning_lag`); a
+synthetic peak with a strong *unrelated* rival still suppresses
+confidence exactly as before (`test_acf_rival_score_still_penalizes_a_
+genuinely_unrelated_rival`).
+
+**Scope.** `_estimate_tempo_acf()` and the new `_acf_rival_score()` are
+defined once on `BeatTracker` (v2) and inherited unmodified by
+`BeatTrackerV3` (v3 subclasses v2 rather than forking it), so this
+applies to both configured engines with no separate v3 change needed.
+`BeatGridTracker` (v1, legacy fallback) uses an unrelated
+IOI-clustering confidence model with no equivalent peak-ratio step and
+is unaffected -- consistent with how the 2026-08-06 primed-confidence
+fix was also scoped to v2/v3 only.
+
+`_VJ_WEIGHTS_DOC_VERSION` bumped to 8; see
+`docs/weights-and-thresholds.md`'s Detector table and Changelog.
+
+**Verified:** new unit coverage in `tests/test_beat_tracker_v2.py`
+(`_acf_rival_score` excludes harmonic multiples, still penalizes a
+genuine unrelated rival, falls back to the score floor with no rivals or
+an invalid `best_bpm`) plus the existing
+`test_acf_confidence_reaches_near_maximum_on_unambiguous_signal`
+regression, which continues to pass. Full suite green (1286 passed).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
@@ -1237,6 +1293,12 @@ designed. `_reset_tempo_lock()` clears both new fields alongside `self._confiden
 Confirmed post-fix with a synthetic 130 BPM onset stream: `_acf_confidence` and
 `_phase_confidence` diverge (1.0 vs 0.34 in one run), where pre-fix they were provably identical
 by construction.
+
+**2026-08-07 update:** `_acf_confidence`'s own input (`acf_peak_ratio`) had a
+separate, independent bug from this one — see "ACF Confidence Excludes
+Harmonically-Related Rivals" above. This section is about the two signals
+overwriting each other; that one is about how the ACF signal itself was
+computed.
 
 ---
 
