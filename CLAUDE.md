@@ -17,10 +17,13 @@ audio from PipeWire/ALSA via `sounddevice`, supports MIDI control via
 `python-rtmidi`, and displays authentic CP437 ANSI art from the BBS artscene.
 
 Platform priority (corrected 2026-08-07): **Linux first, Windows second,
-macOS third.** Linux (Fedora / Arch, Wayland, PipeWire) is both the
-development platform and the primary target — the project is Linux-first in
-every conceivable way, and notably **no paid competitor ships on Linux at
-all**. Windows is a real, supported second target: still check Windows
+macOS third** — with one useful distinction. Linux (Fedora / Arch, Wayland,
+PipeWire) is the **owner's platform**: where it is built, run, and performed
+on, and where it must always work best. Windows is the **primary end-user
+target**: most people who install this will be on it, so it stays a
+first-class supported platform even though it is not where the project
+lives. Notably **no paid competitor ships on Linux at all**, which makes the
+Linux-first stance a position rather than a compromise. Windows: still check
 behavior for fonts, DPI, subprocess, signals, and paths, and prefer bundled
 assets over system paths (see `unicornviz/fonts.py` and
 `docs/audits/2026-08-03-windows-platform-report.md`) — it just no longer

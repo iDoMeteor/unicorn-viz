@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.45**
+**Version 1.0.0-beta.46**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.46** — **One GPU readback per frame instead of one per consumer.** Recording and RTMP streaming each pulled the identical full-resolution frame off the GPU independently — with both live that was two transfers of the same picture every frame (~12 MB/frame at 1080p), and recording's was the *synchronous* path the 2026-08-03 audit flagged as a frame-budget problem. A new `unicornviz.frame_tap.FrameTap` now decides who is due (per-consumer rate caps included), the loop reads back **once**, and everyone due shares that buffer; the subsystem preview keeps reusing it when present. Recording moves onto the double-buffered PBO path as a side effect, which also fixes a latent size mismatch — it was fed drawable-sized bytes while ffmpeg was told the tracked canvas size, which differ under mixed-DPI scaling and mirror/span. Groundwork for the video-interop outputs (v4l2loopback, PipeWire/DMA-BUF, NDI), which would otherwise have made it four or five readbacks per frame.
 - **1.0.0-beta.45** — `--dj-mixer-source`/`--media-source` now automatically set `[auto_vj] auto_exit_after_finale = true` (`_build_overrides()`, `__main__.py`) -- a headless source *is* a headless run, so no separate flag or `config.toml` edit is needed to get the auto-exit behavior shipped in beta.44. The config key itself is unchanged and still available directly for non-headless-source use (e.g. a Spotify session with a configured `show_duration_min`).
 - **1.0.0-beta.44** — Closes `docs/planning/headless-auto-exit-plan-2026-08-07.md`: new `VjApi.grand_finale_active` property exposes the grand-finale sequence's active/idle completion edge, letting a consumer (auto-vj-01's new `auto_exit_after_finale`) request an unattended app exit once a *timed* finale actually finishes, instead of reaching into `app._grand_finale` directly. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Auto-Exit on Set End: the Grand-Finale Completion Watcher".
 - **1.0.0-beta.42** — **Mixer-only mode** (P1 of the mixer-only plan):

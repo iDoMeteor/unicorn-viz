@@ -1,7 +1,9 @@
 # Video Output Interop Plan — PipeWire/DMA-BUF, v4l2loopback, NDI
 
 Owner: owner + agents
-Status: Proposed — not started, pending owner go-ahead on phasing
+Status: **Phase 0 (frame tap) DONE** — core 1.0.0-beta.46. Phasing confirmed
+  by owner 2026-08-07: v4l2loopback first, libfunnel pinned behind our own
+  abstraction (PR upstream if it needs changes).
 Last updated: 2026-08-07
 
 Closes the single worst row on the [scorecard](../scorecard.md): **video
@@ -246,7 +248,7 @@ interop to its host.
 
 ---
 
-## 9. Decisions taken and questions still open
+## 9. Decisions taken
 
 **Decided (owner delegated 2026-08-07):**
 
@@ -256,18 +258,13 @@ interop to its host.
   matches how DistroAV handles the same constraint.
 - **Everything opt-in**, defaulting off (§7.1).
 
-**Still genuinely the owner's call:**
+**Also decided 2026-08-07 (owner):**
 
-1. **Phase order.** v4l2loopback-first gets it working in your OBS this
-   week with no plugin; PipeWire-first is the technically right thing but
-   asks you to install `obs-pwvideo` before you can see anything.
-   *Recommendation: v4l2loopback first* — a working path beats a correct
-   path you cannot yet look at, and Phase 2 replaces it transparently.
-2. **libfunnel dependency.** Pinning a library whose README says the API is
-   unstable is a real risk; writing the PipeWire node ourselves is maybe a
-   week more work and no external churn. *Recommendation: libfunnel behind
-   our own interface*, so swapping later costs nothing outside one module.
-3. **Frame-tap refactor timing.** It touches recording and streaming, both
-   of which are working and freshly fixed. Doing it first is correct but
-   momentarily destabilizes two shipping features — worth doing before RC1,
-   or straight after?
+- **Phase order: v4l2loopback first.** A working path beats a correct path
+  you cannot yet look at; Phase 2 replaces it transparently.
+- **libfunnel: pin it**, behind our own abstraction, and submit PRs upstream
+  if we need changes rather than forking.
+- **Frame tap: done first** (§2), shipped in core 1.0.0-beta.46 ahead of any
+  publisher — see the Status header.
+
+**Nothing outstanding.** Phase 1 can start whenever.

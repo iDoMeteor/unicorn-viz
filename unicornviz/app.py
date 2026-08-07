@@ -27,6 +27,7 @@ import sdl2.ext
 from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect
 from unicornviz.effects.registry import get_effects
+from unicornviz.frame_tap import FrameTap
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
@@ -575,6 +576,9 @@ class App:
         self._invert_colors = False
         # Double-buffered PBOs for async streaming/recording frame readback.
         # Frame N: issue read_into(pbo_write); Frame N+1: read pbo_read (DMA done).
+        # One GPU->CPU readback per frame, fanned out to recording /
+        # streaming (and reused by the subsystem preview when present).
+        self._frame_tap = FrameTap()
         self._stream_pbos: list[moderngl.Buffer] = []
         self._stream_pbo_size: int = 0
         self._stream_pbo_index: int = 0
@@ -5387,6 +5391,7 @@ void main() {
                 self._normalize_gl_render_state()
                 self._render_subsystem_overlays(dt, self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
+            need_frame_for_recording = False
             if self._recorder is not None:
                 _rec_failure = self._recorder.consume_failure()
                 if _rec_failure:
@@ -5395,10 +5400,9 @@ void main() {
                     )
                     self._recorder.stop()
                     self._sync_recording_overlay()
-                elif self._recorder.is_recording:
-                    self._capture_recording_frame()
+                else:
+                    need_frame_for_recording = bool(self._recorder.is_recording)
 
-            stream_frame: bytes | None = None
             need_frame_for_streaming = (
                 self._streamer is not None and self._streamer.is_streaming
             )
@@ -5417,18 +5421,35 @@ void main() {
             # transfer is a couple of MB at most instead of 24 MB on a
             # spanned canvas.  Full-res frames are still reused for the
             # preview when streaming already produced one this frame.
+            #
+            # Frame tap: recording and streaming both want the identical
+            # full-resolution picture. They used to read it back
+            # independently — two GPU->CPU transfers of the same frame every
+            # frame with both live, one of them synchronous. The tap decides
+            # who is due, we read **once**, and everyone due shares it.
+            # See unicornviz/frame_tap.py.
+            _tap_now = time.monotonic()
+            self._frame_tap.sync('recording', need_frame_for_recording)
+            self._frame_tap.sync('streaming', need_frame_for_streaming)
+            due = self._frame_tap.begin_frame(_tap_now)
+            stream_frame: bytes | None = None
+            if due:
+                try:
+                    stream_frame = self._read_streaming_frame()
+                except Exception as exc:
+                    log.error('Output frame readback failed: %s', exc)
+                    stream_frame = None
+                if stream_frame is not None:
+                    self._frame_tap.commit(due, _tap_now)
+            if 'recording' in due and stream_frame is not None:
+                self._write_recording_frame(stream_frame)
+
             subsystem_capture_due = False
             if need_frame_for_subsystems:
                 _now = time.monotonic()
                 if _now - self._last_subsystem_frame_capture_time >= self._subsystem_preview_capture_interval_s():
                     subsystem_capture_due = True
                     self._last_subsystem_frame_capture_time = _now
-            if need_frame_for_streaming:
-                try:
-                    stream_frame = self._read_streaming_frame()
-                except Exception as exc:
-                    log.error('Streaming frame readback failed: %s', exc)
-                    stream_frame = None
             if subsystem_capture_due:
                 if stream_frame is not None:
                     self._update_frame_capture_snapshot(stream_frame)
@@ -5445,7 +5466,7 @@ void main() {
                         self._update_frame_capture_snapshot(None)
             elif not need_frame_for_subsystems:
                 self._update_frame_capture_snapshot(None)
-            if need_frame_for_streaming and stream_frame is not None:
+            if 'streaming' in due and stream_frame is not None:
                 if not self._streamer.write_frame(stream_frame):
                     log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
             if primary_overlay_view is not None:
