@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.42**
+**Version 1.0.0-beta.44**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.44** — Closes `docs/planning/headless-auto-exit-plan-2026-08-07.md`: new `VjApi.grand_finale_active` property exposes the grand-finale sequence's active/idle completion edge, letting a consumer (auto-vj-01's new `auto_exit_after_finale`) request an unattended app exit once a *timed* finale actually finishes, instead of reaching into `app._grand_finale` directly. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Auto-Exit on Set End: the Grand-Finale Completion Watcher".
 - **1.0.0-beta.42** — **Mixer-only mode** (P1 of the mixer-only plan):
   `[dj_mixer] mixer_only = true`, the `--mixer` flag, or the new `unicorn-mix`
   entrypoint boots straight into the DJ mixer console — no splash (new

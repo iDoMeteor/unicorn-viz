@@ -1,9 +1,62 @@
 # Auto-Exit on Set End — dj-mixer-01 + media-01
 
-Owner: DJ Mixer team (dj-mixer-01), media-01 team, grand-finale-01 (whoever owns the watcher — see §4)
-Status: proposed, not yet implemented
+Owner: DJ Mixer team (dj-mixer-01), media-01 team, auto-vj-01/core (the watcher, §4)
+Status: **implemented, 2026-08-07** — all four sections below have shipped.
 Requested by: repo owner, 2026-08-07
 Last updated: 2026-08-07
+
+---
+
+## Status
+
+All four requested changes are done:
+
+- **§1 (dj-mixer-01: `AutoPlay.loop` defaults `False`)** — shipped, dj-mixer-01
+  0.162.0. Went further than asked: `AutoPlay.LOOP_DEFAULT = False`
+  (`autoplay.py:229`) is now the single source of truth so the fresh-boot
+  default and the session-restore default (§1's open question) can't drift
+  from each other independently.
+- **§2 (media-01: real `loop` concept, default `False`)** — shipped, media-01
+  0.20.0, as `repeat` (`all`/`one`/`off`, default `off` — `off` already meant
+  "stop at the end," it just needed §3's announcement wired to it).
+- **§3 (signal "session over")** — shipped on both sides.
+  `AutoPlay.on_night_over` (`autoplay.py:193`) → `DjMixerController.
+  _on_night_over()` → `_publish_session()` (`dj_mixer_controller.py:1083-
+  1223`) publishes `phase: 'over'`, `source: 'list_exhausted'`. media-01's
+  `_note_set_over()` (`media_controller.py:1045-1069`) publishes the
+  identical shape. Both deliberately match the *existing* timer-driven
+  `phase: 'over'` shape byte-for-byte, confirmed against `session.py:134` —
+  no format negotiation needed between the three publishers.
+- **§4 (wire "over" → grand finale → app exit)** — shipped, auto-vj-01
+  1.0.0-rc.25 / core (this session's own part; see README changelogs for
+  the exact core version). Turned out to
+  need **no change** to the "over" → finale trigger half: `_check_timed_
+  finale()` (shipped 2026-08-06) already reacts to `seconds_left: 0.0`
+  (which both night-over payloads publish) exactly like a timer running
+  out — the lead-time gate (`remaining > self._finale_lead_s`) is
+  immediately false at `0.0`, so it fires right away. The exact version
+  numbers are in the drop-ins' own changelogs; the only new code is
+  the second half: new `VjApi.grand_finale_active` (`vj_api.py`) exposes
+  `GrandFinale.is_active`'s True→False completion edge, and new
+  `AutoVJController._maybe_exit_after_finale()` watches it — once seen
+  active then inactive, calls `vj_api.request_exit(force=True)`. A 20 s
+  grace window covers the case where the finale never becomes active at
+  all (drop-in missing, trigger failed) so an unattended run still ends
+  rather than hanging forever. New `[auto_vj] auto_exit_after_finale`
+  config key, **default off** — a normal live performance must never
+  auto-quit after a finale, and the watcher only ever arms behind the
+  *timed* trigger (`_timed_finale_fired`), never a manual `Ctrl+Alt+F`.
+
+`tools/training_daemon.py` needed zero changes for any of this, as
+predicted — it already just waits for the process to exit and packages
+immediately after, regardless of why.
+
+**To actually use it end to end:** `unicornviz --dj-mixer-source` /
+`--media-source` (or `training_daemon.py --source dj-mixer`/`media`) plus
+`[auto_vj] auto_exit_after_finale = true` (not yet exposed as its own CLI
+override — set it in the training deploy's `config.toml`, or add a
+`--auto-exit-after-finale` flag to `__main__.py`/the daemon if that
+friction turns out to matter in practice).
 
 ---
 

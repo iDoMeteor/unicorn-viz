@@ -1642,6 +1642,22 @@ class VJApi:
         """Abort the grand finale and restore pre-finale state."""
         return str(self._app.abort_grand_finale())
 
+    @property
+    def grand_finale_active(self) -> bool:
+        """Whether the grand-finale sequence is currently mid-run.
+
+        True from the moment it actually starts advancing (PEAK/DROP/OUTRO/
+        BLACKOUT) until it returns to idle after the BLACKOUT tail. False if
+        the drop-in isn't loaded, or the sequence was never triggered.
+        Lets a consumer (e.g. auto-vj-01's unattended-run auto-exit) watch
+        for the True -> False completion edge without reaching into
+        app._grand_finale directly.
+        """
+        finale = self._app._grand_finale  # noqa: SLF001
+        if finale is None:
+            return False
+        return bool(getattr(finale, 'is_active', False))
+
     def toggle_auto_vj(self) -> str:
         """Toggle Auto VJ controller on/off; returns a flash-message string."""
         return str(self._app.toggle_auto_vj())

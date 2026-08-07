@@ -1079,6 +1079,54 @@ pure-function tests, no subprocess/pactl/Xvfb/SDL needed. Full main-repo
 suite green (1376 passed); dj-mixer-01 (895 passed, 1 skipped) and
 media-01 (54 passed) own suites green.
 
+### Auto-Exit on Set End: the Grand-Finale Completion Watcher (2026-08-07)
+
+Decision: closes `docs/planning/headless-auto-exit-plan-2026-08-07.md`'s
+last section. New `VjApi.grand_finale_active` property (`vj_api.py`)
+exposes `GrandFinale.is_active`'s True→False completion edge without a
+caller reaching into `app._grand_finale` directly. New
+`AutoVJController._maybe_exit_after_finale()` (`auto_vj.py`), ticked
+alongside `_check_timed_finale()`, watches that edge and calls
+`vj_api.request_exit(force=True)` once the *timed* finale trigger has
+fired and the sequence it triggered has actually finished.
+
+**Why the finale-trigger half needed no change.** dj-mixer-01 (`AutoPlay.
+on_night_over`, loop now defaults `False`) and media-01 (`repeat`
+defaulting `off`) both now publish `phase: 'over'`, `seconds_left: 0.0` on
+the session bus when their playlist naturally ends — deliberately the
+exact same shape `SessionClock` already publishes when its timer runs
+out. `_check_timed_finale()` (shipped 2026-08-06) already treats
+`seconds_left` below its lead-time gate as "fire now" regardless of why
+it's low, so a `0.0` from either drop-in already fires the finale with
+zero auto-vj-01 changes -- confirmed by tracing the existing gate logic
+rather than assumed.
+
+**The grace window.** `_maybe_exit_after_finale()` only exits immediately
+on the True→False edge if it actually observed `grand_finale_active` go
+`True` first. If the timed trigger fired but the finale never becomes
+active within `_EXIT_AFTER_FINALE_GRACE_S` (20.0s -- covers `schedule_
+for_next_downbeat()`'s worst-case wait, plus margin) -- grand-finale-01
+missing, or `trigger_grand_finale()` failing -- it exits anyway. An
+unattended run's entire point is ending in a packaged recording; hanging
+forever waiting for a completion edge that will never arrive would defeat
+that as badly as never exiting at all.
+
+**Explicit opt-in, narrowly scoped.** `[auto_vj] auto_exit_after_finale`
+defaults `false`. Even when on, the watcher only ever arms behind
+`self._timed_finale_fired` -- a manual `Ctrl+Alt+F` finale during a normal
+live set does not set that flag, so it can never trigger an unexpected
+exit mid-show.
+
+**Verified:** `tests/test_auto_vj_exit_after_finale.py` (disabled-flag
+no-op, manual-trigger no-op, the active→inactive exit edge, staying
+active never exits, exits only once, the grace-window timeout path via a
+monkeypatched `time.monotonic`, and becoming active before the grace
+deadline cancels the timeout path) and `tests/test_vj_api_grand_finale_
+active.py` (`grand_finale_active` against a real `App`: `None` drop-in,
+`is_active` `True`/`False`, and a stub with no `is_active` attribute at
+all degrading to `False` rather than raising). Full main-repo suite green
+(1408 passed).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
