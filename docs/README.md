@@ -30,6 +30,7 @@ This is the canonical map for project documentation.
 - **v1.0-RC1 release task list (2026-08-03, active):** [docs/planning/rc1-release-task-list-2026-08-03.md](planning/rc1-release-task-list-2026-08-03.md)
 - Auto VJ phrase-aware song structure plan (draft, 2026-08-05, pending dj-mixer-01 team review of §6): [docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md](planning/auto-vj-phrase-structure-plan-2026-08-05.md)
 - Auto VJ recommender accuracy tracking spec (proposed, 2026-08-06, not yet implemented): [docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md](planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md)
+- Auto-exit on set end — dj-mixer-01 + media-01 (proposed, 2026-08-07, pending mixer/media team implementation): [docs/planning/headless-auto-exit-plan-2026-08-07.md](planning/headless-auto-exit-plan-2026-08-07.md)
 - AI DJ + public system interface plan (draft, 2026-07-17): [docs/planning/ai-dj-public-interface-plan.md](planning/ai-dj-public-interface-plan.md)
 - Program feed — every audio source tells the VJ what is coming (draft, 2026-07-18): [docs/planning/program-feed-plan.md](planning/program-feed-plan.md)
 - "Give me a tour" guided onboarding plan (backlog v2 vision, 2026-07-18): [docs/planning/guided-tour-plan.md](planning/guided-tour-plan.md)
