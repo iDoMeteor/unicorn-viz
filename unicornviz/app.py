@@ -673,6 +673,11 @@ class App:
         # Live per-effect parameter overrides merged over config.toml at
         # instantiation: {ClassName: {param: value}}.
         self._effect_config_overrides: dict[str, dict[str, float]] = {}
+        # Hosted mixer console (mixer-only profile): the texture its
+        # frames are uploaded into, and the last frame id uploaded so a
+        # frame the console has not redrawn is not re-sent.
+        self._hosted_mixer_tex = None
+        self._hosted_mixer_fid = -1
         self._config_editor_was_open = False
         # Now-playing announcement hub: sources (spotify/media/dj-mixer/...)
         # register snapshot callables; the render loop announces the audible
@@ -3746,6 +3751,9 @@ void main() {
         if self._boot_profile == PROFILE_MIXER:
             dj_mixer_cfg = dict(dj_mixer_cfg)
             dj_mixer_cfg['start_enabled'] = True
+            # Hosted: no second window.  The console renders into *this*
+            # window (plan §3-§4) and claims this window's events.
+            dj_mixer_cfg['hosted'] = True
         try:
             dj_mixer_cls = _load_dj_mixer_controller_class()
             self._dj_mixer = dj_mixer_cls(self, dj_mixer_cfg)
@@ -5365,6 +5373,7 @@ void main() {
             if mirror_mode_active:
                 # Compose stage finished into _fbo_a; tile-blit first.
                 self._present_mirror_tiled(self._fbo_a.color_attachments[0])
+            self._present_hosted_mixer()
             if primary_overlay_view is not None:
                 vx, vy, vw, vh = primary_overlay_view
                 overlays.resize(vw, vh)
@@ -6739,6 +6748,54 @@ void main() {
         self._ctx.screen.use()
         self._ctx.viewport = (0, 0, self._width, self._height)
         return frame, pw, ph
+
+    def _present_hosted_mixer(self) -> None:
+        """Draw the hosted mixer console into the main window.
+
+        The mixer-only profile has no effects, so without this the window is
+        black.  The console is produced on the mixer's own render thread as a
+        raw RGBA buffer -- exactly the buffer it used to upload to its second
+        window -- so this uploads and draws it, and the overlay pass that runs
+        straight after lands on top of it just as it would on an effect.
+
+        A no-op in every other profile, and whenever the mixer has not
+        produced a frame yet, so the normal boot path is untouched.
+        """
+        mixer = self._dj_mixer
+        if mixer is None or self._boot_profile != PROFILE_MIXER:
+            return
+        frame_fn = getattr(mixer, 'hosted_frame', None)
+        if not callable(frame_fn):
+            return                       # older drop-in: nothing to present
+        got = frame_fn()
+        if not got:
+            return
+        raw, (fw, fh), fid = got
+        if fw <= 0 or fh <= 0 or not raw:
+            return
+        try:
+            tex = self._hosted_mixer_tex
+            if tex is None or tex.size != (fw, fh):
+                if tex is not None:
+                    tex.release()
+                tex = self._ctx.texture((fw, fh), 4)
+                tex.repeat_x = tex.repeat_y = False
+                self._hosted_mixer_tex = tex
+                self._hosted_mixer_fid = -1
+            if fid != self._hosted_mixer_fid:
+                # Skip the upload when the console has not redrawn: it runs on
+                # its own throttled thread, typically well under the visual
+                # frame rate, so most frames re-use the last texture.
+                tex.write(raw)
+                self._hosted_mixer_fid = fid
+            self._ctx.screen.use()
+            self._ctx.viewport = (0, 0, self._width, self._height)
+            self._normalize_gl_render_state()
+            tex.use(location=0)
+            self._present_prog['tex'].value = 0
+            self._present_vao.render(moderngl.TRIANGLE_STRIP)
+        except Exception as exc:
+            log.warning('Hosted mixer present failed: %s', exc)
 
     def _read_streaming_frame(self) -> bytes | None:
         """Read one RGB24 frame for RTMP streaming using double-buffered PBOs.

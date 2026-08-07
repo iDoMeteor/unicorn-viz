@@ -313,6 +313,22 @@ class VJApi:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)
 
+    def main_window_id(self) -> int:
+        """SDL window id of the main (audience) window, or -1.
+
+        A hosted subsystem claims this to receive the main window's input --
+        see the mixer-only boot profile, where the console *is* the main
+        window and there is no second one to claim.
+        """
+        win = getattr(self._app, '_window', None)
+        if win is None:
+            return -1
+        try:
+            import sdl2  # noqa: PLC0415
+            return int(sdl2.SDL_GetWindowID(win))
+        except Exception:                # pragma: no cover - defensive
+            return -1
+
     def release_window_events(self, window_id: int) -> None:
         """Release SDL event ownership for a subsystem window."""
         self._app.release_window_events(window_id)

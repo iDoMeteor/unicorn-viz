@@ -171,3 +171,105 @@ def test_default_shows_all_core_sections() -> None:
     o = _bare_overlays()
     names = [name for name, _ in o._iter_help_sections()]
     assert names == [name for name, _ in Overlays.CORE_HELP_SECTIONS]
+
+
+# -- P2: the hosted console -------------------------------------------------
+#
+# The mixer profile has no effects, so without the blit the window is black.
+# The console arrives as the same raw RGBA buffer the mixer used to upload to
+# its own second window.
+
+class _FakeTex:
+    def __init__(self, size):
+        self.size = size
+        self.writes = 0
+        self.released = False
+        self.repeat_x = self.repeat_y = True
+
+    def write(self, _raw):
+        self.writes += 1
+
+    def use(self, location=0):
+        pass
+
+    def release(self):
+        self.released = True
+
+
+class _FakeCtx:
+    def __init__(self):
+        self.made = []
+        self.screen = self
+        self.viewport = None
+
+    def texture(self, size, _comp):
+        t = _FakeTex(size)
+        self.made.append(t)
+        return t
+
+    def use(self):
+        pass
+
+
+class _HostApp:
+    """Just enough App to drive _present_hosted_mixer."""
+
+    from unicornviz.app import App as _App
+    _present_hosted_mixer = _App._present_hosted_mixer
+
+    def __init__(self, frame, profile='mixer'):
+        self._dj_mixer = self
+        self._boot_profile = profile
+        self._frame = frame
+        self._ctx = _FakeCtx()
+        self._width, self._height = 1280, 800
+        self._hosted_mixer_tex = None
+        self._hosted_mixer_fid = -1
+        self._present_prog = {'tex': type('V', (), {'value': 0})()}
+        self._present_vao = type('V', (), {'render': lambda *_a: None})()
+
+    def hosted_frame(self):
+        return self._frame
+
+    def _normalize_gl_render_state(self):
+        pass
+
+
+def test_the_console_is_uploaded_and_drawn() -> None:
+    app = _HostApp((b'\x00' * (4 * 4 * 4), (4, 4), 1))
+    app._present_hosted_mixer()
+    assert len(app._ctx.made) == 1
+    assert app._ctx.made[0].writes == 1
+
+
+def test_a_frame_the_console_has_not_redrawn_is_not_re_uploaded() -> None:
+    """The console renders on its own throttled thread, well under the visual
+    frame rate, so most frames should re-use the last texture."""
+    app = _HostApp((b'\x00' * (4 * 4 * 4), (4, 4), 7))
+    for _ in range(5):
+        app._present_hosted_mixer()
+    assert app._ctx.made[0].writes == 1, 'uploaded an unchanged frame'
+
+
+def test_a_resized_console_gets_a_new_texture_and_frees_the_old() -> None:
+    app = _HostApp((b'\x00' * (4 * 4 * 4), (4, 4), 1))
+    app._present_hosted_mixer()
+    first = app._ctx.made[0]
+    app._frame = (b'\x00' * (8 * 8 * 4), (8, 8), 2)
+    app._present_hosted_mixer()
+    assert first.released is True
+    assert app._ctx.made[-1].size == (8, 8)
+
+
+def test_the_blit_is_a_no_op_outside_the_mixer_profile() -> None:
+    """Normal boot must be untouched -- this runs every frame there too."""
+    app = _HostApp((b'\x00' * 64, (4, 4), 1), profile='full')
+    app._present_hosted_mixer()
+    assert app._ctx.made == []
+
+
+def test_nothing_is_drawn_before_the_console_has_rendered() -> None:
+    for empty in (None, (b'', (0, 0), 0), (b'x', (0, 5), 1)):
+        app = _HostApp(empty)
+        app._present_hosted_mixer()
+        assert app._ctx.made == [], empty
