@@ -424,6 +424,12 @@ class App:
         self._gl_context = None
         self._current_effect: BaseEffect | None = None
         self._next_effect: BaseEffect | None = None
+        # A pinned pair of effect instances held alive simultaneously for
+        # hard-cut alternation (auto-vj-01's effect ping-pong) instead of a
+        # full instantiate+destroy transition on every swap between the same
+        # two effects -- see pin_effect_pair()/cut_to_pinned()/
+        # unpin_effect_pair(). None when no pair is pinned.
+        self._pinned_pair: dict[str, BaseEffect] | None = None
         self._transition_t: float = 0.0
         self._transition_kind: str = "crossfade"
         self._transition_dir: tuple[float, float] = (1.0, 0.0)
@@ -3345,6 +3351,16 @@ void main() {
 
     def _switch_effect(self, cls: Type[BaseEffect]) -> None:
         """Begin transition to a new effect."""
+        if self._pinned_pair is not None:
+            # A normal transition (e.g. a manual "next effect" hotkey)
+            # interrupting a pinned ping-pong pair -- release it here
+            # rather than relying on the caller (auto-vj-01's
+            # _exit_pingpong()) to have done so first, or the
+            # off-screen pinned instance would leak forever. Mirrors
+            # unpin_effect_pair(): the on-screen instance is left alone,
+            # since it's still self._current_effect and gets destroyed
+            # the normal way once this transition completes below.
+            self.unpin_effect_pair()
         if self._projectm_manager_modal_active:
             log.info(
                 'Effect switch blocked while ProjectM manager is open: %s',
@@ -6749,6 +6765,69 @@ void main() {
 
     def goto_effect(self, cls: Type[BaseEffect]) -> None:
         self._switch_effect(cls)
+
+    def pin_effect_pair(self, cls_a: Type[BaseEffect], cls_b: Type[BaseEffect]) -> bool:
+        """Instantiate two effects and hold both alive for hard-cut alternation.
+
+        For a consumer that repeatedly alternates between the same two
+        effects (auto-vj-01's effect ping-pong), the normal transition path
+        (`_switch_effect` -> `goto_effect`) pays a full instantiate + destroy
+        on every single swap, even though both effects are about to be
+        needed again a few beats later. Pinning both once and cutting
+        between them with `cut_to_pinned()` turns each swap into a pointer
+        assignment. Returns False (no-op) if a pair is already pinned, the
+        ProjectM manager modal is open, or either class fails to
+        instantiate -- callers should fall back to normal `goto_effect()`.
+        """
+        if self._pinned_pair is not None or self._projectm_manager_modal_active:
+            return False
+        try:
+            a = self._instantiate(cls_a)
+        except Exception:
+            log.exception('Effect pin failed for %s', cls_a.__name__)
+            return False
+        try:
+            b = self._instantiate(cls_b)
+        except Exception:
+            log.exception('Effect pin failed for %s', cls_b.__name__)
+            a.destroy()
+            return False
+        self._pinned_pair = {'a': a, 'b': b}
+        return True
+
+    def cut_to_pinned(self, which: str) -> bool:
+        """Hard-cut the render target to the pinned 'a' or 'b' effect.
+
+        A pointer swap between two already-instantiated effects: no
+        instantiate, no destroy, no transition blend. Returns False if no
+        pair is pinned or `which` isn't 'a'/'b'.
+        """
+        pair = self._pinned_pair
+        if pair is None or which not in pair:
+            return False
+        self._invert_colors = False
+        self._current_effect = pair[which]
+        self._next_effect = None
+        self._transition_t = 0.0
+        return True
+
+    def unpin_effect_pair(self) -> None:
+        """Release the pinned pair, destroying whichever isn't on screen.
+
+        The instance still assigned to `_current_effect` is left alive and
+        rendering -- it is destroyed the normal way, the next time
+        `_switch_effect()` completes a transition away from it. Does not
+        itself pick a replacement effect; the caller (e.g. the director
+        exiting ping-pong mode) is responsible for that. A no-op when no
+        pair is pinned.
+        """
+        pair = self._pinned_pair
+        self._pinned_pair = None
+        if pair is None:
+            return
+        for effect in pair.values():
+            if effect is not self._current_effect:
+                effect.destroy()
 
     @property
     def effect_lock(self) -> str | None:

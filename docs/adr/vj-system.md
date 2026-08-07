@@ -936,6 +936,73 @@ unmapped returns `None`, hit/miss/unmapped counting, confusion-entry
 shape, and the rendered scorecard section. Full main-repo suite green
 (1327 passed); dj-mixer-01's own suite green (878 passed, 1 skipped).
 
+### Effect Ping-Pong Hard-Cuts Between Two Pinned Instances (2026-08-07)
+
+Decision: new core capability, `App.pin_effect_pair()` / `cut_to_pinned()`
+/ `unpin_effect_pair()` (`unicornviz/app.py`), exposed via
+`VjApi.pin_effect_pair()` / `cut_to_pinned_effect()` / `unpin_effect_pair()`
+(`unicornviz/vj_api.py`). Effect ping-pong's `'effect'` kind (auto-vj-01,
+`_enter_pingpong()`/`_run_pingpong_swap()`/`_exit_pingpong()`) now uses
+this instead of `goto_effect()` for every swap.
+
+**Why.** `_switch_effect()` (`app.py`) always pays a full instantiate +
+destroy on every effect swap — correct for a normal transition between two
+different effects, but ping-pong alternates between the *same two* effects
+for its whole run, re-paying that cost (shader compile included) on every
+single beat-threshold swap. Owner's framing: "that's the real fix... both
+could stay instantiated and it could cut between them, turning a shader
+compile + destroy into a pointer swap. That kills the cost entirely rather
+than rationing it" — i.e. this isn't a threshold/budget tune, it's removing
+the cost's root cause.
+
+**Design.** `pin_effect_pair(cls_a, cls_b)` instantiates both once and
+holds them in `App._pinned_pair` (a `{'a': ..., 'b': ...}` dict); returns
+`False` (no-op) if a pair is already pinned, the ProjectM manager modal is
+open, or either class fails to instantiate (in which case the other, if
+already constructed, is destroyed immediately rather than leaked).
+`cut_to_pinned(which)` is a pure pointer assignment — `self._current_effect
+= pair[which]`, `self._next_effect = None`, no instantiate, no destroy, no
+transition blend. `unpin_effect_pair()` destroys whichever pinned instance
+isn't the one currently on screen; the on-screen one is left alive and
+destroyed later the normal way, once a subsequent real transition
+completes past it.
+
+**Defensive unpin in `_switch_effect()`.** A pinned pair can be
+interrupted by something other than auto-vj-01 itself — a manual "next
+effect" hotkey mid-ping-pong-run, for instance. Without a guard, the
+off-screen pinned instance would never get destroyed (only
+`_exit_pingpong()` used to call `unpin_effect_pair()`), leaking its GL
+resources for the rest of the session. `_switch_effect()` now checks
+`self._pinned_pair` first and releases it before proceeding, so *any* path
+into a normal transition cleans up a stale pin, not just the one
+auto-vj-01 itself expects.
+
+**Self-healing on the auto-vj-01 side.** Since the pin can now be released
+out from under a running ping-pong loop by that same interruption,
+`_run_pingpong_swap()` checks `cut_to_pinned_effect()`'s return value: a
+`False` (pair gone) clears `self._pp_pinned` and falls back to
+`goto_effect()` for the remainder of that run, rather than silently
+freezing on whatever effect the interruption left on screen. `pinned` is
+now logged on every `effect_swap` event so a session's ping-pong runs can
+be told apart from a stale/degraded fallback run after the fact.
+
+**Scope.** Only the `'effect'` kind of ping-pong is affected. The
+`'preset'` kind (ProjectM preset-index alternation) was already cheap —
+swapping a preset index, no GL instantiate/destroy involved — and is
+untouched.
+
+**Verified:** `tests/test_app_effect_pinning.py` (App-level mechanics:
+pin/cut/unpin, refusal when already pinned or ProjectM modal is open,
+partial-failure cleanup, transition-state clearing on cut),
+`tests/test_vj_api_effect_pinning.py` (name/class resolution through the
+`VjApi` wrapper layer), `tests/test_auto_vj_pingpong_pinning.py`
+(auto-vj-01's enter/swap/exit wiring, the goto_effect fallback when
+pinning fails, the preset-kind path being untouched, and the self-heal
+path when a cut fails mid-run), and a new case in
+`tests/test_effect_crash_isolation.py` confirming `_switch_effect()`
+releases a pinned pair left behind by an external interruption. Full
+suite green (1352 passed).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

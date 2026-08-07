@@ -424,22 +424,57 @@ class VJApi:
             session_remaining_s=self.get_time_remaining(),
         )
 
+    @staticmethod
+    def _resolve_effect_class(target: 'str | type') -> type | None:
+        """Resolve a display-name/class-name string or class object to an
+        effect class, or None if a string target matches nothing."""
+        if isinstance(target, type):
+            return target
+        name = str(target).strip().lower()
+        if not name:
+            return None
+        for cls in get_effects():
+            if cls.NAME.lower() == name or cls.__name__.lower() == name:
+                return cls
+        return None
+
     def goto_effect(self, target: 'str | type') -> bool:
         """Navigate to a named or class-referenced effect.
 
         ``target`` may be a display-name/class-name string or a class object.
         """
-        if isinstance(target, type):
-            self._app.goto_effect(target)
-            return True
-        name = str(target).strip().lower()
-        if not name:
+        cls = self._resolve_effect_class(target)
+        if cls is None:
             return False
-        for cls in get_effects():
-            if cls.NAME.lower() == name or cls.__name__.lower() == name:
-                self._app.goto_effect(cls)
-                return True
-        return False
+        self._app.goto_effect(cls)
+        return True
+
+    def pin_effect_pair(self, target_a: 'str | type', target_b: 'str | type') -> bool:
+        """Instantiate and hold two named/class-referenced effects alive for
+        hard-cut ping-pong alternation -- see ``App.pin_effect_pair()``.
+
+        Cheaper than repeated ``goto_effect()`` calls between the same two
+        effects: each swap after this becomes a pointer assignment
+        (``cut_to_pinned_effect()``) instead of a full instantiate+destroy
+        transition. Returns False if either target doesn't resolve to a
+        known effect class, or the app-level pin fails (pair already
+        pinned, ProjectM manager open, instantiation error).
+        """
+        cls_a = self._resolve_effect_class(target_a)
+        cls_b = self._resolve_effect_class(target_b)
+        if cls_a is None or cls_b is None:
+            return False
+        return self._app.pin_effect_pair(cls_a, cls_b)
+
+    def cut_to_pinned_effect(self, which: str) -> bool:
+        """Hard-cut to the pinned 'a' or 'b' effect -- see
+        ``App.cut_to_pinned()``. Returns False if no pair is pinned."""
+        return self._app.cut_to_pinned(which)
+
+    def unpin_effect_pair(self) -> None:
+        """Release the pinned effect pair -- see
+        ``App.unpin_effect_pair()``."""
+        self._app.unpin_effect_pair()
 
     def lock_effect(self, name: str) -> None:
         """Pin the system to the effect with display NAME *name* (ProjectM-only

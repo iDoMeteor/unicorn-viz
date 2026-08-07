@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+
 from unicornviz.app import App
 
 
@@ -76,12 +78,14 @@ class _AppStub:
         self._effect_crash_recover = False
         self._current_effect: Any = None
         self._next_effect: Any = None
+        self._pinned_pair: Any = None
         self._previous_effect_name = ''
         self._invert_colors = False
         self._projectm_manager_modal_active = False
         self._effect_lock = None
         self._playlist: Any = None
         self._transition_t = 0.5
+        self._rng = np.random.default_rng(0)
 
     # _instantiate for the stub mirrors App's signature but skips config
     # layering — the classes under test ignore their arguments anyway.
@@ -93,6 +97,26 @@ class _AppStub:
     _resolve_unblocked_effect = App._resolve_unblocked_effect
     _handle_effect_crash = App._handle_effect_crash
     _EFFECT_CRASH_LIMIT = App._EFFECT_CRASH_LIMIT
+    _switch_effect = App._switch_effect
+    unpin_effect_pair = App.unpin_effect_pair
+
+
+def test_switch_effect_releases_a_pinned_pair_left_behind() -> None:
+    """2026-08-07: a normal transition (e.g. a manual 'next effect' hotkey)
+    interrupting auto-vj-01's pinned ping-pong pair must release it, or the
+    off-screen pinned instance leaks its GL resources forever -- only
+    _exit_pingpong() used to call unpin_effect_pair()."""
+    app = _AppStub()
+    onscreen = _OkEffect()
+    offscreen = _OkEffect()
+    app._current_effect = onscreen
+    app._pinned_pair = {'a': onscreen, 'b': offscreen}
+
+    App._switch_effect(app, _OkEffect)  # type: ignore[arg-type]
+
+    assert app._pinned_pair is None
+    assert offscreen.destroyed is True
+    assert onscreen.destroyed is False  # still _current_effect until the transition finishes
 
 
 def test_switch_survives_constructor_failure() -> None:

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.39**
+**Version 1.0.0-beta.40**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.40** — New `App`/`VjApi` capability: `pin_effect_pair()`/`cut_to_pinned_effect()`/`unpin_effect_pair()` -- instantiate two effects once and hard-cut between them (a pointer swap) instead of a full instantiate+destroy transition on every switch. Built for auto-vj-01's effect ping-pong, which alternates between the same two effects for its whole run and was paying that cost on every single swap. `_switch_effect()` defensively releases a pinned pair left behind by an interrupting normal transition (e.g. a manual "next effect" hotkey), so the off-screen instance can't leak. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Effect Ping-Pong Hard-Cuts Between Two Pinned Instances".
 - **1.0.0-beta.39** — `unicornviz/now_playing.py`'s now-playing snapshot contract gains an optional `genre` key (dj-mixer-01 0.158.0 is the first source to populate it, from the loaded track's ID3 tag) -- feeds auto-vj-01's new Tier 2 recommender accuracy tracking (training-kit-01 0.10.0). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Tier 2: Genre-Tag Ground-Truth Accuracy Tracking".
 - **1.0.0-beta.38** — Audio stream latency now defaults to `"low"` (was
   `"high"`) everywhere in code: the `[audio] latency` config default, the
