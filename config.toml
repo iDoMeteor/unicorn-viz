@@ -118,6 +118,13 @@ log_decisions = false
 live_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
+# auto_exit_after_finale: quit unicorn-viz once the TIMED grand finale has
+# fired and fully played out, so an unattended overnight run ends by itself
+# and the training daemon can package the recording.  Needs Auto VJ enabled
+# (the watcher rides this controller's update).  Never fires from a manual
+# Ctrl+Alt+F finale -- only the automatic end-of-set one.  Leave this OFF for
+# any live show.  Default false.
+# auto_exit_after_finale = false
 
 [control_room]
 enabled = true
