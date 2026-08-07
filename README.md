@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.36**
+**Version 1.0.0-beta.38**
 
 ## Contact Me!
 
@@ -544,6 +544,10 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.38** — Audio stream latency now defaults to `"low"` (was
+  `"high"`) everywhere in code: the `[audio] latency` config default, the
+  capture constructor, and the unsupported-value fallback. An explicit
+  `latency` in config.toml still wins.
 - **1.0.0-beta.37** — ProjectM now respects being disabled in the effects
   browser. Auto VJ's projectM-affinity path calls `goto_effect('ProjectM
   Presets')` directly, and a direct goto bypasses the playlist's disabled set

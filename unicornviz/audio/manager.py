@@ -31,7 +31,7 @@ class AudioManager:
         device_hint = cfg.get("audio", "device", default="")
         fft_bands = cfg.get("audio", "fft_bands", default=512)
         buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
-        latency = cfg.get("audio", "latency", default="high")
+        latency = cfg.get("audio", "latency", default="low")
         prefer_default_input = bool(
             cfg.get('audio', 'prefer_default_input', default=False)
         )

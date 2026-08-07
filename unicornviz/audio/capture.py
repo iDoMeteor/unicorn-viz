@@ -73,10 +73,10 @@ def _normalize_latency(latency: str | float) -> str | float:
         return 0.06
 
     log.warning(
-        'Audio latency value %r is unsupported; using high latency fallback',
+        'Audio latency value %r is unsupported; using low latency fallback',
         latency,
     )
-    return 'high'
+    return 'low'
 
 
 def _candidate_monitor_devices(
@@ -241,7 +241,7 @@ class AudioCapture:
         self,
         device_hint: str = "",
         buffer_seconds: float = 2.0,
-        latency: str | float = 'high',
+        latency: str | float = 'low',
         prefer_default_input: bool = False,
         fallback_rms_threshold: float = _DEFAULT_FALLBACK_RMS_THRESHOLD,
         fallback_silence_seconds: float = _DEFAULT_FALLBACK_SILENCE_SECONDS,
