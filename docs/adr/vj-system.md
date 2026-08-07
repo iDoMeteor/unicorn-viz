@@ -1003,6 +1003,82 @@ path when a cut fails mid-run), and a new case in
 releases a pinned pair left behind by an external interruption. Full
 suite green (1352 passed).
 
+### Headless Training: dj-mixer-01/media-01 as Audio Sources (2026-08-07)
+
+Decision: `tools/training_daemon.py` (training-kit-01) gains
+`--source {spotify,dj-mixer,media}` so an unattended Auto VJ training
+session can be driven by dj-mixer-01's real DJ engine or media-01's local
+library, not only Spotify. New core CLI flags on `unicornviz/__main__.py`
+(`--dj-mixer-source`, `--dj-mixer-autoplay-mode`, `--dj-mixer-music-dir`,
+`--dj-mixer-output-device`, `--media-source`, `--media-dir`) force-enable
+and configure the chosen subsystem for a single run via the existing
+`Config(overrides=...)` mechanism (`unicornviz/config.py:376-384`) --
+the same shape already used for `--record`/`--no-record` ->
+`[recording] auto_record`.
+
+**Why.** Spotify needs a human to connect from their phone and press
+play, so a Spotify-sourced session isn't truly unattended at boot. It
+also has no genre signal (the API is gone), so it can never feed Tier 2
+of the recommender accuracy-tracking spec. dj-mixer-01 already populates
+`now_playing_snapshot()`'s `genre` key (shipped the same day, from the
+loaded track's ID3 tag) which auto-vj-01 logs as `track_genre` on every
+corpus row -- so a dj-mixer-01-sourced session gets real Tier 2 ground
+truth "for free," something Spotify structurally cannot provide.
+
+**Design goal, per explicit owner direction: no static config.toml
+pre-editing.** `--source dj-mixer`/`--source media` on the daemon must
+force-enable everything needed for that run via CLI flags -- if the
+subsystem "exists but isn't enabled, enable it for the run" -- without
+writing to the training deploy's saved config file, so switching
+`--source` between runs never requires editing it.
+
+**dj-mixer-01** (`_maybe_boot_autoplay()`, new): arms AutoPlay
+(`autoload`/`cut`/`crossfade`/`smart`) from a cold board, gated by new
+`[dj_mixer] autoplay_boot_mode`/`autoplay_boot_shuffle` config keys and
+distinct from `_restore_state()`'s saved-mode restore (a real DJ's last
+live toggle) -- never fires if a restored session already armed a mode.
+Verified directly: `Browser.mode` defaults to `'library'`
+(`browser.py:80`), so `AutoPlay.set_mode()`'s own `_bind_list()` call
+binds to the whole configured `music_dir` automatically -- a single
+`set_mode()` call is genuinely enough to bootstrap playback from a cold
+board, no separate track-load call needed. `output_device` (routed via
+`--dj-mixer-output-device`, defaulting to the same value as
+`--audio-device`) points PortAudio/sounddevice directly at the training
+null sink.
+
+**media-01**: new `[media] auto_play` config key; `play_pause()` already
+falls through to starting track 0 of the shuffled library on a fresh
+instance, so no other change was needed inside `MediaController`. New
+`App._maybe_auto_play_media()` boot trigger mirrors the RTMP streamer's
+existing `auto_start` pattern. VLC hardcodes `--aout=pulse` with no
+per-instance output-device argument, so routing to the training null sink
+needs `PULSE_SINK` set on the whole `unicorn-viz` process -- the daemon
+sets it only for `--source media` (the same mechanism the daemon's own
+Spotify-GUI fallback already uses on its own process).
+
+**Daemon validation.** `--source dj-mixer`/`--source media` requires
+`--playlist-name` (neither source has Spotify's playlist-detection
+mechanism) and `--source-dir` (the track library), checked at
+argparse-time before any infrastructure is created -- a from-scratch run
+with neither would otherwise waste an entire unattended session before
+failing at packaging time.
+
+**Verified:** `tests/test_main_headless_source_overrides.py`
+(`_build_overrides()` produces the right `[dj_mixer]`/`[media]` keys, the
+output-device default-to-`--audio-device` fallback, absence when neither
+flag is passed), `tests/test_app_media_auto_play.py`
+(`_maybe_auto_play_media()` unbound against a stub), new cases in
+`drop-ins/media-01/tests/test_auto_play_config.py` and
+`drop-ins/dj-mixer-01/tests/test_controller.py` (`_maybe_boot_autoplay()`
+arms a mode and eventually plays via a real tick loop, no-ops without a
+mode configured, never stomps a restored session mode, rejects an invalid
+mode, shuffle default/override), and `tests/test_training_daemon.py`
+(argparse-time validation, `PULSE_SINK`/env construction, the
+`--dj-mixer-source`/`--media-source` command-line pass-through) --
+pure-function tests, no subprocess/pactl/Xvfb/SDL needed. Full main-repo
+suite green (1376 passed); dj-mixer-01 (895 passed, 1 skipped) and
+media-01 (54 passed) own suites green.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

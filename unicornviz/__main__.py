@@ -106,6 +106,14 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument('--ffmpeg-path', help='Path to the ffmpeg executable.')
     recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
+    training = parser.add_argument_group('headless training sources')
+    training.add_argument('--dj-mixer-source', action='store_true', help='Force-enable dj-mixer-01 and arm headless AutoPlay for this run.')
+    training.add_argument('--dj-mixer-autoplay-mode', choices=['autoload', 'cut', 'crossfade', 'smart'], help='AutoPlay mode to arm when --dj-mixer-source is set (default: cut).')
+    training.add_argument('--dj-mixer-music-dir', help='Override [dj_mixer] music_dir for this run.')
+    training.add_argument('--dj-mixer-output-device', help='Override [dj_mixer] output_device for this run. Defaults to --audio-device if not given (the same sink used for capture).')
+    training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run.')
+    training.add_argument('--media-dir', help='Override [media] media_dir for this run.')
+
     logging_group = parser.add_argument_group('logging')
     logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NONE'], help='Console/file log level; NONE disables all logging.')
 
@@ -156,6 +164,18 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     put('recording', 'crf', args.record_crf)
     put('recording', 'ffmpeg_path', args.ffmpeg_path)
     put('recording', 'audio_input_device', args.record_audio_device)
+
+    if args.dj_mixer_source:
+        put('dj_mixer', 'enabled', True)
+        put('dj_mixer', 'start_enabled', True)
+        put('dj_mixer', 'autoplay_boot_mode', args.dj_mixer_autoplay_mode or 'cut')
+        put('dj_mixer', 'output_device', args.dj_mixer_output_device or args.audio_device)
+        put('dj_mixer', 'music_dir', args.dj_mixer_music_dir)
+    if args.media_source:
+        put('media', 'enabled', True)
+        put('media', 'auto_play', True)
+        put('media', 'media_dir', args.media_dir)
+
     put('logging', 'level', args.log_level)
     return overrides
 

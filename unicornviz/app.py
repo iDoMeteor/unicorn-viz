@@ -3619,6 +3619,25 @@ void main() {
         except Exception as exc:
             log.debug('Tour startup offer skipped: %s', exc)
 
+    def _maybe_auto_play_media(self) -> None:
+        """Boot-time auto-play for media-01 (mirrors the RTMP streamer's
+        auto_start / the recorder's auto_record pattern). No-op unless
+        media-01 loaded successfully and ``[media] auto_play`` is set --
+        e.g. training-daemon's ``--media-source``. Failures are swallowed
+        so a media-01 bug can never block the rest of boot (drop-in
+        independence rule).
+        """
+        media = self._media
+        if media is None or not bool(getattr(media, 'enabled', False)):
+            return
+        if not bool(getattr(media, 'auto_play', False)):
+            return
+        try:
+            result = media.play_pause()
+            log.info('media-01: auto-play at boot: %s', result)
+        except Exception as exc:
+            log.warning('media-01: auto-play at boot failed: %s', exc)
+
     def show_splash(self) -> None:
         """Replay the splash screen (hotkey U)."""
         if self._splash_config is None:
@@ -4012,6 +4031,7 @@ void main() {
                         if callable(key_handler):
                             self.vj_api.register_key_handler('media', key_handler)
                         log.info('MediaController loaded from drop-in')
+                        self._maybe_auto_play_media()
                     else:
                         self._media = None
                 except Exception as exc:
