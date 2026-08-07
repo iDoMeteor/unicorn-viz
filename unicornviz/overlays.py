@@ -357,6 +357,8 @@ class Overlays:
     _tour_show_on_startup = True
     _tour_hover = ''
     _tour_button_rects: tuple = ()
+    # Mixer boot profile: restricts CORE_HELP_SECTIONS (None = show all).
+    _core_help_filter: tuple | None = None
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
@@ -5031,10 +5033,21 @@ void main() {
             self._help_right_tab_rects.append((i, tx, y, tab_w, bar_h))
             tx += tab_w + gap
 
+    def set_core_help_filter(self, section_names: tuple[str, ...] | None) -> None:
+        """Restrict which CORE_HELP_SECTIONS render (mixer boot profile).
+
+        Drop-in sections are unaffected — unloaded drop-ins never register
+        theirs, so those filter themselves. ``None`` restores the full set.
+        """
+        self._core_help_filter = tuple(section_names) if section_names else None
+
     def _iter_help_sections(self) -> list[tuple[str, list[tuple[str, str]]]]:
         """Return merged core + dynamic help sections in render order."""
         sections: list[tuple[str, list[tuple[str, str]]]] = []
+        core_filter = getattr(self, '_core_help_filter', None)
         for section, entries in self.CORE_HELP_SECTIONS:
+            if core_filter is not None and section not in core_filter:
+                continue
             sections.append((section, list(entries)))
 
         # All drop-in sections render after system sections, alphabetized.

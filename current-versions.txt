@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.41       BETA          module
+  core (unicornviz)             1.0.0-beta.42       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.158.0             alpha ▲       module
@@ -75,10 +75,11 @@
 
   ── early alpha ───────────────────────────────────────────────────────────
   flying-01                     0.2.1               early alpha   module
-  audio-out-01                  0.2.0               early alpha   module
+  audio-out-01                  0.2.0               early alpha   MISMATCH (readme=0.3.0)
   lyrics-01                     0.2.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
   40 components total  ·  7 RC  1 beta  32 alpha  0 unversioned
+  ⚠  1 version mismatch(es): audio-out-01
 

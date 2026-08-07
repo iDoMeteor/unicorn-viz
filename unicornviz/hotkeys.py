@@ -1447,26 +1447,28 @@ class HotkeyHandler:
         elif sym in (sdl2.SDLK_n, sdl2.SDLK_RIGHT):
             if p.mode == "random":
                 cls = p.advance()
-                log.info("Scene change → %s (random next)", cls.NAME)
             else:
                 cls = p.go_index(p.index + 1)
-                log.info("Scene change → %s (next)", cls.NAME)
-            a.goto_effect(cls)
-            o.flash_name(cls.NAME)
+            if cls is not None:   # empty playlist (mixer-only profile): no-op
+                log.info("Scene change → %s (%s)", cls.NAME,
+                         'random next' if p.mode == 'random' else 'next')
+                a.goto_effect(cls)
+                o.flash_name(cls.NAME)
 
         elif sym in (sdl2.SDLK_p, sdl2.SDLK_LEFT):
             if sym == sdl2.SDLK_p and (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
                 a.open_presets()
-            elif p.mode == "random":
-                cls = p.advance()
-                log.info("Scene change → %s (random prev)", cls.NAME)
-                a.goto_effect(cls)
-                o.flash_name(cls.NAME)
             else:
-                cls = p.go_index(p.index - 1)
-                log.info("Scene change → %s (prev)", cls.NAME)
-                a.goto_effect(cls)
-                o.flash_name(cls.NAME)
+                if p.mode == "random":
+                    cls = p.advance()
+                    reason = 'random prev'
+                else:
+                    cls = p.go_index(p.index - 1)
+                    reason = 'prev'
+                if cls is not None:
+                    log.info("Scene change → %s (%s)", cls.NAME, reason)
+                    a.goto_effect(cls)
+                    o.flash_name(cls.NAME)
 
         elif sym == sdl2.SDLK_f:
             a.toggle_fullscreen()

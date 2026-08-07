@@ -359,6 +359,28 @@ sequence = ["Plasma", "Fire", "Starfield"]
 
 ---
 
+## `[splash]`
+
+| Key       | Type | Default | Description                                        |
+|-----------|------|---------|----------------------------------------------------|
+| `enabled` | bool | `true`  | Show the startup splash animation. The mixer-only boot profile forces this off. |
+| `image`   | str  | `"images/unicorn-viz-01.png"` | Splash image path.           |
+
+---
+
+## `[dj_mixer]` (boot profile keys)
+
+The mixer's own settings are documented in the dj-mixer-01 drop-in; these
+core-read keys select the **mixer-only boot profile** (see
+`drop-ins/dj-mixer-01/docs/mixer-only-mode-plan.md`).
+
+| Key           | Type | Default | Description                                    |
+|---------------|------|---------|------------------------------------------------|
+| `mixer_only`  | bool | `false` | Boot straight into the DJ mixer console: no splash, no audio capture, no effects, no visual drop-ins. The mixer window opens automatically. Also available as the `--mixer` CLI flag or the `unicorn-mix` entrypoint (both override `false` here). |
+| `mixer_allow` | list | `[]`    | Extra drop-ins to load in mixer-only mode, by config-section name (e.g. `["media", "osc"]`). The mixer itself is always loaded. |
+
+---
+
 ## `[logging]`
 
 | Key        | Type | Default  | Description                              |

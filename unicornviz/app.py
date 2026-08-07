@@ -52,7 +52,12 @@ from unicornviz.dropins import (
     MULTIHEAD_RUNTIME_CAPABILITY,
     POSTFX_RUNTIME_CAPABILITY,
 )
-from unicornviz.paths import resolve_path
+from unicornviz.boot_profile import (
+    PROFILE_MIXER,
+    mixer_allowed_sections,
+    resolve_boot_profile,
+)
+from unicornviz.paths import APP_ROOT, resolve_path
 from unicornviz.tour import (
     CORE_TOUR_SLIDES,
     STATE_LAST_SLIDE,
@@ -401,6 +406,23 @@ class App:
         self._running = False
         self._confirm_exit_enabled = bool(self.cfg.get('ui', 'confirm_exit', default=True))
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
+        # Boot profile (mixer-only mode): resolved exactly once, here — every
+        # boot gate reads _boot_profile, never the raw config (see
+        # unicornviz/boot_profile.py and the mixer-only plan doc).
+        _dj_mixer_dropin = (
+            APP_ROOT / 'drop-ins' / 'dj-mixer-01' / 'dj_mixer_controller.py'
+        )
+        self._boot_profile, _profile_notes = resolve_boot_profile(
+            self.cfg, _dj_mixer_dropin.exists,
+        )
+        self._mixer_allow = mixer_allowed_sections(self.cfg)
+        for _note in _profile_notes:
+            log.error('Boot profile: %s', _note)
+        if self._boot_profile == PROFILE_MIXER:
+            log.info(
+                'Boot profile: MIXER-ONLY (allowed sections: %s)',
+                ', '.join(sorted(self._mixer_allow)),
+            )
         self._paused = False
         self._projectm_manager_modal_active = False
         # Effects browser modal (keyboard + mouse, debounced thumbnail preview).
@@ -592,7 +614,11 @@ class App:
         self._primary_overlay_view_debug_last: tuple[int, int, int, int] | None = None
         self._display_index = 0
         self._display_mode = 'single'
-        multihead_cls = _NullMultiHeadController if self._safe_mode else _load_multihead_controller_class()
+        multihead_cls = (
+            _NullMultiHeadController
+            if self._safe_mode or not self._profile_allows('multi_head')
+            else _load_multihead_controller_class()
+        )
         self._multihead = multihead_cls(self.cfg)
         self._fullscreen_mode = str(self.cfg.get('window', 'fullscreen_mode', default='auto')).lower()
         self._render_scale = _clamp_render_scale(
@@ -919,6 +945,17 @@ class App:
             return
         if isinstance(payload, dict):
             self.set_runtime_state('webcam', payload)
+
+    def _profile_allows(self, section: str) -> bool:
+        """Whether the boot profile permits loading a config section's drop-in.
+
+        The full profile allows everything (each block still applies its own
+        `enabled` flag); the mixer profile allows only the mixer plus the
+        sections listed in `[dj_mixer] mixer_allow`.
+        """
+        if self._boot_profile != PROFILE_MIXER:
+            return True
+        return section in self._mixer_allow
 
     def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
         """Route SDL events for a claimed window to a subsystem handler."""
@@ -1728,7 +1765,10 @@ class App:
             self._window_width = self._width
             self._window_height = self._height
 
-        title = self.cfg.get("window", "title", default="Unicorn Viz")
+        default_title = (
+            "Unicorn Mix" if self._boot_profile == PROFILE_MIXER else "Unicorn Viz"
+        )
+        title = self.cfg.get("window", "title", default=default_title)
         win_create_w = self._window_width if self._is_mirror_mode(self._display_mode) else self._width
         win_create_h = self._window_height if self._is_mirror_mode(self._display_mode) else self._height
         self._window = sdl2.SDL_CreateWindow(
@@ -1802,7 +1842,10 @@ class App:
         self._build_blend_pipeline()
         self._build_invert_pipeline()
         self._build_burst_pipeline()
-        if not self._safe_mode:
+        # GL visual-overlay drop-ins (unicorn-tears, candy-frame, webcam,
+        # postfx, color-grade, beat-flash, ...): all visual-output oriented,
+        # so the mixer profile skips the whole block (safe_mode already does).
+        if not self._safe_mode and self._boot_profile != PROFILE_MIXER:
             # Dancing unicorn overlay (optional, from unicorn-tears drop-in).
             try:
                 dancing_cls = _load_dancing_unicorn_class()
@@ -2856,6 +2899,9 @@ void main() {
 
     def _open_context_menu_at(self, x: float, y: float) -> None:
         """Build the menu model and open it at overlay coords (x, y)."""
+        if self._boot_profile == PROFILE_MIXER:
+            # Visual-oriented menu; suppressed in the mixer profile (§8).
+            return
         entries = self._build_context_menu_model()
         self._overlays.open_context_menu(entries, x, y)
         self._set_cursor_visible(True)
@@ -3349,8 +3395,11 @@ void main() {
         h = self._height if height is None else int(height)
         return cls(self._ctx, w, h, effect_cfg)
 
-    def _switch_effect(self, cls: Type[BaseEffect]) -> None:
+    def _switch_effect(self, cls: Type[BaseEffect] | None) -> None:
         """Begin transition to a new effect."""
+        if cls is None:
+            # Empty playlist (mixer-only boot profile) — nothing to switch to.
+            return
         if self._pinned_pair is not None:
             # A normal transition (e.g. a manual "next effect" hotkey)
             # interrupting a pinned ping-pong pair -- release it here
@@ -3489,6 +3538,8 @@ void main() {
             return None
         for _ in range(64):
             candidate = playlist.advance()
+            if candidate is None:
+                break
             if candidate.__name__ not in self._effect_blocklist:
                 log.info(
                     'Effect %s is quarantined — advancing to %s instead',
@@ -3679,6 +3730,34 @@ void main() {
     # Main loop                                                            #
     # ------------------------------------------------------------------ #
 
+    def _load_dj_mixer_subsystem(self) -> None:
+        """Load the two-deck DJ mixer drop-in (window + DDJ-REV1 input).
+
+        Loaded (and REV1 MIDI wired) when enabled; the window and audio
+        output stream stay idle until the operator opens it (Shift+D). The
+        mixer boot profile implies ``start_enabled`` so the console opens
+        immediately at boot.
+        """
+        dj_mixer_cfg = self.cfg.get('dj_mixer', default={}) or {}
+        if not isinstance(dj_mixer_cfg, dict):
+            dj_mixer_cfg = {}
+        if not bool(dj_mixer_cfg.get('enabled', True)):
+            return
+        if self._boot_profile == PROFILE_MIXER:
+            dj_mixer_cfg = dict(dj_mixer_cfg)
+            dj_mixer_cfg['start_enabled'] = True
+        try:
+            dj_mixer_cls = _load_dj_mixer_controller_class()
+            self._dj_mixer = dj_mixer_cls(self, dj_mixer_cfg)
+            self.vj_api.register_subsystem('dj_mixer', self._dj_mixer)
+            key_handler = getattr(self._dj_mixer, 'handle_key', None)
+            if callable(key_handler):
+                self.vj_api.register_key_handler('dj_mixer', key_handler)
+            log.info('DjMixerController loaded from drop-in')
+        except Exception as exc:
+            self._dj_mixer = None
+            log.warning('DjMixerController not available: %s', exc)
+
     def run(self) -> None:
         boot = _StartupProfiler()
         self._init_sdl()
@@ -3689,6 +3768,12 @@ void main() {
         # Subsystems (audio starts before splash so splash can react to music)
         log.info('Startup: initializing audio subsystem')
         audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
+        mixer_profile = self._boot_profile == PROFILE_MIXER
+        if mixer_profile:
+            # Mixer profile: capture is never started — the mixer owns its own
+            # audio; get_audio_data() on the unstarted manager returns silent
+            # buffers and skips the fallback prober. No input device claimed.
+            log.info('Mixer profile: audio capture skipped')
         audio_start_timeout_s = float(self.cfg.get('audio', 'start_timeout_s', default=4.0))
         audio_start_retries = int(self.cfg.get('audio', 'start_retries', default=2))
         audio_start_backoff_s = float(
@@ -3700,8 +3785,9 @@ void main() {
         if audio_start_retries < 0:
             audio_start_retries = 0
         total_audio_attempts = audio_start_retries + 1
-        audio_start_ok = False
-        for attempt in range(1, total_audio_attempts + 1):
+        audio_attempt_count = 0 if mixer_profile else total_audio_attempts
+        audio_start_ok = mixer_profile   # skipped counts as "not a failure"
+        for attempt in range(1, audio_attempt_count + 1):
             log.info(
                 'Startup: audio attempt %d/%d (timeout=%.2fs)',
                 attempt,
@@ -3737,7 +3823,9 @@ void main() {
         # Kick off background image decoding so disk I/O overlaps with the splash.
         # warm_cache() after the splash will find bytes already in memory and
         # only need to do fast GL uploads.
-        _pre_effects = get_effects()
+        # Mixer profile: no effect discovery (skips every effect-module import)
+        # and therefore no prescans — this is most of the ~1s boot target.
+        _pre_effects = [] if mixer_profile else get_effects()
         for _cls in _pre_effects:
             if getattr(_cls, 'NAME', '') == 'Image Showcase' and hasattr(_cls, 'prefetch_async'):
                 _img_cfg = self.cfg.get('effects', 'ImageShowcase', default={}) or {}
@@ -3773,7 +3861,8 @@ void main() {
         # stalling boot after it; the controller (built after the splash)
         # consumes the cached scan.
         _media_cfg = self.cfg.get('media', default={}) or {}
-        if isinstance(_media_cfg, dict) and bool(_media_cfg.get('enabled', False)):
+        if (isinstance(_media_cfg, dict) and bool(_media_cfg.get('enabled', False))
+                and self._profile_allows('media')):
             try:
                 _media_cls = _load_media_controller_class()
                 if hasattr(_media_cls, 'prescan_async'):
@@ -3783,12 +3872,18 @@ void main() {
 
         boot.mark('pre_splash_async_kickoff')
 
-        # Splash screen — shown before any effect loads
+        # Splash screen — shown before any effect loads. `[splash] enabled`
+        # is a standalone gate; the mixer profile forces it off.
         splash_path = str(resolve_path(self.cfg.get("splash", "image", default="images/unicorn-viz-01.png")))
+        splash_enabled = (
+            bool(self.cfg.get('splash', 'enabled', default=True))
+            and not mixer_profile
+        )
         splash_duration_audio = _SPLASH_TOTAL_DURATION
         splash_duration_silent = _SPLASH_TOTAL_DURATION
-        log.info('Startup: entering splash setup (path=%s)', splash_path)
-        if Path(splash_path).exists():
+        log.info('Startup: entering splash setup (path=%s enabled=%s)',
+                 splash_path, splash_enabled)
+        if splash_enabled and Path(splash_path).exists():
             from unicornviz.splash import Splash
 
             splash_w, splash_h, splash_viewport = self._splash_render_target()
@@ -3855,8 +3950,8 @@ void main() {
         self._midi_manager = midi_manager
         boot.mark('midi')
 
-        effects = get_effects()
-        if not effects:
+        effects = [] if mixer_profile else get_effects()
+        if not effects and not mixer_profile:
             raise RuntimeError("No effects found — check unicornviz/effects/")
 
         for effect_cls in effects:
@@ -3907,6 +4002,10 @@ void main() {
             tooltip_delay_s=float(self.cfg.get('tooltips', 'delay_s', default=0.55)),
         )
         self._overlays = overlays
+        if mixer_profile:
+            # Effect/visual hotkeys act on nothing in this profile — advertise
+            # only the sections that still mean something (mixer-only plan §8).
+            overlays.set_core_help_filter(('Help Usage', 'Basics'))
 
         # midi-controllers-01: register help-modal renderer now that Overlays is ready.
         if _mc_register_all is not None:
@@ -3999,7 +4098,7 @@ void main() {
             load_spotify = bool(spotify_cfg.get('enabled', False)) or bool(
                 spotify_web_cfg.get('enabled', False)
             )
-            if load_spotify:
+            if load_spotify and self._profile_allows('spotify'):
                 try:
                     spotify_cls = _load_spotify_controller_class()
                     self._spotify = spotify_cls(self, spotify_cfg)
@@ -4021,7 +4120,7 @@ void main() {
             media_cfg = self.cfg.get('media', default={}) or {}
             if not isinstance(media_cfg, dict):
                 media_cfg = {}
-            if bool(media_cfg.get('enabled', False)):
+            if bool(media_cfg.get('enabled', False)) and self._profile_allows('media'):
                 try:
                     media_cls = _load_media_controller_class()
                     self._media = media_cls(self, media_cfg)
@@ -4043,7 +4142,7 @@ void main() {
             chat_cfg = self.cfg.get('chat', default={}) or {}
             if not isinstance(chat_cfg, dict):
                 chat_cfg = {}
-            if bool(chat_cfg.get('enabled', False)):
+            if bool(chat_cfg.get('enabled', False)) and self._profile_allows('chat'):
                 try:
                     chat_cls = _load_chat_controller_class()
                     self._chat = chat_cls(self, chat_cfg)
@@ -4063,7 +4162,7 @@ void main() {
             audio_out_cfg = self.cfg.get('audio_out', default={}) or {}
             if not isinstance(audio_out_cfg, dict):
                 audio_out_cfg = {}
-            if bool(audio_out_cfg.get('enabled', True)):
+            if bool(audio_out_cfg.get('enabled', True)) and self._profile_allows('audio_out'):
                 try:
                     audio_out_cls = _load_audio_out_controller_class()
                     self._audio_out = audio_out_cls(self, audio_out_cfg)
@@ -4076,31 +4175,14 @@ void main() {
                     self._audio_out = None
                     log.warning('AudioOutController not available: %s', exc)
 
-            # Two-deck DJ mixer window + DDJ-REV1 input (optional drop-in).
-            # Loaded (and REV1 MIDI wired) when enabled; the window and audio
-            # output stream stay idle until the operator opens it (Shift+D).
-            dj_mixer_cfg = self.cfg.get('dj_mixer', default={}) or {}
-            if not isinstance(dj_mixer_cfg, dict):
-                dj_mixer_cfg = {}
-            if bool(dj_mixer_cfg.get('enabled', True)):
-                try:
-                    dj_mixer_cls = _load_dj_mixer_controller_class()
-                    self._dj_mixer = dj_mixer_cls(self, dj_mixer_cfg)
-                    self.vj_api.register_subsystem('dj_mixer', self._dj_mixer)
-                    key_handler = getattr(self._dj_mixer, 'handle_key', None)
-                    if callable(key_handler):
-                        self.vj_api.register_key_handler('dj_mixer', key_handler)
-                    log.info('DjMixerController loaded from drop-in')
-                except Exception as exc:
-                    self._dj_mixer = None
-                    log.warning('DjMixerController not available: %s', exc)
+            self._load_dj_mixer_subsystem()
             boot.mark('subsystem: dj_mixer')
 
             # OSC control-surface bridge (optional drop-in).
             osc_cfg = self.cfg.get('osc', default={}) or {}
             if not isinstance(osc_cfg, dict):
                 osc_cfg = {}
-            if bool(osc_cfg.get('enabled', True)):
+            if bool(osc_cfg.get('enabled', True)) and self._profile_allows('osc'):
                 try:
                     osc_cls = _load_osc_bridge_controller_class()
                     self._osc_bridge = osc_cls(self, osc_cfg)
@@ -4117,7 +4199,7 @@ void main() {
             lyrics_cfg = self.cfg.get('lyrics', default={}) or {}
             if not isinstance(lyrics_cfg, dict):
                 lyrics_cfg = {}
-            if bool(lyrics_cfg.get('enabled', True)):
+            if bool(lyrics_cfg.get('enabled', True)) and self._profile_allows('lyrics'):
                 try:
                     lyrics_cls = _load_lyrics_controller_class()
                     self._lyrics = lyrics_cls(self, lyrics_cfg)
@@ -4132,46 +4214,58 @@ void main() {
                     log.warning('LyricsController not available: %s', exc)
 
             # Auto VJ controller (optional drop-in), Phase 2 telemetry-only.
-            try:
-                auto_vj_cls = _load_auto_vj_controller_class()
-                auto_vj_cfg = self.cfg.get('auto_vj', default={}) or {}
-                if not isinstance(auto_vj_cfg, dict):
-                    auto_vj_cfg = {}
-                self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
-                self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
-                self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
-                log.info('AutoVJController loaded from drop-in')
-            except Exception as exc:
-                self._auto_vj = None
-                self.vj_api.set_status_pill(None)
-                log.warning('AutoVJController not available: %s', exc)
+            if self._profile_allows('auto_vj'):
+                try:
+                    auto_vj_cls = _load_auto_vj_controller_class()
+                    auto_vj_cfg = self.cfg.get('auto_vj', default={}) or {}
+                    if not isinstance(auto_vj_cfg, dict):
+                        auto_vj_cfg = {}
+                    self._auto_vj = auto_vj_cls(self, audio_manager, auto_vj_cfg)
+                    self.vj_api.set_status_pill(getattr(self._auto_vj, 'status_text', ''))
+                    self.vj_api.register_key_handler('auto_vj', self._auto_vj.handle_key)
+                    log.info('AutoVJController loaded from drop-in')
+                except Exception as exc:
+                    self._auto_vj = None
+                    self.vj_api.set_status_pill(None)
+                    log.warning('AutoVJController not available: %s', exc)
 
             # Grand Finale controller (optional drop-in).
-            try:
-                gf_cls = _load_grand_finale_class()
-                gf_cfg = self.cfg.get('grand_finale', default={}) or {}
-                if not isinstance(gf_cfg, dict):
-                    gf_cfg = {}
-                self._grand_finale = gf_cls(self, gf_cfg)
-                self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
-                log.info('GrandFinaleController loaded from drop-in')
-            except Exception as exc:
-                self._grand_finale = None
-                log.warning('GrandFinaleController not available: %s', exc)
+            if self._profile_allows('grand_finale'):
+                try:
+                    gf_cls = _load_grand_finale_class()
+                    gf_cfg = self.cfg.get('grand_finale', default={}) or {}
+                    if not isinstance(gf_cfg, dict):
+                        gf_cfg = {}
+                    self._grand_finale = gf_cls(self, gf_cfg)
+                    self.vj_api.register_key_handler('grand_finale', self._grand_finale.handle_key)
+                    log.info('GrandFinaleController loaded from drop-in')
+                except Exception as exc:
+                    self._grand_finale = None
+                    log.warning('GrandFinaleController not available: %s', exc)
 
             # Control Room controller (optional drop-in subsystem).
             control_room_cfg = self.cfg.get('control_room', default={}) or {}
             if not isinstance(control_room_cfg, dict):
                 control_room_cfg = {}
-            if bool(control_room_cfg.get('enabled', False)):
+            if bool(control_room_cfg.get('enabled', False)) and self._profile_allows('control_room'):
                 self._control_room_startup_cfg = dict(control_room_cfg)
                 self._control_room_startup_frames_remaining = 8
                 log.info('ControlRoomController scheduled for startup after %d audience frames', self._control_room_startup_frames_remaining)
         else:
             log.info('Safe mode enabled: skipping Spotify, Auto VJ, Grand Finale, and Control Room drop-ins')
+            if self._boot_profile == PROFILE_MIXER:
+                # safe_mode + mixer profile: the profile wins for the mixer
+                # itself (§6 of the mixer-only plan) — everything else above
+                # stayed skipped.
+                self._load_dj_mixer_subsystem()
+                boot.mark('subsystem: dj_mixer (safe-mode carve-out)')
 
-        # Load first effect
-        self._current_effect = self._instantiate(playlist.current())
+        # Load first effect (mixer profile: no effects — the window stays
+        # black behind overlays until hosted mode (P2) presents the console).
+        _first_cls = playlist.current()
+        self._current_effect = (
+            self._instantiate(_first_cls) if _first_cls is not None else None
+        )
         # Optional: start locked in ProjectM-only mode.
         _pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
         if isinstance(_pm_cfg, dict) and bool(_pm_cfg.get('only_mode', False)):
@@ -4183,7 +4277,11 @@ void main() {
                 self._effect_lock = 'ProjectM Presets'
                 log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
-        stream_cls = _NullRTMPStreamer if self._safe_mode else _load_rtmp_streamer_class()
+        stream_cls = (
+            _NullRTMPStreamer
+            if self._safe_mode or not self._profile_allows('streaming')
+            else _load_rtmp_streamer_class()
+        )
         stream_cfg = self.cfg.get('streaming', default={}) or {}
         if not isinstance(stream_cfg, dict):
             stream_cfg = {}
@@ -4210,7 +4308,7 @@ void main() {
                 self._streamer.auto_start,
             )
 
-        if not self._safe_mode:
+        if not self._safe_mode and self._profile_allows('cta'):
             cta_cfg = self.cfg.get('cta', default={}) or {}
             if not isinstance(cta_cfg, dict):
                 cta_cfg = {}
@@ -4224,7 +4322,7 @@ void main() {
             except Exception as exc:
                 log.warning('CTAController not available: %s', exc)
 
-        if not self._safe_mode:
+        if not self._safe_mode and self._profile_allows('banner'):
             banner_cfg = self.cfg.get('banner', default={}) or {}
             if not isinstance(banner_cfg, dict):
                 banner_cfg = {}
@@ -4254,6 +4352,10 @@ void main() {
 
         prev_time = time.perf_counter()
         self._session_started_at = time.monotonic()
+        # Mixer profile: closing the console means quitting — there is
+        # nothing to fall back to (mixer-only plan §4). Tracked as
+        # open-then-closed so a slow first open doesn't quit instantly.
+        mixer_console_was_open = False
         self._demo_timer = 0.0
         self._effect_duration = float(
             self.cfg.get('demo', 'effect_duration', default=60)
@@ -4682,8 +4784,9 @@ void main() {
                 if self._demo_timer >= self._effect_duration and allow_advance:
                     self._demo_timer = 0.0
                     next_cls = playlist.advance()
-                    log.info("Auto-advance → %s", next_cls.NAME)
-                    self._switch_effect(next_cls)
+                    if next_cls is not None:
+                        log.info("Auto-advance → %s", next_cls.NAME)
+                        self._switch_effect(next_cls)
             if perf_debug_enabled:
                 perf_after_auto_advance = time.perf_counter()
 
@@ -5355,6 +5458,12 @@ void main() {
                 perf_after_swap = time.perf_counter()
 
             self._present_subsystems()
+            if mixer_profile and self._dj_mixer is not None:
+                if bool(getattr(self._dj_mixer, 'is_open', False)):
+                    mixer_console_was_open = True
+                elif mixer_console_was_open:
+                    log.info('Mixer profile: console closed — quitting')
+                    self.request_exit()
             if perf_debug_enabled:
                 perf_after_subsystem_present = time.perf_counter()
                 perf_frame_counter += 1

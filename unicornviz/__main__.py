@@ -106,6 +106,14 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument('--ffmpeg-path', help='Path to the ffmpeg executable.')
     recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
+    profile = parser.add_argument_group('boot profile')
+    profile.add_argument(
+        '--mixer', action='store_true',
+        help='Boot straight into the DJ mixer console (mixer-only profile: '
+             'no splash, no audio capture, no visual effects/drop-ins). '
+             'Overrides [dj_mixer] mixer_only = false.',
+    )
+
     training = parser.add_argument_group('headless training sources')
     training.add_argument('--dj-mixer-source', action='store_true', help='Force-enable dj-mixer-01 and arm headless AutoPlay for this run.')
     training.add_argument('--dj-mixer-autoplay-mode', choices=['autoload', 'cut', 'crossfade', 'smart'], help='AutoPlay mode to arm when --dj-mixer-source is set (default: cut).')
@@ -175,6 +183,9 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         put('media', 'enabled', True)
         put('media', 'auto_play', True)
         put('media', 'media_dir', args.media_dir)
+
+    if args.mixer:
+        put('dj_mixer', 'mixer_only', True)
 
     put('logging', 'level', args.log_level)
     return overrides
@@ -334,6 +345,17 @@ def main() -> None:
             )
             raise SystemExit(1) from exc
         raise
+
+
+def main_mixer() -> None:
+    """`unicorn-mix` entrypoint: boot the mixer-only profile.
+
+    A branded identity for the same binary — equivalent to
+    `unicorn-viz --mixer`; every other CLI flag still applies.
+    """
+    if '--mixer' not in sys.argv[1:]:
+        sys.argv.insert(1, '--mixer')
+    main()
 
 
 if __name__ == "__main__":

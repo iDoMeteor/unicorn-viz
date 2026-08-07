@@ -116,7 +116,11 @@ class Playlist:
         self._shuffle_recent.append(self._index)
         return self._effects[self._index]
 
-    def current(self) -> Type[BaseEffect]:
+    def current(self) -> Type[BaseEffect] | None:
+        """The active effect class, or None on an empty playlist
+        (mixer-only boot profile: no effects are discovered at all)."""
+        if not self._effects:
+            return None
         return self._effects[self._index]
 
     def find_by_name(self, name: str) -> Type[BaseEffect] | None:
@@ -138,20 +142,26 @@ class Playlist:
                 self._index = cand
                 return
 
-    def advance(self) -> Type[BaseEffect]:
+    def advance(self) -> Type[BaseEffect] | None:
+        if not self._effects:
+            return None
         if self._mode == "random":
             return self._advance_shuffle()
         self._step_to_enabled(1)
         return self._effects[self._index]
 
-    def go_prev(self) -> Type[BaseEffect]:
+    def go_prev(self) -> Type[BaseEffect] | None:
+        if not self._effects:
+            return None
         self._step_to_enabled(-1)
         if self._mode == "random":
             self._shuffle_recent.append(self._index)
             self._reset_shuffle_cycle(avoid_index=self._index)
         return self._effects[self._index]
 
-    def go_index(self, i: int) -> Type[BaseEffect]:
+    def go_index(self, i: int) -> Type[BaseEffect] | None:
+        if not self._effects:
+            return None
         self._index = i % len(self._effects)
         if self._mode == "random":
             self._shuffle_recent.append(self._index)

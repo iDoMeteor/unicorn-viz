@@ -113,6 +113,10 @@ class AudioManager:
         # main thread.  Keeping it here avoids reading analyzer internal state
         # across thread boundaries without a lock.
         self._published_audio_time: float = 0.0
+        # Whether start() has completed. A never-started manager (mixer-only
+        # boot profile) still answers get_audio_data() with its pre-allocated
+        # silent buffers, but must not run the capture fallback prober.
+        self._started: bool = False
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
@@ -184,6 +188,7 @@ class AudioManager:
             daemon=True,
         )
         self._analysis_thread.start()
+        self._started = True
         log.info('AudioManager: analysis thread started')
 
     def stop(self) -> None:
@@ -361,7 +366,8 @@ class AudioManager:
         read a fully-written buffer; the lock is released before any arithmetic.
         No FFT or numpy work happens on the main thread.
         """
-        self._capture.maybe_fallback()
+        if self._started:
+            self._capture.maybe_fallback()
         # Copy latest published snapshot under the lock (only held for ~2 KB copy).
         with self._analysis_lock:
             self._copy_audio_into(self._front_buf, self._last_data_raw)

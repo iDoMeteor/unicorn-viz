@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.41**
+**Version 1.0.0-beta.42**
 
 ## Contact Me!
 
@@ -544,6 +544,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.42** — **Mixer-only mode** (P1 of the mixer-only plan):
+  `[dj_mixer] mixer_only = true`, the `--mixer` flag, or the new `unicorn-mix`
+  entrypoint boots straight into the DJ mixer console — no splash (new
+  `[splash] enabled` gate, honored in normal mode too), no audio capture, no
+  effect discovery, no visual drop-ins; only `[dj_mixer] mixer_allow`-listed
+  drop-ins load. The mixer window auto-opens, its title reads "Unicorn Mix",
+  help shows only the sections that still apply, and closing the console
+  quits the app. Normal boot is unchanged (default off). Hosted single-window
+  mode (P2) remains with the mixer team.
 - **1.0.0-beta.41** — `unicornviz/__main__.py` gains `--dj-mixer-source`/`--media-source` CLI flags (plus `--dj-mixer-autoplay-mode`/`--dj-mixer-music-dir`/`--dj-mixer-output-device`/`--media-dir`) that force-enable and configure dj-mixer-01/media-01 for a single run via the existing `Config(overrides=...)` mechanism, mirroring `--record`/`--no-record`'s existing shape. New `App._maybe_auto_play_media()` boot trigger for `[media] auto_play`. Built so `tools/training_daemon.py` (training-kit-01) can drive dj-mixer-01/media-01 as fully unattended headless training sources instead of only Spotify -- see `drop-ins/training-kit-01/docs/headless-training.md` and [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Headless Training: dj-mixer-01/media-01 as Audio Sources".
 - **1.0.0-beta.40** — New `App`/`VjApi` capability: `pin_effect_pair()`/`cut_to_pinned_effect()`/`unpin_effect_pair()` -- instantiate two effects once and hard-cut between them (a pointer swap) instead of a full instantiate+destroy transition on every switch. Built for auto-vj-01's effect ping-pong, which alternates between the same two effects for its whole run and was paying that cost on every single swap. `_switch_effect()` defensively releases a pinned pair left behind by an interrupting normal transition (e.g. a manual "next effect" hotkey), so the off-screen instance can't leak. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Effect Ping-Pong Hard-Cuts Between Two Pinned Instances".
 - **1.0.0-beta.39** — `unicornviz/now_playing.py`'s now-playing snapshot contract gains an optional `genre` key (dj-mixer-01 0.158.0 is the first source to populate it, from the loaded track's ID3 tag) -- feeds auto-vj-01's new Tier 2 recommender accuracy tracking (training-kit-01 0.10.0). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Tier 2: Genre-Tag Ground-Truth Accuracy Tracking".

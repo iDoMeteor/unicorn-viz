@@ -40,6 +40,7 @@ dev = [
 
 [project.scripts]
 unicorn-viz = "unicornviz.__main__:main"
+unicorn-mix = "unicornviz.__main__:main_mixer"
 
 [tool.setuptools.dynamic]
 version = {attr = "unicornviz.__version__"}
