@@ -17,6 +17,7 @@ the combination boot into nothing) while every other drop-in stays skipped.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 PROFILE_FULL = 'full'
@@ -61,6 +62,21 @@ def resolve_boot_profile(
             'itself; every other drop-in stays skipped',
         )
     return PROFILE_MIXER, notes
+
+
+def dropin_dir_matches_sections(dir_name: str, sections: frozenset[str] | set[str]) -> bool:
+    """Whether a drop-in directory belongs to one of the config sections.
+
+    Directory names use dashes and a numeric suffix (``dj-mixer-01``,
+    ``control-room-01``); config sections use underscores (``dj_mixer``,
+    ``control_room``). Normalizes the former to compare with the latter.
+    Used to scope discovery scans (help entries, tour slides) to the drop-ins
+    the mixer profile can actually load — the scan imports every module it
+    visits, which is the dominant boot cost it exists to avoid.
+    """
+    name = str(dir_name).strip().lower()
+    name = re.sub(r'-\d+$', '', name)
+    return name.replace('-', '_') in sections
 
 
 def mixer_allowed_sections(cfg: Any) -> frozenset[str]:

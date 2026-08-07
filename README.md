@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.49**
+**Version 1.0.0-beta.50**
 
 ## Contact Me!
 
@@ -544,6 +544,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.50** — Mixer-only boot got ~0.7s faster: the help-entry and
+  tour-slide discovery scans (which import every drop-in module they visit —
+  ~1.5s cold across the whole repo) are now scoped by the boot profile, so
+  the mixer profile only scans the drop-ins it can actually load. Normal
+  boot's scan is unchanged.
 - **1.0.0-beta.49** — video-out-01 0.3.0: libfunnel now builds **locally, without sudo** (`drop-ins/video-out-01/install.sh`) into a gitignored `vendor/` at a pinned commit, and the drop-in prefers it over any system copy — v4l2loopback keeps its own sudo-requiring script since a kernel module has no app-local equivalent. Building it for real found five binding bugs the header alone hid, including EGL symbols living in a second shared object, a dequeue return code that would have discarded every frame, a buffering mode that blocks the render thread, and — the dangerous one — libfunnel `assert()`ing on misordered calls, which aborts the process uncatchably. Stream setup is now verified against a live PipeWire daemon; the EGL import and GPU blit still need a consumer attached.
 - **1.0.0-beta.48** — **Zero-copy video out.** video-out-01 0.2.0 adds the PipeWire/DMA-BUF backend — the real Linux equivalent of Spout/Syphon — and core now hands it the GL framebuffer directly each frame. Nothing is read back to the CPU, so unlike the v4l2 path it costs no frame-tap subscription at all; OBS consumes it via the obs-pwvideo plugin, GStreamer via `pipewiresrc`. Needs a Wayland session and a locally-built libfunnel, and fails closed on either. **Unverified against real hardware** — v4l2loopback remains the dependable path until someone has watched this one work.
 - **1.0.0-beta.47** — **The show can leave the window.** New `video-out-01` drop-in publishes the output as a virtual V4L2 camera (v4l2loopback), so OBS takes it as an ordinary *Video Capture Device* with **no plugin** — closing the worst row on the competitive scorecard, where every rival except projectM could already hand its output to another app and we could not. It rides the frame tap, so with recording or streaming already live it costs **no extra GPU readback at all**. Opt-in on both switches; a missing kernel module logs once and disables. First of four planned backends (PipeWire/DMA-BUF, NDI, Spout/Syphon to follow).

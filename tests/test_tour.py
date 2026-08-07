@@ -238,6 +238,8 @@ def test_help_registry_lists_the_tour_key() -> None:
 
 def _bare_app(store: dict[str, object]) -> App:
     app = object.__new__(App)
+    app._boot_profile = 'full'
+    app._mixer_allow = frozenset({'dj_mixer'})
     o = _bare_overlays()
     o.set_tour_slides(CORE_TOUR_SLIDES)
     app._overlays = o
@@ -358,7 +360,7 @@ def test_tour_deck_inserts_discovered_slides_before_goodbye(monkeypatch) -> None
     monkeypatch.setattr(
         app_mod,
         'discover_dropin_tour_slides',
-        lambda: [('Demo', 'Extra', 'Extra body')],
+        lambda *a, **k: [('Demo', 'Extra', 'Extra body')],
     )
     app = _bare_app({})
     deck = app._tour_deck()
@@ -371,7 +373,7 @@ def test_tour_deck_inserts_discovered_slides_before_goodbye(monkeypatch) -> None
 def test_tour_deck_survives_discovery_failure(monkeypatch) -> None:
     import unicornviz.app as app_mod
 
-    def _boom() -> list[tuple[str, str, str]]:
+    def _boom(*_a, **_k) -> list[tuple[str, str, str]]:
         raise RuntimeError('scan exploded')
 
     monkeypatch.setattr(app_mod, 'discover_dropin_tour_slides', _boom)

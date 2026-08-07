@@ -273,3 +273,73 @@ def test_nothing_is_drawn_before_the_console_has_rendered() -> None:
         app = _HostApp(empty)
         app._present_hosted_mixer()
         assert app._ctx.made == [], empty
+
+
+# --------------------------------------------------------------------------- #
+# Profile-scoped discovery scans (mixer boot-time optimization)
+# --------------------------------------------------------------------------- #
+
+def test_dropin_dir_maps_to_config_section() -> None:
+    from unicornviz.boot_profile import dropin_dir_matches_sections
+
+    sections = frozenset({'dj_mixer', 'media', 'control_room'})
+    assert dropin_dir_matches_sections('dj-mixer-01', sections)
+    assert dropin_dir_matches_sections('media-01', sections)
+    assert dropin_dir_matches_sections('control-room-01', sections)
+    assert not dropin_dir_matches_sections('projectm-01', sections)
+    assert not dropin_dir_matches_sections('training-kit-01', sections)
+
+
+def test_help_discovery_dir_filter_skips_unlisted_dropins(tmp_path, monkeypatch) -> None:
+    import unicornviz.dropins as dropins
+
+    for name, marker in (('dj-mixer-01', 'MIXER'), ('spotify-01', 'SPOTIFY')):
+        d = tmp_path / name
+        d.mkdir()
+        (d / 'mod_help_scan.py').write_text(
+            f"HELP_ENTRIES = [('{marker}', 'K', 'D')]\n"
+        )
+    monkeypatch.setattr(dropins, '_dropins_root', lambda: tmp_path)
+    monkeypatch.setattr(dropins, '_is_dropin_excluded', lambda name: False)
+
+    all_entries = dropins.discover_dropin_help_entries()
+    assert {e[0] for e in all_entries} == {'MIXER', 'SPOTIFY'}
+
+    filtered = dropins.discover_dropin_help_entries(
+        lambda dir_name: dir_name == 'dj-mixer-01'
+    )
+    assert {e[0] for e in filtered} == {'MIXER'}
+
+
+def test_tour_discovery_honors_the_same_filter(tmp_path, monkeypatch) -> None:
+    import unicornviz.dropins as dropins
+
+    for name, title in (('dj-mixer-01', 'Mixer slide'), ('games-01', 'Game slide')):
+        d = tmp_path / name
+        d.mkdir()
+        (d / 'mod_tour_scan.py').write_text(
+            f"TOUR_SLIDES = [('S', '{title}', 'B')]\n"
+        )
+    monkeypatch.setattr(dropins, '_dropins_root', lambda: tmp_path)
+    monkeypatch.setattr(dropins, '_is_dropin_excluded', lambda name: False)
+
+    filtered = dropins.discover_dropin_tour_slides(
+        lambda dir_name: dir_name == 'dj-mixer-01'
+    )
+    assert [s[1] for s in filtered] == ['Mixer slide']
+
+
+def test_app_dir_filter_is_none_in_full_profile_and_scoped_in_mixer() -> None:
+    from unicornviz.app import App
+
+    app = object.__new__(App)
+    app._boot_profile = PROFILE_FULL
+    app._mixer_allow = frozenset({'dj_mixer'})
+    assert app._dropin_dir_filter() is None
+
+    app._boot_profile = PROFILE_MIXER
+    app._mixer_allow = frozenset({'dj_mixer', 'media'})
+    filt = app._dropin_dir_filter()
+    assert filt is not None
+    assert filt('dj-mixer-01') and filt('media-01')
+    assert not filt('spotify-01')

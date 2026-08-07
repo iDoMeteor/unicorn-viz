@@ -331,7 +331,9 @@ def discover_dropin_effect_classes(base_cls: Type) -> list[Type]:
     return discovered
 
 
-def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
+def discover_dropin_help_entries(
+    dir_filter: Callable[[str], bool] | None = None,
+) -> list[tuple[str, str, str]]:
     """Discover HELP_ENTRIES from drop-in modules and classes.
 
     Supported formats:
@@ -339,6 +341,11 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
     - module HELP_ENTRIES = [('Section', 'Key', 'Description'), ...]
     - class  HELP_ENTRIES with same tuple/dict formats
     - dict items: {'section': str, 'key': str, 'description': str}
+
+    ``dir_filter`` (drop-in directory name -> bool) scopes the scan: the scan
+    **imports every module it visits** (~1.5s cold across all drop-ins), so
+    restricted boot profiles pass a filter covering only the drop-ins they
+    can actually load. ``None`` scans everything (normal boot).
     """
     root = _dropins_root()
     if not root.exists():
@@ -351,6 +358,8 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
         if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
             continue
         if _is_dropin_excluded(file_path.parent.name):
+            continue
+        if dir_filter is not None and not dir_filter(file_path.parent.name):
             continue
         try:
             module = _load_module_from_file(file_path)
@@ -384,7 +393,9 @@ def discover_dropin_help_entries() -> list[tuple[str, str, str]]:
     return discovered
 
 
-def discover_dropin_tour_slides() -> list[tuple[str, str, str]]:
+def discover_dropin_tour_slides(
+    dir_filter: Callable[[str], bool] | None = None,
+) -> list[tuple[str, str, str]]:
     """Discover TOUR_SLIDES from drop-in modules for the first-run tour.
 
     Supported formats (module level only):
@@ -395,7 +406,9 @@ def discover_dropin_tour_slides() -> list[tuple[str, str, str]]:
     deck (resolved against the help registry at display time). Returns plain
     tuples so this module stays decoupled from ``unicornviz.tour``; malformed
     entries are skipped with a warning, and drop-ins are scanned in sorted
-    directory order so the deck is stable across runs.
+    directory order so the deck is stable across runs. ``dir_filter`` scopes
+    the scan exactly like ``discover_dropin_help_entries`` — without it, a
+    restricted boot profile would pay the full import wall on first F1.
     """
     root = _dropins_root()
     if not root.exists():
@@ -406,6 +419,8 @@ def discover_dropin_tour_slides() -> list[tuple[str, str, str]]:
         if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
             continue
         if _is_dropin_excluded(file_path.parent.name):
+            continue
+        if dir_filter is not None and not dir_filter(file_path.parent.name):
             continue
         try:
             module = _load_module_from_file(file_path)

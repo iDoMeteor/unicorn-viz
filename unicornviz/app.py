@@ -56,6 +56,7 @@ from unicornviz.dropins import (
 )
 from unicornviz.boot_profile import (
     PROFILE_MIXER,
+    dropin_dir_matches_sections,
     mixer_allowed_sections,
     resolve_boot_profile,
 )
@@ -977,6 +978,18 @@ class App:
         if self._boot_profile != PROFILE_MIXER:
             return True
         return section in self._mixer_allow
+
+    def _dropin_dir_filter(self) -> Callable[[str], bool] | None:
+        """Scope for drop-in discovery scans (help entries, tour slides).
+
+        The scans import every module they visit — the dominant mixer-boot
+        cost — so the mixer profile restricts them to directories mapping to
+        loadable sections. None (normal boot) scans everything.
+        """
+        if self._boot_profile != PROFILE_MIXER:
+            return None
+        allowed = self._mixer_allow
+        return lambda dir_name: dropin_dir_matches_sections(dir_name, allowed)
 
     def claim_window_events(self, window_id: int, handler: Callable[[Any], None]) -> bool:
         """Route SDL events for a claimed window to a subsystem handler."""
@@ -3618,7 +3631,9 @@ void main() {
         try:
             extras = [
                 TourSlide(section, title, body)
-                for section, title, body in discover_dropin_tour_slides()
+                for section, title, body in discover_dropin_tour_slides(
+                    self._dropin_dir_filter(),
+                )
             ]
             slides[-1:-1] = extras
         except Exception as exc:
@@ -4078,7 +4093,7 @@ void main() {
                     if section and key and desc:
                         dynamic_help.append((section, key, desc))
 
-        dynamic_help.extend(discover_dropin_help_entries())
+        dynamic_help.extend(discover_dropin_help_entries(self._dropin_dir_filter()))
         overlays.register_help_entries(dynamic_help)
 
         if overlays.unmapped_effects:
