@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.47**
+**Version 1.0.0-beta.48**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.48** — **Zero-copy video out.** video-out-01 0.2.0 adds the PipeWire/DMA-BUF backend — the real Linux equivalent of Spout/Syphon — and core now hands it the GL framebuffer directly each frame. Nothing is read back to the CPU, so unlike the v4l2 path it costs no frame-tap subscription at all; OBS consumes it via the obs-pwvideo plugin, GStreamer via `pipewiresrc`. Needs a Wayland session and a locally-built libfunnel, and fails closed on either. **Unverified against real hardware** — v4l2loopback remains the dependable path until someone has watched this one work.
 - **1.0.0-beta.47** — **The show can leave the window.** New `video-out-01` drop-in publishes the output as a virtual V4L2 camera (v4l2loopback), so OBS takes it as an ordinary *Video Capture Device* with **no plugin** — closing the worst row on the competitive scorecard, where every rival except projectM could already hand its output to another app and we could not. It rides the frame tap, so with recording or streaming already live it costs **no extra GPU readback at all**. Opt-in on both switches; a missing kernel module logs once and disables. First of four planned backends (PipeWire/DMA-BUF, NDI, Spout/Syphon to follow).
   **Screenshots no longer freeze the show:** the PNG encode and disk write moved to a daemon thread (that was the half-second stall, not the readback), pixels come from the frame tap when one is already in hand, and the capture switched off `ctx.screen.read()` — the default-framebuffer path moderngl gets wrong and which the rest of the codebase already routes around.
 - **1.0.0-beta.46** — **One GPU readback per frame instead of one per consumer.** Recording and RTMP streaming each pulled the identical full-resolution frame off the GPU independently — with both live that was two transfers of the same picture every frame (~12 MB/frame at 1080p), and recording's was the *synchronous* path the 2026-08-03 audit flagged as a frame-budget problem. A new `unicornviz.frame_tap.FrameTap` now decides who is due (per-consumer rate caps included), the loop reads back **once**, and everyone due shares that buffer; the subsystem preview keeps reusing it when present. Recording moves onto the double-buffered PBO path as a side effect, which also fixes a latent size mismatch — it was fed drawable-sized bytes while ffmpeg was told the tracked canvas size, which differ under mixed-DPI scaling and mirror/span. Groundwork for the video-interop outputs (v4l2loopback, PipeWire/DMA-BUF, NDI), which would otherwise have made it four or five readbacks per frame.

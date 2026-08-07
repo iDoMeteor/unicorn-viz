@@ -5491,6 +5491,26 @@ void main() {
                     _vo.submit_frame(stream_frame, self._width, self._height)
                 except Exception as exc:
                     log.warning('Video output publish failed: %s', exc)
+            # Zero-copy publish (PipeWire/DMA-BUF): hand over the GL
+            # framebuffer name and let the backend blit on the GPU. This
+            # deliberately does NOT go through the frame tap — the whole
+            # point is that no frame is ever read back to the CPU.
+            if _vo is not None:
+                try:
+                    if _vo.wants_texture():
+                        _src = (
+                            self._fbo_a
+                            if (self._is_mirror_mode(self._display_mode)
+                                and bool(self._mirror_rects)
+                                and self._fbo_a is not None)
+                            else self._ensure_screen_copy_fbo()
+                        )
+                        if _src is not self._fbo_a:
+                            self._ctx.copy_framebuffer(_src, self._ctx.screen)
+                        _vo.submit_texture(
+                            int(_src.glo), self._width, self._height)
+                except Exception as exc:
+                    log.warning('Video output texture publish failed: %s', exc)
 
             subsystem_capture_due = False
             if need_frame_for_subsystems:

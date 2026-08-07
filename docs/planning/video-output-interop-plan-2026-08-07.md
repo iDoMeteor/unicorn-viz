@@ -1,8 +1,9 @@
 # Video Output Interop Plan — PipeWire/DMA-BUF, v4l2loopback, NDI
 
 Owner: owner + agents
-Status: **Phase 0 (frame tap) + Phase 1 (v4l2loopback) DONE** — core
-  1.0.0-beta.47, video-out-01 0.1.0. Phase 2 (PipeWire/DMA-BUF) is next. Phasing confirmed
+Status: **Phases 0-2 built** — frame tap + v4l2loopback (verified) +
+  PipeWire/DMA-BUF (**built, unverified on hardware**). core 1.0.0-beta.48,
+  video-out-01 0.2.0. Phase 3 (NDI) is next. Phasing confirmed
   by owner 2026-08-07: v4l2loopback first, libfunnel pinned behind our own
   abstraction (PR upstream if it needs changes).
 Last updated: 2026-08-07
@@ -143,7 +144,7 @@ within noise when the cap is 30 fps.
 
 ---
 
-## 4. Phase 2 — PipeWire + DMA-BUF (Linux, the real one)
+## 4. Phase 2 — PipeWire + DMA-BUF (Linux) — **BUILT 0.2.0, UNVERIFIED**
 
 **Why second:** it is the correct, zero-copy, Wayland-native answer, and the
 one that makes us a first-class citizen on modern Linux — but it needs real
