@@ -2,7 +2,40 @@
 
 Owner: Runtime/Input
 Status: proposed
-Last updated: 2026-06-03
+Last updated: 2026-07-18
+
+## Validated Finding (2026-07-18): arrow keys are unsafe at ANY modifier depth
+
+audio-out-01 shipped its filter-sweep controls on
+`Ctrl+Shift+Alt+Up/Down/Left/Right` — exactly the "leader" prefix this plan
+recommends (§1) — and the operator reported the drop-in "has never worked"
+because the OS swallows the keys. Root cause, confirmed:
+
+**GNOME, KDE, and macOS all default-bind `Ctrl(+Alt)(+Shift)+Arrow` to
+workspace/Spaces switching at the compositor/window-manager level.**
+Specifically, on stock GNOME: `Ctrl+Alt+Left/Right` switches workspace,
+and `Ctrl+Shift+Alt+Left/Right` **moves the current window** to the
+adjacent workspace — both are defaults, both are grabbed before SDL (and
+therefore this app) ever sees the keypress, and adding more modifiers
+(the leader-prefix strategy) does **not** help because the OS binding
+itself already includes Ctrl+Alt+Shift for the "move window" variant.
+macOS Mission Control defaults `Ctrl+Left/Right` to Spaces switching —
+even the 1-modifier case is unsafe there. This finding is **why the
+"leader prefix" strategy in §1 is insufficient** as a blanket answer:
+it reduces collisions for letter/number keys but does nothing for arrow
+keys, because the arrow-key bindings are more deeply reserved than any
+extra modifier can outrun.
+
+**Corrected rule: never bind arrow keys to a global (non-modal) hotkey,
+at any modifier depth, on any platform.** Use bracket/semicolon/quote
+keys or letter pairs for continuous sweep-style controls instead — see
+audio-out-01's fix (`drop-ins/audio-out-01/docs/troubleshooting.md`,
+"Hotkeys don't respond"): `[`/`]` and `;`/`'` mirror an up/down +
+left/right spatial layout (bracket row above the semicolon/quote row)
+without colliding with anything OS-reserved. This does not change the
+letter/number leader-prefix guidance below, which remains a reasonable
+(if still not fully validated per §"Validation Checklist") strategy for
+non-arrow keys.
 
 ## Objective
 
@@ -22,6 +55,9 @@ This proposal covers high-friction combinations currently used by core and drop-
 - Ctrl+Alt chords (especially numbers and letter combos)
 - Alt+Shift profile combos
 - Function-key combos likely to collide with OS/media layers
+- Any arrow-key combo, at any modifier depth (see "Validated Finding" above —
+  this is a hard rule, not a risk tier: arrow keys are unusable for global
+  hotkeys regardless of how many modifiers are stacked on top)
 
 ## Current High-Risk Hotkeys
 
