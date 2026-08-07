@@ -1117,6 +1117,16 @@ defaults `false`. Even when on, the watcher only ever arms behind
 live set does not set that flag, so it can never trigger an unexpected
 exit mid-show.
 
+**Same-day follow-up: automatic for headless sources.** `_build_overrides()`
+(`unicornviz/__main__.py`) now sets `auto_exit_after_finale = true`
+automatically whenever `--dj-mixer-source` or `--media-source` is passed --
+a headless source *is* a headless run, by definition nobody is at the
+keyboard to press `Q`, so there is no scenario where an operator would want
+one without the other. No separate flag or `config.toml` edit needed for
+either headless CLI path; the config key still exists for anyone driving
+`unicornviz` directly without a source flag (e.g. a Spotify session with a
+configured `show_duration_min`).
+
 **Verified:** `tests/test_auto_vj_exit_after_finale.py` (disabled-flag
 no-op, manual-trigger no-op, the active→inactive exit edge, staying
 active never exits, exits only once, the grace-window timeout path via a

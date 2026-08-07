@@ -51,12 +51,16 @@ All four requested changes are done:
 predicted — it already just waits for the process to exit and packages
 immediately after, regardless of why.
 
-**To actually use it end to end:** `unicornviz --dj-mixer-source` /
-`--media-source` (or `training_daemon.py --source dj-mixer`/`media`) plus
-`[auto_vj] auto_exit_after_finale = true` (not yet exposed as its own CLI
-override — set it in the training deploy's `config.toml`, or add a
-`--auto-exit-after-finale` flag to `__main__.py`/the daemon if that
-friction turns out to matter in practice).
+**To actually use it end to end:** just `unicornviz --dj-mixer-source` /
+`--media-source` (or `training_daemon.py --source dj-mixer`/`media`) — as
+of the same day, `_build_overrides()` (`__main__.py`) sets `[auto_vj]
+auto_exit_after_finale = true` automatically whenever either headless
+source flag is passed. No separate flag, no `config.toml` edit: a
+headless source *is* a headless run, so the set ending implies the
+process should too. (`auto_exit_after_finale` remains a real config key
+for anyone driving `unicornviz` directly without either source flag —
+e.g. a Spotify session with a configured `show_duration_min` — it's just
+no longer something the two headless CLI paths need to remember to set.)
 
 ---
 

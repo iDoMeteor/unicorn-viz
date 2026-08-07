@@ -29,6 +29,32 @@ def test_dj_mixer_source_enables_and_arms_autoplay() -> None:
     assert overrides['dj_mixer']['output_device'] == 'unicorn-training'
 
 
+def test_dj_mixer_source_implies_auto_exit_after_finale() -> None:
+    """A headless source implies a headless run -- no separate flag or
+    config.toml edit needed to opt into auto-exit."""
+    args = _parse(['--dj-mixer-source'])
+
+    overrides = _build_overrides(args)
+
+    assert overrides['auto_vj']['auto_exit_after_finale'] is True
+
+
+def test_media_source_implies_auto_exit_after_finale() -> None:
+    args = _parse(['--media-source'])
+
+    overrides = _build_overrides(args)
+
+    assert overrides['auto_vj']['auto_exit_after_finale'] is True
+
+
+def test_auto_exit_after_finale_absent_without_a_headless_source() -> None:
+    args = _parse([])
+
+    overrides = _build_overrides(args)
+
+    assert 'auto_vj' not in overrides
+
+
 def test_dj_mixer_output_device_overrides_audio_device_default() -> None:
     args = _parse([
         '--dj-mixer-source', '--audio-device', 'unicorn-training',

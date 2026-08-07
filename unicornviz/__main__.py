@@ -179,10 +179,17 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         put('dj_mixer', 'autoplay_boot_mode', args.dj_mixer_autoplay_mode or 'cut')
         put('dj_mixer', 'output_device', args.dj_mixer_output_device or args.audio_device)
         put('dj_mixer', 'music_dir', args.dj_mixer_music_dir)
+        # A headless source implies a headless run: the whole point of
+        # --dj-mixer-source/--media-source is nobody is at the keyboard, so
+        # the set ending must also end the process (see
+        # docs/planning/headless-auto-exit-plan-2026-08-07.md) -- no extra
+        # flag or config.toml edit required to opt in.
+        put('auto_vj', 'auto_exit_after_finale', True)
     if args.media_source:
         put('media', 'enabled', True)
         put('media', 'auto_play', True)
         put('media', 'media_dir', args.media_dir)
+        put('auto_vj', 'auto_exit_after_finale', True)
 
     if args.mixer:
         put('dj_mixer', 'mixer_only', True)
