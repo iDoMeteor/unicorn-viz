@@ -1,8 +1,13 @@
 # Auto VJ Recommender — Accuracy Tracking Spec
 
-Status: Tier 1 implemented (auto-vj-01 1.0.0-rc.14); Tier 2 still proposed
+Status: Tier 1 implemented (auto-vj-01 1.0.0-rc.14); Tier 2 implemented
+  (2026-08-07, dj-mixer-01 0.158.0 / auto-vj-01 1.0.0-rc.23 / training-kit-01
+  0.10.0) -- see docs/adr/vj-system.md § "Tier 2: Genre-Tag Ground-Truth
+  Accuracy Tracking" for the full record. The live-feedback direction in
+  question 4 below remains its own future design pass, not part of this
+  implementation.
 Owner: unicorn-viz maintainers
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 ## Problem
 
@@ -52,6 +57,10 @@ Tracking Tier 1" for the full implementation record.
 
 ## Tier 2 — tag-based genre as ground truth (needs curated library)
 
+**Status: implemented, 2026-08-07.** See docs/adr/vj-system.md § "Tier 2:
+Genre-Tag Ground-Truth Accuracy Tracking" for the full record. Summary
+below is the original proposal; kept as-is for the design rationale.
+
 Per the owner's plan: `drop-ins/dj-mixer-01/tags.py` already extracts a
 `genre` field per track (`TAG_FIELDS`, mapped from the ID3 `GENRE` frame,
 `library.py` `_FACETS`). Once the training library and playlists are kept
@@ -96,8 +105,9 @@ training library managed this way going forward.
      instead of unmapped.
    - **Unmapped bucket** only if neither pass hits — explicit and visible,
      never a silent guess.
-   Not yet built — the keyword table itself (which words route to which
-   profile) needs to be written before Tier 2 implementation starts.
+   **Built 2026-08-07** as `_GENRE_ALIAS_MAP`/`_GENRE_KEYWORD_MAP` in
+   `package_training_set.py` -- see the ADR entry for the exact table and
+   the "techno → electronic" judgment call this proposal left open.
 2. **Partial/missing tags — log them.** Owner's call: don't silently skip.
    An untagged track still doesn't contribute to the hit/miss rate (no
    ground truth to compare against), but it should be visibly counted
@@ -123,14 +133,12 @@ training library managed this way going forward.
 
 ## Non-goals for this spec
 
-- Tier 1 is done; Tier 2 is not being built yet — this document remains the
-  spec for Tier 2 review.
-- Not proposing to feed tag genre into the live `_profile_score()` composite
-  as a term in *this* pass — Tier 2 as scoped here is an offline/
-  packaging-time accuracy measurement. The owner has signaled that's not
-  the end state (see question 4), but the live-feedback design is
-  explicitly deferred to its own pass, not folded in here.
-- Not proposing the actual keyword-fallback table (which words route to
-  which profile) yet — question 1's two-pass design is agreed, but the
-  table contents still need to be written before Tier 2 implementation
-  starts.
+- Tier 1 and Tier 2 are both done (2026-08-06 and 2026-08-07 respectively) —
+  this document remains the design record for both.
+- Tag genre was not fed into the live `_profile_score()` composite as part
+  of Tier 2 — it remains an offline/packaging-time accuracy measurement.
+  The owner has signaled that's not the end state (see question 4), but the
+  live-feedback design is still its own future pass, not folded in here.
+- The keyword-fallback table (`_GENRE_KEYWORD_MAP`) was written as part of
+  Tier 2's implementation — see the ADR entry for its contents and the
+  judgment calls made while writing it.

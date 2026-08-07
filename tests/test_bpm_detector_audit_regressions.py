@@ -223,6 +223,8 @@ def _make_reco_stub(*, mixer_bpm: float, grid) -> SimpleNamespace:
         ]),
         _last_onset_count=0,
         _has_bpm_lock=lambda *a, **kw: True,
+        _sequence_corpus_writer=None,
+        _record_sequence_keyframe=lambda *a, **kw: None,
     )
 
 
@@ -236,7 +238,7 @@ def test_recommender_cycle_primes_tracker_from_fresh_mixer_bpm() -> None:
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.1, mid=0.1,
                              treble=0.1, spectral_flux=0.0, vocal_hnr=0.0, vocal_fmr=0.0)
 
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._app.vj_api.get_bpm_calls == ['auto_vj']
     assert grid.prime_tempo_calls == [128.0]
@@ -252,7 +254,7 @@ def test_recommender_cycle_does_not_prime_when_no_fresh_mixer_bpm() -> None:
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.1, mid=0.1,
                              treble=0.1, spectral_flux=0.0, vocal_hnr=0.0, vocal_fmr=0.0)
 
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert grid.prime_tempo_calls == []
 
@@ -395,6 +397,8 @@ def _make_full_reco_stub(*, bpm: float, centroid: float, zcr: float, onset_count
         _has_bpm_lock=lambda *a, **kw: True,
         _spotify_telemetry_snapshot=lambda: {},
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
+        _sequence_corpus_writer=None,
+        _record_sequence_keyframe=lambda *a, **kw: None,
     )
 
 
@@ -422,7 +426,7 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._recommended_profile_key == 'deep_house'
 
@@ -459,6 +463,6 @@ def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio)
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._recommended_profile_key == 'wide_test'

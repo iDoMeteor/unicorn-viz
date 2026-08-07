@@ -14,7 +14,7 @@ mirrors; every key optional, sensible defaults assumed)::
       'available': bool,            # source is usable at all
       'is_playing': bool,
       'status': str,                # e.g. 'PLAYING' (optional)
-      'title': str, 'artist': str, 'album': str,
+      'title': str, 'artist': str, 'album': str, 'genre': str,
       'previous_title': str, 'previous_artist': str,
       'duration_s': float,
       'banner_change_counter': int, # bump -> the banner (re)shows

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.38**
+**Version 1.0.0-beta.39**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.39** — `unicornviz/now_playing.py`'s now-playing snapshot contract gains an optional `genre` key (dj-mixer-01 0.158.0 is the first source to populate it, from the loaded track's ID3 tag) -- feeds auto-vj-01's new Tier 2 recommender accuracy tracking (training-kit-01 0.10.0). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Tier 2: Genre-Tag Ground-Truth Accuracy Tracking".
 - **1.0.0-beta.38** — Audio stream latency now defaults to `"low"` (was
   `"high"`) everywhere in code: the `[audio] latency` config default, the
   capture constructor, and the unsupported-value fallback. An explicit

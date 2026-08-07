@@ -28,6 +28,10 @@ _format_profile_expected_values_block = _MOD._format_profile_expected_values_blo
 _build_combined_prompt = _MOD._build_combined_prompt
 _format_reco_weights_line = _MOD._format_reco_weights_line
 _RECO_WEIGHT_DEFAULTS = _MOD._RECO_WEIGHT_DEFAULTS
+_load_live_reco_weights = _MOD._load_live_reco_weights
+_map_genre_tag_to_profile_key = _MOD._map_genre_tag_to_profile_key
+_build_recommender_accuracy = _MOD._build_recommender_accuracy
+_format_recommender_accuracy_block = _MOD._format_recommender_accuracy_block
 _build_shadow_comparison = _MOD._build_shadow_comparison
 _summarize_engine_versions = _MOD._summarize_engine_versions
 
@@ -255,11 +259,45 @@ def test_format_profile_expected_values_block_renders_all_entries() -> None:
 def test_reco_weights_line_used_consistently_in_both_prompt_spots() -> None:
     """The two weight mentions in the prompt used to be separate hand-typed
     lists that could silently drift from each other; both must now come from
-    the same _RECO_WEIGHT_DEFAULTS dict via _format_reco_weights_line()."""
+    the same resolved weight dict (live auto-vj-01 read, or the static
+    fallback) via _format_reco_weights_line()."""
     detector_payload = {'essentia_available': False}
     prompt = _build_combined_prompt(detector_payload, {}, None)
-    line = _format_reco_weights_line(_RECO_WEIGHT_DEFAULTS)
+    line = _format_reco_weights_line(_load_live_reco_weights() or _RECO_WEIGHT_DEFAULTS)
     assert prompt.count(line) == 2
+
+
+def test_load_live_reco_weights_matches_live_auto_vj_defaults() -> None:
+    """2026-08-07: _RECO_WEIGHT_DEFAULTS used to be the sole source for the
+    LLM prompt and silently drifted from auto_vj.py's real weights twice
+    (a centroid_fit reweight, and two new vocal-fit terms never mirrored
+    here). _load_live_reco_weights() reads the live dict directly, so this
+    test just confirms that path actually resolves and matches exactly --
+    structural drift is no longer possible once it does."""
+    import importlib.util as _ilu
+    auto_vj_path = (
+        Path(__file__).resolve().parents[1] / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py'
+    )
+    spec = _ilu.spec_from_file_location('test_pts_live_auto_vj', auto_vj_path)
+    assert spec is not None and spec.loader is not None
+    auto_vj_mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(auto_vj_mod)
+
+    live = _load_live_reco_weights()
+    assert live is not None
+    assert live == auto_vj_mod._DEFAULT_RECO_WEIGHTS
+    assert 'vocal_hnr_fit' in live
+    assert 'vocal_fmr_fit' in live
+
+
+def test_load_live_reco_weights_returns_none_when_auto_vj_absent(tmp_path: Path, monkeypatch) -> None:
+    """A checkout without the auto-vj-01 drop-in must fall back cleanly,
+    not raise -- same contract as _load_profile_expected_values()."""
+    (tmp_path / 'pyproject.toml').write_text('', encoding='utf-8')
+    (tmp_path / 'unicornviz').mkdir()
+    monkeypatch.setattr(_MOD, '_find_repo_root', lambda start: tmp_path)
+
+    assert _load_live_reco_weights() is None
 
 
 def test_build_shadow_comparison_none_when_no_shadow_data() -> None:
@@ -341,3 +379,119 @@ def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> Non
     for stale_name in ('lofi:', 'jazz:', 'classical:', 'minimal:', 'metal:', 'industrial:', 'reggae:'):
         assert stale_name not in prompt, f'stale profile {stale_name!r} leaked into prompt'
     assert 'house:' in prompt
+
+
+# ---- Tier 2: genre-tag ground-truth accuracy --------------------------------
+
+
+@pytest.mark.parametrize('tag,expected', [
+    ('House', 'house'),
+    ('Deep House', 'deep_house'),
+    ('Psy-Trance', 'psytrance'),
+    ('psytrance', 'psytrance'),
+    ('UK Garage', 'uk_garage'),
+    ('2-Step', 'uk_garage'),
+    ('Drum & Bass', 'drum_and_bass'),
+    ('DnB', 'drum_and_bass'),
+    ('Rap / R&B', 'rap_rnb'),
+    ('Hip-Hop', 'rap_rnb'),
+    ('Ambient / Chillout', 'ambient'),
+    ('Synthwave / Retrowave', 'synthwave'),
+])
+def test_map_genre_tag_exact_alias_matches(tag: str, expected: str) -> None:
+    assert _map_genre_tag_to_profile_key(tag) == expected
+
+
+@pytest.mark.parametrize('tag,expected', [
+    ('Tropical House', 'house'),
+    ('Afro House', 'house'),
+    ('Progressive House', 'house'),
+    ('Progressive Trance', 'trance'),
+    ('Vaporwave', 'synthwave'),
+    ('Melodic Techno', 'electronic'),
+])
+def test_map_genre_tag_keyword_fallback_matches(tag: str, expected: str) -> None:
+    """Real sub-genres with no dedicated profile route through pass 2 on
+    their last/most-generic word rather than landing unmapped."""
+    assert _map_genre_tag_to_profile_key(tag) == expected
+
+
+def test_map_genre_tag_unmapped_returns_none() -> None:
+    assert _map_genre_tag_to_profile_key('Bossa Nova') is None
+    assert _map_genre_tag_to_profile_key('') is None
+    assert _map_genre_tag_to_profile_key(None) is None
+
+
+def _make_reco_row(genre: str, recommended: str) -> dict:
+    return {'track_genre': genre, 'recommended_profile_key': recommended}
+
+
+def test_recommender_accuracy_counts_hits_and_misses() -> None:
+    rows = [
+        _make_reco_row('Deep House', 'deep_house'),   # hit
+        _make_reco_row('Deep House', 'deep_house'),   # hit
+        _make_reco_row('Psy-Trance', 'deep_house'),   # miss
+        _make_reco_row('', 'house'),                   # untagged -- excluded
+        _make_reco_row('House', ''),                   # no recommendation yet -- excluded
+        _make_reco_row('Bossa Nova', 'house'),          # unmapped
+    ]
+    stats = _build_recommender_accuracy(rows)
+
+    assert stats['total_rows'] == 6
+    assert stats['tagged_rows'] == 4          # every row with both genre+recommendation
+    assert stats['unmapped_rows'] == 1
+    assert stats['usable_rows'] == 3
+    assert stats['hits'] == 2
+    assert stats['misses'] == 1
+    assert stats['accuracy_pct'] == pytest.approx(200.0 / 3.0)
+
+
+def test_recommender_accuracy_confusion_entries_are_genre_expected_recommended() -> None:
+    rows = [_make_reco_row('Psy-Trance', 'deep_house')]
+    stats = _build_recommender_accuracy(rows)
+    assert stats['top_confusions'] == [(('Psy-Trance', 'psytrance', 'deep_house'), 1)]
+
+
+def test_recommender_accuracy_no_tagged_rows() -> None:
+    rows = [_make_reco_row('', 'house'), {'recommended_profile_key': 'house'}]
+    stats = _build_recommender_accuracy(rows)
+    assert stats['tagged_rows'] == 0
+    assert stats['accuracy_pct'] is None
+
+
+def test_format_recommender_accuracy_block_no_tagged_rows() -> None:
+    stats = _build_recommender_accuracy([])
+    block = _format_recommender_accuracy_block(stats)
+    assert any('No tagged rows' in line for line in block)
+
+
+def test_format_recommender_accuracy_block_renders_accuracy_and_confusions() -> None:
+    rows = [
+        _make_reco_row('Deep House', 'deep_house'),
+        _make_reco_row('Psy-Trance', 'deep_house'),
+    ]
+    stats = _build_recommender_accuracy(rows)
+    block = _format_recommender_accuracy_block(stats)
+    joined = '\n'.join(block)
+    assert 'Accuracy:' in joined
+    assert '50.0%' in joined
+    assert 'Psy-Trance' in joined
+
+
+def test_write_scorecard_includes_recommender_accuracy_section(tmp_path: Path) -> None:
+    seq_path = tmp_path / 'sequence-corpus.jsonl'
+    rows = [
+        {**_make_seq_row(), 'track_genre': 'Deep House', 'recommended_profile_key': 'deep_house'},
+        {**_make_seq_row(), 'track_genre': 'Psy-Trance', 'recommended_profile_key': 'deep_house'},
+    ]
+    seq_path.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+    live_path = tmp_path / 'live-corpus.jsonl'
+    live_path.write_text('', encoding='utf-8')
+    bucket_dir = tmp_path / 'set-a' / 'a'
+    bucket_dir.mkdir(parents=True)
+
+    scorecard_path, _lock, _director = _MOD._write_scorecard(bucket_dir, live_path, seq_path)
+
+    content = scorecard_path.read_text(encoding='utf-8')
+    assert '## Recommender Accuracy' in content
+    assert 'Accuracy:' in content

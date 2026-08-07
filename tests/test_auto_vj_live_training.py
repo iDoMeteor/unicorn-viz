@@ -32,6 +32,7 @@ def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
         'title': 'Moonwalk',
         'artist': 'DJ Test',
         'album': 'Test EP',
+        'genre': 'Deep House',
         'status': 'playing',
         'is_playing': True,
         'source': 'playerctl+webapi',
@@ -58,6 +59,7 @@ def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
     assert row['track_title'] == 'Moonwalk'
     assert row['track_artist'] == 'DJ Test'
     assert row['track_album'] == 'Test EP'
+    assert row['track_genre'] == 'Deep House'
     assert row['track_status'] == 'playing'
     assert row['is_playing'] is True
     assert row['metadata_source'] == 'playerctl+webapi'
@@ -99,6 +101,24 @@ def test_build_live_training_row_passes_through_non_spotify_source() -> None:
     row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
 
     assert row['audio_source'] == 'Line In'
+
+
+def test_build_live_training_row_genre_defaults_empty_when_source_omits_it() -> None:
+    """Most now-playing sources (Spotify, media-01) never populate 'genre'
+    -- only dj-mixer-01 does, from the loaded track's ID3 tag. Must default
+    to '' rather than raise, same as every other optional now-playing key."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    spotify = {'track_id': 'spotify:track:test123', 'title': 'Moonwalk'}
+    state = SimpleNamespace(audio_source='Spotify Monitor', playlist_mode='auto')
+    audio_manager = None
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+
+    assert row['track_genre'] == ''
 
 
 def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:

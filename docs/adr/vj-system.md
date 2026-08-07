@@ -811,6 +811,131 @@ an invalid `best_bpm`) plus the existing
 `test_acf_confidence_reaches_near_maximum_on_unambiguous_signal`
 regression, which continues to pass. Full suite green (1286 passed).
 
+### Profile Recommendation Now Also Reaches the Sequence Corpus (2026-08-07)
+
+Decision: `_update_profile_recommendation()` now calls
+`_record_sequence_keyframe('profile_recommendation', ...)` in addition to
+its existing `self._engine.mark('profile_recommendation', ...)` decision-log
+call, carrying the same fields (`recommended_profile_key`, `score_margin`,
+`mean_confidence`, `mean_zcr`, `mean_centroid`, `onset_density`,
+`term_spread`, etc.).
+
+**Why.** `package_training_set.py`'s `_build_recommender_payload` filters
+the *sequence corpus* (not the decision log) for `event_type ==
+'profile_recommendation'` to build its spectral-features summary for the
+LLM tuning prompt. That event type was never written there — only to the
+decision log — so the section was always empty, silently, for every
+session ever packaged. Confirmed against a live 18.5MB same-day corpus
+file: zero matching rows, vs. 377 in the decision log over the same
+window.
+
+`_update_profile_recommendation()`'s signature gained `state`/`spotify`
+parameters (previously just `audio`) to make the keyframe call possible;
+the call site (`auto_vj.py`, the main per-frame update path) already had
+both in scope.
+
+**Verified:** new `tests/test_auto_vj_recommender_corpus_routing.py` --
+a keyframe is written with `event_type == 'profile_recommendation'`,
+carries the same spectral-fit fields as the decision-log event bit-for-bit,
+and is a no-op when the recommender is disabled. Existing tests in
+`tests/test_bpm_detector_audit_regressions.py` updated for the new
+signature (stubbed `_record_sequence_keyframe` as a no-op, matching the
+existing `_maybe_apply_recommended_audio_profile` stub pattern in the same
+file).
+
+### Recommender Weight Table Now Reads Live From `auto_vj.py` (2026-08-07)
+
+Decision: `package_training_set.py`'s `_RECO_WEIGHT_DEFAULTS` (a hand-copied
+snapshot of `auto_vj.py`'s `_DEFAULT_RECO_WEIGHTS`, used to render the LLM
+tuning prompt's weight-distribution text) is now only a fallback. A new
+`_load_live_reco_weights()` reads the real dict straight from
+`auto_vj.py` at prompt-build time (mirrors `_load_profile_expected_values()`'s
+existing "stop hand-copying a snapshot" fix for the profile roster, same
+file, same day discovered).
+
+**Why.** The snapshot had already drifted twice, silently: `centroid_fit`'s
+0.8 → 1.3 raise (2026-08-06) was never mirrored here, and the
+`vocal_hnr_fit`/`vocal_fmr_fit` terms added the same day were absent
+entirely. Every LLM tuning report generated in between reasoned about the
+wrong weights with no way to notice. Found during an owner-requested audit
+of "everywhere the recommender's output has any downstream effect."
+
+**Verified:** `test_load_live_reco_weights_matches_live_auto_vj_defaults`
+asserts the live-loaded dict equals `auto_vj.py`'s real
+`_DEFAULT_RECO_WEIGHTS` exactly (structural drift is no longer possible
+once this passes); `test_load_live_reco_weights_returns_none_when_auto_vj_
+absent` covers the fallback contract when the drop-in isn't present in the
+checkout.
+
+### Tier 2: Genre-Tag Ground-Truth Accuracy Tracking (2026-08-07)
+
+Decision: implements Tier 2 of
+`docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md` --
+the ID3 `GENRE` tag becomes a real accuracy ground truth for the profile
+recommender, closing the gap Tier 1 (signal-activity spread) explicitly
+left open: "is this term discriminating" is not the same question as "was
+the recommendation actually right."
+
+**Data path (new).** dj-mixer-01's `now_playing_snapshot()` gains a
+`genre` key, read via `tags.py`'s `read_tags()` on the loaded deck's
+`_track_path` (cached by path, refreshed only on track change --
+matches the existing `title`/`artist` change-detection cadence, not
+read per frame). `unicornviz/now_playing.py`'s snapshot contract
+documents `genre` as the newest optional key (every key in that contract
+has always been optional; no other source currently populates it).
+`auto_vj.py`'s `_build_live_training_row()` reads `spotify.get('genre')`
+and logs it as `track_genre` on every live-corpus and sequence-corpus row
+(live and sequence, heartbeat and keyframe alike, since all three paths
+funnel through the same builder) -- empty string for any source that
+doesn't provide it (Spotify's genre/audio-features endpoints are
+deprecated and return nothing; media-01 has no tag reader).
+
+**Mapping (new, `package_training_set.py`).** A free-text ID3 tag doesn't
+map 1:1 onto the 20 `PROFILES` keys, so genre → profile-key resolution is
+two-pass, per the owner's 2026-08-06 design:
+
+1. **Exact/alias match** (`_GENRE_ALIAS_MAP`) against a curated table
+   covering every profile's own name plus common ID3 spelling variants
+   ("Psy-Trance" vs "Psytrance", "2-Step" vs "UK Garage").
+2. **Keyword fallback** (`_GENRE_KEYWORD_MAP`), matched as a *suffix* of
+   the tag's last word (not exact-word, so a compound tag like
+   "Vaporwave" still catches `wave` the same as a spaced one like
+   "Tropical House" catches `house`). Deliberately narrow: a keyword that
+   could plausibly mean more than one profile (e.g. `step` -- dubstep and
+   chillstep both end in it and are already exact-matched in pass 1) is
+   left out rather than guessed.
+3. **Unmapped** if neither pass hits -- counted and reported explicitly
+   (`unmapped_rows` in the scorecard section), never silently dropped or
+   guessed, per the owner's point 2 in the spec.
+
+Like the recommender's own weights, this table is a first-cut meant to be
+refined against real tagged-library mileage, not a closed spec.
+
+**Rollup (new, `package_training_set.py`, `_write_scorecard`).** A new
+`## Recommender Accuracy` section: tagged-row count vs. total (so a low
+accuracy sample size is never mistaken for a low accuracy score, per the
+owner's point 2), unmapped count, hit/miss accuracy percentage over usable
+rows (tagged + mapped + a recommendation present that cycle), and the top
+genre/expected/recommended confusions.
+
+**Explicitly deferred (per the spec's own non-goals, unchanged by this
+work).** Tag genre is *not* fed into the live `_profile_score()` composite
+in this pass -- Tier 2 is an offline/packaging-time measurement only. The
+owner has signaled a live-feedback version is a real future direction
+(point 4 in the spec), but that needs its own design pass once this
+offline measurement has real mileage on it.
+
+**Verified:** `drop-ins/dj-mixer-01/tests/test_controller.py` --
+`now_playing_snapshot()` reads and caches genre via the tag reader, keyed
+by path, not re-read on repeat calls for the same track, empty without a
+track path. `tests/test_auto_vj_live_training.py` -- `track_genre` flows
+through `_build_live_training_row()`, defaults to `''` when the source
+omits it. `tests/test_package_training_set.py` -- exact/alias matches,
+keyword-fallback matches (including the compound-word suffix case),
+unmapped returns `None`, hit/miss/unmapped counting, confusion-entry
+shape, and the rendered scorecard section. Full main-repo suite green
+(1327 passed); dj-mixer-01's own suite green (878 passed, 1 skipped).
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
