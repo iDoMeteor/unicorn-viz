@@ -746,6 +746,91 @@ class Recorder:
         finally:
             self._retrying_software = False
 
+    #: How long ffmpeg may go without touching the output file before it is
+    #: considered wedged rather than working.  Finalizing is I/O, not
+    #: computation, so a healthy encoder always keeps the file moving.
+    _FINALIZE_STALL_TIMEOUT_S = 20.0
+    #: Absolute ceiling, however much progress it appears to be making.
+    _FINALIZE_MAX_WAIT_S = 600.0
+
+    def _await_finalize(
+        self,
+        process: subprocess.Popen[bytes],
+        output_path: Path | None,
+    ) -> int:
+        """Wait for ffmpeg to finish writing, escalating only when stuck.
+
+        ``-movflags +faststart`` moves the index to the front of the file,
+        which means **rewriting the whole thing** once recording stops.  A
+        long set is many gigabytes, so that pass legitimately takes tens of
+        seconds -- far longer than the fixed 10s+10s budget this used to
+        allow before sending SIGKILL, which would destroy the very file it
+        was trying to close.
+
+        So progress is what is measured, not elapsed time: as long as the
+        output file keeps changing, ffmpeg is working and is left alone.
+        Escalation happens only when it goes quiet.
+        """
+        deadline = time.monotonic() + self._FINALIZE_MAX_WAIT_S
+        last_size = -1
+        last_progress = time.monotonic()
+        escalated = False
+        announced = False
+
+        while True:
+            try:
+                return_code = process.wait(timeout=0.5)
+                if announced:
+                    log.info('Recording: finalize complete')
+                return return_code
+            except subprocess.TimeoutExpired:
+                pass
+
+            size = -1
+            if output_path is not None:
+                try:
+                    size = output_path.stat().st_size
+                except OSError:
+                    size = -1
+            now = time.monotonic()
+            if size != last_size:
+                last_size = size
+                last_progress = now
+                if not announced and now - (deadline - self._FINALIZE_MAX_WAIT_S) > 2.0:
+                    log.info(
+                        'Recording: finalizing %s (%.1f GB) — rewriting the index, '
+                        'this can take a moment',
+                        output_path.name if output_path else '?',
+                        max(0, size) / 1073741824.0,
+                    )
+                    announced = True
+                continue
+
+            stalled = now - last_progress
+            if stalled >= self._FINALIZE_STALL_TIMEOUT_S and not escalated:
+                escalated = True
+                last_progress = now
+                log.warning(
+                    'Recording: no output progress for %.0fs; asking ffmpeg to '
+                    'finalize gracefully', stalled,
+                )
+                _send_graceful_stop(process)
+            elif stalled >= self._FINALIZE_STALL_TIMEOUT_S and escalated:
+                log.warning(
+                    'Recording: ffmpeg wedged with no output progress — killing '
+                    '(output may be unplayable)'
+                )
+                process.kill()
+                return process.wait(timeout=5.0)
+
+            if now >= deadline:
+                log.warning(
+                    'Recording: finalize exceeded %.0fs — killing',
+                    self._FINALIZE_MAX_WAIT_S,
+                )
+                process.kill()
+                return process.wait(timeout=5.0)
+
     def _frame_writer_worker(self) -> None:
         """Daemon thread: pace the latest frame out to ffmpeg at constant rate.
 
@@ -859,18 +944,7 @@ class Recorder:
             self._latest_frame = None
             if process.stdin is not None:
                 process.stdin.close()
-            try:
-                return_code = process.wait(timeout=10.0)
-            except subprocess.TimeoutExpired:
-                log.debug('Recording stop timed out; asking ffmpeg to finalize gracefully')
-                _send_graceful_stop(process)
-                try:
-                    return_code = process.wait(timeout=10.0)
-                except subprocess.TimeoutExpired:
-                    log.warning('Recording: ffmpeg ignored graceful stop — killing '
-                                '(output may be missing its final index)')
-                    process.kill()
-                    return_code = process.wait(timeout=5.0)
+            return_code = self._await_finalize(process, output_path)
             if self._stderr_thread is not None:
                 self._stderr_thread.join(timeout=2.0)
                 self._stderr_thread = None

@@ -330,3 +330,81 @@ def test_software_retry_does_not_recurse() -> None:
     rec = _recorder(codec='auto')
     rec._active_codec = 'libx264'
     assert rec._retry_in_software() is False
+
+
+# --------------------------------------------------------------------------
+# Finalize: never kill an encoder that is still writing
+# --------------------------------------------------------------------------
+
+class _FinalizingProc:
+    """ffmpeg rewriting its output, as +faststart does on a large file."""
+
+    def __init__(self, ticks_to_finish: int, growing: bool = True) -> None:
+        self._left = ticks_to_finish
+        self._growing = growing
+        self.size = 0
+        self.signals: list[object] = []
+        self.killed = False
+
+    def wait(self, timeout=None):
+        if self._left <= 0:
+            return 0
+        self._left -= 1
+        if self._growing:
+            self.size += 1_000_000
+        # Advance real time, since the caller measures progress against the
+        # clock rather than against poll count.
+        time.sleep(0.01)
+        raise __import__('subprocess').TimeoutExpired('ffmpeg', timeout)
+
+    def send_signal(self, sig) -> None:
+        self.signals.append(sig)
+
+    def kill(self) -> None:
+        self.killed = True
+        self._left = 0
+
+
+class _OutFile:
+    """Stands in for the output path; reports the encoder's current size."""
+
+    name = 'out.mp4'
+
+    def __init__(self, proc) -> None:
+        self._proc = proc
+
+    def stat(self):
+        class _S:
+            st_size = self._proc.size
+        _S.st_size = self._proc.size
+        return _S
+
+
+def _finalize(rec, proc, tmp_path):
+    """Run _await_finalize against a stand-in output file."""
+    del tmp_path
+    return rec._await_finalize(proc, _OutFile(proc))
+
+
+def test_finalize_waits_while_the_file_is_still_growing(tmp_path) -> None:
+    """A multi-GB +faststart rewrite must not be guillotined mid-write.
+
+    The old fixed 10s+10s budget sent SIGKILL to a perfectly healthy
+    encoder, destroying the file it was closing.
+    """
+    rec = _recorder()
+    proc = _FinalizingProc(ticks_to_finish=60, growing=True)
+    assert _finalize(rec, proc, tmp_path) == 0
+    assert proc.killed is False
+    assert proc.signals == [], 'a working encoder must not be signalled'
+
+
+def test_finalize_escalates_when_output_stops_moving(tmp_path) -> None:
+    """Stalled is different from slow, and only stalled deserves a signal."""
+    rec = _recorder()
+    rec._FINALIZE_STALL_TIMEOUT_S = 0.05
+    proc = _FinalizingProc(ticks_to_finish=10_000_000, growing=False)
+    rec._FINALIZE_MAX_WAIT_S = 2.0
+    _finalize(rec, proc, tmp_path)
+    assert proc.signals, 'a wedged encoder should be asked to stop first'
+    assert proc.killed is True

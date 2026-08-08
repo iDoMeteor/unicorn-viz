@@ -71,7 +71,9 @@ def test_stop_closes_stdin_and_releases_pending_frame() -> None:
 
     assert path == Path('recordings/test.mp4')
     assert process.stdin.closed is True
-    assert process.wait_calls == [10.0]
+    # Finalize now polls for progress rather than waiting one fixed 10s
+    # block, so what matters is that it waited and did not escalate.
+    assert process.wait_calls and all(w == 0.5 for w in process.wait_calls)
     assert process.sent_signals == []
     assert writer_thread.join_calls == [5.0]
     assert recorder._process is None
