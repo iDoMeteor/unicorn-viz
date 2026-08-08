@@ -1146,6 +1146,39 @@ void main() {
         self._ctx.enable(moderngl.BLEND)
         self._vao.render(moderngl.TRIANGLES, vertices=len(data) // 4)
 
+    def _char_width(self, scale: float) -> float:
+        """Advance width of one glyph at ``scale``, in screen pixels."""
+        return float(self._glyph_w) * scale * self._font_scale_norm
+
+    def _fit_text(
+        self,
+        text: str,
+        scale: float,
+        max_px: float,
+        keep_tail: int = 3,
+    ) -> str:
+        """Shorten ``text`` to fit ``max_px``, cutting from the middle.
+
+        Device names differ at both ends — 'DDJ-REV1 Analog **Stereo**' vs
+        'Analog **Surround 4.0**' — so trimming the tail would collapse
+        distinct entries into identical-looking rows.  The last
+        ``keep_tail`` characters are always preserved for exactly that
+        reason: they often carry the number that tells two otherwise
+        identical devices apart.
+        """
+        char_w = self._char_width(scale)
+        if char_w <= 0.0:
+            return text
+        max_chars = int(max_px // char_w)
+        if max_chars <= 0 or len(text) <= max_chars:
+            return text
+        ellipsis = '..'
+        if max_chars <= keep_tail + len(ellipsis):
+            # No room for a middle cut; the tail is the informative part.
+            return text[-max_chars:]
+        head = max_chars - keep_tail - len(ellipsis)
+        return f'{text[:head]}{ellipsis}{text[-keep_tail:]}'
+
     def _draw_modal_underlay(
         self,
         x: float,
@@ -3059,8 +3092,9 @@ void main() {
         active_name = 'none'
         if self._audio_sources and 0 <= self._audio_current_idx < len(self._audio_sources):
             active_name = self._audio_sources[self._audio_current_idx]
-        self._draw_text(f'Active: {active_name}', px + 18, py + 48, scale=2.2,
-                        color=(0.5, 0.8, 0.5, 0.85))
+        self._draw_text(
+            self._fit_text(f'Active: {active_name}', 2.2, panel_w - 36.0),
+            px + 18, py + 48, scale=2.2, color=(0.5, 0.8, 0.5, 0.85))
 
         entries = self._audio_sources if self._audio_sources else ['(no sources available)']
         for i, name in enumerate(entries):
@@ -3068,8 +3102,10 @@ void main() {
             if i in self._audio_divider_rows:
                 # A group heading, not a device: no viability tag, no
                 # cursor, and visually quiet so the break reads as a break.
-                self._draw_text(name, px + 22, ry + 5, scale=2.4,
-                                color=(0.55, 0.55, 0.65, 0.75))
+                self._draw_text(
+                    self._fit_text(name, 2.4, panel_w - 40.0),
+                    px + 22, ry + 5, scale=2.4,
+                    color=(0.55, 0.55, 0.65, 0.75))
                 continue
             is_sel = i == self._audio_selected_idx
             is_active = i == self._audio_current_idx
@@ -3077,6 +3113,12 @@ void main() {
             if i < len(self._audio_viable_flags):
                 is_viable = bool(self._audio_viable_flags[i])
             tag = '[V]' if is_viable else '[ ]'
+            # Budget the label against the panel, less padding and the
+            # 6-character '> [V] ' prefix drawn ahead of it.
+            name = self._fit_text(
+                name, 2.8,
+                panel_w - 40.0 - 6.0 * self._char_width(2.8),
+            )
 
             if is_sel:
                 self._draw_rect(px + 8, ry - 2, panel_w - 16, row_h - 4,

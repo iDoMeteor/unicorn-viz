@@ -326,6 +326,9 @@ class AudioCapture:
         self._stream: "sd.InputStream | None" = None
         # Blocking-read capture thread and its stop signal.
         self._stop_event: threading.Event = threading.Event()
+        # Cleared when a stream close times out; PortAudio teardown is
+        # then unsafe (see _close_stream_safely).
+        self._closed_cleanly: bool = True
         self._reader_thread: threading.Thread | None = None
         # Event that the reader sets on every new block.  The analysis thread
         # in AudioManager waits on this instead of polling, so it wakes
@@ -631,6 +634,10 @@ class AudioCapture:
         worker.start()
         worker.join(timeout=_CLOSE_STREAM_TIMEOUT_S)
         if worker.is_alive():
+            # A stream still open here makes PortAudio's own teardown unsafe:
+            # the JACK host API asserts (pa_jack.c Terminate) and aborts the
+            # process.  Record it so shutdown can skip Pa_Terminate entirely.
+            self._closed_cleanly = False
             log.warning(
                 'Audio: stream close timed out after %.2fs during %s; continuing shutdown',
                 _CLOSE_STREAM_TIMEOUT_S,
@@ -1032,6 +1039,11 @@ class AudioCapture:
                 'Audio: skipping stream close during shutdown — reader thread '
                 'still running would race it; leaving it to clean up on its own'
             )
+
+    @property
+    def closed_cleanly(self) -> bool:
+        """False when a stream close timed out, making Pa_Terminate unsafe."""
+        return self._closed_cleanly
 
     @property
     def active(self) -> bool:

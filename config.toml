@@ -1,5 +1,5 @@
 [logging]
-level = "debug"
+level = "info"
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
@@ -31,7 +31,7 @@ directory = "recordings"
 #
 # Constant frame rate the file is muxed at; frames are paced to it on
 # wallclock, and the app caps its GPU readback here too. Lower = cheaper.
-# fps = 30
+fps = 30
 # capture_audio = true
 # crf = 18          # H.264 quality, lower is better (0-51)
 # preset = "veryfast"

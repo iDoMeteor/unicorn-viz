@@ -301,3 +301,31 @@ def test_switch_candidate_refused_when_reader_hangs() -> None:
     finally:
         never.set()
         cap.stop()
+
+
+# --------------------------------------------------------------------------
+# PortAudio teardown must not abort the process on exit
+# --------------------------------------------------------------------------
+
+def test_capture_reports_a_clean_close_by_default() -> None:
+    assert _make_capture().closed_cleanly is True
+
+
+def test_close_timeout_marks_the_shutdown_unclean() -> None:
+    """A stream still open makes Pa_Terminate unsafe.
+
+    PortAudio's JACK host API asserts and aborts
+    (`pa_jack.c:869: Terminate: Assertion 'err == 0' failed`), which is how
+    a clean quit turned into a core dump.
+    """
+    cap = _make_capture()
+
+    class _HangingStream(_RecordingStream):
+        def close(self) -> None:
+            never = threading.Event()
+            never.wait(5.0)
+
+    with patch('unicornviz.audio.capture._CLOSE_STREAM_TIMEOUT_S', 0.05):
+        cap._close_stream_safely(_HangingStream(), context='test')
+
+    assert cap.closed_cleanly is False

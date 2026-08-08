@@ -206,12 +206,35 @@ class AudioManager:
         # still be inside PaAlsaStream_WaitForFrames() when cffi callback objects
         # are collected, causing SIGSEGV.  The import is guarded so the no-audio
         # path is unaffected.
+        #
+        # The call is ``_terminate``: sounddevice has no public ``terminate``.
+        # This used to call ``terminate()``, which raised AttributeError into
+        # the except below every single time, so the deliberate teardown
+        # never ran at all.  Python's own atexit then invoked it during
+        # interpreter shutdown instead.
+        #
+        # Terminating with a stream still open is worse than not terminating:
+        # PortAudio's JACK host API asserts and aborts the process
+        # (``pa_jack.c:869: Terminate: Assertion 'err == 0' failed``).  That
+        # is exactly what happened after a close timed out, so when the
+        # capture reports an unclean close this skips Pa_Terminate *and*
+        # unregisters sounddevice's atexit hook, leaving the OS to reclaim
+        # the device rather than aborting on the way out.
         try:
+            import atexit  # noqa: PLC0415
+
             import sounddevice as _sd  # noqa: PLC0415
-            _sd.terminate()
-            log.debug('AudioManager: sounddevice.terminate() called')
+            if self._capture.closed_cleanly:
+                _sd._terminate()  # noqa: SLF001
+                log.debug('AudioManager: PortAudio terminated cleanly')
+            else:
+                atexit.unregister(_sd._terminate)  # noqa: SLF001
+                log.warning(
+                    'AudioManager: audio stream did not close cleanly; skipping '
+                    'PortAudio teardown to avoid a host-API abort on exit'
+                )
         except Exception as exc:
-            log.debug('AudioManager: sounddevice.terminate() skipped: %s', exc)
+            log.debug('AudioManager: PortAudio teardown skipped: %s', exc)
 
     def _analysis_worker(self) -> None:
         """Daemon thread: process audio blocks as they arrive from AudioCapture.
