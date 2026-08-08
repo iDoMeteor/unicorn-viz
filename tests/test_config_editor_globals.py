@@ -62,7 +62,13 @@ def test_audio_global_rows(tmp_path: Path) -> None:
 def test_audio_rows_without_audio_manager(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Audio', audio=False)
     names = [r['name'] for r in app.config_editor_global_rows('Audio')]
-    assert names == ['advance_interval_s']  # reactivity omitted, no crash
+    # reactivity is omitted without an audio manager (no crash); the latency
+    # selector does not need one, since it persists to runtime state and is
+    # read at the next launch rather than applied live.
+    assert names == [
+        'advance_interval_s',
+        'latency 0=low 1=med 2=high (restart)',
+    ]
 
 
 def test_visuals_global_rows(tmp_path: Path) -> None:

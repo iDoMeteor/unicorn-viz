@@ -81,9 +81,21 @@ FRAME_TIME = 1.0 / TARGET_FPS
 # Budget-skip for secondary-window presents: when the previous frame ran over
 # 1.5x the frame budget, skip _present_subsystems() this frame (secondary
 # windows cost 15-56 ms per present on iGPUs) so the main canvas recovers
-# first.  Capped so sustained overload still presents at ~TARGET_FPS/4.
+# first.
+#
+# MAX_SKIPS was 3, i.e. present 1 frame in 4. That has no middle gear: the
+# instant the loop crossed the threshold the mixer/control-room window fell
+# straight to a quarter rate (~7.5 fps at a 30 fps loop), which is why a
+# general slowdown always presented as "the mixer is broken" (2026-08-08
+# capture: 97% of frames over the line, so the guard fired essentially
+# always). 1 -- present every other frame -- sheds most of the cost while
+# the window still reads as live.
+_SUBSYS_PRESENT_MAX_SKIPS = 1
+# Fallback threshold when the real refresh interval is unknown. The live
+# value is per-display: see App._subsys_present_skip_ms(), because deriving
+# it from a hardcoded 60 Hz means a 30 Hz output is over budget by
+# construction and the guard never stops firing.
 _SUBSYS_PRESENT_SKIP_MS = FRAME_TIME * 1000.0 * 1.5
-_SUBSYS_PRESENT_MAX_SKIPS = 3
 
 # Effects browser live-preview thumbnail resolution (16:9).
 _EB_THUMB_W = 480
@@ -561,6 +573,7 @@ class App:
         self._last_frame_ms: float = 0.0
         # Consecutive _present_subsystems() skips under the frame-budget guard.
         self._subsys_present_skips: int = 0
+        self._subsys_skip_ms_cached: float = 0.0
         self._audio_manager: AudioManager | None = None
         self._midi_manager: MidiManager | None = None
         # Crash containment: per-class crash counts, the session quarantine
@@ -1165,6 +1178,43 @@ class App:
                 log.warning('%s subsystem overlay render failed: %s', name, exc)
         self._render_now_spinning(width, height)
 
+    def _subsys_present_skip_ms(self) -> float:
+        """Frame-time ceiling above which secondary-window presents are skipped.
+
+        Derived from the **actual** display refresh rather than a hardcoded
+        60 Hz: on a 30 Hz output (or a mixed-refresh mirror rig) a 1.5x-of-60
+        threshold is below the display's own frame interval, so every frame
+        looks over budget and the guard throttles the mixer permanently.
+        Cached after the first successful query; falls back to the
+        60 Hz-derived constant when SDL cannot tell us.
+        """
+        cached = self._subsys_skip_ms_cached
+        if cached > 0.0:
+            return cached
+        interval_ms = 0.0
+        try:
+            mode = sdl2.SDL_DisplayMode()
+            if sdl2.SDL_GetCurrentDisplayMode(
+                max(0, int(self._display_index)), mode
+            ) == 0 and int(mode.refresh_rate) > 0:
+                interval_ms = 1000.0 / float(mode.refresh_rate)
+        except Exception:
+            interval_ms = 0.0
+        if interval_ms <= 0.0:
+            interval_ms = FRAME_TIME * 1000.0
+        # Never demand more than the 60 Hz budget: a slow display should
+        # relax the threshold, not a fast one tighten it below what the
+        # renderer can realistically hit.
+        interval_ms = max(interval_ms, FRAME_TIME * 1000.0)
+        self._subsys_skip_ms_cached = interval_ms * 1.5
+        log.info(
+            'Secondary-window present guard: skip above %.1f ms '
+            '(display refresh %.1f ms), max %d consecutive skips',
+            self._subsys_skip_ms_cached, interval_ms,
+            _SUBSYS_PRESENT_MAX_SKIPS,
+        )
+        return self._subsys_skip_ms_cached
+
     def _present_subsystems(self) -> None:
         """Call each subsystem's own present() (e.g. control-room-01/
         dj-mixer-01 blitting to their own SDL window), then restore our GL
@@ -1184,7 +1234,7 @@ class App:
         secondary-window blits stop compounding a main-loop overload.
         """
         if (
-            self._last_frame_ms > _SUBSYS_PRESENT_SKIP_MS
+            self._last_frame_ms > self._subsys_present_skip_ms()
             and self._subsys_present_skips < _SUBSYS_PRESENT_MAX_SKIPS
         ):
             self._subsys_present_skips += 1
@@ -3344,12 +3394,46 @@ void main() {
             specs.append({'key': 'audio.advance_interval_s', 'name': 'advance_interval_s',
                           'value': float(self._effect_duration), 'min': 10.0, 'max': 120.0,
                           'set': lambda v: setattr(self, '_effect_duration', max(10.0, float(v)))})
+            # Latency is an enum, so it rides the numeric slider as an index.
+            # Marked (restart) because changing it means tearing down and
+            # reopening the PortAudio stream underneath a running analysis
+            # thread; the value persists and applies on next launch rather
+            # than pretending to be live.
+            specs.append({'key': 'audio.latency',
+                          'name': 'latency 0=low 1=med 2=high (restart)',
+                          'value': float(self._audio_latency_index()),
+                          'min': 0.0, 'max': 2.0,
+                          'set': self._set_audio_latency_index})
         elif tab == 'Visuals':
             specs.append({'key': 'visuals.render_scale', 'name': 'render_scale',
                           'value': float(self._render_scale), 'min': 0.5, 'max': 1.0,
                           'set': self.set_render_scale})
         specs.extend(self._config_editor_dropin_specs(tab))
         return specs
+
+    _AUDIO_LATENCY_ORDER = ('low', 'medium', 'high')
+
+    def _audio_latency_index(self) -> int:
+        """Current [audio] latency as a 0-2 slider index (unknown -> low)."""
+        value = str(self.cfg.get('audio', 'latency', default='low')).strip().lower()
+        try:
+            return self._AUDIO_LATENCY_ORDER.index(value)
+        except ValueError:
+            return 0
+
+    def _set_audio_latency_index(self, value: float) -> None:
+        """Persist a new [audio] latency; takes effect on next launch."""
+        idx = max(0, min(len(self._AUDIO_LATENCY_ORDER) - 1, int(round(float(value)))))
+        label = self._AUDIO_LATENCY_ORDER[idx]
+        self.set_runtime_state('audio_latency', label)
+        log.info(
+            'Audio latency set to %r — applies on next launch (the capture '
+            'stream cannot be re-opened underneath a live analysis thread)',
+            label,
+        )
+        if self._overlays is not None:
+            self._overlays.flash_message(
+                f'Audio latency: {label} (applies on restart)', 3.0)
 
     def _config_editor_dropin_specs(self, tab: str) -> list[dict]:
         """Gather drop-in setting specs for a tab via the config-editor convention."""
@@ -3856,6 +3940,12 @@ void main() {
 
         # Subsystems (audio starts before splash so splash can react to music)
         log.info('Startup: initializing audio subsystem')
+        # A latency change from the config editor is persisted rather than
+        # applied live (see _set_audio_latency_index); honour it here, at the
+        # one point where the capture stream has not been opened yet.
+        _persisted_latency = self.get_runtime_state('audio_latency', default=None)
+        if isinstance(_persisted_latency, str) and _persisted_latency.strip():
+            self.cfg.set_override('audio', 'latency', _persisted_latency.strip())
         audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
         mixer_profile = self._boot_profile == PROFILE_MIXER
         if mixer_profile:
@@ -4474,7 +4564,19 @@ void main() {
         self._webcam_cycle_interval = float(
             self.cfg.get('webcam', 'cycle_interval', default=0)
         ) or float(self._effect_duration)
-        perf_debug_enabled = log.isEnabledFor(logging.DEBUG)
+        # Explicit config key, NOT log.isEnabledFor(DEBUG): the log-band
+        # design sets the ROOT logger to DEBUG and filters at the handlers,
+        # so isEnabledFor(DEBUG) is True even at the default INFO level and
+        # this instrumentation ran on every frame of every session forever.
+        # Cheap (~15 perf_counter calls, ~1 us/frame) but it never meant
+        # what it looked like it meant. Enable with [logging] perf_frames =
+        # true, or by asking for the DEBUG level outright.
+        perf_debug_enabled = bool(
+            self.cfg.get('logging', 'perf_frames', default=False)
+        ) or str(
+            self.cfg.get('logging', 'level', default='INFO')
+        ).strip().upper() == 'DEBUG'
+
         perf_frame_counter = 0
         perf_sample_every = 120
         perf_slow_frame_ms = 25.0

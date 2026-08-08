@@ -57,7 +57,11 @@ _DEFAULTS: dict[str, Any] = {
         # active use, just a startup placeholder -- see AudioManager.__init__.
         "profile": "house",
         "reactivity": 1.0,
-        "latency": "high",
+        # low: tighter beat response and lower audio-to-visual lag, which is
+        # what a VJ rig wants. Raise to "medium"/"high" (or a float in
+        # seconds) if a loaded machine starts reporting xruns. Toggleable
+        # live from the config editor.
+        "latency": "low",
         "prefer_default_input": True,
         "start_timeout_s": 4.0,
         "start_retries": 2,
@@ -417,6 +421,19 @@ class Config:
 
     def __getitem__(self, key: str) -> Any:
         return self._data[key]
+
+    def set_override(self, section: str, key: str, value: Any) -> None:
+        """Override one already-validated value in memory.
+
+        For settings the config editor persists to runtime state and applies
+        at the next launch (e.g. ``[audio] latency``), applied before the
+        subsystem that reads them is constructed. Deliberately does not touch
+        ``config.toml`` -- the owner's file is theirs, and runtime state is
+        the right home for a runtime choice.
+        """
+        bucket = self._data.get(section)
+        if isinstance(bucket, dict):
+            bucket[key] = value
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node = self._data

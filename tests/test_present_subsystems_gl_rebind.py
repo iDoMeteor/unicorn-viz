@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from unicornviz.app import App
+from unicornviz.app import App, _SUBSYS_PRESENT_SKIP_MS
 
 
 class _StubSubsystemWithPresent:
@@ -42,6 +42,9 @@ def _stub_app(*, subsystems: dict) -> App:
     app._rebind_calls = 0
     app._last_frame_ms = 0.0
     app._subsys_present_skips = 0
+    # Threshold cache: pre-seeded to the 60Hz-derived constant so these
+    # tests stay deterministic instead of querying the real display.
+    app._subsys_skip_ms_cached = _SUBSYS_PRESENT_SKIP_MS
 
     def _rebind() -> bool:
         app._rebind_calls += 1

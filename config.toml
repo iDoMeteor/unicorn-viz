@@ -1,5 +1,5 @@
 [logging]
-level = "info"
+level = "debug"
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
@@ -377,3 +377,13 @@ fps_cap = 30              # 0 = every rendered frame
 # [video_out.pipewire]
 # enabled = true
 # name = "Unicorn Viz"
+
+# ---------------------------------------------------------------------------
+# Per-frame performance instrumentation
+# ---------------------------------------------------------------------------
+# Logs a per-stage breakdown (events/audio/effects/draw/swap/subsys_*) for
+# slow frames plus a periodic sample.  Off by default; --log-level DEBUG also
+# turns it on.  Analyse with:  grep "Perf frame" logs/<newest>.log
+#
+# [logging]
+# perf_frames = true
