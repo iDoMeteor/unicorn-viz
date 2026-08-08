@@ -86,6 +86,10 @@ def _app(tmp_path: Path, *, tab='System', auto_vj=None, color_grade=None,
     app._effect_config_overrides = {}
     app._current_effect = None
     app._audio_manager = _AudioManager() if audio else None
+    # Real App.__init__ always sets these; the Recording tab reads them when
+    # the walk below visits it.
+    app._recorder = None
+    app._recording_sources_cache = None
     app._effect_duration = 30.0
     app._render_scale = 0.9
     app._render_width = 1728

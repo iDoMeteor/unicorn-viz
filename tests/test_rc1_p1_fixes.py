@@ -38,6 +38,11 @@ def test_recorder_failure_latch_consumed_once() -> None:
     class _Proc:
         stdin = object()
 
+        # Still running: this asserts the write-failure latch alone marks
+        # the recorder dead, independently of ffmpeg's own exit state.
+        def poll(self):
+            return None
+
     rec._process = _Proc()
     # A failed recorder must not report as recording (app stops paying the
     # per-frame readback cost) …

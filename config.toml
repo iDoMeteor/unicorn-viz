@@ -22,6 +22,19 @@ preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_m
 
 [recording]
 directory = "recordings"
+# Audio source for recordings. Left unset, Unicorn Viz follows whatever the
+# visualizer is analyzing, then any output that is actually playing, then the
+# system default. Pin it here (or on the config editor's Recording tab) when
+# several apps play at once and auto-detection picks the wrong one.
+# List candidates with:  pactl list short sinks   -> use "<name>.monitor"
+# audio_input_device = "alsa_output.usb-AlphaTheta_Corporation_DDJ-REV1_------00.analog-surround-40.monitor"
+#
+# Constant frame rate the file is muxed at; frames are paced to it on
+# wallclock, and the app caps its GPU readback here too. Lower = cheaper.
+# fps = 30
+# capture_audio = true
+# crf = 18          # H.264 quality, lower is better (0-51)
+# preset = "veryfast"
 
 [render]
 

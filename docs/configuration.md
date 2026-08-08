@@ -180,25 +180,50 @@ check the following before changing config:**
 | `directory`      | str    | `"recordings"` | Output directory for saved recordings. |
 | `ffmpeg_path`    | str    | `"ffmpeg"`  | Path to the ffmpeg executable used for recording. |
 | `container`      | str    | `"mp4"`     | Output container extension for saved recordings. |
-| `fps`            | int    | `60`         | Recording frame rate passed to ffmpeg. |
+| `fps`            | int    | `60`         | Constant frame rate the recording is muxed at. Frames are paced to this rate on wallclock, so a slow render loop yields a real-time-length file rather than a sped-up one; the app also caps its readback here. |
 | `codec`          | str    | `"libx264"` | Video codec used for recording. |
 | `preset`         | str    | `"veryfast"`| ffmpeg encoder preset for performance/quality tradeoff. |
 | `crf`            | int    | `18`         | H.264 quality target; lower is higher quality. |
 | `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |
-| `capture_audio`  | bool   | `false`      | Capture audio alongside video when supported by the configured ffmpeg input backend. |
+| `capture_audio`  | bool   | `true`       | Capture audio alongside video when supported by the configured ffmpeg input backend. |
 | `audio_input_format` | str | `"pulse"`  | ffmpeg input backend used for audio capture. Linux/PipeWire setups should use `pulse`. |
-| `audio_input_device` | str | `""`       | Audio input source name for recording. Empty auto-resolves to the default sink monitor on Linux/PipeWire. |
+| `audio_input_device` | str | `""`       | Audio source for recording. Empty auto-resolves (see *Choosing the audio source* below); set it to pin one output permanently. |
 | `audio_codec`    | str    | `"aac"`     | Audio codec used when audio recording is enabled. |
 | `audio_bitrate`  | str    | `"192k"`    | Audio bitrate passed to ffmpeg. |
 | `filename_prefix`| str    | `"unicornviz"` | Prefix used for timestamped recording filenames. |
 | `show_indicator` | bool   | `true`       | Show a live-only recording indicator while recording. It is shown only when the name overlay is visible and is never burned into saved recordings. |
 
 Notes:
-- Linux/PipeWire/Pulse setups can record audio by enabling `capture_audio = true`.
-- If `audio_input_device` is empty, Unicorn Viz resolves the default sink monitor via `pactl` so recordings capture desktop playback instead of the default microphone source.
+
 - Recording captures the final on-screen composed output.
 - The recording indicator is drawn only after frame capture, so it is visible live but not included in recordings.
-- Recording may reduce runtime performance because frame capture currently uses synchronous screen readback.
+- Recording readback is capped at `fps`, so raising the frame rate raises the per-frame GPU→CPU transfer cost.
+
+### Choosing the audio source
+
+`audio_input_device` empty means auto, resolved in this order:
+
+1. **The source the visualizer is analyzing.** Whatever is driving the
+   visuals is the show, so that is what gets recorded. This is what makes a
+   recording match what you were watching.
+2. **An output that is actually playing.** If the analyzer source cannot be
+   matched to a known output, any output in the `RUNNING` state is used,
+   preferring the system default when several qualify.
+3. **The default output's monitor**, with a warning logged that nothing was
+   playing when the recording started.
+
+The earlier behaviour was step 3 alone, which is silent whenever the set
+plays through anything other than the system default — a DJ controller, an
+interface, a second card. If several applications are playing at once (a
+browser alongside the set, say) auto-detection cannot tell which one you
+mean: pin it, either with `audio_input_device` or with the **audio source**
+row on the config editor's Recording tab.
+
+To list the source names available on a Linux box:
+
+```sh
+pactl list short sinks     # the ".monitor" of any of these records its output
+```
 
 ---
 

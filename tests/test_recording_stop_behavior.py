@@ -10,11 +10,6 @@ def _default_cfg() -> Config:
     return Config(Path('tests') / '_missing_config_for_tests.toml')
 
 
-class _QueueThatFailsIfPut:
-    def put(self, *_args, **_kwargs) -> None:
-        raise AssertionError('stop() should not enqueue a sentinel')
-
-
 class _FakeStdin:
     def __init__(self) -> None:
         self.closed = False
@@ -28,6 +23,10 @@ class _FakeProcess:
         self.stdin = _FakeStdin()
         self.wait_calls: list[float | None] = []
         self.sent_signals: list[object] = []
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        return self.returncode
 
     def wait(self, timeout: float | None = None) -> int:
         self.wait_calls.append(timeout)
@@ -49,14 +48,21 @@ class _FakeThread:
         return self._alive
 
 
-def test_stop_does_not_enqueue_sentinel() -> None:
+def test_stop_closes_stdin_and_releases_pending_frame() -> None:
+    """stop() must never block on the writer hand-off.
+
+    The writer is fed through a single latest-frame slot rather than a
+    queue, so stopping only has to signal, join, and drop the reference —
+    there is no sentinel to enqueue and nothing that can back-pressure the
+    caller.
+    """
     recorder = Recorder(_default_cfg(), 1920, 1080)
     process = _FakeProcess()
     writer_thread = _FakeThread()
 
     recorder._process = process
     recorder._current_path = Path('recordings/test.mp4')
-    recorder._frame_queue = _QueueThatFailsIfPut()
+    recorder._latest_frame = b'pending frame bytes'
     recorder._writer_thread = writer_thread
     recorder._recording_stopping = False
     recorder._capture_audio = False
@@ -70,4 +76,4 @@ def test_stop_does_not_enqueue_sentinel() -> None:
     assert writer_thread.join_calls == [5.0]
     assert recorder._process is None
     assert recorder._current_path is None
-    assert recorder._frame_queue is None
+    assert recorder._latest_frame is None

@@ -586,6 +586,8 @@ class App:
         self._midi_out: MidiOut | None = None
         self._overlays: Overlays | None = None
         self._recorder: Recorder | None = None
+        # Cached pactl sink enumeration for the Recording tab's source picker.
+        self._recording_sources_cache: list[tuple[str, str]] | None = None
         self._audio_scratch_current = AudioData()
         self._audio_scratch_next = AudioData()
         self._splash_config: dict | None = None
@@ -3176,7 +3178,7 @@ void main() {
     def _push_config_editor_model(self) -> None:
         """Feed the config editor its per-tab data each frame while open."""
         overlays = self._overlays
-        tabs = ['Effects', 'Audio', 'Visuals', 'System', 'Hotkeys']
+        tabs = ['Effects', 'Audio', 'Visuals', 'Recording', 'System', 'Hotkeys']
         if self._auto_vj is not None:
             tabs.append('Auto VJ')
         overlays.set_config_editor_tabs(tabs)
@@ -3201,7 +3203,7 @@ void main() {
             overlays.set_config_editor_params(
                 self.config_editor_param_rows(cls) if cls else []
             )
-        elif tab in ('Audio', 'Visuals'):
+        elif tab in ('Audio', 'Visuals', 'Recording'):
             overlays.set_config_editor_params(self.config_editor_global_rows(tab))
         elif tab == 'Hotkeys':
             overlays.set_config_editor_params(self.config_editor_hotkey_rows())
@@ -3408,8 +3410,137 @@ void main() {
             specs.append({'key': 'visuals.render_scale', 'name': 'render_scale',
                           'value': float(self._render_scale), 'min': 0.5, 'max': 1.0,
                           'set': self.set_render_scale})
+        elif tab == 'Recording':
+            specs.extend(self._config_editor_recording_specs())
         specs.extend(self._config_editor_dropin_specs(tab))
         return specs
+
+    # x264 speed/size trade-off, slowest-to-fastest as a slider index.
+    _RECORDING_PRESET_ORDER = (
+        'ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium',
+    )
+
+    def _recording_audio_sources(self) -> list[tuple[str, str]]:
+        """Selectable recording audio sources, index 0 = automatic.
+
+        Cached for the lifetime of the app: enumerating sinks shells out to
+        pactl, and the config editor rebuilds its rows every frame it is
+        open.
+        """
+        if self._recording_sources_cache is None:
+            sources: list[tuple[str, str]] = [('', 'auto (follow visualizer)')]
+            if self._recorder is not None:
+                try:
+                    sources.extend(self._recorder.available_audio_sources())
+                except Exception as exc:
+                    log.debug('Could not enumerate recording audio sources: %s', exc)
+            self._recording_sources_cache = sources
+        return self._recording_sources_cache
+
+    def _recording_source_index(self) -> int:
+        """Current audio-source selection as a slider index."""
+        if self._recorder is None:
+            return 0
+        current = self._recorder.resolved_audio_input
+        pinned = getattr(self._recorder, '_audio_input_device', '')  # noqa: SLF001
+        if not pinned:
+            return 0
+        del current
+        for idx, (name, _label) in enumerate(self._recording_audio_sources()):
+            if name == pinned:
+                return idx
+        return 0
+
+    def _set_recording_source_index(self, value: float) -> None:
+        """Pin (or unpin) the recording audio source and persist the choice."""
+        sources = self._recording_audio_sources()
+        idx = max(0, min(len(sources) - 1, int(round(float(value)))))
+        name, label = sources[idx]
+        if self._recorder is not None:
+            self._recorder.set_pulse_source_name(name)
+        self.set_runtime_state('recording_audio_device', name)
+        if self._overlays is not None:
+            self._overlays.flash_message(f'Recording audio: {label}', 3.0)
+
+    def _config_editor_recording_specs(self) -> list[dict]:
+        """Editable rows for the Recording tab.
+
+        Every value here is consumed when ffmpeg is spawned, so changes take
+        effect on the next recording rather than the one in progress.
+        """
+        rec = self._recorder
+        if rec is None:
+            return []
+        specs: list[dict] = []
+
+        def tweak(key: str, name: str, value: float, low: float, high: float) -> None:
+            def _set(v: float, k: str = key) -> None:
+                rec.apply_setting(k, v)
+                self.set_runtime_state(f'recording_{k}', float(v))
+            specs.append({'key': f'recording.{key}', 'name': name, 'value': float(value),
+                          'min': low, 'max': high, 'set': _set})
+
+        tweak('fps', 'fps (next recording)', rec.target_fps, 15.0, 120.0)
+        tweak('crf', 'quality crf lower=better', rec._crf, 0.0, 51.0)  # noqa: SLF001
+        tweak('capture_audio', 'capture_audio 0=off 1=on',
+              1.0 if rec._capture_audio else 0.0, 0.0, 1.0)  # noqa: SLF001
+        sources = self._recording_audio_sources()
+        specs.append({'key': 'recording.audio_device',
+                      'name': f'audio source 0=auto ({len(sources) - 1} outputs)',
+                      'value': float(self._recording_source_index()),
+                      'min': 0.0, 'max': float(max(0, len(sources) - 1)),
+                      'set': self._set_recording_source_index})
+        specs.append({'key': 'recording.preset', 'name': 'preset 0=ultrafast 5=medium',
+                      'value': float(self._recording_preset_index()),
+                      'min': 0.0, 'max': float(len(self._RECORDING_PRESET_ORDER) - 1),
+                      'set': self._set_recording_preset_index})
+        tweak('auto_record', 'auto_record 0=off 1=on',
+              1.0 if rec.auto_record else 0.0, 0.0, 1.0)
+        tweak('show_indicator', 'show_indicator 0=off 1=on',
+              1.0 if rec.show_indicator else 0.0, 0.0, 1.0)
+        return specs
+
+    def _apply_persisted_recording_settings(self) -> None:
+        """Re-apply config-editor recording choices to a fresh Recorder.
+
+        The editor persists to runtime state rather than rewriting the
+        owner's ``config.toml``, so the values have to be laid back over a
+        newly constructed Recorder before it is ever started.
+        """
+        rec = self._recorder
+        if rec is None:
+            return
+        for key in Recorder.TWEAKABLES:
+            stored = self.get_runtime_state(f'recording_{key}', default=None)
+            if isinstance(stored, (int, float)):
+                rec.apply_setting(key, float(stored))
+        preset = self.get_runtime_state('recording_preset', default=None)
+        if isinstance(preset, str) and preset.strip() in self._RECORDING_PRESET_ORDER:
+            rec._preset = preset.strip()  # noqa: SLF001
+        device = self.get_runtime_state('recording_audio_device', default=None)
+        if isinstance(device, str) and device.strip():
+            rec.set_pulse_source_name(device.strip())
+
+    def _recording_preset_index(self) -> int:
+        """Current x264 preset as a slider index (unknown -> veryfast)."""
+        if self._recorder is None:
+            return 2
+        value = str(self._recorder._preset).strip().lower()  # noqa: SLF001
+        try:
+            return self._RECORDING_PRESET_ORDER.index(value)
+        except ValueError:
+            return 2
+
+    def _set_recording_preset_index(self, value: float) -> None:
+        """Persist a new x264 preset; applies to the next recording."""
+        idx = max(0, min(len(self._RECORDING_PRESET_ORDER) - 1,
+                         int(round(float(value)))))
+        label = self._RECORDING_PRESET_ORDER[idx]
+        if self._recorder is not None:
+            self._recorder._preset = label  # noqa: SLF001
+        self.set_runtime_state('recording_preset', label)
+        if self._overlays is not None:
+            self._overlays.flash_message(f'Recording preset: {label}', 3.0)
 
     _AUDIO_LATENCY_ORDER = ('low', 'medium', 'high')
 
@@ -3469,6 +3600,10 @@ void main() {
     def _config_editor_all_specs(self) -> list[dict]:
         """All persistable setting specs across the settings tabs."""
         specs: list[dict] = []
+        # Recording is deliberately excluded: those settings describe the
+        # machine (capture device, encoder speed) rather than the look of a
+        # show, so loading a visual profile must not silently repoint the
+        # recorder.  They persist on their own via runtime state.
         for tab in ('Audio', 'Visuals'):
             specs.extend(self._config_editor_settings_specs(tab))
         return specs
@@ -4456,6 +4591,7 @@ void main() {
                 self._effect_lock = 'ProjectM Presets'
                 log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
+        self._apply_persisted_recording_settings()
         # Video output interop (v4l2loopback / future PipeWire, NDI).
         # Guarded per the drop-in independence rules: absent drop-in, absent
         # config, or a constructor failure all degrade to None and the app
@@ -5629,7 +5765,18 @@ void main() {
             # who is due, we read **once**, and everyone due shares it.
             # See unicornviz/frame_tap.py.
             _tap_now = time.monotonic()
-            self._frame_tap.sync('recording', need_frame_for_recording)
+            # Cap the recording readback at the muxed frame rate. The
+            # recorder paces its own output, so any frame read back above
+            # that rate is discarded — and at 4K a discarded readback still
+            # costs a full ~25 MB GPU->CPU transfer.
+            self._frame_tap.sync(
+                'recording', need_frame_for_recording,
+                max_fps=(
+                    float(self._recorder.target_fps)
+                    if (need_frame_for_recording and self._recorder is not None)
+                    else 0.0
+                ),
+            )
             self._frame_tap.sync('streaming', need_frame_for_streaming)
             _vo = self._video_out
             _vo_wants = False
@@ -6739,12 +6886,23 @@ void main() {
         """Start recording if recording support is enabled."""
         if self._recorder is None:
             self._recorder = Recorder(self.cfg, self._width, self._height)
+            self._apply_persisted_recording_settings()
         if not self._recorder.enabled:
             self._sync_recording_overlay()
             return False, 'Recording disabled'
         if self._recorder.is_recording:
             self._sync_recording_overlay()
             return True, 'Recording already on'
+        # Point the recorder at whatever the analyzer is listening to, so the
+        # captured audio is the audio that produced the visuals rather than
+        # whichever output the system happens to call "default".
+        try:
+            if self._audio_manager is not None:
+                self._recorder.set_audio_source_hint(
+                    self._audio_manager.get_source_label()
+                )
+        except Exception as exc:
+            log.debug('Could not resolve analyzer source for recording: %s', exc)
         started = self._recorder.start()
         self._sync_recording_overlay()
         if started:
