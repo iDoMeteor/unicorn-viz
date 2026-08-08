@@ -74,10 +74,10 @@
   video-clips-01                0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
-  audio-out-01                  0.3.0               early alpha   module
+  audio-out-01                  0.4.0               early alpha   module
   flying-01                     0.2.1               early alpha   module
+  lyrics-01                     0.3.0               early alpha   module
   video-out-01                  0.3.0               early alpha   module
-  lyrics-01                     0.2.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
