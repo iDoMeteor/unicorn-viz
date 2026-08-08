@@ -353,21 +353,26 @@ headphone_device = "DDJ-REV1: USB Audio"    # cue on the REV1's outputs 3-4 (the
 #   sudo dnf install v4l2loopback          # Fedora
 #   drop-ins/video-out-01/v4l2loopback_setup.sh
 #
-# Both switches must be true; frames ride core's shared frame tap, so this
-# costs no extra GPU readback when recording or streaming is already running.
-#
-# [video_out]
-# enabled = true
-#
-# [video_out.v4l2]
-# enabled = true
-# device = "/dev/video10"   # empty => first existing /dev/video1x node
-# fps_cap = 30              # 0 = every rendered frame
-#
+# enabled: loads the drop-in (default true, like any other drop-in).
+# start_enabled: whether it's actually publishing at boot vs loaded-but-
+# idle until Alt+Shift+O. Left false by default -- this one opens a device
+# and runs a writer thread, so unlike a plain effect toggle, "loaded" and
+# "actively running" are deliberately kept separate here.
+[video_out]
+enabled = true
+start_enabled = false
+
+[video_out.v4l2]
+enabled = true
+device = "/dev/video10"   # empty => first existing /dev/video1x node
+fps_cap = 30              # 0 = every rendered frame
+
 # Zero-copy PipeWire/DMA-BUF (Wayland only; needs libfunnel built from
 # source -- https://github.com/hoshinolina/libfunnel).  Costs no readback
 # at all, so it does not subscribe to the frame tap.  Consume in OBS with
-# the obs-pwvideo plugin.  UNVERIFIED on real hardware as of 0.2.0.
+# the obs-pwvideo plugin.  UNVERIFIED on real hardware as of 0.2.0.  Left
+# off by default until a frame has actually been confirmed in OBS -- v4l2
+# above is the dependable, no-plugin path.
 #
 # [video_out.pipewire]
 # enabled = true

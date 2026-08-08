@@ -4361,14 +4361,21 @@ void main() {
         # Video output interop (v4l2loopback / future PipeWire, NDI).
         # Guarded per the drop-in independence rules: absent drop-in, absent
         # config, or a constructor failure all degrade to None and the app
-        # simply publishes nothing.
+        # simply publishes nothing. Loads by default like any other
+        # drop-in (enabled=True); actually publishing at boot is a
+        # separate, opt-in start_enabled flag the controller reads itself
+        # (this subsystem opens a device/connection and runs a writer
+        # thread, so "loaded" and "actively running" are kept distinct).
         self._video_out = None
         if not self._safe_mode:
             _vo_cfg = self.cfg.get('video_out', default={}) or {}
-            if isinstance(_vo_cfg, dict) and bool(_vo_cfg.get('enabled', False)):
+            if isinstance(_vo_cfg, dict) and bool(_vo_cfg.get('enabled', True)):
                 try:
                     self._video_out = _load_video_out_controller_class()(self, _vo_cfg)
                     self.register_subsystem('video_out', self._video_out)
+                    key_handler = getattr(self._video_out, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('video_out', key_handler)
                 except Exception as exc:
                     log.warning('Video output interop unavailable: %s', exc)
                     self._video_out = None
