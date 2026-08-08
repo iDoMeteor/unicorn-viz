@@ -3419,6 +3419,46 @@ void main() {
         specs.extend(self._config_editor_dropin_specs(tab))
         return specs
 
+    # Selectable recording frame rates.  Deliberately a short list of the
+    # rates that actually make sense for a capture rather than a free
+    # 15-120 slider: cinema/PAL/NTSC standards plus the two common display
+    # rates.  Anything else mostly produces a file no editor wants.
+    _RECORDING_FPS_CHOICES = (24, 25, 30, 48, 50, 60)
+
+    def _recording_fps_index(self) -> int:
+        """Current recording fps as a slider index (nearest known choice)."""
+        if self._recorder is None:
+            return 2
+        current = int(self._recorder.target_fps)
+        if current in self._RECORDING_FPS_CHOICES:
+            return self._RECORDING_FPS_CHOICES.index(current)
+        # A value set by hand in config.toml need not be on the list; snap
+        # the row to the closest choice rather than silently rewriting it.
+        return min(
+            range(len(self._RECORDING_FPS_CHOICES)),
+            key=lambda i: abs(self._RECORDING_FPS_CHOICES[i] - current),
+        )
+
+    def _recording_fps_label(self) -> str:
+        """Render the choice list for the row caption, marking the current one."""
+        idx = self._recording_fps_index()
+        return '/'.join(
+            f'[{v}]' if i == idx else str(v)
+            for i, v in enumerate(self._RECORDING_FPS_CHOICES)
+        )
+
+    def _set_recording_fps_index(self, value: float) -> None:
+        """Persist a new recording frame rate; applies to the next recording."""
+        idx = max(0, min(len(self._RECORDING_FPS_CHOICES) - 1,
+                         int(round(float(value)))))
+        fps = self._RECORDING_FPS_CHOICES[idx]
+        if self._recorder is not None:
+            self._recorder.apply_setting('fps', float(fps))
+        self.set_runtime_state('recording_fps', float(fps))
+        if self._overlays is not None:
+            self._overlays.flash_message(
+                f'Recording: {fps} fps (next recording)', 3.0)
+
     # x264 speed/size trade-off, slowest-to-fastest as a slider index.
     _RECORDING_PRESET_ORDER = (
         'ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium',
@@ -3484,7 +3524,12 @@ void main() {
             specs.append({'key': f'recording.{key}', 'name': name, 'value': float(value),
                           'min': low, 'max': high, 'set': _set})
 
-        tweak('fps', 'fps (next recording)', rec.target_fps, 15.0, 120.0)
+        specs.append({'key': 'recording.fps',
+                      'name': f'fps {self._recording_fps_label()} (next recording)',
+                      'value': float(self._recording_fps_index()),
+                      'min': 0.0,
+                      'max': float(len(self._RECORDING_FPS_CHOICES) - 1),
+                      'set': self._set_recording_fps_index})
         tweak('crf', 'quality crf lower=better', rec._crf, 0.0, 51.0)  # noqa: SLF001
         tweak('capture_audio', 'capture_audio 0=off 1=on',
               1.0 if rec._capture_audio else 0.0, 0.0, 1.0)  # noqa: SLF001

@@ -199,6 +199,37 @@ Notes:
 - The recording indicator is drawn only after frame capture, so it is visible live but not included in recordings.
 - Recording readback is capped at `fps`, so raising the frame rate raises the per-frame GPU→CPU transfer cost.
 
+### Hardware video encoding (Linux)
+
+Recording and streaming both encode with **libx264 on the CPU** by default.
+That is the portable choice and it is fine at 1080p, but at 4K — or with OBS
+encoding a second copy at the same time — it is usually the largest single
+CPU cost on the machine.
+
+Intel GPUs can encode H.264 in hardware via VA-API, **but Fedora's
+`libva-intel-media-driver` package is built without the patent-encumbered
+encoders**. Decode works; encode is absent, and probing reports:
+
+```
+[h264_vaapi] No usable encoding profile found.
+```
+
+The full build lives in RPM Fusion as `intel-media-driver`, which *replaces*
+Fedora's package:
+
+```sh
+sudo dnf install intel-media-driver          # rpmfusion-nonfree
+vainfo | grep -i h264                        # needs libva-utils
+# want: VAProfileH264* ... VAEntrypointEncSlice
+```
+
+**No reboot is required** — it is a userspace driver library. Restart any
+application that should pick it up (OBS, Unicorn Viz); a running process
+keeps the old library mapped.
+
+AMD uses `mesa-va-drivers` (usually already present); NVIDIA uses NVENC and
+needs the proprietary driver plus `libcuda`.
+
 ### Choosing the audio source
 
 `audio_input_device` empty means auto, resolved in this order:

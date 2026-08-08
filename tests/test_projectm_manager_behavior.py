@@ -228,3 +228,45 @@ def test_projectm_delete_presets_can_delete_multiple_files_permanently(tmp_path)
     assert str(third.resolve()) in effect._deleted_presets
     assert effect.preset_count == 1
     assert effect.preset_catalog()[0]['path'] == str(second.resolve())
+
+def test_background_refresh_does_not_touch_state_until_update() -> None:
+    """A background rebuild must be installed by the render thread, not the worker.
+
+    Swapping the catalog from a worker while update()/render() walk it is
+    how you get torn reads; the worker parks its result and update()
+    installs it.
+    """
+    import threading as _t
+
+    module = _load_projectm_effect_module()
+    eff = object.__new__(module.ProjectMEffect)
+    eff._preset_catalog = []
+    eff._preset_paths = []
+    eff._preset_index = 0
+    built = _t.Event()
+
+    class _Item:
+        def __init__(self, name):
+            self.path, self.enabled = Path(name), True
+
+    new_catalog = [_Item('new.milk')]
+
+    def _fake_build():
+        built.set()
+        return new_catalog
+
+    eff._build_preset_catalog = _fake_build
+    eff.refresh_preset_catalog(background=True)
+    assert built.wait(timeout=5.0), 'worker never ran'
+
+    # Give the worker a moment to park its result, then confirm it parked it
+    # rather than installing it.
+    for _ in range(100):
+        if module._catalog_lock and eff._pending_catalog is not None:
+            break
+        _t.Event().wait(0.01)
+    assert eff._preset_catalog == [], 'worker installed the catalog itself'
+
+    eff._install_pending_catalog()
+    assert eff._preset_catalog is new_catalog
+    assert [p.name for p in eff._preset_paths] == ['new.milk']
