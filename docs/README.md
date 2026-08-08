@@ -28,6 +28,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **Performance remediation plan — webcam+mirror, measured (2026-08-08):** [docs/planning/performance-remediation-plan-2026-08-08.md](planning/performance-remediation-plan-2026-08-08.md)
 - **v1.0-RC1 release task list (2026-08-03, active):** [docs/planning/rc1-release-task-list-2026-08-03.md](planning/rc1-release-task-list-2026-08-03.md)
 - **Video output interop plan — PipeWire/DMA-BUF, v4l2loopback, NDI (proposed, 2026-08-07):** [docs/planning/video-output-interop-plan-2026-08-07.md](planning/video-output-interop-plan-2026-08-07.md)
 - Auto VJ phrase-aware song structure plan (draft, 2026-08-05, pending dj-mixer-01 team review of §6): [docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md](planning/auto-vj-phrase-structure-plan-2026-08-05.md)
