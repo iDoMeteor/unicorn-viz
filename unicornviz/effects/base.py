@@ -178,6 +178,16 @@ class BaseEffect(ABC):
     # Subclass interface                                                   #
     # ------------------------------------------------------------------ #
 
+    #: True while this effect is part of a running scene crossfade.
+    #:
+    #: Set by the app on both the outgoing and incoming effect for the
+    #: duration of the blend.  During a crossfade two effects render every
+    #: frame, so it is the worst possible moment for an effect to do
+    #: something expensive and deferrable — notably a shader compile.
+    #: Effects that have such work can check this and postpone it; most
+    #: effects can ignore it entirely.
+    transition_active: bool = False
+
     def _init(self) -> None:
         """Override to set up GL resources instead of overriding __init__."""
 

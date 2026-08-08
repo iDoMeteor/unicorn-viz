@@ -5227,6 +5227,17 @@ void main() {
 
             # Update effects
             if not self._paused:
+                # Tell both effects a crossfade is running, so anything with
+                # deferrable expensive work (a ProjectM preset load compiles
+                # shaders on this thread) can hold it until the blend is over
+                # rather than paying it on the frames that already cost two
+                # full effect renders.  Derived from live state each frame, so
+                # the flag cannot be left set on a stranded effect.
+                _blending = self._next_effect is not None
+                if self._current_effect is not None:
+                    self._current_effect.transition_active = _blending
+                if self._next_effect is not None:
+                    self._next_effect.transition_active = True
                 allow_current_effect_update = True
                 allow_next_effect_update = True
                 if manager_modal_active and self._next_effect is None:
