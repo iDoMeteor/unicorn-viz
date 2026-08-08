@@ -79,6 +79,12 @@ def _normalize_latency(latency: str | float) -> str | float:
     return 'low'
 
 
+#: Added to a candidate's rank when it is a real input (microphone, line-in)
+#: rather than an output being monitored.  Larger than the whole rank scale,
+#: so every output sorts ahead of every input without disturbing the order
+#: within either group.
+_INPUT_RANK_PENALTY = 1000
+
 #: Name fragments that identify a loopback/monitor source on any platform.
 _OUTPUT_NAME_HINTS = ('monitor', 'loopback', 'stereo mix', 'what u hear')
 
@@ -186,6 +192,8 @@ def _candidate_monitor_devices(
 
     # Compute one best rank per device to avoid duplicate candidates.
     best_rank: dict[int, int] = {}
+    # Queried once: one pactl call for the whole ranking pass.
+    sink_descriptions = _pulse_sink_descriptions()
 
     # Check for OBS (informational only)
     for i, d in enumerate(devices):
@@ -257,6 +265,18 @@ def _candidate_monitor_devices(
             rank = 8
         elif 'obs' in name:
             rank = 99
+
+        # Outputs before inputs, always.  The tiers above detect a monitor by
+        # looking for 'monitor' in the device name and by hostapi — neither of
+        # which holds for PipeWire endpoints reached through the JACK hostapi,
+        # where every device is a plain description ('DDJ-REV1 Analog Surround
+        # 4.0').  On such a machine every candidate lands in the same tier and
+        # the order collapses to USB enumeration order, which put five
+        # microphones ahead of the output actually carrying the show.  pactl
+        # knows the difference, so the penalty below applies it while leaving
+        # the relative order inside each group intact.
+        if not _is_output_source(d.get('name', ''), sink_descriptions):
+            rank += _INPUT_RANK_PENALTY
 
         prev = best_rank.get(i)
         if prev is None or rank < prev:

@@ -219,3 +219,66 @@ def test_viable_flags_follow_the_reorder_and_divider_is_never_viable() -> None:
     app = _app_with(mgr)
     app.get_audio_sources()
     assert app.get_audio_source_viable_flags() == [True, False, False]
+
+
+# --------------------------------------------------------------------------
+# Auto-selection ranking
+# --------------------------------------------------------------------------
+
+def test_outputs_rank_ahead_of_inputs(monkeypatch) -> None:
+    """Regression: the show's output ranked 7th, below five microphones.
+
+    The Linux tiers detect a monitor from the device *name* and hostapi.
+    PipeWire endpoints arriving through the JACK hostapi satisfy neither —
+    they are plain descriptions — so every candidate landed in one tier and
+    the order degraded to USB enumeration order.
+    """
+    import unicornviz.audio.capture as cap_mod
+
+    devices = [
+        {'name': 'C922 Pro Stream Webcam Analog Stereo', 'max_input_channels': 2,
+         'hostapi': 0},
+        {'name': 'DDJ-REV1 Analog Stereo', 'max_input_channels': 2, 'hostapi': 0},
+        {'name': 'HD Webcam C615 Mono', 'max_input_channels': 1, 'hostapi': 0},
+        {'name': 'DDJ-REV1 Analog Surround 4.0', 'max_input_channels': 4,
+         'hostapi': 0},
+        {'name': 'Built-in Audio Analog Stereo', 'max_input_channels': 2,
+         'hostapi': 0},
+    ]
+    sinks = {'ddj-rev1 analog surround 4.0', 'built-in audio analog stereo'}
+
+    monkeypatch.setattr(cap_mod, '_SD_AVAILABLE', True)
+    monkeypatch.setattr(cap_mod, '_pulse_sink_descriptions', lambda: sinks)
+    monkeypatch.setattr(cap_mod.sd, 'query_devices', lambda: devices)
+    monkeypatch.setattr(
+        cap_mod.sd, 'query_hostapis',
+        lambda: [{'name': 'JACK Audio Connection Kit'}],
+    )
+
+    order = [d for d in cap_mod._candidate_monitor_devices('') if d is not None]
+    kinds = [
+        cap_mod._is_output_source(devices[i]['name'], sinks) for i in order
+    ]
+    assert kinds == sorted(kinds, reverse=True), (
+        'every output must precede every input'
+    )
+    # The controller's output is now reachable before any microphone.
+    assert order.index(3) < order.index(2)
+
+
+def test_ranking_unchanged_when_nothing_can_be_classified(monkeypatch) -> None:
+    """No pactl and no name hints: degrade to the previous order, not chaos."""
+    import unicornviz.audio.capture as cap_mod
+
+    devices = [
+        {'name': 'Device A', 'max_input_channels': 2, 'hostapi': 0},
+        {'name': 'Device B', 'max_input_channels': 2, 'hostapi': 0},
+    ]
+    monkeypatch.setattr(cap_mod, '_SD_AVAILABLE', True)
+    monkeypatch.setattr(cap_mod, '_pulse_sink_descriptions', lambda: set())
+    monkeypatch.setattr(cap_mod.sd, 'query_devices', lambda: devices)
+    monkeypatch.setattr(
+        cap_mod.sd, 'query_hostapis', lambda: [{'name': 'PulseAudio'}])
+
+    order = [d for d in cap_mod._candidate_monitor_devices('') if d is not None]
+    assert order == [0, 1]
