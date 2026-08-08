@@ -1940,7 +1940,15 @@ class App:
             try:
                 self._webcam_system = webcam_cls(self._ctx, self._width, self._height, cam_cfg)
             except Exception as exc:
-                log.warning('WebcamSystem init failed: %s', exc)
+                # Full traceback: a constructor failure here disables the
+                # entire webcam subsystem for the session, and a bare
+                # one-line message (e.g. an AttributeError from a
+                # construction-order bug) gives no way to find the cause.
+                log.warning(
+                    'WebcamSystem DISABLED — constructor failed: %s. '
+                    'The camera overlay will not be available this session.',
+                    exc, exc_info=True,
+                )
                 self._webcam_system = _NullWebcamSystem(self._ctx, self._width, self._height, cam_cfg)
             if not isinstance(self._webcam_system, _NullWebcamSystem):
                 try:

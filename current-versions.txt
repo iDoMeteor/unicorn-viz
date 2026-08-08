@@ -4,10 +4,10 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.50       BETA          module
+  core (unicornviz)             1.0.0-beta.51       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.164.0             alpha ▲       module
+  dj-mixer-01                   0.165.0             alpha ▲       module
   media-01                      0.20.0              alpha ▲       module
   games-01                      0.13.1              alpha ▲       module
   cosmic-01                     0.11.1              alpha ▲       module
@@ -41,7 +41,7 @@
   vector-01                     0.9.1               alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  webcam-01                     1.0.0-rc.2          RC            module
+  webcam-01                     1.0.0-rc.3          RC            module
 
   ── alpha ─────────────────────────────────────────────────────────────────
   banner-01                     0.8.1               alpha         module

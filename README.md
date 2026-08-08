@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.50**
+**Version 1.0.0-beta.51**
 
 ## Contact Me!
 
@@ -544,6 +544,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.51** — **Webcam drop-in restored** (webcam-01 1.0.0-rc.3): the rc.2 privacy change made `__init__` reach the capture worker before it existed, and the resulting `AttributeError` was swallowed by the guarded loader — silently disabling the entire webcam subsystem. Core now logs that failure with a full traceback and says plainly that the subsystem is DISABLED, rather than emitting a bare one-line message. video-out-01 0.4.0 makes its own failures visible too: the toggle reports whether publishing actually started instead of always claiming success.
 - **1.0.0-beta.50** — Mixer-only boot got ~0.7s faster: the help-entry and
   tour-slide discovery scans (which import every drop-in module they visit —
   ~1.5s cold across the whole repo) are now scoped by the boot profile, so
