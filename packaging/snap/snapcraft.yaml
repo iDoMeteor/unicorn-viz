@@ -8,6 +8,7 @@ description: |
 
 grade: devel
 confinement: devmode
+license: MIT
 
 apps:
   unicorn-viz:
@@ -25,3 +26,16 @@ parts:
     source: ../..
     requirements:
       - requirements.txt
+
+  # Attribution: MIT/BSD/Apache dependencies require their notices to travel
+  # with any binary distribution.  Regenerate THIRD_PARTY_LICENSES.md with
+  # tools/gen_third_party_licenses.py when requirements.txt pins change.
+  licenses:
+    plugin: dump
+    source: ../..
+    organize:
+      LICENSE: usr/share/doc/unicorn-viz/LICENSE
+      THIRD_PARTY_LICENSES.md: usr/share/doc/unicorn-viz/THIRD_PARTY_LICENSES.md
+    stage:
+      - usr/share/doc/unicorn-viz/LICENSE
+      - usr/share/doc/unicorn-viz/THIRD_PARTY_LICENSES.md

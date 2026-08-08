@@ -15,6 +15,12 @@ modules:
     buildsystem: simple
     build-commands:
       - python3 -m pip install --no-deps --prefix=/app .
+      # Attribution: MIT/BSD/Apache dependencies require their notices to
+      # travel with any binary distribution.  Regenerate THIRD_PARTY_LICENSES.md
+      # with tools/gen_third_party_licenses.py when pins change.
+      - install -Dm644 LICENSE /app/share/licenses/io.unicornviz.UnicornViz/LICENSE
+      - install -Dm644 THIRD_PARTY_LICENSES.md
+        /app/share/licenses/io.unicornviz.UnicornViz/THIRD_PARTY_LICENSES.md
     sources:
       - type: dir
         path: ../..
