@@ -2,12 +2,43 @@
 
 Owner: owner (solo studio) + agents
 Status: Active — the working checklist for the first public release
-Last updated: 2026-08-07 (platform priority corrected to Linux-first; video interop added)
+Last updated: 2026-08-08 (performance remediation + a live-fault block found during owner testing)
 
 Sources: [2026-08-03 full-system audit](../audits/2026-08-03-full-system-audit.md),
 [2026-08-03 Windows platform report](../audits/2026-08-03-windows-platform-report.md),
 [installers plan](installers.md),
 [Windows native-deps field notes](../packaging/windows-native-deps-2026-07-11.md).
+
+## Added 2026-08-08 — found by running the thing, not by reading it
+
+None of these were on the original list.  All were found during owner
+testing this week and are now closed; they are recorded because they say
+something about where the remaining risk is.
+
+- [x] **[P0]** Audio source selection could **kill the process**: selecting a
+      microphone replaced the capture stream while the reader thread was
+      still inside `stream.read()`, corrupting the heap.  Surfaced as
+      `Fatal Python error: Aborted` with no Python traceback. *(beta.56)*
+- [x] **[P1]** Recordings had **no audio** — the recorder captured the
+      default sink's monitor, which is silent whenever the set plays through
+      anything else.  Measured -91 dB (digital silence) in real captures. *(beta.54)*
+- [x] **[P1]** Recordings played back at the **wrong speed** whenever the
+      render loop fell below the muxed rate, and drifted off their own audio. *(beta.54)*
+- [x] **[P1]** Auto-selection ranked the DJ controller's output **7th, below
+      five microphones**, because the monitor-detection heuristic does not
+      fire for PipeWire-via-JACK endpoints. *(beta.57)*
+- [x] **[P1]** webcam+mirror performance: unchanged camera frames re-uploaded
+      every frame; present guard starving the mixer to quarter rate. *(beta.53,
+      webcam-01 rc.4 — see [performance-remediation-plan-2026-08-08.md](performance-remediation-plan-2026-08-08.md))*
+- [x] **[P2]** ProjectM shader compiles landing inside scene crossfades. *(beta.55,
+      projectm-01 0.10.1)*
+
+**The pattern worth noting:** every one of these was invisible to tests and
+audits and obvious within minutes of real use.  The largest remaining RC1
+risks below are the same shape — Windows and multi-head items that no one
+has actually run.
+
+---
 
 Legend: **[P0]** ship-blocker for RC1 · **[P1]** should land in RC1 ·
 **[P2]** acceptable to slip to RC2/1.0 · **(D)** owner decision needed first.
@@ -39,8 +70,11 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - [x] **[P1][M]** videos-01: fix decoder-thread EOF blocking-put leak, the
       no-audio-device frozen-clock path, and the dead `reached_bottom`
       contract (auto-advance parks otherwise). *(done — videos-01 0.7.1)*
-- [ ] **[P2][M]** Recording capture: reuse the existing streaming PBO path
-      instead of the synchronous per-frame drawable read.
+- [x] **[P2][M]** Recording capture: reuse the existing streaming PBO path
+      instead of the synchronous per-frame drawable read. *(done — beta.49
+      frame tap: one readback fanned out to recording/streaming/video-out;
+      beta.54 additionally caps the recording readback at the muxed frame
+      rate, which it had been ignoring entirely.)*
 - [ ] **[P2][S]** video-clips-01: move `cap.read()`/seek off `render()`.
 
 ## B. Windows platform (second target as of 2026-08-07 — see the Windows report)
@@ -75,6 +109,9 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
       PipeWire/DMA-BUF, NDI after. Prerequisite: single shared frame tap in
       core so recording/streaming/interop stop each doing their own readback.
       See [video-output-interop-plan-2026-08-07.md](video-output-interop-plan-2026-08-07.md).
+      *(frame tap done — beta.49. v4l2loopback done — video-out-01 0.4.x,
+      appears in OBS. PipeWire/DMA-BUF via libfunnel implemented, pixels not
+      yet confirmed on screen. NDI not started. Scorecard row D → B.)*
 
 - [ ] **[P0][D]** Decide the public drop-in channel: all 39 submodules are
       private SSH — a public clone gets zero drop-ins. Options: public
