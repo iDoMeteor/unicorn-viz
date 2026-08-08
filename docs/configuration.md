@@ -199,7 +199,7 @@ budget.
 | `ffmpeg_path`    | str    | `"ffmpeg"`  | Path to the ffmpeg executable used for recording. |
 | `container`      | str    | `"mp4"`     | Output container extension for saved recordings. |
 | `fps`            | int    | `60`         | Constant frame rate the recording is muxed at. Frames are paced to this rate on wallclock, so a slow render loop yields a real-time-length file rather than a sped-up one; the app also caps its readback here. |
-| `codec`          | str    | `"libx264"` | Video codec used for recording. |
+| `codec`          | str    | `"auto"`   | Video codec. `"auto"` probes for a working hardware encoder (NVENC → VA-API → QSV) and falls back to `libx264`; the probe encodes a real frame, since a built-in encoder may still be unusable. Any explicit name is used as given. |
 | `preset`         | str    | `"veryfast"`| ffmpeg encoder preset for performance/quality tradeoff. |
 | `crf`            | int    | `18`         | H.264 quality target; lower is higher quality. |
 | `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |

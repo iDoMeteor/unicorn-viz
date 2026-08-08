@@ -115,7 +115,9 @@ _DEFAULTS: dict[str, Any] = {
         "ffmpeg_path": "ffmpeg",
         "container": "mp4",
         "fps": 60,
-        "codec": "libx264",
+        # "auto" probes for a working hardware H.264 encoder once and
+        # falls back to software x264 when none is usable.
+        "codec": "auto",
         "preset": "veryfast",
         "crf": 18,
         "pixel_format": "yuv420p",

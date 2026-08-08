@@ -48,6 +48,73 @@ def _send_graceful_stop(process: subprocess.Popen) -> None:
         process.send_signal(signal.SIGINT)
 
 
+#: Hardware H.264 encoders, best-first.  Each entry is
+#: ``(codec, pre_input_args, filter_suffix, quality_flag)``:
+#:
+#: * ``pre_input_args`` must appear before any ``-i`` (VA-API opens its
+#:   device there);
+#: * ``filter_suffix`` is appended to the video filter chain, since VA-API
+#:   encodes from GPU surfaces and needs the frame uploaded first;
+#: * ``quality_flag`` replaces ``-crf``, which is an x264 concept the
+#:   hardware encoders reject.
+_HW_ENCODERS: tuple[tuple[str, list[str], str, str], ...] = (
+    ('h264_nvenc', [], '', '-cq'),
+    ('h264_vaapi', ['-vaapi_device', '{device}'], 'format=nv12,hwupload', '-qp'),
+    ('h264_qsv', [], '', '-global_quality'),
+)
+
+#: Probe result, cached for the process.  ``False`` means "probed, none work".
+_hw_encoder_cache: tuple[str, list[str], str, str] | None | bool = None
+
+
+def _render_device() -> str:
+    """First DRM render node, used as the VA-API device."""
+    nodes = sorted(Path('/dev/dri').glob('renderD*')) if Path('/dev/dri').is_dir() else []
+    return str(nodes[0]) if nodes else '/dev/dri/renderD128'
+
+
+def _probe_hw_encoder(ffmpeg_path: str) -> tuple[str, list[str], str, str] | None:
+    """Return the first hardware encoder that actually encodes, or None.
+
+    Being *built* into ffmpeg says nothing about whether it runs here: a
+    driver may be missing, or -- on Fedora -- present but built without the
+    patent-encumbered encoders, which reports 'No usable encoding profile
+    found' only when you try.  So each candidate is asked to encode a real
+    frame, and the answer is cached for the process.
+    """
+    global _hw_encoder_cache
+    if _hw_encoder_cache is not None:
+        return _hw_encoder_cache or None
+
+    device = _render_device()
+    for codec, pre_input, filt, quality in _HW_ENCODERS:
+        pre = [a.format(device=device) for a in pre_input]
+        cmd = [
+            ffmpeg_path, '-hide_banner', '-loglevel', 'error', '-y',
+            *pre,
+            '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=1',
+        ]
+        if filt:
+            cmd += ['-vf', filt]
+        cmd += ['-c:v', codec, '-f', 'null', '-']
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=20.0)
+        except Exception as exc:
+            log.debug('Recording: %s probe failed to run: %s', codec, exc)
+            continue
+        if proc.returncode == 0:
+            log.info('Recording: hardware encoder available: %s', codec)
+            _hw_encoder_cache = (codec, pre, filt, quality)
+            return _hw_encoder_cache
+        detail = (proc.stderr or b'').decode('utf-8', 'replace').strip().splitlines()
+        log.debug('Recording: %s unavailable (%s)', codec,
+                  detail[0] if detail else f'exit {proc.returncode}')
+
+    log.info('Recording: no working hardware encoder; using software x264')
+    _hw_encoder_cache = False
+    return None
+
+
 class Recorder:
     """Manage an ffmpeg subprocess for recording raw RGB frames to disk."""
 
@@ -58,7 +125,7 @@ class Recorder:
         self._ffmpeg_path = str(cfg.get('recording', 'ffmpeg_path', default='ffmpeg'))
         self._container = str(cfg.get('recording', 'container', default='mp4'))
         self._fps = int(cfg.get('recording', 'fps', default=60))
-        self._codec = str(cfg.get('recording', 'codec', default='libx264'))
+        self._codec = str(cfg.get('recording', 'codec', default='auto'))
         self._preset = str(cfg.get('recording', 'preset', default='veryfast'))
         self._crf = int(cfg.get('recording', 'crf', default=18))
         self._pixel_format = str(cfg.get('recording', 'pixel_format', default='yuv420p'))
@@ -78,6 +145,9 @@ class Recorder:
         # Set by the app from the analyzer's active source, see
         # set_audio_source_hint().
         self._source_hint: str = ''
+        # Encoder actually selected at spawn (see _resolve_encoder).
+        self._active_codec: str = ''
+        self._retrying_software: bool = False
         self._last_error: str = ''
         # Async writer state.  The render thread publishes into a single
         # latest-frame slot; a daemon thread paces that slot out to ffmpeg's
@@ -114,6 +184,11 @@ class Recorder:
     @property
     def show_indicator(self) -> bool:
         return self._show_indicator
+
+    @property
+    def active_codec(self) -> str:
+        """Encoder chosen for the current/most recent recording."""
+        return self._active_codec or self._codec
 
     @property
     def target_fps(self) -> int:
@@ -449,10 +524,28 @@ class Recorder:
             return 'pulse', self._resolve_pulse_source()
         return input_format, self._audio_input_device or 'default'
 
+    def _resolve_encoder(self) -> tuple[str, list[str], str, str]:
+        """Return ``(codec, pre_input, filter_suffix, quality_flag)`` to use.
+
+        ``codec = "auto"`` probes for a working hardware encoder and falls
+        back to software x264 when none is usable -- which is the normal
+        outcome on a stock Fedora box, where the shipped VA-API driver has
+        no H.264 encoder at all.
+        """
+        if self._codec.strip().lower() == 'auto':
+            hw = _probe_hw_encoder(self._ffmpeg_path)
+            if hw is not None:
+                return hw
+            return 'libx264', [], '', '-crf'
+        return self._codec, [], '', '-crf'
+
     def _build_command(self, output_path: Path) -> list[str]:
+        codec, pre_input, filter_suffix, quality_flag = self._resolve_encoder()
+        self._active_codec = codec
         command = [
             self._ffmpeg_path,
             '-y',
+            *pre_input,
             '-loglevel',
             'error',
             '-nostdin',
@@ -493,21 +586,20 @@ class Recorder:
         command += ['-map', '0:v:0']
         if self._resolved_audio_input is not None:
             command += ['-map', '1:a:0']
-        command += [
-            # GL reads back bottom-up; flip once here rather than on the CPU.
-            '-vf',
-            'vflip',
-            '-c:v',
-            self._codec,
-            '-preset',
-            self._preset,
-            '-crf',
-            str(self._crf),
-            '-pix_fmt',
-            self._pixel_format,
-            '-movflags',
-            '+faststart',
-        ]
+        # GL reads back bottom-up; flip once here rather than on the CPU.
+        # Hardware encoders append their own upload step to this chain.
+        vfilter = 'vflip' + (f',{filter_suffix}' if filter_suffix else '')
+        command += ['-vf', vfilter, '-c:v', codec]
+        if codec == 'libx264':
+            # -preset is an x264 concept; hardware encoders name their own
+            # speed controls differently and reject it.
+            command += ['-preset', self._preset]
+        command += [quality_flag, str(self._crf)]
+        if not filter_suffix:
+            # A GPU-surface pipeline sets its own output format; forcing one
+            # here would insert a download and undo the point of the thing.
+            command += ['-pix_fmt', self._pixel_format]
+        command += ['-movflags', '+faststart']
         if self._resolved_audio_input is not None:
             command += [
                 '-c:a',
@@ -606,7 +698,7 @@ class Recorder:
             self._process = None
             self._current_path = None
             log.error(self._last_error)
-            return False
+            return self._retry_in_software()
 
     def _stderr_reader_worker(self) -> None:
         """Daemon thread: drain ffmpeg's stderr so it can never block.
@@ -630,6 +722,29 @@ class Recorder:
                 log.warning('ffmpeg: %s', line)
         except Exception as exc:
             log.debug('Recording stderr reader exited: %s', exc)
+
+    def _retry_in_software(self) -> bool:
+        """Fall back to x264 once when a hardware encoder failed to spawn.
+
+        The probe encodes a real frame, so a hardware encoder that gets this
+        far usually works -- but a driver can still refuse the actual
+        resolution or run out of surfaces.  A recording that silently does
+        not happen is the worst outcome, so give up the acceleration rather
+        than the recording.  Guarded so the retry cannot recurse.
+        """
+        global _hw_encoder_cache
+        if self._active_codec in ('', 'libx264') or self._retrying_software:
+            return False
+        log.warning(
+            'Recording: %s failed to start; retrying with software x264',
+            self._active_codec,
+        )
+        _hw_encoder_cache = False  # do not re-pick it this session
+        self._retrying_software = True
+        try:
+            return self.start()
+        finally:
+            self._retrying_software = False
 
     def _frame_writer_worker(self) -> None:
         """Daemon thread: pace the latest frame out to ffmpeg at constant rate.

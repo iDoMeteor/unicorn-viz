@@ -280,3 +280,53 @@ def test_pinning_and_clearing_the_audio_source() -> None:
     assert rec._audio_input_device == 'pinned.monitor'
     rec.set_pulse_source_name('')
     assert rec._audio_input_device == ''
+
+
+# --------------------------------------------------------------------------
+# Encoder selection
+# --------------------------------------------------------------------------
+
+def test_explicit_codec_is_never_overridden(monkeypatch) -> None:
+    """A pinned codec must not be silently swapped for hardware."""
+    import unicornviz.recording as rec_mod
+    monkeypatch.setattr(rec_mod, '_probe_hw_encoder',
+                        lambda _p: ('h264_vaapi', [], 'x', '-qp'))
+    rec = _recorder(codec='libx264')
+    assert rec._resolve_encoder()[0] == 'libx264'
+
+
+def test_auto_uses_hardware_when_the_probe_succeeds(monkeypatch) -> None:
+    import unicornviz.recording as rec_mod
+    monkeypatch.setattr(
+        rec_mod, '_probe_hw_encoder',
+        lambda _p: ('h264_vaapi', ['-vaapi_device', '/dev/dri/renderD128'],
+                    'format=nv12,hwupload', '-qp'))
+    rec = _recorder(codec='auto', capture_audio=False)
+    cmd = rec._build_command(Path('/tmp/o.mp4'))
+    assert '-c:v' in cmd and cmd[cmd.index('-c:v') + 1] == 'h264_vaapi'
+    # VA-API opens its device before any input.
+    assert cmd.index('-vaapi_device') < cmd.index('-i')
+    # Frames must be uploaded to the GPU after the flip.
+    assert 'vflip,format=nv12,hwupload' in cmd
+    # -crf and -preset are x264 concepts the hardware encoders reject.
+    assert '-crf' not in cmd
+    assert '-preset' not in cmd
+    assert '-qp' in cmd
+
+
+def test_auto_falls_back_to_software_when_no_hardware(monkeypatch) -> None:
+    """The normal outcome on a stock Fedora box, and it must still record."""
+    import unicornviz.recording as rec_mod
+    monkeypatch.setattr(rec_mod, '_probe_hw_encoder', lambda _p: None)
+    rec = _recorder(codec='auto', capture_audio=False)
+    cmd = rec._build_command(Path('/tmp/o.mp4'))
+    assert cmd[cmd.index('-c:v') + 1] == 'libx264'
+    assert '-crf' in cmd
+    assert '-preset' in cmd
+    assert '-pix_fmt' in cmd
+
+
+def test_software_retry_does_not_recurse() -> None:
+    rec = _recorder(codec='auto')
+    rec._active_codec = 'libx264'
+    assert rec._retry_in_software() is False
