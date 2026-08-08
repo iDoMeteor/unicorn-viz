@@ -171,6 +171,24 @@ check the following before changing config:**
 
 ---
 
+## `[render]`
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `internal_scale` | float | `1.0` | Internal render resolution multiplier. |
+| `fps_limit` | int | `30` | Render frame cap. `0` follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank). Also on the config editor's Visuals tab. |
+
+**Why the default is 30, not 60.** A loop that cannot finish inside one
+vblank misses it and lands on the next one regardless, so the effective rate
+is already halved — but unevenly, because some frames make it and some do
+not, and that unevenness is what reads as judder. Asking for every second
+vblank up front trades a nominally lower number for a *steady* one, and it
+leaves GPU headroom for a capture tool sharing the same adapter. Raise it to
+`60`, or set `0` to follow the display, if your scene comfortably fits the
+budget.
+
+---
+
 ## `[recording]`
 
 | Key              | Type   | Default      | Description |

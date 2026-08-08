@@ -37,6 +37,7 @@ fps = 30
 # preset = "veryfast"
 
 [render]
+# fps_limit = 30   # 0 = follow display vsync; 24 | 30 | 60
 
 [overlays]
 flash_messages = false

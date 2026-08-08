@@ -74,7 +74,10 @@ def test_audio_rows_without_audio_manager(tmp_path: Path) -> None:
 def test_visuals_global_rows(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     rows = app.config_editor_global_rows('Visuals')
-    assert [r['name'] for r in rows] == ['render_scale']
+    assert [r['name'] for r in rows] == [
+        'render_scale',
+        'fps limit 0=display/24/30/60',
+    ]
     assert (rows[0]['min'], rows[0]['max']) == (0.5, 1.0)
 
 

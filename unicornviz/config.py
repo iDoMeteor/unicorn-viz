@@ -101,6 +101,12 @@ _DEFAULTS: dict[str, Any] = {
     },
     "render": {
         "internal_scale": 1.0,
+        # Render frame cap. 0 follows the display's own vsync; a positive
+        # value locks to the nearest whole division of the refresh rate.
+        # 30 by default: a 4K spanned canvas rarely finishes inside a 60 Hz
+        # vblank, and a steady 30 looks better than an unstable 45-60 while
+        # leaving GPU headroom for a capture tool on the same adapter.
+        "fps_limit": 30,
     },
     "recording": {
         "enabled": True,

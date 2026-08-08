@@ -1888,7 +1888,7 @@ class App:
             raise RuntimeError(
                 f"SDL_GL_CreateContext failed: {sdl2.SDL_GetError().decode()}"
             )
-        sdl2.SDL_GL_SetSwapInterval(1)  # vsync
+        self._apply_frame_limit()
 
         self._set_cursor_visible(self._show_cursor_default)
 
@@ -3414,10 +3414,90 @@ void main() {
             specs.append({'key': 'visuals.render_scale', 'name': 'render_scale',
                           'value': float(self._render_scale), 'min': 0.5, 'max': 1.0,
                           'set': self.set_render_scale})
+            specs.append({'key': 'visuals.fps_limit',
+                          'name': 'fps limit 0=display/24/30/60',
+                          'value': float(self._frame_limit_index()),
+                          'min': 0.0,
+                          'max': float(len(self._FRAME_LIMIT_CHOICES) - 1),
+                          'set': self._set_frame_limit_index})
         elif tab == 'Recording':
             specs.extend(self._config_editor_recording_specs())
         specs.extend(self._config_editor_dropin_specs(tab))
         return specs
+
+    # Selectable render frame-rate caps.  0 means "follow the display".
+    #
+    # Locking below the display rate is deliberate rather than a compromise:
+    # a loop that cannot finish inside one vblank misses it and lands on the
+    # next one anyway, so the *effective* rate is already halved -- but with
+    # jitter, because some frames make it and some do not.  Asking for every
+    # second vblank up front trades a nominally lower number for a steady
+    # one, and the eye reads steadiness as smoothness far more than it reads
+    # the raw figure.  It also halves the GPU budget the visualizer competes
+    # for with a capture tool sharing the same adapter.
+    _FRAME_LIMIT_CHOICES = (0, 24, 30, 60)
+
+    def _display_refresh_hz(self) -> float:
+        """Current display refresh rate, or 60.0 when it cannot be read."""
+        try:
+            mode = sdl2.SDL_DisplayMode()
+            if sdl2.SDL_GetCurrentDisplayMode(
+                max(0, int(self._display_index)), mode
+            ) == 0 and int(mode.refresh_rate) > 0:
+                return float(mode.refresh_rate)
+        except Exception as exc:
+            log.debug('Could not read display refresh rate: %s', exc)
+        return float(TARGET_FPS)
+
+    def _apply_frame_limit(self) -> None:
+        """Set the GL swap interval from the configured frame cap.
+
+        Implemented as a swap interval rather than a sleep loop: waiting on
+        the vblank is what keeps the cadence exact and tear-free, where a
+        timer would drift against it and reintroduce the judder this exists
+        to remove.  A cap that does not divide the refresh rate evenly is
+        rounded to the nearest interval that does, and reported.
+        """
+        target = int(self.cfg.get('render', 'fps_limit', default=30))
+        if target <= 0:
+            sdl2.SDL_GL_SetSwapInterval(1)
+            log.info('Frame limit: following display vsync')
+            return
+        refresh = self._display_refresh_hz()
+        interval = max(1, int(round(refresh / float(target))))
+        sdl2.SDL_GL_SetSwapInterval(interval)
+        effective = refresh / float(interval)
+        if abs(effective - target) > 0.5:
+            log.info(
+                'Frame limit: %d fps requested, locking to %.1f fps '
+                '(every %d vblank(s) of a %.0f Hz display)',
+                target, effective, interval, refresh,
+            )
+        else:
+            log.info('Frame limit: locked to %.0f fps (vsync/%d)', effective, interval)
+
+    def _frame_limit_index(self) -> int:
+        """Current render frame cap as a slider index."""
+        current = int(self.cfg.get('render', 'fps_limit', default=30))
+        if current in self._FRAME_LIMIT_CHOICES:
+            return self._FRAME_LIMIT_CHOICES.index(current)
+        return min(
+            range(len(self._FRAME_LIMIT_CHOICES)),
+            key=lambda i: abs(self._FRAME_LIMIT_CHOICES[i] - current),
+        )
+
+    def _set_frame_limit_index(self, value: float) -> None:
+        """Apply and persist a new render frame cap.  Takes effect at once."""
+        idx = max(0, min(len(self._FRAME_LIMIT_CHOICES) - 1,
+                         int(round(float(value)))))
+        target = self._FRAME_LIMIT_CHOICES[idx]
+        self.cfg.set_override('render', 'fps_limit', target)
+        self.set_runtime_state('render_fps_limit', float(target))
+        self._apply_frame_limit()
+        self._subsys_skip_ms_cached = 0.0  # re-derive the present guard
+        if self._overlays is not None:
+            label = 'display vsync' if target <= 0 else f'{target} fps'
+            self._overlays.flash_message(f'Frame limit: {label}', 3.0)
 
     # Selectable recording frame rates.  Deliberately a short list of the
     # rates that actually make sense for a capture rather than a free
@@ -4127,6 +4207,9 @@ void main() {
         # A latency change from the config editor is persisted rather than
         # applied live (see _set_audio_latency_index); honour it here, at the
         # one point where the capture stream has not been opened yet.
+        _persisted_limit = self.get_runtime_state('render_fps_limit', default=None)
+        if isinstance(_persisted_limit, (int, float)):
+            self.cfg.set_override('render', 'fps_limit', int(_persisted_limit))
         _persisted_latency = self.get_runtime_state('audio_latency', default=None)
         if isinstance(_persisted_latency, str) and _persisted_latency.strip():
             self.cfg.set_override('audio', 'latency', _persisted_latency.strip())

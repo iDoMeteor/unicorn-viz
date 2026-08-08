@@ -189,7 +189,8 @@ def test_audio_out_in_audio(tmp_path: Path) -> None:
 def test_no_dropins_no_extra_rows(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     names = [r['name'] for r in app.config_editor_global_rows('Visuals')]
-    assert names == ['render_scale']  # no contributor → nothing extra
+    # no contributor → only the core Visuals rows
+    assert names == ['render_scale', 'fps limit 0=display/24/30/60']
 
 
 def test_profile_persists_and_restores_dropin_setting(tmp_path: Path) -> None:
