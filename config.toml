@@ -107,6 +107,14 @@ enabled = true
 [color_grade]
 start_enabled = false       # passive grade on at boot; Ctrl+Shift+Alt+L toggles
 
+[video_postfx]
+enabled = true
+# video_dir = ""             # override; default this drop-in's own videos/ folder
+# max_layers = 4             # simultaneous chroma-keyed video layers (1-16)
+# key_tolerance = 0.14       # RGB distance below which a pixel is keyed out (0-1)
+# key_softness = 0.06        # smoothstep edge width added to key_tolerance
+# key_color = ""             # optional "R,G,B" override; empty = auto-detect per clip
+
 [auto_vj]
 enabled = true
 beat_tracker_engine = "v3"   # freezes the tempo prior while confidently locked (see docs/adr/vj-system.md)

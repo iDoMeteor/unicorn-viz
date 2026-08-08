@@ -59,6 +59,7 @@ Complex drop-ins should also include:
 | training-kit-01 | Yes | Yes | Auto VJ training tools: corpus packaging, scoring, daemon |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | video-out-01 | Yes | Not required | Video output interop: v4l2loopback virtual camera (PipeWire/NDI planned) |
+| video-postfx-01 | Yes | Yes | Chroma-keyed video overlay stack post subsystem |
 | vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
 | video-clips-01 | Yes | Not required | Video Clips: audio-reactive clip montage (directory-group selection) |
 | videos-01 | Yes | Not required | Video Player: whole videos with audio (ffpyplayer); manual-only |
@@ -167,5 +168,10 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/streaming-01/docs/configuration.md)
   - [Integration](../drop-ins/streaming-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/streaming-01/docs/troubleshooting.md)
+- video-postfx-01
+  - [Operations](../drop-ins/video-postfx-01/docs/operations.md)
+  - [Configuration](../drop-ins/video-postfx-01/docs/configuration.md)
+  - [Integration](../drop-ins/video-postfx-01/docs/integration.md)
+  - [Troubleshooting](../drop-ins/video-postfx-01/docs/troubleshooting.md)
 - webcam-01
   - [Planning](../drop-ins/webcam-01/docs/planning.md)

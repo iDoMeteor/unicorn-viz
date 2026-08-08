@@ -79,7 +79,8 @@
   lyrics-01                     0.3.0               early alpha   module
   video-out-01                  0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
+  video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
-  41 components total  ·  7 RC  1 beta  33 alpha  0 unversioned
+  42 components total  ·  7 RC  1 beta  34 alpha  0 unversioned
 

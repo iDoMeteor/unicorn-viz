@@ -388,6 +388,14 @@ def _load_osc_bridge_controller_class() -> type:
     )
 
 
+def _load_video_postfx_controller_class() -> type:
+    """Load VideoPostFxController from the video-postfx-01 drop-in."""
+    return load_dropin_symbol(
+        'video-postfx-01/video_postfx_controller.py',
+        'VideoPostFxController',
+    )
+
+
 def _load_lyrics_controller_class() -> type:
     """Load LyricsController from the lyrics-01 drop-in."""
     return load_dropin_symbol(
@@ -473,6 +481,7 @@ class App:
         self._postfx_controller = None
         self._color_grade = None
         self._beat_flash = None
+        self._video_postfx = None
         self._dancing_unicorn = None
         self._rainbow_nova = None
         self._unicorn_tears: Any = None
@@ -2037,6 +2046,34 @@ class App:
                     self._beat_flash = None
                     log.warning('BeatFlashController not available: %s', exc)
 
+            # Chroma-keyed video overlay stack, last in the post chain so its
+            # composited clips are the final layer before the audience-facing
+            # overlay stack (optional drop-in).
+            video_postfx_cfg = self.cfg.get('video_postfx', default={}) or {}
+            if not isinstance(video_postfx_cfg, dict):
+                video_postfx_cfg = {}
+            if not bool(video_postfx_cfg.get('enabled', True)):
+                self._video_postfx = None
+                log.info('VideoPostFxController disabled by config')
+            else:
+                try:
+                    video_postfx_cls = _load_video_postfx_controller_class()
+                    self._video_postfx = video_postfx_cls(
+                        self._ctx,
+                        self._render_width,
+                        self._render_height,
+                        video_postfx_cfg,
+                    )
+                    self._video_postfx.set_vj_api(self.vj_api)
+                    self.vj_api.register_subsystem('video_postfx', self._video_postfx)
+                    key_handler = getattr(self._video_postfx, 'handle_key', None)
+                    if callable(key_handler):
+                        self.vj_api.register_key_handler('video_postfx', key_handler)
+                    log.info('VideoPostFxController loaded from drop-in')
+                except Exception as exc:
+                    self._video_postfx = None
+                    log.warning('VideoPostFxController not available: %s', exc)
+
             # System-level screen burst timing/transform controller (optional).
             try:
                 burst_cls = _load_screen_burst_controller_class()
@@ -2286,9 +2323,11 @@ void main() {
     def _active_post_chain(self) -> list:
         """Return the ordered list of active global post-FX controllers.
 
-        Order is postfx → colour-grade (→ beat-flash, added by that drop-in).
-        Each entry exposes the shared ``apply(src_tex, dst_fbo, dt, bass, mid,
-        treble, beat)`` contract and an ``is_active()`` predicate.
+        Order is postfx → colour-grade → beat-flash → video-postfx (last, so
+        its composited video layers are the final layer before the
+        audience-facing overlay stack takes over). Each entry exposes the
+        shared ``apply(src_tex, dst_fbo, dt, bass, mid, treble, beat)``
+        contract and an ``is_active()`` predicate.
         """
         chain: list = []
         pf = self._postfx_controller
@@ -2300,6 +2339,9 @@ void main() {
         bf = self._beat_flash
         if bf is not None and bf.is_active():
             chain.append(bf)
+        vp = self._video_postfx
+        if vp is not None and vp.is_active():
+            chain.append(vp)
         return chain
 
     def _apply_post_chain(self, dt: float) -> None:
@@ -5691,6 +5733,9 @@ void main() {
             if self._beat_flash is not None:
                 self._beat_flash.destroy()
                 self._beat_flash = None
+            if self._video_postfx is not None:
+                self._video_postfx.destroy()
+                self._video_postfx = None
             if self._current_effect:
                 self._current_effect.destroy()
             if self._next_effect:

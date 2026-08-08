@@ -119,3 +119,6 @@
 [submodule "drop-ins/video-out-01"]
 	path = drop-ins/video-out-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-video-out-01.git
+[submodule "drop-ins/video-postfx-01"]
+	path = drop-ins/video-postfx-01
+	url = git@github.com:iDoMeteor/unicorn-viz-dropin-video-postfx-01.git

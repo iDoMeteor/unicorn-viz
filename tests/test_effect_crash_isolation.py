@@ -233,6 +233,7 @@ def test_ensure_shutdown_is_idempotent_on_cold_app() -> None:
     app._postfx_controller = None
     app._color_grade = None
     app._beat_flash = None
+    app._video_postfx = None
     app._current_effect = None
     app._next_effect = None
     app._invert_vao = None
