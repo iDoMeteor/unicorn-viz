@@ -272,6 +272,10 @@ class AudioManager:
         """Return a user-facing label for the active audio input source."""
         return self._capture.current_source_label()
 
+    def source_is_output_flags(self) -> list[bool]:
+        """Per-source: True for an output being monitored, False for an input."""
+        return self._capture.source_is_output_flags()
+
     def list_sources(self) -> list[str]:
         """Return candidate capture sources for selector UI."""
         return self._capture.source_labels()

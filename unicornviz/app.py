@@ -575,6 +575,10 @@ class App:
         self._subsys_present_skips: int = 0
         self._subsys_skip_ms_cached: float = 0.0
         self._audio_manager: AudioManager | None = None
+        # Selector row -> candidate index, and which rows are dividers.
+        # Rebuilt whenever get_audio_sources() runs.
+        self._audio_source_rows: list[int] = []
+        self._audio_source_dividers: set[int] = set()
         self._midi_manager: MidiManager | None = None
         # Crash containment: per-class crash counts, the session quarantine
         # list, and the flag asking the main loop to advance off a crashed
@@ -6858,21 +6862,99 @@ void main() {
         """
         return self.vj_api.fire_midi_action(action)
 
+    #: Non-selectable divider shown between outputs and inputs in the
+    #: audio selector.  Reaching a microphone should feel deliberate.
+    AUDIO_SELECTOR_DIVIDER = '--- INPUTS (mics / line-in) ---'
+
+    def _audio_source_display(self) -> tuple[list[str], list[int], set[int]]:
+        """Build the selector's display order.
+
+        Returns ``(labels, row_to_candidate, divider_rows)``.  Outputs come
+        first, then a divider, then real inputs; both groups are sorted
+        alphabetically.  The underlying candidate order is *not* touched —
+        it encodes auto-selection priority, which is working and is not what
+        this reorder is for.
+        """
+        labels = self._audio_manager.list_sources()
+        try:
+            is_output = self._audio_manager.source_is_output_flags()
+        except Exception:
+            is_output = []
+        if len(is_output) != len(labels):
+            is_output = [True] * len(labels)
+
+        outputs = sorted(
+            (name for name, is_out in zip(labels, is_output) if is_out),
+            key=str.lower)
+        inputs = sorted(
+            (name for name, is_out in zip(labels, is_output) if not is_out),
+            key=str.lower)
+        index_of = {label: i for i, label in enumerate(labels)}
+
+        rows: list[str] = []
+        row_to_candidate: list[int] = []
+        dividers: set[int] = set()
+        for label in outputs:
+            row_to_candidate.append(index_of[label])
+            rows.append(label)
+        if inputs:
+            dividers.add(len(rows))
+            row_to_candidate.append(-1)
+            rows.append(self.AUDIO_SELECTOR_DIVIDER)
+            for label in inputs:
+                row_to_candidate.append(index_of[label])
+                rows.append(label)
+        return rows, row_to_candidate, dividers
+
     def get_audio_sources(self) -> list[str]:
         """Return available audio capture sources for selector UI."""
-        return self._audio_manager.list_sources()
+        rows, self._audio_source_rows, self._audio_source_dividers = (
+            self._audio_source_display()
+        )
+        return rows
+
+    def get_audio_source_dividers(self) -> set[int]:
+        """Rows the selector must render as dividers and never land on."""
+        self.get_audio_sources()
+        return set(self._audio_source_dividers)
+
+    def _candidate_for_row(self, row: int) -> int:
+        """Map a selector row back to its underlying candidate index."""
+        if not self._audio_source_rows:
+            self.get_audio_sources()
+        if 0 <= int(row) < len(self._audio_source_rows):
+            return self._audio_source_rows[int(row)]
+        return -1
 
     def get_audio_source_index(self) -> int:
-        """Return currently selected audio source index for selector UI."""
-        return self._audio_manager.get_source_index()
+        """Return the selector row holding the active source."""
+        active = self._audio_manager.get_source_index()
+        if not self._audio_source_rows:
+            self.get_audio_sources()
+        for row, candidate in enumerate(self._audio_source_rows):
+            if candidate == active:
+                return row
+        return 0
 
     def get_audio_source_viable_flags(self) -> list[bool]:
-        """Return viability flags for audio source selector UI."""
-        return self._audio_manager.source_viable_flags()
+        """Return viability flags in selector row order."""
+        flags = self._audio_manager.source_viable_flags()
+        if not self._audio_source_rows:
+            self.get_audio_sources()
+        out: list[bool] = []
+        for candidate in self._audio_source_rows:
+            out.append(
+                False if candidate < 0 or candidate >= len(flags)
+                else bool(flags[candidate])
+            )
+        return out
 
     def select_audio_source(self, index: int) -> str:
-        """Select a specific audio source by index and return a HUD message."""
-        label = self._audio_manager.select_source(index)
+        """Select the source on a selector row and return a HUD message."""
+        candidate = self._candidate_for_row(index)
+        if candidate < 0:
+            return 'Audio source: (divider)'
+        label = self._audio_manager.select_source(candidate)
         return f'Audio source: {label}'
 
     def cycle_audio_source(self, delta: int) -> str:
@@ -6882,7 +6964,10 @@ void main() {
 
     def toggle_audio_source_viable(self, index: int) -> str:
         """Toggle viability tag for a source row and return a HUD message."""
-        _enabled, msg = self._audio_manager.toggle_source_viable(index)
+        candidate = self._candidate_for_row(index)
+        if candidate < 0:
+            return 'Not a source'
+        _enabled, msg = self._audio_manager.toggle_source_viable(candidate)
         return msg
 
     def select_postfx_slot(self, slot: int) -> str:

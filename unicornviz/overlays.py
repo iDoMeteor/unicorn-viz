@@ -596,6 +596,7 @@ class Overlays:
         self._audio_viable_flags: list[bool] = []
         self._audio_current_idx: int = 0
         self._audio_selected_idx: int = 0
+        self._audio_divider_rows: set[int] = set()
         self._midi_ports: list[str] = []
         self._midi_current_port: str = ''
         self._midi_selected_idx: int = 0   # 0 = "None (disable)"
@@ -2970,9 +2971,14 @@ void main() {
         sources: list[str],
         current_index: int,
         viable_flags: list[bool] | None = None,
+        divider_rows: set[int] | None = None,
     ) -> None:
         """Populate the audio selector source list before opening the overlay."""
         self._audio_sources = list(sources)
+        # Rows that are group headings rather than devices: rendered plainly
+        # and skipped by the cursor, so getting to a microphone takes a
+        # deliberate move past a visible break.
+        self._audio_divider_rows = set(divider_rows or ())
         if viable_flags is None or len(viable_flags) != len(self._audio_sources):
             self._audio_viable_flags = [True] * len(self._audio_sources)
         else:
@@ -2993,9 +2999,15 @@ void main() {
         return bool(self._audio_viable_flags[idx])
 
     def move_audio_selection(self, delta: int) -> None:
-        """Move the audio selector cursor by delta rows (wraps)."""
+        """Move the audio selector cursor by delta rows, skipping dividers."""
         total = max(1, len(self._audio_sources))
-        self._audio_selected_idx = (self._audio_selected_idx + delta) % total
+        step = -1 if int(delta) < 0 else 1
+        idx = (self._audio_selected_idx + int(delta)) % total
+        for _ in range(total):
+            if idx not in self._audio_divider_rows:
+                break
+            idx = (idx + step) % total
+        self._audio_selected_idx = idx
 
     def get_audio_selected_index(self) -> int:
         """Return the source index currently highlighted in selector."""
@@ -3053,6 +3065,12 @@ void main() {
         entries = self._audio_sources if self._audio_sources else ['(no sources available)']
         for i, name in enumerate(entries):
             ry = py + 80.0 + i * row_h
+            if i in self._audio_divider_rows:
+                # A group heading, not a device: no viability tag, no
+                # cursor, and visually quiet so the break reads as a break.
+                self._draw_text(name, px + 22, ry + 5, scale=2.4,
+                                color=(0.55, 0.55, 0.65, 0.75))
+                continue
             is_sel = i == self._audio_selected_idx
             is_active = i == self._audio_current_idx
             is_viable = True

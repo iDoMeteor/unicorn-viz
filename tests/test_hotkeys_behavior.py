@@ -89,9 +89,11 @@ class _Overlay:
         sources: list[str],
         current_index: int,
         viable_flags: list[bool] | None = None,
+        divider_rows: set[int] | None = None,
     ) -> None:
         self.audio_sources = list(sources)
         self.audio_selected_index = current_index
+        self.audio_divider_rows = set(divider_rows or ())
         if viable_flags is None:
             self.audio_viable_flags = [True] * len(self.audio_sources)
         else:
@@ -169,6 +171,9 @@ class _App:
 
     def get_audio_source_viable_flags(self) -> list[bool]:
         return [True, True]
+
+    def get_audio_source_dividers(self) -> set[int]:
+        return set()
 
     def select_audio_source(self, index: int) -> str:
         self.audio_source_selected = index

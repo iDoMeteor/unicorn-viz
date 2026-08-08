@@ -11,8 +11,16 @@ produced "PaAlsaStreamComponent_RegisterChannels failed" /
 
 _stop_reader_thread() now aborts the stream before joining and returns
 whether the reader actually exited; callers only close the stream when it
-did. When it didn't, the stream/thread are abandoned (the reader thread is
-daemon, so it can't block process exit) instead of racing a close.
+did. On shutdown, a stream whose reader is still alive is abandoned (the
+reader thread is daemon, so it can't block process exit) instead of racing
+a close.
+
+The live source-switch path goes further and **refuses the switch**
+outright in that case.  Abandoning the old stream and opening a new one
+anyway looked survivable but was not: the reader may still be inside
+stream.read(), and replacing the stream underneath it corrupts the heap.
+That lands as `Fatal Python error: Aborted` at the next allocation, with
+no exception to catch and no clue where it came from.
 """
 from __future__ import annotations
 
@@ -249,7 +257,7 @@ def test_stop_does_not_close_stream_when_reader_thread_hangs() -> None:
 # _switch_to_candidate_index: same abandon-don't-race behavior on live switch
 # --------------------------------------------------------------------------- #
 
-def test_switch_candidate_does_not_close_old_stream_when_reader_hangs() -> None:
+def test_switch_candidate_refused_when_reader_hangs() -> None:
     cap = _make_capture(block_size=256)
     old_stream = _RecordingStream()
     cap._stream = old_stream
@@ -280,14 +288,16 @@ def test_switch_candidate_does_not_close_old_stream_when_reader_hangs() -> None:
 
         assert old_stream.stop_called is False
         assert old_stream.close_called is False
-        # The switch still proceeds onto the new device rather than wedging.
-        assert cap._stream is new_stream
+        # The switch is REFUSED and the old stream stays in place.
+        #
+        # This previously proceeded onto the new device on the reasoning
+        # that wedging was worse.  It is not: _stop_reader_thread's contract
+        # says the reader may still be inside stream.read(), and replacing
+        # the stream underneath it corrupts the heap.  That surfaces as
+        # `Fatal Python error: Aborted` from whatever allocates next — no
+        # exception, no traceback, the whole app gone mid-set.  Keeping the
+        # current source is strictly better than losing the process.
+        assert cap._stream is old_stream
     finally:
         never.set()
-        # _switch_to_candidate_index's _open_stream() started a REAL
-        # _blocking_reader_worker thread against new_stream. Its read() has
-        # no delay, so a tight while-not-stop_event loop spins a CPU core at
-        # ~100% for the rest of this pytest process if left running — stop()
-        # sets _stop_event and joins it (new_stream.read() returns instantly,
-        # so this is fast, not a repeat of the hang under test).
         cap.stop()

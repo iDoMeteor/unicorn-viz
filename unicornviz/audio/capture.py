@@ -79,6 +79,49 @@ def _normalize_latency(latency: str | float) -> str | float:
     return 'low'
 
 
+#: Name fragments that identify a loopback/monitor source on any platform.
+_OUTPUT_NAME_HINTS = ('monitor', 'loopback', 'stereo mix', 'what u hear')
+
+
+def _pulse_sink_descriptions() -> set[str]:
+    """Return lowercased descriptions of Pulse/PipeWire *outputs*.
+
+    PipeWire endpoints reach sounddevice by their human description
+    ('Built-in Audio Analog Stereo'), which gives no clue whether the
+    endpoint is a speaker's monitor or a microphone.  pactl knows, so it
+    decides.  Returns an empty set when pactl is unavailable, in which case
+    callers fall back to name hints.
+    """
+    try:
+        proc = subprocess.run(
+            ['pactl', 'list', 'sinks'],
+            check=True, capture_output=True, text=True, timeout=5.0,
+        )
+    except Exception as exc:
+        log.debug('Audio: sink enumeration unavailable (%s)', exc)
+        return set()
+    out: set[str] = set()
+    for line in proc.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('Description:'):
+            desc = stripped.split(':', 1)[1].strip().lower()
+            if desc:
+                out.add(desc)
+    return out
+
+
+def _is_output_source(name: str, sink_descriptions: set[str]) -> bool:
+    """True when a capture device is really an output being monitored.
+
+    Outputs are safe to listen to — they carry the show.  Real inputs are
+    microphones and line-ins, which is why they are not enabled by default.
+    """
+    lower = name.strip().lower()
+    if any(hint in lower for hint in _OUTPUT_NAME_HINTS):
+        return True
+    return lower in sink_descriptions
+
+
 def _candidate_monitor_devices(
     hint: str,
     *,
@@ -344,6 +387,45 @@ class AudioCapture:
     def _candidate_keys(self) -> list[str]:
         return [self._source_key_for_device(device) for device in self._candidate_devices]
 
+    def source_is_output_flags(self) -> list[bool]:
+        """Per-candidate: True for an output being monitored, False for an input.
+
+        Outputs carry the show; inputs are microphones and line-ins.  The
+        selector groups by this, and it decides what is enabled by default.
+        """
+        if not self._candidate_devices:
+            return []
+        sinks = _pulse_sink_descriptions()
+        flags: list[bool] = []
+        for device in self._candidate_devices:
+            if device is None:
+                # The OS default source: treat as an input, since on a
+                # typical desktop that is the microphone.
+                flags.append(False)
+                continue
+            try:
+                name = str(sd.query_devices(device).get('name', ''))
+            except Exception:
+                name = ''
+            flags.append(_is_output_source(name, sinks))
+        return flags
+
+    def _default_viable_keys(self) -> set[str]:
+        """Keys enabled when no operator preference has been saved yet.
+
+        Only outputs.  Selecting a microphone is a deliberate act, not
+        something that should happen by cursoring one row too far — and on
+        this stack picking the wrong input can take the process down.
+        If nothing classifies as an output, fall back to enabling
+        everything rather than leaving the operator with no usable source.
+        """
+        keys = self._candidate_keys()
+        outputs = {
+            key for key, is_out in zip(keys, self.source_is_output_flags())
+            if is_out
+        }
+        return outputs or set(keys)
+
     def _apply_source_state_preferences(self) -> None:
         if not self._candidate_devices:
             return
@@ -359,7 +441,7 @@ class AudioCapture:
 
         candidate_keys = self._candidate_keys()
         if not self._viable_source_keys:
-            self._viable_source_keys = set(candidate_keys)
+            self._viable_source_keys = self._default_viable_keys()
             self._save_source_state()
             return
         valid = {k for k in self._viable_source_keys if k in candidate_keys}
@@ -670,15 +752,21 @@ class AudioCapture:
         # Pre-allocate mono scratch to avoid a heap allocation per block.
         scratch = np.empty(blocksize, dtype=np.float32)
         is_first_block = True
+        # Bind the stream *once*, for the life of this thread.  Re-reading
+        # self._stream each iteration meant a reader could pick up a stream
+        # opened by a later source switch while still holding the blocksize
+        # and scratch buffer it started with — a thread operating on a stream
+        # that was never its own.  One thread, one stream: if the stream is
+        # replaced, this thread's job is to exit, not to follow it.
+        own_stream = self._stream
         while not self._stop_event.is_set():
-            stream = self._stream
-            if stream is None or not self._active:
+            if own_stream is None or not self._active or self._stream is not own_stream:
                 break
             try:
-                if stream.read_available < blocksize:
+                if own_stream.read_available < blocksize:
                     time.sleep(_READER_POLL_INTERVAL_S)
                     continue
-                data, overflow = stream.read(blocksize)
+                data, overflow = own_stream.read(blocksize)
             except Exception as exc:
                 if not self._stop_event.is_set():
                     log.warning('Audio reader: stream.read() failed: %s', exc)
@@ -699,8 +787,15 @@ class AudioCapture:
                     self._suppressed_status_count = 0
                 else:
                     self._suppressed_status_count += 1
+            # Take our own copy before any arithmetic.  What read() hands
+            # back is tied to PortAudio's buffers; running numpy over it
+            # while a source switch tears the stream down underneath is a
+            # use-after-free, and the abort surfaces later at whatever the
+            # next malloc happens to be (observed: a heap corruption abort
+            # inside `mono * mono`, nowhere near the real cause).
+            data = np.array(data, dtype=np.float32, copy=True)
             # Downmix to mono using pre-allocated scratch (no per-block heap alloc)
-            n = len(data)
+            n = min(len(data), blocksize)
             if data.ndim > 1 and data.shape[1] > 1:
                 np.mean(data[:n], axis=1, out=scratch[:n])
                 mono = scratch[:n]
@@ -1018,17 +1113,22 @@ class AudioCapture:
             old_stream = self._stream
             self._stream = None
             reader_exited = self._stop_reader_thread(old_stream)
+            if old_stream is not None and not reader_exited:
+                # _stop_reader_thread's contract: when this is False the
+                # reader may still be inside stream.read(), so the stream
+                # must not be closed or replaced.  Opening the new stream
+                # anyway used to be treated as acceptable — it is not, and
+                # it takes the whole app down with a heap-corruption abort
+                # rather than an exception anything can catch.  Keep the
+                # current source and tell the operator.
+                log.warning(
+                    'Audio: reader thread still running; source switch '
+                    'refused to avoid tearing down a stream in use'
+                )
+                self._stream = old_stream
+                return self.current_source_label()
             if old_stream is not None:
-                if reader_exited:
-                    self._close_stream_safely(old_stream, context='operator source select')
-                else:
-                    # See stop()'s comment: closing while the reader may still
-                    # be inside read() on this stream risks a crash. Abandon
-                    # it (daemon thread cleans up on its own) and proceed.
-                    log.warning(
-                        'Audio: reader thread still running after source-select '
-                        'abort; abandoning old stream instead of racing its close'
-                    )
+                self._close_stream_safely(old_stream, context='operator source select')
             self._open_stream(target_device)
             self._candidate_index = bounded_idx
             self._selected_source_key = self._source_key_for_device(target_device)
@@ -1046,7 +1146,20 @@ class AudioCapture:
             return self.current_source_label()
 
     def select_source(self, index: int) -> str:
-        """Select a specific capture source by candidate index."""
+        """Select a specific capture source by candidate index.
+
+        Refuses sources tagged non-viable.  Activation used to happen on
+        Return regardless of the tag, so a source deliberately marked
+        unusable could still be made active by accident — which on this
+        stack can mean opening a device that takes the process down.
+        """
+        flags = self.source_viable_flags()
+        if flags and 0 <= int(index) < len(flags) and not flags[int(index)]:
+            log.info(
+                'Audio: source %d is tagged non-viable; activation refused',
+                int(index),
+            )
+            return self.current_source_label()
         return self._switch_to_candidate_index(index)
 
     def cycle_source(self, delta: int) -> str:
@@ -1064,7 +1177,18 @@ class AudioCapture:
         if len(self._candidate_devices) <= 1:
             return self.current_source_label()
         step = -1 if int(delta) < 0 else 1
-        target_idx = (self.current_source_index() + step) % len(self._candidate_devices)
+        # Step over non-viable sources rather than landing on one: cycling is
+        # a live hotkey, and it must not be able to hand the show to a
+        # microphone the operator has explicitly ruled out.
+        flags = self.source_viable_flags()
+        total = len(self._candidate_devices)
+        target_idx = (self.current_source_index() + step) % total
+        for _ in range(total):
+            if not flags or target_idx >= len(flags) or flags[target_idx]:
+                break
+            target_idx = (target_idx + step) % total
+        else:
+            return self.current_source_label()
         return self._switch_to_candidate_index(target_idx)
 
     def source_viable_flags(self) -> list[bool]:
@@ -1078,7 +1202,7 @@ class AudioCapture:
             self._candidate_index = 0
         keys = self._candidate_keys()
         if not self._viable_source_keys:
-            self._viable_source_keys = set(keys)
+            self._viable_source_keys = self._default_viable_keys()
             self._save_source_state()
         return [k in self._viable_source_keys for k in keys]
 

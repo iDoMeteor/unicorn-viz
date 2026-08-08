@@ -1540,14 +1540,16 @@ class HotkeyHandler:
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
                 viable_flags = a.get_audio_source_viable_flags()
-                o.set_audio_sources(sources, current_idx, viable_flags)
+                o.set_audio_sources(sources, current_idx, viable_flags,
+                                    a.get_audio_source_dividers())
                 o.toggle_audio_selector()
             else:
                 # A-family default — open audio source selector menu.
                 sources = a.get_audio_sources()
                 current_idx = a.get_audio_source_index()
                 viable_flags = a.get_audio_source_viable_flags()
-                o.set_audio_sources(sources, current_idx, viable_flags)
+                o.set_audio_sources(sources, current_idx, viable_flags,
+                                    a.get_audio_source_dividers())
                 o.toggle_audio_selector()
 
         elif sym == sdl2.SDLK_b:
