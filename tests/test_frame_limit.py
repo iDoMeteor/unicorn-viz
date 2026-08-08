@@ -79,3 +79,32 @@ def test_choices_include_display_and_the_common_rates() -> None:
     assert App._FRAME_LIMIT_CHOICES[0] == 0
     for rate in (24, 30, 60):
         assert rate in App._FRAME_LIMIT_CHOICES
+
+
+# --------------------------------------------------------------------------
+# CLI overrides
+# --------------------------------------------------------------------------
+
+def _overrides(argv):
+    """Config overrides produced by a command line."""
+    from unicornviz.__main__ import _build_overrides, _build_parser
+    return _build_overrides(_build_parser().parse_args(argv))
+
+
+def test_fps_limit_flag_overrides_config() -> None:
+    assert _overrides(['--fps-limit', '60'])['render']['fps_limit'] == 60
+
+
+def test_fps_limit_zero_is_not_dropped_as_falsy() -> None:
+    """0 means 'follow the display' — it must survive the override plumbing."""
+    assert _overrides(['--fps-limit', '0'])['render']['fps_limit'] == 0
+
+
+def test_record_codec_flag_overrides_config() -> None:
+    assert _overrides(['--record-codec', 'h264_vaapi'])['recording']['codec'] == 'h264_vaapi'
+
+
+def test_unset_flags_leave_the_section_alone() -> None:
+    ov = _overrides([])
+    assert 'fps_limit' not in ov.get('render', {})
+    assert 'codec' not in ov.get('recording', {})

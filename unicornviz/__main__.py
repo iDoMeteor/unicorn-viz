@@ -70,6 +70,12 @@ def _build_parser() -> argparse.ArgumentParser:
     fullscreen.add_argument('--fullscreen', action='store_true', help='Start fullscreen.')
     fullscreen.add_argument('--windowed', action='store_true', help='Start windowed.')
 
+    display.add_argument(
+        '--fps-limit', type=int, metavar='FPS',
+        help='Render frame cap; 0 follows the display vsync. Locks to the '
+             'nearest whole division of the refresh rate (default 30).',
+    )
+
     demo = parser.add_argument_group('playlist / transitions')
     demo.add_argument('--mode', choices=['sequential', 'random'], help='Playlist mode.')
     demo.add_argument('--effect-duration', type=float, help='Seconds per effect in auto-play mode.')
@@ -103,6 +109,12 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument('--record-dir', help='Directory for saved recordings.')
     recording.add_argument('--record-fps', type=int, help='Recording output FPS.')
     recording.add_argument('--record-crf', type=int, help='Recording video quality CRF value.')
+    recording.add_argument(
+        '--record-codec',
+        help="Recording video codec. 'auto' probes for a working hardware "
+             "encoder (NVENC/VA-API/QSV) and falls back to libx264; or name "
+             "one explicitly, e.g. libx264, h264_vaapi, h264_nvenc.",
+    )
     recording.add_argument('--ffmpeg-path', help='Path to the ffmpeg executable.')
     recording.add_argument('--record-audio-device', help='Pulse/PipeWire audio input device/source name for recording.')
 
@@ -170,6 +182,7 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     put('recording', 'directory', args.record_dir)
     put('recording', 'fps', args.record_fps)
     put('recording', 'crf', args.record_crf)
+    put('recording', 'codec', args.record_codec)
     put('recording', 'ffmpeg_path', args.ffmpeg_path)
     put('recording', 'audio_input_device', args.record_audio_device)
 
@@ -194,6 +207,7 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     if args.mixer:
         put('dj_mixer', 'mixer_only', True)
 
+    put('render', 'fps_limit', args.fps_limit)
     put('logging', 'level', args.log_level)
     return overrides
 
