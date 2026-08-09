@@ -1259,6 +1259,8 @@ void main() {
         taps = list(self._bpm_tap_times)
         if taps and now - taps[-1] > self.BPM_TAP_RESET_S:
             taps = []
+        if not taps:
+            log.info('BPM tapper: tap sequence started (KP 0)')
         taps.append(now)
         taps = taps[-self.BPM_TAP_MAX_TAPS:]
         self._bpm_tap_times = tuple(taps)
@@ -1288,13 +1290,17 @@ void main() {
             f'TAP {self._bpm_tap_value:5.1f} BPM'
             if self._bpm_tap_value > 0.0 else 'TAP  ---  BPM'
         )
-        scale = 2.0
-        text_w = len(text) * 8.0 * scale
+        scale = 2.6
+        # Real glyph advance (matches _char_quads), not the 8px legacy cell —
+        # keeps the readout flush right instead of drifting toward center.
+        char_w = float(self._glyph_w) * scale * self._font_scale_norm
+        char_h = float(self._glyph_h) * scale * self._font_scale_norm
+        text_w = len(text) * char_w
         x = self._width - text_w - 24.0
         y = 14.0
         if self._recording_active and self._show_recording_indicator:
             y += 34.0   # clear the recording dot + timer row
-        self._draw_rect(x - 10.0, y - 6.0, text_w + 20.0, 8.0 * scale + 12.0,
+        self._draw_rect(x - 10.0, y - 6.0, text_w + 20.0, char_h + 12.0,
                         (0.02, 0.04, 0.08, 0.62))
         pulse = 0.75 + 0.25 * math.sin(self._hud_t * 6.0)
         self._draw_text(text, x, y, scale=scale,
@@ -2976,8 +2982,11 @@ void main() {
         if include_recording_indicator:
             self._render_recording_indicator()
 
-        if not route_modals_elsewhere:
-            self._render_bpm_tapper()
+        # Corner readout, NOT gated on route_modals_elsewhere: like the
+        # recording indicator it belongs to the audience window even while
+        # the control room mirrors the HUD/modals (the gate hid it entirely
+        # when the CR was open — there is no CR-side tapper surface yet).
+        self._render_bpm_tapper()
 
         if self._cta.is_active:
             self._cta.render(dt, self._ctx, self._draw_rect, self._width, self._height)
