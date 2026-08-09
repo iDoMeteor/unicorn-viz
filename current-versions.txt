@@ -77,9 +77,9 @@
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
-  webcam-01                     1.1.0               early alpha   MISMATCH (readme=1.0.0-rc.4)
+  webcam-01                     1.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
   42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
-  ⚠  2 version mismatch(es): dj-mixer-01, webcam-01
+  ⚠  1 version mismatch(es): dj-mixer-01
 

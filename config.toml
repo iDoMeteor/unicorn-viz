@@ -164,7 +164,14 @@ pip_scale      = 0.25            # fraction of viewport width (0.12 – 0.80)
 border_thickness = 1.0           # border/backplate thickness in pixels
 # border_color   = [0.04, 0.72, 1.0, 0.28]  # RGBA 0.0 – 1.0
 # treatment      = "neon"          # raw | neon | glitch | vintage | thermal
+# cycle_interval now only sets the auto-cycle baseline: effects show for
+# half this value, the plain camera in between shows for the full value
+# (normal -> effect -> normal -> effect -> ...). Only affects auto-cycle
+# mode (Ctrl+KP Enter); manual treatment switching is unaffected.
 cycle_interval = 10               # auto-cycle interval in s (0 = 30 s default)
+# selfie_seg = false  # per-camera; toggle live per-camera in the Config
+                       # Editor's Visuals tab (requires mediapipe -- see
+                       # drop-ins/webcam-01/requirements.txt)
 
 [effects.ImageShowcase]
 preload_images = true        # true = warm image cache at startup
