@@ -76,7 +76,25 @@ class AudioProfile:
 
     # Spectral features for the profile recommender.  Set to None to skip
     # scoring on that dimension (safe for profiles without calibrated values).
-    # spectral_centroid_mu: frequency-weighted mean of spectrum (Hz) — "brightness"
+    # spectral_centroid_mu: frequency-weighted mean of spectrum (Hz) — "brightness".
+    #   2026-08-09: recalibrated for all 20 profiles. The original values
+    #   (independently hand/LLM-authored, same synthesis pass as bpm_prior_mu
+    #   etc.) disagreed substantially with each profile's own expected_bands
+    #   fingerprint -- computing the same weighted-mean-frequency the live
+    #   recommender uses, directly against expected_bands, showed 14 of 20
+    #   profiles implied a meaningfully *brighter* target than the stated mu
+    #   (up to 1.9x for chillstep, 1.77x for house). Found live: a real
+    #   session's observed centroid (~2900-4300 Hz) looked like a wild outlier
+    #   against the old mu values but was actually close to what most
+    #   profiles' own fingerprints already implied. Now mu = the centroid
+    #   implied by that same profile's expected_bands (rounded to the nearest
+    #   50 Hz), so the two brightness representations can't disagree by
+    #   construction. This does NOT validate expected_bands itself -- see
+    #   docs/adr/vj-system.md's centroid recalibration entry for two known
+    #   ordering surprises (house now implies brighter than tech_house;
+    #   chillstep now implies brighter than synthwave) that contradict the
+    #   genres' own documented acoustic character, meaning the fingerprints
+    #   themselves may need their own accuracy pass, not just this one.
     # spectral_centroid_sigma: how tightly this genre's brightness clusters
     #   around spectral_centroid_mu (Hz). Mirrors bpm_prior_sigma's role for
     #   tempo -- a genre with a very characteristic, consistent timbral
@@ -206,7 +224,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.35,
         bpm_hint_min=120.0,
         bpm_hint_max=128.0,
-        spectral_centroid_mu=1500.0,
+        spectral_centroid_mu=2650.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.060,
         zcr_sigma=0.028,
@@ -260,7 +278,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_max=124.0,
         # Warmer/less bright than house (1500 Hz) -- the chord stabs and
         # rolled-off hats keep energy lower in the spectrum.
-        spectral_centroid_mu=1150.0,
+        spectral_centroid_mu=1250.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.048,
         zcr_sigma=0.020,
@@ -304,7 +322,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.16,
         bpm_hint_min=122.0,
         bpm_hint_max=130.0,
-        spectral_centroid_mu=1700.0,
+        spectral_centroid_mu=2550.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.065,
         zcr_sigma=0.015,
@@ -345,7 +363,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.24,
         bpm_hint_min=126.0,
         bpm_hint_max=136.0,
-        spectral_centroid_mu=2000.0,
+        spectral_centroid_mu=2350.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.072,
         zcr_sigma=0.020,
@@ -388,7 +406,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.20,
         bpm_hint_min=134.0,
         bpm_hint_max=142.0,
-        spectral_centroid_mu=2200.0,
+        spectral_centroid_mu=2000.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.080,
         zcr_sigma=0.020,
@@ -429,7 +447,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.16,
         bpm_hint_min=140.0,
         bpm_hint_max=149.0,
-        spectral_centroid_mu=2500.0,
+        spectral_centroid_mu=2150.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.090,
         zcr_sigma=0.015,
@@ -484,7 +502,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.35,
         bpm_hint_min=118.0,
         bpm_hint_max=132.0,
-        spectral_centroid_mu=1600.0,
+        spectral_centroid_mu=2050.0,
         spectral_centroid_sigma=600.0,
         # 2026-07-08: lowered 0.065 -> 0.052 (confusability pass, see ADR).
         # zcr_mu was an exact duplicate of both generic's (0.065) and
@@ -532,7 +550,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.18,
         bpm_hint_min=132.0,
         bpm_hint_max=140.0,
-        spectral_centroid_mu=1800.0,
+        spectral_centroid_mu=2500.0,
         spectral_centroid_sigma=400.0,
         # 2026-07-08: raised 0.068 -> 0.086 (confusability pass, see ADR).
         # Was tied exactly with uk_garage's zcr_mu and close to breaks',
@@ -581,7 +599,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.20,
         bpm_hint_min=128.0,
         bpm_hint_max=136.0,
-        spectral_centroid_mu=1700.0,
+        spectral_centroid_mu=2200.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.068,
         zcr_sigma=0.020,
@@ -622,7 +640,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.22,
         bpm_hint_min=132.0,
         bpm_hint_max=145.0,
-        spectral_centroid_mu=1900.0,
+        spectral_centroid_mu=2500.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.075,
         zcr_sigma=0.020,
@@ -663,7 +681,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.22,
         bpm_hint_min=142.0,
         bpm_hint_max=154.0,
-        spectral_centroid_mu=2000.0,
+        spectral_centroid_mu=2450.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.075,
         zcr_sigma=0.015,
@@ -748,7 +766,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.18,
         bpm_hint_min=168.0,
         bpm_hint_max=178.0,
-        spectral_centroid_mu=2200.0,
+        spectral_centroid_mu=1700.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.085,
         zcr_sigma=0.015,
@@ -849,7 +867,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.27,
         bpm_hint_min=70.0,
         bpm_hint_max=100.0,
-        spectral_centroid_mu=1200.0,
+        spectral_centroid_mu=1300.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.054,
         zcr_sigma=0.028,
@@ -905,7 +923,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # already documented in this profile's own comment.
         bpm_hint_min=90.0,
         bpm_hint_max=110.0,
-        spectral_centroid_mu=1800.0,
+        spectral_centroid_mu=2400.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.068,
         zcr_sigma=0.028,
@@ -973,7 +991,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # No bpm_hint_min/max: Generic is a disabled (enabled=False) catch-all
         # fallback, not a genre with a real "sweet spot" tempo range to
         # display -- see P2-E in docs/audits/2026-08-04-bpm-detector-audit.md.
-        spectral_centroid_mu=1600.0,
+        spectral_centroid_mu=2300.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.065,
         zcr_sigma=0.028,
@@ -1016,7 +1034,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.60,
         bpm_hint_min=84.0,
         bpm_hint_max=116.0,
-        spectral_centroid_mu=800.0,
+        spectral_centroid_mu=1250.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.030,
         zcr_sigma=0.028,
@@ -1067,7 +1085,7 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.50,
         bpm_hint_min=78.0,
         bpm_hint_max=112.0,
-        spectral_centroid_mu=900.0,
+        spectral_centroid_mu=1700.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.040,
         zcr_sigma=0.028,
@@ -1141,7 +1159,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # Brightness sits between chillstep's pad-only atmosphere (900 Hz)
         # and house's percussion-driven brightness (1500 Hz) -- present lead
         # synths without a hi-hat-driven treble floor.
-        spectral_centroid_mu=1200.0,
+        spectral_centroid_mu=1700.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.050,
         zcr_sigma=0.020,

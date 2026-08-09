@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.71**
+**Version 1.0.0-beta.72**
 
 ## Contact Me!
 
@@ -557,6 +557,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.72** — `spectral_centroid_mu` recalibrated for all 20 audio profiles (`unicornviz/audio/profiles.py`) -- was independently hand/LLM-authored and disagreed with each profile's own `expected_bands` fingerprint by up to 1.9x, the real premise behind a spectral-centroid recommender term dominating composite scores in a live auto-vj-01 session. Now derived directly from `expected_bands` (same weighted-mean-frequency formula the live recommender uses), so the two "brightness" representations can't disagree by construction. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "`spectral_centroid_mu` Recalibrated" (auto-vj-01).
 - **1.0.0-beta.71** — Config Editor honors an optional per-row `step` in
   drop-in settings rows, making 0/1 toggles (webcam-01 1.1.2 selfie-seg)
   actually flippable — the default (max-min)/40 notch was floored back

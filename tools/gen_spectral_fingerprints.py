@@ -581,6 +581,22 @@ def main() -> int:
     print(f'Parsed {len(fingerprints)} profiles successfully.')
 
     # Sanity-check: report per-profile peak band and centroid estimate.
+    #
+    # 2026-08-09: this centroid≈ estimate is exactly what AudioProfile's
+    # spectral_centroid_mu should be seeded from (same weighted-mean-frequency
+    # formula the live recommender uses against the real capture spectrum) --
+    # but that field has always been set independently (originally hand/LLM-
+    # authored in a separate pass, not derived from this tool's own output).
+    # The two drifted apart badly: 14 of 20 profiles' expected_bands implied
+    # a meaningfully brighter centroid than their stated spectral_centroid_mu
+    # (up to 1.9x), found live when a real session's observed centroid
+    # looked like a wild outlier against the old mu values but was actually
+    # close to what the fingerprints already implied. spectral_centroid_mu
+    # was recalibrated 2026-08-09 to match this exact number (rounded to the
+    # nearest 50 Hz) for every profile -- see the field's comment in
+    # profiles.py and docs/adr/vj-system.md. When adding a new profile here,
+    # copy the printed centroid≈ value straight into spectral_centroid_mu
+    # rather than re-deriving or re-eyeballing a separate number.
     print('\nProfile summary (peak band Hz | cosine-diagonal check):')
     for key, vec in fingerprints.items():
         peak_idx = int(np.argmax(vec))

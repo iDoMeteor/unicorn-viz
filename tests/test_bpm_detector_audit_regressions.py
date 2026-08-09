@@ -568,10 +568,14 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     """Shared setup for the two detector_trust confirmation tests below.
     Restricted to house/deep_house with bpm/centroid/zcr/onset set to the
     midpoint between the two profiles' own mus -- close enough to produce a
-    real, non-trivial margin (0.4238, calibrated empirically) rather than a
-    trivial 0.0 or 1.0 that wouldn't distinguish the trust-scaling effect.
-    Current profile is 'deep_house' so the winner ('house') is a genuine
-    contest against a different candidate, not itself."""
+    real, non-trivial margin (0.1554, calibrated empirically against the
+    2026-08-09 spectral_centroid_mu recalibration -- see profiles.py's field
+    comment) rather than a trivial 0.0 or 1.0 that wouldn't distinguish the
+    trust-scaling effect. Current profile is 'deep_house' so the winner
+    ('house') is a genuine contest against a different candidate, not itself.
+    margin_cfg=0.08 leaves real headroom on both sides: low trust (~0.13)
+    needs an effective margin of ~0.62, comfortably above 0.1554; high trust
+    (~0.96) needs ~0.083, comfortably below it."""
     import unicornviz.audio.profiles as profiles_mod
     h = profiles_mod.PROFILES['house']
     dh = profiles_mod.PROFILES['deep_house']
@@ -581,7 +585,7 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     mid_onset = (h.onset_density_mu + dh.onset_density_mu) / 2
     stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=mid_onset)
     stub._app._audio_manager._profile_key = 'deep_house'
-    stub._profile_auto_reco_score_margin = 0.15
+    stub._profile_auto_reco_score_margin = 0.08
     stub._profile_auto_reco_confirm_wins = 1
     for s in stub._reco_samples:
         s['conf'] = conf
