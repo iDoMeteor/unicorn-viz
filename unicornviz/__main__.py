@@ -129,6 +129,17 @@ def _build_parser() -> argparse.ArgumentParser:
     training = parser.add_argument_group('headless training sources')
     training.add_argument('--dj-mixer-source', action='store_true', help='Force-enable dj-mixer-01 and arm headless AutoPlay for this run.')
     training.add_argument('--dj-mixer-autoplay-mode', choices=['autoload', 'cut', 'crossfade', 'smart'], help='AutoPlay mode to arm when --dj-mixer-source is set (default: cut).')
+    training.add_argument(
+        '--dj-mixer-set', metavar='NAME',
+        help='Saved mixer set to play in headless autoplay (case-insensitive). '
+             'Without it the browser stays on the whole library, which makes a '
+             'training run unrepeatable.',
+    )
+    training.add_argument(
+        '--dj-mixer-start-delay', type=float, metavar='SECONDS',
+        help='Seconds to wait after boot before the first track starts '
+             '(default 3.0), so audio, recording and both deck loads settle.',
+    )
     training.add_argument('--dj-mixer-music-dir', help='Override [dj_mixer] music_dir for this run.')
     training.add_argument('--dj-mixer-output-device', help='Override [dj_mixer] output_device for this run. Defaults to --audio-device if not given (the same sink used for capture).')
     training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run.')
@@ -203,6 +214,9 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         put('media', 'auto_play', True)
         put('media', 'media_dir', args.media_dir)
         put('auto_vj', 'auto_exit_after_finale', True)
+
+    put('dj_mixer', 'autoplay_boot_set', args.dj_mixer_set)
+    put('dj_mixer', 'autoplay_boot_delay_s', args.dj_mixer_start_delay)
 
     if args.mixer:
         put('dj_mixer', 'mixer_only', True)
