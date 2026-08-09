@@ -34,6 +34,11 @@ _build_recommender_accuracy = _MOD._build_recommender_accuracy
 _format_recommender_accuracy_block = _MOD._format_recommender_accuracy_block
 _build_shadow_comparison = _MOD._build_shadow_comparison
 _summarize_engine_versions = _MOD._summarize_engine_versions
+_load_live_detector_constants = _MOD._load_live_detector_constants
+_DETECTOR_CONSTANT_DEFAULTS = _MOD._DETECTOR_CONSTANT_DEFAULTS
+_DIRECTOR_CONSTANT_DEFAULTS = _MOD._DIRECTOR_CONSTANT_DEFAULTS
+_format_constants_line = _MOD._format_constants_line
+_format_tuning_recommendations_md = _MOD._format_tuning_recommendations_md
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -495,3 +500,111 @@ def test_write_scorecard_includes_recommender_accuracy_section(tmp_path: Path) -
     content = scorecard_path.read_text(encoding='utf-8')
     assert '## Recommender Accuracy' in content
     assert 'Accuracy:' in content
+
+
+# ---- Detector/director constants fed to the LLM tuning prompt --------------
+
+
+def test_load_live_detector_constants_matches_live_beat_grid_and_auto_vj() -> None:
+    """Mirrors test_load_live_reco_weights_matches_live_auto_vj_defaults --
+    confirms the live-read path for detector thresholds actually resolves
+    and matches the real source (beat_grid.py module constants +
+    AutoVJController's _BPM_LOCK_* class attributes), not just the fallback
+    snapshot."""
+    import importlib.util as _ilu
+    repo_root = Path(__file__).resolve().parents[1]
+    bg_spec = _ilu.spec_from_file_location(
+        'test_pts_live_beat_grid', repo_root / 'drop-ins' / 'auto-vj-01' / 'beat_grid.py')
+    assert bg_spec is not None and bg_spec.loader is not None
+    bg_mod = _ilu.module_from_spec(bg_spec)
+    bg_spec.loader.exec_module(bg_mod)
+    av_spec = _ilu.spec_from_file_location(
+        'test_pts_live_auto_vj_2', repo_root / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py')
+    assert av_spec is not None and av_spec.loader is not None
+    av_mod = _ilu.module_from_spec(av_spec)
+    av_spec.loader.exec_module(av_mod)
+
+    live = _load_live_detector_constants()
+    assert live is not None
+    for name in _DETECTOR_CONSTANT_DEFAULTS:
+        if name.startswith('_BPM_LOCK'):
+            assert live[name] == getattr(av_mod.AutoVJController, name)
+        else:
+            assert live[name] == getattr(bg_mod, name)
+
+
+def test_load_live_detector_constants_returns_none_when_auto_vj_absent(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / 'pyproject.toml').write_text('', encoding='utf-8')
+    (tmp_path / 'unicornviz').mkdir()
+    monkeypatch.setattr(_MOD, '_find_repo_root', lambda start: tmp_path)
+
+    assert _load_live_detector_constants() is None
+
+
+def test_format_constants_line_uses_equals_not_multiply() -> None:
+    """Distinct notation from _format_reco_weights_line()'s '×' -- these are
+    independent thresholds, not composite-score multipliers."""
+    line = _format_constants_line({'a': 1.5, 'b': 2})
+    assert line == 'a = 1.5, b = 2'
+
+
+def test_build_combined_prompt_includes_detector_and_director_constants() -> None:
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    live_detector = _load_live_detector_constants() or _DETECTOR_CONSTANT_DEFAULTS
+    assert _format_constants_line(live_detector) in prompt
+    assert _format_constants_line(_DIRECTOR_CONSTANT_DEFAULTS) in prompt
+
+
+def test_build_combined_prompt_weight_enum_includes_vocal_fit_terms() -> None:
+    """Regression: the weight_recommendations schema enum used to omit
+    vocal_hnr_fit/vocal_fmr_fit entirely, so the LLM could never be asked
+    to recommend a change to either -- silent coverage gap, not a crash."""
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert 'vocal_hnr_fit' in prompt
+    assert 'vocal_fmr_fit' in prompt
+
+
+def test_build_combined_prompt_flags_non_discriminating_terms() -> None:
+    """lock_rate/mean_conf/mean_dconf are session-global, not per-candidate --
+    the prompt must tell the LLM not to propose re-weighting them for
+    recommendation accuracy (see docs/adr/vj-system.md's centroid_fit entry
+    discussion of this same finding)."""
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert 'cannot affect which profile is recommended' in prompt
+
+
+def test_format_tuning_recommendations_md_renders_detector_and_director_sections() -> None:
+    tuning = {
+        'overall_assessment': 'Solid session overall.',
+        'weight_recommendations': [
+            {'weight': 'centroid_fit', 'current_coefficient': 1.0,
+             'recommended_coefficient': 0.8, 'rationale': 'Test rationale.'},
+        ],
+        'detector_recommendations': [
+            {'constant': '_BPM_LOCK_RELEASE_CONFIDENCE', 'current_value': 0.28,
+             'recommended_value': 0.22, 'rationale': 'Lock churn observed.'},
+        ],
+        'director_recommendations': [
+            {'constant': 'phrase_bias_max', 'current_value': 0.15,
+             'recommended_value': 0.18, 'rationale': 'Builds rushed.'},
+        ],
+    }
+    md = _format_tuning_recommendations_md(tuning, 'set-a', 'a', '2026-08-09T00:00:00Z', 'anthropic')
+    assert '## Recommender Weight Recommendations' in md
+    assert '## Detector Constant Recommendations' in md
+    assert '## Director Constant Recommendations' in md
+    assert '_BPM_LOCK_RELEASE_CONFIDENCE' in md
+    assert 'phrase_bias_max' in md
+    assert '## Advisory Only' in md
+
+
+def test_format_tuning_recommendations_md_omits_empty_sections() -> None:
+    tuning = {'overall_assessment': 'n/a'}
+    md = _format_tuning_recommendations_md(tuning, 'set-a', 'a', '2026-08-09T00:00:00Z', 'anthropic')
+    assert '## Recommender Weight Recommendations' not in md
+    assert '## Detector Constant Recommendations' not in md
+    assert '## Director Constant Recommendations' not in md
+    assert '## Advisory Only' in md
