@@ -1,8 +1,9 @@
 # Unicorn Viz — Licensing & Third-Party Code Audit (2026-08-08)
 
 Owner: core manager (agent) + owner
-Status: Complete — findings 3, 4, 5 remediated; findings 1, 2, 6, 9 open (owner decision)
-Last updated: 2026-08-08
+Status: Complete — findings 3, 4, 5, 10 remediated; findings 1, 2, 6, 9 open (owner decision)
+Last updated: 2026-08-09 — added Finding 10 (webcam-01's vendored MediaPipe
+selfie-segmentation model, added after this audit's original pass)
 
 Scope: every third-party thing the project depends on, links to, ships, or
 downloads — Python packages (core + drop-in), native libraries, bundled fonts,
@@ -431,6 +432,53 @@ Sources: [demucs LICENSE](https://github.com/facebookresearch/demucs/blob/main/L
 [Mixxx GSoC 2025 Demucs→ONNX writeup](https://mixxx.org/news/2025-10-27-gsoc2025-demucs-to-onnx-dhunstack/),
 [models and variants overview](https://deepwiki.com/facebookresearch/demucs/5.1-models-and-variants).
 
+## Finding 10 — webcam-01's vendored MediaPipe selfie-segmentation model — **RESOLVED 2026-08-09**
+
+**Where:** `drop-ins/webcam-01/assets/models/selfie_segmenter.tflite` (a
+committed binary, added 2026-08-09 for the optional per-camera
+background-dim feature) and `drop-ins/webcam-01/requirements.txt` (new
+file, declaring `mediapipe==1.0.0`).
+
+**Plain English:** this is a different fact pattern from every other item
+in this audit. Every other optional drop-in dependency (`essentia`,
+`mutagen`, `python-vlc`, `demucs`) is a *package* the operator installs
+themselves — nothing is committed to the repo, so the advisory-table
+treatment in Finding 3 (name only, no license text, because it's "not
+included in any bundle we produce") is the right fit. A `.tflite` model
+file dropped into `assets/models/` and committed to git is instead
+shipped *with the source repo itself* — closer in kind to the ACiD ANSi
+art (Finding 5) or the CP437 font blobs (Finding 6) than to a pip
+dependency.
+
+**What was checked:** both the `mediapipe` PyPI package's bundled
+`LICENSE` file and Google's official Model Card for this exact model
+(`selfie_segmenter`, float16 variant) were read directly. Both state
+**Apache License, Version 2.0**. The Model Card names the authors
+(Tingbo Hou, Siargey Pisarchyk, Karthik Raveendran, Google, dated
+2021-05-06) and the copyright holder (Google LLC).
+
+**What it actually means:** Apache 2.0 is permissive and, critically,
+does not restrict *use* the way the Demucs weights in Finding 9 do — it
+asks only that the license and copyright notice travel with
+redistributed copies. Committing the model file to the repo is
+therefore fine outright; the only real obligation is attribution, same
+as any other Apache/MIT/BSD dependency in Finding 3.
+
+**What was done (2026-08-09):** added
+`drop-ins/webcam-01/assets/models/NOTICE.md`, recording the model's
+origin URL, Model Card URL, authors, copyright holder, and Apache 2.0
+license text pointer, right next to the binary it documents. The
+`mediapipe` package itself stays in webcam-01's own `requirements.txt`
+as an operator-installed, non-bundled optional dependency, correctly
+covered by the existing Finding 3 advisory-table mechanism — no change
+needed there.
+
+**Note for future drop-ins:** this is the pattern to repeat if a future
+drop-in vendors a binary asset (model weights, font, sample data) rather
+than declaring a package dependency — check the asset's actual license
+(not just the license of the code that loads it) and drop a `NOTICE.md`
+beside it if permissive, or flag it here for an owner decision if it
+carries any share-alike, non-commercial, or other restriction.
 
 ---
 
@@ -447,6 +495,7 @@ Sources: [demucs LICENSE](https://github.com/facebookresearch/demucs/blob/main/L
 | 7 | Decide `mutagen` — accept as never-bundled, or replace with an in-house tag reader | GPL-2.0 in a drop-in you might one day want in a bundle | Medium | **Open — owner** |
 | 8 | Add `license` + classifier to `pyproject.toml`; fix the README hedge; pick a license for the 40 drop-in repos | Correctness and future-proofing | Low | **Open** |
 | 9 | Before any paid product *or paid performance*: replace the Demucs weights | Confirmed CC BY-NC 4.0 — restricts use, not just distribution | Medium | **Open — owner** |
+| 10 | Add `NOTICE.md` for webcam-01's vendored `selfie_segmenter.tflite` (Apache 2.0) | Committed binary asset, not an operator-installed package — attribution obligation applies at commit time, not install time | Trivial | **Done 2026-08-09** |
 
 ## Distribution posture summary
 
