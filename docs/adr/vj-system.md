@@ -1214,6 +1214,268 @@ regression tests in `tests/test_bpm_detector_audit_regressions.py`:
 check`/`bandit` on `auto_vj.py` show only pre-existing findings outside
 this diff's hunks.
 
+**Update, same day:** the "separately investigated, not fixed" vocal_hnr/
+vocal_fmr note above was resolved a few hours later — see "Vocal-Presence
+Core Bug: `AudioManager._copy_audio_into()` Never Copied `vocal_hnr`/
+`vocal_fmr`" below. Root cause was in core (`unicornviz/audio/manager.py`),
+not in the analyzer or the recommender as originally suspected.
+
+---
+
+## Subsystem Versioning: Detector / Director / Recommender Get Independent Semver (2026-08-09)
+
+Decision: `beat_grid.py` gains `_DETECTOR_VERSION`, `auto_vj.py` gains
+`_DIRECTOR_VERSION` and `_RECOMMENDER_VERSION` — each subsystem's own
+SemVer, independent of both `auto_vj.py`'s drop-in-wide `__version__` (a
+release counter for the whole package) and `_VJ_WEIGHTS_DOC_VERSION` (a
+doc-freshness counter for `weights-and-thresholds.md`, shared across all
+three subsystems). A subsystem version answers a narrower question: what
+behavioral state is *this specific subsystem* in, independent of what else
+shipped in the same drop-in release.
+
+**Why now.** The day's work (below) touches all three subsystems'
+mechanisms unevenly — the recommender gets a structural rewire, the
+detector and director get nothing this time. A single drop-in-wide version
+number (`1.0.0-rc.NN`) can't express "the recommender changed meaningfully,
+the detector and director didn't" — every rc bump reads as "something
+changed somewhere," which is true but not useful for answering "is my
+mental model of the *recommender specifically* still accurate." Owner:
+"we should really be semver'ing detector/recommender/director each
+independently and consistently, add agent rules for that and source
+comments near their origin points."
+
+**Why not fold into `_VJ_WEIGHTS_DOC_VERSION`.** That counter already
+exists and already tracks all three subsystems, but it's a doc-freshness
+signal ("has the reference doc been updated to match the code"), not a
+behavioral-state signal ("what does this subsystem currently do"). Both
+are useful, for different questions, so both stay. See CLAUDE.md
+"Subsystem Versioning (Auto VJ: Detector / Director / Recommender)" for
+the full bump discipline and `weights-and-thresholds.md`'s header (which
+now echoes all four numbers) for where they surface.
+
+**Starting values.** All three start at `0.1.0` — pre-1.0 alpha, per the
+project's existing "everything starts at `0.x` until first feature-
+complete, validated release" rule (CLAUDE.md "Versioning & Release
+Standards"). It would be inconsistent for an internal subsystem to
+leapfrog past the parent drop-in's own maturity level (`auto-vj-01` itself
+is still `1.0.0-rc.27`, not yet `1.0.0`). `_RECOMMENDER_VERSION` moves
+immediately to `0.2.0` in the same commit as the top-3-weights rewire
+below — `0.1.0` is a baseline snapshot of "state as of rc.27," not a
+release that ever shipped on its own.
+
+**Verified:** no runtime behavior depends on these constants (documentation
+and versioning-discipline only); full suite unaffected.
+
+---
+
+## Top-3-Weights Rewire: `detector_trust` Replaces the Dead Composite Terms (2026-08-09)
+
+Decision: `lock_rate`/`mean_conf`/`mean_dconf` removed from
+`_DEFAULT_RECO_WEIGHTS` and `_profile_score()`'s composite entirely. New
+`detector_trust` (a blend of `lock_rate`/`mean_dconf`, using their old
+composite weights `2.5`/`1.2` as blend ratios) scales the confirmation
+margin and gates the decider. `_RECOMMENDER_VERSION` bumped to `0.2.0`.
+
+**The problem, proven not assumed.** Digging into per-term accuracy
+(triggered by the `centroid_fit` trim earlier the same day) found that
+`lock_rate`/`mean_conf`/`mean_dconf` are computed once per eval cycle from
+the sample window, not per candidate profile — every candidate gets the
+identical value. In a weighted-sum composite, an identical constant added
+to every candidate cancels out of the ranking (`argmax` is unaffected by a
+uniform shift), the softmax margin (`best_prob - current_prob` — the
+constant appears in both `_profile_score()` calls that feed each
+probability and cancels in the subtraction), and the confirmation decision
+(gated on that same margin). Verified directly in `_maybe_apply_
+recommended_audio_profile`'s and `_update_profile_recommendation`'s
+softmax-normalization code, not inferred from behavior. Despite this,
+these three terms carried the *highest* weights in the whole table (`2.5`,
+`1.8`, `1.2` — all above `tempo_fit`'s `2.0`), meaning roughly 30% of the
+visible "weight budget" was doing nothing for recommendation accuracy.
+
+**The philosophical question, and the owner's answer.** Asked directly why
+a construct this inert would have been left in place, and what it was
+plausibly reaching for: "it was probably intended to keep the recommender
+from jumping around back when we didn't have such robust data and improved
+accuracy... and to allow it to switch immediately when confidence in
+another genre jumps confidently ahead of the current without
+flip-flopping." That reading fits the evidence: these three terms are the
+*only* ones in the composite that measure the tracker's own health
+(is it locked, how confident is the lock, how confident is downbeat phase)
+rather than how well a candidate genre fits the audio — a natural
+instinct is "don't trust a recommendation much when the detector itself
+isn't confident." The mechanism chosen to express that instinct (an
+additive term in a comparative ranking) was simply the wrong shape for the
+job — a uniform trust signal needs to scale a *threshold*, not get added
+to every candidate's *score*.
+
+**The mechanism that actually does the job.** `detector_trust` (defined in
+`_update_profile_recommendation`, module constant `_TRUST_BLEND_WEIGHTS =
+{'lock_rate': 2.5, 'mean_dconf': 1.2}` in `auto_vj.py`) now:
+
+1. Scales the confirmation margin: `effective_margin =
+   profile_auto_reco_score_margin / max(detector_trust, _TRUST_FLOOR)`.
+   At `detector_trust = 1.0` this is exactly the configured threshold
+   (today's behavior, unchanged). A shaky lock/downbeat-phase reading
+   demands a bigger margin before confirming — implements "resist
+   jumping around on weak evidence."
+2. Gates both the normal and fast-override decider paths on
+   `detector_trust >= _TRUST_FLOOR` (`0.15`) before either path's own
+   gates run — a decisive-looking score gap is not itself evidence of
+   anything if the detector barely had a lock this cycle.
+
+`mean_conf` is deliberately *not* part of the `detector_trust` blend: it
+already had a real, working role independent of the composite
+(`profile_auto_reco_decider_min_confidence`, checked in the normal
+decider path) — folding it into the blend too would have double-counted
+it. `lock_rate`/`mean_dconf` had no such role before this change; they now
+do.
+
+**A necessary side effect: fast-override migrated to probability
+thresholds.** `_maybe_apply_recommended_audio_profile`'s fast-override
+path (`profile_auto_reco_decider_force_recommended_score`/`..._force_
+current_score_cap`) compared raw composite scores against fixed absolute
+thresholds (`2.25`/`1.80`). Removing the three terms shifts every
+candidate's raw composite score down by whatever they used to contribute
+— a session-dependent amount, not a fixed offset — which would have
+silently broken those fixed thresholds (the fast-override path would have
+gone from "rarely used, works" to "practically dead" without ever
+raising an error). Migrated to the softmax probability the normal path
+already uses for exactly this reason (see the softmax-normalize comment
+in `_update_profile_recommendation`: "a single fixed additive threshold
+mean very different things across genres" — the same argument applies
+here, just discovered a day later). Renamed `..._force_recommended_prob`
+(`0.55`) / `..._force_current_prob_cap` (`0.05`); confirmed no
+`config.toml` in the wild set the old keys, so no migration shim was
+needed.
+
+**Verified:** full main-repo suite green, including new tests in
+`tests/test_bpm_detector_audit_regressions.py`:
+`test_lock_rate_mean_conf_mean_dconf_not_in_default_weights`,
+`test_low_detector_trust_requires_bigger_margin_to_confirm`,
+`test_high_detector_trust_confirms_at_configured_margin` (both calibrated
+against a real house/deep_house contest, not a synthetic score — margin
+held constant at `0.4238` while only `detector_trust` varies, confirming
+the effect is attributable to the scaling formula, not incidental score
+noise), `test_detector_trust_logged_on_profile_recommendation_event`,
+`test_recommender_decider_blocked_when_detector_trust_below_floor`, and
+updated fast-override tests (`test_fast_override_applies_despite_
+unconfirmed_recommendation`, `test_fast_override_does_not_fire_when_
+current_prob_not_capped`, `test_fast_override_uses_shorter_cooldown_than_
+normal_path`) now exercising probability thresholds instead of raw
+scores.
+
+---
+
+## Per-Profile `zcr_sigma`/`onset_density_sigma` (2026-08-09)
+
+Decision: `zcr_fit`/`onset_fit` gain the same per-profile-sigma mechanism
+`tempo_fit`/`centroid_fit` already had (`zcr_sigma`, `onset_density_sigma`
+on `AudioProfile`, three coarse tight/medium/wide tiers: `0.015`/`0.020`/
+`0.028` for zcr, `0.7`/`1.0`/`1.5` for onset). Owner: "let's do the
+research and give each profile proper sigmas for each appropriate
+weight."
+
+**Research basis.** Unlike `spectral_centroid_sigma`'s original tiers
+(assigned by genre feel alone, 2026-08-06), these were researched against
+genre-production convention for all 20 profiles plus the one genre-tagged,
+scorecard-validated training bucket available (`training-house-01`,
+house-only, 674 samples) — full per-profile rationale in
+`weights-and-thresholds.md`'s new zcr/onset sigma table. Directly
+validated for `house`: observed onset-density stdev ≈0.197 and zcr stdev
+≈0.025 from real session data, both consistent with the proposed values.
+Every other profile's tier assignment is domain-knowledge/textual-
+grounding based, not measured — same caveat `spectral_centroid_sigma`
+already carries.
+
+**Key finding: rhythmic regularity and timbral/tempo spread are
+independent properties of a genre.** The research surfaced several
+profiles where zcr and onset sigma diverge sharply from what a single
+"genre is tightly/loosely defined" intuition would predict. `house` is the
+clearest case: its `bpm_prior_sigma` (`0.35`) and `spectral_centroid_sigma`
+(`600`) are both already the widest of any profile — deliberately, since
+the owner's library spans real production diversity (tropical, afro,
+progressive house). A naive "match the existing wide tiers" rule would
+have given `house` a wide onset sigma too. But four-on-the-floor kick
+timing is mechanically regular *regardless* of production style — a
+tropical house track and a classic house track can sound completely
+different (wide zcr/centroid) while both keeping essentially metronomic
+kick spacing (tight onset). `house` ships with `zcr_sigma=0.028` (wide)
+and `onset_density_sigma=0.7` (tight) specifically to capture this split,
+and it's the one profile where real session data confirms both halves of
+it independently. `trance` and `hardgroove` show smaller versions of the
+same effect in the other direction (onset pulled tighter/looser than
+their bpm/centroid tier alone would suggest, based on the profile's own
+genre-description language about rhythmic character).
+
+**Mechanism, mirroring `centroid_fit` exactly.** `_profile_score()`'s
+`zcr_fit`/`onset_fit` now read `getattr(profile, 'zcr_sigma', 0.020)` /
+`getattr(profile, 'onset_density_sigma', 1.0)` instead of the old fixed
+`0.020`/`1.2` constants, floored at `0.005`/`0.1` against a misconfigured
+near-zero value blowing up the Gaussian (same floor pattern as
+`centroid_fit`'s `50.0` Hz floor).
+
+**Verified:** full main-repo suite green, including new tests
+`test_zcr_fit_uses_per_profile_sigma_not_fixed_020` and `test_onset_fit_
+uses_per_profile_sigma_not_fixed_1_2` in `tests/test_bpm_detector_audit_
+regressions.py`, mirroring `test_centroid_fit_uses_per_profile_sigma_not_
+fixed_400`'s isolation methodology exactly (two variants of the same
+profile, identical `mu`, only the sigma under test differs).
+
+---
+
+## Vocal-Presence Core Bug: `AudioManager._copy_audio_into()` Never Copied `vocal_hnr`/`vocal_fmr` (2026-08-09)
+
+Decision: `unicornviz/audio/manager.py`'s `AudioManager._copy_audio_into()`
+gains two missing lines (`target.vocal_hnr = source.vocal_hnr`;
+`target.vocal_fmr = source.vocal_fmr`). Owner: "let's put those to work!"
+(re: `vocal_hnr_fit`/`vocal_fmr_fit` being frozen constants, found
+digging into per-term recommender accuracy earlier the same day).
+
+**Root cause, found by live execution, not static reading.** A first pass
+(same day, earlier) read `analyzer.py`'s `_compute_vocal_hnr`/
+`_compute_vocal_fmr` and their call site and found nothing obviously
+wrong — both are genuine, non-stub implementations. The actual bug was one
+layer further out: `AudioManager._copy_audio_into()`, the hand-written
+field-by-field copy that hands the analysis thread's `AudioData` snapshot
+to the main thread's long-lived published buffers, was written before
+`vocal_hnr`/`vocal_fmr` existed on `AudioData` (`__slots__` gained them in
+a later commit, `a5b03b2`) and was never updated to include them —
+confirmed via `git log -S`, `_copy_audio_into`'s field list was last
+touched in an earlier commit (`aa921e2`, the P1 analysis-thread
+introduction) that predates `a5b03b2`. The published `AudioData` instances
+(`_last_data`/`_last_data_raw`) keep their `AudioData.__init__` default
+(`0.0`) for these two fields forever, since the one function responsible
+for updating them silently skips both, every frame.
+
+Confirmed with live execution against the real `Analyzer` and
+`AudioManager` classes (not a synthetic reproduction of the bug): fed a
+real `Analyzer()` a synthetic singing-like signal (8-harmonic tone in the
+vocal formant band, 5 Hz syllabic AM modulation) — the analyzer computed
+`vocal_hnr=0.6899`, `vocal_fmr=0.6804` correctly, but after
+`AudioManager._copy_audio_into()` those values read back as `0.0`,
+reproduced deterministically. This is exactly the symptom the historical-
+data dig found: `mean_vocal_hnr`/`mean_vocal_fmr` exactly `0.0` on all 803
+real `profile_recommendation` rows across two independent dj-mixer
+sessions, with `vocal_hnr_fit`/`vocal_fmr_fit` consequently coming out as
+frozen constants (`4.205`/`6.2422` on every row) rather than tracking
+anything about the actual audio.
+
+**Blast radius wider than the recommender.** `AudioManager.get_audio_
+data()`/`get_audio_data_raw()` are the general-purpose audio API every
+effect and drop-in reads from, not an auto-vj-01-specific path — any
+effect using `audio.vocal_hnr`/`audio.vocal_fmr` for visual reactivity has
+been silently reading zero this whole time too, not just the recommender.
+Fixed in core, not in auto-vj-01, since the bug lives in the shared
+audio-manager boundary.
+
+**Verified:** new tests in `tests/test_audio_manager_startup.py`:
+`test_copy_audio_into_copies_every_audiodata_slot` (enumerates every
+`AudioData.__slots__` entry dynamically, not just the two dropped here, so
+a *future* field added without a matching copy line fails loudly instead
+of silently reading a stale default the same way these two did) and
+`test_copy_audio_into_copies_vocal_hnr_and_fmr` (narrower, explicit
+regression naming the exact symptom). Full main-repo suite green.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

@@ -567,13 +567,20 @@ def test_build_combined_prompt_weight_enum_includes_vocal_fit_terms() -> None:
 
 
 def test_build_combined_prompt_flags_non_discriminating_terms() -> None:
-    """lock_rate/mean_conf/mean_dconf are session-global, not per-candidate --
-    the prompt must tell the LLM not to propose re-weighting them for
-    recommendation accuracy (see docs/adr/vj-system.md's centroid_fit entry
-    discussion of this same finding)."""
+    """2026-08-09: lock_rate/mean_conf/mean_dconf were retired from the
+    composite entirely (they were session-global, not per-candidate, so
+    structurally inert as weighted terms) and now scale detector_trust /
+    the confirmation gate instead -- the prompt must not ask the LLM to
+    recommend re-weighting them (there is no weight to recommend), and
+    must explain where they actually matter now."""
     detector_payload = {'essentia_available': False}
     prompt = _build_combined_prompt(detector_payload, {}, None)
-    assert 'cannot affect which profile is recommended' in prompt
+    assert 'not in this weight list' in prompt
+    assert 'detector_trust' in prompt
+    reco_weights_line = _format_reco_weights_line(_load_live_reco_weights() or _RECO_WEIGHT_DEFAULTS)
+    assert 'lock_rate' not in reco_weights_line
+    assert 'mean_conf' not in reco_weights_line
+    assert 'mean_dconf' not in reco_weights_line
 
 
 def test_format_tuning_recommendations_md_renders_detector_and_director_sections() -> None:

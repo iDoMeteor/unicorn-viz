@@ -178,8 +178,8 @@ def _make_recommender_stub(**overrides) -> SimpleNamespace:
         _profile_auto_reco_decider_min_margin=0.0,
         _profile_auto_reco_decider_min_confidence=0.0,
         _profile_auto_reco_decider_cooldown_s=20.0,
-        _profile_auto_reco_decider_force_recommended_score=2.25,
-        _profile_auto_reco_decider_force_current_score_cap=1.80,
+        _profile_auto_reco_decider_force_recommended_prob=0.55,
+        _profile_auto_reco_decider_force_current_prob_cap=0.05,
         _profile_auto_reco_decider_force_cooldown_s=6.0,
         _profile_auto_reco_last_apply_t=-1e9,
         _audio_profile_candidate_key=None,
@@ -265,27 +265,51 @@ def test_recommender_decider_does_not_double_apply_within_cooldown() -> None:
 
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
         stub, manager=manager, recommended_key='psytrance', recommended_score=1.0,
-        current_score=0.5, score_margin=1.0, mean_confidence=1.0)
+        current_score=0.5, recommended_prob=0.5, current_prob=0.1,
+        score_margin=1.0, mean_confidence=1.0, detector_trust=1.0)
     assert manager.set_calls == ['psytrance']
 
     # Immediately try again (steady track keeps recommending the same
     # switch) -- must be a no-op because the cooldown window hasn't elapsed.
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
         stub, manager=manager, recommended_key='hardstyle', recommended_score=1.0,
-        current_score=0.5, score_margin=1.0, mean_confidence=1.0)
+        current_score=0.5, recommended_prob=0.5, current_prob=0.1,
+        score_margin=1.0, mean_confidence=1.0, detector_trust=1.0)
 
     assert manager.set_calls == ['psytrance']
+
+
+def test_recommender_decider_blocked_when_detector_trust_below_floor() -> None:
+    """2026-08-09: a decisive-looking score gap is not itself evidence of
+    anything if the detector barely had a lock this cycle -- both paths
+    require detector_trust >= _TRUST_FLOOR, checked before either path's
+    own gates."""
+    stub = _make_recommender_stub()
+    manager = _FakeManager('tech_house')
+
+    _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
+        stub, manager=manager, recommended_key='psytrance', recommended_score=1.0,
+        current_score=0.5, recommended_prob=0.9, current_prob=0.01,
+        score_margin=1.0, mean_confidence=1.0,
+        detector_trust=_AUTO_VJ._TRUST_FLOOR - 0.01)
+
+    assert manager.set_calls == []
 
 
 # ---------------------------------------------------------------------------
 # Fast-override path: a strong candidate can replace an obviously weak
 # current profile without waiting out the full cooldown (documented in
 # config.toml since 2026-07-06, never actually implemented until now).
+# 2026-08-09: migrated from raw composite-score thresholds to softmax
+# probability thresholds -- removing lock_rate/mean_conf/mean_dconf from
+# the composite shifts every raw score by a session-dependent amount,
+# which would have silently broken a fixed absolute-score threshold.
 # ---------------------------------------------------------------------------
 
 def test_fast_override_applies_despite_unconfirmed_recommendation() -> None:
-    """The fast path bypasses confirm-wins/margin/confidence -- only the raw
-    score gap matters -- but still applies the (shorter) force cooldown."""
+    """The fast path bypasses confirm-wins/margin/confidence -- only the
+    probability gap matters -- but still applies the (shorter) force
+    cooldown, and still requires detector_trust >= _TRUST_FLOOR."""
     stub = _make_recommender_stub(
         _recommended_profile_confirmed=False,
         _profile_auto_reco_decider_min_margin=0.99,
@@ -295,21 +319,24 @@ def test_fast_override_applies_despite_unconfirmed_recommendation() -> None:
 
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
         stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
-        current_score=1.5, score_margin=0.0, mean_confidence=0.0)
+        current_score=1.5, recommended_prob=0.6, current_prob=0.02,
+        score_margin=0.0, mean_confidence=0.0, detector_trust=1.0)
 
     assert manager.set_calls == ['deep_house']
 
 
-def test_fast_override_does_not_fire_when_current_score_not_capped() -> None:
-    """Recommended score alone clearing the bar isn't enough -- current must
-    also be genuinely weak, else this falls through to the normal path."""
+def test_fast_override_does_not_fire_when_current_prob_not_capped() -> None:
+    """Recommended probability alone clearing the bar isn't enough -- current
+    must also be genuinely weak, else this falls through to the normal
+    path."""
     stub = _make_recommender_stub(_recommended_profile_confirmed=False)
     manager = _FakeManager('house')
 
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
         stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
-        current_score=2.0,  # above the 1.80 cap
-        score_margin=0.0, mean_confidence=0.0)
+        current_score=2.0, recommended_prob=0.6,
+        current_prob=0.20,  # above the 0.05 cap
+        score_margin=0.0, mean_confidence=0.0, detector_trust=1.0)
 
     assert manager.set_calls == []
 
@@ -321,7 +348,8 @@ def test_fast_override_uses_shorter_cooldown_than_normal_path() -> None:
     # 10s ago clears the 6s force cooldown but not the normal 20s cooldown.
     _AUTO_VJ.AutoVJController._maybe_apply_recommended_audio_profile(
         stub, manager=manager, recommended_key='deep_house', recommended_score=2.5,
-        current_score=1.5, score_margin=1.0, mean_confidence=1.0)
+        current_score=1.5, recommended_prob=0.6, current_prob=0.02,
+        score_margin=1.0, mean_confidence=1.0, detector_trust=1.0)
 
     assert manager.set_calls == ['deep_house']
 
@@ -466,6 +494,153 @@ def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._recommended_profile_key == 'wide_test'
+
+
+def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
+    """2026-08-09: same upgrade as centroid_fit (2026-08-06) and tempo_fit,
+    applied to zcr_fit -- was a fixed 0.020 for every profile, now reads
+    zcr_sigma per profile."""
+    import dataclasses
+
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['psytrance']
+    tight = dataclasses.replace(base, zcr_sigma=0.010)
+    wide = dataclasses.replace(base, zcr_sigma=0.040)
+    restricted = {'tight_test': tight, 'wide_test': wide}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    off_target_zcr = float(base.zcr_mu) + 0.03
+    stub = _make_full_reco_stub(
+        bpm=float(base.bpm_prior_mu), centroid=float(base.spectral_centroid_mu or 2000.0),
+        zcr=off_target_zcr, onset_count=float(base.onset_density_mu or 2.0),
+    )
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'wide_test'
+
+
+def test_onset_fit_uses_per_profile_sigma_not_fixed_1_2(monkeypatch) -> None:
+    """Same upgrade applied to onset_fit -- was a fixed 1.2 onsets/s for
+    every profile, now reads onset_density_sigma per profile."""
+    import dataclasses
+
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['psytrance']
+    tight = dataclasses.replace(base, onset_density_sigma=0.5)
+    wide = dataclasses.replace(base, onset_density_sigma=2.0)
+    restricted = {'tight_test': tight, 'wide_test': wide}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    off_target_onset = float(base.onset_density_mu) + 1.5
+    stub = _make_full_reco_stub(
+        bpm=float(base.bpm_prior_mu), centroid=float(base.spectral_centroid_mu or 2000.0),
+        zcr=float(base.zcr_mu or 0.08), onset_count=off_target_onset,
+    )
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'wide_test'
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: top-3-weights rewire. lock_rate/mean_conf/mean_dconf retired
+# from the composite (proven mathematically inert -- identical for every
+# candidate, so they cancel out of the ranking/margin/softmax regardless of
+# weight). detector_trust (blend of lock_rate/mean_dconf) now scales how
+# large a margin is required to confirm a recommendation.
+# ---------------------------------------------------------------------------
+
+
+def test_lock_rate_mean_conf_mean_dconf_not_in_default_weights() -> None:
+    for name in ('lock_rate', 'mean_conf', 'mean_dconf'):
+        assert name not in _AUTO_VJ._DEFAULT_RECO_WEIGHTS
+
+
+def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleNamespace:
+    """Shared setup for the two detector_trust confirmation tests below.
+    Restricted to house/deep_house with bpm/centroid/zcr/onset set to the
+    midpoint between the two profiles' own mus -- close enough to produce a
+    real, non-trivial margin (0.4238, calibrated empirically) rather than a
+    trivial 0.0 or 1.0 that wouldn't distinguish the trust-scaling effect.
+    Current profile is 'deep_house' so the winner ('house') is a genuine
+    contest against a different candidate, not itself."""
+    import unicornviz.audio.profiles as profiles_mod
+    h = profiles_mod.PROFILES['house']
+    dh = profiles_mod.PROFILES['deep_house']
+    mid_bpm = (h.bpm_prior_mu + dh.bpm_prior_mu) / 2
+    mid_centroid = (h.spectral_centroid_mu + dh.spectral_centroid_mu) / 2
+    mid_zcr = (h.zcr_mu + dh.zcr_mu) / 2
+    mid_onset = (h.onset_density_mu + dh.onset_density_mu) / 2
+    stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=mid_onset)
+    stub._app._audio_manager._profile_key = 'deep_house'
+    stub._profile_auto_reco_score_margin = 0.15
+    stub._profile_auto_reco_confirm_wins = 1
+    for s in stub._reco_samples:
+        s['conf'] = conf
+        s['dconf'] = dconf
+        s['locked'] = locked
+    return stub
+
+
+def test_low_detector_trust_requires_bigger_margin_to_confirm(monkeypatch) -> None:
+    """A margin that would confirm at full trust must NOT confirm when
+    lock_rate/mean_dconf are both weak -- the effective threshold scales up
+    as 1/detector_trust."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {'house': profiles_mod.PROFILES['house'], 'deep_house': profiles_mod.PROFILES['deep_house']}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+    # Weak lock/downbeat-phase confidence this cycle -> low detector_trust
+    # (mean_conf stays high, isolating lock_rate/dconf's contribution).
+    stub = _make_trust_test_stub(conf=0.9, dconf=0.05, locked=False)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'house'
+    event, kw = stub._engine.marks[0]
+    assert kw['detector_trust'] < 0.2   # confirms the low-trust setup actually landed
+    assert stub._recommended_profile_confirmed is False
+
+
+def test_high_detector_trust_confirms_at_configured_margin(monkeypatch) -> None:
+    """Same setup as above but with a solid lock/downbeat-phase reading --
+    confirmation should proceed normally at the configured margin."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {'house': profiles_mod.PROFILES['house'], 'deep_house': profiles_mod.PROFILES['deep_house']}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+    stub = _make_trust_test_stub(conf=0.9, dconf=0.95, locked=True)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'house'
+    event, kw = stub._engine.marks[0]
+    assert kw['detector_trust'] > 0.9   # confirms the high-trust setup actually landed
+    assert stub._recommended_profile_confirmed is True
+
+
+def test_detector_trust_logged_on_profile_recommendation_event() -> None:
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    assert event == 'profile_recommendation'
+    assert 'detector_trust' in kw
+    assert 0.0 <= kw['detector_trust'] <= 1.0
 
 
 # ---------------------------------------------------------------------------

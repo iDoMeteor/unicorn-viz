@@ -90,11 +90,36 @@ class AudioProfile:
     #   profile used before this field existed) is the default for any
     #   profile that doesn't set it explicitly.
     # zcr_mu: zero-crossing rate per sample — correlates with harshness/noise content
+    # zcr_sigma: how tightly this genre's zcr clusters around zcr_mu. Mirrors
+    #   spectral_centroid_sigma's role -- a genre with a very consistent,
+    #   narrow percussive-vs-tonal texture (e.g. cleanly quantized electronic
+    #   production) should be tight; one whose zcr varies a lot by track/
+    #   subgenre/production style should be wide.
     # onset_density_mu: expected onset events per second (with kick-biased weighting)
+    # onset_density_sigma: how tightly this genre's rhythmic density clusters
+    #   around onset_density_mu. A mechanically regular pulse (four-on-the-
+    #   floor house/techno, psytrance's rolling kick) should be tight even
+    #   when its zcr/centroid/bpm sigma is wide for other reasons; a
+    #   syncopated or variable-density genre (breaks, garage's swing,
+    #   dubstep's sparse hits) should be wide regardless of how tight its
+    #   other sigmas are -- rhythmic regularity and timbral/tempo spread are
+    #   independent properties of a genre, not the same axis in disguise.
+    #   2026-08-09: added as coarse tight/medium/wide tiers (zcr: 0.015/
+    #   0.020/0.028, onset: 0.7/1.0/1.5) from genre-convention research plus
+    #   the one genre-tagged validated training bucket available (house) --
+    #   not fitted values. 0.020/1.0 (medium) are the defaults for any
+    #   profile that doesn't set these explicitly, mirroring how 400 Hz was
+    #   spectral_centroid_sigma's pre-per-profile fixed constant. See
+    #   drop-ins/auto-vj-01/docs/weights-and-thresholds.md and docs/adr/
+    #   vj-system.md for the full per-profile rationale and the plan to
+    #   replace these with measured values once broader genre-tagged
+    #   training data exists.
     spectral_centroid_mu: float | None = None
     spectral_centroid_sigma: float = 400.0
     zcr_mu: float | None = None
+    zcr_sigma: float = 0.020
     onset_density_mu: float | None = None
+    onset_density_sigma: float = 1.0
 
     # Vocal-presence heuristics (2026-07-08, first-pass/unvalidated starting
     # values -- not yet checked against real session data the way the
@@ -184,7 +209,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1500.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.060,
+        zcr_sigma=0.028,
         onset_density_mu=2.5,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -236,7 +263,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1150.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.048,
+        zcr_sigma=0.020,
         onset_density_mu=2.0,
+        onset_density_sigma=0.7,
         # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: soulful
         # vocal chops are common but not as reliably continuous as
         # rap/hyphy/r&b's genuinely vocal-forward material -- a fabricated
@@ -278,7 +307,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1700.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.065,
+        zcr_sigma=0.015,
         onset_density_mu=2.8,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -317,7 +348,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2000.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.072,
+        zcr_sigma=0.020,
         onset_density_mu=3.2,
+        onset_density_sigma=1.0,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -358,7 +391,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2200.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.080,
+        zcr_sigma=0.020,
         onset_density_mu=3.5,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -397,7 +432,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2500.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.090,
+        zcr_sigma=0.015,
         onset_density_mu=4.0,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -457,7 +494,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # simultaneously without trading centroid/onset distance against
         # either.
         zcr_mu=0.052,
+        zcr_sigma=0.028,
         onset_density_mu=2.5,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -504,7 +543,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # this is the direction consistent with the genre's own character,
         # and numerically separates from both neighbors at once.
         zcr_mu=0.086,
+        zcr_sigma=0.020,
         onset_density_mu=3.2,
+        onset_density_sigma=1.0,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -543,7 +584,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1700.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.068,
+        zcr_sigma=0.020,
         onset_density_mu=2.8,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -582,7 +625,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1900.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.075,
+        zcr_sigma=0.020,
         onset_density_mu=3.5,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -621,7 +666,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2000.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.075,
+        zcr_sigma=0.015,
         onset_density_mu=3.5,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -663,7 +710,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1550.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.130,
+        zcr_sigma=0.015,
         onset_density_mu=4.0,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -702,7 +751,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=2200.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.085,
+        zcr_sigma=0.015,
         onset_density_mu=4.5,
+        onset_density_sigma=0.7,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -747,7 +798,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=950.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.095,
+        zcr_sigma=0.020,
         onset_density_mu=1.8,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.35,
         vocal_fmr_mu=0.25,
         expected_bands=[
@@ -799,7 +852,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1200.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.054,
+        zcr_sigma=0.028,
         onset_density_mu=1.9,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.58,
         vocal_fmr_mu=0.53,
         # Regenerated (tools/gen_spectral_fingerprints.py, scoped rerun,
@@ -853,7 +908,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1800.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.068,
+        zcr_sigma=0.028,
         onset_density_mu=2.5,
+        onset_density_sigma=1.5,
         vocal_hnr_mu=0.55,
         vocal_fmr_mu=0.5,
         # 2026-08-06: regenerated (tools/gen_spectral_fingerprints.py,
@@ -919,7 +976,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1600.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.065,
+        zcr_sigma=0.028,
         onset_density_mu=2.5,
+        onset_density_sigma=1.5,
         expected_bands=[
             0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.740, 0.760,
             0.780, 0.800, 0.720, 0.740, 0.760, 0.780, 0.800, 0.820,
@@ -960,7 +1019,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=800.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.030,
+        zcr_sigma=0.028,
         onset_density_mu=0.4,
+        onset_density_sigma=2.0,
         expected_bands=[
             0.400, 0.420, 0.440, 0.460, 0.480, 0.500, 0.520, 0.540,
             0.560, 0.580, 0.600, 0.620, 0.640, 0.750, 0.800, 1.000,
@@ -1009,7 +1070,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=900.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.040,
+        zcr_sigma=0.028,
         onset_density_mu=1.5,
+        onset_density_sigma=1.5,
         # 2026-08-06: regenerated (tools/gen_spectral_fingerprints.py,
         # scoped rerun -- see docs/adr/vj-system.md and hyphy's matching
         # comment) after a cosine-similarity audit found the previous
@@ -1081,7 +1144,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=1200.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.050,
+        zcr_sigma=0.020,
         onset_density_mu=1.9,
+        onset_density_sigma=1.0,
         # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: classic
         # synthwave (Kavinsky et al.) is predominantly instrumental, and a
         # fabricated target would be worse than no signal on this dimension.

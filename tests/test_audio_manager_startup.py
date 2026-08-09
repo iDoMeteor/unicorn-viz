@@ -3,10 +3,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from unicornviz.audio.manager import AudioManager
 from unicornviz.config import Config
+from unicornviz.effects.base import AudioData
 
 
 class _CaptureBase:
@@ -102,3 +104,56 @@ def test_start_succeeds_for_active_capture() -> None:
     manager.start(timeout_s=0.1)
     # Stop cleanly so the analysis thread doesn't leak into other tests.
     manager.stop()
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: _copy_audio_into()'s hand-written field list silently dropped
+# vocal_hnr/vocal_fmr for its entire lifetime -- they were added to
+# AudioData's __slots__ after this copy function was written and never
+# added here, so every consumer of get_audio_data()/get_audio_data_raw()
+# read the AudioData() default (0.0) forever, even though the analyzer
+# computed real nonzero values every frame. Confirmed via live execution
+# against a real Analyzer() + synthetic vocal-like signal (see
+# docs/adr/vj-system.md, auto-vj-01, for the recommender-side symptom this
+# caused: mean_vocal_hnr/mean_vocal_fmr exactly 0.0 on 803/803 real session
+# rows). This test enumerates every AudioData slot dynamically -- not just
+# the two dropped here -- so a future field added to AudioData without a
+# matching line in _copy_audio_into() fails loudly instead of silently
+# reading a stale default forever, the same way these two did.
+# ---------------------------------------------------------------------------
+
+
+def test_copy_audio_into_copies_every_audiodata_slot() -> None:
+    source = AudioData()
+    target = AudioData()
+    for i, name in enumerate(AudioData.__slots__):
+        current = getattr(source, name)
+        if hasattr(current, '__setitem__'):
+            current[:] = np.arange(len(current), dtype=current.dtype) + i + 1
+        else:
+            setattr(source, name, float(i) + 1.0)
+
+    AudioManager._copy_audio_into(source, target)
+
+    for name in AudioData.__slots__:
+        source_val = getattr(source, name)
+        target_val = getattr(target, name)
+        if hasattr(source_val, '__len__'):
+            assert list(target_val) == list(source_val), f'{name} not copied'
+        else:
+            assert target_val == source_val, f'{name} not copied'
+
+
+def test_copy_audio_into_copies_vocal_hnr_and_fmr() -> None:
+    """Narrower, explicit regression for the specific fields that were
+    dropped -- kept alongside the exhaustive test above so this exact
+    symptom has a test that names it directly."""
+    source = AudioData()
+    target = AudioData()
+    source.vocal_hnr = 0.6899
+    source.vocal_fmr = 0.6804
+
+    AudioManager._copy_audio_into(source, target)
+
+    assert target.vocal_hnr == pytest.approx(0.6899)
+    assert target.vocal_fmr == pytest.approx(0.6804)

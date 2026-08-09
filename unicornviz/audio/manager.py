@@ -132,6 +132,16 @@ class AudioManager:
         target.bass_flux = source.bass_flux
         target.mid_flux = source.mid_flux
         target.spectral_flux = source.spectral_flux
+        # 2026-08-09: vocal_hnr/vocal_fmr were added to AudioData's __slots__
+        # (see base.py) well after this hand-written field list was written,
+        # and never added here -- so every consumer of get_audio_data()/
+        # get_audio_data_raw() silently read the AudioData() default (0.0)
+        # forever, even though the analyzer computed real values every frame.
+        # Confirmed live: the analyzer's front_buf carried a real 0.69, this
+        # copy dropped it to 0.0. See docs/adr/vj-system.md (auto-vj-01) for
+        # the recommender-side symptom this caused.
+        target.vocal_hnr = source.vocal_hnr
+        target.vocal_fmr = source.vocal_fmr
         target.fft[:] = source.fft
         target.waveform[:] = source.waveform
         target.bands[:] = source.bands

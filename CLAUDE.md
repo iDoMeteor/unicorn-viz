@@ -691,6 +691,63 @@ it only requires the doc and the version constant to move with the code.
 
 ---
 
+## Subsystem Versioning (Auto VJ: Detector / Director / Recommender)
+
+The three VJ subsystems each carry their own independent semantic version,
+distinct from both `auto_vj.py`'s drop-in-wide `__version__` (a release
+counter for the whole package) and `_VJ_WEIGHTS_DOC_VERSION` above (a
+doc-freshness counter for one reference document, shared across all three
+subsystems). A subsystem version answers a narrower question: *what
+behavioral state is this specific subsystem in*, independent of what else
+shipped in the same drop-in release.
+
+**The three constants, each with a comment at its origin point explaining
+the scheme and pointing at its siblings:**
+
+- `_DETECTOR_VERSION` (`beat_grid.py`, module level) — the detector's
+  tuning state. **Not** the same axis as `ENGINE_VERSION` (a per-class
+  constant marking which architecture generation — v1/v2/v3 — is active;
+  `BeatTracker.ENGINE_VERSION` stays `'2.0.0'` across every tuning change).
+  `_DETECTOR_VERSION` moves; `ENGINE_VERSION` doesn't, until a new engine
+  generation ships.
+- `_DIRECTOR_VERSION` (`auto_vj.py`, module level, near the recommender
+  constants) — the director's phrase-bias tuning state.
+- `_RECOMMENDER_VERSION` (`auto_vj.py`, module level, right above
+  `_DEFAULT_RECO_WEIGHTS`) — the recommender's scoring-model state.
+
+**Bump rules** — same Semantic Versioning 2.0.0 discipline as the
+project-wide rules above (pre-1.0: never bump MAJOR; a user-facing/
+behavioral change bumps MINOR; a small tweak bumps PATCH), applied per
+subsystem instead of per drop-in:
+
+- `_DETECTOR_VERSION` bumps on the same trigger list as
+  `_VJ_WEIGHTS_DOC_VERSION`'s detector bullet (any `beat_grid.py` constant
+  change that alters live behavior).
+- `_DIRECTOR_VERSION` bumps on the same trigger list as
+  `_VJ_WEIGHTS_DOC_VERSION`'s director bullet.
+- `_RECOMMENDER_VERSION` bumps on the same trigger list as
+  `_VJ_WEIGHTS_DOC_VERSION`'s recommender bullet, **and also** on a
+  structural change to a term's own computation (e.g. fixing a term that
+  was silently dead) or on retiring/adding a term — changes that alter what
+  the composite score means even when no weight value changes.
+
+**Relationship to `_VJ_WEIGHTS_DOC_VERSION`:** every trigger that bumps a
+subsystem version also bumps `_VJ_WEIGHTS_DOC_VERSION` (they share the same
+underlying trigger list) — but not every `_VJ_WEIGHTS_DOC_VERSION` bump
+necessarily needs to move all three subsystem versions; only the subsystem
+actually touched moves. Keep `weights-and-thresholds.md`'s header echoing
+all four numbers (`Doc version`, `Detector version`, `Director version`,
+`Recommender version`) so a reader can see at a glance which subsystem last
+changed without cross-referencing commit history.
+
+**Agent duties — same discipline as the doc-sync obligation above:** when a
+commit bumps a subsystem version, update that subsystem's header line in
+`weights-and-thresholds.md` and add a one-line note to its ADR entry in
+`docs/adr/vj-system.md` stating the new version. This is a documentation-
+sync obligation, not a design gate, same as above.
+
+---
+
 ## VJ Training
 
 - Every packaged Auto VJ training bucket under `assets/training/sets/<set>/<bucket>/`

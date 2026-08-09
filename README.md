@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.67**
+**Version 1.0.0-beta.68**
 
 ## Contact Me!
 
@@ -557,6 +557,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.68** — **Fixed: `vocal_hnr`/`vocal_fmr` audio fields were always zero.** `AudioManager._copy_audio_into()` (the hand-written field-by-field copy that publishes the analysis thread's snapshot to the main-thread audio buffers) never copied these two fields -- added after the copy function was written, never added to it. Any effect or drop-in reading `audio.vocal_hnr`/`audio.vocal_fmr` (not just Auto VJ's recommender, where this was found) has been silently getting `0.0` regardless of what's actually playing. New regression test enumerates every `AudioData` slot dynamically so a future field added without a matching copy line fails loudly instead of the same way these two did.
 - **1.0.0-beta.67** — **KP 0 is a BPM tapper**: tap along on keypad-zero and
   a cyan readout appears in the top-right corner with the tapped tempo
   (averaged over up to 8 consecutive intervals; a 2.5 s pause starts a fresh

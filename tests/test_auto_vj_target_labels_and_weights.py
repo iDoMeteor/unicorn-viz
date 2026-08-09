@@ -81,7 +81,7 @@ def test_load_recommender_weights_overrides_known_keys(tmp_path, monkeypatch) ->
     weights = _AUTO_VJ_MODULE._load_recommender_weights()
 
     assert weights['tempo_fit'] == 3.3
-    assert weights['lock_rate'] == _AUTO_VJ_MODULE._DEFAULT_RECO_WEIGHTS['lock_rate']
+    assert weights['band_fit'] == _AUTO_VJ_MODULE._DEFAULT_RECO_WEIGHTS['band_fit']
 
 
 def test_load_recommender_weights_ignores_unknown_keys(tmp_path, monkeypatch) -> None:
