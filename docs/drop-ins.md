@@ -78,6 +78,7 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/auto-vj-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/auto-vj-01/docs/troubleshooting.md)
   - [Weights & Thresholds Reference](../drop-ins/auto-vj-01/docs/weights-and-thresholds.md)
+  - [Director scene-detection audit (2026-08-09)](../docs/audits/2026-08-09-director-scene-detection-audit.md)
   - [Training Pack Protocol](planning/auto-vj-training-pack-protocol.md)
 - banner-01
   - [Operations](../drop-ins/banner-01/docs/operations.md)
