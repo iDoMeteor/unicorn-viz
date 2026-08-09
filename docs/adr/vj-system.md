@@ -1478,6 +1478,151 @@ regression naming the exact symptom). Full main-repo suite green.
 
 ---
 
+## Live-Session Follow-Up: Centroid Runaway, HUD Clamp, Director Audit Fixes (2026-08-09)
+
+Decision: a batch of fixes triggered by watching the top-3-weights rewire
+run live for the first time, same day it shipped. Owner ran a live
+training session immediately afterward and reported the HUD pegging at
+`-9.99` repeatedly, sometimes on two different candidates at once.
+Digging into the actual corpus data (the new `term_values_by_candidate`
+logging, added earlier the same day for exactly this kind of
+investigation) found the real cause, plus surfaced three of the director
+audit's findings as things to fix immediately rather than defer.
+
+**Root cause: `centroid_fit` was structurally unbounded and swamping
+every other term.** The live session's observed spectral centroid ran
+`~3700-4000 Hz`; the *brightest*-calibrated profile in the roster
+(`psytrance`) only goes up to `2500 Hz`. Every candidate was scoring a
+catastrophic centroid mismatch, and because `-0.5*x*x` has no ceiling, the
+tightest-sigma candidates (`dubstep`, `hardstyle`, `tech_house`) reached
+composite scores past `-70` while `tempo_fit`/`band_fit`/`onset_fit`
+stayed in the low single digits for every candidate — `centroid_fit` was
+effectively the *only* term that mattered, and the recommender was
+picking almost entirely by "which candidate's `spectral_centroid_sigma`
+happens to be widest" (`house`/`hyphy`, both `600`) rather than genre fit.
+Confirmed directly from a live corpus row before touching any code:
+
+| Candidate | `centroid_fit` | everything else | total |
+| --- | --- | --- | --- |
+| `house` (won) | -8.2 | ~-1.2 | -9.0 |
+| `hyphy` | -6.3 (best centroid_fit of the field) | -1.5 | -10.3 |
+| `trance` | -9.3 | -1.2 | -10.1 |
+| `dubstep` (worst) | -71.0 | -3.5 | -74.4 |
+
+This also explains the director audit's own `treble` double-count finding
+mattering *more* than it looked in isolation: once one term can swing 10-
+50x larger than every other term combined, any smaller miscalibration
+elsewhere becomes irrelevant noise by comparison -- fixing the ceiling and
+the double-count together is what actually restores the composite to
+meaning something.
+
+**Fix 1 — every `*_fit` Gaussian term clipped at 6 sigma.** Not just
+`centroid_fit` — the owner asked directly "are there other weights that
+should be floored/capped?", and the answer is yes: `tempo_fit`,
+`zcr_fit`, `onset_fit`, `vocal_hnr_fit`, `vocal_fmr_fit`, and
+`top_cand_fit` are all the same `-0.5*x*x` form, all equally capable of
+this failure mode given a bad enough mismatch. New shared helper
+`_gaussian_fit(diff, sigma)` (nested inside `_update_profile_recommendation`,
+alongside `_safe_log2`) clips `x = diff/sigma` to
+`±_GAUSSIAN_FIT_X_CLIP` (`6.0`, a new module constant) before squaring —
+6 sigma is far enough out that no plausible real reading is affected; it
+only bites when a term is already this catastrophically miscalibrated,
+which is exactly the case this exists to contain. Ceiling: `-18.0` raw per
+term, versus the `-71.0` observed for `dubstep` pre-fix.
+
+**Fix 2 — HUD score clamp removed entirely.** `profile_recommendation_hud`/
+`current_profile_score_hud` used to clamp displayed scores to `±9.99`.
+Owner: "clamping my live metric display values is absolutely retarded...
+let's get rid of that." A clamped readout is indistinguishable from a real
+score that happens to land near the old boundary — exactly the
+information an operator watching live needs (a term blowing out to `-70`
+looks identical to a real, close `-9` once clamped), and it was the direct
+cause of "two different profiles pegged at the same number" reading as a
+false signal of agreement/confidence rather than what it actually was:
+both scores independently blowing past the display floor.
+
+**Fix 3 — `drop_score`'s treble double-count, found in the same-day
+director audit, fixed rather than just flagged.** Owner: "don't double
+count treble! that explains that lol." Both `beat_grid.py` engines
+(`BeatGridTracker`/v1 and `BeatTracker`/v2) had `treble_n` as both a
+standalone weighted term *and* inside `band_blend`. Removed the standalone
+term; the remaining terms' weights are renormalized proportionally
+(divided by their old sum) so they still sum to `1.0` rather than
+arbitrarily picking one term to inherit the freed weight. See the audit
+doc (`docs/audits/2026-08-09-director-scene-detection-audit.md`) for the
+full before/after weight tables.
+
+**Fix 4 — `allow_timeout_forced_transitions` hardcoded fallback flipped
+False → True**, per the audit's Recommendation #1 — see the "Subsystem
+Versioning" and per-constant tables in the audit doc; not re-derived here.
+Owner separately flagged real-world friction this was plausibly
+contributing to: "wasn't doing well on long breakdowns/drops in the more
+wandering genres w/longer songs." Per-audio-genre-profile overrides for
+this (and other director thresholds generally) are explicitly **not**
+in this fix — see "Deferred" below.
+
+**Fix 5 — external mixer-hint bias weight raised `1.0` → `2.0`.** Owner:
+the external hint terms "seem weak, like not doing crap." At `1.0`, the
+external-hint-match/arm-ahead terms needed `confidence x proximity ==
+1.0` (never actually reachable — proximity tops out just under `1.0`,
+confidence is rarely exactly `1.0` either) to reach the `phrase_bias_max`
+clamp on their own, so a confident external confirmation was routinely
+getting outweighed by the internal bar-counting terms it was supposed to
+reinforce. At `2.0`, it reaches the clamp at ~50% `confidence x
+proximity`, letting a real mixer confirmation actually dominate a stale
+local guess instead of just nudging it. The mismatch term stays at `0.5`
+— confirmation and disagreement were never meant to be symmetric (see the
+existing code comment on that asymmetry), and the owner's question was
+specifically about "the 1.0s."
+
+**Fix 6 — centroid Hz axis made dynamic.** The spectral-centroid frequency
+axis assumed a fixed `22050 Hz` Nyquist (44.1kHz sample rate) regardless
+of what the capture stream actually runs at — understating every reading
+~8.8% against this project's own documented `48000 Hz` default (Nyquist
+`24000`). Owner: "we can't say for sure what Hz will be used by our users
+or streams etc." New `AudioManager.sample_rate` public property
+(delegates to `AudioCapture.sample_rate`, itself already runtime-detected
+from the device/PipeWire) lets `auto_vj.py` derive Nyquist live instead of
+assuming it, falling back to `48000` if the audio manager is unavailable
+for any reason. This is a real, independent correctness fix — worth doing
+regardless of Fix 1, though it alone would not have prevented the runaway
+(an 8.8% understatement doesn't explain a 4x-over-range observed value).
+
+**Deferred, not implemented here.** The owner asked "should we have
+per-genre tweaks on director, thoroughly? that is really the whole intent
+of guessing the genre... to better read/predict/respond to drops &
+breakdowns and energy levels" — explicitly connecting per-audio-profile
+overrides for `allow_timeout_forced_transitions` (Fix 4) to the director
+audit's Recommendation #4 (no per-genre scaling anywhere in `drop_score`
+or the mode thresholds, unlike the recommender's `bpm_prior_sigma`/
+`spectral_centroid_sigma`/`zcr_sigma`/`onset_density_sigma`). Scoped out
+of this fix deliberately: building a genre-profile-override layer for
+director thresholds is architecturally bigger than any single constant
+(would need a new lookup layer in `_profile_value()`, currently mood-
+profile-only, plus new `AudioProfile` fields, plus the same kind of
+research pass `zcr_sigma`/`onset_density_sigma` got) and the owner is
+about to run a multi-genre, multi-session training marathon specifically
+to build a stable base first — exactly the kind of broad, repeated,
+tagged data that per-genre director calibration should be researched
+against, the same way `zcr_sigma`/`onset_density_sigma` leaned on
+`training-house-01`. Recalibrating `spectral_centroid_mu` values upward
+(the deeper fix behind Fix 1's defensive ceiling) is deferred for the same
+reason: "this is just some hype dj at a club... not exactly super unique"
+— the current MIR-research-derived values may need a broad recalibration
+pass against real club/marathon material, not a guess.
+
+**Verified:** full main-repo suite green, including new/updated tests
+across `tests/test_bpm_detector_audit_regressions.py` (Gaussian clip,
+dynamic sample rate), `tests/test_beat_tracker_v2.py` and
+`tests/test_beat_grid_tracker_v1.py` (treble double-count, both engines),
+`tests/test_auto_vj_profile_hud.py` (HUD clamp removal, both properties),
+`tests/test_auto_vj_phrase_structure.py` (external hint weight,
+`allow_timeout_forced_transitions` fallback), `tests/test_audio_manager_
+startup.py` (`AudioManager.sample_rate`). `ruff`/`bandit` show only
+pre-existing findings outside these diffs' hunks.
+
+---
+
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
 
 Decision: the director gains a bar-relative phrase clock and a soft

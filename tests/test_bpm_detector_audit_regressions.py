@@ -21,6 +21,7 @@ from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -734,3 +735,113 @@ def test_term_values_by_candidate_reaches_sequence_corpus_too() -> None:
     assert len(captured) == 1
     assert 'term_values_by_candidate' in captured[0]
     assert captured[0]['term_values_by_candidate']
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: found live -- a session whose observed spectral centroid ran
+# ~3700-4000 Hz against every profile's spectral_centroid_mu topping out at
+# 2500 Hz drove centroid_fit past -70 raw for the tightest-sigma candidates,
+# completely swamping every other term (which rarely exceed a few units) and
+# making the composite score effectively just "which candidate's sigma
+# happens to be widest," not genre fit. Every *_fit Gaussian term is now
+# clipped at _GAUSSIAN_FIT_X_CLIP (6.0) sigma before squaring.
+# ---------------------------------------------------------------------------
+
+
+def test_centroid_fit_is_clipped_for_an_extreme_mismatch(monkeypatch) -> None:
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['psytrance']  # spectral_centroid_sigma=250 (tight)
+    restricted = {'psytrance': base}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    # ~16 sigma off mu at this profile's tight 250 Hz sigma -- would be
+    # -0.5*16^2 = -128 raw uncapped; must land at exactly -0.5*6^2 = -18.0.
+    extreme_centroid = float(base.spectral_centroid_mu) + 250.0 * 16.0
+    stub = _make_full_reco_stub(
+        bpm=float(base.bpm_prior_mu), centroid=extreme_centroid,
+        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
+    )
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    centroid_fit = kw['term_values_by_candidate']['psytrance']['centroid_fit']
+    assert centroid_fit == pytest.approx(-18.0, abs=1e-6)
+
+
+def test_centroid_fit_clips_symmetrically_below_mu_too(monkeypatch) -> None:
+    """Same clip, opposite direction -- an observed value far *below* mu
+    must clip to the same -18.0 floor as far *above* (test above), not
+    just one side of the Gaussian."""
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['psytrance']
+    restricted = {'psytrance': base}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    extreme_centroid = max(1.0, float(base.spectral_centroid_mu) - 250.0 * 16.0)
+    stub = _make_full_reco_stub(
+        bpm=float(base.bpm_prior_mu), centroid=extreme_centroid,
+        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
+    )
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    centroid_fit = kw['term_values_by_candidate']['psytrance']['centroid_fit']
+    assert centroid_fit == pytest.approx(-18.0, abs=1e-6)
+
+
+def test_centroid_hz_axis_uses_audio_manager_sample_rate_when_available() -> None:
+    """2026-08-09: the centroid Hz axis used to assume a fixed 22050 Hz
+    Nyquist (44.1kHz) regardless of the real capture rate -- understating
+    every reading ~8.8% against this project's own documented 48kHz
+    default. Now read live from AudioManager.sample_rate. All FFT energy
+    concentrated in the last bin makes the resulting mean_centroid a
+    direct, exact readout of the Nyquist actually used."""
+    # _make_full_reco_stub pre-populates 6 samples at centroid=0.0; this
+    # tick's fresh sample (computed from audio.fft below) joins them in the
+    # same rolling window, so mean_centroid is the average of all 7 --
+    # divide the expected raw reading by 7 accordingly.
+    stub = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
+    stub._audio_manager = SimpleNamespace(sample_rate=44100)
+    fft = np.zeros(100, dtype=np.float32)
+    fft[-1] = 1.0
+    audio = SimpleNamespace(waveform=None, fft=fft, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    assert kw['mean_centroid'] == pytest.approx(22050.0 * 0.99 / 7.0, abs=1.0)
+
+
+def test_centroid_hz_axis_falls_back_to_48000_without_audio_manager() -> None:
+    """No _audio_manager (or one missing sample_rate) degrades to 48000 --
+    this project's own documented capture default -- rather than raising."""
+    stub = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
+    stub._audio_manager = None
+    fft = np.zeros(100, dtype=np.float32)
+    fft[-1] = 1.0
+    audio = SimpleNamespace(waveform=None, fft=fft, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    assert kw['mean_centroid'] == pytest.approx(24000.0 * 0.99 / 7.0, abs=1.0)
+
+
+def test_gaussian_fit_x_clip_constant_matches_the_documented_floor() -> None:
+    """Direct check on the shared clip constant every *_fit term uses (see
+    _gaussian_fit() inside _update_profile_recommendation) -- 6.0 sigma,
+    -18.0 raw ceiling, matches what the two centroid_fit tests above
+    observe end-to-end."""
+    assert _AUTO_VJ._GAUSSIAN_FIT_X_CLIP == pytest.approx(6.0)
+    x_clip = _AUTO_VJ._GAUSSIAN_FIT_X_CLIP
+    assert -0.5 * x_clip * x_clip == pytest.approx(-18.0)

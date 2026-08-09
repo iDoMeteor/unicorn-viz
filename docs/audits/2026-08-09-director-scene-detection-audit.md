@@ -110,45 +110,47 @@ identical in spirit to the recommender's (a set of `[0,1]`-ish normalized
 signals × fixed weights, summed and clamped), computed fresh every frame:
 
 ```python
+# 2026-08-09: was energy_norm*0.22 + slope_norm*0.36 + treble_n*0.12 +
+# band_blend*0.16 + flux_norm*0.14 -- treble_n double-counted (also
+# inside band_blend, see the finding below), fixed the same day this
+# audit shipped. Remaining four terms renormalized proportionally.
 drop_score = clamp01(
-    energy_norm  * 0.22
-  + slope_norm   * 0.36
-  + treble_n     * 0.12
-  + band_blend   * 0.16
-  + flux_norm    * 0.14
+    energy_norm  * 0.25
+  + slope_norm   * 0.409
+  + band_blend   * 0.182
+  + flux_norm    * 0.159
 )
 ```
 
 | Term | Weight | What it measures | Normalization |
 | --- | --- | --- | --- |
-| `slope_norm` | **0.36** (largest) | Positive energy slope over the last ~2s (rising energy), saturating. | `slope_pos / (slope_pos + 0.12)` |
-| `energy_norm` | 0.22 | Absolute smoothed energy level. | `energy / (energy + 1.0)` |
-| `band_blend` | 0.16 | Weighted blend of normalized bass/mid/treble (`0.45/0.30/0.25`). | Each band z-score-normalized against its own running mean/variance, squashed to `[0,1]` |
-| `flux_norm` | 0.14 | EMA-smoothed spectral flux (transient/onset energy), saturating. | `flux_smooth / (flux_smooth + 0.10)` |
-| `treble_n` | 0.12 (smallest) | Normalized treble band alone (double-counted — also inside `band_blend`). | z-score normalized |
+| `slope_norm` | **0.409** (largest) | Positive energy slope over the last ~2s (rising energy), saturating. | `slope_pos / (slope_pos + 0.12)` |
+| `energy_norm` | 0.25 | Absolute smoothed energy level. | `energy / (energy + 1.0)` |
+| `band_blend` | 0.182 | Weighted blend of normalized bass/mid/treble (`0.45/0.30/0.25`) — the *only* place treble now contributes, at its intended `0.25` share of this term. | Each band z-score-normalized against its own running mean/variance, squashed to `[0,1]` |
+| `flux_norm` | 0.159 | EMA-smoothed spectral flux (transient/onset energy), saturating. | `flux_smooth / (flux_smooth + 0.10)` |
 
 **Theoretical read, same methodology as the recommender audit:**
 
-- **`slope_norm` (0.36, importance High, accuracy High).** The single
+- **`slope_norm` (0.409, importance High, accuracy High).** The single
   strongest, most theoretically sound signal — a build's whole identity
   *is* rising energy, and the saturating normalization (`x/(x+0.12)`)
   means it can't be dominated by one loud transient the way a raw linear
   slope could. Correctly the largest weight.
-- **`energy_norm` (0.22, importance Medium, accuracy Medium).** Absolute
+- **`energy_norm` (0.25, importance Medium, accuracy Medium).** Absolute
   level matters (a drop is loud), but it's the term most vulnerable to
   mastering/loudness differences between tracks — the same failure mode
   `centroid_fit` had before its per-profile-sigma fix, except `drop_score`
   has no per-profile calibration mechanism at all (see §6, "no per-genre
   scaling").
-- **`treble_n` counted twice (0.12 standalone + inside `band_blend`'s
-  0.16×0.25 ≈ 0.04 contribution, total ≈0.16 effective weight on treble
-  alone).** Not obviously wrong — a drop is often treble-heavy (hi-hats,
-  risers, white-noise sweeps) — but it means treble content has an outsized
-  effective vote relative to bass/mid, which get no standalone term at all.
-  Worth knowing this is deliberate-looking but undocumented; no comment in
-  the code explains why treble specifically gets double-counted and
-  bass/mid don't.
-- **`flux_norm` (0.14, importance Medium-High, accuracy Medium).** A real,
+- **`treble_n` used to be counted twice (0.12 standalone + inside
+  `band_blend`'s 0.16×0.25 ≈ 0.04 contribution, total ≈0.16 effective
+  weight on treble alone) — fixed 2026-08-09, same day this audit
+  shipped** (owner: "don't double count treble! that explains that lol").
+  The standalone term is gone; treble now only contributes its intended
+  `0.25` share inside `band_blend` (≈0.046 effective, well below bass's
+  `0.45` share ≈0.082), which is what the weight authors' own numbers
+  said should happen all along.
+- **`flux_norm` (0.159, importance Medium-High, accuracy Medium).** A real,
   distinct signal (broad-spectrum transient energy, "qualitatively
   different from energy slope" per the code's own comment) — sound
   reasoning for keeping it additive rather than folded into slope. Its
@@ -156,12 +158,12 @@ drop_score = clamp01(
   derivation, unlike `slope_norm`'s (which at least shares its `0.12`
   constant with the CRUISE build/breakdown gates elsewhere, suggesting it
   was tuned once and reused).
-- **`band_blend` (0.16, importance Medium, accuracy Medium).** Reasonable
+- **`band_blend` (0.182, importance Medium, accuracy Medium).** Reasonable
   as a coarse texture signal, but the same coarse-3-bucket limitation the
   recommender's `band_fit` has — no spectral-shape (64-band) equivalent
   exists on the detector side.
 
-**No per-genre scaling anywhere in `drop_score`.** Every one of these five
+**No per-genre scaling anywhere in `drop_score`.** Every one of these four
 terms uses one fixed normalization constant for every track, every genre,
 every session — there is no equivalent of the recommender's
 `bpm_prior_sigma`/`spectral_centroid_sigma`/`zcr_sigma`/`onset_density_sigma`
@@ -244,17 +246,28 @@ error.
 
 | Term | Weight (multiplier of `phrase_bias_max`) | Fires when | Notes |
 | --- | --- | --- | --- |
-| **External hint match** | `1.0 × confidence × proximity` | The mixer's published `role` equals the role being biased | `proximity` ramps `0 → 1` as the mixer's own `bars_left` goes from `phrase_external_proximity_bars` (default `8.0`) down to `1` — confirming "yes we're in BUILD" at the very *start* of a long build contributes ~nothing; only escalates as that role is actually ending |
+| **External hint match** | `2.0 × confidence × proximity` *(raised from `1.0`, 2026-08-09)* | The mixer's published `role` equals the role being biased | `proximity` ramps `0 → 1` as the mixer's own `bars_left` goes from `phrase_external_proximity_bars` (default `8.0`) down to `1` — confirming "yes we're in BUILD" at the very *start* of a long build contributes ~nothing; only escalates as that role is actually ending |
 | **External hint mismatch** | `-0.5 × confidence` | The mixer publishes a *different*, confident role | Not proximity-gated — a mismatch is evidence regardless of where in the phase we are, so it isn't softened the way a match is |
-| **Arm ahead of `next_role`** | `1.0 × confidence × proximity` | The mixer's `next_role` equals the role being biased | `proximity` ramps over `phrase_arm_proximity_bars` (default `16.0`, twice the match term's window) keyed on `bars_to_next` — "prepare early" intentionally starts further out than "confirmed, about to end" |
+| **Arm ahead of `next_role`** | `2.0 × confidence × proximity` *(raised from `1.0`, 2026-08-09)* | The mixer's `next_role` equals the role being biased | `proximity` ramps over `phrase_arm_proximity_bars` (default `16.0`, twice the match term's window) keyed on `bars_to_next` — "prepare early" intentionally starts further out than "confirmed, about to end" |
+
+**2026-08-09 update:** match/arm-ahead raised `1.0 → 2.0`. At `1.0`, either
+term needed `confidence × proximity == 1.0` (never actually reachable) to
+saturate `phrase_bias_max` on its own, so a confident external
+confirmation was routinely outweighed by the internal bar-counting terms
+it was supposed to reinforce — owner: the external terms "seem weak, like
+not doing crap." At `2.0`, saturation needs only ~50% `confidence ×
+proximity`. Mismatch intentionally left at `0.5` — confirmation and
+disagreement were never meant to be symmetric (see below), and the
+owner's question was specifically about "the 1.0s." See
+`docs/adr/vj-system.md` § "Live-Session Follow-Up."
 
 **Relative ranking of external influence:** hint-match and arm-ahead each
-carry the *same* maximum weight (`1.0×`) as each other and are both
-stronger than a mismatch (`0.5×`) — the system trusts a confident
-confirmation twice as much as a confident disagreement. This is a
-deliberate, documented asymmetry (per the code's own comment: "it
-disagrees with this specific role outright, it doesn't confirm some other
-one is nearly over") rather than an oversight.
+carry the *same* maximum weight as each other and are both stronger than
+a mismatch — the system trusts a confident confirmation more than a
+confident disagreement. This is a deliberate, documented asymmetry (per
+the code's own comment: "it disagrees with this specific role outright,
+it doesn't confirm some other one is nearly over") rather than an
+oversight.
 
 ### External influence — peak-tier override (separate from bias)
 
@@ -286,7 +299,7 @@ the phrase-bias external influences, despite superficially similar naming.
 
 ## 6. Oddities / potential bugs
 
-### 6.1 — `allow_timeout_forced_transitions`'s hardcoded fallback is the *dangerous* value
+### 6.1 — `allow_timeout_forced_transitions`'s hardcoded fallback is the *dangerous* value — **RESOLVED 2026-08-09**
 
 The code-level fallback (used only when no mood profile and no
 `config.toml` override supplies this key) is **`False`**. All three
@@ -303,9 +316,13 @@ from normal defensive-default practice: the safe value should be the
 one that survives an unconfigured `_profile_value()` lookup, with profiles
 opting *out* of it if they want, not the other way around.
 
-**Recommendation:** flip the hardcoded fallback to `True`, matching every
-shipped profile's actual behavior, so the failure mode of a missing key is
-"transitions behave normally" rather than "a mode can never time out."
+**Fixed same day:** hardcoded fallback flipped to `True`. Owner separately
+noted this was plausibly contributing to real friction: "wasn't doing well
+on long breakdowns/drops in the more wandering genres w/longer songs."
+Per-audio-genre-profile overrides for this specific constant were
+explicitly **not** added — see §6.4's note below, folded into the same
+"thorough per-genre director tweaks" follow-up rather than a one-off
+exception. See `docs/adr/vj-system.md` § "Live-Session Follow-Up."
 
 ### 6.2 — `CLIMAX`'s exit is not gated by `allow_timeout_forced_transitions`, inconsistently with `BUILD`/`BREAKDOWN`/`DROP`
 
@@ -323,7 +340,7 @@ intentional — e.g. "CLIMAX must always be time-bounded since it's the
 most visually intense state") or bring it in line with the other three for
 consistency.
 
-### 6.3 — Treble is double-counted in `drop_score` with no documented rationale
+### 6.3 — Treble is double-counted in `drop_score` with no documented rationale — **RESOLVED 2026-08-09**
 
 Covered in §3 — `treble_n` appears both standalone (`0.12`) and inside
 `band_blend` (contributing another `~0.04`), giving treble roughly `0.16`
@@ -333,12 +350,14 @@ often treble-forward), but nothing in the code says this was a deliberate
 choice versus an accumulated accident from `band_blend` being added after
 `treble_n` already existed.
 
-**Recommendation:** a one-line comment confirming intent would resolve
-this; if unintentional, consider whether bass (kick drops, sub-bass
-drops — genuinely common in bass-heavy genres) deserves the same
-standalone treatment for symmetry.
+**Fixed same day** (owner: "don't double count treble! that explains that
+lol") — the standalone term removed in both `beat_grid.py` engines
+(`BeatGridTracker`/v1, `BeatTracker`/v2); the remaining terms'
+weights renormalized proportionally so they still sum to `1.0`. See
+`docs/adr/vj-system.md` § "Live-Session Follow-Up" for the exact new
+weight values.
 
-### 6.4 — No per-genre-profile scaling anywhere in `drop_score` or the mode thresholds
+### 6.4 — No per-genre-profile scaling anywhere in `drop_score` or the mode thresholds — **still open, explicitly deferred**
 
 Covered in §3. Every threshold in §4 is one fixed number for every audio
 profile — an ambient track and a hardstyle track compete for `BUILD`/
@@ -350,6 +369,19 @@ a bug — the director predates that pattern and nothing is provably broken
 — but it's the most significant asymmetry between the two subsystems
 audited today, and a plausible next target if `DROP`/`BUILD` timing turns
 out to feel wrong on quiet-genre sessions specifically.
+
+**2026-08-09 update:** the owner independently converged on this same
+finding from a different angle — real friction on long/wandering-genre
+songs (§6.1) plus a direct question, "should we have per-genre tweaks on
+director, thoroughly? that is really the whole intent of guessing the
+genre... to better read/predict/respond to drops & breakdowns and energy
+levels." Deliberately not implemented yet: this needs a genre-profile-
+override lookup layer in `_profile_value()` (currently mood-profile-only)
+plus new `AudioProfile` fields plus the same kind of research pass
+`zcr_sigma`/`onset_density_sigma` got — bigger than a single-session fix.
+The owner is running a multi-genre, multi-session training marathon
+specifically to build a stable base first, which will also produce exactly
+the broad, tagged data this calibration should be researched against.
 
 ---
 
@@ -388,14 +420,17 @@ out to feel wrong on quiet-genre sessions specifically.
 
 ## 8. Recommendations summary
 
-| # | Recommendation | Priority | Effort |
-| --- | --- | --- | --- |
-| 1 | Flip `allow_timeout_forced_transitions`'s hardcoded fallback to `True` (§6.1) | High — current safety depends entirely on every mood profile remembering to override it | Trivial (one-line default change) |
-| 2 | Resolve the `CLIMAX` timeout-gate inconsistency (§6.2) — comment or align | Medium | Trivial |
-| 3 | Confirm or fix the treble double-count in `drop_score` (§6.3) | Low — plausible either way, just undocumented | Trivial (comment) to Small (rebalance) |
-| 4 | Consider per-audio-profile scaling for `drop_score`'s normalization constants and/or the `BUILD`/`DROP` thresholds (§6.4), mirroring the recommender's per-profile sigma pattern | Low-Medium — no known live bug, but a real asymmetry with the subsystem it sits next to | Medium — needs the same kind of research pass `zcr_sigma`/`onset_density_sigma` got, plus new `AudioProfile` fields |
+| # | Recommendation | Priority | Effort | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Flip `allow_timeout_forced_transitions`'s hardcoded fallback to `True` (§6.1) | High — current safety depends entirely on every mood profile remembering to override it | Trivial (one-line default change) | **Done 2026-08-09** |
+| 2 | Resolve the `CLIMAX` timeout-gate inconsistency (§6.2) — comment or align | Medium | Trivial | Open |
+| 3 | Confirm or fix the treble double-count in `drop_score` (§6.3) | Low — plausible either way, just undocumented | Trivial (comment) to Small (rebalance) | **Done 2026-08-09** |
+| 4 | Consider per-audio-profile scaling for `drop_score`'s normalization constants and/or the `BUILD`/`DROP` thresholds (§6.4), mirroring the recommender's per-profile sigma pattern | Low-Medium — no known live bug, but a real asymmetry with the subsystem it sits next to | Medium — needs the same kind of research pass `zcr_sigma`/`onset_density_sigma` got, plus new `AudioProfile` fields | Deferred — owner converged on the same finding independently; explicitly waiting on marathon data (see §6.4) |
 
-None of items 1–3 were implemented in this audit — flagged for owner
-review per this project's convention of not silently fixing findings the
-owner hasn't seen yet, especially where (as in #1) the current live
-behavior is already safe and the risk is latent rather than active.
+Items 1 and 3 were implemented the same day this audit shipped, after the
+top-3-weights rewire's first live session surfaced both as active
+contributors to a real symptom (composite scores blowing past the old
+`±9.99` HUD clamp) rather than latent risk — see `docs/adr/vj-system.md`
+§ "Live-Session Follow-Up" for the full account. Item 2 remains flagged
+for owner review, unchanged. Item 4 is explicitly deferred pending the
+owner's training marathon.

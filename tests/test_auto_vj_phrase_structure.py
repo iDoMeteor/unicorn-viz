@@ -267,8 +267,11 @@ def test_phrase_bias_external_match_no_bars_left_keeps_prior_full_strength_behav
     with_hint = _bare_controller(section_hint=hint, _bars_since_phase_entry=12)
     without_hint = _bare_controller(section_hint=None, _bars_since_phase_entry=12)
 
+    # 2026-08-09: match multiplier raised 1.0 -> 2.0 (owner: the old 1.0x
+    # meant a confident external confirmation could rarely out-vote the
+    # internal bar-counting terms it was supposed to reinforce).
     assert with_hint._phrase_bias('RISE') == pytest.approx(
-        min(0.15, without_hint._phrase_bias('RISE') + 0.15 * 0.9), abs=1e-9
+        min(0.15, without_hint._phrase_bias('RISE') + 0.15 * 2.0 * 0.9), abs=1e-9
     )
 
 
@@ -597,3 +600,29 @@ def test_impact_escalates_to_climax_via_early_override_without_known_progress() 
 
     assert strong._mode == 'CLIMAX'
     assert weak._mode == 'DROP'
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: allow_timeout_forced_transitions's hardcoded fallback (used
+# only when no active VJ mood profile and no config.toml override supplies
+# the key) was False -- the *unsafe* value, since it gates the only exit
+# from DROP/BREAKDOWN/BUILD's forced-drop timeout other than a genuine
+# fizzle. All three shipped mood profiles (chill/normie/raver) already
+# override it True, so this only mattered for a hypothetical future profile
+# that forgot the key -- found during the director scene-detection audit.
+# ---------------------------------------------------------------------------
+
+
+def test_allow_timeout_forced_transitions_fallback_defaults_to_true() -> None:
+    """Exercises the exact _profile_value() lookup __init__ uses, with no
+    active profile and no config.toml override supplying the key -- the
+    scenario the old False fallback would have silently mishandled."""
+    inst = object.__new__(AutoVJController)
+    inst._use_user_profile_overrides = False
+    inst._explicit_profile_override_keys = set()
+    inst._profile_defaults = {}
+    inst._cfg = {}
+
+    result = AutoVJController._profile_value(inst, 'allow_timeout_forced_transitions', True)
+
+    assert result is True

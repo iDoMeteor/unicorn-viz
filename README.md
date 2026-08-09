@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.69**
+**Version 1.0.0-beta.70**
 
 ## Contact Me!
 
@@ -557,6 +557,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.70** — New public `AudioManager.sample_rate` property (delegates to `AudioCapture.sample_rate`) so consumers computing a frequency axis from FFT bin indices can derive Nyquist from the real capture rate instead of assuming a fixed one -- auto-vj-01's spectral centroid calc was assuming 22050 Hz (44.1kHz) regardless of what the device/PipeWire actually negotiates, understating readings ~8.8% against this project's own documented 48kHz default. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Live-Session Follow-Up" (auto-vj-01).
 - **1.0.0-beta.69** — BPM tapper hardening after a field no-show: the
   readout now renders on the audience window even while the control room
   mirrors the HUD/modals (recording-indicator parity — the modal gate

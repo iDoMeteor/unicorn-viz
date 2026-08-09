@@ -73,6 +73,17 @@ def test_default_audio_profile_is_house() -> None:
     assert manager.get_profile_key() == 'house'
 
 
+def test_sample_rate_delegates_to_capture() -> None:
+    """2026-08-09: new public property so auto-vj-01's spectral centroid
+    calc can derive Nyquist from the real capture rate instead of assuming
+    a fixed 44.1kHz -- real devices/PipeWire commonly negotiate 48kHz
+    (this project's own documented default), understating every centroid
+    reading by ~8.8% under the old fixed assumption."""
+    manager = _manager()
+    manager._capture._sample_rate = 44100
+    assert manager.sample_rate == 44100
+
+
 def test_start_times_out_when_capture_hangs() -> None:
     manager = _manager()
     manager._capture = _CaptureSlowStart()

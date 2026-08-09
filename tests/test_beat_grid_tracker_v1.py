@@ -283,6 +283,23 @@ def test_drop_score_stays_bounded_zero_to_one() -> None:
         t += dt
 
 
+def test_drop_score_no_longer_double_counts_treble() -> None:
+    """2026-08-09: same fix as BeatTracker (v2) -- see test_beat_tracker_v2.py's
+    test of the same name for the full rationale. v1 had the identical
+    double-count (standalone treble_norm term + band_blend's own treble
+    share)."""
+    dt = 1.0 / 60.0
+    bass_only = BeatGridTracker({})
+    treble_only = BeatGridTracker({})
+    t = 0.0
+    while t < 3.0:
+        bass_only.update(dt, SimpleNamespace(bass=1.0, mid=0.0, treble=0.0), onsets=None, t=t)
+        treble_only.update(dt, SimpleNamespace(bass=0.0, mid=0.0, treble=1.0), onsets=None, t=t)
+        t += dt
+
+    assert bass_only.drop_score > treble_only.drop_score
+
+
 def test_energy_slope_is_positive_when_energy_is_rising() -> None:
     bg = BeatGridTracker({})
     dt = 1.0 / 60.0

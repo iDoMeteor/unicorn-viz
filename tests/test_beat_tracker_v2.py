@@ -607,3 +607,29 @@ def test_energy_rises_toward_sustained_input_level() -> None:
         t += dt
 
     assert bt.energy > 1.0, 'sustained bass+mid+treble=1.0 each should pull energy well above 0'
+
+
+def test_drop_score_no_longer_double_counts_treble() -> None:
+    """2026-08-09: treble used to get both a standalone drop_score term
+    (0.12) and its band_blend share (0.25 x 0.16 = 0.04, effective ~0.16
+    total) -- found during the director scene-detection audit. band_blend's
+    own weights (bass 0.45 > mid 0.30 > treble 0.25) say bass should matter
+    most for drop_score, but the double-count meant a treble-only signal
+    scored *higher* than a bass-only signal at the same magnitude despite
+    bass's nominally higher weight. This is now flipped back to the
+    intended ordering: bass-only outscores treble-only, since bass_blend's
+    weight (0.45) is more than treble's (0.25) and nothing double-counts
+    either anymore.
+    """
+    dt = 1.0 / 60.0
+    bass_only = BeatTracker({})
+    treble_only = BeatTracker({})
+    t = 0.0
+    while t < 3.0:
+        bass_only.update(dt, SimpleNamespace(bass=1.0, mid=0.0, treble=0.0, spectral_flux=0.0),
+                          onsets=None, t=t)
+        treble_only.update(dt, SimpleNamespace(bass=0.0, mid=0.0, treble=1.0, spectral_flux=0.0),
+                            onsets=None, t=t)
+        t += dt
+
+    assert bass_only.drop_score > treble_only.drop_score
