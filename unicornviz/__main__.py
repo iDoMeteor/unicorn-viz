@@ -126,8 +126,13 @@ def _build_parser() -> argparse.ArgumentParser:
              'Overrides [dj_mixer] mixer_only = false.',
     )
 
-    training = parser.add_argument_group('headless training sources')
-    training.add_argument('--dj-mixer-source', action='store_true', help='Force-enable dj-mixer-01 and arm headless AutoPlay for this run.')
+    training = parser.add_argument_group(
+        'headless training sources',
+        'Unattended run sources. Each of these records Auto VJ training '
+        'data by default (decision log plus the live and sequence corpora); '
+        'pass --no-training to suppress it.',
+    )
+    training.add_argument('--dj-mixer-source', action='store_true', help='Force-enable dj-mixer-01 and arm headless AutoPlay for this run. Records Auto VJ training data unless --no-training.')
     training.add_argument('--dj-mixer-autoplay-mode', choices=['autoload', 'cut', 'crossfade', 'smart'], help='AutoPlay mode to arm when --dj-mixer-source is set (default: cut).')
     training.add_argument(
         '--dj-mixer-set', metavar='NAME',
@@ -140,16 +145,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help='Seconds to wait after boot before the first track starts '
              '(default 3.0), so audio, recording and both deck loads settle.',
     )
-    training.add_argument(
+    training_toggle = training.add_mutually_exclusive_group()
+    training_toggle.add_argument(
         '--training', action='store_true',
-        help='Record Auto VJ training data for this run: decision log plus '
-             'the live and sequence corpora. Without it an unattended run '
-             'produces no training data at all unless someone presses the '
-             'in-app toggle.',
+        help='Record Auto VJ training data: decision log plus the live and '
+             'sequence corpora. Implied by any headless source flag above, so '
+             'it is only needed to capture training data on an interactive run.',
+    )
+    training_toggle.add_argument(
+        '--no-training', action='store_true',
+        help='Do not record Auto VJ training data, even on a headless run '
+             '(which otherwise enables it automatically).',
     )
     training.add_argument('--dj-mixer-music-dir', help='Override [dj_mixer] music_dir for this run.')
     training.add_argument('--dj-mixer-output-device', help='Override [dj_mixer] output_device for this run. Defaults to --audio-device if not given (the same sink used for capture).')
-    training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run.')
+    training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run. Records Auto VJ training data unless --no-training.')
     training.add_argument('--media-dir', help='Override [media] media_dir for this run.')
 
     logging_group = parser.add_argument_group('logging')
@@ -225,7 +235,13 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     put('dj_mixer', 'autoplay_boot_set', args.dj_mixer_set)
     put('dj_mixer', 'autoplay_boot_delay_s', args.dj_mixer_start_delay)
 
-    if args.training:
+    # A headless source is a training run by definition -- that is what the
+    # flag group is for -- so capture is on unless explicitly refused.  It
+    # used to require a separate opt-in, and the failure was silent: the run
+    # looked healthy and produced no training data at all, which is only
+    # discoverable after the set is over and unrepeatable.
+    headless_run = bool(args.dj_mixer_source or args.media_source)
+    if (args.training or headless_run) and not args.no_training:
         # All three streams together: a decision log without the corpora
         # cannot be scored, and a corpus without decisions cannot be
         # explained.  Partial capture is what makes a run unusable later.

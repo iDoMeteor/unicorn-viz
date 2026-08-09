@@ -163,11 +163,37 @@ check the following before changing config:**
 
 ---
 
-## `[render]`
+## Headless / training runs
 
-| Key              | Type   | Default | Description                                              |
-|------------------|--------|---------|----------------------------------------------------------|
-| `internal_scale` | float  | `1.0`   | Internal effect render scale before upscaling to screen. Use `0.5`–`1.0` for extra headroom on heavy scenes. |
+Unattended runs are started with a **headless source** flag —
+`--dj-mixer-source` (play a mixer set) or `--media-source` (play a media
+folder). Each of these:
+
+- forces the relevant drop-in on and arms its auto-play;
+- sets `[auto_vj] auto_exit_after_finale` so the run ends by itself;
+- **records Auto VJ training data**: the decision log plus the live and
+  sequence corpora.
+
+Training capture is on by default here because a headless source *is* a
+training run — that is what the flag group is for. It used to need a
+separate opt-in, and the failure was silent: the session looked healthy,
+recorded video and audio correctly, and produced no training data at all,
+which is only discoverable after the set is over and no longer repeatable.
+
+Pass `--no-training` to suppress it (for example when using the mixer purely
+as an audio source), or `--training` to capture on an ordinary interactive
+run. The three streams are enabled together and cannot be selected
+individually: a decision log without the corpora cannot be scored, and a
+corpus without the decisions that produced it cannot be explained.
+
+A fully specified unattended capture:
+
+```sh
+unicorn-viz --dj-mixer-source --dj-mixer-autoplay-mode smart \
+            --dj-mixer-set "training - house 01" \
+            --record --record-audio --record-codec auto \
+            --fps-limit 30 --log-level INFO
+```
 
 ---
 
@@ -175,7 +201,7 @@ check the following before changing config:**
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `internal_scale` | float | `1.0` | Internal render resolution multiplier. |
+| `internal_scale` | float | `1.0` | Internal effect render scale before upscaling to screen. Use `0.5`-`1.0` for extra headroom on heavy scenes. |
 | `fps_limit` | int | `30` | Render frame cap. `0` follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank). Also on the config editor's Visuals tab. |
 
 **Why the default is 30, not 60.** A loop that cannot finish inside one

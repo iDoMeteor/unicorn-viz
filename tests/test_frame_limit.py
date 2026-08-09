@@ -124,3 +124,29 @@ def test_training_flag_enables_all_three_streams() -> None:
 
 def test_training_is_off_unless_asked_for() -> None:
     assert 'log_decisions' not in _overrides([]).get('auto_vj', {})
+
+
+def test_headless_sources_imply_training() -> None:
+    """A headless source *is* a training run; that is what the group is for.
+
+    Requiring a separate opt-in failed silently: the run looked healthy and
+    produced no training data, discoverable only once the set was over and
+    no longer repeatable.
+    """
+    for argv in (['--dj-mixer-source'], ['--media-source']):
+        vj = _overrides(argv)['auto_vj']
+        assert vj['log_decisions'] is True, argv
+        assert vj['live_training_enabled'] is True, argv
+        assert vj['sequence_training_enabled'] is True, argv
+
+
+def test_no_training_opts_a_headless_run_out() -> None:
+    vj = _overrides(['--dj-mixer-source', '--no-training']).get('auto_vj', {})
+    assert 'log_decisions' not in vj
+
+
+def test_training_and_no_training_are_mutually_exclusive() -> None:
+    import pytest
+    from unicornviz.__main__ import _build_parser
+    with pytest.raises(SystemExit):
+        _build_parser().parse_args(['--training', '--no-training'])
