@@ -1137,6 +1137,28 @@ active.py` (`grand_finale_active` against a real `App`: `None` drop-in,
 all degrading to `False` rather than raising). Full main-repo suite green
 (1408 passed).
 
+### `centroid_fit` Weight Trimmed 1.3 → 1.0 (2026-08-07)
+
+Decision: `centroid_fit` trimmed again, `1.3` to `1.0` (owner: "i think
+it's still pulling us off the bpm too easily"). Unlike the 1.5 → 1.3 trim
+above, this one *is* prompted by a live-session finding: a confident
+spectral-brightness match kept outvoting a real tempo mismatch in the
+composite score. `centroid_fit` is now equal to `spectral_shape_fit`
+rather than above it, still above `zcr_fit`/`onset_fit`, and stays below
+`tempo_fit` (`2.0`) — tempo is the sharper, per-profile-sigma-driven
+signal and should not lose ties to timbre. `_VJ_WEIGHTS_DOC_VERSION`
+bumped to 9. Full weight history: `0.8` (original) → `1.5` (2026-08-06)
+→ `1.3` (2026-08-06) → `1.0` (2026-08-07).
+
+**Verified:** full main-repo suite green (1507 passed), including
+`tests/test_bpm_detector_audit_regressions.py::test_recommender_prefers_
+deep_house_over_psytrance_at_120_bpm` (reads `_DEFAULT_RECO_WEIGHTS`
+live, so exercises the new weight directly) and `::test_centroid_fit_
+uses_per_profile_sigma_not_fixed_400` (weight-agnostic by construction —
+isolates `spectral_centroid_sigma` with all else held equal). `ruff
+check`/`bandit` on `auto_vj.py` show only pre-existing findings outside
+this diff's hunks.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

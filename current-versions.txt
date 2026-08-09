@@ -15,7 +15,7 @@
   projectm-01                   0.10.3              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.25         RC            module
+  auto-vj-01                    1.0.0-rc.26         RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -39,9 +39,6 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   vector-01                     0.9.1               alpha ▲       module
-
-  ── RC ────────────────────────────────────────────────────────────────────
-  webcam-01                     1.0.0-rc.4          RC            module
 
   ── alpha ─────────────────────────────────────────────────────────────────
   banner-01                     0.8.1               alpha         module
@@ -80,8 +77,9 @@
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
+  webcam-01                     1.1.0               early alpha   MISMATCH (readme=1.0.0-rc.4)
 ────────────────────────────────────────────────────────────────────────────
 
-  42 components total  ·  7 RC  1 beta  34 alpha  0 unversioned
-  ⚠  1 version mismatch(es): dj-mixer-01
+  42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
+  ⚠  2 version mismatch(es): dj-mixer-01, webcam-01
 
