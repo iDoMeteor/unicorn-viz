@@ -102,6 +102,7 @@ Complex drop-ins should also include:
   - [Test Matrix](../drop-ins/control-room-01/docs/test-matrix.md)
   - [Troubleshooting](../drop-ins/control-room-01/docs/troubleshooting.md)
 - dj-mixer-01
+  - [Coding conventions](../drop-ins/dj-mixer-01/docs/conventions.md)
   - [Operations](../drop-ins/dj-mixer-01/docs/operations.md)
   - [Configuration](../drop-ins/dj-mixer-01/docs/configuration.md)
   - [Integration](../drop-ins/dj-mixer-01/docs/integration.md)
