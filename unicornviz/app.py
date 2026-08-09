@@ -3716,14 +3716,21 @@ void main() {
                 name = str(row.get('name', ''))
                 if not name:
                     continue
-                specs.append({
+                spec = {
                     'key': f'dropin.{prefix}.{name}',
                     'name': name,
                     'value': float(row.get('value', 0.0)),
                     'min': float(row.get('min', 0.0)),
                     'max': float(row.get('max', 1.0)),
                     'set': (lambda v, s=setter, n=name: s(n, v)),
-                })
+                }
+                # Optional per-row step (e.g. 1.0 for a 0/1 toggle). Without
+                # it, a quantizing setter can make a row unreachable: the
+                # default (max-min)/40 notch moves 0.0 -> 0.025, the setter
+                # floors it back to 0, and the value never accumulates.
+                if 'step' in row:
+                    spec['step'] = float(row['step'])
+                specs.append(spec)
         return specs
 
     def _config_editor_all_specs(self) -> list[dict]:
@@ -3795,7 +3802,7 @@ void main() {
             return
         spec = specs[i]
         lo, hi = float(spec['min']), float(spec['max'])
-        step = (hi - lo) / 40.0 if hi > lo else 0.01
+        step = float(spec.get('step', 0.0)) or ((hi - lo) / 40.0 if hi > lo else 0.01)
         spec['set'](min(hi, max(lo, float(spec['value']) + notches * step)))
 
     # ------------------------------------------------------------------ #
@@ -5865,6 +5872,17 @@ void main() {
                 self._normalize_gl_render_state()
                 self._render_subsystem_overlays(dt, vw, vh)
                 overlays.render(dt, include_recording_indicator=False)
+                if mirror_mode_active:
+                    # Ephemeral corner readouts (BPM tapper) repeat on every
+                    # mirror tile — the operator may be watching any head,
+                    # and the resolved primary can move with the window.
+                    for dx, dy, dw, dh in self._mirror_rects:
+                        tile = (dx, self._window_height - (dy + dh), dw, dh)
+                        if tile == (vx, vy, vw, vh):
+                            continue   # primary already drew it
+                        self._ctx.viewport = tile
+                        overlays.render_corner_readout()
+                    self._ctx.viewport = (vx, vy, vw, vh)
             else:
                 overlays.resize(self._width, self._height)
                 self._normalize_gl_render_state()

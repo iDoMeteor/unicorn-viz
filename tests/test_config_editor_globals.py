@@ -105,3 +105,37 @@ def test_adjust_visuals_render_scale(tmp_path: Path) -> None:
     # range [0.5, 1.0], step = 0.5/40 = 0.0125; -1 from 1.0 → 0.9875.
     app._config_editor_adjust(-1.0)
     assert abs(captured['v'] - 0.9875) < 1e-6
+
+
+class _ToggleDropin:
+    """Quantizing 0/1 setter — the webcam-01 selfie-seg row shape."""
+
+    CONFIG_EDITOR_CATEGORY = 'Visuals'
+    CONFIG_EDITOR_KEY = 'webcam'
+
+    def __init__(self):
+        self.enabled = False
+
+    def config_editor_settings(self):
+        return [{'name': 'cam0_selfie_seg', 'value': 1.0 if self.enabled else 0.0,
+                 'min': 0.0, 'max': 1.0, 'step': 1.0}]
+
+    def set_config_setting(self, name, value):
+        self.enabled = float(value) >= 0.5
+
+
+def test_adjust_honors_per_row_step_for_quantized_toggles(tmp_path: Path) -> None:
+    # Without an explicit step, (max-min)/40 nudges 0.0 -> 0.025 and a
+    # >= 0.5 quantizing setter floors it straight back: unreachable toggle.
+    app = _app(tmp_path, tab='Visuals')
+    toggle = _ToggleDropin()
+    app._webcam_system = toggle
+    row_index = next(
+        i for i, r in enumerate(app.config_editor_global_rows('Visuals'))
+        if r['name'] == 'cam0_selfie_seg'
+    )
+    app._overlays._ce_param_idx = row_index
+    app._config_editor_adjust(1.0)
+    assert toggle.enabled is True    # one notch flips it on
+    app._config_editor_adjust(-1.0)
+    assert toggle.enabled is False   # and one notch flips it back

@@ -1278,6 +1278,16 @@ void main() {
         now = time.monotonic() if now is None else float(now)
         return now - self._bpm_tap_times[-1] <= self.BPM_TAP_HOLD_S
 
+    def render_corner_readout(self) -> None:
+        """Public pass for the corner readout(s), viewport-agnostic.
+
+        The app calls this once per mirror tile (after the primary overlay
+        pass) so ephemeral operator feedback like the BPM tapper shows on
+        every mirrored display — a 5-head operator shouldn't have to know
+        which monitor currently resolves as the overlay primary.
+        """
+        self._render_bpm_tapper()
+
     def _render_bpm_tapper(self) -> None:
         """Top-right tapped-BPM readout, only while being tapped.
 

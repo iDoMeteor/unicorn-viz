@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.70       BETA          module
+  core (unicornviz)             1.0.0-beta.71       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.170.0             alpha ▲       module
@@ -76,7 +76,7 @@
   flying-01                     0.2.1               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
-  webcam-01                     1.1.1               early alpha   module
+  webcam-01                     1.1.2               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
