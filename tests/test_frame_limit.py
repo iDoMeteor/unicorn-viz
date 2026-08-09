@@ -108,3 +108,19 @@ def test_unset_flags_leave_the_section_alone() -> None:
     ov = _overrides([])
     assert 'fps_limit' not in ov.get('render', {})
     assert 'codec' not in ov.get('recording', {})
+
+
+def test_training_flag_enables_all_three_streams() -> None:
+    """A decision log without corpora cannot be scored, and vice versa.
+
+    Regression: an unattended run produced zero training data unless a human
+    pressed the in-app toggle, which defeats the point of running headless.
+    """
+    vj = _overrides(['--training'])['auto_vj']
+    assert vj['log_decisions'] is True
+    assert vj['live_training_enabled'] is True
+    assert vj['sequence_training_enabled'] is True
+
+
+def test_training_is_off_unless_asked_for() -> None:
+    assert 'log_decisions' not in _overrides([]).get('auto_vj', {})

@@ -140,6 +140,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help='Seconds to wait after boot before the first track starts '
              '(default 3.0), so audio, recording and both deck loads settle.',
     )
+    training.add_argument(
+        '--training', action='store_true',
+        help='Record Auto VJ training data for this run: decision log plus '
+             'the live and sequence corpora. Without it an unattended run '
+             'produces no training data at all unless someone presses the '
+             'in-app toggle.',
+    )
     training.add_argument('--dj-mixer-music-dir', help='Override [dj_mixer] music_dir for this run.')
     training.add_argument('--dj-mixer-output-device', help='Override [dj_mixer] output_device for this run. Defaults to --audio-device if not given (the same sink used for capture).')
     training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run.')
@@ -217,6 +224,14 @@ def _build_overrides(args: argparse.Namespace) -> dict:
 
     put('dj_mixer', 'autoplay_boot_set', args.dj_mixer_set)
     put('dj_mixer', 'autoplay_boot_delay_s', args.dj_mixer_start_delay)
+
+    if args.training:
+        # All three streams together: a decision log without the corpora
+        # cannot be scored, and a corpus without decisions cannot be
+        # explained.  Partial capture is what makes a run unusable later.
+        put('auto_vj', 'log_decisions', True)
+        put('auto_vj', 'live_training_enabled', True)
+        put('auto_vj', 'sequence_training_enabled', True)
 
     if args.mixer:
         put('dj_mixer', 'mixer_only', True)
