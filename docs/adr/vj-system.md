@@ -1159,6 +1159,61 @@ isolates `spectral_centroid_sigma` with all else held equal). `ruff
 check`/`bandit` on `auto_vj.py` show only pre-existing findings outside
 this diff's hunks.
 
+### `top_cand_fit` Fixed; Per-Candidate Term Logging Added (2026-08-09)
+
+Context: chasing the `centroid_fit` trim above, the owner asked for a real
+0-100% accuracy score per recommender term computed from historical
+training data. Digging into it surfaced two independent problems, both
+found by reading `_profile_score()` directly rather than by guessing from
+symptoms.
+
+**`top_cand_fit` was structurally always `0.0`.** The term is meant to be
+the best (least-negative) Gaussian log-density among the ACF's raw top-3
+tempo candidates. It was implemented as `top_cand_fit = 0.0` then combined
+via `max(top_cand_fit, -0.5*x*x)` inside the candidate loop — since every
+real candidate's value is `<= 0`, the `0.0` initializer always won,
+regardless of how good or bad the candidates actually were. Confirmed
+empirically before touching the code: 0 nonzero values across 803 logged
+`profile_recommendation` rows spanning two independent dj-mixer sessions,
+and 0 nonzero in every sampled decision-log row too. Its `0.4` weight has
+contributed nothing to any recommendation, ever, since it shipped. Fixed
+by flooring at the worst real candidate instead of `0.0`, falling back to
+`0.0` only in the genuine no-candidates-and-no-fresh-mixer-hint case.
+`_VJ_WEIGHTS_DOC_VERSION` bumped to 10.
+
+**Real per-term accuracy was structurally impossible to compute.** The
+same historical-data dig found that `term_spread` (max-min across
+candidates per eval cycle, added earlier for Tier 1 signal-activity
+tracking) can only show a term was *discriminating* that cycle — not
+whether its value favored the *correct* candidate. There was no way to
+answer "did `centroid_fit` actually push toward the genre-tag-confirmed
+right answer, or just toward whatever won anyway" from the data logged.
+New `term_values_by_candidate` field (`{profile_key: {term: value}}` for
+every enabled candidate, `lock_rate`/`mean_conf`/`mean_dconf` excluded
+since they're identical for every candidate — see the entry below) on
+both the decision-log and sequence-corpus `profile_recommendation` events
+makes that computable once training-kit-01 cross-references it against a
+genre tag.
+
+**Separately investigated, not fixed:** `vocal_hnr_fit`/`vocal_fmr_fit`
+were found to be frozen constants in every session checked (`mean_vocal_
+hnr`/`mean_vocal_fmr` read exactly `0.0` on all 803 rows, so the fit terms
+come out to the same number regardless of what's playing) despite
+`analyzer.py`'s `_compute_vocal_hnr`/`_compute_vocal_fmr` being genuine,
+non-stub implementations. A quick read of the analyzer's wiring (spectrum
+slicing, gating on `energy > 1e-5`) didn't turn up an obvious cause —
+this needs a live/replay debug session to pin down, not a guess. Left
+alone pending that investigation.
+
+**Verified:** full main-repo suite green (1526 passed), including four new
+regression tests in `tests/test_bpm_detector_audit_regressions.py`:
+`test_top_cand_fit_reflects_real_candidate_fit_not_floored_at_zero`,
+`test_top_cand_fit_zero_only_when_no_candidates_at_all`,
+`test_term_values_by_candidate_excludes_non_discriminating_terms`, and
+`test_term_values_by_candidate_reaches_sequence_corpus_too`. `ruff
+check`/`bandit` on `auto_vj.py` show only pre-existing findings outside
+this diff's hunks.
+
 ---
 
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)

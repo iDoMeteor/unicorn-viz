@@ -466,3 +466,96 @@ def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._recommended_profile_key == 'wide_test'
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: top_cand_fit was initialized to 0.0 and combined via max() with
+# terms that are always <= 0 (Gaussian log-density), so the 0.0 floor always
+# won -- the term was silently dead on every row of every session ever
+# logged (confirmed against real training data: 0/803 nonzero rows). Fixed
+# by flooring at the worst real candidate instead of 0.0, falling back to
+# 0.0 only in the genuine no-candidates-at-all case.
+# ---------------------------------------------------------------------------
+
+
+def test_top_cand_fit_reflects_real_candidate_fit_not_floored_at_zero(monkeypatch) -> None:
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {'house': profiles_mod.PROFILES['house']}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+    mu = float(restricted['house'].bpm_prior_mu)
+
+    stub = _make_full_reco_stub(bpm=mu, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    # A single ACF top-candidate well off this profile's prior -- top_cand_fit
+    # for 'house' must come out clearly negative, not floored at 0.0.
+    stub._grid = SimpleNamespace(bpm=mu, confidence=0.5, downbeat_confidence=0.4,
+                                  top_candidates=[(mu * 1.5, 1.0)])
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    assert event == 'profile_recommendation'
+    assert kw['term_values_by_candidate']['house']['top_cand_fit'] < -0.01
+
+
+def test_top_cand_fit_zero_only_when_no_candidates_at_all() -> None:
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    assert stub._grid.top_candidates == []  # the stub's default -- no ACF candidates, no mixer hint
+
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    for candidate_terms in kw['term_values_by_candidate'].values():
+        assert candidate_terms['top_cand_fit'] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 2026-08-09: term_spread (max-min across candidates) can show a term was
+# discriminating that cycle but not whether it favored the *correct*
+# candidate -- real per-term accuracy needs each candidate's raw value.
+# term_values_by_candidate carries that; lock_rate/mean_conf/mean_dconf are
+# excluded since they're identical for every candidate (see the top-3-weight
+# discussion in docs/adr/vj-system.md).
+# ---------------------------------------------------------------------------
+
+
+def test_term_values_by_candidate_excludes_non_discriminating_terms() -> None:
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    by_candidate = kw['term_values_by_candidate']
+    assert by_candidate  # at least one enabled profile scored
+    for terms in by_candidate.values():
+        assert 'lock_rate' not in terms
+        assert 'mean_conf' not in terms
+        assert 'mean_dconf' not in terms
+        assert 'tempo_fit' in terms
+        assert 'centroid_fit' in terms
+        assert 'vocal_hnr_fit' in terms
+        assert 'vocal_fmr_fit' in terms
+
+
+def test_term_values_by_candidate_reaches_sequence_corpus_too() -> None:
+    """The decision log and the sequence corpus are two independent sinks --
+    both must get the new field, not just whichever one a test happens to
+    check first."""
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    captured: list[dict] = []
+    stub._record_sequence_keyframe = lambda *a, **kw: captured.append(kw)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert len(captured) == 1
+    assert 'term_values_by_candidate' in captured[0]
+    assert captured[0]['term_values_by_candidate']
