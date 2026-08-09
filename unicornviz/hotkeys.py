@@ -1499,6 +1499,11 @@ class HotkeyHandler:
             # F1 — first-run tour dialog (also reachable from the context menu).
             a.toggle_tour()
 
+        elif sym == sdl2.SDLK_KP_0:
+            # Keypad 0 — BPM tapper; the readout renders top-right while
+            # tapping (no flash message: the readout IS the feedback).
+            o.bpm_tap()
+
         elif sym == sdl2.SDLK_k:
             if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
                 _refresh_webcam_editor_payload()

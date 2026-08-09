@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.66**
+**Version 1.0.0-beta.67**
 
 ## Contact Me!
 
@@ -557,6 +557,12 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.67** — **KP 0 is a BPM tapper**: tap along on keypad-zero and
+  a cyan readout appears in the top-right corner with the tapped tempo
+  (averaged over up to 8 consecutive intervals; a 2.5 s pause starts a fresh
+  measurement). The readout shows only while tapping (lingers 3 s) and drops
+  below the recording indicator when that occupies the corner. Also removed
+  the COMPOSE debug line from the HUD tweakables block.
 - **1.0.0-beta.66** — **Headless runs record training data by default.** `--dj-mixer-source` and `--media-source` now imply `--training`; `--no-training` opts out. A headless source *is* a training run — that is what the flag group exists for — and requiring a separate opt-in failed silently: the session looked healthy, recorded video and audio correctly, and produced no training data at all, which is only discoverable once the set is over and no longer repeatable. The group description, both source flags and the configuration reference all now state it, and `docs/configuration.md` gains a *Headless / training runs* section (which also folds away a duplicate `[render]` heading).
 - **1.0.0-beta.65** — **`--training`**: enable Auto VJ training capture for a run. There was no way to do this from the command line, so an unattended run recorded **zero** training data unless a human pressed the in-app toggle — which is precisely what headless operation is supposed to remove. The flag turns on all three streams together (decision log, live corpus, sequence corpus), because a decision log without the corpora cannot be scored and a corpus without decisions cannot be explained; partial capture is what makes a run unusable after the fact.
 - **1.0.0-beta.64** — `--dj-mixer-set` and `--dj-mixer-start-delay`, pairing with dj-mixer-01 0.166.0: headless autoplay can now be told **which set to play**, ejects both decks first, and waits (default 3s) before the first track so audio, recording and deck loads settle. Previously it armed a mode but selected nothing, so an unattended run played a random walk of the whole library — watchable, but not a repeatable basis for training. Also pairs with immersive-01 0.10.1, which removes the dead `iMid` uniform that made Tunnel crash on its first frame and get quarantined mid-session.

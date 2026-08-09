@@ -359,6 +359,16 @@ class Overlays:
     _tour_button_rects: tuple = ()
     # Mixer boot profile: restricts CORE_HELP_SECTIONS (None = show all).
     _core_help_filter: tuple | None = None
+    # BPM tapper (KP 0): tap timestamps, newest last. Class-level defaults so
+    # bare test shells work (same pattern as the tour state above).
+    _bpm_tap_times: tuple = ()
+    _bpm_tap_value: float = 0.0
+
+    # Tap-tempo tuning: a gap this long starts a fresh measurement; the
+    # readout lingers this long after the last tap; intervals averaged.
+    BPM_TAP_RESET_S = 2.5
+    BPM_TAP_HOLD_S = 3.0
+    BPM_TAP_MAX_TAPS = 9   # averages up to 8 consecutive intervals
 
     CORE_HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         (
@@ -433,6 +443,7 @@ class Overlays:
                 ('a / A', 'Audio source selector menu'),
                 ('Ctrl+A', 'Audio source selector menu (alternate)'),
                 ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
+                ('KP 0', 'BPM tapper (readout top right while tapping)'),
                 ('m', 'System monitor modal'),
                 ('Alt+M', 'MIDI device selector'),
                 ('B', 'Effects browser (search/filter/preview/pin all effects)'),
@@ -1233,6 +1244,62 @@ void main() {
             return
         self._controller_help_renderer(self)
 
+    # ------------------------------------------------------------------ #
+    # BPM tapper (KP 0) — top-right readout, visible only while tapping    #
+    # ------------------------------------------------------------------ #
+
+    def bpm_tap(self, now: float | None = None) -> float:
+        """Record one tap; return the current tapped BPM (0.0 = need more).
+
+        A gap longer than ``BPM_TAP_RESET_S`` starts a fresh measurement, so
+        the operator just starts tapping again — no clear key. BPM averages
+        the retained consecutive intervals (up to ``BPM_TAP_MAX_TAPS - 1``).
+        """
+        now = time.monotonic() if now is None else float(now)
+        taps = list(self._bpm_tap_times)
+        if taps and now - taps[-1] > self.BPM_TAP_RESET_S:
+            taps = []
+        taps.append(now)
+        taps = taps[-self.BPM_TAP_MAX_TAPS:]
+        self._bpm_tap_times = tuple(taps)
+        if len(taps) >= 2:
+            span = taps[-1] - taps[0]
+            self._bpm_tap_value = (60.0 * (len(taps) - 1) / span) if span > 0 else 0.0
+        else:
+            self._bpm_tap_value = 0.0
+        return self._bpm_tap_value
+
+    def bpm_tapper_active(self, now: float | None = None) -> bool:
+        """Whether the readout should show (tapped within the hold window)."""
+        if not self._bpm_tap_times:
+            return False
+        now = time.monotonic() if now is None else float(now)
+        return now - self._bpm_tap_times[-1] <= self.BPM_TAP_HOLD_S
+
+    def _render_bpm_tapper(self) -> None:
+        """Top-right tapped-BPM readout, only while being tapped.
+
+        Drops below the recording indicator's screen-corner slot whenever
+        recording is active so the two never overlap.
+        """
+        if not self.bpm_tapper_active():
+            return
+        text = (
+            f'TAP {self._bpm_tap_value:5.1f} BPM'
+            if self._bpm_tap_value > 0.0 else 'TAP  ---  BPM'
+        )
+        scale = 2.0
+        text_w = len(text) * 8.0 * scale
+        x = self._width - text_w - 24.0
+        y = 14.0
+        if self._recording_active and self._show_recording_indicator:
+            y += 34.0   # clear the recording dot + timer row
+        self._draw_rect(x - 10.0, y - 6.0, text_w + 20.0, 8.0 * scale + 12.0,
+                        (0.02, 0.04, 0.08, 0.62))
+        pulse = 0.75 + 0.25 * math.sin(self._hud_t * 6.0)
+        self._draw_text(text, x, y, scale=scale,
+                        color=(0.10, 0.94, 1.0, pulse))
+
     def _render_recording_indicator(self) -> None:
         """Draw the live-only recording indicator when the name overlay is visible."""
         if not (self._recording_active and self._show_recording_indicator):
@@ -1311,9 +1378,6 @@ void main() {
         tweak_lines = []
         if postfx_val not in {'N/A', '-', ''}:
             tweak_lines.append(f"POST FX     {postfx_val}")
-        compose_dbg = str(self._hud_state.get('compose_debug', ''))
-        if compose_dbg not in {'', 'N/A', '-'}:
-            tweak_lines.append(f"COMPOSE     {compose_dbg}")
         tweak_lines += [
             f"REACTIVITY  {self._hud_state.get('reactivity', '1.0')}",
             f"SPEED       {self._hud_state.get('speed', 'N/A')}",
@@ -2911,6 +2975,9 @@ void main() {
 
         if include_recording_indicator:
             self._render_recording_indicator()
+
+        if not route_modals_elsewhere:
+            self._render_bpm_tapper()
 
         if self._cta.is_active:
             self._cta.render(dt, self._ctx, self._draw_rect, self._width, self._height)
