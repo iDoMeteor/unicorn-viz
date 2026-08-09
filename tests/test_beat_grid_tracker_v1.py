@@ -300,6 +300,21 @@ def test_drop_score_no_longer_double_counts_treble() -> None:
     assert bass_only.drop_score > treble_only.drop_score
 
 
+def test_band_blend_rebalanced_toward_bass() -> None:
+    """2026-08-09: same rebalance as BeatTracker (v2) -- band_blend split
+    0.45/0.30/0.25 -> 0.7/0.2/0.1 (bass/mid/treble)."""
+    dt = 1.0 / 60.0
+    bass_only = BeatGridTracker({})
+    mid_only = BeatGridTracker({})
+    t = 0.0
+    while t < 3.0:
+        bass_only.update(dt, SimpleNamespace(bass=1.0, mid=0.0, treble=0.0), onsets=None, t=t)
+        mid_only.update(dt, SimpleNamespace(bass=0.0, mid=1.0, treble=0.0), onsets=None, t=t)
+        t += dt
+
+    assert bass_only.drop_score > mid_only.drop_score
+
+
 def test_energy_slope_is_positive_when_energy_is_rising() -> None:
     bg = BeatGridTracker({})
     dt = 1.0 / 60.0

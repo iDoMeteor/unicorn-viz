@@ -633,3 +633,62 @@ def test_drop_score_no_longer_double_counts_treble() -> None:
         t += dt
 
     assert bass_only.drop_score > treble_only.drop_score
+
+
+def test_band_blend_rebalanced_toward_bass() -> None:
+    """2026-08-09: band_blend split 0.45/0.30/0.25 (bass/mid/treble) ->
+    0.7/0.2/0.1 -- a drop should read primarily off the bass band. Mid-only
+    should now score noticeably lower relative to bass-only than it did
+    under the old weighting (0.30 vs 0.45 -> 0.2 vs 0.7, a much bigger gap)."""
+    dt = 1.0 / 60.0
+    bass_only = BeatTracker({})
+    mid_only = BeatTracker({})
+    t = 0.0
+    while t < 3.0:
+        bass_only.update(dt, SimpleNamespace(bass=1.0, mid=0.0, treble=0.0, spectral_flux=0.0),
+                          onsets=None, t=t)
+        mid_only.update(dt, SimpleNamespace(bass=0.0, mid=1.0, treble=0.0, spectral_flux=0.0),
+                         onsets=None, t=t)
+        t += dt
+
+    assert bass_only.drop_score > mid_only.drop_score
+
+
+def test_bass_flux_norm_responds_to_bass_flux() -> None:
+    """New 2026-08-09 term: a sustained bass_flux signal should measurably
+    raise drop_score relative to an otherwise-identical tracker with no
+    bass_flux at all."""
+    dt = 1.0 / 60.0
+    with_bass_flux = BeatTracker({})
+    without_bass_flux = BeatTracker({})
+    t = 0.0
+    while t < 2.0:
+        with_bass_flux.update(
+            dt, SimpleNamespace(bass=0.3, mid=0.3, treble=0.3, spectral_flux=0.0, bass_flux=2.0),
+            onsets=None, t=t,
+        )
+        without_bass_flux.update(
+            dt, SimpleNamespace(bass=0.3, mid=0.3, treble=0.3, spectral_flux=0.0, bass_flux=0.0),
+            onsets=None, t=t,
+        )
+        t += dt
+
+    assert with_bass_flux.bass_flux_fast > 0.0
+    assert with_bass_flux.drop_score > without_bass_flux.drop_score
+
+
+def test_flux_norm_rescoped_excludes_bass_flux() -> None:
+    """2026-08-09: flux_norm = spectral_flux - bass_flux (mid+treble only)
+    now, to avoid double-counting bass against the new bass_flux_norm term.
+    A tracker whose entire reported spectral_flux is attributable to bass
+    (spectral_flux == bass_flux) should show ~zero smoothed flux_norm
+    input, since the bass contribution is subtracted out."""
+    dt = 1.0 / 60.0
+    bt = BeatTracker({})
+    t = 0.0
+    while t < 2.0:
+        bt.update(dt, SimpleNamespace(bass=0.3, mid=0.0, treble=0.0, spectral_flux=2.0, bass_flux=2.0),
+                   onsets=None, t=t)
+        t += dt
+
+    assert bt.spectral_flux_smooth == pytest.approx(0.0, abs=1e-6)

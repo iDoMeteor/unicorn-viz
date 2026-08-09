@@ -149,6 +149,56 @@ def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path) -> Non
     assert not (tmp_path / 'session_score.json').exists()
 
 
+# ---- _run_llm_summary (2026-08-09: consolidated console summary) -----------
+
+_run_llm_summary = _MOD._run_llm_summary
+_build_summary_prompt = _MOD._build_summary_prompt
+
+
+def test_run_llm_summary_none_when_no_llm_data(tmp_path: Path) -> None:
+    scorecard_path = tmp_path / 'scorecard.md'
+    scorecard_path.write_text('# scorecard', encoding='utf-8')
+    with patch.object(_MOD, '_call_llm', side_effect=AssertionError('should not be called')):
+        result = _run_llm_summary(tmp_path, scorecard_path, None, 'openai', 'sk-fake')
+    assert result is None
+
+
+def test_run_llm_summary_none_when_no_provider(tmp_path: Path) -> None:
+    scorecard_path = tmp_path / 'scorecard.md'
+    scorecard_path.write_text('# scorecard', encoding='utf-8')
+    result = _run_llm_summary(tmp_path, scorecard_path, {'detector': {}}, None, None)
+    assert result is None
+
+
+def test_run_llm_summary_returns_summary_text(tmp_path: Path) -> None:
+    scorecard_path = tmp_path / 'scorecard.md'
+    scorecard_path.write_text('# scorecard', encoding='utf-8')
+    (tmp_path / 'recommender_score.md').write_text('x', encoding='utf-8')
+    (tmp_path / 'detector_score.md').write_text('x', encoding='utf-8')
+    (tmp_path / 'director_score.md').write_text('x', encoding='utf-8')
+    with patch.object(_MOD, '_call_llm', return_value='{"summary": "Top takeaway here."}'):
+        result = _run_llm_summary(tmp_path, scorecard_path, {'detector': {}}, 'openai', 'sk-fake')
+    assert result == 'Top takeaway here.'
+
+
+def test_run_llm_summary_none_on_call_failure(tmp_path: Path) -> None:
+    scorecard_path = tmp_path / 'scorecard.md'
+    scorecard_path.write_text('# scorecard', encoding='utf-8')
+    with patch.object(_MOD, '_call_llm', side_effect=RuntimeError('boom')):
+        result = _run_llm_summary(tmp_path, scorecard_path, {'detector': {}}, 'openai', 'sk-fake')
+    assert result is None
+
+
+def test_build_summary_prompt_does_not_ask_to_restate_reports() -> None:
+    """Owner instruction: reports stay fully separate on disk -- the
+    summary is a synthesis pass, not a merge. Loosely checks the prompt
+    doesn't ask the LLM to reproduce report content verbatim."""
+    prompt = _build_summary_prompt('scorecard text', {'detector': {}}, {'scorecard': Path('scorecard.md')})
+    assert 'summary' in prompt.lower()
+    assert 'scorecard text' in prompt
+    assert 'top 3' in prompt.lower() or 'top three' in prompt.lower()
+
+
 # ---- _score_lock_quality ----------------------------------------------------
 
 

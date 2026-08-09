@@ -322,7 +322,12 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.16,
         bpm_hint_min=122.0,
         bpm_hint_max=130.0,
-        spectral_centroid_mu=2550.0,
+        # 2026-08-09: 2550 -> 2900 (LLM tuning rec from `library/a`, observed
+        # 2910.5) -- increases separation from house's own mu (2650), the
+        # exact pair behind that session's #1 confusion (Tech House ->
+        # house, 1060x). See docs/planning/
+        # auto-vj-director-detector-refinement-plan-2026-08-09.md section 1.
+        spectral_centroid_mu=2900.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.065,
         zcr_sigma=0.015,

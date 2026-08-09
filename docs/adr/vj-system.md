@@ -1706,6 +1706,177 @@ with comments explaining what changed and why). `ruff`/`bandit` clean.
 
 ---
 
+## Director/Detector/Recommender Refinement Batch (2026-08-09)
+
+Implements the LHF (low-hanging-fruit) items from
+`docs/planning/auto-vj-director-detector-refinement-plan-2026-08-09.md`
+after two discussion rounds resolved nearly all open questions. Deferred
+items (config-menu UI, PGW/PGTT, CLI A/B overrides, `INTRO`/`OUTRO` modes)
+stay in the plan doc as follow-on work, not covered here.
+
+**`DROP -> IMPACT`: confirmed final design philosophy.** The 2026-08-05
+one-shot design below (`_infer_peak_tier()` decided once at `_fire_drop()`
+time) is the permanent mechanism for how a drop's tier gets decided --
+nothing further planned on that specific question. What changes in this
+batch is downstream of it: what IMPACT *does* once a major-tier drop has
+fired.
+
+**CLIMAX decoupled from IMPACT.** Previously CLIMAX was reachable only
+through IMPACT -- `_enter_climax()`'s only call site was inside the
+`_mode == _IMPACT` branch, after `impact_hold_s` elapsed on a major-tier
+flourish. IMPACT wasn't just "the flourish for a major drop," it was also
+the *only* corridor CLIMAX could be reached through. Owner: "IMPACT is
+purely related to firing of major drop... obviously IMPACT -> CLIMAX is not
+appropriate anymore." Now: `climax_worthy`'s gate (unchanged verbatim --
+`peak_tier == 'major'`, downbeat confidence, score-vs-threshold-plus-
+progress OR early-override) is evaluated directly from the `DROP` branch,
+guarded by a minimum time-since-fire floor that reuses `impact_hold_s`
+rather than inventing a second timing constant. IMPACT itself is now purely
+the fixed-duration entry flourish -- it always settles back into ordinary
+DROP when its hold elapses, no gate check left inside it.
+
+**`BREAKDOWN <-> DROP` added; general order loosening.** `BREAKDOWN -> DROP`
+didn't exist at all -- confirmed via code inspection, not just doc gaps.
+Owner: "that's like most songs in the primary target genres" (many
+house/tech-house tracks breakdown straight back into the next drop with no
+distinct build phase). Added, gated by the same score/downbeat-confidence
+threshold BUILD's own (non-fastlane) drop trigger uses, plus a small
+minimum-time-in-breakdown floor. `DROP -> BREAKDOWN` also added: a drop that
+fizzles, or whose cooldown elapses while energy is already low, can now
+settle straight into BREAKDOWN instead of always routing through CRUISE
+first -- reuses the same low-energy evidence CRUISE itself already used to
+detect a breakdown (`_post_drop_landing_mode()`), so the destination
+reflects live audio evidence rather than a fixed sequence position. Per
+owner direction ("we really shouldn't be discriminating about order much at
+all, aside from intros, outros & major drop -> climax"), the remaining hard
+constraints are: CLIMAX only follows a major-tier DROP (unchanged), and the
+intro/outro concept -- which doesn't exist in the mode state machine yet and
+is scoped as its own follow-on design (two new source-gated modes,
+`INTRO`/`OUTRO`, applied only when dj-mixer-01/media-01 can supply section
+metadata) rather than implemented in this batch.
+
+**`drop_score` composition reworked (both `BeatGridTracker`/v1 and
+`BeatTracker`/v2, `beat_grid.py`).** `band_blend`'s internal split moved
+0.45/0.30/0.25 (bass/mid/treble) to 0.7/0.2/0.1 -- a drop should read
+primarily off the bass band. v2 gained a new term, `bass_flux_norm`: a
+dedicated bass-transient signal (the previous composite had none -- only a
+smoothed bass *level* via `band_blend`, no bass *attack* detector), using
+`bass_flux` (already computed per-frame in `unicornviz/audio/analyzer.py`
+for downbeat detection, propagated through `AudioManager._copy_audio_into`,
+previously unused by `drop_score`). Fast-attack/slower-release envelope
+(not the symmetric EMA the existing flux term uses) -- owner: "one big bass
+hit after next to no bass should hit like a freight train as fast as
+possible." The existing `flux_norm` term is rescoped to mid+treble only
+(`spectral_flux - bass_flux`, since no separate treble-only signal is
+computed) to avoid double-counting bass between it and the new term -- the
+same shape of bug as the treble double-count fixed earlier the same day,
+just avoided proactively this time instead of found after the fact. Full
+5-term reweight: `energy_norm*0.15 + slope_norm*0.35 + band_blend*0.15 +
+flux_norm*0.10 + bass_flux_norm*0.25` (was `energy_norm*0.25 +
+slope_norm*0.409 + band_blend*0.182 + flux_norm*0.159`). `slope_norm` stays
+the clear largest single term (it drives most breakdown->build detections);
+`bass_flux_norm` is the second-largest, per "make it heavy." **All of these
+numbers are a first-pass starting point, not final** -- the full reweight
+genuinely needs the upcoming training-marathon's data (plan section 4d).
+
+**`_phrase_bias()`'s 9 inline literals (7 conceptual terms) extracted into
+named, profile-scoped constants** (`_phrase_under_over_hold_mult`,
+`_phrase_boundary_bonus_mult`, `_phrase_peak_flourish_bonus_mult`,
+`_phrase_early_song_suppress_mult`, `_phrase_outro_suppress_mult`,
+`_phrase_external_match_mult`, `_phrase_external_mismatch_mult`,
+`_phrase_external_arm_mult`). Owner: "hidden magic is no good... let's log,
+track & analyze [these], and extract them into tweakables." Two value
+changes land in the same commit:
+- `phrase_boundary_bonus_mult`: 0.25 -> 0.3 (LLM tuning recommendation from
+  the `library/a` training session, applied as-is).
+- Sectionality (`phrase_external_match_mult`/`phrase_external_arm_mult`):
+  1.0 -> 2.0 (earlier today) -> **1.5** (this batch). The "raise it hard,
+  treat it as quite authoritative" instruction from earlier today was
+  originally misattributed to `phrase_boundary_bonus_mult` -- corrected by
+  the owner to mean these sectionality terms instead. The final value isn't
+  the largest defensible number, though: owner framed it as an
+  explore/exploit call, not an accuracy call -- "we still want the AI to do
+  *some* work... it's more important to have it learning for the next
+  months or year... if we don't give it opportunity to chip in, it won't
+  learn anything." At 2.0 a confident external hint could dominate the
+  internal bar-counting/audio-evidence terms almost completely, starving
+  the internal detector/director's own reasoning of the chance to be tested
+  against real outcomes -- exactly the signal the training marathon needs.
+  1.5 keeps external hints the clearly strongest single evidence category
+  (above the internal terms' 0.3-0.6 range) while leaving room for internal
+  reasoning to occasionally win and generate learnable signal.
+
+Per-term logging added: `_phrase_bias()` now stashes its last call's full
+term breakdown (`self._last_phrase_bias_terms`), picked up by
+`_mark_mode_transition()` and included in every real transition's action-log
+payload as `phrase_bias_terms` -- answers "are we not logging the external
+influence data? that would tell us what and when which is correct" (owner)
+directly: previously nothing recorded what `_get_section_hint()` returned or
+contributed on any given tick.
+
+**Timing constants** (`build_max_s`/`breakdown_max_s` per mood profile).
+Owner-supplied values directly, not derived: chill 52->60 / 55->120, normie
+36->45 / 52->90, raver 55->30 / 80->60. Raver previously had the *longest*
+`build_max_s` (55.0, even longer than chill's 52.0) and by far the longest
+`breakdown_max_s` (80.0) -- backwards for a mood meant to have the shortest
+patience/fastest cycling. Owner's own explanation: "those timings make some
+sense since most of my tuning in those days was spent in raver mode" --
+raver absorbed most of the early hand-tuning attention, leaving chill/normie
+comparatively under-tuned by accident. Also: `drop_timeout_score_floor`'s
+code-level fallback default changed from `self._drop_threshold` (no actual
+relaxation, despite being documented as a "relaxed-but-not-zero floor") to
+`self._drop_threshold * 0.65` (in the family of the three shipped profiles'
+own values) -- never misfired in practice since all three profiles already
+override it, but the fallback should behave as documented for a future
+profile that omits the key.
+
+**Recommender weights**: `spectral_shape_fit` 1.0 -> 1.2,
+`kick_regularity_fit` 0.5 -> 0.7 -- both LLM tuning recommendations from the
+`library/a` session, applied as-is.
+`_BPM_LOCK_RELEASE_CONFIDENCE` 0.28 -> 0.25 was also recommended by the same
+session but **held back, "to watch" only** -- that session's own scorecard
+shows `0 lock gained` / `0 lock lost`, zero churn, so the LLM's stated
+rationale ("minor lock churn suggests release confidence is slightly too
+high") doesn't match the data it came from. Revisit only if a future
+session's scorecard actually shows churn.
+
+**`tech_house.spectral_centroid_mu`** (`unicornviz/audio/profiles.py`):
+2550 -> 2900, also an LLM tuning recommendation (observed 2910.5 in the same
+session). Checked for overlap before applying: `house` sits at mu=2650/
+sigma=600 (the exact profile behind that session's #1 confusion, `Tech
+House -> house`, 1060x) -- moving tech_house's mu to 2900 *increases* its
+distance from house's mu (100 -> 250), working against the observed
+confusion rather than into it. `deep_house` (1250) and `peak_time` (2350)
+are already far enough away that the move doesn't bring tech_house closer
+to either.
+
+**Training-set packaging** (`drop-ins/training-kit-01/tools/
+package_training_set.py`): the five per-bucket report files
+(`scorecard.md`, `recommender_score.md`, `detector_score.md`,
+`director_score.md`, `tuning_recommendations.md`) stay fully separate
+(owner instruction -- this wasn't the discoverability fix). New: a follow-up
+LLM call synthesizes all five into a short console-only summary (top 3
+takeaways, whether any report's recommendations conflict with another's, a
+pointer to the single most actionable file) printed at the end of a
+packaging run, followed by reminders of all five file paths -- addresses
+"I don't see anything about the weights from the LLM report" (the
+recommendations were real, just living in `tuning_recommendations.md` while
+the user was checking `recommender_score.md`).
+
+**Subsystem versioning rescheme**: `_DETECTOR_VERSION`/`_DIRECTOR_VERSION`/
+`_RECOMMENDER_VERSION` moved from an `0.x.y` scheme to `1.0.0-rc.N` --
+`_DETECTOR_VERSION` -> `1.0.0-rc.3`, `_RECOMMENDER_VERSION` ->
+`1.0.0-rc.2`, `_DIRECTOR_VERSION` -> `1.0.0-rc.2`. See the "Subsystem
+Versioning" ADR entry above for the original scheme and the plan doc
+section 8a for the full resolution -- reuses `__version__`'s own existing
+`-rc.N` qualifier rather than inventing a new one, and needed no `CLAUDE.md`
+exception since that qualifier was already the sanctioned "approaching 1.0"
+signal for this codebase.
+
+**Verified:** [pending -- see commit for test run results]
+
+---
+
 ## Phrase-Aware Director: Bar-Relative Bias + IMPACT Fold-In (2026-08-05)
 
 Decision: the director gains a bar-relative phrase clock and a soft
@@ -2519,6 +2690,7 @@ training-pipeline concern; this entry exists here only because both touch
 | 2026-07-18–2026-08-04 | `set_profile()` narrowing `_bpm_min`/`_bpm_max` from `bpm_hint_min`/`bpm_hint_max` (all engines; v3 kept applying it even while confidently locked) | The dominant "BPM tending hot" mechanism, not the prior re-prime the 2026-07-18 fix addressed — a wrongly-applied profile could permanently hide the true tempo from the search, self-confirming the wrong profile. Removed entirely (P0-A); see BPM Detector Audit section above |
 | 2026-08-04–2026-08-06 | Recommender `_profile_score()` sigma floor `max(0.45, ...)` | P2-E's premise (two disagreeing sigma floors is itself a bug) was wrong -- they're different concerns. Live session showed psytrance still winning at 30 BPM off its mu despite correctly-favoring spectral-shape fit; reverted to `max(0.08, ...)` (see Recommender Sigma-Floor Revert section) |
 | 2026-06-18–2026-08-05 | `IMPACT` as a held state, earned via a mid-groove score re-check after a delay (`impact_trigger_score`/`impact_min_delay_s`/`impact_max_delay_s`) | Didn't correspond to anything in real song structure — imposed a fixed DROP→IMPACT→CLIMAX staircase on every drop cycle regardless of the track. Folded into DROP as a fixed-duration entry flourish for a later drop, decided once at fire time; see Phrase-Aware Director section above |
+| 2026-08-05–2026-08-09 | `CLIMAX` reachable only via `IMPACT` (the only `_enter_climax()` call site was inside the `_mode == _IMPACT` branch) | IMPACT was never meant to be a CLIMAX prerequisite, only the major-tier drop's own entry flourish — the two were structurally fused with no stated reason. `climax_worthy` (gate logic unchanged) now evaluates directly from DROP, guarded by a reused `impact_hold_s` minimum-time-since-fire floor instead of requiring IMPACT's specific state transit; see Director/Detector/Recommender Refinement Batch section above |
 
 ---
 

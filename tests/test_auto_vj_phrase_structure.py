@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import random
+import time
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
@@ -86,6 +87,14 @@ _PHRASE_DEFAULTS = dict(
     _phrase_external_tier_min_confidence=0.6,
     _phrase_external_proximity_bars=8.0,
     _phrase_arm_proximity_bars=16.0,
+    _phrase_under_over_hold_mult=0.6,
+    _phrase_boundary_bonus_mult=0.3,
+    _phrase_peak_flourish_bonus_mult=0.3,
+    _phrase_early_song_suppress_mult=0.4,
+    _phrase_outro_suppress_mult=0.5,
+    _phrase_external_match_mult=1.5,
+    _phrase_external_mismatch_mult=0.5,
+    _phrase_external_arm_mult=1.5,
 )
 
 
@@ -571,14 +580,6 @@ def test_impact_settles_back_to_drop_when_not_climax_worthy() -> None:
     assert inst._mode == 'DROP'
 
 
-def test_impact_escalates_to_climax_when_major_tier_and_progress_favors_it() -> None:
-    inst = _bare_impact_tick_controller(score=0.9, dconf=0.9, peak_tier='major', song_progress=0.6)
-
-    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
-
-    assert inst._mode == 'CLIMAX'
-
-
 def test_impact_does_not_escalate_to_climax_on_minor_tier_even_with_high_score() -> None:
     """A minor-tier peak never escalates to CLIMAX, regardless of score --
     tier is decided once at drop-fire and is not reconsidered here."""
@@ -589,16 +590,67 @@ def test_impact_does_not_escalate_to_climax_on_minor_tier_even_with_high_score()
     assert inst._mode == 'DROP'
 
 
-def test_impact_escalates_to_climax_via_early_override_without_known_progress() -> None:
+# ---------------------------------------------------------------------------
+# DROP tick branch -- climax-worthy decision, decoupled from IMPACT
+# (2026-08-09, plan section 3b: CLIMAX no longer requires passing through
+# IMPACT's fixed hold window -- climax_worthy is evaluated directly from
+# DROP, guarded only by a reused impact_hold_s minimum-time-since-fire
+# floor). _bare_impact_tick_controller's setup is reused verbatim (same
+# thresholds/constants), just with _mode='DROP' and _drop_fired_t moved far
+# enough into the past that elapsed >= impact_hold.
+# ---------------------------------------------------------------------------
+
+def _bare_drop_climax_tick_controller(*, score: float, dconf: float, peak_tier: str,
+                                       song_progress: float | None) -> AutoVJController:
+    inst = _bare_impact_tick_controller(
+        score=score, dconf=dconf, peak_tier=peak_tier, song_progress=song_progress,
+    )
+    inst._mode = 'DROP'
+    # 2s ago: clears impact_hold_s (1.0) without also clearing
+    # drop_cooldown_s (30.0) -- unlike _impact_fired_t's 0.0/1_000_000.0
+    # convention elsewhere in this file, DROP's own cooldown check means an
+    # arbitrarily-huge "in the past" value would also (wrongly) trip
+    # _exit_drop() before the climax check gets a chance to matter.
+    inst._drop_fired_t = time.monotonic() - 2.0
+    return inst
+
+
+def test_drop_does_not_evaluate_climax_before_impact_hold_elapses() -> None:
+    inst = _bare_drop_climax_tick_controller(score=0.9, dconf=0.9, peak_tier='major', song_progress=0.6)
+    inst._drop_fired_t = 999_000.0  # far in the future -> elapsed < impact_hold
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'DROP'
+
+
+def test_drop_escalates_to_climax_when_major_tier_and_progress_favors_it() -> None:
+    inst = _bare_drop_climax_tick_controller(score=0.9, dconf=0.9, peak_tier='major', song_progress=0.6)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'CLIMAX'
+
+
+def test_drop_does_not_escalate_to_climax_on_minor_tier_even_with_high_score() -> None:
+    inst = _bare_drop_climax_tick_controller(score=0.95, dconf=0.9, peak_tier='minor', song_progress=0.9)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'DROP'
+
+
+def test_drop_escalates_to_climax_via_early_override_without_known_progress() -> None:
     """No song-position info at all (e.g. a live stream) -- overwhelming
     score evidence can still justify CLIMAX; a merely-good score cannot."""
-    strong = _bare_impact_tick_controller(score=0.95, dconf=0.9, peak_tier='major', song_progress=None)
-    weak = _bare_impact_tick_controller(score=0.65, dconf=0.9, peak_tier='major', song_progress=None)
+    strong = _bare_drop_climax_tick_controller(score=0.95, dconf=0.9, peak_tier='major', song_progress=None)
+    weak = _bare_drop_climax_tick_controller(score=0.65, dconf=0.9, peak_tier='major', song_progress=None)
 
     strong._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
     weak._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
 
     assert strong._mode == 'CLIMAX'
+    assert weak._mode == 'DROP'
     assert weak._mode == 'DROP'
 
 
@@ -626,3 +678,106 @@ def test_allow_timeout_forced_transitions_fallback_defaults_to_true() -> None:
     result = AutoVJController._profile_value(inst, 'allow_timeout_forced_transitions', True)
 
     assert result is True
+
+
+def test_drop_timeout_score_floor_fallback_actually_relaxes_threshold() -> None:
+    """2026-08-09: fallback changed from self._drop_threshold (no actual
+    relaxation despite being documented as a 'relaxed-but-not-zero floor')
+    to 0.65x threshold -- exercises the exact _profile_value() lookup
+    __init__ uses, with no active profile and no config.toml override
+    supplying the key."""
+    inst = object.__new__(AutoVJController)
+    inst._use_user_profile_overrides = False
+    inst._explicit_profile_override_keys = set()
+    inst._profile_defaults = {}
+    inst._cfg = {}
+    inst._drop_threshold = 0.78
+
+    result = AutoVJController._profile_value(inst, 'drop_timeout_score_floor', inst._drop_threshold * 0.65)
+
+    assert result == pytest.approx(0.78 * 0.65)
+    assert result < inst._drop_threshold  # the actual relaxation this fix restores
+
+
+# ---------------------------------------------------------------------------
+# BREAKDOWN <-> DROP (2026-08-09, plan sections 2/3c): general order
+# loosening -- previously the only way out of BREAKDOWN was _enter_build()
+# or a timeout to CRUISE, and the only way out of DROP was cooldown/fizzle
+# to CRUISE. Many tracks in the primary target genres breakdown straight
+# back into the next drop with no distinct build phase, and a fizzled/
+# cooled-down drop with energy already low should be able to settle
+# straight into BREAKDOWN instead of always routing through CRUISE.
+# ---------------------------------------------------------------------------
+
+def _bare_breakdown_tick_controller(*, score: float, dconf: float, breakdown_enter_t: float) -> AutoVJController:
+    inst = _bare_impact_tick_controller(score=score, dconf=dconf, peak_tier='minor', song_progress=0.5)
+    inst._mode = 'BREAKDOWN'
+    inst._breakdown_enter_t = breakdown_enter_t
+    # Far in the future -> _bare_impact_tick_controller's -1e9 default
+    # (fine for IMPACT-branch tests, which never read it) would otherwise
+    # make the breakdown-timeout branch fire immediately on every tick here.
+    inst._breakdown_deadline_t = time.monotonic() + 1000.0
+    inst._drop_pending = False  # _bare_drop_controller defaults this True
+    # bpm=0 -> _schedule_drop() calls _fire_drop() synchronously instead of
+    # going through self._grid.schedule_for_next_downbeat(), which the
+    # SimpleNamespace grid stub doesn't implement.
+    inst._grid = SimpleNamespace(drop_score=score, downbeat_confidence=dconf,
+                                  bpm=0.0, energy_slope=0.0, energy=0.5)
+    return inst
+
+
+def test_breakdown_fires_drop_when_evidence_clears_threshold() -> None:
+    inst = _bare_breakdown_tick_controller(score=0.8, dconf=0.9, breakdown_enter_t=time.monotonic() - 5.0)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode in ('DROP', 'IMPACT')  # _fire_drop() ran synchronously
+    assert inst._drop_cycle_count == 1
+
+
+def test_breakdown_does_not_fire_drop_before_minimum_time_floor() -> None:
+    """Guards against firing on a single noisy frame right at breakdown
+    entry, even with strong score/confidence evidence."""
+    inst = _bare_breakdown_tick_controller(score=0.8, dconf=0.9, breakdown_enter_t=time.monotonic() - 0.1)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'BREAKDOWN'
+
+
+def test_breakdown_does_not_fire_drop_when_score_below_threshold() -> None:
+    inst = _bare_breakdown_tick_controller(score=0.2, dconf=0.9, breakdown_enter_t=time.monotonic() - 5.0)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'BREAKDOWN'
+
+
+def _bare_drop_fizzle_controller(*, slope: float, energy: float) -> AutoVJController:
+    inst = _bare_impact_tick_controller(score=0.1, dconf=0.9, peak_tier='minor', song_progress=0.5)
+    inst._mode = 'DROP'
+    inst._drop_fired_t = time.monotonic() - 5.0  # clears both impact_hold_s and fizzle_grace_s
+    inst._drop_peak_score = 0.1  # never rose above _drop_fizzle_score (0.5)
+    inst._grid = SimpleNamespace(drop_score=0.1, downbeat_confidence=0.9,
+                                  bpm=124.0, energy_slope=slope, energy=energy)
+    return inst
+
+
+def test_drop_fizzle_lands_in_breakdown_when_energy_already_low() -> None:
+    """slope/energy both clear BREAKDOWN's own detection thresholds
+    (_breakdown_slope_threshold=-0.1, _breakdown_energy_threshold=0.9)."""
+    inst = _bare_drop_fizzle_controller(slope=-0.2, energy=0.3)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'BREAKDOWN'
+
+
+def test_drop_fizzle_lands_in_cruise_when_energy_not_low() -> None:
+    """Preserves the prior behavior when the audio evidence doesn't
+    actually look like a breakdown -- fizzle still lands in CRUISE."""
+    inst = _bare_drop_fizzle_controller(slope=0.5, energy=0.95)
+
+    inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
+
+    assert inst._mode == 'CRUISE'

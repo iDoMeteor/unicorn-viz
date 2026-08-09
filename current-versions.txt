@@ -4,10 +4,10 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.72       BETA          module
+  core (unicornviz)             1.0.0-beta.73       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.170.0             alpha ▲       module
+  dj-mixer-01                   0.177.0             alpha ▲       module
   media-01                      0.20.0              alpha ▲       module
   games-01                      0.13.1              alpha ▲       module
   cosmic-01                     0.11.1              alpha ▲       module
@@ -15,7 +15,7 @@
   projectm-01                   0.10.3              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.30         RC            module
+  auto-vj-01                    1.0.0-rc.31         RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
