@@ -270,3 +270,13 @@ interop to its host.
   publisher — see the Status header.
 
 **Nothing outstanding.** Phase 1 can start whenever.
+
+---
+
+## Phase 3 (NDI) — moved out, 2026-08-08
+
+NDI is no longer part of this plan or this drop-in. The NDI SDK is
+proprietary, and folding it into `video-out-01` would put a license
+obligation inside a component that is otherwise clean (GPL ioctls +
+MIT libfunnel). It now has its own drop-in and plan:
+[ndi-output-plan-2026-08-08.md](ndi-output-plan-2026-08-08.md).

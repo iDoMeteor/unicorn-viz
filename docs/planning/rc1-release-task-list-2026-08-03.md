@@ -197,6 +197,12 @@ Effort: S < half day · M ≈ 1-2 days · L ≈ 3+ days.
 - Frame-budget CI guard (DW-001) and compositor dedup (standing deferred).
 - macOS channel (☆ today) — per installers.md, post-RC1.
 - Test dirs for multi-head-01/midi-controllers-01.
+- **NDI output (`ndi-out-01`)** — Phase 3 of video interop, kept as its own
+  drop-in because the NDI SDK is proprietary and would otherwise put a
+  license obligation inside the cleanly-licensed `video-out-01`. Blocked on
+  an owner action (accept Vizrt's EULA, install the SDK), not on
+  engineering. See
+  [ndi-output-plan-2026-08-08.md](ndi-output-plan-2026-08-08.md).
 - Screenshot path fix + async PNG encode; log-band `isEnabledFor` gating;
   public-surface stragglers; icon-set leak on DPI-bucket change.
 

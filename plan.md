@@ -57,6 +57,12 @@
 - `[done]` RTMP streaming subsystem drop-in.
 - `[todo]` Validate ProjectM on primary F44 machine and continue polish there.
 - `[todo]` Design vignette/post-process system (see Phase 4).
+- `[deferred]` NDI output as its own drop-in (`ndi-out-01`) — Phase 3 of video
+  interop. Split out of `video-out-01` because the NDI SDK is proprietary and
+  would otherwise put a license obligation inside a cleanly-licensed component.
+  Blocked on an owner action (accept Vizrt's EULA, install the SDK), not on
+  engineering; the core integration points already exist.
+  See `docs/planning/ndi-output-plan-2026-08-08.md`.
 - `[todo]` Design external plugin loading for paid effect packs.
 - `[done]` Hotkey UX remap pass (mnemonic grouping + live-performance ergonomics).
 - `[done]` Add optional global keystroke logging (`logs/keystrokes-*.log`) with beat-context snapshot (bpm, beat_phase, energy, vj_mode) per keypress; gated by `[keystrokes] enabled = false`.
