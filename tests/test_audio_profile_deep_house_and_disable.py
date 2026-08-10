@@ -6,7 +6,10 @@
 - 'electronic' disabled from discovery 2026-08-06 (cosine-similarity audit
   found its expected_bands more similar to far-tempo profiles than its own
   tempo neighbors -- a non-discriminating catch-all, same treatment as
-  'generic'; see docs/adr/vj-system.md).
+  'generic'; see docs/adr/vj-system.md), then revived and renamed to
+  'Dance' 2026-08-10 (owner call: a deliberately house-identical profile
+  minus vocal presence, so the old "too similar to neighbors" disable
+  reason no longer applies -- see docs/adr/vj-system.md).
 - 'rap' and 'r&b' merged into 'rap_rnb' 2026-08-06 (owner call: genuine
   siblings, 0.9856 cosine similarity, 3 BPM apart -- not a false
   catch-all pairing like fire_dj/electronic).
@@ -61,36 +64,49 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     enabled = enabled_profiles()
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
-    assert 'electronic' not in enabled
+    assert 'electronic' in enabled   # revived as 'Dance' 2026-08-10
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
 
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     """Every profile except the explicitly-disabled ones should default to
     enabled=True without having to set it themselves."""
-    _disabled = {'generic', 'electronic'}
+    _disabled = {'generic'}
     for key, profile in PROFILES.items():
         if key in _disabled:
             continue
         assert profile.enabled is True, f'{key} unexpectedly disabled'
 
 
-def test_electronic_is_disabled_but_still_in_profiles() -> None:
+def test_electronic_key_now_resolves_to_the_revived_dance_profile() -> None:
+    """Dict key kept as 'electronic' for backward compatibility with any
+    existing config/corpus data that references it by key -- only the
+    display name and enabled state changed."""
     assert 'electronic' in PROFILES
-    assert PROFILES['electronic'].enabled is False
+    p = PROFILES['electronic']
+    assert p.enabled is True
+    assert p.name == 'Dance'
+    assert 'electronic' in list_profiles()
+    assert 'electronic' in enabled_profiles()
 
 
-def test_electronic_excluded_from_discovery() -> None:
-    assert 'electronic' not in list_profiles()
-    assert 'electronic' not in enabled_profiles()
-
-
-def test_electronic_still_resolvable_by_direct_lookup() -> None:
-    """Disabled means excluded from discovery, not deleted -- direct
-    reference (explicit config, internal fallback) must keep working."""
-    p = get_profile('electronic')
-    assert p.name == 'Electronic'
-    assert p is PROFILES['electronic']
+def test_dance_matches_house_on_everything_except_vocal_presence() -> None:
+    """The split between 'house' and 'dance' (electronic, revived) is meant
+    to ride entirely on vocal_hnr_fit/vocal_fmr_fit -- owner: 'vocals is
+    enough to carry the split, otherwise basically indistinguishable.'"""
+    house = get_profile('house')
+    dance = get_profile('electronic')
+    assert dance.bpm_prior_mu == house.bpm_prior_mu
+    assert dance.bpm_prior_sigma == house.bpm_prior_sigma
+    assert dance.bpm_hint_min == house.bpm_hint_min
+    assert dance.bpm_hint_max == house.bpm_hint_max
+    assert dance.expected_bands == house.expected_bands
+    # The actual discriminator: dance has near-zero vocal presence, house
+    # has a real target.
+    assert dance.vocal_hnr_mu is not None and dance.vocal_hnr_mu < 0.10
+    assert dance.vocal_fmr_mu is not None and dance.vocal_fmr_mu < 0.10
+    assert house.vocal_hnr_mu is not None and house.vocal_hnr_mu > dance.vocal_hnr_mu
+    assert house.vocal_fmr_mu is not None and house.vocal_fmr_mu > dance.vocal_fmr_mu
 
 
 # ---- rap + r&b merged into rap_rnb (2026-08-06) ------------------------
@@ -108,13 +124,17 @@ def test_rap_rnb_is_registered_and_discoverable() -> None:
     assert PROFILES['rap_rnb'].enabled is True
 
 
-def test_rap_rnb_bpm_prior_is_a_blend_of_the_two_originals() -> None:
-    """86.5 = (88.0 rap + 85.0 r&b) / 2; the merge shouldn't silently pick
-    one side over the other."""
+def test_rap_rnb_bpm_prior_reflects_2026_08_10_owner_judgment_call() -> None:
+    """mu moved 86.5 (the original rap/r&b merge blend) -> 85.0 the same
+    day as the house-family consolidation pass -- an explicit owner
+    judgment call, not fit from this session's corpus (that corpus's own
+    rap/r&b sample was flagged as unrepresentative and separately found to
+    carry real tactus-fold contamination -- see docs/adr/vj-system.md).
+    hint_min/max unchanged, independently authored from mu/sigma."""
     p = PROFILES['rap_rnb']
-    assert p.bpm_prior_mu == 86.5
-    assert p.bpm_hint_min == 70.0  # union: rap's wider floor
-    assert p.bpm_hint_max == 100.0  # both originals agreed here
+    assert p.bpm_prior_mu == 85.0
+    assert p.bpm_hint_min == 70.0
+    assert p.bpm_hint_max == 100.0
 
 
 # ---- deep_house -------------------------------------------------------
@@ -189,3 +209,30 @@ def test_hyphy_chillstep_similarity_improved_and_stays_bounded() -> None:
     chillstep = get_profile('chillstep')
     sim = _cosine_sim(hyphy.expected_bands, chillstep.expected_bands)
     assert sim < 0.975  # was 0.9788 before the scoped regeneration
+
+
+# ---- mu-in-hint drift canary (2026-08-10) -------------------------------
+#
+# bpm_prior_mu/sigma (steers the live tempo search + drives tempo_fit, the
+# recommender's highest-weighted term) and bpm_hint_min/max (a display
+# label + a scorecard "was the detected bpm in range" metric, currently NO
+# live effect on recommendation) are independently authored -- deliberately
+# NOT derived from each other. Deriving hint from sigma was considered and
+# rejected: hint grades the detector, sigma steers it, so computing the
+# yardstick from the steering knob would let widening the knob
+# auto-improve the score with nothing having actually gotten better (the
+# same failure shape as the hard-clamp bug already reverted, relocated
+# into measurement instead of search). This test is the cheap alternative:
+# assert the two independently-authored numbers still agree on the basic
+# fact that the prior's center falls inside the display range, so a future
+# edit to one without the other fails loudly instead of drifting silently.
+
+
+def test_bpm_prior_mu_falls_inside_its_own_hint_range() -> None:
+    for key, profile in PROFILES.items():
+        if profile.bpm_hint_min is None or profile.bpm_hint_max is None:
+            continue
+        assert profile.bpm_hint_min <= profile.bpm_prior_mu <= profile.bpm_hint_max, (
+            f'{key}: bpm_prior_mu={profile.bpm_prior_mu} falls outside '
+            f'bpm_hint range [{profile.bpm_hint_min}, {profile.bpm_hint_max}]'
+        )

@@ -22,10 +22,14 @@ def test_synthwave_tempo_prior_matches_classic_kavinsky_range() -> None:
     assert p.bpm_hint_min == 85.0
     assert p.bpm_hint_max == 118.0
     assert p.bpm_hint_min < p.bpm_prior_mu < p.bpm_hint_max
-    # Clearly separated from house's hint range (120-128) so a synthwave
-    # track's tempo can't be silently absorbed into the wrong neighbor.
+    # Clearly separated from house's hint range so a synthwave track's
+    # tempo can't be silently absorbed into the wrong neighbor. <=, not <:
+    # 2026-08-10's house-family consolidation moved house's own hint_min to
+    # 118, exactly touching synthwave's hint_max -- adjacent bands with a
+    # shared boundary are fine (same convention as deep_house/chillstep
+    # elsewhere in this profile roster), an actual overlap is not.
     house = get_profile('house')
-    assert p.bpm_hint_max < house.bpm_hint_min
+    assert p.bpm_hint_max <= house.bpm_hint_min
 
 
 def test_synthwave_spectral_fields_are_calibrated() -> None:

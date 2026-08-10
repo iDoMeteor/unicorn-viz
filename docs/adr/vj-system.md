@@ -105,6 +105,164 @@ the active engine or director.
 
 ---
 
+## House-Family Consolidation: Adjacent BPM Bands, `dance` Revived, Centroid De-Weighted (2026-08-10)
+
+Follow-on to the previous day's whole director/detector/recommender batch
+and the same day's overnight training session (`library/b`, 9 hours, 129
+tracks) and multi-session investigation with `dj-mixer-01` into the
+`house`/`tech_house` centroid confusion and a `house`/`deep_house` tempo
+overlap the investigation surfaced along the way. Owner's own words on the
+overall approach: "we're going to have to do our best guesses at
+rationality, maybe slim down our categories even more and call it 'good
+enough' for now until this thing gets out in the wild... better to fit
+well into a few less categories than appear straight up wrong a lot."
+
+**House-family BPM bands moved from soft/overlapping to adjacent.**
+Previously `house` (120-128) and `tech_house` (122-130) shared 6 of
+`tech_house`'s 8-BPM span; `deep_house` (118-124) sat entirely inside
+`house`'s old range. New bands, owner's explicit numbers:
+
+| Profile | Old hint | New hint | `bpm_prior_mu` | `bpm_prior_sigma` |
+|---|---|---|---|---|
+| `deep_house` | 118-124 | **112-118** | 121.0 -> 115.0 | 0.30 -> 0.10 |
+| `house` | 120-128 | **118-126** | 124.0 -> 122.0 | 0.35 -> 0.10 |
+| `tech_house` | 122-130 | **127-134** | 126.0 -> 130.5 | 0.16 -> 0.09 |
+
+`mu` is the new band's center; `sigma` tightened as far as it can usefully
+go given `auto_vj.py`'s `tempo_fit` scoring floors sigma at `0.08` (a value
+below that has zero further effect on the live composite score — see
+`_gaussian_fit()`'s docstring). This only sharpens the **recommender's**
+genre discrimination; `beat_grid.py`'s own detector-search floor
+(`_MIN_PROFILE_PRIOR_SIGMA = 0.45`) is deliberately untouched, so this
+doesn't narrow what tempo the live detector searches for or locks onto —
+only how confidently the recommender favors a profile once a tempo is
+already found. Bands are adjacent (touching at the boundary, e.g.
+`deep_house`'s 118 == `house`'s 118) rather than gapped, matching the
+existing `chillstep`/`deep_house` convention elsewhere in the roster.
+
+**`electronic` revived and renamed to `dance`.** Disabled 2026-08-06
+because its `expected_bands` fingerprint was non-discriminating — ≥0.95
+cosine-similar to nearly everything, including far-tempo genres. That
+stops being disqualifying once the profile's whole purpose is redefined:
+"the same 4-on-the-floor house-tempo material minus vocals... vocals is
+enough to carry the split, otherwise basically indistinguishable" (owner).
+Every field except `vocal_hnr_mu`/`vocal_fmr_mu` is now a deliberate copy
+of `house`'s own values (same band, same `expected_bands`, same
+weights) — the split is meant to ride entirely on `vocal_hnr_fit`/
+`vocal_fmr_fit`, which is the first real use those two terms have had
+since their copy-bug fix earlier the same day (`AudioManager.
+_copy_audio_into()` silently dropping them — see the "Vocal-Presence Core
+Bug" entry above). Dict key kept as `electronic` for backward
+compatibility with any config/corpus data that references it by key; only
+`name` (`"Electronic"` -> `"Dance"`) and `enabled` (`False` -> `True`)
+changed.
+
+**`rap_rnb` mu moved to an explicit owner judgment call, not fit from this
+session's data.** 86.5 -> 85.0 (band center unchanged, 70-100), sigma
+0.27 -> 0.20. The library's own rap/r&b sample (n=13-25) was independently
+flagged twice in the same investigation: unrepresentative (mostly
+accidental agent-download inclusions, not a curated test set) and
+separately found to carry a real ~24%-in-one-direction 4/3 tactus-fold
+contamination (see the multi-session investigation notes below) — so
+last night's measured median was explicitly *not* used as the target
+here, on the owner's own reasoning that using it anyway "is not a good
+reason and should therefore be deferred pending training on some serious
+rap/r&b/etc libraries."
+
+**`hyphy` relabeled "Hyphy / Trap", band widened 90-110 -> 100-118.**
+Dict key kept as `hyphy` for backward compatibility. Owner: "rap/rnb/trap
+all should have solid deep bass lines as well.. hyphy not so much" — the
+existing `bass_weight` (1.5, already the highest in the family) kept
+as-is rather than lowered, since this merged profile's real-world matches
+are expected to skew trap (808-driven) more than pure hyphy going
+forward.
+
+**`centroid_fit` weight: 1.0 -> 0.8. The formula bug itself stays open,
+unresolved.** Root cause of the `house`/`tech_house` confusion: `expected_
+bands`-derived `spectral_centroid_mu` (all 20 profiles, recalibrated the
+previous day) and the live `centroid_fit` measurement are structurally
+different formulas — `expected_bands` weights 64 *log-spaced* perceptual
+band centers (correctly matching `audio_spectrum.py`'s visual bars, which
+is what `spectral_shape_fit`'s own cosine-similarity comparison actually
+needs and is untouched here), while the live measurement weights the raw
+512-bin FFT *linearly* across the full Nyquist range. A library-agnostic
+fix was attempted — bandwidth-weighting each log-band's contribution to
+approximate what a linear formula would produce, using no real audio data
+at all — and does **not** hold up empirically: tested against `tech_
+house`'s own fingerprint, it overshoots the real measured average
+(3520 Hz, from `library/b`) by more than 2x (7594 Hz), because `expected_
+bands`' per-band values are relative prominence ratings, not a true per-Hz
+energy density, and log-spaced high-frequency bins are wide enough in raw
+Hz that naive bandwidth-weighting assumes far more real energy up there
+than plausibly exists. No clean formula-only fix was found. Recalibrating
+`mu` from any one library's real measured data was considered and
+rejected for the same reason the `deep_house`/`house` tempo question was
+(see below) — it would tune a shipped default to that library's sourcing
+habits, not the genre. The weight cut reflects the owner's own house-
+family philosophy (BPM primary, brightness a secondary tiebreaker) rather
+than standing in as a fix for the still-open formula bug.
+
+**A collection-bias trap, found and corrected mid-investigation, worth
+keeping in mind for any future per-profile tuning off real session data.**
+The multi-session investigation (this session + `dj-mixer-01`, using the
+mixer's own independently-analyzed BPM/key/structure store for 449
+tracks) initially read `deep_house`'s real tempo distribution (from
+`library/b`) as fully overlapping `house`'s — both centered ~125 BPM. That
+overlap conclusion is real *for this library*, but the mixer session
+caught an important distinction the first pass had run together: "can
+tempo separate house from deep_house" (no, not in this collection) is a
+different question from "is `deep_house`'s configured range wrong" (the
+sample can't answer that, because it isn't a sample of the genre — ~99%
+of the owner's library is Mixcloud-sourced, and that source runs
+124-126 regardless of genre tag; owner confirmed independently: "for
+whatever reason almost all mixcloud tracks are 124-126 and that's where
+they all came from"). The shipped `deep_house` band (112-118) reflects
+the owner's own genre-convention judgment, deliberately *not* fit to this
+library's skewed sample — the same caution applies to any other profile
+whose "real" data all comes from one collection.
+
+**Also settled in the same investigation, not yet acted on:**
+`bpm_hint_min`/`bpm_hint_max` was confirmed to have **zero live effect on
+recommendation** — `tempo_fit` (weight 2.0, the recommender's single
+highest-weighted term) is computed entirely from `bpm_prior_mu`/`sigma` in
+log2(BPM) space; `hint_min/max` only feeds the HUD label and a scorecard
+"was the detected BPM in range" metric. A proposal to derive `hint_min/
+max` from `mu`/`sigma` was raised and rejected: `hint` grades the
+detector, `sigma` steers it, so deriving the yardstick from the steering
+knob would let widening the knob auto-improve the score with nothing
+having actually gotten better — the same failure shape as the hard-clamp
+bug already reverted (see "BPM Detector Audit" below), just relocated
+from search into measurement. Agreed direction instead: keep the two
+independently authored, and add a drift-canary test asserting `mu` always
+falls inside `[hint_min, hint_max]` so a future edit to one without the
+other fails loudly rather than drifting silently — implemented as `test_
+bpm_prior_mu_falls_inside_its_own_hint_range()` in `tests/test_audio_
+profile_deep_house_and_disable.py`, checked against all 20 profiles.
+
+**Deferred, not implemented this pass**: a triplet-aware extension to
+`tactus_preference_ratio`. The same investigation found a real, well-
+evidenced detector bug — 24 of 28 tempo folds across a 437-track join
+against embedded BPM tags are 2/3 or 4/3 ratio (triplet/three-against-four
+ambiguity), not the classic 2x/0.5x octave folds `tactus_preference_ratio`
+already handles — concentrated specifically in R&B/Hip-Hop (24.3% fold
+rate vs. 0.6% for house-family, a ~40x relative risk, binomial-significant
+at n=437). Recommended as a principled extension of the existing
+mechanism (not a new one) once scoped with its own test fixtures built
+from the real fold examples — not bundled into this pass since it's a
+detector behavior change, not a config/weight tweak, and deserves its own
+review.
+
+**Verified:** full main-repo suite green (1597 passed after fixing one
+pre-existing boundary-touch assertion in `test_audio_profile_synthwave.py`
+that assumed strict, non-touching separation from `house`'s old hint
+range), `ruff` clean on every touched file. New tests: `test_electronic_
+key_now_resolves_to_the_revived_dance_profile`, `test_dance_matches_
+house_on_everything_except_vocal_presence`, `test_bpm_prior_mu_falls_
+inside_its_own_hint_range` (all 20 profiles), plus updated assertions for
+`rap_rnb`'s new `mu` and the `electronic`/`dance` enabled-state flip.
+
+---
+
 ## BPM Detector Audit — Hard Clamp Removal + Mixer-BPM Hint Bus (2026-08-04)
 
 Decision: `set_profile()` in all three tracker engines (v1/v2/v3) no longer

@@ -217,13 +217,26 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.4,
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.75,
-        bpm_prior_mu=124.0,
-        # 2026-06-20: house BPM spans 120-128; sigma=0.20 was too peaked and
-        # depressed confidence on tracks at the edges of the range.  Widened
-        # to 0.35 to flatten the prior across the full 8-BPM span.
-        bpm_prior_sigma=0.35,
-        bpm_hint_min=120.0,
-        bpm_hint_max=128.0,
+        # 2026-08-10: house-family consolidation (owner philosophy pass --
+        # "lean harder on bpm than bright/darker" -- see docs/adr/vj-system.md
+        # for the full account). Bands moved from soft/overlapping to
+        # deliberately adjacent: deep_house 112-118, house 118-126,
+        # tech_house 127-134. mu is the band center; sigma tightened from
+        # 0.35 to 0.10 -- as tight as it can usefully go, since
+        # auto_vj.py's tempo_fit scoring floors sigma at 0.08 (a value
+        # below that has zero additional effect on the actual composite
+        # score). Note this only sharpens the RECOMMENDER's genre
+        # discrimination -- beat_grid.py's own detector-search floor
+        # (_MIN_PROFILE_PRIOR_SIGMA = 0.45) is intentionally untouched, so
+        # this doesn't narrow what tempo the detector searches for, only
+        # how confidently the recommender favors this profile once a tempo
+        # is found. bpm_hint_min/max now literally the authored band edges
+        # (independently authored from mu/sigma, not derived from either --
+        # see the mu-in-hint drift-canary test).
+        bpm_prior_mu=122.0,
+        bpm_prior_sigma=0.10,
+        bpm_hint_min=118.0,
+        bpm_hint_max=126.0,
         spectral_centroid_mu=2650.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.060,
@@ -251,7 +264,8 @@ PROFILES: Dict[str, AudioProfile] = {
         name="Deep House",
         description=(
             "Warm rolling sub-bass, soulful/jazzy chord stabs, and soft "
-            "filtered hats at 118-124 BPM -- slower and mellower than house"
+            "filtered hats at 112-118 BPM -- slower, darker, and more "
+            "melodic than house"
         ),
         bass_min=20.0,
         bass_max=200.0,
@@ -270,12 +284,16 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.5,
         onset_mid_emphasis=1.3,
         onset_treble_emphasis=0.8,
-        # Deep house sits clearly below house's 120-128 pocket -- centered
-        # lower and narrower, reflecting a more tempo-consistent genre.
-        bpm_prior_mu=121.0,
-        bpm_prior_sigma=0.30,
-        bpm_hint_min=118.0,
-        bpm_hint_max=124.0,
+        # 2026-08-10: house-family consolidation, see house's own field
+        # comment for the full rationale. deep_house's band moved from
+        # 118-124 (overlapping house's old 120-128) to 112-118, adjacent to
+        # but no longer overlapping house's new 118-126. sigma tightened to
+        # 0.10 (recommender-scoring floor is 0.08; below that has no
+        # further effect) -- detector search width untouched.
+        bpm_prior_mu=115.0,
+        bpm_prior_sigma=0.10,
+        bpm_hint_min=112.0,
+        bpm_hint_max=118.0,
         # Warmer/less bright than house (1500 Hz) -- the chord stabs and
         # rolled-off hats keep energy lower in the spectrum.
         spectral_centroid_mu=1250.0,
@@ -302,7 +320,7 @@ PROFILES: Dict[str, AudioProfile] = {
     ),
     "tech_house": AudioProfile(
         name="Tech House",
-        description="Punchy low-end, clipped claps, tight hats, and steady 4/4 pressure",
+        description="Punchy low-end, clipped claps, tight hats, and steady 4/4 pressure at 127-134 BPM -- darker than house",
         bass_min=25.0,
         bass_max=220.0,
         mid_min=220.0,
@@ -318,10 +336,14 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.55,
         onset_mid_emphasis=1.10,
         onset_treble_emphasis=0.80,
-        bpm_prior_mu=126.0,
-        bpm_prior_sigma=0.16,
-        bpm_hint_min=122.0,
-        bpm_hint_max=130.0,
+        # 2026-08-10: house-family consolidation, see house's own field
+        # comment for the full rationale. Band moved from 122-130
+        # (overlapping house's old 120-128 across 6 of its 8 BPM span) to
+        # 127-134, adjacent to house's new 118-126, no longer overlapping.
+        bpm_prior_mu=130.5,
+        bpm_prior_sigma=0.09,
+        bpm_hint_min=127.0,
+        bpm_hint_max=134.0,
         # 2026-08-09: 2550 -> 2900 (LLM tuning rec from `library/a`, observed
         # 2910.5) -- increases separation from house's own mu (2650), the
         # exact pair behind that session's #1 confusion (Tech House ->
@@ -471,66 +493,66 @@ PROFILES: Dict[str, AudioProfile] = {
             0.850, 0.900, 0.800, 0.700, 0.600, 0.500, 0.400, 0.300,
         ],
     ),
+    # 2026-08-10: revived and renamed from 'electronic' (owner call, house-
+    # family consolidation pass -- see docs/adr/vj-system.md). Disabled on
+    # 2026-08-06 because its expected_bands fingerprint was >=0.95 cosine-
+    # similar to nearly everything, including far-tempo genres -- a flat
+    # signal that didn't discriminate, not a unique one. That's no longer a
+    # disqualifying flaw: this profile's whole purpose now is "the same 4-
+    # on-the-floor house-tempo material minus vocals" -- owner: "vocals is
+    # enough to carry the split, otherwise basically indistinguishable."
+    # So every field below except vocal_hnr_mu/vocal_fmr_mu is a deliberate
+    # copy of house's own values, not independently authored -- the split
+    # is meant to ride entirely on vocal_hnr_fit/vocal_fmr_fit (the two
+    # terms that were silently reading zero all day until the copy-bug fix
+    # earlier today; this is their first real use). Dict key kept as
+    # 'electronic' for backward compatibility with any existing config/
+    # corpus data that references it by key; only the display name changed.
     "electronic": AudioProfile(
-        name="Electronic",
-        description="Balanced across all frequencies with emphasis on detail",
-        # 2026-08-06: disabled (owner call, confirmed by cosine-similarity
-        # audit against the whole catalog -- see docs/adr/vj-system.md
-        # "Wide-Tier Catch-All Profiles Disabled..."). expected_bands is
-        # >=0.95 cosine-similar to nearly every other profile, *higher* to
-        # far-tempo genres (trance 0.9962, hyphy 0.9950, psytrance 0.9871)
-        # than to its own close-tempo neighbors (deep_house 0.9547, house
-        # 0.9403) -- a flat fingerprint that doesn't discriminate, not a
-        # unique signal, layered on a bpm_hint range (118-132) already
-        # fully covered by house/tech_house/deep_house/peak_time. Same
-        # disable-not-delete pattern as 'generic': still resolvable
-        # directly by key, just excluded from the recommender pool and
-        # Alt+A cycling.
-        enabled=False,
+        name="Dance",
+        description="4-on-the-floor house-tempo material with no vocal presence -- otherwise identical to house",
+        enabled=True,
         bass_min=20.0,
-        bass_max=200.0,
-        mid_min=200.0,
-        mid_max=3000.0,
-        treble_min=3000.0,
+        bass_max=250.0,
+        mid_min=250.0,
+        mid_max=2000.0,
+        treble_min=2000.0,
         treble_max=20000.0,
-        bass_weight=1.0,
-        mid_weight=1.1,
-        treble_weight=1.0,
-        beat_threshold=1.2,
-        smoothing=0.1,
-        curve="flat",
-        # Electronic: broad genre, moderate kick bias, wider prior.
-        onset_bass_emphasis=1.9,
-        onset_mid_emphasis=1.2,
-        onset_treble_emphasis=0.9,
-        bpm_prior_mu=125.0,
-        bpm_prior_sigma=0.35,
+        bass_weight=1.2,
+        mid_weight=1.0,
+        treble_weight=0.9,
+        beat_threshold=1.15,
+        smoothing=0.12,
+        curve="bass_boost",
+        onset_bass_emphasis=1.4,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.75,
+        # Same band as house -- tempo is not the discriminator, vocal
+        # presence is. See house's own field comment for the sigma-
+        # tightening rationale (recommender-scoring floor is 0.08).
+        bpm_prior_mu=122.0,
+        bpm_prior_sigma=0.10,
         bpm_hint_min=118.0,
-        bpm_hint_max=132.0,
-        spectral_centroid_mu=2050.0,
+        bpm_hint_max=126.0,
+        spectral_centroid_mu=2650.0,
         spectral_centroid_sigma=600.0,
-        # 2026-07-08: lowered 0.065 -> 0.052 (confusability pass, see ADR).
-        # zcr_mu was an exact duplicate of both generic's (0.065) and
-        # tech_house's (0.065) values, making this profile the closest
-        # competing match to both. This is the one dimension both neighbors
-        # shared, so it's a single-parameter fix that separates from both
-        # simultaneously without trading centroid/onset distance against
-        # either.
-        zcr_mu=0.052,
+        zcr_mu=0.060,
         zcr_sigma=0.028,
         onset_density_mu=2.5,
-        onset_density_sigma=1.5,
-        vocal_hnr_mu=0.35,
-        vocal_fmr_mu=0.25,
+        onset_density_sigma=0.7,
+        # The actual discriminator: near-zero vocal-formant harmonic/
+        # modulation presence, vs. house's 0.35/0.25.
+        vocal_hnr_mu=0.05,
+        vocal_fmr_mu=0.05,
         expected_bands=[
-            0.820, 0.800, 0.780, 0.760, 0.740, 0.720, 0.700, 0.760,
-            0.840, 0.880, 0.850, 0.820, 0.800, 0.780, 0.760, 0.740,
-            0.720, 0.700, 0.700, 0.720, 0.740, 0.760, 0.780, 0.800,
-            0.820, 0.840, 0.860, 0.880, 0.900, 0.880, 0.860, 0.840,
-            0.820, 0.840, 0.860, 0.900, 1.000, 0.960, 0.920, 0.880,
-            0.840, 0.800, 0.760, 0.720, 0.700, 0.680, 0.660, 0.640,
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.740, 0.760,
-            0.720, 0.680, 0.620, 0.560, 0.500, 0.440, 0.380, 0.320,
+            0.950, 0.900, 0.850, 0.800, 0.750, 0.700, 0.650, 0.700,
+            0.750, 0.800, 0.900, 0.850, 0.650, 0.600, 0.550, 0.500,
+            0.450, 0.400, 0.350, 0.300, 0.250, 0.200, 0.150, 0.200,
+            0.250, 0.300, 0.350, 0.400, 0.450, 0.500, 0.550, 0.600,
+            0.650, 0.700, 0.750, 0.800, 0.850, 0.900, 0.950, 0.800,
+            0.850, 0.900, 1.000, 0.950, 0.900, 0.850, 0.800, 0.850,
+            0.900, 0.950, 0.700, 0.750, 0.800, 0.850, 0.900, 0.950,
+            0.800, 0.750, 0.700, 0.650, 0.600, 0.550, 0.500, 0.450,
         ],
     ),
     "hardgroove": AudioProfile(
@@ -852,7 +874,7 @@ PROFILES: Dict[str, AudioProfile] = {
     # See docs/adr/vj-system.md for the full merge record.
     "rap_rnb": AudioProfile(
         name="Rap / R&B",
-        description="Heavy sub-bass with sustained, vocal-forward mids -- merged hip-hop/R&B sibling profile",
+        description="Heavy sub-bass with sustained, vocal-forward mids at 70-100 BPM -- merged hip-hop/R&B sibling profile",
         bass_min=30.0,
         bass_max=275.0,
         mid_min=275.0,
@@ -868,8 +890,18 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.6,
         onset_mid_emphasis=1.1,
         onset_treble_emphasis=0.75,
-        bpm_prior_mu=86.5,
-        bpm_prior_sigma=0.27,
+        # 2026-08-10: 86.5 -> 85.0 (band center), sigma tightened 0.27 ->
+        # 0.20. Owner's own judgment call, not fit from this session's
+        # corpus -- the library's own rap/r&b tracks (n=13-25) were flagged
+        # as unrepresentative (mostly accidental agent-download inclusions,
+        # not a curated rap/r&b test set) and, separately, confirmed to
+        # carry a real ~24% one-directional 4/3 tactus-fold contamination
+        # in that same small sample (see docs/adr/vj-system.md) -- so last
+        # night's measured median was explicitly not used as the target
+        # here. hint_min/max unchanged (70-100), independently authored
+        # from mu/sigma per the drift-canary test below.
+        bpm_prior_mu=85.0,
+        bpm_prior_sigma=0.20,
         bpm_hint_min=70.0,
         bpm_hint_max=100.0,
         spectral_centroid_mu=1300.0,
@@ -897,9 +929,17 @@ PROFILES: Dict[str, AudioProfile] = {
             0.230, 0.220, 0.200, 0.180, 0.160, 0.150, 0.130, 0.120,
         ],
     ),
+    # 2026-08-10: relabeled "Hyphy" -> "Hyphy / Trap" (owner call, house-
+    # family-style consolidation applied to this pair too). Dict key kept
+    # as 'hyphy' for backward compatibility. Owner: "rap/rnb/trap all
+    # should have solid deep bass lines as well.. hyphy not so much" -- the
+    # existing bass_weight (1.5, already the highest in this family) is
+    # kept as-is rather than lowered, since this merged profile's real-
+    # world matches are expected to skew trap (808-driven) more than pure
+    # hyphy going forward.
     "hyphy": AudioProfile(
-        name="Hyphy",
-        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble",
+        name="Hyphy / Trap",
+        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 100-118 BPM",
         bass_min=20.0,
         bass_max=350.0,
         mid_min=350.0,
@@ -917,17 +957,12 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.5,
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.80,
-        bpm_prior_mu=95.0,
-        bpm_prior_sigma=0.25,
-        # 2026-07-08: bpm_hint_min/max had never been set despite the genre's
-        # own tempo pocket being documented above ("90-110 BPM") -- without a
-        # hint, the ACF search ran the full 60-200 BPM range unconstrained
-        # (confirmed as a likely factor in a real Detroit-techno-into-hyphy
-        # misclassification, since 120-135 BPM techno sat comfortably inside
-        # this profile's uncapped search). Wired the hint to the range
-        # already documented in this profile's own comment.
-        bpm_hint_min=90.0,
-        bpm_hint_max=110.0,
+        # 2026-08-10: band widened 90-110 -> 100-118 (owner call, house-
+        # family-style consolidation), mu recentered to the new band.
+        bpm_prior_mu=109.0,
+        bpm_prior_sigma=0.20,
+        bpm_hint_min=100.0,
+        bpm_hint_max=118.0,
         spectral_centroid_mu=2400.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.068,
