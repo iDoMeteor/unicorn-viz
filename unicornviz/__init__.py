@@ -46,4 +46,4 @@ from __future__ import annotations
 # Semantic version of the core package (see CLAUDE.md "Versioning & Release
 # Standards"). Pre-1.0 while in alpha; the first feature-complete, validated
 # release is 1.0.0. Owner-adjustable initial value.
-__version__ = '1.0.0-beta.78'
+__version__ = '1.0.0-beta.79'

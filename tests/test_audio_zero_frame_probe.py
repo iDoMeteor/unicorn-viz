@@ -40,6 +40,7 @@ def _make_manager() -> AudioManager:
     mgr._frames_read = 0
     mgr._zero_probe_next_report_t = 0.0
     mgr._zero_probe_first_anomaly_logged = False
+    mgr._zero_probe_reported_anomalies = 0
     return mgr
 
 
@@ -120,12 +121,54 @@ def test_summary_verdict_names_the_publish_defect_when_any_anomaly_seen(
 def test_summary_verdict_names_the_gate_when_every_zero_was_quiet(
     caplog: logging.LogCaptureFixture,
 ) -> None:
+    """Gated silence is correct behaviour, so it reports at DEBUG, not WARNING.
+
+    An intentionally paused rig sits at ~100% gated frames all night; warning
+    about that buries the one line that means something.
+    """
     mgr = _make_manager()
     _silence(mgr._last_data_raw)
     mgr._observe_zero_frame(publish_seq=1, publish_block_seq=1, publish_rms=0.001)
-    with caplog.at_level(logging.WARNING, logger='unicornviz.audio.manager'):
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.audio.manager'):
         mgr.log_zero_frame_summary()
     assert 'SILENCE GATE' in caplog.text
+    assert [r.levelno for r in caplog.records] == [logging.DEBUG]
+
+
+def test_periodic_report_stays_silent_while_only_gated_frames_accumulate(
+    caplog: logging.LogCaptureFixture,
+) -> None:
+    """The 30s summary fires only when a *new* anomaly appears.
+
+    Regression for an overnight run that logged the same unchanged tally
+    every 30 seconds for eight hours while the rig was deliberately paused.
+    """
+    mgr = _make_manager()
+    _silence(mgr._last_data_raw)
+    # Arm the reporting clock, then push it into the past so every subsequent
+    # frame is due for a periodic report.
+    mgr._observe_zero_frame(publish_seq=0, publish_block_seq=0, publish_rms=0.001)
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.audio.manager'):
+        for seq in range(1, 25):
+            mgr._zero_probe_next_report_t = 1.0  # long past
+            mgr._observe_zero_frame(
+                publish_seq=seq, publish_block_seq=seq, publish_rms=0.001
+            )
+    assert mgr._zero_gated == 25
+    assert caplog.text == ''
+
+
+def test_periodic_report_fires_again_when_a_new_anomaly_appears(
+    caplog: logging.LogCaptureFixture,
+) -> None:
+    mgr = _make_manager()
+    _silence(mgr._last_data_raw)
+    mgr._observe_zero_frame(publish_seq=0, publish_block_seq=0, publish_rms=0.001)
+    with caplog.at_level(logging.WARNING, logger='unicornviz.audio.manager'):
+        mgr._zero_probe_next_report_t = 1.0
+        mgr._observe_zero_frame(publish_seq=1, publish_block_seq=1, publish_rms=0.0625)
+    assert any('probe:' in r.message for r in caplog.records)
+    assert any('PUBLISH DEFECT' in r.getMessage() for r in caplog.records)
 
 
 def test_summary_is_silent_when_no_zero_frames_occurred(
@@ -135,6 +178,6 @@ def test_summary_is_silent_when_no_zero_frames_occurred(
     mgr = _make_manager()
     _signal(mgr._last_data_raw)
     mgr._observe_zero_frame(publish_seq=1, publish_block_seq=1, publish_rms=0.09)
-    with caplog.at_level(logging.WARNING, logger='unicornviz.audio.manager'):
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.audio.manager'):
         mgr.log_zero_frame_summary()
     assert caplog.text == ''

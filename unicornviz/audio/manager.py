@@ -155,6 +155,7 @@ class AudioManager:
         self._frames_read: int = 0
         self._zero_probe_next_report_t: float = 0.0
         self._zero_probe_first_anomaly_logged: bool = False
+        self._zero_probe_reported_anomalies: int = 0
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
@@ -537,6 +538,14 @@ class AudioManager:
         if now < self._zero_probe_next_report_t:
             return
         self._zero_probe_next_report_t = now + 30.0
+        # A pause, a track change, or a quiet intro all park the counters at a
+        # constant value.  Re-reporting an unchanged tally every 30s for eight
+        # hours is noise, so the periodic line only fires when a *new* anomaly
+        # has appeared since the last one.  The tally still lands once at
+        # stop(), and the first anomaly already logged immediately above.
+        if self._zero_anomalous == self._zero_probe_reported_anomalies:
+            return
+        self._zero_probe_reported_anomalies = self._zero_anomalous
         self.log_zero_frame_summary()
 
     def log_zero_frame_summary(self) -> None:
@@ -556,7 +565,12 @@ class AudioManager:
             )
         else:
             verdict = 'reader outran the analysis thread only; no fresh zeros'
-        log.warning(
+        # Only an anomaly is a fault. Gated silence is the correct, expected
+        # behaviour whenever nothing is playing -- a deliberately paused rig
+        # sits at ~100% gated frames, and shouting WARNING about that buries
+        # the one line that matters.
+        emit = log.warning if self._zero_anomalous > 0 else log.debug
+        emit(
             'Audio zero-frame probe: %d/%d frames zero (%.1f%%) '
             '[gate=%d anomaly=%d repeat=%d] — %s',
             self._zero_frames,
