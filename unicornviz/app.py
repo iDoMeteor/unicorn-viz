@@ -26,7 +26,7 @@ import sdl2
 import sdl2.ext
 
 from unicornviz.config import Config
-from unicornviz.effects.base import AudioData, BaseEffect
+from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
 from unicornviz.audio.manager import AudioManager
@@ -2493,28 +2493,16 @@ void main() {
         source: AudioData,
         scale: float,
     ) -> AudioData:
-        """Populate a reusable AudioData scratch buffer from a source snapshot."""
-        target.bass = min(1.0, source.bass * scale)
-        target.mid = min(1.0, source.mid * scale)
-        target.treble = min(1.0, source.treble * scale)
-        target.beat = source.beat
-        target.bpm = source.bpm
-        np.multiply(source.fft, scale, out=target.fft)
-        np.clip(target.fft, 0.0, 1.0, out=target.fft)
-        target.waveform[:] = source.waveform
-        # Reactivity scales only the "level" signals (bass/mid/treble/fft) above.
-        # Everything else is reactivity-independent by design and must be copied
-        # through faithfully — the raw perceptual `bands` in particular drive the
-        # fixed-height spectrum bars, and the z-score normalised / flux fields are
-        # already reactivity-invariant. (Previously these were dropped, so a
-        # per-effect reactivity override fed effects a stale/zero `bands`.)
-        target.bands[:] = source.bands
-        target.bass_n = source.bass_n
-        target.mid_n = source.mid_n
-        target.treble_n = source.treble_n
-        target.bass_flux = source.bass_flux
-        target.mid_flux = source.mid_flux
-        target.spectral_flux = source.spectral_flux
+        """Populate a reusable AudioData scratch buffer from a source snapshot.
+
+        2026-08-09: delegates to the shared copy_audio_data() -- this method
+        used to hand-write its own field list (independent of
+        AudioManager._copy_audio_into's, which had already been bitten once
+        by the same disease) and was found the same day still missing
+        vocal_hnr/vocal_fmr. One shared list now; see
+        unicornviz/effects/base.py's copy_audio_data() docstring.
+        """
+        copy_audio_data(source, target, scale=scale)
         return target
 
     def _audio_for_effect(

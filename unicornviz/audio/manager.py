@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from unicornviz.effects.base import AudioData
+from unicornviz.effects.base import AudioData, copy_audio_data
 from unicornviz.audio.capture import AudioCapture
 from unicornviz.audio.analyzer import Analyzer, OnsetEvent  # noqa: F401 (OnsetEvent re-exported)
 from unicornviz.audio.profiles import AudioProfile, get_profile, list_profiles
@@ -158,31 +158,16 @@ class AudioManager:
 
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
-        """Copy all fields from source into target in-place (no allocation)."""
-        target.bass = source.bass
-        target.mid = source.mid
-        target.treble = source.treble
-        target.bass_n = source.bass_n
-        target.mid_n = source.mid_n
-        target.treble_n = source.treble_n
-        target.beat = source.beat
-        target.bpm = source.bpm
-        target.bass_flux = source.bass_flux
-        target.mid_flux = source.mid_flux
-        target.spectral_flux = source.spectral_flux
-        # 2026-08-09: vocal_hnr/vocal_fmr were added to AudioData's __slots__
-        # (see base.py) well after this hand-written field list was written,
-        # and never added here -- so every consumer of get_audio_data()/
-        # get_audio_data_raw() silently read the AudioData() default (0.0)
-        # forever, even though the analyzer computed real values every frame.
-        # Confirmed live: the analyzer's front_buf carried a real 0.69, this
-        # copy dropped it to 0.0. See docs/adr/vj-system.md (auto-vj-01) for
-        # the recommender-side symptom this caused.
-        target.vocal_hnr = source.vocal_hnr
-        target.vocal_fmr = source.vocal_fmr
-        target.fft[:] = source.fft
-        target.waveform[:] = source.waveform
-        target.bands[:] = source.bands
+        """Copy all fields from source into target in-place (no allocation).
+
+        2026-08-09: delegates to the shared copy_audio_data() -- this method
+        used to hand-write its own field list, which is exactly how
+        vocal_hnr/vocal_fmr went silently missing here for a while (see
+        docs/adr/vj-system.md, auto-vj-01, "Vocal-Presence Core Bug") and
+        then a second, independent copy list (App._fill_audio_scratch) was
+        found with the identical gap the same day. One shared list now.
+        """
+        copy_audio_data(source, target)
 
     def start(self, timeout_s: float | None = None) -> None:
         """Start audio capture and require an active capture source.

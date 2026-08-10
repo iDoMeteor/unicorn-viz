@@ -1478,6 +1478,85 @@ regression naming the exact symptom). Full main-repo suite green.
 
 ---
 
+## Same-Day Second Occurrence: `data.bpm` Never Assigned; a Second Hand-Written Copy List Missing the Same Two Fields (2026-08-09)
+
+Reported by the owner, in another session, the same day as the entry
+above: "both are the same family as the vocal_hnr/vocal_fmr bug your other
+session just fixed... I'm reporting rather than fixing since neither is
+what we're hunting." Confirmed both, then owner: "I think these are uber
+critical, please address now."
+
+**Bug 1 — `AudioData.bpm` is dead.** `Analyzer.process()` never assigned
+`data.bpm` anywhere in its body. Every `AudioData` snapshot — live or
+scratch-buffer — carried the constructor default (`120.0`) forever,
+regardless of the real track tempo. Not caught earlier because Auto VJ
+(auto-vj-01) never reads `data.bpm` at all; it runs its own independent
+`BeatTracker`/`BeatGridTracker` fed directly from raw PCM/onsets, so "real
+BPM reaches Auto VJ by another route" and nothing about the app's own
+behavior looked wrong. The only consumers actually affected are ordinary
+effects reading `audio.bpm` for tempo-synced visuals — silently locked to
+120 the whole time, with no error or obviously-wrong-looking symptom to
+notice it by.
+
+Root cause, one layer removed from where it first looks: `Analyzer.
+set_expected_bpm(bpm, confidence)` — the existing feedback hook Auto VJ
+already calls every frame with its own locked BPM (`auto_vj.py:2712`) —
+derived `self._refractory_s` from its `bpm` argument but never stored the
+value itself anywhere. `process()` had nothing to read even if someone
+remembered to assign `data.bpm`. Fix: `Analyzer.__init__` gains
+`self._expected_bpm: float = 120.0` (same default as `AudioData.bpm`, so a
+cold start / pre-Auto-VJ session is bit-for-bit unchanged from before this
+fix); `set_expected_bpm()` now stores `self._expected_bpm = bpm` alongside
+the existing `_refractory_s` derivation, sticky across a momentary
+confidence dip (mirrors `_refractory_s`'s own existing gate: only updates
+when `bpm > 0 and confidence >= 0.5`, otherwise holds); `process()` now
+assigns `data.bpm = self._expected_bpm` *before* the silent-frame early
+return, so a momentarily silent block doesn't blank the known tempo either
+— same stickiness reasoning applied to a second axis.
+
+**Scope note:** this wires up the feedback path that already existed; it
+does not add independent BPM detection to core. When Auto VJ is disabled
+(the default), nothing calls `set_expected_bpm()`, so `data.bpm` stays at
+`120.0` exactly as it always has — there is still no standalone tempo
+detector in `unicornviz/audio/` itself. Fixing that would be a materially
+larger, separate project; out of scope for this dead-field bug.
+
+**Bug 2 — a second, independent hand-written `AudioData` copy list, same
+gap.** `App._fill_audio_scratch()` (`app.py:2490`, called whenever an
+effect sets a reactivity override) turned out to have written its own
+field-by-field copy — independent of `AudioManager._copy_audio_into()`
+above, which had already been through the exact fix documented in the
+entry directly above this one on the *same day* — and was still missing
+`vocal_hnr`/`vocal_fmr`. Confirms the shape of the risk the first fix's
+test comment already named: "a future field added to `AudioData` without a
+matching line... fails loudly instead of silently reading a stale default"
+— true of the test for `_copy_audio_into`, but there was nothing stopping
+a *second*, differently-hand-written list elsewhere from having the same
+gap independently, which is exactly what happened.
+
+**Structural fix, not just a second patch.** New `unicornviz.effects.base.
+copy_audio_data(source, target, *, scale=1.0)` — the single source of truth
+for `AudioData`'s full field list, covering all 16 `__slots__` entries in
+one place. `scale != 1.0` additionally clamps the scaled "level" fields
+(`bass`/`mid`/`treble`/`fft`) to `[0, 1]`, matching `_fill_audio_scratch`'s
+old reactivity-override behavior; every other field is reactivity-invariant
+and copied through unscaled regardless of `scale`. Both
+`AudioManager._copy_audio_into()` and `App._fill_audio_scratch()` now
+delegate to it instead of maintaining their own copies of the list — one
+list to keep in sync with `AudioData.__slots__` going forward, not two.
+
+**Verified:** new tests in `tests/test_analyzer_bpm_feedback.py` (defaults
+to 120 with no feedback; reflects a confident `set_expected_bpm()` call;
+ignores a low-confidence call; stays sticky across a silent frame; updates
+correctly on a pre-allocated `out=` buffer, matching real call sites) and
+`tests/test_app_audio_scratch.py` (same "enumerate every `AudioData.
+__slots__` dynamically" pattern as `test_audio_manager_startup.py`'s
+existing test, plus explicit `vocal_hnr`/`vocal_fmr` and reactivity-scale-
+boundary regressions). Full main-repo suite green (1590 passed), `ruff`
+clean on every touched file.
+
+---
+
 ## Live-Session Follow-Up: Centroid Runaway, HUD Clamp, Director Audit Fixes (2026-08-09)
 
 Decision: a batch of fixes triggered by watching the top-3-weights rewire

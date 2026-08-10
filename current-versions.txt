@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.75       BETA          MISMATCH (readme=1.0.0-beta.74)
+  core (unicornviz)             1.0.0-beta.76       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.181.0             alpha ▲       MISMATCH (readme=0.180.0)
@@ -81,5 +81,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
-  ⚠  2 version mismatch(es): core (unicornviz), dj-mixer-01
+  ⚠  1 version mismatch(es): dj-mixer-01
 

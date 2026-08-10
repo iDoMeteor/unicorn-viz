@@ -123,6 +123,50 @@ class AudioData:
         self.vocal_fmr: float = 0.0
 
 
+def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0) -> None:
+    """Copy every ``AudioData`` field from *source* into *target* in-place.
+
+    No allocation -- array fields are copied via ``[:] =``, scalars via
+    plain assignment. This is the single source of truth for ``AudioData``'s
+    full field list; every call site that used to hand-write its own copy of
+    this list (``AudioManager._copy_audio_into``, ``App._fill_audio_scratch``)
+    now delegates here instead, after the same "new field silently dropped
+    at one of two copy sites" bug (``vocal_hnr``/``vocal_fmr``, then
+    ``data.bpm`` never even being *produced* in the first place) showed up
+    twice in one day -- see docs/adr/vj-system.md (auto-vj-01) "Vocal-
+    Presence Core Bug" and the follow-up entry for the second occurrence.
+
+    ``scale`` != ``1.0`` additionally clamps the scaled "level" fields
+    (``bass``/``mid``/``treble``/``fft``) to ``[0, 1]`` -- matches the old
+    ``_fill_audio_scratch`` reactivity-override behavior. Every other field
+    is reactivity-invariant by design and copied through unscaled regardless
+    of ``scale``.
+    """
+    if scale == 1.0:
+        target.bass = source.bass
+        target.mid = source.mid
+        target.treble = source.treble
+        target.fft[:] = source.fft
+    else:
+        target.bass = min(1.0, source.bass * scale)
+        target.mid = min(1.0, source.mid * scale)
+        target.treble = min(1.0, source.treble * scale)
+        np.multiply(source.fft, scale, out=target.fft)
+        np.clip(target.fft, 0.0, 1.0, out=target.fft)
+    target.bass_n = source.bass_n
+    target.mid_n = source.mid_n
+    target.treble_n = source.treble_n
+    target.beat = source.beat
+    target.bpm = source.bpm
+    target.bass_flux = source.bass_flux
+    target.mid_flux = source.mid_flux
+    target.spectral_flux = source.spectral_flux
+    target.vocal_hnr = source.vocal_hnr
+    target.vocal_fmr = source.vocal_fmr
+    target.waveform[:] = source.waveform
+    target.bands[:] = source.bands
+
+
 class BaseEffect(ABC):
     """
     All effects subclass this.

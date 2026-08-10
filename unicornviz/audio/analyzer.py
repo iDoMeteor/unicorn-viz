@@ -151,6 +151,14 @@ class Analyzer:
         # P3 — adaptive refractory (set by BeatTracker via set_expected_bpm)
         self._refractory_s: float | None = None
         self._beat_cooldown_until_t: float = -1e9
+        # 2026-08-09 fix: set_expected_bpm() derived _refractory_s from its
+        # bpm argument but never stored the value itself, so data.bpm (see
+        # process() below) had nothing to read and stayed at AudioData's
+        # constructor default (120.0) forever -- every effect reading
+        # audio.bpm saw a constant, regardless of the real track tempo.
+        # Same default as AudioData.bpm so a cold start / no-feedback-yet
+        # session is bit-for-bit unchanged from before this fix.
+        self._expected_bpm: float = 120.0
 
         # Per-band running z-score normalisation state.
         # Updated every frame so bass_n/mid_n/treble_n track relative change
@@ -286,8 +294,13 @@ class Analyzer:
         """
         if bpm > 0 and confidence >= 0.5:
             self._refractory_s = float(np.clip(0.70 * 60.0 / bpm, 0.18, 0.50))
+            self._expected_bpm = float(bpm)
         else:
             self._refractory_s = None
+            # Deliberately NOT reset to a default here -- a momentary
+            # confidence dip shouldn't blank out data.bpm for every effect
+            # reading it this frame. Sticky like a real tempo estimate;
+            # only overwritten by the next confident feed.
 
     # ------------------------------------------------------------------
     # P2 — time-based onset envelope helpers
@@ -438,6 +451,13 @@ class Analyzer:
         data = out if out is not None else AudioData()
         now: float = t if t is not None else time.monotonic()
         self._last_audio_time = now
+        # 2026-08-09 fix: data.bpm was never assigned anywhere in process()
+        # -- see self._expected_bpm's field comment in __init__. Set before
+        # the silent-frame early return below: a momentarily silent frame
+        # shouldn't reset the known tempo estimate any more than a momentary
+        # confidence dip does (same stickiness reasoning as
+        # set_expected_bpm() above).
+        data.bpm = self._expected_bpm
 
         if pcm is None or len(pcm) == 0:
             return data
