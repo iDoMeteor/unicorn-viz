@@ -26,6 +26,8 @@ _cleanup_stale_empty_corpus_files = _MOD._cleanup_stale_empty_corpus_files
 _load_profile_expected_values = _MOD._load_profile_expected_values
 _format_profile_expected_values_block = _MOD._format_profile_expected_values_block
 _build_combined_prompt = _MOD._build_combined_prompt
+_build_recommender_payload = _MOD._build_recommender_payload
+_mean_field = _MOD._mean_field
 _format_reco_weights_line = _MOD._format_reco_weights_line
 _RECO_WEIGHT_DEFAULTS = _MOD._RECO_WEIGHT_DEFAULTS
 _load_live_reco_weights = _MOD._load_live_reco_weights
@@ -122,6 +124,76 @@ def test_build_detector_payload_set_description_included() -> None:
     rows = [_make_seq_row()]
     payload = _build_detector_payload(rows, 'set-a', 'a', set_description='House night baseline run.')
     assert payload['set_description'] == 'House night baseline run.'
+
+
+def test_build_detector_payload_band_signal_summary() -> None:
+    """2026-08-09: band_signal surfaces bass_n/mid_n/treble_n/bass_flux/
+    mid_flux means and the real per-frame beat-onset rate -- data behind
+    drop_score's band_blend rebalance and new bass_flux_norm term, both
+    landed the same day as provisional starting points."""
+    rows = []
+    for i in range(4):
+        row = _make_seq_row(track_id=f'track_{i}')
+        row['bass_n'] = 0.8
+        row['mid_n'] = 0.4
+        row['treble_n'] = 0.2
+        row['bass_flux'] = 2.0
+        row['mid_flux'] = 1.0
+        row['beat'] = 1.0 if i % 2 == 0 else 0.0
+        rows.append(row)
+
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+
+    assert payload['band_signal']['mean_bass_n'] == pytest.approx(0.8)
+    assert payload['band_signal']['mean_mid_n'] == pytest.approx(0.4)
+    assert payload['band_signal']['mean_treble_n'] == pytest.approx(0.2)
+    assert payload['band_signal']['mean_bass_flux'] == pytest.approx(2.0)
+    assert payload['band_signal']['mean_mid_flux'] == pytest.approx(1.0)
+    assert payload['band_signal']['raw_beat_rate_pct'] == pytest.approx(50.0)
+
+
+def test_build_detector_payload_band_signal_none_on_empty_rows() -> None:
+    payload = _build_detector_payload([], 'set-a', 'a')
+    assert payload['band_signal']['mean_bass_n'] is None
+    assert payload['band_signal']['raw_beat_rate_pct'] is None
+
+
+# ---- _build_recommender_payload ---------------------------------------------
+
+
+def test_build_recommender_payload_vocal_summary() -> None:
+    """2026-08-09: vocal_hnr/vocal_fmr now reach every sequence corpus row
+    (previously only the coarser profile_recommendation events) -- feeds
+    vocal_hnr_fit/vocal_fmr_fit, surfaced here at the denser granularity."""
+    rows = []
+    for i in range(3):
+        row = _make_seq_row(track_id=f'track_{i}')
+        row['vocal_hnr'] = 0.6
+        row['vocal_fmr'] = 0.5
+        rows.append(row)
+
+    payload = _build_recommender_payload(rows, duration_min=10.0, set_id='set-a', bucket_id='a')
+
+    assert payload['spectral_features']['vocal']['mean_vocal_hnr'] == pytest.approx(0.6)
+    assert payload['spectral_features']['vocal']['mean_vocal_fmr'] == pytest.approx(0.5)
+    assert payload['spectral_features']['vocal']['n_rows'] == 3
+
+
+def test_build_recommender_payload_vocal_summary_absent_with_no_rows() -> None:
+    payload = _build_recommender_payload([], duration_min=None, set_id='set-a', bucket_id='a')
+    assert 'vocal' not in payload.get('spectral_summary', {})
+
+
+# ---- _mean_field --------------------------------------------------------------
+
+
+def test_mean_field_ignores_missing_and_non_numeric() -> None:
+    rows = [{'x': 1.0}, {'x': 'nope'}, {}, {'x': 3.0}]
+    assert _mean_field(rows, 'x') == pytest.approx(2.0)
+
+
+def test_mean_field_none_on_no_valid_values() -> None:
+    assert _mean_field([{'x': 'nope'}], 'x') is None
 
 
 # ---- _run_llm_scoring skip / idempotent paths -------------------------------

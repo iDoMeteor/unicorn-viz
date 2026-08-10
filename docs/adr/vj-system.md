@@ -1557,6 +1557,79 @@ clean on every touched file.
 
 ---
 
+## The Rest of the 16 `AudioData` Slots Reach the Training Corpus + LLM Scoring (2026-08-09)
+
+Direct follow-on to the entry above, same day. Once `data.bpm` and
+`vocal_hnr`/`vocal_fmr`'s copy-path bugs were fixed, the owner asked for
+the full inventory of what the other 14 non-`fft`/`waveform` slots
+actually are and whether they're worth tracking for training: "let's add
+all to the training logs, whatever place is appropriate, that is a gold
+mine! everything but fft/waveform," followed by "add to llm scoring &
+reporting as well please, in/if/as appropriate."
+
+**Corpus capture (auto-vj-01, `_build_live_training_row()`).** Before this
+change, per-frame corpus coverage of `AudioData`'s 16 slots was
+inconsistent across the three call sites that build a row
+(`_record_live_training_row()`, `_record_sequence_heartbeat()`,
+`_record_sequence_keyframe()`):
+- `bass_flux`/`mid_flux`/`vocal_hnr`/`vocal_fmr` reached **no** per-frame
+  corpus row at all (`vocal_hnr`/`vocal_fmr` only reached the much coarser
+  `profile_recommendation` event, sampled once per recommender eval cycle
+  rather than every heartbeat/keyframe).
+- `bass`/`mid`/`treble`/`bass_n`/`mid_n`/`treble_n`/`beat` reached the
+  *sequence* corpus only, via a second, independent field list in
+  `_sequence_director_fields()` — not the *live* corpus
+  (`_record_live_training_row()` never merged that function's output).
+
+All of it now lives in `_build_live_training_row()` itself, the one
+function all three call sites already funnel through, so every corpus row
+— live and sequence alike — carries the same 14 fields consistently.
+`_sequence_director_fields()`'s now-duplicate copy of
+`bass`/`mid`/`treble`/`bass_n`/`mid_n`/`treble_n`/`beat`/`spectral_flux`/
+`bands`/`kick_regularity` was removed rather than left to drift from the
+base row — the same "one list, not two" lesson as `copy_audio_data()` in
+the entry above, applied to a different pair of lists the same day.
+
+**LLM scoring (training-kit-01, `package_training_set.py`).** New
+`_mean_field()` (promoted from a local closure that used to live only
+inside `_build_recommender_payload`, computing `mean_zcr`/`mean_centroid`)
+is now the shared helper for every mean-of-a-corpus-field computation:
+- `_build_detector_payload()` gains a `band_signal` block
+  (`mean_bass_n`/`mean_mid_n`/`mean_treble_n`, `mean_bass_flux`/
+  `mean_mid_flux`, `raw_beat_rate_pct` — the real per-frame onset-flag
+  rate, distinct from `beat_lock` above which tracks BPM-lock confidence,
+  and from `beat_count`/`beat_density` which are a theoretical estimate
+  from `bpm x duration`, not a real count). This is the actual data behind
+  `drop_score`'s `band_blend` rebalance and new `bass_flux_norm` term
+  landed the same day as provisional starting points "pending marathon-
+  week data" — now that data exists in every session's LLM payload.
+- `_build_recommender_payload()` gains a `spectral_features.vocal` block
+  (`mean_vocal_hnr`/`mean_vocal_fmr`), at the corpus's per-heartbeat
+  density rather than the recommender-cycle density `profile_recommendation`
+  events give the existing `spectral_features.overall` block.
+- Both payloads are dumped wholesale into the LLM prompt already (no
+  further wiring needed for the LLM to see the raw numbers), but the
+  prompt text also gained short explanatory notes pointing at both new
+  blocks and explicitly inviting a tuning opinion on `band_blend`/
+  `bass_flux_norm` and `vocal_hnr_fit`/`vocal_fmr_fit` — the same "here's
+  what this data means and why it matters" treatment `shadow_note` already
+  gives the shadow-engine comparison block.
+
+**Not done:** the deterministic `scorecard.md` (as opposed to the LLM-
+scored reports) wasn't touched — the ask was specifically about "LLM
+scoring & reporting," and the new fields already reach the LLM payloads
+without it. A scorecard section could be added later if wanted.
+
+**Verified:** new tests — `tests/test_auto_vj_live_training.py`
+(`test_build_live_training_row_captures_every_audiodata_field_except_
+fft_waveform`, explicit per-field assertions plus confirms `fft`/
+`waveform` are absent) and `tests/test_package_training_set.py`
+(`band_signal`/`spectral_features.vocal` summaries, both the populated and
+empty-corpus cases, plus `_mean_field()` itself). Full main-repo suite
+green (1597 passed), `ruff` clean on every touched file.
+
+---
+
 ## Live-Session Follow-Up: Centroid Runaway, HUD Clamp, Director Audit Fixes (2026-08-09)
 
 Decision: a batch of fixes triggered by watching the top-3-weights rewire

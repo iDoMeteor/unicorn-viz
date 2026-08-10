@@ -224,3 +224,52 @@ def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> N
     assert row['bpm'] == 126.0
     assert row['bpm_confidence'] == 0.70
     assert row['danceability'] == pytest.approx(0.205)
+
+
+def test_build_live_training_row_captures_every_audiodata_field_except_fft_waveform() -> None:
+    """2026-08-09: bass/mid/treble/bass_n/mid_n/treble_n/beat/bass_flux/
+    mid_flux/vocal_hnr/vocal_fmr now reach every corpus row this function
+    feeds (live corpus + both sequence corpus paths) -- previously
+    bass_flux/mid_flux/vocal_hnr/vocal_fmr weren't captured in any per-frame
+    row at all, and the rest only reached the sequence corpus via a
+    separate, now-removed duplicate list in _sequence_director_fields().
+    Owner: "let's add all to the training logs... that is a gold mine!"
+    """
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass=0.11, mid=0.22, treble=0.33,
+        bass_n=0.44, mid_n=0.55, treble_n=0.66,
+        beat=1.0,
+        bpm=126.0,
+        bass_flux=1.23, mid_flux=4.56,
+        spectral_flux=7.89,
+        vocal_hnr=0.71, vocal_fmr=0.62,
+    )
+    spotify = {
+        'track_id': 'spotify:track:test123', 'title': 'Moonwalk',
+        'status': 'playing', 'is_playing': True,
+        'duration_s': 180.0, 'position_s': 90.0, 'progress': 0.5,
+    }
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    audio_manager = SimpleNamespace(
+        get_profile_key=lambda: 'normie',
+        get_profile=lambda: SimpleNamespace(name='Normie'),
+        get_profile_bpm_range=lambda: (90, 130),
+    )
+    grid = SimpleNamespace(bpm=126.0, confidence=0.70)
+
+    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+
+    assert row['bass'] == pytest.approx(0.11)
+    assert row['mid'] == pytest.approx(0.22)
+    assert row['treble'] == pytest.approx(0.33)
+    assert row['bass_n'] == pytest.approx(0.44)
+    assert row['mid_n'] == pytest.approx(0.55)
+    assert row['treble_n'] == pytest.approx(0.66)
+    assert row['beat'] == pytest.approx(1.0)
+    assert row['bass_flux'] == pytest.approx(1.23)
+    assert row['mid_flux'] == pytest.approx(4.56)
+    assert row['vocal_hnr'] == pytest.approx(0.71)
+    assert row['vocal_fmr'] == pytest.approx(0.62)
+    assert 'fft' not in row
+    assert 'waveform' not in row
