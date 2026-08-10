@@ -121,6 +121,102 @@ def test_build_live_training_row_genre_defaults_empty_when_source_omits_it() -> 
     assert row['track_genre'] == ''
 
 
+def test_build_live_training_row_decodes_camelot_key_from_now_playing() -> None:
+    """2026-08-10: 'key' (Camelot code, e.g. dj-mixer-01's analyzer output)
+    is decoded into the corpus row's key/scale/key_index/key_sin/key_cos/
+    is_minor schema instead of staying a permanent 'unknown' placeholder."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    spotify = {'track_id': 'dj_mixer:test', 'title': 'Moonwalk', 'key': '8A'}
+    state = SimpleNamespace(audio_source='dj_mixer', playlist_mode='auto')
+    audio_manager = None
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+
+    assert row['key'] == 'A minor'
+    assert row['key_camelot'] == '8A'
+    assert row['scale'] == 'minor'
+    assert row['is_minor'] == 1
+    assert row['key_index'] == 7
+    assert row['key_sin'] == pytest.approx(np.sin(2 * np.pi * 7 / 12), abs=1e-5)
+    assert row['key_cos'] == pytest.approx(np.cos(2 * np.pi * 7 / 12), abs=1e-5)
+
+
+def test_build_live_training_row_key_placeholder_when_absent_or_unrecognized() -> None:
+    """No 'key' in now-playing (most sources), or a code the Camelot table
+    doesn't recognize, both fall back to the same 'unknown' placeholder --
+    never raises."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row = _build_live_training_row(audio, {}, state, None, grid)
+    assert row['key'] == 'unknown'
+    assert row['key_camelot'] == ''
+    assert row['scale'] == 'unknown'
+    assert row['key_index'] == -1
+    assert row['is_minor'] == 0
+
+    row = _build_live_training_row(audio, {'key': 'not-a-real-code'}, state, None, grid)
+    assert row['key'] == 'unknown'
+
+
+def test_build_live_training_row_captures_mixer_bpm_and_section_hint() -> None:
+    """2026-08-10: the mixer's raw BPM hint and its song-structure hint
+    (previously read only for live phrase-bias decisions, never written to
+    any corpus row -- see docs/adr/vj-system.md) now reach every corpus row
+    this function builds, prefixed section_* to avoid collisions."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    state = SimpleNamespace(audio_source='dj_mixer', playlist_mode='auto')
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+    section_hint = {
+        'role': 'PEAK', 'tier': 'major', 'label': 'drop',
+        'bars_in': 2.0, 'bars_left': 6.0, 'confidence': 0.9,
+        'next_role': 'FALL', 'next_label': 'breakdown', 'bars_to_next': 6.0,
+    }
+
+    row = _build_live_training_row(
+        audio, {}, state, None, grid,
+        mixer_bpm=128.5, section_hint=section_hint,
+    )
+
+    assert row['mixer_bpm'] == 128.5
+    assert row['section_role'] == 'PEAK'
+    assert row['section_tier'] == 'major'
+    assert row['section_label'] == 'drop'
+    assert row['section_bars_in'] == 2.0
+    assert row['section_bars_left'] == 6.0
+    assert row['section_confidence'] == 0.9
+    assert row['section_next_role'] == 'FALL'
+    assert row['section_next_label'] == 'breakdown'
+    assert row['section_bars_to_next'] == 6.0
+    # next_tier wasn't in the hint dict -- not fabricated as a key.
+    assert 'section_next_tier' not in row
+
+
+def test_build_live_training_row_mixer_bpm_and_section_default_when_absent() -> None:
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row = _build_live_training_row(audio, {}, state, None, grid)
+
+    assert row['mixer_bpm'] == 0.0
+    assert 'section_role' not in row
+
+
 def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
     corpus_path = tmp_path / 'live-autovj.jsonl'
     writer = LiveCorpusWriter(corpus_path, True, 1.0)

@@ -41,6 +41,9 @@ _DETECTOR_CONSTANT_DEFAULTS = _MOD._DETECTOR_CONSTANT_DEFAULTS
 _DIRECTOR_CONSTANT_DEFAULTS = _MOD._DIRECTOR_CONSTANT_DEFAULTS
 _format_constants_line = _MOD._format_constants_line
 _format_tuning_recommendations_md = _MOD._format_tuning_recommendations_md
+_build_director_payload = _MOD._build_director_payload
+_extract_director_events = _MOD._extract_director_events
+_write_scorecard = _MOD._write_scorecard
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -184,6 +187,105 @@ def test_build_recommender_payload_vocal_summary_absent_with_no_rows() -> None:
     assert 'vocal' not in payload.get('spectral_summary', {})
 
 
+# ---- _build_director_payload / _extract_director_events ---------------------
+# Mixer song-structure hint capture (2026-08-10) -- see docs/adr/vj-system.md.
+
+
+def test_extract_director_events_includes_section_change_events() -> None:
+    rows = [_make_seq_row(event_type='section_change')]
+    rows[0].update({
+        'from_role': 'RISE', 'from_label': 'build',
+        'to_role': 'PEAK', 'to_label': 'drop',
+        'section_role': 'PEAK', 'section_label': 'drop', 'section_bars_left': 6.0,
+    })
+
+    events = _extract_director_events(rows)
+
+    assert len(events) == 1
+    entry = events[0]
+    assert entry['event_type'] == 'section_change'
+    assert entry['from_role'] == 'RISE'
+    assert entry['from_label'] == 'build'
+    assert entry['to_role'] == 'PEAK'
+    assert entry['to_label'] == 'drop'
+    assert entry['section_role'] == 'PEAK'
+    assert entry['section_bars_left'] == 6.0
+
+
+def test_extract_director_events_carries_section_context_on_other_event_types() -> None:
+    """A drop_fire (or any existing event type) also picks up the mixer's
+    section hint when present -- lets structural_sync be judged from the
+    same event samples the other four director dimensions already use."""
+    rows = [_make_seq_row(event_type='drop_fire')]
+    rows[0].update({'section_role': 'PEAK', 'section_label': 'drop', 'section_bars_left': 2.0})
+
+    events = _extract_director_events(rows)
+
+    assert events[0]['section_role'] == 'PEAK'
+    assert events[0]['section_label'] == 'drop'
+    assert events[0]['section_bars_left'] == 2.0
+
+
+def test_extract_director_events_omits_section_fields_when_absent() -> None:
+    """No mixer session hint that tick -- section_* keys must not appear at
+    all (not as empty-string placeholders), same falsy-stripping already
+    applied to every other optional field here."""
+    rows = [_make_seq_row(event_type='drop_fire')]
+
+    events = _extract_director_events(rows)
+
+    assert 'section_role' not in events[0]
+    assert 'section_label' not in events[0]
+    assert 'section_bars_left' not in events[0]
+
+
+def test_build_director_payload_stats_include_section_changes_and_coverage() -> None:
+    hb_with_hint = [
+        {**_make_seq_row(track_id=f'hb{i}'), 'section_role': 'HOLD'} for i in range(2)
+    ]
+    hb_without_hint = [_make_seq_row(track_id='hb_no_hint')]
+    section_change = _make_seq_row(event_type='section_change')
+
+    payload = _build_director_payload(
+        hb_with_hint + hb_without_hint + [section_change],
+        duration_min=10.0, set_id='set-a', bucket_id='a',
+    )
+
+    assert payload['stats']['section_changes'] == 1
+    # 2 of 3 heartbeat rows carried a section hint.
+    assert payload['stats']['section_hint_coverage_pct'] == pytest.approx(66.7, abs=0.1)
+
+
+def test_build_director_payload_zero_section_coverage_when_no_mixer_session() -> None:
+    rows = [_make_seq_row(track_id=f'hb{i}') for i in range(3)]
+
+    payload = _build_director_payload(rows, duration_min=10.0, set_id='set-a', bucket_id='a')
+
+    assert payload['stats']['section_changes'] == 0
+    assert payload['stats']['section_hint_coverage_pct'] == 0.0
+
+
+def test_write_scorecard_includes_song_structure_and_key_section(tmp_path: Path) -> None:
+    seq_path = tmp_path / 'sequence-corpus.jsonl'
+    rows = [
+        {**_make_seq_row(track_id='a'), 'section_role': 'HOLD', 'key': 'A minor'},
+        {**_make_seq_row(track_id='b'), 'key': 'unknown'},
+        {**_make_seq_row(event_type='section_change')},
+    ]
+    seq_path.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+    live_path = tmp_path / 'live-corpus.jsonl'
+    live_path.write_text('', encoding='utf-8')
+    bucket_dir = tmp_path / 'set-a' / 'a'
+    bucket_dir.mkdir(parents=True)
+
+    scorecard_path, _lock, _director = _write_scorecard(bucket_dir, live_path, seq_path)
+
+    content = scorecard_path.read_text(encoding='utf-8')
+    assert '## Song Structure & Key' in content
+    assert 'Section-change events: `1`' in content
+    assert 'Key coverage: `33.3%`' in content
+
+
 # ---- _mean_field --------------------------------------------------------------
 
 
@@ -211,6 +313,31 @@ def test_run_llm_scoring_returns_existing_without_api_call(tmp_path: Path) -> No
     with patch.object(_MOD, '_call_llm', side_effect=AssertionError('should not be called')):
         result = _run_llm_scoring(tmp_path, [], 'set-a', 'a', force_regen=False)
     assert result == {'detector': {}, 'director': {}}
+
+
+def test_run_llm_scoring_overrides_a_hallucinated_scored_at(tmp_path: Path) -> None:
+    """2026-08-10: an LLM has no reliable notion of 'now' and will happily
+    invent a plausible-looking but wrong scored_at (observed live: every
+    report in a session stamped identically with a hallucinated 2023 date)
+    rather than leaving the field blank. The packaging script's own clock
+    must always win, not just fill in a missing key."""
+    rows = [_make_seq_row()]
+    fake_response = json.dumps({
+        'detector': {'scores': {}}, 'director': {'scores': {}},
+        'recommender': {'scores': {}}, 'tuning': {},
+        'scored_at': '2023-10-02T14:30:00+00:00',
+    })
+    with patch.dict('os.environ', {'OPENAI_API_KEY': 'sk-fake'}, clear=False), \
+         patch.object(_MOD, '_call_llm', return_value=fake_response):
+        result = _run_llm_scoring(tmp_path, rows, 'set-a', 'a')
+
+    assert result is not None
+    assert result['scored_at'] != '2023-10-02T14:30:00+00:00'
+    assert result['scored_at'].startswith('20')  # a real, current-era ISO timestamp
+    session_data = json.loads((tmp_path / 'session_score.json').read_text(encoding='utf-8'))
+    assert session_data['scored_at'] == result['scored_at']
+    det_data = json.loads((tmp_path / 'detector_score.json').read_text(encoding='utf-8'))
+    assert det_data['scored_at'] == result['scored_at']
 
 
 def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path) -> None:

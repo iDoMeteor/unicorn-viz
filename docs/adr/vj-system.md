@@ -105,6 +105,139 @@ the active engine or director.
 
 ---
 
+## Mixer Track Meta Reaches the Training Corpus (2026-08-10)
+
+Owner question that started this: "are we capturing all the incoming mixer
+track meta into our training logs, like song sectionality, etc?" The answer
+was no on two fronts. dj-mixer-01 computes a rich per-track analysis
+(sections/song-structure, musical key, cue/loop points, stems -- see
+`track_store.py`), but only a thin slice ever crosses the drop-in boundary:
+the *currently playing* section (plus its immediate successor) via
+`vj_api.publish_section()`/`get_section()`, and BPM via
+`publish_bpm()`/`get_bpm()`. Musical key had no crossing mechanism at all.
+And of what *did* cross, the section hint was consumed only by
+`_phrase_bias()` for live decisions (see the phrase-structure plan,
+2026-08-05/06) and never written to any training-corpus row -- so there was
+no way to later ask "did the director's actions actually line up with the
+track's real structure?"
+
+**Musical key: exposed via the existing now-playing channel, not a new
+hint-bus type.** `dj_mixer_controller.now_playing_snapshot()` already
+carries `genre` (an ID3 tag, Tier 2 of the recommender-accuracy-tracking
+plan) through to `_build_live_training_row()` via
+`vj_api.active_now_playing()`. `key` (Camelot code, e.g. "8A", from
+`track_store.key_for_path()` -- the same store `_publish_section()` already
+reads) rides the same channel via a new `_current_track_key()` mirroring
+`_current_track_genre()`'s cache-by-path pattern. No new `vj_api` surface
+needed -- genre and key are both "the analyzer's opinion about the loaded
+file," a natural fit for a channel that already exists, not a case for the
+`publish_bpm`/`publish_section` pattern (those are live, per-tick values;
+key is a per-track constant, same as genre).
+
+**Camelot decode uses wheel position, not chromatic pitch class, for the
+cyclical encoding.** The corpus row schema (`key`/`scale`/`key_index`/
+`key_sin`/`key_cos`/`is_minor`/`key_strength`) predates this work -- it was
+designed for Spotify's Audio Features key/mode/key_confidence shape, dead
+since that endpoint's Nov 2024 deprecation (see the "Spotify's Get Audio
+Features..." comment already in `_build_live_training_row`). Repurposing it
+for Camelot: `key_index`/`key_sin`/`key_cos` encode the Camelot wheel's own
+1-12 position (zero-based), not chromatic semitone distance -- adjacent
+Camelot numbers are the wheel's own definition of harmonic compatibility,
+so this is the more musically meaningful cyclical encoding for any future
+harmonic-mixing-aware use of the corpus. `key_strength` stays 0.0
+(unmeasured, not "confident zero") -- `key_detect.py` computes a detection
+confidence but the track store never persists it, only the Camelot code
+itself (confirmed by reading `track_store.py`; a real gap, not something
+this pass fixes).
+
+**`mixer_bpm`: the raw hint, distinct from the locally-tracked result.**
+`self._grid.bpm` (the corpus's `bpm` field) may already reflect
+`prime_tempo()` having adopted an external hint (see the BPM Detector Audit
+entry below) -- once that happens the primed and un-primed values are
+indistinguishable in the row. New `_get_mixer_bpm()` (mirrors
+`_get_section_hint()`'s defensive-wrapper pattern) captures
+`vj_api.get_bpm(exclude='auto_vj')` fresh into every row as `mixer_bpm`, so
+a corpus consumer can compare detector output against ground truth
+directly instead of only ever seeing the post-prime result.
+
+**Section hint fields land on every corpus row, prefixed `section_*`.**
+`_build_live_training_row()` gained a `section_hint` parameter; all three
+call sites (`_record_live_training_row`/`_record_sequence_heartbeat`/
+`_record_sequence_keyframe`) now pass `self._get_section_hint()`. This
+reaches live corpus rows *and* every sequence corpus row (heartbeat and
+keyframe alike) for free, since all three already funnel through the one
+row builder -- no separate merge into `_sequence_director_fields()` needed
+(that would have re-fetched the same hint a second time per tick).
+
+**New `section_change` keyframe event, one per real boundary crossing.**
+Previously nothing marked *when* the mixer's structure actually changed --
+only the current state was available at each existing event's timestamp.
+`_maybe_record_section_change()` tracks `self._last_section_signature`
+(a `(role, label)` tuple) and fires a `section_change` keyframe
+(`from_role`/`from_label`/`to_role`/`to_label`/`tier`/`confidence`) exactly
+on a change, not once per tick spent inside a section. The very first hint
+seen seeds the signature without firing, so app startup mid-song doesn't
+read as a spurious transition.
+
+**Scoring: a new `structural_sync` director dimension, nullable.**
+`_extract_director_events()` now also samples `section_change` events and
+carries `section_role`/`section_label`/`section_bars_left` context on every
+sampled event (mode_transition/drop_fire/impact_fire alike), and
+`_build_director_payload()` reports `stats.section_changes`/
+`stats.section_hint_coverage_pct` so the LLM (and a human reader) can tell
+"no mixer session this run" (0%) apart from "a mixer session that didn't
+cross many boundaries." The new fifth dimension follows the detector's
+existing `external_agreement` convention: scored null, not 0, when no
+mixer hint existed that session -- a missing signal is not evidence of
+poor sync. `scorecard.md` gained a non-LLM "Song Structure & Key" section
+(section-change count, section-hint coverage %, key coverage %) --
+descriptive completeness stats, not a heuristic score.
+
+**A pre-existing bug found while reviewing a live session's first reports
+under the new capture, unrelated to the capture work itself but fixed in
+the same pass:** every `scored_at` timestamp across all four score files
+read `2023-10-02T14:30:00+00:00` in a real session -- the LLM had no
+reliable notion of "now" and invented a plausible-looking wrong one, and
+`llm_data.setdefault('scored_at', now_iso)` only fills a *missing* key, so
+the packaging script's own correct clock (`now_iso`, already computed)
+never overrode it. Changed to an unconditional overwrite -- the packaging
+script's own clock is always authoritative for this field.
+
+**Cross-session collision, surfaced and left as a process note, not fixed
+here:** while this work was in progress, a concurrent session sharing this
+machine's working directory for `drop-ins/dj-mixer-01` committed and
+pushed (`beaeeb4`, an unrelated version-renumbering commit) while this
+session's uncommitted `dj_mixer_controller.py`/test changes were sitting in
+that same working tree -- they were swept into that commit with no
+changelog credit. Per the git-history-safety rules, the already-pushed
+commit was left untouched; a small follow-up commit (`b3bcb62`) gave the
+key-exposure feature its own version bump and changelog line. No process
+change proposed here -- flagged for the owner's awareness since it's a
+real collision risk any time two sessions edit the same drop-in's working
+directory concurrently.
+
+**Verified:** full main-repo suite green (1614 passed), dj-mixer-01's own
+full suite green (1040 passed, 1 skipped), `ruff`/`bandit` clean on every
+touched file. New tests: `_current_track_key`/`now_playing_snapshot` key
+coverage (dj-mixer-01), Camelot decode + `mixer_bpm`/`section_*` field
+presence and absence (`test_auto_vj_live_training.py`),
+`_get_mixer_bpm`/`_maybe_record_section_change` boundary/no-op/seed cases
+(`test_auto_vj_phrase_structure.py`), `_extract_director_events`/
+`_build_director_payload` section coverage and the `scored_at` override
+(`test_package_training_set.py`).
+
+**Not done this pass, left as known gaps:** `key_detect.py`'s detection
+confidence isn't persisted upstream by dj-mixer-01's analyzer, so
+`key_strength` stays permanently 0.0 until that's addressed at the
+analyzer level (would need an `ANALYSIS_VERSION` bump there, out of scope
+for a corpus-capture pass in a different repo). No structural_sync
+*formula* was computed -- the LLM judges it qualitatively from the raw
+event samples, matching how every other director dimension already works;
+a fitted metric is deferred until there's enough mixer-sourced session
+data to validate one against.
+
+---
+
 ## House-Family Consolidation: Adjacent BPM Bands, `dance` Revived, Centroid De-Weighted (2026-08-10)
 
 Follow-on to the previous day's whole director/detector/recommender batch

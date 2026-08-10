@@ -173,6 +173,93 @@ def test_get_section_hint_passes_through_a_valid_hint() -> None:
     assert inst._get_section_hint() == hint
 
 
+def test_get_mixer_bpm_returns_zero_when_vj_api_lacks_get_bpm() -> None:
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=SimpleNamespace())  # no get_bpm at all
+    assert inst._get_mixer_bpm() == 0.0
+
+
+def test_get_mixer_bpm_returns_zero_on_lookup_error() -> None:
+    class _Raising:
+        def get_bpm(self, exclude=''):
+            raise RuntimeError('boom')
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=_Raising())
+    assert inst._get_mixer_bpm() == 0.0
+
+
+def test_get_mixer_bpm_passes_through_a_valid_hint() -> None:
+    class _Vj:
+        def get_bpm(self, exclude=''):
+            assert exclude == 'auto_vj'
+            return 128.5
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=_Vj())
+    assert inst._get_mixer_bpm() == 128.5
+
+
+def test_maybe_record_section_change_seeds_without_firing_on_first_hint() -> None:
+    """The very first hint seen must not fire a transition -- there is no
+    prior section to have transitioned from, and app startup mid-song
+    shouldn't read as a spurious boundary crossing."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_controller(section_hint={'role': 'HOLD', 'label': 'intro'},
+                             _last_section_signature=None)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    inst._maybe_record_section_change(SimpleNamespace(), SimpleNamespace(), {'available': True})
+    assert calls == []
+    assert inst._last_section_signature == ('HOLD', 'intro')
+
+
+def test_maybe_record_section_change_fires_on_real_transition() -> None:
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_controller(
+        section_hint={'role': 'PEAK', 'tier': 'major', 'label': 'drop', 'confidence': 0.9},
+        _last_section_signature=('RISE', 'build'),
+    )
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    inst._maybe_record_section_change(SimpleNamespace(), SimpleNamespace(), {'available': True})
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] == 'section_change'
+    assert kwargs['from_role'] == 'RISE'
+    assert kwargs['from_label'] == 'build'
+    assert kwargs['to_role'] == 'PEAK'
+    assert kwargs['to_label'] == 'drop'
+    assert kwargs['tier'] == 'major'
+    assert kwargs['confidence'] == 0.9
+    assert inst._last_section_signature == ('PEAK', 'drop')
+
+
+def test_maybe_record_section_change_noop_when_signature_unchanged() -> None:
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_controller(section_hint={'role': 'PEAK', 'label': 'drop'},
+                             _last_section_signature=('PEAK', 'drop'))
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    inst._maybe_record_section_change(SimpleNamespace(), SimpleNamespace(), {'available': True})
+    assert calls == []
+    assert inst._last_section_signature == ('PEAK', 'drop')
+
+
+def test_maybe_record_section_change_noop_without_spotify() -> None:
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_controller(section_hint={'role': 'PEAK', 'label': 'drop'},
+                             _last_section_signature=('RISE', 'build'))
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    inst._maybe_record_section_change(SimpleNamespace(), SimpleNamespace(), {})
+    assert calls == []
+    assert inst._last_section_signature == ('RISE', 'build')  # untouched, no hint even looked up
+
+
+def test_maybe_record_section_change_noop_without_hint() -> None:
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_controller(section_hint=None, _last_section_signature=('RISE', 'build'))
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    inst._maybe_record_section_change(SimpleNamespace(), SimpleNamespace(), {'available': True})
+    assert calls == []
+    assert inst._last_section_signature == ('RISE', 'build')  # untouched
+
+
 def test_sync_phrase_clock_from_section_hint_sets_bars_in_and_tier() -> None:
     hint = {'role': 'PEAK', 'tier': 'major', 'bars_in': 12.5, 'confidence': 0.9}
     inst = _bare_controller(section_hint=hint, _phrase_neutral_bars_left=3, _peak_tier='minor')
