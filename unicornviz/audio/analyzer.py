@@ -259,6 +259,11 @@ class Analyzer:
         """Return the timestamp used for the most recent process() call."""
         return float(self._last_audio_time)
 
+    @property
+    def silence_rms_floor(self) -> float:
+        """Return the RMS level below which the gate zeroes the spectrum."""
+        return float(self._silence_rms_floor)
+
     # ------------------------------------------------------------------
     # P1 — onset event queue
     # ------------------------------------------------------------------

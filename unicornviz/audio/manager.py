@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -118,6 +119,43 @@ class AudioManager:
         # silent buffers, but must not run the capture fallback prober.
         self._started: bool = False
 
+        # ------------------------------------------------------------------
+        # Zero-frame probe (2026-08-09).
+        #
+        # A live session showed the spectrum-analyzer effect drawing flat bars
+        # while the beat tracker still reported a plausible BPM, and the Auto
+        # VJ decision log confirmed it: 1,266 of 2,637 audio-carrying rows had
+        # bass/mid/treble/energy all exactly zero, interleaved with healthy
+        # rows rather than arriving in one contiguous dropout.
+        #
+        # Two hypotheses produce that signature and need opposite fixes:
+        #
+        #   (a) GATE      — the input really did fall below the analyzer's
+        #                   silence floor, so process() zeroed the spectrum on
+        #                   purpose.  A tuning problem.
+        #   (b) ANOMALY   — a loud block was analyzed and a fresh snapshot was
+        #                   published, yet the buffer handed to consumers is
+        #                   still zero.  A publish/copy defect.
+        #
+        # The discriminator is the *input RMS of the block that produced the
+        # zero snapshot*, which only the analysis thread knows.  So the publish
+        # side records it alongside a monotonically increasing publish counter,
+        # and the reader side classifies each zero frame against it.
+        #
+        # Cost when audio is healthy: three float comparisons per frame.
+        self._publish_seq: int = 0
+        self._publish_block_seq: int = -1
+        self._publish_rms: float = 0.0
+        self._zero_probe_last_publish: int = -1
+        self._zero_frames: int = 0
+        self._zero_gated: int = 0
+        self._zero_anomalous: int = 0
+        self._zero_repeat: int = 0
+        self._zero_rms_peak: float = 0.0
+        self._frames_read: int = 0
+        self._zero_probe_next_report_t: float = 0.0
+        self._zero_probe_first_anomaly_logged: bool = False
+
     @staticmethod
     def _copy_audio_into(source: AudioData, target: AudioData) -> None:
         """Copy all fields from source into target in-place (no allocation)."""
@@ -202,6 +240,9 @@ class AudioManager:
         log.info('AudioManager: analysis thread started')
 
     def stop(self) -> None:
+        # Final zero-frame verdict, so a session always ends with the counts on
+        # record even if it ran for less than one reporting interval.
+        self.log_zero_frame_summary()
         # Signal the analysis thread and unblock its wait immediately.
         self._analysis_stop.set()
         self._capture.signal_new_block()
@@ -271,10 +312,17 @@ class AudioManager:
             self._analyzer.process(block, out=self._back_buf)
             onsets = self._analyzer.drain_onsets()
             audio_t = self._analyzer.last_audio_time
+            # Input level of the block that produced this snapshot.  Read here,
+            # on the thread that owns the analyzer, so the reader-side probe
+            # never touches analyzer internals across a thread boundary.
+            block_rms = self._analyzer.last_raw_rms
             # Atomic publish: swap buffers, accumulate onsets, update timestamp.
             with self._analysis_lock:
                 self._front_buf, self._back_buf = self._back_buf, self._front_buf
                 self._published_audio_time = audio_t
+                self._publish_seq += 1
+                self._publish_block_seq = new_seq
+                self._publish_rms = block_rms
                 if onsets:
                     self._onset_pending.extend(onsets)
         log.debug('AudioManager: analysis thread exited')
@@ -425,6 +473,10 @@ class AudioManager:
         with self._analysis_lock:
             self._copy_audio_into(self._front_buf, self._last_data_raw)
             self._copy_audio_into(self._front_buf, self._last_data)
+            publish_seq = self._publish_seq
+            publish_block_seq = self._publish_block_seq
+            publish_rms = self._publish_rms
+        self._observe_zero_frame(publish_seq, publish_block_seq, publish_rms)
         # Apply reactivity outside the lock — no shared state involved.
         if self._reactivity != 1.0:
             r = self._reactivity
@@ -434,6 +486,102 @@ class AudioManager:
             np.multiply(self._last_data.fft, r, out=self._last_data.fft)
             np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
         return self._last_data
+
+    def _observe_zero_frame(
+        self,
+        publish_seq: int,
+        publish_block_seq: int,
+        publish_rms: float,
+    ) -> None:
+        """Classify an all-zero published snapshot and log a rate-limited summary.
+
+        Called once per ``get_audio_data()`` with the publish bookkeeping read
+        under the same lock as the snapshot copy, so the counter and the buffer
+        it describes are guaranteed to be the same generation.
+
+        A zero frame is sorted into one of three buckets:
+
+        ``repeat``    the reader outran the analysis thread and re-read a
+                      snapshot it already saw.  Expected at 60 fps against
+                      ~47 blocks/s and not a fault on its own.
+        ``gate``      the block's input RMS was at or below the analyzer's
+                      silence floor, so the spectrum was zeroed deliberately.
+        ``anomaly``   a fresh snapshot, produced from a block whose RMS was
+                      above the floor, is nonetheless all zero.  This is the
+                      publish/copy defect and the only bucket that indicates
+                      a bug in this module.
+
+        See the probe rationale in ``__init__``.
+        """
+        self._frames_read += 1
+        raw = self._last_data_raw
+        if raw.bass != 0.0 or raw.mid != 0.0 or raw.treble != 0.0:
+            return
+
+        self._zero_frames += 1
+        fresh = publish_seq != self._zero_probe_last_publish
+        self._zero_probe_last_publish = publish_seq
+        floor = self._analyzer.silence_rms_floor
+
+        if not fresh:
+            self._zero_repeat += 1
+        elif publish_rms <= floor:
+            self._zero_gated += 1
+        else:
+            self._zero_anomalous += 1
+            self._zero_rms_peak = max(self._zero_rms_peak, publish_rms)
+            # The first anomaly is the whole point of the probe — log it
+            # immediately and in full rather than waiting for the next
+            # periodic summary, which may be up to 30s away.
+            if not self._zero_probe_first_anomaly_logged:
+                self._zero_probe_first_anomaly_logged = True
+                log.warning(
+                    'Audio zero-frame ANOMALY: fresh snapshot (publish=%d '
+                    'block=%d) is all-zero but its input rms=%.5f is above the '
+                    'silence floor %.5f — the gate did not do this',
+                    publish_seq,
+                    publish_block_seq,
+                    publish_rms,
+                    floor,
+                )
+
+        now = time.monotonic()
+        if self._zero_probe_next_report_t == 0.0:
+            self._zero_probe_next_report_t = now + 30.0
+            return
+        if now < self._zero_probe_next_report_t:
+            return
+        self._zero_probe_next_report_t = now + 30.0
+        self.log_zero_frame_summary()
+
+    def log_zero_frame_summary(self) -> None:
+        """Log cumulative zero-frame counts, with a verdict when one is clear."""
+        if self._zero_frames == 0:
+            return
+        share = 100.0 * self._zero_frames / max(1, self._frames_read)
+        if self._zero_anomalous > 0:
+            verdict = (
+                f'PUBLISH DEFECT — {self._zero_anomalous} fresh zero snapshots '
+                f'from blocks up to rms {self._zero_rms_peak:.5f}'
+            )
+        elif self._zero_gated > 0:
+            verdict = (
+                f'SILENCE GATE — {self._zero_gated} zero snapshots, all from '
+                f'blocks at or below the floor {self._analyzer.silence_rms_floor:.5f}'
+            )
+        else:
+            verdict = 'reader outran the analysis thread only; no fresh zeros'
+        log.warning(
+            'Audio zero-frame probe: %d/%d frames zero (%.1f%%) '
+            '[gate=%d anomaly=%d repeat=%d] — %s',
+            self._zero_frames,
+            self._frames_read,
+            share,
+            self._zero_gated,
+            self._zero_anomalous,
+            self._zero_repeat,
+            verdict,
+        )
 
     def get_audio_data_raw(self) -> AudioData:
         """Return latest unscaled analyzer snapshot for detection/telemetry."""

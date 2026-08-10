@@ -280,6 +280,8 @@ class TestFFTDedup:
 
             mock_analyzer = MagicMock()
             mock_analyzer.last_raw_rms = 0.0
+            # Read by AudioManager's zero-frame probe on every get_audio_data().
+            mock_analyzer.silence_rms_floor = 0.0060
             mock_analyzer.process.side_effect = _fake_process
             mock_analyzer.drain_onsets.return_value = []
             MockAnalyzer.return_value = mock_analyzer
