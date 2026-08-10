@@ -317,6 +317,10 @@ class AudioManager:
         """
         return self._capture.sample_rate
 
+    def set_claimed_device_names(self, names: set[str]) -> None:
+        """Forward exclusively-held audio devices to the capture layer."""
+        self._capture.set_claimed_device_names(names)
+
     def source_is_output_flags(self) -> list[bool]:
         """Per-source: True for an output being monitored, False for an input."""
         return self._capture.source_is_output_flags()

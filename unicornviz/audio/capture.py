@@ -22,6 +22,7 @@ the counter each frame and skips the FFT when no new block has arrived
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import sys
 import threading
@@ -54,6 +55,30 @@ _READER_POLL_INTERVAL_S = 0.01  # max time the reader can be blocked before re-c
 _DEFAULT_FALLBACK_RMS_THRESHOLD = 0.0015
 _DEFAULT_FALLBACK_SILENCE_SECONDS = 6.0
 _DEFAULT_FALLBACK_COOLDOWN_SECONDS = 8.0
+
+
+#: Words that appear in almost every audio device name and therefore
+#: identify nothing.  Matching on these would claim unrelated hardware.
+_DEVICE_GENERIC_TOKENS = frozenset({
+    'usb', 'audio', 'analog', 'stereo', 'mono', 'surround', 'digital',
+    'device', 'output', 'input', 'built', 'in', 'builtin', 'sound', 'card',
+    'interface', 'monitor', 'default', 'front', 'rear', 'line', 'pro',
+})
+
+
+def _device_tokens(name: str) -> set[str]:
+    """Distinctive lowercase tokens identifying a piece of audio hardware.
+
+    Device names differ by layer for the same physical device, sharing only
+    the model: 'DDJ-REV1: USB Audio' vs 'DDJ-REV1 Analog Surround 4.0'.
+    Splitting on non-alphanumerics and dropping generic words leaves the
+    part that actually identifies the box.
+    """
+    parts = re.split(r'[^a-z0-9]+', name.strip().lower())
+    return {
+        p for p in parts
+        if len(p) >= 3 and p not in _DEVICE_GENERIC_TOKENS and not p.isdigit()
+    }
 
 
 def _normalize_latency(latency: str | float) -> str | float:
@@ -329,6 +354,11 @@ class AudioCapture:
         # Cleared when a stream close times out; PortAudio teardown is
         # then unsafe (see _close_stream_safely).
         self._closed_cleanly: bool = True
+        # Audio devices another subsystem holds open exclusively.  Opening
+        # one of these a second time is not an error we can catch: see
+        # set_claimed_device_names().
+        self._claimed_names: set[str] = set()
+        self._claimed_tokens: set[str] = set()
         self._reader_thread: threading.Thread | None = None
         # Event that the reader sets on every new block.  The analysis thread
         # in AudioManager waits on this instead of polling, so it wakes
@@ -1040,6 +1070,40 @@ class AudioCapture:
                 'still running would race it; leaving it to clean up on its own'
             )
 
+    def set_claimed_device_names(self, names: set[str]) -> None:
+        """Record audio devices another subsystem owns exclusively.
+
+        The DJ mixer opens its controller's USB audio interface directly,
+        at real-time priority with blocking writes, bypassing PipeWire.
+        Opening the same hardware a second time for capture does not raise
+        -- it takes the process down inside the native audio stack, with no
+        Python exception and nothing in the faulthandler dump.  Since the
+        failure cannot be caught, it has to be refused up front.
+
+        Matching is by distinctive token, not substring: each layer names
+        the same hardware differently, and the two share no substring at
+        all.  The mixer opens 'DDJ-REV1: USB Audio' while sounddevice lists
+        'DDJ-REV1 Analog Surround 4.0' -- only the model token is common.
+        """
+        self._claimed_names = {n.strip().lower() for n in names if n and n.strip()}
+        self._claimed_tokens = {
+            t for n in self._claimed_names for t in _device_tokens(n)
+        }
+
+    def _device_is_claimed(self, device: int | None) -> bool:
+        """True when ``device`` is held open by another subsystem."""
+        if not self._claimed_names or device is None:
+            return False
+        try:
+            name = str(sd.query_devices(device).get('name', '')).strip().lower()
+        except Exception:
+            return False
+        if not name:
+            return False
+        if any(c in name or name in c for c in self._claimed_names):
+            return True
+        return bool(_device_tokens(name) & self._claimed_tokens)
+
     @property
     def closed_cleanly(self) -> bool:
         """False when a stream close timed out, making Pa_Terminate unsafe."""
@@ -1135,6 +1199,10 @@ class AudioCapture:
             return self.current_source_label()
 
         bounded_idx = max(0, min(int(target_idx), len(self._candidate_devices) - 1))
+        if self._device_is_claimed(self._candidate_devices[bounded_idx]):
+            # Also guards auto-fallback, not just the operator's selector.
+            log.warning('Audio: refusing to switch onto a claimed device')
+            return self.current_source_label()
         current_idx = self._candidate_index
         if bounded_idx == current_idx:
             return self.current_source_label()
@@ -1185,6 +1253,15 @@ class AudioCapture:
         unusable could still be made active by accident — which on this
         stack can mean opening a device that takes the process down.
         """
+        if 0 <= int(index) < len(self._candidate_devices) and self._device_is_claimed(
+            self._candidate_devices[int(index)]
+        ):
+            log.warning(
+                'Audio: source %d is held open by another subsystem (the mixer '
+                'owns its controller output); refusing to open it twice',
+                int(index),
+            )
+            return self.current_source_label()
         flags = self.source_viable_flags()
         if flags and 0 <= int(index) < len(flags) and not flags[int(index)]:
             log.info(
@@ -1236,7 +1313,10 @@ class AudioCapture:
         if not self._viable_source_keys:
             self._viable_source_keys = self._default_viable_keys()
             self._save_source_state()
-        return [k in self._viable_source_keys for k in keys]
+        return [
+            (k in self._viable_source_keys) and not self._device_is_claimed(d)
+            for k, d in zip(keys, self._candidate_devices)
+        ]
 
     def toggle_source_viable(self, index: int) -> tuple[bool, str]:
         """Toggle viability tag for candidate index and persist selection state."""

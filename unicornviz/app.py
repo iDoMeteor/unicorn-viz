@@ -7012,6 +7012,34 @@ void main() {
     #: audio selector.  Reaching a microphone should feel deliberate.
     AUDIO_SELECTOR_DIVIDER = '--- INPUTS (mics / line-in) ---'
 
+    def _refresh_claimed_audio_devices(self) -> None:
+        """Tell the capture layer which audio devices are already spoken for.
+
+        Gathered by convention -- any controller exposing
+        ``owned_audio_device_names()`` contributes -- so core keeps no
+        knowledge of which drop-in owns what.  Without this, selecting the
+        DJ controller as a capture source opens hardware the mixer already
+        holds at real-time priority, which kills the process inside the
+        native audio stack with nothing to catch and nothing in the crash
+        dump.
+        """
+        if self._audio_manager is None:
+            return
+        claimed: set[str] = set()
+        for attr in self._CONFIG_CONTRIBUTOR_ATTRS + ('_dj_mixer', '_mixer'):
+            ctrl = getattr(self, attr, None)
+            getter = getattr(ctrl, 'owned_audio_device_names', None) if ctrl else None
+            if getter is None:
+                continue
+            try:
+                claimed.update(str(n) for n in getter() if n)
+            except Exception as exc:
+                log.debug('Audio device claim from %s skipped: %s', attr, exc)
+        try:
+            self._audio_manager.set_claimed_device_names(claimed)
+        except Exception as exc:
+            log.debug('Could not publish claimed audio devices: %s', exc)
+
     def _audio_source_display(self) -> tuple[list[str], list[int], set[int]]:
         """Build the selector's display order.
 
@@ -7054,6 +7082,9 @@ void main() {
 
     def get_audio_sources(self) -> list[str]:
         """Return available audio capture sources for selector UI."""
+        # Refreshed here rather than once at boot: a drop-in may open its
+        # device long after startup (the mixer does, on open_window()).
+        self._refresh_claimed_audio_devices()
         rows, self._audio_source_rows, self._audio_source_dividers = (
             self._audio_source_display()
         )

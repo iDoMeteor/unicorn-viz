@@ -282,3 +282,72 @@ def test_ranking_unchanged_when_nothing_can_be_classified(monkeypatch) -> None:
 
     order = [d for d in cap_mod._candidate_monitor_devices('') if d is not None]
     assert order == [0, 1]
+
+
+# --------------------------------------------------------------------------
+# Devices another subsystem holds open
+# --------------------------------------------------------------------------
+
+def _claimed_capture(monkeypatch, devices, claimed):
+    """A capture whose candidates resolve to `devices` by index."""
+    import unicornviz.audio.capture as cap_mod
+    cap = AudioCapture()
+    cap._candidate_devices = list(range(len(devices)))
+    cap._viable_source_keys = {f'name:{d.lower()}' for d in devices}
+    cap._candidate_keys = lambda: [f'name:{d.lower()}' for d in devices]
+    cap.source_is_output_flags = lambda: [True] * len(devices)
+    monkeypatch.setattr(
+        cap_mod.sd, 'query_devices', lambda i: {'name': devices[i]})
+    cap.set_claimed_device_names(claimed)
+    return cap
+
+
+def test_claimed_device_cannot_be_selected(monkeypatch) -> None:
+    """The crash of 2026-08-09, refused.
+
+    The mixer opens 'DDJ-REV1: USB Audio' directly at real-time priority,
+    bypassing PipeWire.  Selecting the same hardware for capture killed the
+    process inside the native audio stack: no Python exception, no
+    traceback, an empty faulthandler dump, and the log ending mid-line
+    right after 'Audio: opening stream device=23'.
+    """
+    cap = _claimed_capture(
+        monkeypatch,
+        ['Built-in Audio Analog Stereo', 'DDJ-REV1 Analog Surround 4.0'],
+        {'DDJ-REV1: USB Audio'},
+    )
+    switched: list[int] = []
+    cap._switch_to_candidate_index = lambda i: switched.append(i)
+    cap.current_source_label = lambda: 'Built-in Audio Analog Stereo'
+
+    assert cap.select_source(1) == 'Built-in Audio Analog Stereo'
+    assert switched == [], 'must never reach _open_stream on a claimed device'
+
+
+def test_claim_matching_survives_differing_device_names(monkeypatch) -> None:
+    """Each layer names the same hardware differently; matching is two-way."""
+    cap = _claimed_capture(
+        monkeypatch, ['DDJ-REV1 Analog Surround 4.0'], {'DDJ-REV1: USB Audio'})
+    assert cap._device_is_claimed(0) is True
+
+
+def test_claimed_device_is_never_viable(monkeypatch) -> None:
+    cap = _claimed_capture(
+        monkeypatch,
+        ['Built-in Audio Analog Stereo', 'DDJ-REV1 Analog Surround 4.0'],
+        {'DDJ-REV1'},
+    )
+    assert cap.source_viable_flags() == [True, False]
+
+
+def test_unclaimed_devices_are_unaffected(monkeypatch) -> None:
+    cap = _claimed_capture(
+        monkeypatch, ['Built-in Audio Analog Stereo'], {'DDJ-REV1: USB Audio'})
+    assert cap._device_is_claimed(0) is False
+    assert cap.source_viable_flags() == [True]
+
+
+def test_no_claims_means_no_behaviour_change(monkeypatch) -> None:
+    cap = _claimed_capture(
+        monkeypatch, ['Built-in Audio Analog Stereo'], set())
+    assert cap._device_is_claimed(0) is False

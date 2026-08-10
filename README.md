@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.73**
+**Version 1.0.0-beta.74**
 
 ## Contact Me!
 
@@ -557,6 +557,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.74** — **Selecting the DJ controller as an audio source no longer kills the app.** The mixer opens that interface directly at real-time priority, bypassing PipeWire; opening the same hardware again for capture does not raise — it takes the process down inside the native audio stack, leaving no exception, no traceback and an empty faulthandler dump, with the log ending mid-line after `Audio: opening stream`. Since it cannot be caught, it is now refused: any controller exposing `owned_audio_device_names()` contributes to a claimed-device set (convention only — core imports no drop-in), and claimed devices are rejected for manual selection, for auto-fallback, and in the selector's viability flags. Matching is by distinctive token rather than substring, because the layers name the same box differently and share no substring at all: `DDJ-REV1: USB Audio` vs `DDJ-REV1 Analog Surround 4.0`. Also explains the same session's other symptom — the monitor really was silent (`rms=0.00000`), so auto-selection was right to refuse it.
 - **1.0.0-beta.73** — `tech_house.spectral_centroid_mu` (`unicornviz/audio/profiles.py`) adjusted `2550 → 2900`, an LLM tuning recommendation from a real training session (observed 2910.5). Checked for overlap before applying: increases tech_house's distance from `house`'s own mu (100 → 250), the exact profile pair behind that session's #1 confusion (`Tech House → house`, 1060x). Part of a larger director/detector/recommender refinement batch landed the same day in auto-vj-01 and training-kit-01 -- see [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Director/Detector/Recommender Refinement Batch" and [docs/planning/auto-vj-director-detector-refinement-plan-2026-08-09.md](docs/planning/auto-vj-director-detector-refinement-plan-2026-08-09.md).
 - **1.0.0-beta.72** — `spectral_centroid_mu` recalibrated for all 20 audio profiles (`unicornviz/audio/profiles.py`) -- was independently hand/LLM-authored and disagreed with each profile's own `expected_bands` fingerprint by up to 1.9x, the real premise behind a spectral-centroid recommender term dominating composite scores in a live auto-vj-01 session. Now derived directly from `expected_bands` (same weighted-mean-frequency formula the live recommender uses), so the two "brightness" representations can't disagree by construction. See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "`spectral_centroid_mu` Recalibrated" (auto-vj-01).
 - **1.0.0-beta.71** — Config Editor honors an optional per-row `step` in
