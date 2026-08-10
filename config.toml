@@ -210,7 +210,14 @@ projectm_library = ""
 preset_dirs = "drop-ins/projectm-01/presets"
 texture_dirs = ["drop-ins/projectm-01/presets/presets-milkdrop-texture-pack/textures", "drop-ins/projectm-01/textures"]
 start_preset = ""
-dark_skip_enabled = true
+# Solid-color auto-exclusion: a preset that reads as continuously one
+# flat color (any color, not just black) for solid_color_duration
+# seconds gets excluded permanently (excluded_presets.txt). No warm-up
+# grace period -- a preset that opens flat and takes its time waking up
+# is caught just like one that stays flat forever.
+solid_color_skip_enabled = true
+solid_color_duration = 0.2       # seconds continuously flat before exclusion
+# solid_color_std_threshold = 4.0  # 0-255 scale; below this counts as "flat"
 preset_warmup_frames = 8
 # projectM affinity & preset behavior (inside [auto_vj] section)
 #

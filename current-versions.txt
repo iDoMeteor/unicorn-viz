@@ -7,12 +7,12 @@
   core (unicornviz)             1.0.0-beta.78       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.181.0             alpha ▲       module
+  dj-mixer-01                   0.182.0             alpha ▲       module
   media-01                      0.20.0              alpha ▲       module
   games-01                      0.13.1              alpha ▲       module
   cosmic-01                     0.11.1              alpha ▲       module
   immersive-01                  0.10.1              alpha ▲       module
-  projectm-01                   0.10.4              alpha ▲       module
+  projectm-01                   0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.34         RC            module

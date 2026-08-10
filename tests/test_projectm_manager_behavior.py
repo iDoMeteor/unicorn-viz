@@ -41,11 +41,17 @@ def _make_effect(module, roots: list[Path], tmp_path: Path):
     effect.config = {}
     effect._preset_dirs = lambda: list(roots)
     effect._exclude_dirs = lambda: frozenset()
-    effect._load_dark_excluded = lambda: set()
+    effect._load_excluded_presets = lambda: set()
     effect._runtime_preset_state_file = lambda: tmp_path / 'runtime' / 'projectm' / 'preset_manager_state.json'
     effect._legacy_preset_state_file = lambda: tmp_path / 'drop-ins' / 'projectm-01' / 'preset_manager_state.json'
     effect._preset_trash_dir = lambda: tmp_path / 'preset-trash'
     effect._preset_states_dir = lambda: tmp_path / 'states'
+    # _load_current_preset()'s reentrancy guard needs these; a hand-built
+    # stub via object.__new__ skips _init(), which normally sets them.
+    effect._update_tick = 0
+    effect._preset_load_tick = -1
+    effect._solid_color_duration = 0.0
+    effect._solid_color_check_time = None
     return effect
 
 
