@@ -604,88 +604,6 @@ PROFILES: Dict[str, AudioProfile] = {
             0.950, 0.900, 0.850, 0.800, 0.750, 0.700, 0.650, 0.600,
         ],
     ),
-    "uk_garage": AudioProfile(
-        name="UK Garage",
-        description="Swinging kick-snare, vocal chops, and crisp tops around the 130 pocket",
-        bass_min=28.0,
-        bass_max=220.0,
-        mid_min=220.0,
-        mid_max=3600.0,
-        treble_min=3600.0,
-        treble_max=20000.0,
-        bass_weight=1.10,
-        mid_weight=1.15,
-        treble_weight=1.20,
-        beat_threshold=1.08,
-        smoothing=0.10,
-        curve="slight_presence",
-        onset_bass_emphasis=1.25,
-        onset_mid_emphasis=1.25,
-        onset_treble_emphasis=1.15,
-        bpm_prior_mu=132.0,
-        bpm_prior_sigma=0.20,
-        bpm_hint_min=128.0,
-        bpm_hint_max=136.0,
-        spectral_centroid_mu=2200.0,
-        spectral_centroid_sigma=400.0,
-        zcr_mu=0.068,
-        zcr_sigma=0.020,
-        onset_density_mu=2.8,
-        onset_density_sigma=1.5,
-        vocal_hnr_mu=0.35,
-        vocal_fmr_mu=0.25,
-        expected_bands=[
-            0.780, 0.760, 0.740, 0.720, 0.700, 0.680, 0.660, 0.750,
-            0.800, 0.820, 0.780, 0.740, 0.700, 0.760, 0.800, 0.820,
-            0.840, 0.860, 0.880, 0.900, 0.880, 0.860, 0.850, 0.880,
-            0.900, 0.930, 0.960, 1.000, 0.980, 0.960, 0.930, 0.900,
-            0.880, 0.850, 0.830, 0.820, 0.820, 0.800, 0.780, 0.750,
-            0.720, 0.700, 0.680, 0.660, 0.650, 0.640, 0.630, 0.620,
-            0.620, 0.650, 0.680, 0.720, 0.760, 0.800, 0.840, 0.880,
-            0.900, 0.850, 0.780, 0.700, 0.600, 0.500, 0.420, 0.350,
-        ],
-    ),
-    "breaks": AudioProfile(
-        name="Breaks",
-        description="Broken-beat energy, syncopated mids, and sharp hats with higher tempo tolerance",
-        bass_min=30.0,
-        bass_max=240.0,
-        mid_min=240.0,
-        mid_max=4200.0,
-        treble_min=4200.0,
-        treble_max=20000.0,
-        bass_weight=1.10,
-        mid_weight=1.20,
-        treble_weight=1.15,
-        beat_threshold=1.04,
-        smoothing=0.09,
-        curve="bright",
-        onset_bass_emphasis=1.30,
-        onset_mid_emphasis=1.35,
-        onset_treble_emphasis=1.15,
-        bpm_prior_mu=138.0,
-        bpm_prior_sigma=0.22,
-        bpm_hint_min=132.0,
-        bpm_hint_max=145.0,
-        spectral_centroid_mu=2500.0,
-        spectral_centroid_sigma=400.0,
-        zcr_mu=0.075,
-        zcr_sigma=0.020,
-        onset_density_mu=3.5,
-        onset_density_sigma=1.5,
-        vocal_hnr_mu=0.35,
-        vocal_fmr_mu=0.25,
-        expected_bands=[
-            0.550, 0.570, 0.580, 0.600, 0.620, 0.620, 0.600, 0.650,
-            0.680, 0.720, 0.750, 0.730, 0.700, 0.780, 0.850, 0.880,
-            0.920, 0.950, 0.900, 0.820, 0.780, 0.740, 0.700, 0.680,
-            0.620, 0.580, 0.550, 0.530, 0.520, 0.520, 0.500, 0.500,
-            0.520, 0.560, 0.620, 0.680, 0.740, 0.800, 0.820, 0.800,
-            0.780, 0.800, 0.820, 0.800, 0.780, 0.760, 0.740, 0.720,
-            0.740, 0.780, 0.820, 0.860, 0.900, 0.940, 0.980, 1.000,
-            0.950, 0.880, 0.780, 0.680, 0.580, 0.480, 0.400, 0.320,
-        ],
-    ),
     "hard_techno": AudioProfile(
         name="Hard Techno",
         description="Punishing kick, clipped industrial mids, and high-BPM insistence",
@@ -997,57 +915,6 @@ PROFILES: Dict[str, AudioProfile] = {
             0.750, 0.700, 0.650, 0.600, 0.550, 0.500, 0.450, 0.400,
         ],
     ),
-    # 2026-08-03: disabled from discovery (Alt+A cycling, auto-vj recommender
-    # candidate pool) now that a real genre roster covers the material this
-    # was standing in for -- a flat, no-bias "unknown content" fallback was
-    # actively competing against, and getting confused with, genuinely
-    # calibrated profiles. Left in PROFILES (not deleted) so get_profile()'s
-    # own fallback-on-unknown-key behaviour and any existing config
-    # referencing it by name keep working. See enabled_profiles()/
-    # AudioProfile.enabled.
-    "generic": AudioProfile(
-        name="Generic",
-        description="Balanced profile for unknown or mixed content",
-        enabled=False,
-        bass_min=20.0,
-        bass_max=250.0,
-        mid_min=250.0,
-        mid_max=3000.0,
-        treble_min=3000.0,
-        treble_max=20000.0,
-        bass_weight=1.0,
-        mid_weight=1.0,
-        treble_weight=1.0,
-        beat_threshold=1.2,
-        smoothing=0.1,
-        curve="flat",
-        # Generic: balanced (matches legacy hardcoded behaviour for
-        # backward compatibility with prior v1 tuning).
-        onset_bass_emphasis=1.8,
-        onset_mid_emphasis=1.2,
-        onset_treble_emphasis=1.0,
-        bpm_prior_mu=120.0,
-        bpm_prior_sigma=0.55,
-        # No bpm_hint_min/max: Generic is a disabled (enabled=False) catch-all
-        # fallback, not a genre with a real "sweet spot" tempo range to
-        # display -- see P2-E in docs/audits/2026-08-04-bpm-detector-audit.md.
-        spectral_centroid_mu=2300.0,
-        spectral_centroid_sigma=600.0,
-        zcr_mu=0.065,
-        zcr_sigma=0.028,
-        onset_density_mu=2.5,
-        onset_density_sigma=1.5,
-        expected_bands=[
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.740, 0.760,
-            0.780, 0.800, 0.720, 0.740, 0.760, 0.780, 0.800, 0.820,
-            0.840, 0.860, 0.880, 0.900, 0.920, 0.940, 0.960, 0.980,
-            1.000, 0.980, 0.960, 0.940, 0.920, 0.900, 0.880, 0.860,
-            0.840, 0.820, 0.800, 0.780, 0.760, 0.740, 0.720, 0.700,
-            0.680, 0.660, 0.640, 0.620, 0.600, 0.580, 0.560, 0.540,
-            0.520, 0.500, 0.520, 0.540, 0.560, 0.580, 0.600, 0.620,
-            0.640, 0.660, 0.680, 0.700, 0.720, 0.740, 0.760, 0.780,
-        ],
-    ),
     "ambient": AudioProfile(
         name="Ambient / Chillout",
         description="Smooth, subtle reactivity with slight bass emphasis",
@@ -1227,13 +1094,23 @@ PROFILES: Dict[str, AudioProfile] = {
 
 
 def get_profile(name: str) -> AudioProfile:
-    """Get a profile by name. Falls back to 'generic' if not found.
+    """Get a profile by name. Falls back to 'house' if not found.
+
+    2026-08-10: 'generic' (the previous fallback target) was eliminated
+    entirely as part of the house-family consolidation pass -- it was a
+    disabled, deliberately-uncalibrated catch-all never meant to be a real
+    analyzer profile (see AudioManager.__init__'s own 'house' default and
+    its field comment for the identical reasoning, established 2026-08-06).
+    Falling back to 'house' here instead extends that same reasoning to
+    this second, previously-inconsistent fallback path -- an unknown/typo'd
+    profile key now degrades to the same well-populated, real profile the
+    app already starts on by default, not a deliberately weak one.
 
     Direct-lookup path: resolves a disabled profile too (e.g. 'generic'
     itself, or any explicit config reference) -- only discovery
     (list_profiles() / enabled_profiles()) hides disabled profiles.
     """
-    return PROFILES.get(name, PROFILES["generic"])
+    return PROFILES.get(name, PROFILES["house"])
 
 
 def enabled_profiles() -> Dict[str, AudioProfile]:

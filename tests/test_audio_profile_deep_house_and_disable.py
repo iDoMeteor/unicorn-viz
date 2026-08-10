@@ -2,7 +2,11 @@
 
 - AudioProfile.enabled / enabled_profiles() -- capability-aware disable
   (mirrors unicorn-horn ADR-0003's pattern: disable, don't delete).
-- 'generic' disabled from discovery 2026-08-03 (still resolvable directly).
+- 'generic' disabled from discovery 2026-08-03 (still resolvable directly),
+  then eliminated entirely 2026-08-10 (house-family consolidation pass --
+  get_profile()'s unknown-key fallback moved from 'generic' to 'house',
+  see docs/adr/vj-system.md). 'uk_garage' and 'breaks' eliminated the same
+  day, no fallback role to reassign.
 - 'electronic' disabled from discovery 2026-08-06 (cosine-similarity audit
   found its expected_bands more similar to far-tempo profiles than its own
   tempo neighbors -- a non-discriminating catch-all, same treatment as
@@ -29,35 +33,26 @@ from unicornviz.audio.profiles import (
 # ---- enabled / disable mechanism -----------------------------------------
 
 
-def test_generic_is_disabled_but_still_in_profiles() -> None:
-    assert 'generic' in PROFILES
-    assert PROFILES['generic'].enabled is False
+def test_generic_uk_garage_breaks_eliminated_entirely() -> None:
+    """2026-08-10: unlike 'electronic' (disabled, then revived), these three
+    were removed outright, not just disabled -- no dict entry survives."""
+    for key in ('generic', 'uk_garage', 'breaks'):
+        assert key not in PROFILES, f'{key} should have been eliminated entirely'
+        assert key not in list_profiles()
+        assert key not in enabled_profiles()
 
 
-def test_generic_excluded_from_discovery() -> None:
-    assert 'generic' not in list_profiles()
-    assert 'generic' not in enabled_profiles()
-
-
-def test_generic_still_resolvable_by_direct_lookup() -> None:
-    """Disabled means excluded from discovery, not deleted -- direct
-    reference (explicit config, internal fallback) must keep working."""
-    p = get_profile('generic')
-    assert p.name == 'Generic'
-    assert p is PROFILES['generic']
-
-
-def test_generic_has_no_bpm_hint_range() -> None:
-    """P2-E hygiene: Generic is a disabled catch-all fallback, not a genre
-    with a real tempo 'sweet spot' -- it should not carry bpm_hint_min/max.
-    See docs/audits/2026-08-04-bpm-detector-audit.md."""
-    p = PROFILES['generic']
-    assert p.bpm_hint_min is None
-    assert p.bpm_hint_max is None
-    # preferred_bpm_range() must still degrade gracefully (derives from the
-    # prior mu/sigma instead of the removed hints).
-    lo, hi = p.preferred_bpm_range()
-    assert lo < hi
+def test_get_profile_unknown_key_falls_back_to_house_not_generic() -> None:
+    """get_profile()'s fallback-on-unknown-key moved from 'generic' (now
+    eliminated) to 'house' -- an unknown/typo'd profile key degrades to the
+    same well-populated real profile the app already starts on by default,
+    not a deliberately weak catch-all."""
+    p = get_profile('this-key-does-not-exist')
+    assert p.name == 'House'
+    assert p is PROFILES['house']
+    # Also covers the literal now-dead key, for anyone with a stale
+    # config.toml reference or old corpus data.
+    assert get_profile('generic') is PROFILES['house']
 
 
 def test_enabled_profiles_excludes_only_disabled_entries() -> None:

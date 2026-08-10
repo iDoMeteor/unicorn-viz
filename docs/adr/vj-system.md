@@ -237,7 +237,9 @@ independently authored, and add a drift-canary test asserting `mu` always
 falls inside `[hint_min, hint_max]` so a future edit to one without the
 other fails loudly rather than drifting silently — implemented as `test_
 bpm_prior_mu_falls_inside_its_own_hint_range()` in `tests/test_audio_
-profile_deep_house_and_disable.py`, checked against all 20 profiles.
+profile_deep_house_and_disable.py`, checked against every profile with a
+hint range set (20 at the time this test was written; 17 after the
+same-day elimination pass below).
 
 **Deferred, not implemented this pass**: a triplet-aware extension to
 `tactus_preference_ratio`. The same investigation found a real, well-
@@ -258,8 +260,49 @@ that assumed strict, non-touching separation from `house`'s old hint
 range), `ruff` clean on every touched file. New tests: `test_electronic_
 key_now_resolves_to_the_revived_dance_profile`, `test_dance_matches_
 house_on_everything_except_vocal_presence`, `test_bpm_prior_mu_falls_
-inside_its_own_hint_range` (all 20 profiles), plus updated assertions for
-`rap_rnb`'s new `mu` and the `electronic`/`dance` enabled-state flip.
+inside_its_own_hint_range` (all 20 profiles at the time), plus updated
+assertions for `rap_rnb`'s new `mu` and the `electronic`/`dance`
+enabled-state flip.
+
+### Addendum (same day): `uk_garage`, `breaks`, and `generic` eliminated entirely
+
+Immediate follow-on instruction from the owner after the consolidation
+above landed: "while we're at it... let's eliminate completely the
+uk_garage profile & breaks & generic." A stronger action than the
+disable-and-keep pattern used for `electronic`/`generic` earlier in the
+project's history (see "Fire DJ Profile Removed" and the original
+2026-08-03 `generic` disable below) — these three dict entries were
+deleted outright from `unicornviz/audio/profiles.py`, not just marked
+`enabled=False`. `uk_garage` and `breaks` had no other load-bearing
+reference in the codebase; `generic` did — it was `get_profile()`'s
+hardcoded fallback for an unknown/typo'd profile key. That fallback moved
+to `house`, matching the app's own already-documented default (`Audio
+Manager.__init__`'s own "house" default precedent) rather than a
+deliberately weak catch-all — an unknown key now degrades to a real,
+well-populated profile instead of a near-inert one.
+
+Cross-file consequences fixed in the same pass: `training-kit-01/tools/
+package_training_set.py`'s `_GENRE_ALIAS_MAP`/`_GENRE_KEYWORD_MAP` had six
+entries routing tags like "UK Garage," "2-Step," "breaks," and "generic"
+to the now-gone keys — removed rather than left to silently miscategorize
+future packaging runs; `tests/test_package_training_set.py`'s
+parametrized alias-match cases for `uk_garage` swapped for still-valid
+`hard_techno`/`hardstyle` cases to preserve coverage of that code path.
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md`'s BPM/sigma,
+centroid-sigma-tier, and zcr/onset-sigma-tier tables all had rows for the
+three eliminated profiles, plus that pass's own BPM/sigma table had never
+actually been updated with the house-family band changes above (it was
+still showing pre-consolidation `house`/`deep_house`/`tech_house`/
+`rap_rnb`/`hyphy` values) — both fixed together, `_VJ_WEIGHTS_DOC_VERSION`
+-> 16, `_RECOMMENDER_VERSION` -> `1.0.0-rc.4` (retiring 3 recommender
+candidates changes what the composite score is chosen among, same bump
+class as retiring a scoring term).
+
+**Verified:** full main-repo suite green (1595 passed) after replacing
+the four `test_generic_*` tests in `test_audio_profile_deep_house_and_
+disable.py` with `test_generic_uk_garage_breaks_eliminated_entirely()`
+and `test_get_profile_unknown_key_falls_back_to_house_not_generic()`.
+Live profile count: 17 (was 20 immediately before this addendum).
 
 ---
 
