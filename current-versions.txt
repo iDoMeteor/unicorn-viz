@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.79       BETA          MISMATCH (readme=1.0.0-beta.78)
+  core (unicornviz)             1.0.0-beta.80       BETA          MISMATCH (readme=1.0.0-beta.78)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.183.0             alpha ▲       MISMATCH (readme=0.184.0)

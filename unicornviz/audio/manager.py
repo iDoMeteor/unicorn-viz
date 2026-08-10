@@ -152,6 +152,7 @@ class AudioManager:
         self._zero_anomalous: int = 0
         self._zero_repeat: int = 0
         self._zero_rms_peak: float = 0.0
+        self._zero_gate_rms_peak: float = 0.0
         self._frames_read: int = 0
         self._zero_probe_next_report_t: float = 0.0
         self._zero_probe_first_anomaly_logged: bool = False
@@ -513,6 +514,12 @@ class AudioManager:
             self._zero_repeat += 1
         elif publish_rms <= floor:
             self._zero_gated += 1
+            # How close the gated blocks got to the floor separates two very
+            # different situations that otherwise log identically: a peak near
+            # zero means there was no signal at all, while a peak just under
+            # the floor means real audio is being clipped and the floor is the
+            # thing that needs changing.
+            self._zero_gate_rms_peak = max(self._zero_gate_rms_peak, publish_rms)
         else:
             self._zero_anomalous += 1
             self._zero_rms_peak = max(self._zero_rms_peak, publish_rms)
@@ -559,9 +566,19 @@ class AudioManager:
                 f'from blocks up to rms {self._zero_rms_peak:.5f}'
             )
         elif self._zero_gated > 0:
+            floor = self._analyzer.silence_rms_floor
+            nearness = self._zero_gate_rms_peak / floor if floor > 0.0 else 0.0
+            reading = (
+                'loudest gated block reached %.0f%% of the floor — real audio '
+                'may be getting clipped' % (100.0 * nearness)
+                if nearness >= 0.5
+                else 'loudest gated block was only %.0f%% of the floor — no '
+                     'signal, not a threshold problem' % (100.0 * nearness)
+            )
             verdict = (
                 f'SILENCE GATE — {self._zero_gated} zero snapshots, all from '
-                f'blocks at or below the floor {self._analyzer.silence_rms_floor:.5f}'
+                f'blocks at or below the floor {floor:.5f}; '
+                f'peak gated rms {self._zero_gate_rms_peak:.5f}, {reading}'
             )
         else:
             verdict = 'reader outran the analysis thread only; no fresh zeros'

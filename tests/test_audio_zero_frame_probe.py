@@ -37,6 +37,7 @@ def _make_manager() -> AudioManager:
     mgr._zero_anomalous = 0
     mgr._zero_repeat = 0
     mgr._zero_rms_peak = 0.0
+    mgr._zero_gate_rms_peak = 0.0
     mgr._frames_read = 0
     mgr._zero_probe_next_report_t = 0.0
     mgr._zero_probe_first_anomaly_logged = False
@@ -133,6 +134,32 @@ def test_summary_verdict_names_the_gate_when_every_zero_was_quiet(
         mgr.log_zero_frame_summary()
     assert 'SILENCE GATE' in caplog.text
     assert [r.levelno for r in caplog.records] == [logging.DEBUG]
+
+
+def test_gate_verdict_distinguishes_no_signal_from_a_clipping_floor(
+    caplog: logging.LogCaptureFixture,
+) -> None:
+    """Both log 'SILENCE GATE', but they need opposite responses.
+
+    A peak near zero means nothing was playing.  A peak just under the floor
+    means real audio is being thrown away and the floor is the bug.
+    """
+    quiet = _make_manager()
+    _silence(quiet._last_data_raw)
+    quiet._observe_zero_frame(publish_seq=1, publish_block_seq=1, publish_rms=0.00001)
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.audio.manager'):
+        quiet.log_zero_frame_summary()
+    assert 'no signal' in caplog.text
+
+    caplog.clear()
+    borderline = _make_manager()
+    _silence(borderline._last_data_raw)
+    borderline._observe_zero_frame(
+        publish_seq=1, publish_block_seq=1, publish_rms=_FLOOR * 0.98
+    )
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.audio.manager'):
+        borderline.log_zero_frame_summary()
+    assert 'may be getting clipped' in caplog.text
 
 
 def test_periodic_report_stays_silent_while_only_gated_frames_accumulate(
