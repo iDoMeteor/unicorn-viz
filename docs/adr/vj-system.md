@@ -242,6 +242,92 @@ generator_tool` (byte-identical check against the tool's own output); new
 `test_profile_recommendation_mark_stamps_recommender_version`. Full suite
 green (1625 passed), `ruff`/`bandit` clean.
 
+### Addendum (next day): reverted — the "fix" exposed a worse bug, confirmed live
+
+**Read this before touching `centroid_fit`'s formula again.**
+
+The log-band `audio.bands` formula above was live for about a day before
+a real training session (`assets/training/corpus/sequence-corpus-
+20260811T215004Z.jsonl`, a media-player run, 15 real tracks, 7961 rows)
+surfaced a severe regression: the recommender picked `ambient`
+**6709/7960 rows (84%)**, and the *active* profile ended up on `ambient`
+for **7454/7960 rows (94%)** — for a real, varied dance session with
+accurate detected BPM ranging `100.9–137.0` the entire time (owner,
+watching live: "the recommender is straight up stuck on ambient even w/
+the bpm accurate & mood in raver").
+
+**Root cause, confirmed by recomputing centroid directly from the
+session's own logged `bands` arrays (not assumed):** the formula fix
+above was internally consistent — it made the live measurement match
+*how `spectral_centroid_mu` was derived* (both sides now run
+`dot(band_centers, vec)/sum(vec)` over a 64 log-band vector). What it
+exposed is that **`expected_bands`' magnitude decay across bands doesn't
+match real measured audio at all.** Averaged over ~2000 real high-energy
+frames (`energy > 1.5`) from this session, actual band magnitude falls
+steadily from `~0.65-0.71` at the low end (30-100 Hz) to `~0.05` by
+11 kHz — a much steeper bass-dominant rolloff than the hand/LLM-authored
+fingerprints assume. Checked directly: this holds equally for quiet
+frames (`energy < 0.3`, median centroid `513 Hz`) and loud ones
+(`energy > 1.5`, median centroid `529 Hz`) — not a silence-gating
+artifact, a genuine property of how this formula reads real audio.
+
+Consequence: live centroid reads `~400-800 Hz` for essentially *all* real
+audio measured this way, which sits far below every profile's
+`spectral_centroid_mu` (house `2650`, trance `2000`, peak_time `2350`...)
+**except** `ambient`'s (`1250`, both the lowest mu among plausible
+candidates and the widest sigma, `600`, of the bunch — the most forgiving
+combination available). The math on the actual session data:
+
+```text
+ambient: z = (580 − 1250) / 600 = −1.12  →  centroid_fit ≈ −0.62
+house:   z = (580 − 2650) / 600 = −3.45  →  centroid_fit ≈ −5.95
+trance:  z = (580 − 2000) / 400 = −3.55  →  centroid_fit ≈ −6.30
+```
+
+Even at the already-reduced `0.5` weight, that's a standing multi-point
+advantage for `ambient` over every genre-appropriate candidate, on
+essentially every real audio frame — not an occasional miss, a
+near-universal bias. This is a worse failure mode than the original
+formula-mismatch bug the fix targeted (which was a systematic
+*understatement*, not a *directional bias toward one specific profile*).
+
+**Decision: revert the formula, cut the weight further.** `centroid_fit`'s
+live measurement is back to the pre-fix linear-FFT formula
+(`np.dot(freqs, fft_arr)/sum(fft_arr)`, sample-rate-aware Nyquist axis —
+see the field's own code comment in `auto_vj.py` for the restored
+history). This is a real rollback to known, previously-stable (if
+formula-mismatched in its own documented way) behavior — not a new
+design. `centroid_fit` weight cut `0.5 → 0.3` on top of the revert, extra
+caution while neither formula's `mu` values are recalibrated against real
+measured data. `PERC_BAND_CENTERS_HZ` (`unicornviz/audio/analyzer.py`) is
+left in place, unused by the recommender for now — it's still correct
+infrastructure (verified byte-identical to the fingerprint tool's own
+output) for whenever `spectral_centroid_mu` gets a real recalibration
+pass before the log-band formula is retried. `_RECOMMENDER_VERSION` →
+`1.0.0-rc.9`, `_VJ_WEIGHTS_DOC_VERSION` → `25`.
+
+**What the actual fix looks like, for whoever picks this back up:**
+`spectral_centroid_mu` needs to be recalibrated per profile against real
+measured centroid values (using whichever formula is live at the time),
+not derived from `expected_bands`' idealized fingerprint shape. This is
+exactly the "broader, more representative dataset" this section's
+original entry flagged as the blocker for a real fix — the session that
+surfaced this incident is one useful data point but explicitly not
+sufficient on its own (single library, single session, per the same
+overfitting concern raised for `deep_house`/`house` tempo elsewhere in
+this document).
+
+**Verified:** `test_centroid_uses_log_band_weighted_mean_matching_
+fingerprint_formula` and `test_centroid_no_longer_depends_on_sample_
+rate_or_audio_manager` removed (their premise no longer holds);
+`test_centroid_hz_axis_uses_audio_manager_sample_rate_when_available` and
+`test_centroid_hz_axis_falls_back_to_48000_without_audio_manager`
+restored (the pre-fix formula's own tests). `test_perc_band_centers_hz_
+matches_the_fingerprint_generator_tool` and `test_profile_recommendation_
+mark_stamps_recommender_version` kept — both still valid (the constant
+and the version-stamping are independent of which formula is active).
+Full suite green, `ruff`/`bandit` clean.
+
 ---
 
 ## `hardgroove` Eliminated Entirely (2026-08-11)
