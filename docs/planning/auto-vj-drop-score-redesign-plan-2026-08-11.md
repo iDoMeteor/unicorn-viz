@@ -271,6 +271,22 @@ not weighted sum" instinct that came up for the sustain side too (4c).
 This is a v0 for reviewers to push on, not a final answer — open
 questions below.
 
+**Composes with `deck.py`'s `structural_cues()` (4d) rather than being
+replaced by it — correction from the audit's re-evaluation.** Originally
+flagged `structural_cues()` (a phrase-step RMS-jump detector) as possibly
+a stronger foundation than this draft. On closer read it's not a
+substitute: as written it uses **8 bars of *lookahead***
+(`mean(e[b:b+8]) − mean(e[b-8:b])` at boundary `b`), which is what makes
+its `0.30`/`0.12` gates so clean — a causal live port has to shrink that
+to roughly 1 bar of leading window against 8 trailing, which is noisier
+and adds a ~1-bar latency floor. That makes it a strong **confirmation /
+sustain-onset check** (fires ~1 bar into a real drop, once there's
+actually a trailing window to compare) rather than an instantaneous
+trigger — a natural gate for the fizzle floor (4c), and a second opinion
+`impact_novelty` above can be checked against a beat later, not a
+replacement for the immediate coincidence trigger. The two compose: step
+detector for *sure*, `impact_novelty` for *now*.
+
 **Explicitly deferred, per your note:** the buildup-influence window
 being genre/mood-tunable (not a fixed 2s) rather than universal. Mechanism
 already exists to hang this off — `_PROFILE_PRESETS` already carries many
