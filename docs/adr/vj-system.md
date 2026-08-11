@@ -172,6 +172,76 @@ changelog entries).
 `tech_house` added to the enabled/disabled assertion sets); full relevant
 suites green.
 
+### Addendum (same day, later): the formula-mismatch bug itself fixed
+
+Owner: "fix the centroid issue please." The mitigation above (weight cut +
+`tech_house` disable) stands, but the actual bug — live centroid measured
+via raw linear-FFT bins, `spectral_centroid_mu` derived via log-spaced
+`expected_bands` — is now fixed, not just weighted around.
+
+The fix: `unicornviz/audio/analyzer.py` gains a new public constant,
+`PERC_BAND_CENTERS_HZ` — the geometric-mean center frequency of each of
+the 64 log-spaced perceptual bands (`np.sqrt(edges[:-1] * edges[1:])` over
+`np.logspace(log10(30), log10(16000), 65)`), i.e. the exact same
+computation `tools/gen_spectral_fingerprints.py`'s `_centers` already
+performs — verified byte-identical to that tool's own output
+(`tools/spectral_fingerprints_out.py`'s `BAND_CENTERS_HZ` literal) by a
+new test. `auto_vj.py`'s `_update_profile_recommendation()` now computes
+the live centroid as `dot(PERC_BAND_CENTERS_HZ, audio.bands) /
+sum(audio.bands)` — `audio.bands` being the same 64-band, peak-normalized,
+relative-magnitude vector `spectral_shape_fit`'s cosine similarity already
+compares against `expected_bands` — replacing the old `dot(freqs, fft_arr)
+/ sum(fft_arr)` over a raw 512-bin linear-FFT array with a
+sample-rate-derived Nyquist axis.
+
+This is a genuine formula-level fix, not an approximation: both sides of
+`centroid_fit`'s Gaussian comparison are now computed in the identical
+basis by construction, so no `mu` recalibration is needed (it was already
+derived via this exact formula on 2026-08-09 — see "`spectral_centroid_mu`
+Recalibrated" below). It's a different repair strategy from the rejected
+2026-08-10 attempt (bandwidth-weighting `expected_bands` to *approximate*
+the old linear-FFT formula's absolute scale, which failed because
+`expected_bands` values are relative prominence, not per-Hz density) —
+this fix instead changes the *live* formula to match how `mu` was already
+being derived, sidestepping the density-assumption problem entirely. Side
+effect: also retires the 2026-08-09 `AudioManager.sample_rate`-dependent
+Nyquist-axis fix (`beta.81`-era) — no longer applicable once frequency
+positions are fixed values independent of capture rate.
+
+**Deliberately not done in this pass, flagged as open questions:**
+`centroid_fit`'s weight stays at `0.5` and `tech_house` stays disabled.
+De-weighting/disabling were responses to a bug that no longer exists in
+that form, but neither decision reverts automatically — raising the
+weight back up is a separate philosophy call (the owner's house-family
+stance already leans on `bpm_prior_mu` as primary regardless of centroid
+reliability), and `tech_house` still has zero validated library examples
+of its own even with a trustworthy centroid axis to lean on.
+
+**Corpus provenance gap closed as a direct consequence:** neither the
+`profile_recommendation` decision-log `mark()` nor its sequence-corpus
+keyframe previously stamped which recommender formula produced a given
+row's `mean_centroid` — meaning historical corpus data spanning this fix
+would have been silently non-comparable (pre-fix rows on the old linear-
+FFT basis, post-fix rows on the new log-band basis) with no way to tell
+which is which after the fact. Both call sites now stamp
+`recommender_version=_RECOMMENDER_VERSION`, mirroring the
+`ANALYSIS_VERSION` discipline CLAUDE.md already requires for dj-mixer-01
+track analysis, for the same reason: a stale/ambiguous reference is worse
+than no reference.
+
+`_RECOMMENDER_VERSION` → `1.0.0-rc.8`, `_VJ_WEIGHTS_DOC_VERSION` → `22`.
+
+**Verified:** two tests that asserted the old sample-rate-dependent Nyquist
+formula (`test_centroid_hz_axis_uses_audio_manager_sample_rate_when_
+available`, `test_centroid_hz_axis_falls_back_to_48000_without_audio_
+manager`) replaced with tests against the new formula
+(`test_centroid_uses_log_band_weighted_mean_matching_fingerprint_
+formula`, `test_centroid_no_longer_depends_on_sample_rate_or_audio_
+manager`); new `test_perc_band_centers_hz_matches_the_fingerprint_
+generator_tool` (byte-identical check against the tool's own output); new
+`test_profile_recommendation_mark_stamps_recommender_version`. Full suite
+green (1625 passed), `ruff`/`bandit` clean.
+
 ---
 
 ## `hardgroove` Eliminated Entirely (2026-08-11)
@@ -802,6 +872,15 @@ rejected for the same reason the `deep_house`/`house` tempo question was
 habits, not the genre. The weight cut reflects the owner's own house-
 family philosophy (BPM primary, brightness a secondary tiebreaker) rather
 than standing in as a fix for the still-open formula bug.
+
+**Update, 2026-08-11:** the bug described in this section is fixed — see
+"Recommender `centroid_fit` Weight Cut + `tech_house` Disabled" §
+Addendum, near the top of this document. The fix that eventually worked
+wasn't a library-agnostic approximation of the *old* formula (the
+bandwidth-weighting attempt above); it was replacing the *live*
+measurement's formula with the same log-band-weighted-mean-frequency
+computation `mu` was already derived by, so no approximation or new
+library data was needed after all.
 
 **A collection-bias trap, found and corrected mid-investigation, worth
 keeping in mind for any future per-profile tuning off real session data.**

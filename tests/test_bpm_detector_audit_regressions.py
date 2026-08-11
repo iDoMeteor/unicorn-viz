@@ -827,44 +827,94 @@ def test_centroid_fit_clips_symmetrically_below_mu_too(monkeypatch) -> None:
     assert centroid_fit == pytest.approx(-18.0, abs=1e-6)
 
 
-def test_centroid_hz_axis_uses_audio_manager_sample_rate_when_available() -> None:
-    """2026-08-09: the centroid Hz axis used to assume a fixed 22050 Hz
-    Nyquist (44.1kHz) regardless of the real capture rate -- understating
-    every reading ~8.8% against this project's own documented 48kHz
-    default. Now read live from AudioManager.sample_rate. All FFT energy
-    concentrated in the last bin makes the resulting mean_centroid a
-    direct, exact readout of the Nyquist actually used."""
+def test_perc_band_centers_hz_matches_the_fingerprint_generator_tool() -> None:
+    """PERC_BAND_CENTERS_HZ (unicornviz/audio/analyzer.py) must be the exact
+    same 64 values tools/gen_spectral_fingerprints.py's _centers computes
+    (both: geometric mean of np.logspace(log10(30), log10(16000), 65) band
+    edges) -- that tool's own output (tools/spectral_fingerprints_out.py's
+    BAND_CENTERS_HZ literal) is what every profile's spectral_centroid_mu
+    was seeded from. If these ever drift apart, centroid_fit's live
+    measurement and mu are back to being computed in different bases --
+    the exact bug this constant exists to close. See
+    docs/adr/vj-system.md."""
+    from unicornviz.audio.analyzer import PERC_BAND_CENTERS_HZ
+    from tools.spectral_fingerprints_out import BAND_CENTERS_HZ
+
+    assert len(PERC_BAND_CENTERS_HZ) == len(BAND_CENTERS_HZ) == 64
+    for live, tool in zip(PERC_BAND_CENTERS_HZ, BAND_CENTERS_HZ):
+        assert live == pytest.approx(tool, abs=0.02)
+
+
+def test_centroid_uses_log_band_weighted_mean_matching_fingerprint_formula() -> None:
+    """2026-08-11: centroid_fit's live measurement now runs the same
+    dot(band_centers, vec)/sum(vec) formula tools/gen_spectral_fingerprints.py
+    uses to derive spectral_centroid_mu from expected_bands, over
+    audio.bands (the same 64 log-spaced perceptual band vector) -- replacing
+    the old raw-linear-FFT-bin centroid (np.dot(freqs, fft_arr), freqs a
+    linear Nyquist axis), which was structurally different from how mu is
+    derived. All energy concentrated in one band makes the resulting
+    mean_centroid a direct, exact readout of that band's own center
+    frequency (unicornviz.audio.analyzer.PERC_BAND_CENTERS_HZ). See
+    docs/adr/vj-system.md "Recommender centroid_fit Weight Cut + tech_house
+    Disabled"."""
+    from unicornviz.audio.analyzer import PERC_BAND_CENTERS_HZ
+
     # _make_full_reco_stub pre-populates 6 samples at centroid=0.0; this
-    # tick's fresh sample (computed from audio.fft below) joins them in the
-    # same rolling window, so mean_centroid is the average of all 7 --
+    # tick's fresh sample (computed from audio.bands below) joins them in
+    # the same rolling window, so mean_centroid is the average of all 7 --
     # divide the expected raw reading by 7 accordingly.
     stub = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
-    stub._audio_manager = SimpleNamespace(sample_rate=44100)
-    fft = np.zeros(100, dtype=np.float32)
-    fft[-1] = 1.0
-    audio = SimpleNamespace(waveform=None, fft=fft, bands=None, bass=0.34, mid=0.33,
+    bands = np.zeros(64, dtype=np.float32)
+    bands[40] = 1.0
+    audio = SimpleNamespace(waveform=None, fft=None, bands=bands, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     event, kw = stub._engine.marks[0]
-    assert kw['mean_centroid'] == pytest.approx(22050.0 * 0.99 / 7.0, abs=1.0)
+    assert kw['mean_centroid'] == pytest.approx(float(PERC_BAND_CENTERS_HZ[40]) / 7.0, abs=1.0)
 
 
-def test_centroid_hz_axis_falls_back_to_48000_without_audio_manager() -> None:
-    """No _audio_manager (or one missing sample_rate) degrades to 48000 --
-    this project's own documented capture default -- rather than raising."""
-    stub = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
-    stub._audio_manager = None
-    fft = np.zeros(100, dtype=np.float32)
-    fft[-1] = 1.0
-    audio = SimpleNamespace(waveform=None, fft=fft, bands=None, bass=0.34, mid=0.33,
+def test_profile_recommendation_mark_stamps_recommender_version() -> None:
+    """2026-08-11: the profile_recommendation decision-log mark() and
+    sequence-corpus keyframe now both stamp recommender_version, so future
+    corpus analysis can tell which formula (old raw-linear-FFT centroid vs.
+    the fixed log-band-weighted one) produced a given historical
+    mean_centroid without guessing from timestamps -- same rationale as
+    dj-mixer-01's ANALYSIS_VERSION (see CLAUDE.md)."""
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     event, kw = stub._engine.marks[0]
-    assert kw['mean_centroid'] == pytest.approx(24000.0 * 0.99 / 7.0, abs=1.0)
+    assert kw['recommender_version'] == _AUTO_VJ._RECOMMENDER_VERSION
+
+
+def test_centroid_no_longer_depends_on_sample_rate_or_audio_manager() -> None:
+    """The 2026-08-09 fix (read the Hz axis from AudioManager.sample_rate,
+    since the old formula's linear Nyquist axis scaled with capture rate)
+    is retired by the 2026-08-11 formula fix -- PERC_BAND_CENTERS_HZ is
+    fixed Hz values independent of capture sample rate, so the identical
+    audio.bands reading must produce the identical centroid whether or not
+    an _audio_manager (or its sample_rate) is present at all."""
+    bands = np.zeros(64, dtype=np.float32)
+    bands[40] = 1.0
+    audio = SimpleNamespace(waveform=None, fft=None, bands=bands, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    stub_a = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
+    stub_a._audio_manager = SimpleNamespace(sample_rate=44100)
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub_a, audio, SimpleNamespace(), {})
+
+    stub_b = _make_full_reco_stub(bpm=124.0, centroid=0.0, zcr=0.08, onset_count=2.0)
+    stub_b._audio_manager = None
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub_b, audio, SimpleNamespace(), {})
+
+    centroid_a = stub_a._engine.marks[0][1]['mean_centroid']
+    centroid_b = stub_b._engine.marks[0][1]['mean_centroid']
+    assert centroid_a == pytest.approx(centroid_b, abs=1e-6)
 
 
 def test_gaussian_fit_x_clip_constant_matches_the_documented_floor() -> None:

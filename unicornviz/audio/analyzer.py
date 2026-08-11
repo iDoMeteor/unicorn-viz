@@ -41,6 +41,21 @@ _ASSUMED_SAMPLE_RATE = 48000
 _PERC_N_BANDS = 64
 _PERC_F_MIN = 30.0
 _PERC_F_MAX = 16_000.0
+
+# 2026-08-11: public (not underscore-prefixed) geometric-mean center
+# frequency of each of the 64 bands above, Hz -- the same formula
+# tools/gen_spectral_fingerprints.py uses to derive AudioProfile's
+# spectral_centroid_mu from expected_bands (centroid = dot(centers, vec) /
+# sum(vec)). Exposed so other consumers can compute a spectral centroid in
+# THIS weighting basis (log-spaced bands, relative-magnitude vector) rather
+# than a raw linear-FFT-bin centroid, which is a structurally different
+# formula from what spectral_centroid_mu represents -- see
+# docs/adr/vj-system.md "Recommender centroid_fit Weight Cut + tech_house
+# Disabled" for the bug this exists to let callers avoid. First consumer:
+# drop-ins/auto-vj-01/auto_vj.py's _update_profile_recommendation().
+_perc_edges_hz = np.logspace(np.log10(_PERC_F_MIN), np.log10(_PERC_F_MAX), _PERC_N_BANDS + 1)
+PERC_BAND_CENTERS_HZ: np.ndarray = np.sqrt(_perc_edges_hz[:-1] * _perc_edges_hz[1:])
+
 _BASS_HZ = (40.0, 180.0)
 _LOW_MID_HZ = (180.0, 700.0)
 _MID_HZ = (700.0, 3200.0)
