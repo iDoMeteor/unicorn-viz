@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.82**
+**Version 1.0.0-beta.83**
 
 ## Contact Me!
 
@@ -557,6 +557,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.83** — `tech_house` disabled in `unicornviz/audio/profiles.py` (`enabled=False`, same disable-not-delete pattern as `hyphy`), pending a library with enough tech_house-specific material to recalibrate `spectral_centroid_mu` against a real measured average -- it sat closest of any profile to `peak_time` on `bpm_prior_mu` and leaned on a known-buggy centroid signal to break that tie. Still directly resolvable via `get_profile('tech_house')`. Companion change in auto-vj-01 (recommender `centroid_fit` weight `0.8 → 0.5`, same open formula-mismatch bug) -- see that drop-in's own changelog and [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Recommender centroid_fit Weight Cut + tech_house Disabled".
 - **1.0.0-beta.82** — `hardgroove` eliminated entirely from `unicornviz/audio/profiles.py` (not disabled -- no dict entry survives): zero validated library examples across every recent session, plus heavy overlap with `tech_house`/`peak_time`/`hard_techno` on BPM, spectral centroid, and an onset-density value identical to `peak_time`'s. Live profile count: 16 (was 20). `docs/audio-profile-reference.md` fully regenerated from live code in the same pass -- it had drifted stale, including an outdated claim that `bpm_hint` hard-caps the ACF search range (removed 2026-08-04). See [docs/adr/vj-system.md](docs/adr/vj-system.md). Companion change in auto-vj-01 (`_RECOMMENDER_VERSION` bump) -- see that drop-in's own changelog.
 - **1.0.0-beta.81** — `hyphy` tightened (`bpm_prior_sigma` 0.20→0.15, `spectral_centroid_sigma` 600→400 Hz) and disabled in `unicornviz/audio/profiles.py`, pending real trap/hyphy library material -- a real session found the recommender picking it for hip-hop tracks (987x) that should land on `rap_rnb`, with zero known hyphy/trap tracks in the library to validate any pick against. Still directly resolvable via `get_profile('hyphy')`, same disable-not-delete pattern as `electronic`/`generic` before. Companion changes in auto-vj-01 (`drop_score` bass-gated reweight, mood-profile drop/climax ladder reboot, `onset_fit` weight bump) -- see that drop-in's own changelog and [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Drop Score Bass-Gated Reweight".
 - **1.0.0-beta.78** — `uk_garage`, `breaks`, and `generic` profiles eliminated entirely from `unicornviz/audio/profiles.py` (not disabled -- no dict entry survives), a same-day follow-on to the house-family consolidation below. `get_profile()`'s unknown-key fallback moved from `generic` (now gone) to `house`. Live profile count: 17 (was 20). See [docs/adr/vj-system.md](docs/adr/vj-system.md) § "House-Family Consolidation" addendum. Companion changes in training-kit-01 (dead genre-map entries removed) and auto-vj-01 (`_RECOMMENDER_VERSION` bump) -- see those drop-ins' own changelogs.

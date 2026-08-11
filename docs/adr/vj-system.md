@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -102,6 +102,75 @@ Comparison" for the packager-side reporting.  Ignored if set equal to the
 active `beat_tracker_engine`. All shadow calls are wrapped in try/except
 that only logs at debug level — a shadow-engine failure can never affect
 the active engine or director.
+
+---
+
+## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
+
+Follow-up to the `hardgroove` elimination below, same session: reviewing
+`tech_house`/`peak_time`/`hard_techno` side by side surfaced that
+`tech_house` and `peak_time` sit almost on top of each other on
+`bpm_prior_mu` (130.5 vs. 130.0, `tech_house`'s 127–134 band fully inside
+`peak_time`'s 126–136), separated mainly by `bpm_prior_sigma` (0.09 tight
+vs. 0.24 wide) and a 550 Hz spectral-centroid gap (2900 vs. 2350). That
+centroid gap is a weaker discriminator than it looks, because it runs
+through `centroid_fit`, which carries a known, still-open formula bug (see
+"House-Family Consolidation" below for the original discovery on
+2026-08-10): every profile's `spectral_centroid_mu` is derived from
+`expected_bands`, a 64-band **log-spaced** perceptual fingerprint (the same
+one `audio_spectrum.py` draws and `spectral_shape_fit`'s cosine similarity
+correctly compares against), while the live `centroid_fit` measurement
+computes spectral centroid from the raw 512-bin **linear** FFT across the
+full Nyquist range. The two are structurally different formulas being
+compared as if they were the same quantity. A library-agnostic
+bandwidth-weighting fix was attempted on 2026-08-10 and rejected — it
+overshot `tech_house`'s own real measured average (3520 Hz) by more than
+2x (7594 Hz), because `expected_bands` values are relative prominence
+ratings, not per-Hz energy density. No clean fix exists without a
+representative library to refit `spectral_centroid_mu` against, which is
+exactly what's missing for `tech_house` specifically.
+
+**Decision, both owner calls:**
+
+1. `centroid_fit` weight `0.8 → 0.5` (`_DEFAULT_RECO_WEIGHTS` in
+   `auto_vj.py`) — no compensating rebalance applied to any other term.
+   Unlike `drop_score` in `beat_grid.py`, this composite is not a
+   probability distribution that has to sum to 1; it's an arbitrary-scale
+   weighted sum of independent Gaussian log-densities (see
+   `_GAUSSIAN_FIT_X_CLIP`), so trimming one term's weight doesn't leave a
+   gap another term needs to backfill — it just makes an already-flagged-
+   unreliable signal count for less. `centroid_fit` is now the weakest
+   non-vocal timbre/rhythm fit (below `kick_regularity_fit` at 0.7,
+   roughly level with `zcr_fit` at 0.6).
+2. `tech_house` disabled (`enabled=False` in `unicornviz/audio/profiles.py`,
+   same disable-not-delete pattern as `hyphy` — `get_profile('tech_house')`
+   still resolves it directly, `enabled_profiles()` excludes it from the
+   recommender's candidate pool) pending a library with enough
+   `tech_house`-specific material to recalibrate `spectral_centroid_mu`
+   against a real measured average instead of the buggy `expected_bands`-
+   derived value. This is a pause, not a removal — `tech_house` is a real,
+   validated genre, unlike `hardgroove`; it just currently leans on the
+   unreliable centroid axis harder than most profiles to separate itself
+   from `peak_time`, and disabling it until that's fixed was judged safer
+   than leaving a coin-flip in the roster.
+
+The formula-mismatch bug itself remains open and unresolved by this change
+— this is a symptom mitigation (de-weight the unreliable term, pause the
+profile that depends on it most), not a fix. A real fix needs either a
+reformulated live measurement that matches the log-band `expected_bands`
+weighting, or a from-scratch `spectral_centroid_mu` refit against real
+per-Hz measured data for every profile — both out of scope for this pass.
+
+`_RECOMMENDER_VERSION` → `1.0.0-rc.7`, `_VJ_WEIGHTS_DOC_VERSION` → `21`.
+`docs/audio-profile-reference.md` and
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` updated in the same
+pass (centroid_fit row, tech_house rows across all three profile tables,
+changelog entries).
+
+**Verified:** `tests/test_audio_profile_deep_house_and_disable.py` extended
+(`test_tech_house_disabled_pending_recalibrated_library_material`, plus
+`tech_house` added to the enabled/disabled assertion sets); full relevant
+suites green.
 
 ---
 

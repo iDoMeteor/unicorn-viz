@@ -29,13 +29,18 @@ better-populated neighbors; see `docs/adr/vj-system.md`). `electronic`'s
 display name is "Dance" (dict key kept for backward compatibility);
 `hyphy`'s is "Hyphy / Trap" and it is currently **disabled**
 (`enabled=False`, still directly resolvable via `get_profile('hyphy')`)
-pending real trap/hyphy library material.
+pending real trap/hyphy library material. `tech_house` is also currently
+**disabled** (`enabled=False`, still directly resolvable via
+`get_profile('tech_house')`) as of 2026-08-11, pending a library with
+enough tech_house-specific material to recalibrate `spectral_centroid_mu`
+against a real measured average — see `docs/adr/vj-system.md` § "Recommender
+centroid_fit Weight Cut + tech_house Disabled".
 
 | profile | bpm_prior_mu | σ (log2) | bpm_hint (display range) | spectral_centroid_mu | zcr_mu | onset_density_mu | vocal_hnr_mu | vocal_fmr_mu |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `house` | 122 | 0.10 | 118-126 | 2650 | 0.060 | 2.5 | 0.35 | 0.25 |
 | `deep_house` | 115 | 0.10 | 112-118 | 1250 | 0.048 | 2.0 | — | — |
-| `tech_house` | 130.5 | 0.09 | 127-134 | 2900 | 0.065 | 2.8 | 0.35 | 0.25 |
+| `tech_house` *(disabled)* | 130.5 | 0.09 | 127-134 | 2900 | 0.065 | 2.8 | 0.35 | 0.25 |
 | `peak_time` | 130 | 0.24 | 126-136 | 2350 | 0.072 | 3.2 | 0.35 | 0.25 |
 | `trance` | 138 | 0.20 | 134-142 | 2000 | 0.080 | 3.5 | 0.35 | 0.25 |
 | `psytrance` | 145 | 0.16 | 140-149 | 2150 | 0.090 | 4.0 | 0.35 | 0.25 |

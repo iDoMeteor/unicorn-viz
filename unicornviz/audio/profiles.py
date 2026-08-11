@@ -320,6 +320,21 @@ PROFILES: Dict[str, AudioProfile] = {
     ),
     "tech_house": AudioProfile(
         name="Tech House",
+        # 2026-08-11: disabled -- pending a library with enough tech_house-
+        # specific material to recalibrate spectral_centroid_mu against a
+        # real measured average. Root cause: spectral_centroid_mu here
+        # (2900.0, below) comes from the same buggy expected_bands-derived
+        # formula flagged in auto_vj.py's _DEFAULT_RECO_WEIGHTS
+        # ('centroid_fit' comment) and docs/adr/vj-system.md -- log-band-
+        # weighted, not the live linear-FFT-weighted measurement it's
+        # compared against -- and this profile sits closest of any in the
+        # roster to peak_time on both bpm_prior_mu (130.5 vs 130.0, bands
+        # fully overlapping) and onset_density_mu (2.8 vs peak_time's 3.2),
+        # so it leans on that unreliable centroid axis harder than most to
+        # win ties. Same disable-not-delete pattern as hyphy (owner: this
+        # is a pause, not a removal) -- re-enable once real tech_house
+        # material exists to recalibrate against.
+        enabled=False,
         description="Punchy low-end, clipped claps, tight hats, and steady 4/4 pressure at 127-134 BPM -- darker than house",
         bass_min=25.0,
         bass_max=220.0,

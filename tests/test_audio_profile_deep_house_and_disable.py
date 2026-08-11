@@ -65,7 +65,25 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     assert 'generic' not in enabled
     assert 'electronic' in enabled   # revived as 'Dance' 2026-08-10
     assert 'hyphy' not in enabled   # disabled 2026-08-10, see docs/adr/vj-system.md
+    assert 'tech_house' not in enabled   # disabled 2026-08-11, see docs/adr/vj-system.md
     assert 'house' in enabled   # a normal enabled profile is unaffected
+
+
+def test_tech_house_disabled_pending_recalibrated_library_material() -> None:
+    """2026-08-11: disabled (not eliminated) -- see docs/adr/vj-system.md
+    'Recommender centroid_fit Weight Cut + tech_house Disabled'. Root cause
+    is the same centroid_fit formula-mismatch bug documented on
+    spectral_centroid_mu (expected_bands-derived, log-band-weighted) vs.
+    the live measurement (linear-FFT-weighted); tech_house sits closest of
+    any profile to peak_time on bpm_prior_mu and leans on that unreliable
+    axis to break the tie. Direct lookup must still resolve it (disable,
+    not delete -- same pattern as hyphy)."""
+    tech_house = get_profile('tech_house')
+    assert tech_house.enabled is False
+    assert tech_house.name == 'Tech House'
+    assert 'tech_house' not in enabled_profiles()
+    assert 'tech_house' in PROFILES   # still directly resolvable, not eliminated
+    assert 'tech_house' not in list_profiles()   # excluded from discovery, same as hyphy
 
 
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
@@ -75,8 +93,10 @@ def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     'generic' is gone entirely now (eliminated, not merely disabled -- see
     test_generic_uk_garage_breaks_eliminated_entirely above), so it's no
     longer in this set; 'hyphy' replaced it 2026-08-10 (disabled pending
-    real trap/hyphy library material -- see docs/adr/vj-system.md)."""
-    _disabled = {'hyphy'}
+    real trap/hyphy library material -- see docs/adr/vj-system.md);
+    'tech_house' added 2026-08-11 (disabled pending recalibrated library
+    material, same doc)."""
+    _disabled = {'hyphy', 'tech_house'}
     for key, profile in PROFILES.items():
         if key in _disabled:
             continue
