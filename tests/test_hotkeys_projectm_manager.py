@@ -73,6 +73,18 @@ class _ManagerEffect:
         self.calls.append(('delete_presets', (tuple(preset_paths), permanent)))
         return 1
 
+    def quarantine_preset(self, path_str: str) -> bool:
+        self.calls.append(('quarantine_preset', path_str))
+        return True
+
+    def restore_from_quarantine(self, path_str: str) -> bool:
+        self.calls.append(('restore_from_quarantine', path_str))
+        return True
+
+    def delete_quarantined_preset(self, path_str: str) -> bool:
+        self.calls.append(('delete_quarantined_preset', path_str))
+        return True
+
     def undo_last_bulk_state_change(self):
         self.calls.append(('undo_last_bulk_state_change', None))
         return 'disable-all (state-x.json)'
@@ -386,3 +398,97 @@ def test_projectm_manager_preset_actions_toggle_delete_and_close() -> None:
     assert app.projectm_modal_active_calls[-1] is False
     assert ('goto_preset_path', '/tmp/presets/pack-a/one.milk') in manager.calls
     assert any('reverted' in msg.lower() for msg in overlay.messages)
+
+
+def test_q_quarantines_an_excluded_preset() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/quarantine-me.milk', 'enabled': False, 'kind': 'excluded'}
+
+    handler.handle(sdl2.SDLK_q, 0)
+
+    assert ('quarantine_preset', '/tmp/quarantine-me.milk') in manager.calls
+    assert any('quarantined' in msg.lower() for msg in overlay.messages)
+
+
+def test_q_on_a_non_excluded_preset_is_a_no_op() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/presets/pack-a/one.milk', 'enabled': True}
+
+    handler.handle(sdl2.SDLK_q, 0)
+
+    assert not any(name == 'quarantine_preset' for name, _ in manager.calls)
+    assert any('excluded category' in msg.lower() for msg in overlay.messages)
+
+
+def test_r_restores_a_quarantined_preset() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/restore-me.milk', 'enabled': False, 'kind': 'quarantined'}
+
+    handler.handle(sdl2.SDLK_r, 0)
+
+    assert ('restore_from_quarantine', '/tmp/restore-me.milk') in manager.calls
+    assert any('restored' in msg.lower() for msg in overlay.messages)
+
+
+def test_r_on_a_non_quarantined_preset_is_a_no_op() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/presets/pack-a/one.milk', 'enabled': True}
+
+    handler.handle(sdl2.SDLK_r, 0)
+
+    assert not any(name == 'restore_from_quarantine' for name, _ in manager.calls)
+    assert any('quarantined category' in msg.lower() for msg in overlay.messages)
+
+
+def test_delete_on_a_quarantined_preset_permanently_deletes_without_trash() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/delete-me.milk', 'enabled': False, 'kind': 'quarantined'}
+
+    handler.handle(sdl2.SDLK_DELETE, 0)
+
+    assert ('delete_quarantined_preset', '/tmp/delete-me.milk') in manager.calls
+    assert not any(name == 'delete_presets' for name, _ in manager.calls)
+    assert any('permanently deleted' in msg.lower() for msg in overlay.messages)
+
+
+def test_delete_on_a_normal_preset_still_uses_the_existing_trash_flow() -> None:
+    """Quarantine's Delete override must not leak into ordinary browsing."""
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/presets/pack-b/two.milk', 'enabled': True}
+
+    handler.handle(sdl2.SDLK_DELETE, 0)
+
+    assert ('delete_presets', (('/tmp/presets/pack-b/two.milk',), False)) in manager.calls
+    assert not any(name == 'delete_quarantined_preset' for name, _ in manager.calls)
+
+
+def test_e_and_d_are_suppressed_for_excluded_and_quarantined_kinds() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/excluded.milk', 'enabled': False, 'kind': 'excluded'}
+
+    handler.handle(sdl2.SDLK_e, 0)
+    handler.handle(sdl2.SDLK_d, 0)
+
+    assert not any(name == 'set_presets_enabled' for name, _ in manager.calls)
+    assert sum('not applicable' in msg.lower() for msg in overlay.messages) == 2

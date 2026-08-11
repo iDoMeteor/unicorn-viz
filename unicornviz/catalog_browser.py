@@ -25,6 +25,16 @@ from typing import Any
 
 ALL_CATEGORIES = '(all)'
 UNCATEGORIZED = '(uncategorized)'
+# Categories whose key starts with this prefix are "system/virtual" --
+# always reachable by selecting them directly, same as any other category,
+# but hidden from the catch-all "(all)" view. Lets a producer feed in
+# entries that duplicate (or wouldn't otherwise belong alongside) the main
+# catalog -- e.g. projectM's Excluded/Quarantined/Disabled sections --
+# without inflating "(all)"'s counts or list with redundant/out-of-band
+# rows. Same convention this project already uses for
+# _exclude_dirs()'s '! Transition' default (drop-ins/projectm-01/
+# projectm_effect.py).
+HIDDEN_FROM_ALL_PREFIX = '! '
 
 # Focus panes.
 PANE_CATEGORIES = 0
@@ -90,9 +100,10 @@ class CatalogBrowser:
         query = self._search_query.strip().lower()
 
         def category_ok(entry: dict[str, Any]) -> bool:
+            key = str(entry.get('category_key', '') or UNCATEGORIZED)
             if category == ALL_CATEGORIES:
-                return True
-            return str(entry.get('category_key', '') or UNCATEGORIZED) == category
+                return not key.startswith(HIDDEN_FROM_ALL_PREFIX)
+            return key == category
 
         def query_ok(entry: dict[str, Any]) -> bool:
             if not query:
@@ -116,7 +127,10 @@ class CatalogBrowser:
         query = self._search_query.strip().lower()
         for entry in self._entries:
             key = str(entry.get('category_key', '') or UNCATEGORIZED)
-            if category != ALL_CATEGORIES and key != category:
+            if category == ALL_CATEGORIES:
+                if key.startswith(HIDDEN_FROM_ALL_PREFIX):
+                    continue
+            elif key != category:
                 continue
             total += 1
             if not query:

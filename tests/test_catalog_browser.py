@@ -9,6 +9,7 @@ import pytest
 
 from unicornviz.catalog_browser import (
     ALL_CATEGORIES,
+    HIDDEN_FROM_ALL_PREFIX,
     PANE_CATEGORIES,
     PANE_LIST,
     CatalogBrowser,
@@ -125,3 +126,41 @@ def test_reentrant_set_entries_clamps(browser):
     browser.set_entries([_entry('Solo', 'only', [], 'x')])
     assert browser.categories() == [ALL_CATEGORIES, 'only']
     assert browser.selected_index() == 0
+
+
+# ------------------------------------------------------- hidden-from-all categories
+
+@pytest.fixture
+def browser_with_special(browser):
+    entries = browser.entries()
+    entries.append(_entry('Ghost', f'{HIDDEN_FROM_ALL_PREFIX}Special', [], 'x'))
+    browser.set_entries(entries)
+    return browser
+
+
+def test_special_category_still_appears_in_the_category_list(browser_with_special):
+    assert f'{HIDDEN_FROM_ALL_PREFIX}Special' in browser_with_special.categories()
+
+
+def test_special_category_is_reachable_by_selecting_it_directly(browser_with_special):
+    idx = browser_with_special.categories().index(f'{HIDDEN_FROM_ALL_PREFIX}Special')
+    browser_with_special.set_category_index(idx)
+    assert [e['display_name'] for e in browser_with_special.filtered()] == ['Ghost']
+
+
+def test_special_category_entry_is_excluded_from_all_view(browser_with_special):
+    browser_with_special.set_category_index(browser_with_special.categories().index(ALL_CATEGORIES))
+    names = {e['display_name'] for e in browser_with_special.filtered()}
+    assert 'Ghost' not in names
+    assert names == {'Plasma', 'Kaleidoscope', 'Tron Grid', 'Audio Spectrum'}
+
+
+def test_special_category_entry_is_excluded_from_all_stats(browser_with_special):
+    matches, total = browser_with_special.category_stats(ALL_CATEGORIES)
+    assert total == 4   # not 5 -- the special entry doesn't inflate the catch-all count
+    assert matches == 4
+
+
+def test_special_category_entry_still_counts_in_its_own_stats(browser_with_special):
+    matches, total = browser_with_special.category_stats(f'{HIDDEN_FROM_ALL_PREFIX}Special')
+    assert (matches, total) == (1, 1)

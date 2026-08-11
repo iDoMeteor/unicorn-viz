@@ -1374,6 +1374,9 @@ class HotkeyHandler:
                     if selected is None:
                         o.flash_message('ProjectM: no preset selected', 1.2)
                         return
+                    if selected.get('kind') in ('excluded', 'quarantined'):
+                        o.flash_message('ProjectM: not applicable here', 1.4)
+                        return
                     remaining = manager_effect.set_presets_enabled([str(selected.get('path', ''))], True)
                     _sync_projectm_manager()
                     o.flash_message(f'ProjectM preset enabled ({remaining} enabled)', 1.6)
@@ -1389,14 +1392,48 @@ class HotkeyHandler:
                     if selected is None:
                         o.flash_message('ProjectM: no preset selected', 1.2)
                         return
+                    if selected.get('kind') in ('excluded', 'quarantined'):
+                        o.flash_message('ProjectM: not applicable here', 1.4)
+                        return
                     remaining = manager_effect.set_presets_enabled([str(selected.get('path', ''))], False)
                     _sync_projectm_manager()
                     o.flash_message(f'ProjectM preset disabled ({remaining} enabled)', 1.6)
+                return
+            if sym == sdl2.SDLK_q:
+                selected = o.get_projectm_selected_preset()
+                if selected is None or selected.get('kind') != 'excluded':
+                    o.flash_message('ProjectM: q quarantines a preset from the Excluded category', 1.8)
+                    return
+                if manager_effect.quarantine_preset(str(selected.get('path', ''))):
+                    _sync_projectm_manager()
+                    o.flash_message('ProjectM preset quarantined', 1.6)
+                else:
+                    o.flash_message('ProjectM: quarantine failed', 1.6)
+                return
+            if sym == sdl2.SDLK_r:
+                selected = o.get_projectm_selected_preset()
+                if selected is None or selected.get('kind') != 'quarantined':
+                    o.flash_message('ProjectM: r restores a preset from the Quarantined category', 1.8)
+                    return
+                if manager_effect.restore_from_quarantine(str(selected.get('path', ''))):
+                    _sync_projectm_manager()
+                    o.flash_message('ProjectM preset restored', 1.6)
+                else:
+                    o.flash_message('ProjectM: restore failed', 1.6)
                 return
             if sym == sdl2.SDLK_DELETE:
                 selected = o.get_projectm_selected_preset()
                 if selected is None:
                     o.flash_message('ProjectM: no preset selected', 1.2)
+                    return
+                if selected.get('kind') == 'quarantined':
+                    # No confirmation, no trash -- already reviewed once by
+                    # definition (only ever arrives here via 'q').
+                    if manager_effect.delete_quarantined_preset(str(selected.get('path', ''))):
+                        _sync_projectm_manager()
+                        o.flash_message('ProjectM quarantined preset permanently deleted', 1.8)
+                    else:
+                        o.flash_message('ProjectM: delete failed', 1.6)
                     return
                 permanent = bool(mod & sdl2.KMOD_SHIFT)
                 deleted = manager_effect.delete_presets([str(selected.get('path', ''))], permanent=permanent)

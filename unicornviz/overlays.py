@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Callable
 import moderngl
 import numpy as np
 
-from unicornviz.catalog_browser import CatalogBrowser, PANE_CATEGORIES, PANE_LIST
+from unicornviz.catalog_browser import CatalogBrowser, HIDDEN_FROM_ALL_PREFIX, PANE_CATEGORIES, PANE_LIST
 from unicornviz.cta_overlay import CTAOverlay, _CTA_SHOW_DURATION, _CTA_SLOTS
 from unicornviz.paths import resolve_path
 from unicornviz.tooltips import TooltipHoverTracker, TooltipRegion, wrap_tooltip_text
@@ -3474,7 +3474,10 @@ void main() {
         enabled = 0
         for entry in self._projectm_browser.entries():
             key = str(entry.get('category_key', '') or '(uncategorized)')
-            if category != '(all)' and key != category:
+            if category == '(all)':
+                if key.startswith(HIDDEN_FROM_ALL_PREFIX):
+                    continue
+            elif key != category:
                 continue
             total += 1
             if bool(entry.get('enabled', False)):
@@ -4163,13 +4166,17 @@ void main() {
             idx = cat_top + local_idx
             ry = cat_start_y + local_idx * row_h
             is_sel = idx == cat_idx
+            is_special = category.startswith(HIDDEN_FROM_ALL_PREFIX)
             enabled_count, total_count = self._projectm_category_stats(category)
             label = f'{category} [{enabled_count}/{total_count}]'
             if is_sel:
-                self._draw_rect(left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, (0.25, 0.18, 0.06, 0.90))
-                self._draw_text(f'> {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.92, 0.22, 1.0))
+                bg = (0.30, 0.10, 0.22, 0.90) if is_special else (0.25, 0.18, 0.06, 0.90)
+                fg = (1.0, 0.42, 0.80, 1.0) if is_special else (1.0, 0.92, 0.22, 1.0)
+                self._draw_rect(left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, bg)
+                self._draw_text(f'> {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=fg)
             else:
-                self._draw_text(f'  {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(0.84, 0.86, 0.94, 0.84))
+                fg = (0.92, 0.56, 0.80, 0.90) if is_special else (0.84, 0.86, 0.94, 0.84)
+                self._draw_text(f'  {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=fg)
 
         preset_entries = self._projectm_filtered_entries()
         preset_start_y = content_y + 48.0
@@ -4186,13 +4193,16 @@ void main() {
             path = str(entry.get('path', ''))
             is_current = path == self._projectm_current_path
             enabled = bool(entry.get('enabled', False))
+            kind = entry.get('kind')
             prefix = '*' if is_current else ' '
-            status = 'ON ' if enabled else 'OFF'
+            status = {'excluded': 'EXCL', 'quarantined': 'QUAR'}.get(kind, 'ON  ' if enabled else 'OFF ')
             name = str(entry.get('display_name', ''))[:54]
             label = f'{prefix} [{status}] {name}'
             if is_sel:
                 self._draw_rect(right_x + 6.0, ry - 2.0, right_w - 12.0, row_h - 3.0, (0.08, 0.24, 0.54, 0.90))
                 self._draw_text(f'> {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.94, 0.26, 1.0))
+            elif kind in ('excluded', 'quarantined'):
+                self._draw_text(f'  {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=(0.92, 0.56, 0.80, 0.90))
             else:
                 color = (0.40, 0.92, 0.44, 0.90) if enabled else (0.98, 0.48, 0.48, 0.88)
                 self._draw_text(f'  {label}', right_x + 16.0, ry + 4.0, scale=2.0, color=color)
@@ -4229,8 +4239,15 @@ void main() {
             scale=1.8,
             color=(0.58, 0.68, 0.78, 0.86),
         )
+        selected_kind = selected.get('kind') if selected else None
+        if selected_kind == 'excluded':
+            delete_hint = 'Q: move to quarantine'
+        elif selected_kind == 'quarantined':
+            delete_hint = 'R: restore    Delete: permanently delete (no trash)'
+        else:
+            delete_hint = 'Delete: trash    Shift+Delete: permanent'
         self._draw_text(
-            'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Ctrl+Z: undo    Ctrl+Y/Ctrl+Shift+Z: redo    Delete: trash',
+            f'Ctrl+A: enable all    Ctrl+Shift+A: disable all    Ctrl+Z: undo    Ctrl+Y/Ctrl+Shift+Z: redo    {delete_hint}',
             px + 18.0,
             footer_y + 12.0,
             scale=1.8,
