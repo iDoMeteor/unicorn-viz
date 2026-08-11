@@ -628,6 +628,57 @@ every bass test read "present" (documented in-code, fine);
 stems (naming only); `sosfilt`'s causal group delay at these crossovers is
 negligible at bar granularity.
 
+A mixer-team-facing version of B1-B5, reshaped into sequenced work items
+with fixes and validation steps, lives at
+`drop-ins/dj-mixer-01/docs/offline-analysis-accuracy-plan.md`.
+
+---
+
+## Re-evaluation addendum (same day): plan section 4d + the shipped `bass_det` channel
+
+Between this audit's first pass and this addendum, two things landed:
+core `1.0.0-beta.85` shipped the detector-facing band channel
+(`bass_det`/`mid_det`/`treble_det`, `_DETECTOR_BASS_GAIN = 2.0`;
+`band_blend`'s z-score now reads it — auto-vj-01 `1.0.0-rc.44`, detector
+`1.0.0-rc.8`, superseding the rc.7 audited above), and the mixer team
+added section 4d ("what dj-mixer-01's offline analysis has that's worth
+stealing") to the redesign plan. Re-evaluated both:
+
+**`bass_det` (plan section 1, now shipped): a well-grounded interim; F1
+stands as the follow-up.** The methodology was right — gain swept
+empirically against a real session for maximum cross-mode median
+separation, which is a better criterion than the median-centering
+estimate this audit offered (the two agree on ballpark: sweep landed
+2.0, centering said ~1.25). The measured result — 6.8pp BREAKDOWN/CRUISE
+median separation, up from 1.7pp — is also right where F1's inversion
+analysis predicted the ceiling would be (~10pp raw spread, 0.52 vs
+0.62), which is the point: `bass_det` still reads `bass_weighted`, i.e.
+the per-frame peak-normalized spectrum, so it recovers most of what the
+curve was destroying but cannot exceed the shape-fraction ceiling the
+normalization imposes. The raw-magnitude channel (F1) remains the real
+fix, and the sweep's own separation metric is exactly the yardstick to
+evaluate a raw-path candidate against `bass_det` when it's built.
+
+**Plan 4d: substantially correct, one load-bearing claim needs a
+correction before anyone ports gates.** Agreed on all counts for
+`dsp.py`'s band-splitter (genuinely real-time-proven, right filter
+family), the convergent-validation reading of `bpm.py`'s log2 prior, the
+rank-transform → online-percentile observation (which converges with
+F4's percentile-reference proposal — two independent routes to the same
+primitive, a good sign), and the offline-only classifications (stems,
+repetition, positional pass). The correction: `structural_cues()` is
+described as "~16 bars trailing history and zero future lookahead" — as
+written it uses **8 bars of lookahead** (`mean(e[b:b+8]) −
+mean(e[b-8:b])` at boundary `b`), which is why its 0.30/0.12 gates are
+so clean. A causal port shrinks the leading window to ~1 bar against
+the trailing 8: noisier, a ~1-bar latency floor, and it needs bar phase
+(F5/B4) to define bars. Consequence for the trigger design: the
+phrase-step detector is a strong *confirmation / sustain-onset* check
+(~1 bar into the drop) and a natural gate for the fizzle floor — it is
+not a substitute for 4a's instantaneous transient trigger, and the two
+compose exactly as 4d's last sentence suggests (step for *sure*, 4a
+coincidence for *now*). Detail in the mixer-facing plan doc, item F.
+
 Sources consulted:
 
 - [TISMIR novelty/activation tutorial](https://transactions.ismir.net/articles/10.5334/tismir.202)
