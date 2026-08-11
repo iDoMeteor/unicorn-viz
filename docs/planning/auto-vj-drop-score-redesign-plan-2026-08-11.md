@@ -94,6 +94,31 @@ itself), `test_band_blend_reads_bass_det_not_bass`/
 `_VJ_WEIGHTS_DOC_VERSION` → `24`, core → `1.0.0-beta.85`, auto-vj-01 →
 `1.0.0-rc.44`.
 
+**Independent cross-validation (reviewer re-evaluation, next day):** the
+gain sweep's criterion — maximize real cross-mode median separation — was
+checked against a completely different analytical method (inverting the
+plan's own reported medians algebraically through `_shape()`) and the two
+land on the same ballpark (`2.0` empirically vs. `~1.25` from
+median-centering), which is the reassuring part. The more telling part:
+the *measured* result — `1.7pp → 6.8pp` — sits almost exactly where the
+independent inversion analysis predicts the ceiling should be (`~10pp` raw
+spread). That's not a coincidence, it's the same limitation stated a
+different way: `bass_det` still reads `bass_weighted`, i.e. the spectrum
+*after* it's divided by its own per-frame maximum
+(`analyzer.py:556-559`) — so what feeds `_shape()` is a **spectral-shape
+fraction** ("how much of this frame's loudest bin is bass"), not an
+absolute level. `bass_det` recovers most of what the saturating gain was
+destroying, but it cannot exceed the ceiling that per-frame
+normalization itself imposes. **The real fix is a raw-magnitude channel**
+— built from the pre-normalization spectrum, the same path
+`flux`/`bass_flux` already correctly use (`analyzer.py:512-518`'s own
+comment already explains why per-frame normalization erases a transient,
+the level fix is the same lesson applied to the band levels) — and this
+sweep's own separation metric (real cross-mode median pp) is the
+ready-made yardstick to judge that raw-magnitude candidate against
+`bass_det` once it's built. Not built this pass; `bass_det` stands as a
+well-grounded interim, not a dead end.
+
 **Note on the "30%" question this shipped in response to:** worth being
 precise about what target is and isn't achievable on this curve family.
 A *cross-mode median* gap anywhere near 30 percentage points isn't
