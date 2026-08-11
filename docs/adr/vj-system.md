@@ -641,6 +641,78 @@ session's confidence numbers.
 
 **Verified:** full main-repo suite green (1622 passed), `ruff` clean.
 
+### Addendum (2026-08-11): `energy_norm` / `band_blend` swap, and the elimination question
+
+Follow-up owner observation, live: a real drop's `drop_score` was found
+decaying purely from the passage of time under a synthetic constant-input
+test (bass=1.0, mid=0.3, treble=0.2, unchanging, after a quiet 5s warmup):
+`drop_score` fell from ~0.712 (t=0.05s) to a stable ~0.540 (t=7s+), a ~24%
+relative drop, with `bass_flux_fast` staying rock-steady at exactly 0.300
+throughout -- isolating the entire decay to `band_blend`. Root cause:
+`band_blend`'s inputs (`bass_n`/`mid_n`/`treble_n`) are running z-scores
+(`unicornviz/audio/analyzer.py`'s per-band adaptive normalizer) -- the
+baseline "catches up" to sustained loud bass within ~5-7s, redefining it as
+statistically normal and fading `band_blend` toward neutral (~0.5) even
+though the true level never changed. A real, unchanging drop was being
+scored *less* drop-like the longer it held.
+
+**Simulated three fix directions against two real sessions**
+(`favorites/e`: fresh, unmasked media-player session, 97 real `drop_fire`
+events; `library/b`: 484 events) before touching code, replaying
+`band_blend`/`energy_norm`/`slope_norm` directly from each corpus row's own
+logged `bass_n`/`mid_n`/`treble_n`/`energy`/`energy_slope` (formula-
+independent fields) and `flux_norm`/`bass_flux_norm` via their EMA update
+rule row-by-row from logged raw `bass_flux`/`spectral_flux`:
+
+1. **Naive swap** (`energy_norm 0.15→0.30`, `band_blend 0.30→0.15`, others
+   unchanged): real drops clear the raver/normie score floors measurably
+   more often (`library/b`: `380→437` of `484` at the `0.60` floor,
+   `294→314` at `0.65`) -- reproduced on both sessions. Known cost: a small
+   regression on a rare bass-free-loud-breakdown proxy (`band_blend<0.15`
+   and `energy_norm>0.5`, `11/72198` rows in `library/b` -- zero such rows
+   existed at all in the fresh `favorites/e` session) -- mean score
+   `0.567→0.634`, `0/11→2/11` newly clearing the `0.70` floor.
+2. **Gated swap** (same weights, but `energy_norm` scaled by
+   `0.5 + 0.5*max(band_blend, bass_flux_norm)` before weighting, so pure
+   loudness with zero bass evidence caps at half credit): didn't help in
+   practice. `bass_flux_fast`'s slow-release EMA (0.85 retain) keeps
+   `bass_flux_norm` elevated for seconds after an isolated kick, so
+   `max()` almost never actually reads "no bass," even in a genuinely
+   sustained bass-free stretch -- the gate was defeated by the same kind
+   of lag it was meant to guard against.
+3. **Strict gate** (`energy_norm` scaled by `0.3 + 0.7*band_blend` alone,
+   no `bass_flux_norm`): fixed the false positive cleanly (`1/11` clearing
+   `0.60`, down from naive swap's `5/11`) but overcorrected into a real
+   regression on genuine drops (`293/484` clearing `0.60` on `library/b`,
+   *below* the un-swapped baseline's `380/484`) -- because gating directly
+   on `band_blend` re-imports its own decay problem through the gate.
+
+**Decision: ship the naive swap** (`energy_norm 0.30` / `band_blend 0.15`,
+`bass_flux_norm 0.35`/`slope_norm 0.15`/`flux_norm 0.05` unchanged) --
+owner call, accepting the small known false-positive cost as the better
+trade given neither gated variant improved on it without a worse
+regression elsewhere. `_DETECTOR_VERSION` → `1.0.0-rc.7`,
+`_VJ_WEIGHTS_DOC_VERSION` → `23`. The bass-gated invariant from the
+2026-08-10 reweight (a bass-free moment can't clear any mood profile's
+floor) still holds under the new weights, with a smaller margin: max
+`drop_score` with zero bass content is now `energy_norm(1.0)*0.30 +
+slope_norm(1.0)*0.15 + flux_norm(1.0)*0.05 = 0.50`, still below every
+floor (raver's `0.60` is the lowest), down from the prior formula's
+`0.35`.
+
+**Open, not decided this pass:** the owner's read on this data is that
+`band_blend` itself may be worth eliminating outright rather than further
+reweighting around its decay -- and if so, what (if anything) should take
+over its "is there bass" role, since `bass_flux_norm` alone is a
+*transient* detector (attack-only) with no sustained-level signal, exactly
+the gap `band_blend` was originally covering. Flagged for the next round,
+not resolved here.
+
+**Verified:** `test_drop_score_bass_gated_reweight_caps_a_bass_free_
+breakdown` re-run against the new weights (still passes with real margin:
+the scenario now reads ~0.32, not just barely under the 0.50 assertion);
+full suite green (1638 passed), `ruff`/`bandit` clean.
+
 ---
 
 ## Mixer Track Meta Reaches the Training Corpus (2026-08-10)

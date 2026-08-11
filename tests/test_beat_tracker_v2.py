@@ -746,7 +746,13 @@ def test_drop_score_bass_gated_reweight_caps_a_bass_free_breakdown() -> None:
     understate this term and give a falsely reassuring result. Then drop
     to zero bass with loud, rising, transient mid/treble content (the
     piano+vocals stand-in) and confirm drop_score lands comfortably below
-    every rebooted mood-profile floor (lowest is raver's 0.60)."""
+    every rebooted mood-profile floor (lowest is raver's 0.60).
+
+    2026-08-11: energy_norm/band_blend swapped (0.15/0.30 -> 0.30/0.15,
+    see beat_grid.py's own comment) -- the bass-free ceiling moved from
+    0.35 to 0.50, still below 0.60, so this assertion (< 0.50) still holds
+    with real margin (verified: this scenario now reads ~0.32, not just
+    barely under 0.50)."""
     dt = 1.0 / 60.0
     bt = BeatTracker({})
     t = 0.0
