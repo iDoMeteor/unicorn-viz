@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-07
+Last updated: 2026-08-10
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -102,6 +102,174 @@ Comparison" for the packager-side reporting.  Ignored if set equal to the
 active `beat_tracker_engine`. All shadow calls are wrapped in try/except
 that only logs at debug level — a shadow-engine failure can never affect
 the active engine or director.
+
+---
+
+## Drop Score Bass-Gated Reweight (2026-08-10)
+
+Triggered by an owner observation while watching a live session: `drop_score`
+read `0.54` during a breakdown that was just piano chords and vocals — zero
+drums, zero bass. That number is high enough to matter: for raver (the
+largest mood-profile share of most sessions) the *main* `drop_energy_
+threshold` was `0.46` at the time, meaning 0.54 could have fired a real drop
+directly, not just via the timeout safety valve. Investigated, discussed,
+and fixed as one coordinated change across the detector's `drop_score`
+formula and every mood profile's drop/climax decision ladder, rather than
+patching either in isolation — see the false-threshold-inversion problem
+below for why patching just one would have made things worse, not better.
+
+**Root cause.** `drop_score` (`BeatTracker.update()`, inherited unmodified
+by `BeatTrackerV3`) was a 5-term composite: `energy_norm*0.15 +
+slope_norm*0.35 + band_blend*0.15 + flux_norm*0.10 + bass_flux_norm*0.25`.
+Only `band_blend` and `bass_flux_norm` require any bass presence at all
+(combined weight `0.40`, a minority); the other three
+(`energy_norm`/`slope_norm`/`flux_norm`) are genre-agnostic loudness/
+transient signals — a swelling piano-and-vocal passage satisfies all three
+just fine on its own, chord attacks and vocal dynamics are real events on
+`flux_norm`'s mid+treble axis. `slope_norm` (rate of energy increase) was
+the single largest term and needed no bass whatsoever to reach a high
+value.
+
+**Fix, agreed after a back-and-forth on the exact numbers (owner's final
+proposal):** `energy_norm*0.15 + slope_norm*0.15 + band_blend*0.30 +
+flux_norm*0.05 + bass_flux_norm*0.35`. Combined bass-aware weight rises
+`0.40 -> 0.65`, a genuine majority for the first time. Consequence, checked
+directly: the maximum possible `drop_score` with zero bass content is now
+`energy_norm(1.0)*0.15 + slope_norm(1.0)*0.15 + flux_norm(1.0)*0.05 =
+0.35` — below every rebooted mood-profile floor (lowest is raver's `0.60`,
+see below), so a rhythm-free moment can no longer fire a drop via any
+path, by construction rather than a conditional gate. Verified with a
+synthetic-tracker regression test that warms up a real bass baseline (so
+the per-band adaptive normalizer has something to actually drop *from* —
+a cold-start zero-bass tracker reads its own permanent silence as neutral,
+not conspicuously absent) then cuts to zero-bass, loud, transient-heavy
+mid/treble content: `drop_score` settles at `~0.30`, comfortably under
+every floor. `_DETECTOR_VERSION` -> `1.0.0-rc.4`. Only `BeatTracker`/v2's
+formula changed; `BeatGridTracker`/v1 uses a structurally different
+3-term formula (no `bass_flux_norm`/`flux_norm` at all) and was
+untouched — the owner separately flagged v1 vs. v3 behavioral differences
+as worth a proper A/B test, deferred to its own investigation.
+
+**The threshold-inversion problem, and why the whole ladder moved
+together.** Each mood profile (`chill`/`normie`/`raver`) explicitly
+overrides five `drop_score` gates, not just the one initially in
+discussion: `drop_timeout_score_floor < drop_energy_threshold <
+climax_entry_score < climax_early_override_score < drop_fastlane_score`.
+The owner proposed new floor values directly (`0.70`/`0.65`/`0.60`) — but
+the *shipped* main thresholds at the time were `0.55`/`0.54`/`0.46`,
+calibrated for the old formula's easier-to-satisfy scoring. Setting only
+the floor to the new values would have put it *above* the main threshold
+for all three profiles — inverting the ladder's whole purpose (a timeout
+floor is supposed to be a relaxed bar below the real threshold, a
+"give up waiting, take what we can get" safety valve; a floor above
+threshold makes the safety valve stricter than the thing it's a fallback
+for). This exact inversion had already happened once before and been
+fixed — see the `2026-06-20` comments in `auto_vj.py`'s `chill`/`raver`
+profile blocks ("floor was 0.56/0.52, above drop_energy_threshold... timeout
+rescue should not require more score than a regular drop") — so it was
+caught before landing this time, not after.
+
+Resolved as a single reboot of the whole five-value ladder per profile,
+preserving strict ordering and each rung's relative position across
+profiles (chill strictest throughout, raver most permissive throughout,
+same shape as before):
+
+| Profile | Floor | Threshold | Climax entry | Climax early | Fastlane |
+| --- | --- | --- | --- | --- | --- |
+| `chill` | 0.50 → **0.70** | 0.55 → **0.77** | 0.64 → **0.83** | 0.72 → **0.89** | 0.78 → **0.95** |
+| `normie` | 0.48 → **0.65** | 0.54 → **0.73** | 0.60 → **0.79** | 0.66 → **0.85** | 0.72 → **0.91** |
+| `raver` | 0.40 → **0.60** | 0.46 → **0.69** | 0.56 → **0.75** | 0.62 → **0.81** | 0.68 → **0.87** |
+
+Owner set the three floor values directly; thresholds were counter-
+proposed to sit just below them at a ratio matching the old floor/threshold
+relationship (owner: "i'm down with my floors and your thresholds!");
+climax-entry/climax-early/fastlane were then rescaled by the agent to
+preserve strict ordering with consistent ~`0.06` gaps above threshold,
+since leaving them at their old absolute values would have reproduced the
+identical inversion bug one rung higher (fastlane ending up below the new
+threshold for normie/raver). `drop_confirm_score` needed no change — it's
+never profile-overridden, always deriving as `drop_energy_threshold *
+0.90`, so it moved automatically. `_DIRECTOR_VERSION` -> `1.0.0-rc.3`.
+This whole ladder was undocumented in `weights-and-thresholds.md` before
+this pass despite existing since the mood-profile system shipped — added
+as a new table, a real gap this doc's own "keep it up to date" mandate
+exists to prevent, not one specific to today's change.
+
+**`onset_fit` recommender weight: `0.7` -> `1.0`.** LLM tuning
+recommendation from the `favorites/b` session ("onset events strongly
+correlate with genre transitions"), owner-reviewed and agreed. Onset
+density (onset events/sec) is a real, measurable acoustic property that
+cleanly separates e.g. tech house's dense hi-hat pattern from deep
+house's sparser one, without `centroid_fit`'s known formula-mismatch
+caveat (see "House-Family Consolidation" below). Flipped two existing
+regression tests that had specific numeric inputs calibrated against the
+old weight (`test_recommender_prefers_deep_house_over_psytrance_at_120_
+bpm`'s `onset_count`, `_make_trust_test_stub`'s `onset_count` — the
+latter's own literal-mu-average intent was already slightly wrong before
+today, since `onset_count` isn't `onset_density` itself but accumulates
+across the fixture's 6 samples over the fit's rolling window; the old
+`onset_fit` weight (0.7) was too small to expose that pre-existing
+mismatch, 1.0 was not). Both re-tuned empirically to restore their
+original intent (tempo_fit dominance; a small non-trivial margin) under
+the new weight, documented inline with the specific numbers. `_RECOMMENDER_
+VERSION` -> `1.0.0-rc.5`.
+
+**`hyphy` tightened and disabled.** Same session's real data: the
+recommender picked `hyphy` for real hip-hop tracks (987x) that should
+land on `rap_rnb` — the alias map already routes "Hip-Hop"/"hip hop" to
+`rap_rnb` correctly, so this was a live-scoring problem, not a genre-tag
+mapping one. Owner: "there is no hyphy in the library afiak. yet" — a
+different kind of signal than a tag-vs-recommender disagreement (which the
+owner has separately asked to defer to the recommender's judgment on, see
+below): zero known validated hyphy/trap examples means every hyphy pick in
+that data was very likely a false positive by construction, not a
+judgment call to trust either way. `bpm_prior_sigma` 0.20 -> 0.15 and
+`spectral_centroid_sigma` 600 Hz (wide tier) -> 400 Hz (medium, the
+dataclass default) — not closing a BPM overlap gap (100-118 was already
+adjacent to, not overlapping, `house`'s 118-126 and `rap_rnb`'s 70-100),
+but sharpening discrimination within the band; the wide centroid tier was
+never re-justified for hyphy the way it was for house's genuinely diverse
+library content, so defaulting to medium removes it as a low-resistance
+catch-all on that axis. `enabled=False` (still directly resolvable via
+`get_profile('hyphy')`; `enabled_profiles()` excludes it), same disable-
+not-delete pattern used for `electronic`/`generic` before `generic`'s
+later full elimination. Owner: "we will be keeping the hyphy/trap genre in
+the long term.. and they should remain a single named pair 'hyphy/trap'"
+— a pause pending real library material, not a removal.
+
+**Standing policy, noted the same session (not itself a code change):**
+owner has decided to trust the recommender's judgment over the library's
+own genre tags for now ("i think it should be pretty dialed in") and
+plans to edit the library's tags to better match the system's expectations
+instead of only tuning the system to match the tags — the inverse of this
+whole investigation's working assumption up to this point. Any future
+suggestion to modify recommender weights/profile values must flag this
+policy and be carefully considered before acting on a tag-vs-recommender
+confusion count alone. Saved as agent memory
+(`feedback_trust_recommender_over_library_tags.md`); does not apply to
+detector/director changes with their own independent evidence base (like
+this entry's `drop_score` fix), which came from a direct listening
+observation, not a tag-confusion count.
+
+**Verified:** full main-repo suite green (1619 passed), `ruff`/`bandit`
+clean on every touched file (two pre-existing, unrelated findings
+confirmed outside the diff ranges via `git diff --unified=0`). New tests:
+`test_drop_score_bass_gated_reweight_caps_a_bass_free_breakdown`
+(`test_beat_tracker_v2.py`), `test_hyphy_disabled_and_tightened_pending_
+real_library_material` (`test_audio_profile_deep_house_and_disable.py`);
+two existing tests recalibrated for the `onset_fit` bump (see above), one
+(`test_default_enabled_true_for_profiles_that_dont_set_it`) updated to
+replace an already-stale `'generic'` reference (eliminated entirely in an
+earlier pass, so no longer meaningful there) with `'hyphy'`.
+
+**Not done this pass, explicitly deferred:** `_V2_COHERENCE_WINDOW`
+(`32 -> 40`, an LLM tuning suggestion tied to phase-lock confidence
+smoothing, not tempo-value accuracy despite being pitched that way) --
+agent's assessment was skeptical of the causal link claimed; owner agreed
+to hold and is considering a proper v1-vs-v3 (or v2-vs-v3) A/B test given
+"I see problems," which would be a more direct way to investigate engine-
+level behavioral differences than tweaking one detector constant on a
+plausible-sounding but unverified LLM rationale.
 
 ---
 

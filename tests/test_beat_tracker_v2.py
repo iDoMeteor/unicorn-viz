@@ -692,3 +692,47 @@ def test_flux_norm_rescoped_excludes_bass_flux() -> None:
         t += dt
 
     assert bt.spectral_flux_smooth == pytest.approx(0.0, abs=1e-6)
+
+
+def test_drop_score_bass_gated_reweight_caps_a_bass_free_breakdown() -> None:
+    """2026-08-10: real session finding (favorites/b) -- a breakdown that
+    was just piano chords + vocals (zero drums/bass) read drop_score=0.54
+    under the old weights, clearing every shipped mood profile's
+    drop_energy_threshold/drop_timeout_score_floor at the time (raver's
+    was 0.46). The reweight (slope_norm/flux_norm cut, band_blend/
+    bass_flux_norm raised to 0.65 combined) makes bass presence
+    load-bearing.
+
+    Reproduces the actual shape of the incident, not just a cold-start
+    zero-bass tracker: warm up with real bass so the per-band adaptive
+    normalizer (beat_grid._norm) establishes a genuine "bass is normally
+    present" baseline, matching a real track that had bass before the
+    breakdown -- a tracker that has *never* seen bass reads its own
+    silence as neutral (z-score ~0, band_blend ~0.5), which would
+    understate this term and give a falsely reassuring result. Then drop
+    to zero bass with loud, rising, transient mid/treble content (the
+    piano+vocals stand-in) and confirm drop_score lands comfortably below
+    every rebooted mood-profile floor (lowest is raver's 0.60)."""
+    dt = 1.0 / 60.0
+    bt = BeatTracker({})
+    t = 0.0
+    while t < 5.0:
+        bt.update(
+            dt,
+            SimpleNamespace(bass=1.0, mid=0.6, treble=0.5, spectral_flux=0.3, bass_flux=0.3),
+            onsets=None, t=t,
+        )
+        t += dt
+    breakdown_start = t
+    while t < breakdown_start + 3.0:
+        bt.update(
+            dt,
+            SimpleNamespace(bass=0.0, mid=1.0, treble=1.0, spectral_flux=3.0, bass_flux=0.0),
+            onsets=None, t=t,
+        )
+        t += dt
+
+    assert bt.drop_score < 0.50, (
+        f'drop_score={bt.drop_score:.3f} during a bass-free breakdown -- '
+        'should sit well under every rebooted mood-profile floor (>= 0.60)'
+    )

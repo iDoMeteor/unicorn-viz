@@ -60,13 +60,19 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
     assert 'electronic' in enabled   # revived as 'Dance' 2026-08-10
+    assert 'hyphy' not in enabled   # disabled 2026-08-10, see docs/adr/vj-system.md
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
 
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     """Every profile except the explicitly-disabled ones should default to
-    enabled=True without having to set it themselves."""
-    _disabled = {'generic'}
+    enabled=True without having to set it themselves.
+
+    'generic' is gone entirely now (eliminated, not merely disabled -- see
+    test_generic_uk_garage_breaks_eliminated_entirely above), so it's no
+    longer in this set; 'hyphy' replaced it 2026-08-10 (disabled pending
+    real trap/hyphy library material -- see docs/adr/vj-system.md)."""
+    _disabled = {'hyphy'}
     for key, profile in PROFILES.items():
         if key in _disabled:
             continue
@@ -204,6 +210,32 @@ def test_hyphy_chillstep_similarity_improved_and_stays_bounded() -> None:
     chillstep = get_profile('chillstep')
     sim = _cosine_sim(hyphy.expected_bands, chillstep.expected_bands)
     assert sim < 0.975  # was 0.9788 before the scoped regeneration
+
+
+def test_hyphy_disabled_and_tightened_pending_real_library_material() -> None:
+    """2026-08-10: a real 3-hour session found the recommender picking
+    hyphy for real hip-hop tracks (987x) that should land on rap_rnb, and
+    there are no known hyphy/trap tracks in the library to validate
+    against at all -- so every hyphy pick in that data was very likely a
+    false positive by construction. Disabled (still directly resolvable,
+    same disable-not-delete pattern already used for 'electronic'/
+    'generic' before generic's later full elimination) and tightened in
+    the same pass: bpm_prior_sigma 0.20 -> 0.15, spectral_centroid_sigma
+    600 (wide tier) -> 400 (medium, the dataclass default) -- 'wide' was
+    never re-justified for hyphy the way it was for house's genuinely
+    diverse library content. See docs/adr/vj-system.md."""
+    hyphy = get_profile('hyphy')
+    assert hyphy.enabled is False
+    assert hyphy.name == 'Hyphy / Trap'
+    assert 'hyphy' not in enabled_profiles()
+    assert 'hyphy' in PROFILES   # still directly resolvable, not eliminated
+    assert hyphy.bpm_prior_sigma == 0.15
+    assert hyphy.spectral_centroid_sigma == 400.0
+    # Band itself untouched -- tightening is about discrimination sharpness
+    # within the band, not closing an overlap gap (100-118 was already
+    # adjacent to house's 118-126 and rap_rnb's 70-100, not overlapping).
+    assert hyphy.bpm_hint_min == 100.0
+    assert hyphy.bpm_hint_max == 118.0
 
 
 # ---- mu-in-hint drift canary (2026-08-10) -------------------------------

@@ -445,13 +445,22 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     scores psytrance higher despite the tempo miss (verified directly while
     diagnosing the fix, both before and after the centroid_fit reweight);
     with the reverted 0.08 floor (i.e. each profile's own authored sigma --
-    0.16 for psytrance) tempo_fit's now-real penalty flips the outcome."""
+    0.16 for psytrance) tempo_fit's now-real penalty flips the outcome.
+
+    2026-08-10: onset_count 1.6 -> 1.4 -- onset_fit's weight bumped 0.7 ->
+    1.0 that day (owner-agreed LLM tuning recommendation) made the old
+    1.6 (onset_density ~3.84, close to psytrance's onset_density_mu=4.0
+    vs. deep_house's 2.0) decisive enough on its own to flip the winner
+    back to psytrance regardless of tempo_fit. 1.4 keeps the same
+    partway-toward-psytrance intent while leaving room for tempo_fit's
+    penalty to still be the deciding term, which is what this test is
+    actually about."""
     import unicornviz.audio.profiles as profiles_mod
     restricted = {k: profiles_mod.PROFILES[k] for k in ('psytrance', 'deep_house')}
     monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
     monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
 
-    stub = _make_full_reco_stub(bpm=120.0, centroid=2350.0, zcr=0.085, onset_count=1.6)
+    stub = _make_full_reco_stub(bpm=120.0, centroid=2350.0, zcr=0.085, onset_count=1.4)
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
@@ -566,24 +575,37 @@ def test_lock_rate_mean_conf_mean_dconf_not_in_default_weights() -> None:
 
 def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleNamespace:
     """Shared setup for the two detector_trust confirmation tests below.
-    Restricted to house/deep_house with bpm/centroid/zcr/onset set to the
+    Restricted to house/deep_house with bpm/centroid/zcr set to the
     midpoint between the two profiles' own mus -- close enough to produce a
-    real, non-trivial margin (0.1554, calibrated empirically against the
+    real, non-trivial margin (~0.157, calibrated empirically against the
     2026-08-09 spectral_centroid_mu recalibration -- see profiles.py's field
     comment) rather than a trivial 0.0 or 1.0 that wouldn't distinguish the
     trust-scaling effect. Current profile is 'deep_house' so the winner
     ('house') is a genuine contest against a different candidate, not itself.
     margin_cfg=0.08 leaves real headroom on both sides: low trust (~0.13)
-    needs an effective margin of ~0.62, comfortably above 0.1554; high trust
-    (~0.96) needs ~0.083, comfortably below it."""
+    needs an effective margin well above ~0.157; high trust (~0.96) needs
+    an effective margin comfortably below it.
+
+    onset_count=1.9 (2026-08-10, was the literal mu average, 2.25) --
+    onset_count isn't onset_density itself, it accumulates across the
+    stub's 6 samples over the fit's rolling window, so the true onset
+    density landing at the fit is a multiple of onset_count, not equal to
+    it; the literal mu average landed the actual fit input far from
+    either profile's onset_density_mu, which the 2026-08-09 onset_fit
+    weight (0.7) was too small to expose but the 2026-08-10 bump to 1.0
+    (owner-agreed LLM tuning recommendation) was not -- it flipped the
+    winner to deep_house outright. Re-tuned empirically (not re-derived
+    analytically -- the accumulation window's exact effective duration
+    isn't a clean closed form worth chasing) to restore both this
+    fixture's own stated intent (a small, real, non-trivial margin) and
+    the original winner/confirmation behavior."""
     import unicornviz.audio.profiles as profiles_mod
     h = profiles_mod.PROFILES['house']
     dh = profiles_mod.PROFILES['deep_house']
     mid_bpm = (h.bpm_prior_mu + dh.bpm_prior_mu) / 2
     mid_centroid = (h.spectral_centroid_mu + dh.spectral_centroid_mu) / 2
     mid_zcr = (h.zcr_mu + dh.zcr_mu) / 2
-    mid_onset = (h.onset_density_mu + dh.onset_density_mu) / 2
-    stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=mid_onset)
+    stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=1.9)
     stub._app._audio_manager._profile_key = 'deep_house'
     stub._profile_auto_reco_score_margin = 0.08
     stub._profile_auto_reco_confirm_wins = 1

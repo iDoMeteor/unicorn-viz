@@ -857,6 +857,19 @@ PROFILES: Dict[str, AudioProfile] = {
     # hyphy going forward.
     "hyphy": AudioProfile(
         name="Hyphy / Trap",
+        # 2026-08-10: disabled -- a real 3-hour session (favorites/b) found
+        # the recommender picking hyphy for real hip-hop tracks (987x) that
+        # should land on rap_rnb, and owner confirms there are no known
+        # hyphy/trap tracks in the library to validate against at all, so
+        # every hyphy pick in that data was very likely a false positive by
+        # construction. Tightened (bpm_prior_sigma, spectral_centroid_sigma
+        # below) and disabled in the same pass, same disable-not-delete
+        # pattern used for uk_garage/breaks/generic before they were fully
+        # eliminated -- re-enable once real trap/hyphy material exists to
+        # validate against. Owner: "we will be keeping the hyphy/trap genre
+        # in the long term.. and they should remain a single named pair
+        # 'hyphy/trap'" -- this is a pause, not a removal.
+        enabled=False,
         description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 100-118 BPM",
         bass_min=20.0,
         bass_max=350.0,
@@ -878,11 +891,27 @@ PROFILES: Dict[str, AudioProfile] = {
         # 2026-08-10: band widened 90-110 -> 100-118 (owner call, house-
         # family-style consolidation), mu recentered to the new band.
         bpm_prior_mu=109.0,
-        bpm_prior_sigma=0.20,
+        # 2026-08-10: 0.20 -> 0.15, tightened alongside the disable above --
+        # the BPM band itself (100-118) is already adjacent to (not
+        # overlapping) house's 118-126 and rap_rnb's 70-100, so this isn't
+        # closing an overlap gap; it's making the recommender's tempo_fit
+        # term discriminate more sharply within hyphy's own band rather
+        # than treating a wide swath of it as equally plausible, so it's
+        # less likely to win on a track whose *detected* BPM only loosely
+        # lands in-band (relevant given the already-documented rap_rnb/
+        # hip-hop tactus-fold risk -- see docs/adr/vj-system.md -- a track
+        # whose true tempo folds into this band should have to fit it
+        # convincingly, not just nominally).
+        bpm_prior_sigma=0.15,
         bpm_hint_min=100.0,
         bpm_hint_max=118.0,
         spectral_centroid_mu=2400.0,
-        spectral_centroid_sigma=600.0,
+        # 2026-08-10: 600.0 (wide tier) -> 400.0 (medium, the dataclass
+        # default tier) -- wide was never re-justified for hyphy the way it
+        # was for house's genuinely diverse library content; with zero
+        # validated hyphy examples, "wide" just meant "forgiving," letting
+        # it act as a low-resistance catch-all on the centroid axis.
+        spectral_centroid_sigma=400.0,
         zcr_mu=0.068,
         zcr_sigma=0.028,
         onset_density_mu=2.5,
