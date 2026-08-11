@@ -719,6 +719,20 @@ def test_format_recommender_accuracy_block_no_tagged_rows() -> None:
     assert any('No tagged rows' in line for line in block)
 
 
+def test_format_recommender_accuracy_block_always_includes_tag_reliability_caveat() -> None:
+    """2026-08-11: owner request -- readers of this block (human or a future
+    LLM summarizing scorecards) should never see an accuracy_pct without the
+    caveat that track_genre is an uncurated ID3 tag, not a professionally
+    tagged ground truth, and has zero live influence on the recommender.
+    Present whether or not any rows are tagged."""
+    empty_block = _format_recommender_accuracy_block(_build_recommender_accuracy([]))
+    assert any('uncurated ID3 tag' in line for line in empty_block)
+
+    tagged_stats = _build_recommender_accuracy([_make_reco_row('Deep House', 'deep_house')])
+    tagged_block = _format_recommender_accuracy_block(tagged_stats)
+    assert any('uncurated ID3 tag' in line for line in tagged_block)
+
+
 def test_format_recommender_accuracy_block_renders_accuracy_and_confusions() -> None:
     rows = [
         _make_reco_row('Deep House', 'deep_house'),
