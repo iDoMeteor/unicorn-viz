@@ -393,6 +393,9 @@ class SecondaryGLWindow:
         # resolution and have the linear-filtered quad upscale them.
         self._tex_width = 0
         self._tex_height = 0
+        # Shape of the last frame rejected as too short, so a resize that
+        # produces a run of identical mismatches only warns once.
+        self._short_frame_shape: tuple[int, int, int] | None = None
 
     @property
     def window_id(self) -> int:
@@ -497,6 +500,21 @@ class SecondaryGLWindow:
         """
         if self.window is None or self._gl is None:
             return False
+        # glTexSubImage2D is handed a raw pointer to ``raw_rgba`` and told to
+        # read width*height*4 bytes from it.  The driver does not know how big
+        # the buffer actually is, so a caller whose declared size outruns its
+        # raster reads past the end of the object and segfaults inside Mesa --
+        # not an exception, a dead process.  That is exactly what happened on
+        # 2026-08-11: media-01 publishes its raster and its dimensions as two
+        # independent attributes, so a window resize moved the dimensions
+        # while the previous (smaller) frame was still the current raster.
+        #
+        # Every caller here renders on its own thread and presents on the main
+        # one, so this is a shared hazard rather than one drop-in's mistake.
+        # Refuse the upload instead: the producer catches up within a frame or
+        # two and the deck resumes on its own.
+        if not self._frame_fits(raw_rgba, width, height):
+            return False
         prev_window = sdl2.SDL_GL_GetCurrentWindow()
         prev_context = sdl2.SDL_GL_GetCurrentContext()
         ok = False
@@ -528,6 +546,40 @@ class SecondaryGLWindow:
         finally:
             self._restore(prev_window, prev_context)
         return ok
+
+    def _frame_fits(self, raw_rgba: object, width: int, height: int) -> bool:
+        """Return True when ``raw_rgba`` holds at least width*height*4 bytes.
+
+        Logs the first rejection of a given shape at WARNING and any repeat at
+        DEBUG: a resize can produce a short burst of mismatched frames while
+        the producer thread catches up, and warning on every one of them
+        during a drag would bury the first occurrence.
+        """
+        w, h = int(width), int(height)
+        if w <= 0 or h <= 0:
+            log.warning('SecondaryGLWindow: refusing present of %dx%d frame', w, h)
+            return False
+        try:
+            available = memoryview(raw_rgba).nbytes  # type: ignore[arg-type]
+        except TypeError:
+            log.warning(
+                'SecondaryGLWindow: refusing present of a non-buffer frame (%s)',
+                type(raw_rgba).__name__,
+            )
+            return False
+        needed = w * h * 4
+        if available >= needed:
+            self._short_frame_shape = None
+            return True
+        shape = (w, h, available)
+        emit = log.debug if shape == self._short_frame_shape else log.warning
+        self._short_frame_shape = shape
+        emit(
+            'SecondaryGLWindow: refusing present — %dx%d needs %d bytes but the '
+            'frame holds %d; the producer thread has not caught up with a resize',
+            w, h, needed, available,
+        )
+        return False
 
     def _resize_texture(self, width: int, height: int) -> None:
         self._tex_width = max(1, width)

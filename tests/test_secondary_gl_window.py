@@ -22,6 +22,8 @@ be faked below the ctypes boundary without a real context.
 """
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from unicornviz import secondary_gl_window as sgw
@@ -333,6 +335,63 @@ def test_present_uploads_draws_and_swaps(fakes) -> None:
 def test_present_returns_false_when_never_created(fakes) -> None:
     win = _make()
     assert win.present(b'\x00', 640, 480) is False
+
+
+def test_present_refuses_a_frame_shorter_than_its_declared_size(fakes) -> None:
+    """Regression for the 2026-08-11 SIGSEGV inside Mesa.
+
+    glTexSubImage2D reads width*height*4 bytes from a raw pointer with no
+    idea how large the object is.  Callers rasterize on their own thread and
+    present on the main one, so a resize can move the declared dimensions
+    while the previous, smaller frame is still current.  Uploading that
+    combination reads off the end of the buffer and kills the process.
+    """
+    win = _make()
+    win.create()
+    short = b'\x00' * (640 * 480 * 4)  # last frame, at the old size
+    ok = win.present(short, 800, 600)  # dimensions already moved
+    assert ok is False
+    assert win._gl.tex_sub_image_calls == []  # noqa: SLF001
+    assert win._gl.draw_calls == 0  # noqa: SLF001
+
+
+def test_present_accepts_a_frame_larger_than_its_declared_size(fakes) -> None:
+    """Only a short buffer is dangerous; extra trailing bytes are ignored."""
+    win = _make()
+    win.create()
+    raw = b'\x00' * (640 * 480 * 4 + 4096)
+    assert win.present(raw, 640, 480) is True
+
+
+def test_present_refuses_a_zero_sized_frame(fakes) -> None:
+    win = _make()
+    win.create()
+    assert win.present(b'', 0, 0) is False
+    assert win._gl.draw_calls == 0  # noqa: SLF001
+
+
+def test_repeated_identical_short_frames_warn_only_once(
+    fakes, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A drag produces a run of identical mismatches; warn on the first only."""
+    win = _make()
+    win.create()
+    short = b'\x00' * (640 * 480 * 4)
+    with caplog.at_level(logging.DEBUG, logger='unicornviz.secondary_gl_window'):
+        for _ in range(5):
+            win.present(short, 800, 600)
+    levels = [r.levelno for r in caplog.records]
+    assert levels == [logging.WARNING] + [logging.DEBUG] * 4
+
+
+def test_a_good_frame_rearms_the_short_frame_warning(fakes) -> None:
+    """After recovery, a fresh mismatch must warn again rather than stay quiet."""
+    win = _make()
+    win.create()
+    win.present(b'\x00' * (640 * 480 * 4), 800, 600)
+    assert win._short_frame_shape is not None  # noqa: SLF001
+    win.present(b'\x00' * (640 * 480 * 4), 640, 480)
+    assert win._short_frame_shape is None  # noqa: SLF001
 
 
 def test_present_restores_previous_context_on_success(fakes) -> None:
