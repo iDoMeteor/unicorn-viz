@@ -254,6 +254,7 @@ profile would follow the identical pattern. Not designed further here,
 flagged so it isn't lost.
 
 **Open questions for review:**
+
 - Is `bass_flux_norm * midtreb_activity_fast` (both required, multiplied)
   too strict? A real impact might have one lead the other by a frame or
   two depending on production style — may need a short coincidence
@@ -351,6 +352,84 @@ some_absolute_min)`) so a genuinely weak drop can still exit early. Not
 decided here — exactly the kind of trade-off this doc exists to surface
 for review, not resolve unilaterally.
 
+### 4d. What dj-mixer-01's offline analysis has that's worth stealing
+
+Full pass through `drop-ins/dj-mixer-01`'s offline analysis code
+(`structure.py`, `key_detect.py`, `bpm.py`, `deck.py`, `stems.py`, `dsp.py`)
+looking specifically for anything cheap enough for a real-time, causal
+(no-lookahead) detector inside the 16.67ms/frame budget. Full findings
+kept out of this doc for length; summary here, by real-time feasibility:
+
+**Directly portable, no redesign needed:**
+
+- **`dsp.py`'s `_StatefulBiquad`/`ThreeBandEQ`** (the mixer's own live
+  3-band EQ) is the *same Butterworth filter family* `structure.py`'s
+  offline band-balance feature uses, already running per-sample in
+  real-time production code today. Worth knowing for any future revisit
+  of how `unicornviz/audio/analyzer.py` computes band energy — there's a
+  proven-real-time streaming band-splitter sitting in this codebase
+  already, not something that would need inventing.
+- **`bpm.py`'s log2-symmetric Gaussian tempo prior** (centered on a
+  canonical BPM, used to resolve half/double-time ambiguity in its
+  offline autocorrelation) is architecturally the same idea auto-vj-01's
+  own `bpm_prior_mu`/`bpm_prior_sigma` already implements live —
+  independent convergent validation that this is the right approach to
+  the octave-fold problem, not a new technique to adopt (see the earlier
+  "Squabble Up" live tactus-fold discussion this session, which is
+  exactly this failure mode).
+
+**Best new candidate for the trigger signal (4a) — stronger than what's
+drafted there:** `deck.py`'s `structural_cues()` (a phrase-boundary
+step-detector, separate from and simpler than `structure.py`'s full
+segmenter) compares mean RMS energy of a trailing ~8-bar window against
+the ~8-bar window before it, and flags a boundary when the step exceeds a
+fixed magnitude gate (`> 0.30` peak-normalized for a strong jump, `>
+0.12` for "real, not drift"; symmetric `< -0.12` gate for a breakdown
+step down). **This needs only ~16 bars of trailing history and zero
+future lookahead** — closer to genuinely causal than anything else
+reviewed in that codebase, and a simpler, more directly measurable idea
+than section 4a's multiplicative coincidence draft. Worth evaluating as
+an alternative or complement to 4a's `impact_novelty` formula: a
+"phrase-step energy jump" test might catch real impacts more robustly
+than a coincidence-of-three-factors test, or the two could combine (step
+detector for *when*, coincidence factors for *how confident*).
+
+**Adaptable with a rolling-window substitute, not free:**
+
+- `structure.py`'s core energy normalizer is a **rank transform over the
+  whole track** (`argsort(argsort(bar_energies))`), which is what makes
+  its PEAK/FALL thresholds (`>= 0.66`, `<= 0.40` rank) meaningful — a live
+  version needs a causal proxy (trailing-window percentile, or an online
+  quantile estimator like the P² algorithm) instead of true whole-track
+  rank. Relevant beyond just this feature: this session's `bass_det` gain
+  fix (section 1) used a *fixed* gain empirically tuned against one
+  session's distribution; an online-percentile approach would adapt
+  per-track/per-set automatically instead of relying on one grounded-but-
+  static constant. Not proposed as an immediate change, flagged as a
+  fancier alternative worth knowing about.
+- Chroma extraction (pitch-class FFT folding, `structure.py`/
+  `key_detect.py`) is cheap per-block, but chroma **self-similarity**
+  ("this section repeats, therefore it's a chorus") is whole-track by
+  construction — a live analog could self-match against a growing buffer
+  of *past* chroma only, but can never do the forward-looking "this is
+  the last chorus" trick. The mixer's own code says as much
+  (`structure.py`'s docstring: "it can notice a drop only after the
+  drop... never know that *this* chorus is the last one").
+
+**Offline-only, no real-time path exists:**
+
+- **Stem separation** (`stems.py`, shells out to Demucs — a neural net,
+  whole-file, disk-cached) has no cheap live equivalent. Confirms the
+  existing design choice: `vocal_hnr`/`vocal_fmr` (spectral heuristics,
+  not real stem access) exist specifically *because* stems aren't
+  available live — this isn't a gap to close, it's already the right
+  trade-off.
+- `structure.py`'s merge-short-runs and intro/outro positional passes are
+  whole-sequence operations; the positional pass's own docstring states
+  outright that final-chorus/outro labeling is offline-only by
+  construction — nothing about a track's audio distinguishes "the last
+  chorus" from an earlier one without knowing where the track ends.
+
 ---
 
 ## 5. What's simulated so far, for context
@@ -383,6 +462,7 @@ from-scratch redesign — that decision point isn't reached yet.
 ## 6. Summary for reviewers
 
 **Decided, low-risk, could land independently of the rest:**
+
 - Revert `band_blend` weights to `0.45/0.30/0.25` (both v1 and v2/v3
   copies) — mechanical, well-documented history, no new design needed.
   **Not yet implemented** — next up.
@@ -393,6 +473,7 @@ from-scratch redesign — that decision point isn't reached yet.
   `_DETECTOR_VERSION` `1.0.0-rc.8`).
 
 **Decided in principle, needs building + simulating before shipping:**
+
 - Split `drop_score` into two independently-computed signals: a
   novelty/coincidence-based trigger and a state-based sustain score.
 - Sustain score needs a genuinely non-decaying-the-wrong-way bass-level
@@ -401,12 +482,16 @@ from-scratch redesign — that decision point isn't reached yet.
   factor needs, so it's the one piece both halves depend on.
 
 **Genuinely open, wants your (and reviewers') judgment:**
-- Exact shape/gain for the detector's own band channel (section 1).
+
+- ~~Exact shape/gain for the detector's own band channel (section 1).~~
+  Shipped — see section 1.
 - Whether `band_blend`'s combination should become AND-like (`min()`/
   product) rather than staying a weighted sum, independent of which
   weights it uses (section 4c).
 - The trigger formula draft in 4a — multiplicative coincidence window,
-  whether "instability" needs its own separate term.
+  whether "instability" needs its own separate term, **and whether
+  `deck.py`'s `structural_cues()` phrase-step detector (section 4d) is a
+  simpler, stronger foundation than the coincidence draft.**
 - Whether the fizzle check needs an absolute floor alongside the new
   relative check (section 4c).
 - Per-mood/genre slope-influence window (explicitly deferred, not
