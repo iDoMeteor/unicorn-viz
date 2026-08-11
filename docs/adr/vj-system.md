@@ -405,6 +405,55 @@ this one's `1.0.0-rc.38`.
 
 **Verified:** full main-repo suite green (1621 passed), `ruff` clean.
 
+### Addendum (2026-08-11): `dconf_pending` added, and a correction
+
+Checking the overnight session's real data the next day surfaced a
+finding that briefly looked like the drop/climax ladder was badly
+miscalibrated: `drop_score` at `drop_fire` events (412 of them) averaged
+`0.679`, with 266/412 (65%) reading *below* their own mood profile's main
+threshold. Root cause traced to `_fire_drop()`: drops wait for the next
+downbeat after being scheduled (`_schedule_drop()` →
+`schedule_for_next_downbeat(self._fire_drop)`), and `drop_score` — a
+volatile, fast-reacting signal especially after the bass-gated reweight —
+can decay substantially in that window. The corpus captures `drop_score`
+*at fire time* (post-decay), not the value that actually satisfied the
+gate at *schedule time*.
+
+**Correction, made before this was reported as a real problem:** the
+corpus already had `score_pending` (the actual gating value) — an
+earlier pass at this analysis missed checking for it. Re-run against
+`score_pending` instead: mean `0.728`, only 2/412 below their profile's
+threshold. The ladder is working as designed; zero `drop_cancelled`
+events in the same session's decision log independently confirms the
+re-validation gate never once rejected a scheduled drop. The apparent
+"65% below threshold" was an artifact of comparing the wrong (decayed)
+value, not a real calibration problem.
+
+What *was* a real, if smaller, gap: `dconf_pending` (the downbeat-
+confidence half of the same re-validation gate,
+`self._drop_pending_dconf`) was tracked internally and already reached
+the decision log's `drop_cancelled` mark, but never the training corpus's
+`drop_fire` keyframe. Added alongside the already-present `score_pending`
+so a future session can verify both halves of the gate from corpus data
+alone. `auto-vj-01` → `1.0.0-rc.39`. New test:
+`test_fire_drop_corpus_keyframe_includes_pending_score_and_dconf`.
+
+Separately, the same overnight-data review found `confidence` sat at
+exactly `0.90` for 99.5% of the session's heartbeat rows — not because
+the ACF/phase machinery converged well (`phase_confidence` averaged only
+`0.347`, genuinely weak), but because `mixer_bpm` was fresh on literally
+every row, continuously re-priming the tracker's confidence to its
+`_primed_confidence` floor (`0.9`, refreshed roughly every 8s by the
+recommender's own eval cycle against a 10s hold). Whenever dj-mixer-01 is
+the audio source with a live BPM hint, the whole night's `_V2_PHASE_TOL`/
+confidence-blend tuning is largely invisible in the `confidence` value
+actually used for lock gating and the HUD — it would only show up on
+Spotify/media-player sessions, or when the mixer's hint goes stale. Not
+acted on this pass; noted for whoever next interprets a mixer-sourced
+session's confidence numbers.
+
+**Verified:** full main-repo suite green (1622 passed), `ruff` clean.
+
 ---
 
 ## Mixer Track Meta Reaches the Training Corpus (2026-08-10)
@@ -558,7 +607,7 @@ Previously `house` (120-128) and `tech_house` (122-130) shared 6 of
 `house`'s old range. New bands, owner's explicit numbers:
 
 | Profile | Old hint | New hint | `bpm_prior_mu` | `bpm_prior_sigma` |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `deep_house` | 118-124 | **112-118** | 121.0 -> 115.0 | 0.30 -> 0.10 |
 | `house` | 120-128 | **118-126** | 124.0 -> 122.0 | 0.35 -> 0.10 |
 | `tech_house` | 122-130 | **127-134** | 126.0 -> 130.5 | 0.16 -> 0.09 |
@@ -2208,6 +2257,7 @@ change, per-frame corpus coverage of `AudioData`'s 16 slots was
 inconsistent across the three call sites that build a row
 (`_record_live_training_row()`, `_record_sequence_heartbeat()`,
 `_record_sequence_keyframe()`):
+
 - `bass_flux`/`mid_flux`/`vocal_hnr`/`vocal_fmr` reached **no** per-frame
   corpus row at all (`vocal_hnr`/`vocal_fmr` only reached the much coarser
   `profile_recommendation` event, sampled once per recommender eval cycle
@@ -2230,6 +2280,7 @@ the entry above, applied to a different pair of lists the same day.
 `_mean_field()` (promoted from a local closure that used to live only
 inside `_build_recommender_payload`, computing `mean_zcr`/`mean_centroid`)
 is now the shared helper for every mean-of-a-corpus-field computation:
+
 - `_build_detector_payload()` gains a `band_signal` block
   (`mean_bass_n`/`mean_mid_n`/`mean_treble_n`, `mean_bass_flux`/
   `mean_mid_flux`, `raw_beat_rate_pct` — the real per-frame onset-flag
@@ -2575,6 +2626,7 @@ named, profile-scoped constants** (`_phrase_under_over_hold_mult`,
 `_phrase_external_arm_mult`). Owner: "hidden magic is no good... let's log,
 track & analyze [these], and extract them into tweakables." Two value
 changes land in the same commit:
+
 - `phrase_boundary_bonus_mult`: 0.25 -> 0.3 (LLM tuning recommendation from
   the `library/a` training session, applied as-is).
 - Sectionality (`phrase_external_match_mult`/`phrase_external_arm_mult`):
@@ -3523,6 +3575,7 @@ climax list, so `goto_random_effect`'s tag filter collapsed to the same ~5
 psychedelic-tagged effects whenever a drop, impact, or climax fired.
 
 **Fix (two parts, both landed):**
+
 1. All 44 rotation effects were given one-or-more **mood tags** — `chill`,
    `groovy`, `energetic`, `intense`, `hard` — layered on top of their existing
    category tags. See `docs/planning/vj-mood-tag-rollout.md` for the full

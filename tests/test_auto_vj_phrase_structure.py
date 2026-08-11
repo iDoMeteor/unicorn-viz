@@ -64,6 +64,9 @@ class _FakeVjApi:
     def get_section(self, exclude: str = '') -> dict | None:
         return self.section_hint
 
+    def state(self) -> SimpleNamespace:
+        return SimpleNamespace(audio_source='', playlist_mode='auto')
+
 
 _PHRASE_DEFAULTS = dict(
     _bars_since_track_start=0,
@@ -587,6 +590,35 @@ def test_fire_drop_cancels_on_revalidation_failure_without_touching_cycle_count(
     assert inst._mode == 'BUILD'  # unchanged
     assert inst._drop_cycle_count == 0
     assert any(action == 'drop_cancelled' for action, _ in inst._engine.calls)
+
+
+def test_fire_drop_corpus_keyframe_includes_pending_score_and_dconf() -> None:
+    """2026-08-11: score_pending was already captured on the drop_fire
+    corpus keyframe, but dconf_pending (the downbeat-confidence half of
+    the same re-validation gate) was not -- present in the decision log's
+    drop_cancelled mark the whole time, just never made it to the
+    training corpus. A real overnight session found drop_score at fire
+    time reads much lower than the score that actually satisfied the
+    gate (the drop waits for the next downbeat, and drop_score decays in
+    that window) -- score_pending/dconf_pending are what a future session
+    actually needs to verify the ladder is calibrated correctly, not the
+    post-decay drop_score alone."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_drop_controller(
+        _drop_cycle_count=0, _bars_since_phase_entry=12,
+        _drop_pending_score=0.73, _drop_pending_dconf=0.62,
+    )
+    inst._spotify_snapshot = lambda: {'available': True, 'is_playing': True}
+    inst._last_audio = SimpleNamespace(bass=0.5, mid=0.5, treble=0.5)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+
+    inst._fire_drop()
+
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] == 'drop_fire'
+    assert kwargs['score_pending'] == 0.73
+    assert kwargs['dconf_pending'] == 0.62
 
 
 # ---------------------------------------------------------------------------
