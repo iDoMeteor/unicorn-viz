@@ -53,6 +53,11 @@ AudioData slots
 ``bass``      float            Averaged low-band energy  (0–1, may exceed 1)
 ``mid``       float            Averaged mid-band energy
 ``treble``    float            Averaged high-band energy
+``bass_det``  float            Detector-facing bass level -- same pre-curve input as
+                               ``bass`` but a gain tuned for dynamic range, not visual
+                               saturation. Not consumed by effects.
+``mid_det``   float            Detector-facing mid level (currently same gain as ``mid``)
+``treble_det`` float           Detector-facing treble level (currently same gain as ``treble``)
 ``bass_n``    float            Bass  energy, independently z-score normalised to 0–1
 ``mid_n``     float            Mid   energy, independently z-score normalised to 0–1
 ``treble_n``  float            Treble energy, independently z-score normalised to 0–1
@@ -77,6 +82,7 @@ class AudioData:
     """Snapshot of audio state passed to effects each frame."""
 
     __slots__ = ("fft", "waveform", "bass", "mid", "treble",
+                 "bass_det", "mid_det", "treble_det",
                  "bass_n", "mid_n", "treble_n",
                  "beat", "bpm", "bass_flux", "mid_flux",
                  "bands", "spectral_flux",
@@ -88,6 +94,27 @@ class AudioData:
         self.bass: float = 0.0
         self.mid: float = 0.0
         self.treble: float = 0.0
+        # 2026-08-11: detector-facing counterparts of bass/mid/treble --
+        # same pre-curve (profile-weighted) input, run through
+        # unicornviz.audio.analyzer._shape() with a gain chosen for
+        # dynamic range rather than visual saturation. Added because
+        # bass/mid/treble's gains (6.6/5.8/7.2) are tuned for effects
+        # (which want to read as "alive" even when quiet) and, verified
+        # against real session data, leave *bass* specifically pegged near
+        # ceiling almost always (median 0.97-0.98 across every director
+        # mode, including BREAKDOWN) -- a signal the detector's z-score
+        # normalizer was silently compensating for. mid/treble's existing
+        # gains were checked the same way and found already well-tuned
+        # (best achievable cross-mode separation *is* their current gain),
+        # so bass_det uses a new, lower gain while mid_det/treble_det
+        # currently just mirror mid/treble's existing gains -- kept as
+        # separate fields anyway so either can be retuned independently
+        # later without another round of plumbing. Effects do not consume
+        # these; only drop-ins/auto-vj-01/beat_grid.py's z-score inputs do.
+        # See docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md.
+        self.bass_det: float = 0.0
+        self.mid_det: float = 0.0
+        self.treble_det: float = 0.0
         # Per-band running z-score normalised values.  Each band is normalised
         # independently against its own recent mean/variance so the signal
         # always spans 0–1 regardless of absolute loudness.  Useful for effects
@@ -153,6 +180,9 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
         target.treble = min(1.0, source.treble * scale)
         np.multiply(source.fft, scale, out=target.fft)
         np.clip(target.fft, 0.0, 1.0, out=target.fft)
+    target.bass_det = source.bass_det
+    target.mid_det = source.mid_det
+    target.treble_det = source.treble_det
     target.bass_n = source.bass_n
     target.mid_n = source.mid_n
     target.treble_n = source.treble_n

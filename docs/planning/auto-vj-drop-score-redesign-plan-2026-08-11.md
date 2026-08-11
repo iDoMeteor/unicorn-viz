@@ -57,22 +57,58 @@ differently, much more gently shaped) band data, computed once alongside
 the existing profile-weighted values, consumed only by
 `drop-ins/auto-vj-01/beat_grid.py`.
 
-**Open for review:** exact shape for the detector's channel. Options,
-roughest to most work:
-- **Raw, no shaping at all** (`bass_weighted` before `_shape()` is
-  applied) — simplest, but per-profile `bass_weight`/`mid_weight`/
-  `treble_weight` still apply, so it isn't purely physical either.
-- **A much gentler curve** (small `gain`, e.g. 0.5-1.0 instead of 6.6) —
-  keeps the same functional family, just stretched out so saturation
-  happens near the genuinely-loud end instead of the middle.
-- **No curve, but re-derive `gain` empirically** from real corpus data (the
-  same way this session's other constants got grounded) rather than
-  picking a number by feel.
+**Shipped (2026-08-11, same day, ahead of the rest of this plan) — owner
+asked for this specific piece "asap."** `AudioData.bass_det`/`mid_det`/
+`treble_det` (`unicornviz/effects/base.py`), computed in
+`unicornviz/audio/analyzer.py` from the same pre-curve
+(`bass_weighted`/`mid_weighted`/`treble_weighted`) input as `bass`/`mid`/
+`treble`, through the same `_shape()` function with a separately-tuned
+gain. Grounded empirically rather than picked by feel: inverted real
+`favorites/e` `bass`/`mid`/`treble` values back to their pre-`_shape()`
+input, swept candidate gains, kept whichever maximized cross-director-mode
+median separation. Result was asymmetric across bands, worth knowing:
+**`bass`'s effects gain (`6.6`) was genuinely mistuned** for this purpose
+(only `1.7pp` separation; `2.0` empirically best on this data, `6.8pp`,
+~4x better) — but **`mid` (`5.8`) and `treble` (`7.2`) were already
+optimal**, every lower gain tested gave *less* separation, not more. So
+only `bass_det`'s gain differs from its effects counterpart;
+`mid_det`/`treble_det` currently mirror `mid`/`treble` exactly (kept as
+separate fields anyway so either can move independently later).
+`drop-ins/auto-vj-01/beat_grid.py`'s `band_blend` z-score inputs
+(`bass_n`/`mid_n`/`treble_n`, both v1 and v2/v3) now read this new
+channel instead of `bass`/`mid`/`treble`; `raw_energy`/`energy_norm`
+deliberately left untouched (checked separately, already well-calibrated
+— see section 4b/4c, this is a different problem from that one).
+Effects, HUD, and live-corpus telemetry are unaffected — they still read
+the original `bass`/`mid`/`treble`, unchanged gains.
 
-Whichever is chosen, it should be checked the same way this session's
-centroid fix was: pull the real distribution (median/p10/p90 per director
-mode) for the new channel across a couple of sessions before shipping, and
-confirm BREAKDOWN and CRUISE actually separate.
+**Verified end-to-end**, not just at the raw `_shape()` step: replayed the
+full z-score pipeline (same `_norm()` formula/alpha) on the new channel
+against real `favorites/e` data. Real `bass_n` cross-director-mode median
+separation: `2.4pp → 9.0pp`. New tests:
+`tests/test_analyzer_detector_bands.py` (four tests on the new channel
+itself), `test_band_blend_reads_bass_det_not_bass`/
+`test_band_blend_falls_back_to_bass_when_bass_det_absent`
+(`tests/test_beat_tracker_v2.py`). Full suite green (1644 passed),
+`ruff`/`bandit` clean. `_DETECTOR_VERSION` → `1.0.0-rc.8`,
+`_VJ_WEIGHTS_DOC_VERSION` → `24`, core → `1.0.0-beta.85`, auto-vj-01 →
+`1.0.0-rc.44`.
+
+**Note on the "30%" question this shipped in response to:** worth being
+precise about what target is and isn't achievable on this curve family.
+A *cross-mode median* gap anywhere near 30 percentage points isn't
+reachable by any gain choice on `1-exp(-x·gain)` — the sweep found the
+*peak* achievable for bass at `~6-7pp`, regardless of gain, because every
+director mode mixes loud and quiet moments internally (a "DROP" isn't
+loud on literally every frame; kicks land periodically). That cap is a
+property of the music's own moment-to-moment texture, not a shaping
+failure — no curve fixes it, because the z-score downstream is what's
+supposed to recover mode-level discrimination from moment-level noise,
+not the curve. What the curve fix *does* achieve, and what "30%" is likely
+closer to in spirit: the raw *within-signal* percentile spread (a genuinely
+quiet moment vs. a genuinely loud one) is now large again instead of
+compressed near ceiling — that's the actual "pegging even when nearly
+empty" complaint, and it's fixed.
 
 ## 2. Where `bass_n`/`mid_n`/`treble_n` (the z-score) actually gets used
 
@@ -349,10 +385,12 @@ from-scratch redesign — that decision point isn't reached yet.
 **Decided, low-risk, could land independently of the rest:**
 - Revert `band_blend` weights to `0.45/0.30/0.25` (both v1 and v2/v3
   copies) — mechanical, well-documented history, no new design needed.
+  **Not yet implemented** — next up.
 - Fizzle/exit check becomes relative to the drop's own peak
-  (`peak * 0.9`) instead of a fixed absolute bar.
-- Detector gets its own unshaped/gently-shaped band channel, separate
-  from the effects-tuned `_shape()` curve.
+  (`peak * 0.9`) instead of a fixed absolute bar. **Not yet implemented.**
+- ~~Detector gets its own unshaped/gently-shaped band channel, separate
+  from the effects-tuned `_shape()` curve.~~ **Shipped** (section 1,
+  `_DETECTOR_VERSION` `1.0.0-rc.8`).
 
 **Decided in principle, needs building + simulating before shipping:**
 - Split `drop_score` into two independently-computed signals: a

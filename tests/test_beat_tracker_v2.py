@@ -711,6 +711,61 @@ def test_bass_flux_norm_responds_to_bass_flux() -> None:
     assert with_bass_flux.drop_score > without_bass_flux.drop_score
 
 
+def test_band_blend_reads_bass_det_not_bass() -> None:
+    """2026-08-11: band_blend's z-score inputs (bass_n/mid_n/treble_n) read
+    audio.bass_det/mid_det/treble_det, not audio.bass/mid/treble -- see
+    beat_grid.py's own comment and
+    docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md. Two
+    trackers with identical bass (so raw_energy/energy_norm match) but
+    different bass_det should diverge on drop_score, driven by band_blend."""
+    dt = 1.0 / 60.0
+    high_det = BeatTracker({})
+    low_det = BeatTracker({})
+    t = 0.0
+    # Silent warmup so the z-score baseline starts from a real "quiet"
+    # reference, matching the bass-gated-breakdown test's own methodology.
+    while t < 5.0:
+        high_det.update(dt, SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bass_det=0.02,
+                                              mid_det=0.3, treble_det=0.2, spectral_flux=0.0,
+                                              bass_flux=0.0), onsets=None, t=t)
+        low_det.update(dt, SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bass_det=0.02,
+                                             mid_det=0.3, treble_det=0.2, spectral_flux=0.0,
+                                             bass_flux=0.0), onsets=None, t=t)
+        t += dt
+    warm_start = t
+    while t < warm_start + 2.0:
+        # Identical bass (raw_energy/energy_norm match); bass_det diverges.
+        high_det.update(dt, SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bass_det=0.9,
+                                              mid_det=0.3, treble_det=0.2, spectral_flux=0.0,
+                                              bass_flux=0.0), onsets=None, t=t)
+        low_det.update(dt, SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bass_det=0.02,
+                                             mid_det=0.3, treble_det=0.2, spectral_flux=0.0,
+                                             bass_flux=0.0), onsets=None, t=t)
+        t += dt
+
+    assert high_det.energy == pytest.approx(low_det.energy, abs=1e-6), (
+        'raw_energy/energy_norm should be identical -- both trackers saw the '
+        'same bass/mid/treble, only bass_det differs'
+    )
+    assert high_det.drop_score > low_det.drop_score
+
+
+def test_band_blend_falls_back_to_bass_when_bass_det_absent() -> None:
+    """Back-compat: a stub audio object with no bass_det attribute at all
+    (e.g. every pre-existing test fixture in this file) must behave exactly
+    as before -- band_blend's z-score falls back to reading bass/mid/treble
+    directly, per beat_grid.py's `is None` fallback."""
+    dt = 1.0 / 60.0
+    bt = BeatTracker({})
+    t = 0.0
+    while t < 2.0:
+        bt.update(dt, SimpleNamespace(bass=0.6, mid=0.3, treble=0.2, spectral_flux=0.0,
+                                        bass_flux=0.0), onsets=None, t=t)
+        t += dt
+
+    assert bt.drop_score > 0.0
+
+
 def test_flux_norm_rescoped_excludes_bass_flux() -> None:
     """2026-08-09: flux_norm = spectral_flux - bass_flux (mid+treble only)
     now, to avoid double-counting bass against the new bass_flux_norm term.

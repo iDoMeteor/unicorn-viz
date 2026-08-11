@@ -36,6 +36,25 @@ _FFT_BANDS = 512
 _SMOOTHING = 0.75          # exponential smoothing coefficient
 _ASSUMED_SAMPLE_RATE = 48000
 
+# 2026-08-11: detector-facing _shape() gains -- see AudioData.bass_det's own
+# field comment (unicornviz/effects/base.py) for why these exist as a
+# separate channel from bass/mid/treble's effects-facing gains below.
+# Grounded empirically (inverted real bass/mid/treble values from a real
+# session, unicornviz/audio/profiles.py's curve unchanged, back to their
+# pre-_shape() input, then swept candidate gains for the one maximizing
+# cross-director-mode median separation): bass's current effects gain
+# (6.6) was found badly mistuned for this purpose -- only 1.7 percentage
+# points of median separation between BREAKDOWN and CRUISE -- with 2.0
+# empirically best on that data (6.8pp, ~4x better). mid (5.8) and treble
+# (7.2) were checked the same way and found ALREADY well-tuned for this --
+# every lower gain tested gave less separation, not more -- so their
+# detector-facing gains currently just mirror the effects ones rather than
+# introducing an unneeded second constant. See
+# docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md.
+_DETECTOR_BASS_GAIN = 2.0
+_DETECTOR_MID_GAIN = 5.8
+_DETECTOR_TREBLE_GAIN = 7.2
+
 # 64 log-spaced perceptual bands shared across all consumers (effects + auto-VJ).
 # Matches audio_spectrum.py exactly: 30 Hz – 16 kHz, 64 bands, raw (no visual gain).
 _PERC_N_BANDS = 64
@@ -605,6 +624,13 @@ class Analyzer:
         data.bass = self._shape(bass_weighted, gain=6.6)
         data.mid = self._shape(mid_weighted, gain=5.8)
         data.treble = self._shape(treble_weighted, gain=7.2)
+
+        # Detector-facing counterparts -- same pre-curve input, gain tuned
+        # for dynamic range rather than visual saturation. See
+        # AudioData.bass_det's field comment and _DETECTOR_BASS_GAIN above.
+        data.bass_det = self._shape(bass_weighted, gain=_DETECTOR_BASS_GAIN)
+        data.mid_det = self._shape(mid_weighted, gain=_DETECTOR_MID_GAIN)
+        data.treble_det = self._shape(treble_weighted, gain=_DETECTOR_TREBLE_GAIN)
 
         # Per-band independently z-score normalised values (0–1).
         # These track *relative change* within each band so an effect or
