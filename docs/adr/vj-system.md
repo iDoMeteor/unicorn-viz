@@ -271,6 +271,43 @@ to hold and is considering a proper v1-vs-v3 (or v2-vs-v3) A/B test given
 level behavioral differences than tweaking one detector constant on a
 plausible-sounding but unverified LLM rationale.
 
+### Addendum (same day): LLM tuning prompt fixed at the source
+
+The `_V2_COHERENCE_WINDOW` miscategorization above wasn't just a one-off
+bad call — training-kit-01's LLM tuning prompt had no mechanism to stop it
+from happening again on a future session. Fixed there directly (training-
+kit-01 0.15.4): the prompt now explicitly sorts every detector constant
+into one of three categories — tempo VALUE search/accuracy
+(`_MIN_PROFILE_PRIOR_SIGMA`, `_V2_PRIOR_SIGMA`, `_V2_RAW_DOMINANCE_RATIO`,
+`_V2_DENSITY_FAST_RATIO`, `_V2_DENSITY_SCORE_RATIO`,
+`_V2_HARMONIC_CONF_TOL`), lock STATE gating (`_BPM_LOCK_CONFIDENCE`,
+`_BPM_LOCK_RELEASE_CONFIDENCE`), or phase-lock CONFIDENCE smoothing
+(`_V2_PHASE_TOL`, `_V2_COHERENCE_WINDOW`) — and requires every
+`detector_recommendations` rationale to name the exact payload field it
+read, which must belong to the same category as the constant being
+recommended. A rationale citing a tempo-value metric (`bpm_delta_median`,
+`external_agreement`) to justify a confidence-smoothing constant change
+(or vice versa) is now explicitly called out as invalid in the prompt
+itself, regardless of how plausible it reads. New regression test:
+`test_build_combined_prompt_separates_confidence_smoothing_from_tempo_
+accuracy`.
+
+Owner, on the underlying detector confidence signals this surfaced while
+discussing the fix (2026-08-10, not yet acted on beyond flagging — see the
+`_V2_COHERENCE_WINDOW` deferral above): trusts the project's own BPM
+detector over both Essentia comparison and LLM tempo-plausibility
+commentary ("i trust our bpm detector over essentia AND over the llm, it's
+pretty damn solid") — saved as agent memory
+(`feedback_trust_bpm_detector_over_essentia_and_llm.md`), same standing-
+caution pattern as the recommender-vs-library-tags note above. Also
+raised, not yet resolved: whether `_V2_PHASE_TOL` (±18% of beat period to
+count an onset as "on-beat") is too wide, whether the `0.4 ACF / 0.6
+phase` confidence blend over-weights phase given that width, and whether a
+future v3 detector generation should weight an actual bass/kick-band hit
+landing on the grid rather than treating every onset equally for
+phase-coherence purposes — tabled pending a dedicated coherence-window
+planning pass.
+
 ---
 
 ## Mixer Track Meta Reaches the Training Corpus (2026-08-10)

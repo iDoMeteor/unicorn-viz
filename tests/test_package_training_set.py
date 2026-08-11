@@ -832,6 +832,23 @@ def test_build_combined_prompt_flags_non_discriminating_terms() -> None:
     assert 'mean_dconf' not in reco_weights_line
 
 
+def test_build_combined_prompt_separates_confidence_smoothing_from_tempo_accuracy() -> None:
+    """2026-08-10: a real session's LLM tuning recommendation suggested
+    widening _V2_COHERENCE_WINDOW to fix a 'tempo plausibility' issue --
+    a weak causal link (that constant governs phase-lock confidence
+    smoothing, not which BPM value gets picked). The prompt must now
+    explicitly separate tempo-value-search constants from confidence-
+    smoothing ones and require a rationale to cite a same-category
+    payload field, so the LLM can't repeat that exact mistake."""
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert '_V2_COHERENCE_WINDOW' in prompt
+    assert '_V2_PHASE_TOL' in prompt
+    assert 'Phase-lock CONFIDENCE smoothing' in prompt
+    assert 'Tempo VALUE search/accuracy' in prompt
+    assert 'must name the' in prompt and 'exact payload field' in prompt
+
+
 def test_format_tuning_recommendations_md_renders_detector_and_director_sections() -> None:
     tuning = {
         'overall_assessment': 'Solid session overall.',
