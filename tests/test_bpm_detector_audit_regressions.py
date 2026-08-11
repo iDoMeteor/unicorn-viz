@@ -96,10 +96,14 @@ def _run_silence(tracker, *, duration_s: float, start_t: float, fps: float = 60.
 # ---------------------------------------------------------------------------
 
 def test_locked_bpm_does_not_drift_toward_mismatched_profile() -> None:
+    """2026-08-10: settle window 65s -> 130s -- _V2_PHASE_TOL 0.18 -> 0.12
+    means phase_confidence converges noticeably slower (verified directly:
+    ~120s to fully stabilize at 124 BPM, versus the old ~65s baseline
+    under 0.18); 130s leaves real margin past that."""
     psytrance = _FakeProfile(mu=145.0, sigma=0.16, hint_min=140.0, hint_max=149.0)
     tr = BeatTracker({})
 
-    t = _run_steady_click_track(tr, bpm=124.0, duration_s=65.0)
+    t = _run_steady_click_track(tr, bpm=124.0, duration_s=130.0)
     assert tr.bpm > 0.0 and tr.confidence >= 0.55, (
         f'did not reach lock confidence before profile switch (bpm={tr.bpm}, confidence={tr.confidence})'
     )

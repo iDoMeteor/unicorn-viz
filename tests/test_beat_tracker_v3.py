@@ -158,13 +158,16 @@ def test_v2_drifts_toward_new_profile_but_v3_does_not() -> None:
     not move at all."""
     psytrance = _FakeProfile(mu=145.0, sigma=0.16, hint_min=140.0, hint_max=149.0)
 
-    # Phase coherence (32-onset rolling window) needs real wall-clock time to
-    # fill from a cold start -- ~65s of a steady 124 BPM stream is what it
+    # Phase coherence (35-onset rolling window) needs real wall-clock time to
+    # fill from a cold start -- 130s of a steady 124 BPM stream is what it
     # actually takes to cross the 0.55 lock-confidence threshold in practice
-    # (verified directly against BeatTracker.update(), not assumed).
+    # (verified directly against BeatTracker.update(), not assumed). 2026-08-10:
+    # was 65s under the old _V2_COHERENCE_WINDOW=32/_V2_PHASE_TOL=0.18 --
+    # _V2_PHASE_TOL 0.18 -> 0.12 converges noticeably slower (~120s to fully
+    # stabilize at this tempo), 130s leaves real margin past that.
     for cls in (BeatTracker, BeatTrackerV3):
         tr = cls({})
-        _run_steady_click_track(tr, bpm=124.0, duration_s=65.0)
+        _run_steady_click_track(tr, bpm=124.0, duration_s=130.0)
         assert tr._bpm > 0.0 and tr._confidence >= 0.55, (
             f'{cls.__name__} did not reach lock confidence before profile switch '
             f'(bpm={tr._bpm}, confidence={tr._confidence})'

@@ -158,14 +158,39 @@ def test_acf_rival_score_falls_back_to_score_floor_when_best_bpm_invalid() -> No
 def test_full_confidence_blend_eventually_converges_given_enough_steady_time() -> None:
     """Known real behavior, not just a hope: phase_confidence has no explicit
     initial sync step (see _absorb_onset/_advance_phase) and only converges
-    once BPM drift happens to carry phase within +/-18% tolerance by chance.
-    On a perfectly steady click track this reliably happens within ~60s;
-    confirmed via manual simulation before writing this test."""
+    once BPM drift happens to carry phase within +/-_V2_PHASE_TOL tolerance
+    by chance. On a perfectly steady click track this reliably happens
+    within ~60s at 120 BPM under the current 0.12 tolerance; confirmed via
+    manual simulation before writing this test.
+
+    2026-08-10: _V2_PHASE_TOL 0.18 -> 0.12 (see beat_grid.py's own field
+    comment for the full story) -- a 0.08 cut was tried first and directly
+    verified to break convergence entirely (phase_confidence stuck at 0.0
+    for 120+ simulated seconds on this exact zero-jitter click track,
+    never registering a single hit) before being reverted to 0.12. See
+    test_phase_tol_012_converges_reliably_where_008_did_not below for a
+    guard against silently regressing back into that failure mode."""
     bt = BeatTracker({})
     _run_steady_click_track(bt, bpm=120.0, duration_s=60.0)
 
     assert bt.confidence > 0.9
     assert bt._phase_confidence > 0.9
+
+
+def test_phase_tol_012_converges_reliably_where_008_did_not() -> None:
+    """Regression guard for the 2026-08-10 _V2_PHASE_TOL investigation: a
+    tighter tolerance than the current 0.12 broke phase convergence
+    outright on a mathematically perfect, zero-jitter click track (not
+    just filtering genuinely off-grid real-world timing, which was the
+    intent). If a future edit tightens _V2_PHASE_TOL again, this should
+    fail loudly rather than silently reintroducing that failure mode."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=120.0, duration_s=60.0)
+    assert bt._phase_confidence > 0.0, (
+        'phase_confidence never registered a single hit -- _V2_PHASE_TOL is '
+        'likely too tight relative to the phase oscillator\'s own BPM-estimate '
+        'residual error (see beat_grid.py\'s field comment on _V2_PHASE_TOL)'
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -293,20 +293,88 @@ itself, regardless of how plausible it reads. New regression test:
 accuracy`.
 
 Owner, on the underlying detector confidence signals this surfaced while
-discussing the fix (2026-08-10, not yet acted on beyond flagging — see the
-`_V2_COHERENCE_WINDOW` deferral above): trusts the project's own BPM
-detector over both Essentia comparison and LLM tempo-plausibility
-commentary ("i trust our bpm detector over essentia AND over the llm, it's
-pretty damn solid") — saved as agent memory
+discussing the fix (2026-08-10): trusts the project's own BPM detector
+over both Essentia comparison and LLM tempo-plausibility commentary ("i
+trust our bpm detector over essentia AND over the llm, it's pretty damn
+solid") — saved as agent memory
 (`feedback_trust_bpm_detector_over_essentia_and_llm.md`), same standing-
-caution pattern as the recommender-vs-library-tags note above. Also
-raised, not yet resolved: whether `_V2_PHASE_TOL` (±18% of beat period to
-count an onset as "on-beat") is too wide, whether the `0.4 ACF / 0.6
-phase` confidence blend over-weights phase given that width, and whether a
-future v3 detector generation should weight an actual bass/kick-band hit
-landing on the grid rather than treating every onset equally for
-phase-coherence purposes — tabled pending a dedicated coherence-window
-planning pass.
+caution pattern as the recommender-vs-library-tags note above.
+
+### Addendum (same day): coherence-window experiments implemented, one reverted mid-flight
+
+The confidence-signal questions raised above (`_V2_PHASE_TOL` width, the
+`0.4/0.6` confidence blend, a possible v3 bass-hit-on-grid term) were
+discussed further the same day and turned into two live experiments —
+"let's get some [onset-jitter] data!" — plus one piece of new corpus
+capture, rather than staying tabled:
+
+**`_V2_PHASE_TOL`: `0.18` → `0.12`, by way of a rejected `0.08`.** First
+tried `0.08` (owner: "set it to +/- 8"), matching the "is ±18% way too
+wide" suspicion with an aggressive, data-generating cut. Verified directly
+before committing — a mathematically perfect, zero-jitter synthetic click
+track (not real audio, an idealized best case) never registered a single
+phase hit in 120+ simulated seconds; `phase_confidence` stayed at exactly
+`0.0` the whole time, capping overall confidence at `0.4` regardless of
+how long it ran. Root cause: the phase oscillator advances at the
+tracker's own *estimated* BPM (e.g. `122.4` for a true `120`), not the
+true tempo, so there's always some small residual mismatch — under the
+old `0.18` tolerance that residual was forgivable; at `0.08` it was
+apparently enough on its own to keep phase permanently out of tolerance,
+independent of any real off-grid content. This was caught and reported
+*before* committing to an overnight run on it — flagged as a real risk of
+burning a whole night's data collection on a config that breaks lock
+convergence rather than just filtering swing/human timing as intended.
+Owner chose to back off; `0.12` verified convergent by the same method
+(reaches full confidence reliably), though noticeably slower than `0.18`
+did — ~120s to fully stabilize in one tested scenario (124 BPM) versus
+the old ~65s baseline. Two regression tests whose settle windows were
+empirically timed against the old baseline needed their duration extended
+to `130s` accordingly (`test_locked_bpm_does_not_drift_toward_mismatched_
+profile`, `test_v2_drifts_toward_new_profile_but_v3_does_not`); a new
+`test_phase_tol_012_converges_reliably_where_008_did_not` guards against a
+future edit silently re-tightening past the point where this breaks.
+
+**`_V2_COHERENCE_WINDOW`: `32` → `35`.** The LLM's own `32 → 40`
+suggestion was already rejected above as reasoning about the wrong axis —
+this is the owner trying a partial move toward that number anyway, as its
+own independent experiment ("kinda split the difference"), not an
+endorsement of the LLM's stated rationale.
+
+**New corpus capture, so the `0.4/0.6` blend itself can eventually be
+judged:** `BeatTracker.acf_confidence`/`phase_confidence` — previously
+private-only, the combined `confidence` was the only thing ever exposed —
+are now public properties, reaching every corpus row via
+`_detector_snapshot()`. The blend ratio itself is deliberately *not*
+touched this pass ("let's do that [rebalance] and make sure we're getting
+the training data we can later judge by for further tweaking after we
+first settle issues from point 1" — owner), sequenced behind having real
+`_V2_PHASE_TOL=0.12` session data to look at first.
+
+**What to watch in the upcoming overnight session, per the owner's own
+question:** the HUD BPM confidence reading (`BPM: xxx (0.xx)`, the
+blended value), lock churn (gained/lost counts in the scorecard), and
+profile-switch frequency — `detector_trust` scales the score margin
+required to confirm a switch, so a noisier/lower confidence signal should
+show up as more conservative, less frequent switches, not just a raw
+confidence-number change.
+
+`_DETECTOR_VERSION` → `1.0.0-rc.5`, `_VJ_WEIGHTS_DOC_VERSION` → `18`.
+Full write-up: `docs/planning/auto-vj-coherence-window-plan-2026-08-10.md`.
+
+**Separately, same conversation — a concern about the drop/climax ladder
+reboot above, not yet acted on:** owner observed "drop guy not doing so
+well" after the bass-gated reweight + ladder reboot shipped, and reads it
+as likely the *thresholds* needing help rather than the reweight itself
+("i think that was the right direction that might need tweaking but
+thresholds maybe could use some help"). Explicitly deferred — "we'll deal
+with it tomorrow, i'll run an overnighter" — pending real data from the
+same overnight session this coherence-window experiment is riding along
+in. A `+4%` blanket raise across the whole ladder was requested and then
+retracted mid-turn ("ignore my request to raise the thresholds.. let's
+wait for more data") before any change was made.
+
+**Verified:** full main-repo suite green (1621 passed), `ruff` clean on
+every touched file.
 
 ---
 
