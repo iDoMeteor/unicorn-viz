@@ -472,10 +472,167 @@ weights-doc version, or ANALYSIS_VERSION move. Every finding above that turns
 into a code change will trip the documented triggers (`_DETECTOR_VERSION`,
 `_DIRECTOR_VERSION`, `weights-and-thresholds.md`, the ADRs) when it lands.
 
+---
+
+## Bonus: dj-mixer-01 offline analyzer (owner-requested addendum)
+
+Audited because the redesign plan leans on this analyzer twice: as the
+proven encoding of the band-balance insight, and (via M1) as candidate
+ground truth for the redesign sims. Scope: `bpm.py`, `key_detect.py`,
+`structure.py`, and the beat-grid / structural-cue code in `deck.py`
+(`ANALYSIS_VERSION = 3`). Verdict: **the structure classifier is the
+strongest music-theory code in the project**; the tempo path has one
+quantified defect worth fixing before the analyzer is used as sim ground
+truth; the key detector is correct but uses the wrong profiles for dance
+music; and the offline grid has the same missing-downbeat gap as the live
+path (F5).
+
+### What is verified correct
+
+- **`structure.py` classification** — rank-normalized per-bar RMS
+  (mastering-invariant by construction, the right call), real Butterworth
+  band-split (200 Hz / 2 kHz) on the *raw* signal for low/mid/high
+  fractions — i.e. genuine level-based band balance, exactly what F1 says
+  the VJ's live path lacks. `PEAK` requires energy ≥ p66 **AND** bass
+  present (the AND form F9 recommends, already shipped here). The
+  unconditional drums-out → `FALL` rule (stems) is musically right and
+  catches the wall-of-pads breakdown that defeats every energy rule.
+- **`_mark_builds()` walking backward from peaks** deserves singling out:
+  it encodes that a filtered build's RMS is often *below* the groove it
+  follows — the forward slope test "gets the most recognisable build in
+  dance music exactly wrong" — which is precisely the production insight
+  from F3's sources, implemented correctly and bounded sanely (16-bar cap,
+  1-block-from-FALL cap, climb-check past 8 bars). The live trigger design
+  should treat this function as its reference semantics.
+- **Camelot machinery** (`key_detect.py`): both wheel maps verified against
+  the circle of fifths (all 24 entries correct), pitch-class math correct
+  (A440 → pc 9), Krumhansl-Schmuckler profile values are the standard
+  published ones, `semitone_gap`/`compatible`/`near_compatible` implement
+  the wheel arithmetic correctly (one step = a fifth = 7 semitones, folded
+  to ±6).
+- **`grid_drift()`** — scoring a tempo candidate by the circular
+  concentration (resultant vector length) of onset phases on the candidate
+  grid is an elegant, statistically sound refinement, and the
+  absolute-not-relative gain gate is correctly reasoned.
+
+### B1 — ACF integer-lag quantization exceeds the drift-refinement window at exactly the club tempos (quantified)
+
+`bpm.py` picks `argmax` over integer lags of an 86.13 Hz (44.1 kHz ÷ 512)
+envelope with no peak interpolation, so the estimate is quantized to the
+lag grid; `grid_drift()` then refines only within ±0.6%
+(`GRID_DRIFT_SPAN`). Measured quantization error of the nearest lag
+candidate vs. the drift window:
+
+True BPM | 44.1 kHz nearest / err | 48 kHz nearest / err
+--- | --- | ---
+122 | 123.05 / **0.86%** | 122.28 / 0.23%
+128 | 129.20 / **0.94%** | 127.84 / 0.12%
+140 | 139.67 / 0.23% | 140.62 / 0.45%
+150 | 152.00 / **1.33%** | 148.03 / **1.32%**
+174 | 172.27 / **1.00%** | 175.78 / **1.02%**
+
+Bold = outside the ±0.6% drift window: the refinement **cannot reach the
+true tempo** — it polishes a value it can't correct. At 44.1 kHz this hits
+house/techno tempos; at either rate it hits hardstyle and DnB. (The
+docstring's own worked example, "127.84 vs really 128.00," is the lucky
+48 kHz case.) A 1% tempo error walks a full beat off the audio in ~100
+beats — `grid_drift`'s own motivating scenario. Fix is one standard step:
+**parabolic interpolation of the ACF peak** (three-point vertex fit around
+the argmax lag) before the prior/argmax pick — sub-lag resolution
+(~±0.1 BPM), no new scan cost — and/or widen `GRID_DRIFT_SPAN` to cover at
+least one lag step at the detected tempo.
+
+### B2 — No harmonic comb offline: the one known real-world miss (R&B 4/3 fold) is the exact error class combs suppress
+
+`bpm.py` scores plain ACF × log2 prior — no aubio-style harmonic
+accumulation, although the live tracker already has that code
+(`beat_grid.py:_estimate_tempo_acf`) and its rationale ("the dotted-half
+lag of 164 at 109"). Dotted/triplet (4/3, 3/2) lag confusions are
+precisely what harmonic-comb scoring disambiguates, and the mixer store's
+one documented real-world error class is an R&B 4/3 fold. Port the comb
+(sum ACF at 2×/3×/4× lag at 1/h weight) into the offline estimator — it
+is strictly more information from the same envelope, and offline there is
+no frame budget to respect. Also note the offline envelope is *energy*
+flux per 512-sample hop (log-RMS diff), not spectral flux — coarser onset
+evidence than the live path uses; adequate for four-on-the-floor, weakest
+exactly on syncopated R&B/hip-hop material where the 4/3 fold bit.
+
+### B3 — Key detection: correct implementation, non-ideal profiles for this library, and unfiltered decimation
+
+Three independent items:
+
+1. **Profiles.** Krumhansl-Schmuckler weights are implemented correctly,
+   but K-S profiles are derived from probe-tone experiments on classical
+   tonality and are documented (in the key-detection-for-DJ literature —
+   Sha'ath's KeyFinder work, Essentia's `edma` profile family) to
+   underperform on electronic dance music, which is sparse-harmony,
+   loop-based, and bass/unison-heavy. Swapping the two 12-value constants
+   for Sha'ath or Essentia-edma profiles is a near-zero-risk, documented
+   accuracy win on exactly this library's material. (Would bump
+   `ANALYSIS_VERSION` — key results change.)
+2. **Aliasing.** `_chroma()` decimates by plain slicing
+   (`samples[::stride]`) with no anti-alias filter, so 6–22 kHz content
+   (hats, cymbals, air — abundant in dance music) folds back across the
+   0–5.5 kHz band the chroma reads. Same pattern in `structure.py`'s
+   `_bar_chroma()`. Cheapest correct fix: box-average consecutive samples
+   (`reshape(-1, stride).mean(axis=1)`) instead of slicing — a crude but
+   real low-pass — or scipy `decimate` since structure.py already imports
+   scipy conditionally.
+3. **Mono crash.** `_chroma()` does `samples[::stride].mean(axis=1)` —
+   raises on 1-D input. `bpm.py` guards `ndim == 2`; `key_detect.py`
+   doesn't. Latent only if every loader path guarantees stereo; one-line
+   guard regardless.
+
+Whole-track summed chroma also cannot represent key changes mid-track —
+acceptable for dance material, worth a docstring caveat since the Camelot
+badge drives harmonic-mix suggestions.
+
+### B4 — The offline grid has no downbeat either: `beat_offset` is manual-only
+
+`beat_offset` defaults to 0.0 and is set only by the operator (waveform
+click in `ui.py`, `grid_set_downbeat_here()`, stored marks) —
+`grid_drift()` refines tempo but never phase, and nothing estimates the
+first downbeat. Consequences: `structural_cues()` and
+`analyze_structure()` snap to "phrase boundaries" of a grid whose bar
+phase is arbitrary on any track the owner hasn't hand-anchored — an
+8-bar-boundary energy step measured off-phase smears across two phrase
+blocks and can shrink below the 0.30/0.12 gates. This is the offline twin
+of live finding F5, and it partially undercuts M1's "use mixer PEAK
+boundaries as ground truth" until anchored: the *labels* (PEAK/FALL) stay
+trustworthy (4-bar blocks are phase-robust enough), but boundary *times*
+carry up to ±half-a-bar of anchor error. Offline, downbeat estimation is
+cheap and well-understood: score the 4 (or 8) candidate phases of the
+drift-corrected grid by bass-onset strength landing on beat 1 (the same
+circular-concentration machinery `grid_drift` already has, applied to bar
+phase), pick the argmax, keep manual override authoritative. That single
+addition would upgrade both the mixer's cues and every downstream VJ
+consumer (section hints, `_maybe_sync_phrase_clock_from_section_hint`,
+and F5's option 2).
+
+### B5 — Ground-truth caveats for the redesign sims (ties back to M1)
+
+When using mixer analysis as reference truth for the drop-score sims:
+BPM is trustworthy to ~±1% (B1) — fine for phrase-scale alignment, and
+the VJ's ±14% phase tolerance absorbs it; section *labels* and tier are
+trustworthy; section boundary *times* inherit B4's anchor ambiguity
+(±half a bar) plus 4-bar block granularity, so tolerance windows for
+trigger-F1 scoring (M2) should be no tighter than ±1 bar against mixer
+boundaries, or use hand-anchored tracks for the tight-window tier.
+`structural_cues`' conservative single-drop pick ("first strong step
+> 0.30") is a *high-precision, low-recall* labeler by design — good for
+positive labels, never for counting misses.
+
+Smaller notes, no action urged: `_bar_bands`' scipy-absent fallback makes
+every bass test read "present" (documented in-code, fine);
+`structure.py`'s drums-out threshold reuses `_VOCAL_PRESENT` for drum
+stems (naming only); `sosfilt`'s causal group delay at these crossovers is
+negligible at bar granularity.
+
 Sources consulted:
-- https://transactions.ismir.net/articles/10.5334/tismir.202
-- https://arxiv.org/html/2603.08759v1
-- https://archives.ismir.net/ismir2014/paper/000297.pdf (Yadati et al., ISMIR 2014)
-- https://www.audiolabs-erlangen.de/resources/MIR/FMP/C4/C4S4_NoveltySegmentation.html
-- https://www.semanticscholar.org/paper/Preferred-tempo-reconsidered.-Moelants/b0db06a5a8b2c1942afff5c317c5f6da55a7dcf7
-- https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2018.00349/full
+
+- [TISMIR novelty/activation tutorial](https://transactions.ismir.net/articles/10.5334/tismir.202)
+- [EDMFormer (arXiv)](https://arxiv.org/html/2603.08759v1)
+- [Yadati et al., ISMIR 2014 — Detecting Drops in EDM](https://archives.ismir.net/ismir2014/paper/000297.pdf)
+- [FMP: Novelty-Based Segmentation (Foote)](https://www.audiolabs-erlangen.de/resources/MIR/FMP/C4/C4S4_NoveltySegmentation.html)
+- [Moelants — Preferred tempo reconsidered](https://www.semanticscholar.org/paper/Preferred-tempo-reconsidered.-Moelants/b0db06a5a8b2c1942afff5c317c5f6da55a7dcf7)
+- [Frontiers — Preferred tempo & low-frequency bias](https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2018.00349/full)
