@@ -22,3 +22,4 @@ build/
 # redistribute). Curate packs locally; see assets/sims/README.md for placement.
 assets/sims/*/
 !assets/sims/README.md
+pM-to-check.txt
