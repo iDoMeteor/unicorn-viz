@@ -28,6 +28,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **Auto VJ drop-score redesign — trigger/sustain split (2026-08-11, draft, pending external audio review before implementation):** [docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md](planning/auto-vj-drop-score-redesign-plan-2026-08-11.md)
 - **Auto VJ coherence-window & detector-confidence plan (2026-08-10, two experiments shipped, judgment deferred to overnight session data):** [docs/planning/auto-vj-coherence-window-plan-2026-08-10.md](planning/auto-vj-coherence-window-plan-2026-08-10.md)
 - **Performance remediation plan — webcam+mirror, measured (2026-08-08):** [docs/planning/performance-remediation-plan-2026-08-08.md](planning/performance-remediation-plan-2026-08-08.md)
 - **v1.0-RC1 release task list (2026-08-03, active):** [docs/planning/rc1-release-task-list-2026-08-03.md](planning/rc1-release-task-list-2026-08-03.md)
