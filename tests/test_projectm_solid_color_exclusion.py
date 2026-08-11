@@ -78,6 +78,7 @@ def test_load_migrates_and_dedupes(tmp_path: Path) -> None:
 
     stub = object.__new__(PM)
     stub._excluded_presets_file = lambda: f          # type: ignore[method-assign]
+    stub._excluded_presets_cache = None
     keys = PM._load_excluded_presets(stub)
 
     assert keys == {'presets/a.milk', 'presets/b.milk', 'presets/c.milk'}
