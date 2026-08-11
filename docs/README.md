@@ -68,6 +68,7 @@ This is the canonical map for project documentation.
 - Second-window Linux mitigation strategies (2026-07-09, closed — SDL2 texture-framebuffer + moderngl/Wayland root-cause audit, explicit-GL fix implemented and owner-confirmed): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 - Tooltip system plan — control room / mixer / overlays full-surface audit + shared architecture (2026-07-13): [docs/planning/tooltip-system-plan-2026-07-13.md](planning/tooltip-system-plan-2026-07-13.md)
 - Active audit tracker: [docs/audits](audits)
+  - **Auto VJ music-theory & algorithms audit — drop-score redesign review (2026-08-11):** [docs/audits/2026-08-11-auto-vj-music-theory-audit.md](audits/2026-08-11-auto-vj-music-theory-audit.md)
   - **Auto VJ director scene-detection audit (2026-08-09):** [docs/audits/2026-08-09-director-scene-detection-audit.md](audits/2026-08-09-director-scene-detection-audit.md)
   - **Licensing & third-party code audit (2026-08-08):** [docs/audits/2026-08-08-licensing-audit.md](audits/2026-08-08-licensing-audit.md)
   - **BPM detector audit — the "consistently 20 hot" root cause (2026-08-04):** [docs/audits/2026-08-04-bpm-detector-audit.md](audits/2026-08-04-bpm-detector-audit.md)
