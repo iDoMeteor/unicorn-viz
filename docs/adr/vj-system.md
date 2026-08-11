@@ -105,6 +105,54 @@ the active engine or director.
 
 ---
 
+## `hardgroove` Eliminated Entirely (2026-08-11)
+
+Owner: "who tf ever says 'ya man, i listen too hardgroove all the time'."
+Same shape of problem as `hyphy` (see below) but decided outright rather
+than paused, since there's no plan to bring in validated hardgroove
+material the way there is for trap/hyphy.
+
+Investigated first, not just removed on the joke alone: `hardgroove`
+(132-140 BPM, mu=136) overlapped `tech_house` (127-134) and `peak_time`
+(126-136) on BPM simultaneously, sat within 50-150 Hz of `peak_time`
+(2350) and `hard_techno` (2450) on spectral centroid (mu=2500, both
+within a 250-400 Hz sigma), and its onset-density mu (3.2) was
+numerically **identical** to `peak_time`'s. No axis where it was clearly
+the best fit over its neighbors. Real usage across the three most recent
+sessions checked (favorites/b, c, d — ~89,000 rows): zero tracks tagged
+"hardgroove" or any variant, while the recommender still picked it
+147/94/214 times respectively (always < 1.3% of rows) — every pick
+unverifiable by construction, same as `hyphy`'s finding.
+
+Eliminated entirely (not disabled — no dict entry survives), same pattern
+as `uk_garage`/`breaks`/`generic`. `_RECOMMENDER_VERSION` →
+`1.0.0-rc.6`, `_VJ_WEIGHTS_DOC_VERSION` → `20`. Live profile count: 16
+(was 20 before this week's consolidation passes: `uk_garage`, `breaks`,
+`generic`, `hardgroove` all eliminated; `hyphy` disabled, not eliminated,
+pending real trap/hyphy library material).
+
+`docs/audio-profile-reference.md` fully regenerated from live
+`unicornviz/audio/profiles.py` values in the same pass — it had drifted
+significantly stale (still describing the pre-house-family-consolidation
+BPM bands, and incorrectly claiming `bpm_hint` hard-caps the ACF search
+range, a claim the 2026-08-04 hard-clamp-removal fix invalidated but the
+doc was never updated to reflect).
+
+**Not fixed this pass, flagged for later:**
+`drop-ins/auto-vj-01/AUDIO_PROFILE_CHEAT_SHEET.md` is far more stale than
+this doc was — it still lists `breaks`/`uk_garage`/`generic`/`hardgroove`
+as live picks, and also references profiles (`pop`, `rock`,
+`metal_extreme`, `classical`) that do not exist anywhere in the current
+`PROFILES` dict at all. This needs a comprehensive rewrite, not a spot
+fix, and was out of scope for this pass -- flagged rather than silently
+left for the next owner to trip over.
+
+**Verified:** full main-repo suite green (1622 passed), `ruff` clean. New
+test: `test_generic_uk_garage_breaks_hardgroove_eliminated_entirely`
+(renamed from the `uk_garage`/`breaks`/`generic`-only version).
+
+---
+
 ## Drop Score Bass-Gated Reweight (2026-08-10)
 
 Triggered by an owner observation while watching a live session: `drop_score`

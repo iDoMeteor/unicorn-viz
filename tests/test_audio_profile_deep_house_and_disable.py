@@ -33,10 +33,14 @@ from unicornviz.audio.profiles import (
 # ---- enabled / disable mechanism -----------------------------------------
 
 
-def test_generic_uk_garage_breaks_eliminated_entirely() -> None:
-    """2026-08-10: unlike 'electronic' (disabled, then revived), these three
-    were removed outright, not just disabled -- no dict entry survives."""
-    for key in ('generic', 'uk_garage', 'breaks'):
+def test_generic_uk_garage_breaks_hardgroove_eliminated_entirely() -> None:
+    """2026-08-10/11: unlike 'electronic' (disabled, then revived), these
+    were removed outright, not just disabled -- no dict entry survives.
+    'hardgroove' (2026-08-11) had zero validated library examples across
+    every recent session and overlapped tech_house/peak_time/hard_techno
+    on nearly every axis (BPM, centroid, onset density) -- see
+    docs/adr/vj-system.md."""
+    for key in ('generic', 'uk_garage', 'breaks', 'hardgroove'):
         assert key not in PROFILES, f'{key} should have been eliminated entirely'
         assert key not in list_profiles()
         assert key not in enabled_profiles()
