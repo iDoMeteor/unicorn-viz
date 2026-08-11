@@ -263,6 +263,21 @@ class Analyzer:
         Uses a soft-sigmoid of the z-score so sustained levels stay in a
         meaningful range rather than collapsing to 0 or 1 indefinitely.
         Returns (normalised_value, updated_mean, updated_var).
+
+        2026-08-11: this is the copy that produces AudioData.bass_n/mid_n/
+        treble_n -- consumed by several effects (audio_spectrogram.py,
+        audio_waveforms.py, audio_sine.py, audio_chromogram.py,
+        audio_centroid.py, audio_tracks.py) and the live-corpus telemetry
+        sample (app.py's build_live_corpus_sample()), NOT by the Auto VJ
+        drop_score/band_blend computation. drop-ins/auto-vj-01/beat_grid.py
+        runs the identical formula (same math, same default alpha) as two
+        further independent copies with their own mean/var state -- one in
+        BeatGridTracker, one in BeatTracker/BeatTrackerV3 -- so a tuning
+        change made only here does not reach the detector, and vice versa.
+        Same underlying signal, three independently-drifting z-score
+        trackers. See docs/adr/vj-system.md "Recommender centroid_fit
+        Weight Cut..." sibling entries for the ongoing drop_score redesign
+        discussion this duplication came up in.
         """
         a = self._band_alpha
         mean = mean + a * (x - mean)
