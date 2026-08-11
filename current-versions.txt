@@ -15,7 +15,7 @@
   projectm-01                   0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.37         RC            MISMATCH (readme=1.0.0-rc.36)
+  auto-vj-01                    1.0.0-rc.38         RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -81,5 +81,4 @@
 ────────────────────────────────────────────────────────────────────────────
 
   42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
-  ⚠  1 version mismatch(es): auto-vj-01
 

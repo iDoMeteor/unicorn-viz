@@ -376,6 +376,35 @@ wait for more data") before any change was made.
 **Verified:** full main-repo suite green (1621 passed), `ruff` clean on
 every touched file.
 
+### Addendum (same night, before the overnight run): two more calls
+
+- **`_V2_PHASE_TOL`: `0.12` → `0.14`.** Owner: "sounds pretty tight against
+  your test," referring to the ~120s convergence time measured for `0.12`.
+  Still well below the original `0.18`, with more convergence headroom
+  than `0.12` had.
+- **ACF/phase confidence blend: `0.4/0.6` → `0.5/0.5`.** An explicit owner
+  call for tonight's session specifically ("do set acf & phase confidence
+  equal for tonight"), not a resolution of the "is phase over-weighted"
+  question raised earlier — that's still deferred pending real
+  `acf_confidence`/`phase_confidence` corpus data (now captured
+  separately, per the addendum above).
+
+One test (`test_is_downbeat_fires_exactly_once_per_four_beats`) needed
+relaxing from an exact `beat_count == downbeat_count * 4` check to
+`beat_count // 4 == downbeat_count` — a fixed 30s wall-clock test cutoff
+stops 0-3 beats into a partial bar as often as not, and which remainder it
+lands on is sensitive to exactly this kind of convergence-timing tuning;
+not a real downbeat-detection bug, just a test that had been getting
+lucky.
+
+`_DETECTOR_VERSION` → `1.0.0-rc.6`, `_VJ_WEIGHTS_DOC_VERSION` → `19`. Also
+caught and fixed in the same pass: the prior `_V2_PHASE_TOL=0.12`/
+`_V2_COHERENCE_WINDOW=35` commit (auto-vj-01 `1.0.0-rc.37`) had shipped
+without its own README changelog entry — added retroactively alongside
+this one's `1.0.0-rc.38`.
+
+**Verified:** full main-repo suite green (1621 passed), `ruff` clean.
+
 ---
 
 ## Mixer Track Meta Reaches the Training Corpus (2026-08-10)

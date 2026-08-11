@@ -1,8 +1,10 @@
 # Auto VJ: Coherence-Window & Detector-Confidence Plan (2026-08-10)
 
 Owner: unicorn-viz
-Status: two experiments shipped tonight, riding along in an overnight
-  session; judgment on further tuning deferred until that data exists
+Status: experiments shipped tonight (final values: `_V2_PHASE_TOL=0.14`,
+  ACF/phase confidence blend 0.5/0.5, `_V2_COHERENCE_WINDOW=35`), riding
+  along in an overnight session; judgment on further tuning deferred
+  until that data exists
 Last updated: 2026-08-10
 
 ## Context
@@ -89,6 +91,30 @@ move.
 Versions: `_DETECTOR_VERSION` → `1.0.0-rc.5`, `_VJ_WEIGHTS_DOC_VERSION` →
 `18`. Full detail in `weights-and-thresholds.md`'s Detector section and
 changelog entry 18.
+
+### 4. Same night, two more calls before the overnight run actually started
+
+- **`_V2_PHASE_TOL`: `0.12` → `0.14`.** Owner: "sounds pretty tight against
+  your test" (referring to the ~120s convergence time measured for
+  `0.12`). Still well below the original `0.18`, more convergence headroom
+  than `0.12` had.
+- **Confidence blend: `0.4/0.6` → `0.5/0.5` ACF/phase.** An explicit owner
+  call for tonight's session specifically ("do set acf & phase confidence
+  equal for tonight"), *not* the data-driven rebalance deferred in §3
+  above — that question (is `0.6` on phase too strong) is still open,
+  still pending real `acf_confidence`/`phase_confidence` data. Treat
+  tonight's `0.5/0.5` as itself one more data point, not a settled answer.
+
+One more test needed adjusting: `test_is_downbeat_fires_exactly_once_per_
+four_beats` relaxed from an exact `beat_count == downbeat_count * 4` check
+to `beat_count // 4 == downbeat_count` — a fixed 30s wall-clock cutoff
+stops 0-3 beats into a partial bar, and which remainder it lands on is
+sensitive to convergence-timing tuning; not a real downbeat-detection bug.
+
+Final shipped state for tonight's overnight session:
+`_V2_PHASE_TOL=0.14`, confidence blend `0.5/0.5`,
+`_V2_COHERENCE_WINDOW=35`. `_DETECTOR_VERSION` → `1.0.0-rc.6`,
+`_VJ_WEIGHTS_DOC_VERSION` → `19`.
 
 ---
 
