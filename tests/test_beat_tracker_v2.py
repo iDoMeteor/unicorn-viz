@@ -227,6 +227,67 @@ def test_tactus_fold_accepted_when_candidate_fits_beat_spacing_comparably() -> N
     assert accepted is True
 
 
+# ---------------------------------------------------------------------------
+# kr/dbc option B (2026-08-13): kick_regularity scales tactus fold eagerness
+# ---------------------------------------------------------------------------
+
+
+def test_effective_tactus_ratio_equals_baseline_at_full_kick_regularity() -> None:
+    bt = BeatTracker({'tactus_preference_ratio': 0.55})
+    bt._kick_regularity = 1.0
+
+    assert bt._effective_tactus_ratio() == pytest.approx(0.55)
+
+
+def test_effective_tactus_ratio_defaults_to_least_eager_when_never_supplied() -> None:
+    """_kick_regularity starts at 0.0 and only changes when update() is
+    called with an explicit reading -- a caller that never wires this
+    through (an older test, a hand-built harness) gets the strictest
+    behavior, never silently the most permissive one."""
+    bt = BeatTracker({'tactus_preference_ratio': 0.55})
+
+    assert bt._kick_regularity == 0.0
+    assert bt._effective_tactus_ratio() == pytest.approx(0.55 + 1.0 * 0.30)
+
+
+def test_effective_tactus_ratio_clamps_out_of_range_kick_regularity() -> None:
+    """kick_regularity is documented as 0..1; a caller passing something
+    outside that range (bad upstream computation, stale float) must not
+    push the effective ratio outside the [baseline, baseline+spread]
+    band the rest of this mechanism assumes."""
+    bt = BeatTracker({'tactus_preference_ratio': 0.55})
+
+    bt._kick_regularity = 1.5   # clamps to 1.0 -> baseline
+    assert bt._effective_tactus_ratio() == pytest.approx(0.55)
+
+    bt._kick_regularity = -0.5   # clamps to 0.0 -> baseline + full spread
+    assert bt._effective_tactus_ratio() == pytest.approx(0.55 + 0.30)
+
+
+def test_effective_tactus_ratio_climbs_as_kick_regularity_falls() -> None:
+    bt = BeatTracker({'tactus_preference_ratio': 0.55})
+
+    bt._kick_regularity = 0.7
+    high = bt._effective_tactus_ratio()
+    bt._kick_regularity = 0.3
+    low = bt._effective_tactus_ratio()
+
+    assert 0.55 < high < low
+
+
+def test_update_persists_kick_regularity_across_calls_when_omitted() -> None:
+    """update()'s kick_regularity defaults to None, meaning 'no new
+    reading this frame' -- must not reset the tracker's last-known value
+    back to 0.0 on every call that doesn't supply one."""
+    bt = BeatTracker({})
+    bt.update(1.0 / 60.0, _audio(), onsets=None, t=0.0, kick_regularity=0.8)
+    assert bt._kick_regularity == pytest.approx(0.8)
+
+    bt.update(1.0 / 60.0, _audio(), onsets=None, t=1.0 / 60.0)   # omitted this time
+
+    assert bt._kick_regularity == pytest.approx(0.8), 'must persist, not reset to 0.0'
+
+
 def test_full_confidence_blend_eventually_converges_given_enough_steady_time() -> None:
     """Known real behavior, not just a hope: phase_confidence has no explicit
     initial sync step (see _absorb_onset/_advance_phase) and only converges

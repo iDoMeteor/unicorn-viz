@@ -515,6 +515,80 @@ Full suite green (1659 passed), `ruff`/`bandit` clean.
 
 ---
 
+## Kick Regularity Scales Tactus Fold Eagerness — kr/dbc Option B (2026-08-13)
+
+Same conversation, immediately following option A above. `kick_regularity`
+(`auto_vj.py`'s `_compute_kick_regularity()`) is a raw kick-band-energy
+consistency reading over the last 16 raw onsets (0..1) — genre-independent,
+already computed, already used elsewhere (`kick_regularity_fit` in the
+recommender, Build/Drop director gating), but not wired into anything
+inside `beat_grid.py`. Unlike `kick_regularity` itself, the tactus
+mechanism it now feeds is entirely acoustic self-measurement, not a genre
+inference — so this doesn't raise the truth-directionality question option
+A's design constraint addressed; it's squarely inside the safe direction.
+
+**Before building, a retroactive check** using the same `favorites`-corpus
+data pulled for option A's ground-truth validation: the three borderline
+tactus-fold cases found there ("Beat It (Nylze Edit)", "Blackout Riddim
+(Clean)", "Uptown Funk (Nylze Edit Mashup)") had median `kick_regularity`
+of `0.452`, `0.343`, and `0.634` respectively — all below the 56-track
+library's `0.702` median-of-medians, two of them well below. This is real
+evidence the hypothesis holds before any code changed: low kick regularity
+correlates with the exact cases where the current tactus mechanism looks
+shakiest.
+
+**Implementation:** `BeatTracker.update()`/`BeatTrackerV3.update()` (v3
+inherits `update()` unchanged) gain an optional `kick_regularity: float |
+None = None` parameter, stored in `self._kick_regularity` and *persisted*
+across calls that omit it (a caller doesn't have to recompute it every
+frame). Defaults to `0.0` — the strictest setting — for any caller that
+never supplies a reading at all, so an old test or a hand-built harness
+gets conservative behavior, never silently the most permissive one.
+`BeatGridTracker` (legacy/v1) also gained the parameter, accepted and
+unused, purely for call-site compatibility — without it, a session
+configured with `beat_tracker_engine = "legacy"` (or a legacy
+`beat_tracker_shadow_engine`) would hit an uncaught `TypeError` on the
+very next tick, since the shared call site in `auto_vj.py` now passes the
+kwarg unconditionally.
+
+New `_effective_tactus_ratio()` interpolates: at `kick_regularity = 1.0`
+(classic four-on-the-floor) the effective ratio equals the validated
+`tactus_preference_ratio` baseline, unchanged; it climbs toward
+`baseline + _TACTUS_KICK_REGULARITY_SPREAD` (`0.30`, first-cut value) as
+`kick_regularity` falls toward `0.0`. This is deliberately one-directional
+— it can only make folding *stricter* than the already-validated baseline,
+never more eager — so it can't introduce new risk on the material option
+A's ground-truth check already confirmed works well; it only tightens the
+mechanism specifically where the retroactive check found evidence of risk.
+Applied at the `_tactus_fold_accepted()` call site via `_effective_tactus_
+ratio()` in place of the raw `tactus_preference_ratio` read.
+
+**Wiring, `auto_vj.py`:** `_compute_kick_regularity()` is called once per
+tick, immediately before `self._grid.update(...)` (and passed identically
+to `self._shadow_grid.update(...)` for A/B parity) — one frame stale
+relative to that tick's own kick-band sample (appended later the same
+tick), acceptable since kick regularity changes on a musical timescale,
+not a per-frame one.
+
+**Verified:** five new tests in `tests/test_beat_tracker_v2.py`
+(`test_effective_tactus_ratio_equals_baseline_at_full_kick_regularity`,
+`test_effective_tactus_ratio_defaults_to_least_eager_when_never_
+supplied`, `test_effective_tactus_ratio_clamps_out_of_range_kick_
+regularity`, `test_effective_tactus_ratio_climbs_as_kick_regularity_
+falls`, `test_update_persists_kick_regularity_across_calls_when_
+omitted`). Full suite green (1664 passed), `ruff`/`bandit` clean.
+`_DETECTOR_VERSION` → `1.0.0-rc.14`, `_VJ_WEIGHTS_DOC_VERSION` → `32`.
+
+**Not yet done:** this is a first cut per the owner's own sequencing
+("a first...test.... then b....test/tweak/test, decide") — the spread
+value (`0.30`) is reasoned and retroactively spot-checked against three
+known cases, not validated against a real live-driven session. Next real
+step is exactly what the owner asked for: let it run, then look at
+whether it measurably reduces fold-related mismatches in the next
+packaged corpus before considering it settled.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
