@@ -11,6 +11,9 @@ from unicornviz.hotkeys import HotkeyHandler
 
 class _ManagerEffect:
     NAME = 'ProjectM Presets'
+    EXCLUDED_CATEGORY = '! Excluded'
+    QUARANTINE_CATEGORY = '! Quarantined'
+    DISABLED_CATEGORY = '! Disabled'
 
     def __init__(self) -> None:
         self.current_preset_path = '/tmp/presets/pack-a/one.milk'
@@ -35,6 +38,7 @@ class _ManagerEffect:
             },
         ]
         self.calls: list[tuple[str, object]] = []
+        self.quarantine_category_result = 3
 
     def preset_catalog(self):
         self.calls.append(('preset_catalog', None))
@@ -76,6 +80,10 @@ class _ManagerEffect:
     def quarantine_preset(self, path_str: str) -> bool:
         self.calls.append(('quarantine_preset', path_str))
         return True
+
+    def quarantine_category(self, category: str) -> int:
+        self.calls.append(('quarantine_category', category))
+        return self.quarantine_category_result
 
     def restore_from_quarantine(self, path_str: str) -> bool:
         self.calls.append(('restore_from_quarantine', path_str))
@@ -492,3 +500,83 @@ def test_e_and_d_are_suppressed_for_excluded_and_quarantined_kinds() -> None:
 
     assert not any(name == 'set_presets_enabled' for name, _ in manager.calls)
     assert sum('not applicable' in msg.lower() for msg in overlay.messages) == 2
+
+
+def test_shift_q_quarantines_the_whole_excluded_category() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 0
+    overlay._category = manager.EXCLUDED_CATEGORY
+
+    handler.handle(sdl2.SDLK_q, sdl2.KMOD_SHIFT)
+
+    assert ('quarantine_category', manager.EXCLUDED_CATEGORY) in manager.calls
+    assert any('quarantined 3' in msg.lower() for msg in overlay.messages)
+
+
+def test_shift_q_quarantines_the_whole_disabled_category() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 0
+    overlay._category = manager.DISABLED_CATEGORY
+
+    handler.handle(sdl2.SDLK_q, sdl2.KMOD_SHIFT)
+
+    assert ('quarantine_category', manager.DISABLED_CATEGORY) in manager.calls
+    assert any('quarantined 3' in msg.lower() for msg in overlay.messages)
+
+
+def test_shift_q_is_a_no_op_for_a_normal_category() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 0
+    overlay._category = 'Fractal'
+
+    handler.handle(sdl2.SDLK_q, sdl2.KMOD_SHIFT)
+
+    assert not any(name == 'quarantine_category' for name, _ in manager.calls)
+    assert any('only applies' in msg.lower() for msg in overlay.messages)
+
+
+def test_shift_q_requires_the_categories_pane() -> None:
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._category = manager.EXCLUDED_CATEGORY
+
+    handler.handle(sdl2.SDLK_q, sdl2.KMOD_SHIFT)
+
+    assert not any(name == 'quarantine_category' for name, _ in manager.calls)
+    assert any('categories pane' in msg.lower() for msg in overlay.messages)
+
+
+def test_shift_q_reports_when_nothing_to_quarantine() -> None:
+    manager = _ManagerEffect()
+    manager.quarantine_category_result = 0
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 0
+    overlay._category = manager.EXCLUDED_CATEGORY
+
+    handler.handle(sdl2.SDLK_q, sdl2.KMOD_SHIFT)
+
+    assert ('quarantine_category', manager.EXCLUDED_CATEGORY) in manager.calls
+    assert any('nothing to quarantine' in msg.lower() for msg in overlay.messages)
+
+
+def test_plain_q_still_targets_a_single_excluded_preset_when_shift_is_not_held() -> None:
+    """Shift+Q must not swallow the pre-existing single-item 'q' binding."""
+    manager = _ManagerEffect()
+    handler, _app, overlay = _setup(manager)
+    handler.handle(sdl2.SDLK_m, sdl2.KMOD_CTRL)
+    overlay.projectm_manager_focus_pane = 1
+    overlay._selected_preset = {'path': '/tmp/quarantine-me.milk', 'enabled': False, 'kind': 'excluded'}
+
+    handler.handle(sdl2.SDLK_q, 0)
+
+    assert ('quarantine_preset', '/tmp/quarantine-me.milk') in manager.calls
+    assert not any(name == 'quarantine_category' for name, _ in manager.calls)

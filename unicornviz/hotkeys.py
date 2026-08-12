@@ -1399,6 +1399,21 @@ class HotkeyHandler:
                     _sync_projectm_manager()
                     o.flash_message(f'ProjectM preset disabled ({remaining} enabled)', 1.6)
                 return
+            if sym == sdl2.SDLK_q and (mod & sdl2.KMOD_SHIFT):
+                if o.projectm_manager_focus_pane != 0:
+                    o.flash_message('ProjectM: Shift+Q quarantines a whole category (focus the categories pane)', 2.0)
+                    return
+                category = o.get_projectm_selected_category()
+                if category not in (manager_effect.EXCLUDED_CATEGORY, manager_effect.DISABLED_CATEGORY):
+                    o.flash_message('ProjectM: Shift+Q only applies to Excluded/Disabled', 1.8)
+                    return
+                count = manager_effect.quarantine_category(category)
+                _sync_projectm_manager()
+                if count > 0:
+                    o.flash_message(f'ProjectM: quarantined {count} preset(s) from {category}', 2.0)
+                else:
+                    o.flash_message('ProjectM: nothing to quarantine', 1.6)
+                return
             if sym == sdl2.SDLK_q:
                 selected = o.get_projectm_selected_preset()
                 if selected is None or selected.get('kind') != 'excluded':

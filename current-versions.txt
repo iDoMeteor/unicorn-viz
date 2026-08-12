@@ -10,7 +10,7 @@
   dj-mixer-01                   0.184.0             alpha ▲       module
   media-01                      0.20.0              alpha ▲       module
   games-01                      0.13.1              alpha ▲       module
-  projectm-01                   0.12.2              alpha ▲       module
+  projectm-01                   0.12.3              alpha ▲       module
   cosmic-01                     0.11.1              alpha ▲       module
   immersive-01                  0.10.1              alpha ▲       module
 
