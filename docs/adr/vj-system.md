@@ -299,6 +299,109 @@ input; real data will say if it needs retuning. `_DETECTOR_VERSION` →
 
 ---
 
+## Genre Never Writes to an Established Tempo — `set_profile()`'s Confidence Gate Removed Entirely (2026-08-13)
+
+Same conversation, later the same day: reviewing an offline replay of the
+freeze-hysteresis fix (see below) against the two largest packaged
+`favorites` corpora surfaced the sharper framing underneath every incident
+in this section. Owner's own words: "since bpm is a major factor in
+choosing genre, it really doesn't make sense for a genre detected outside
+of the bpm to try to then shape the bpm... the bpm hasn't changed just
+because genre doesn't agree 100% — that means there are other factors
+out-weighing the bpm, not that the bpm is wrong."
+
+This is correct, and it names the actual defect class more precisely than
+either prior fix did. `tempo_fit` (a recommender scoring term) infers a
+genre profile's fit partly *from* the tracker's own `bpm` — genre is
+downstream of tempo in the dependency graph. `BeatTracker.set_profile()`
+writing a profile's prior back into `_prior_mu`/`_prior_sigma` sends
+information the other direction, upstream, into the very measurement the
+genre inference depended on. Every incident that motivated `BeatTrackerV3`
+— the 2026-07-18 "20 BPM hot" investigation, the 2026-08-12 overnight
+compounding, and (per that day's addendum above) plausibly some of the
+week's apparent recommender instability too — is this same backward edge
+firing under different triggering conditions. The 2026-08-12 fix (acquire/
+release hysteresis on the freeze) narrowed *when* the backward edge could
+fire; it didn't remove the edge.
+
+**Decision, owner call, both options offered ("remove it or nullify its
+impact for now")**: nullify via a code change functionally equivalent to
+removal, scoped to `BeatTrackerV3` only. `set_profile()` now primes the
+prior only while `self._bpm <= 0.0` — before any tempo reading exists,
+there is nothing for a rough genre-informed starting point to contradict,
+so this is legitimate disambiguation, not truth-reversal. The instant a
+real `self._bpm` is established, every subsequent call is a complete,
+unconditional no-op — no confidence check, no acquire/release hysteresis,
+no `_prior_frozen` state. All of that machinery (`_PRIOR_FREEZE_CONFIDENCE`,
+`_PRIOR_FREEZE_RELEASE_CONFIDENCE`, the sticky flag, the custom
+`__init__`) is deleted rather than left inert — it solved the wrong layer
+of the problem and would only have been confusing dead weight going
+forward. `BeatTracker`/v2 is deliberately left with the original
+always-reprimes behavior, so `beat_tracker_shadow_engine = "v2"` continues
+to give a live, real-session A/B between the old coupled behavior and the
+new decoupled one — the same shadow mechanism that already validated the
+2026-08-12 fix by showing v2 drifted just as badly with no freeze at all.
+`prime_tempo()` (external ground-truth BPM, e.g. from the DJ mixer's own
+per-track analysis) is unaffected — that source is genuinely authoritative
+evidence, not an inference looping back from the detector's own output, so
+it isn't the backward-flow case this change targets.
+
+**Offline replay before the decision, for context:** with no way to fully
+re-run the ACF/onset pipeline from archived corpus rows (no raw onset
+timestamps or spectral data retained), a narrower replay was done instead
+— reconstructing just the confidence-driven state machines rc.48
+(freeze hysteresis) and rc.49 (hold-gate source) from recorded
+`confidence`/`acf_confidence`/`profile` columns in the two largest
+packaged `favorites` sets, `d` (57,736 rows, the healthiest session on
+record — 100% lock coverage, median confidence `0.90`) and `g` (55,837
+rows, the overnight-drift session traced in the 2026-08-12 addendum
+above). Result: on `d`, zero of 67 profile-switch events would have
+flipped behavior under the rc.48 hysteresis — a true no-op on healthy
+data, as intended. On `g`, 9 of 46 switch events (~20%) fell inside the
+exact mid-confidence dip band the hysteresis targets and would now have
+been blocked — real, non-trivial confirmation the fix engaged on the
+session it was built for. (The rc.49 hold-gate comparison is noted as
+unreliable — no hold-window timing is recorded in the corpus, so the
+"confidence vs acf_conf disagree" proxy measured across all frames, not
+just frames where the real gate evaluates, overstating its apparent
+impact.) This replay validated that rc.48 was working as designed; it did
+not, on its own, surface the deeper one-way-coupling question — that came
+from the owner's framing in the same conversation, not from the data.
+
+**Not addressed by this change:** the still-open, not-yet-root-caused
+2026-08-13 live-session drift (BPM 70/chillstep within a few songs, no
+`set_profile()` call in the window where the number moved — see the
+addendum above) is a different mechanism and this change would not have
+prevented it, since no profile call was in the loop during that drift
+either. Left as its own open item pending `log_decisions`-enabled
+telemetry from a live session.
+
+**Half/double-time disambiguation, raised in the same conversation:**
+with genre no longer available as a disambiguator once locked, the
+existing dedicated signals are the onset-density guard
+(`_V2_DENSITY_FAST_RATIO`/`_V2_DENSITY_SCORE_RATIO`, penalizing a
+candidate whose implied onset rate looks like double-time) and the
+tactus fold-down bias (`tactus_preference_ratio`, biasing an ambiguous
+half/double read toward the more "danceable" lane) — not the comb-filter
+harmonic weighting (`acf_h / h`), which strengthens the fundamental's
+overall candidate score but isn't itself a dedicated half/double
+disambiguator. `kick_regularity` and `downbeat_confidence` are already
+recorded per corpus row but not currently wired into disambiguation —
+flagged as an unexplored signal, not scoped or built here.
+
+**Verified:** `tests/test_beat_tracker_v3.py` rewritten for the new
+model (`test_set_profile_is_noop_once_bpm_established`,
+`test_set_profile_is_a_full_noop_when_bpm_established`,
+`test_set_profile_stays_inert_regardless_of_confidence` replacing the
+two hysteresis-specific tests that no longer apply; `test_set_profile_
+fully_reprimes_when_bpm_zero`, `test_set_profile_reprimes_again_after_
+unlock`, `test_set_profile_none_is_noop_like_v2`, and the v2-vs-v3 A/B
+test kept with updated comments). Full suite green, `ruff`/`bandit`
+clean. `_DETECTOR_VERSION` → `1.0.0-rc.12`, `_VJ_WEIGHTS_DOC_VERSION` →
+`30`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing

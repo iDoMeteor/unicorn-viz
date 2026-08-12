@@ -1,18 +1,22 @@
-"""Regression tests for BeatTrackerV3 (v2 + frozen tempo prior while locked).
+"""Regression tests for BeatTrackerV3 (v2 + a one-way tempo/genre boundary).
 
-Root cause this engine fixes (see docs/adr/vj-system.md "Recommender Weight
-Promotion + Manual-Override Label"): v2's set_profile() unconditionally
+Root cause this engine fixes (see docs/adr/vj-system.md, the 2026-07-18 "20
+BPM hot" investigation, and the 2026-08-13 addendum): a genre profile is
+inferred *from* BPM among other signals -- v2's set_profile() unconditionally
 re-primes the ACF's Gaussian tempo prior on every call, including when the
-profile recommender auto-applies a new genre profile mid-track -- dragging an
-already-locked BPM toward the new profile's prior even though the track's
-real tempo never changed. v3 only inherits set_profile() differently; every
-other method (update(), the ACF/phase-lock machinery) is unchanged from v2.
+profile recommender auto-applies a new genre profile mid-track, letting truth
+flow backward from an inference into the measurement it came from. This drags
+an already-established BPM toward a new profile's prior even though the
+track's real tempo never changed. v3 only inherits set_profile() differently;
+every other method (update(), the ACF/phase-lock machinery) is unchanged
+from v2.
 
 As of P0-A/P1-D (docs/audits/2026-08-04-bpm-detector-audit.md), v2's
 set_profile() no longer narrows the ACF search range at all -- only the
-Gaussian prior. So v3's own set_profile() override is now a complete no-op
-while confidently locked (freezing "nothing" was previously "freeze the
-prior but still apply the range clamp"; now there is no clamp to apply).
+Gaussian prior. 2026-08-13 (superseding an earlier confidence-gated freeze):
+v3's set_profile() primes the prior only while no tempo has been established
+yet (self._bpm <= 0.0); the instant a real bpm exists, every subsequent call
+is a complete, unconditional no-op -- no confidence check of any kind.
 """
 from __future__ import annotations
 
@@ -74,13 +78,13 @@ def test_engine_versions_are_distinct_and_present() -> None:
     assert BeatTrackerV3.ENGINE_VERSION == '3.0.0'
 
 
-# ---- set_profile(): frozen while confidently locked ----------------------
+# ---- set_profile(): inert once a tempo is established --------------------
 
 
-def test_set_profile_freezes_prior_when_confidently_locked() -> None:
+def test_set_profile_is_noop_once_bpm_established() -> None:
     tr = BeatTrackerV3({})
     tr._bpm = 124.0
-    tr._confidence = 0.65   # >= _PRIOR_FREEZE_CONFIDENCE (0.55)
+    tr._confidence = 0.65
     before_mu = tr._prior_mu
 
     tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16, hint_min=140.0, hint_max=149.0))
@@ -89,11 +93,11 @@ def test_set_profile_freezes_prior_when_confidently_locked() -> None:
     assert tr._bpm == 124.0            # bpm itself never touched by set_profile
 
 
-def test_set_profile_is_a_full_noop_when_locked() -> None:
+def test_set_profile_is_a_full_noop_when_bpm_established() -> None:
     """P1-D: once v2's set_profile() no longer narrows the search range at
-    all (P0-A), there is nothing left for a locked v3 switch to apply --
-    set_profile() is a complete no-op while confidently locked, not just a
-    partial prior freeze. See docs/audits/2026-08-04-bpm-detector-audit.md."""
+    all (P0-A), there is nothing left for an established-bpm v3 switch to
+    apply -- set_profile() is a complete no-op. See
+    docs/audits/2026-08-04-bpm-detector-audit.md."""
     tr = BeatTrackerV3({})
     tr._bpm = 124.0
     tr._confidence = 0.65
@@ -105,20 +109,31 @@ def test_set_profile_is_a_full_noop_when_locked() -> None:
     assert tr._bpm_max == bpm_max_before
 
 
-def test_set_profile_fully_reprimes_when_not_locked_low_confidence() -> None:
+def test_set_profile_stays_inert_regardless_of_confidence() -> None:
+    """2026-08-13: superseded the confidence-gated freeze entirely -- once a
+    tempo exists there is no confidence reading, high or low, that reopens
+    re-priming. This is what closes both the 2026-07-18 rapid-profile-churn
+    incident and the 2026-08-12 mid-track-dip compounding incident with a
+    single, simpler guarantee instead of an acquire/release threshold pair.
+    See the BeatTrackerV3 class docstring."""
     tr = BeatTrackerV3({})
     tr._bpm = 124.0
-    tr._confidence = 0.30   # below freeze threshold
+    tr._confidence = 0.05   # about as low as it gets, short of a real reset
+    before_mu = tr._prior_mu
 
-    tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
+    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))
 
-    assert tr._prior_mu == 145.0
+    assert tr._prior_mu == before_mu, (
+        'no confidence reading should reopen re-priming while bpm > 0 -- '
+        'the coupling from genre back into tempo should not exist at all, '
+        'not just be gated tighter'
+    )
 
 
 def test_set_profile_fully_reprimes_when_bpm_zero() -> None:
     tr = BeatTrackerV3({})
     tr._bpm = 0.0
-    tr._confidence = 0.9    # confidence alone isn't enough without bpm > 0
+    tr._confidence = 0.9    # confidence is irrelevant to this gate entirely
 
     tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
 
@@ -130,55 +145,12 @@ def test_set_profile_reprimes_again_after_unlock() -> None:
     tr._bpm = 124.0
     tr._confidence = 0.65
     tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
-    assert tr._prior_mu != 145.0   # frozen the first time
+    assert tr._prior_mu != 145.0   # inert the first time, bpm already established
 
     tr._reset_tempo_lock()
     tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
 
-    assert tr._prior_mu == 145.0   # re-primed after the lock was lost
-
-
-def test_set_profile_stays_frozen_through_a_mid_range_confidence_dip() -> None:
-    """2026-08-12: the actual incident this hysteresis closes. A real track
-    dipping to e.g. 0.40 mid-track (well above the release threshold, 0.28,
-    but below the acquire one, 0.55) is completely normal -- a breakdown, a
-    quiet passage -- and must not reopen re-priming. Before this fix, the
-    freeze was re-evaluated fresh from the instantaneous confidence on every
-    call, so this exact dip fell through to a full re-prime and (per a real
-    overnight session) compounded into a multi-hour BPM drift. See the
-    BeatTrackerV3 class docstring's 2026-08-12 addendum."""
-    tr = BeatTrackerV3({})
-    tr._bpm = 124.0
-    tr._confidence = 0.65
-    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))  # freezes
-    before_mu = tr._prior_mu
-    assert before_mu != 95.0
-
-    tr._confidence = 0.40   # dips below acquire (0.55) but above release (0.28)
-    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))
-
-    assert tr._prior_mu == before_mu, (
-        'a mid-range confidence dip must not unfreeze the prior -- this is '
-        'exactly the gap that let a recommender-applied profile drag a '
-        'correctly-locked BPM over a real overnight session'
-    )
-
-
-def test_set_profile_unfreezes_only_below_release_threshold() -> None:
-    """The other half of the hysteresis pair: a dip that actually clears the
-    release threshold (0.28) is a real signal the lock may be gone, and
-    should still re-open re-priming -- the fix adds a dead zone, it doesn't
-    remove the unfreeze path entirely."""
-    tr = BeatTrackerV3({})
-    tr._bpm = 124.0
-    tr._confidence = 0.65
-    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))  # freezes
-    assert tr._prior_mu != 145.0
-
-    tr._confidence = 0.20   # below release threshold (0.28)
-    tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
-
-    assert tr._prior_mu == 145.0, 'a dip below the release threshold must unfreeze'
+    assert tr._prior_mu == 145.0   # re-primed after bpm reset to 0.0
 
 
 def test_set_profile_none_is_noop_like_v2() -> None:
@@ -222,4 +194,4 @@ def test_v2_drifts_toward_new_profile_but_v3_does_not() -> None:
         if cls is BeatTracker:
             assert tr._prior_mu == 145.0, 'v2 should re-prime toward the new profile'
         else:
-            assert tr._prior_mu == mu_before, 'v3 should freeze the prior while locked'
+            assert tr._prior_mu == mu_before, 'v3 should leave the prior untouched once bpm is established'
