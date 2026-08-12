@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-11
+Last updated: 2026-08-13
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -184,6 +184,118 @@ threshold` added (`tests/test_beat_tracker_v3.py`); all 8 pre-existing
 `BeatTrackerV3` tests still pass unchanged (none of them previously
 exercised a partial dip, so none needed updating). Full suite green,
 `ruff`/`bandit` clean.
+
+### Addendum (2026-08-13): the freeze fix didn't stop a live-session drift the next morning — different mechanism, still open
+
+Owner-reported, live: BPM read `70` and the profile had switched to
+`chillstep` within a few songs of a fresh session start — the same
+symptom as the overnight incident above, recurring on a much shorter
+timescale despite the hysteresis fix from the previous night. Pulled
+`logs/unicornviz_20260812_073106.log` (the session in question) and
+found the timeline does **not** implicate the mechanism just fixed:
+
+```text
+07:32:27  primed peak_time  mu=130 σ=0.24
+07:35:34  mood switch -> raver   (auto bpm 127)   -- correct lock
+07:35:48  primed house      mu=122 σ=0.10
+          ... 5 minutes, zero set_profile() calls ...
+07:40:45  mood switch -> chill    (auto bpm 70)   -- self._grid.bpm itself now 70
+07:40:53  recommender switches to chillstep
+07:41:06  primed chillstep  mu=95 σ=0.50
+```
+
+`self._grid.bpm` (the value the mood auto-switcher reads directly, per
+`AutoVJController._maybe_auto_switch_profile`) had already collapsed from
+127 to 70 **before** any low-tempo profile reached `set_profile()` — the
+chillstep priming at `07:41:06` is downstream of the drift, not its
+cause. There is a five-minute gap with zero `set_profile()` calls in the
+exact window where the number moved, and neither prior in effect during
+that window (`peak_time` mu=130 or `house` mu=122, whichever the freeze
+did or didn't block) sits anywhere near `70` in log2 space. This rules
+out the reprime-cascade mechanism the 2026-08-12 fix closed — that fix is
+doing what it was built to do, but this is a second, structurally
+different failure: the tracker's own continuous per-frame ACF/candidate-
+persistence walk can apparently drift a lock by nearly half over a few
+minutes with **no external push at all** (no profile switch, no reprime).
+
+**Not yet root-caused.** `log_decisions` was `false` for this session
+(confirmed: `config.toml:139`), so there is no per-frame
+`acf_confidence`/`candidate_history`/`drop_score` telemetry for the
+window where the drift happened — the kind of data that made the
+Thriller trace above traceable at all. Only three sparse INFO-level
+milestone lines exist. Next step: enable `log_decisions` (or hit
+Ctrl+T/Alt+T live) for the next session so a repeat can be traced
+frame-by-frame instead of inferred from milestone logs. Not scoping a
+fix until there's real data — same discipline as every other detector
+finding in this document.
+
+**Open design question raised in the same conversation, not yet decided
+or built:** should a genre/profile ever be allowed to bias the raw tempo
+estimator at all, even softly? Owner's framing: BPM sits higher in the
+"truth chain" than genre — genre is partly *inferred from* BPM
+(`tempo_fit` is a recommender input), so feeding a genre-driven prior
+back into the tempo estimator makes truth flow in both directions
+instead of one, which is the shape underlying every incident in this
+section (the 2026-07-18 "20 BPM hot" investigation, the 2026-08-12
+overnight compounding, and arguably this one once a root cause is
+found). `BeatTracker.set_profile()`'s own docstring already half-agrees
+— "a genre profile is soft evidence, not ground truth" — but still
+performs a soft reweight of `_acf_prior` toward the profile's
+mu/sigma; that soft nudge is the actual mechanism in both prior
+incidents. A strict one-way version (recommender reads BPM; genre never
+writes to the tempo estimator, soft or hard) would close this bug class
+structurally, at the cost of losing genre priors as a disambiguator in
+genuinely ambiguous half/double-time cases. Notably it would **not**
+explain or fix this specific 2026-08-13 incident, since no
+`set_profile()` call was even in the loop during the window where the
+number moved — flagged here as a real, larger architecture decision to
+make deliberately once the current mechanism is root-caused, not
+something to fold into either fix in this section.
+
+---
+
+## Tempo-Hold Lock Gate Decoupled from the Confidence Blend (2026-08-13)
+
+Same conversation as the addendum above, agreed by the owner as a
+distinct, narrower fix (unrelated to the still-open drift): the
+tempo-hold gate in `_estimate_tempo_acf()` —
+
+```python
+if self._bpm > 0.0 and self._last_t < self._tempo_hold_until_t and self._confidence >= 0.45:
+    return
+```
+
+— decides whether this frame's ACF candidate is allowed to override the
+current lock during the hold window. It was keyed to `self._confidence`,
+the *published* ACF/phase blend, which is downstream of two things that
+have nothing to do with this frame's ACF evidence quality: the `0.7/0.3`
+ACF/phase blend ratio (an explicitly temporary stopgap — see the
+Confidence blend row in `weights-and-thresholds.md`, due to be replaced
+by a strength-weighted phase-coherence rework) and the
+`primed_confidence` floor bump (a separate mechanism, for a separate
+purpose). Every future retune of the blend ratio would silently change
+how sticky this hold-gate is as a side effect, with no one having
+decided lock stickiness should change.
+
+**Fix:** gate on `acf_conf` (the already-computed raw local variable, a
+few lines above) instead:
+
+```python
+if self._bpm > 0.0 and self._last_t < self._tempo_hold_until_t and acf_conf >= 0.45:
+    return
+```
+
+`acf_conf` runs higher than the blended value on stable material (per
+the confidence-blend note above, it "reaches 1.0 regularly" on stable
+stretches, while the blend is pulled down by phase), so this makes the
+hold modestly *stickier* on genuinely stable tracks, while making it
+fully independent of the phase-confidence rework once that lands. No
+interaction with the prior-freeze fix above — different function
+(`_estimate_tempo_acf`, not `set_profile()`), different threshold,
+different mechanism. Threshold value (`0.45`) carried over unchanged for
+this first cut rather than re-picking it blind for a differently-shaped
+input; real data will say if it needs retuning. `_DETECTOR_VERSION` →
+`1.0.0-rc.11`, `_VJ_WEIGHTS_DOC_VERSION` → `29`.
 
 ---
 
