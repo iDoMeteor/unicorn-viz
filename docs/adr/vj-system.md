@@ -844,6 +844,59 @@ breakdown` re-run against the new weights (still passes with real margin:
 the scenario now reads ~0.32, not just barely under the 0.50 assertion);
 full suite green (1638 passed), `ruff`/`bandit` clean.
 
+### Addendum (same night): confidence blend `0.5/0.5` → `0.7/0.3` — the "is phase over-weighted" question, finally answered
+
+Real data, not another owner-call-for-tonight this time: pulled
+`acf_confidence`/`phase_confidence` from a live session (`sequence-
+corpus-20260811T234716Z.jsonl`), restricted to stable-BPM stretches
+(BPM unchanged over the last 20 rows — 69% of the session) as a proxy
+for "genuinely locked, not drifting":
+
+```text
+STABLE-bpm subset (n=4895):
+  acf_confidence:   median 0.40   p90 1.00   max 1.00
+  phase_confidence: median 0.29   p90 0.37   max 0.60
+```
+
+`phase_confidence` structurally caps around `0.3-0.4` *even during
+stable, locked stretches* — it essentially never approaches `1.0`
+regardless of how correct the tempo is. `acf_confidence` reaches `1.0`
+regularly on the same stretches. So the question this document has
+carried open since the coherence-window work above ("is phase over-
+weighted?") has an answer: yes, but not because the *ratio* was wrong —
+because `phase_confidence`'s own formula (a flat hit-rate over every
+onset landing within `_V2_PHASE_TOL` of the beat) can't distinguish "the
+lock is bad" from "this hi-hat pattern was never going to land on the
+downbeat." Real music generates plenty of legitimately off-beat onsets
+even when perfectly locked; the metric counts every one of them against
+confidence regardless of whether it should.
+
+**Decision: `0.5/0.5` → `0.7/0.3` ACF/phase, explicitly temporary.** Real
+fix, agreed but not built this pass: weight phase coherence by onset
+strength/band (kick/bass-region onsets should count toward the hit-rate;
+hi-hat/fill onsets shouldn't count against it) rather than treating
+every onset as equally meaningful evidence — planned for the next
+session. This ratio bump is a stopgap standing in for that, on the same
+axis the coherence-window work already established
+(`acf_confidence`/`phase_confidence` now public, reaching every corpus
+row) — it's just now backed by real stable-lock data instead of a
+same-night owner call.
+
+**Explicit process note, on the owner's own record:** this is a
+deliberate, acknowledged exception to the standing flag-and-confirm
+policy for detector changes (`feedback_trust_bpm_detector_over_essentia_
+and_llm` and its sibling memory) — "i'm violating my own policy but it's
+due to consensus and this is just a temp fix while we work on phase
+confidence." Not a precedent for skipping that discipline going forward;
+recorded here specifically so it doesn't read as a silent departure from
+it later. `_DETECTOR_VERSION` → `1.0.0-rc.9`, `_VJ_WEIGHTS_DOC_VERSION`
+→ `27`.
+
+**Verified:** full suite green, `ruff`/`bandit` clean — no test asserted
+the specific `0.5/0.5` ratio (the perfect-click-track convergence test
+reaches `~1.0` on both terms regardless of blend weight, so it's
+insensitive to this change by construction).
+
 ---
 
 ## Mixer Track Meta Reaches the Training Corpus (2026-08-10)
