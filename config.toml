@@ -76,7 +76,6 @@ endpoint = "rtmp://live-api-s.rumble.com/live"
 [spotify]
 enabled = true
 poll_interval_s = 1
-live_corpus_file = "assets/training/corpus/live-corpus.jsonl"
 
 [spotify.web_api]
 enabled = true
@@ -131,25 +130,19 @@ enabled = true
 
 [auto_vj]
 enabled = true
-beat_tracker_engine = "v3"   # freezes the tempo prior while confidently locked (see docs/adr/vj-system.md)
-beat_tracker_shadow_engine = "v2"   # A/B logging only -- never drives the director; see bpm_shadow/confidence_shadow/shadow_engine in decision-log + corpus
-analysis_mode_enabled = true
+beat_tracker_engine = "v3"   # genre never writes back to an established tempo (see docs/adr/vj-system.md)
+beat_tracker_shadow_engine = "v2"   # re-enabled 2026-08-14: mid-investigation on a real v3/v2 regression (see docs/adr/vj-system.md); turn off again once phase_tol/blend settle
 analysis_downbeat_confidence_min = 0.30
 postfx_cruise_slots = [1,2,3,4,5,6]
-log_decisions = false
-live_training_enabled = false
+log_decisions = true
+live_training_enabled = true
+sequence_training_enabled = true
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
-# auto_exit_after_finale: quit unicorn-viz once the TIMED grand finale has
-# fired and fully played out, so an unattended overnight run ends by itself
-# and the training daemon can package the recording.  Needs Auto VJ enabled
-# (the watcher rides this controller's update).  Never fires from a manual
-# Ctrl+Alt+F finale -- only the automatic end-of-set one.  Leave this OFF for
-# any live show.  Default false.
 # auto_exit_after_finale = false
 
 [control_room]
-enabled = true
+enabled = false
 fullscreen = true       # borderless fullscreen on the chosen display (default true)
 display_index = 3
 render_interval = 0.5
@@ -160,8 +153,8 @@ enabled = true
 
 [webcam]
 pip_position   = "hidden"  # top_left | top_center | top_right |
-pip_scale      = 0.25            # fraction of viewport width (0.12 – 0.80)
-border_thickness = 1.0           # border/backplate thickness in pixels
+pip_scale      = 0.2            # fraction of viewport width (0.12 – 0.80)
+border_thickness = 3.0           # border/backplate thickness in pixels
 # border_color   = [0.04, 0.72, 1.0, 0.28]  # RGBA 0.0 – 1.0
 # treatment      = "neon"          # raw | neon | glitch | vintage | thermal
 # cycle_interval now only sets the auto-cycle baseline: effects show for
@@ -265,7 +258,7 @@ preset_warmup_frames = 8
 # hardware-bringup.md, configuration.md).
 [dj_mixer]
 enabled = true               # load the drop-in (idle until Shift+D)
-start_enabled = true   # open the mixer (window + REV1 + audio) at boot
+start_enabled = false   # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
 music_dir = "~/Music/crates" # crate folder browsed by the REV1 rotary + LOAD
 display_index = 4            # display the mixer window opens on

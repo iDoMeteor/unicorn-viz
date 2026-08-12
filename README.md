@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.89**
+**Version 1.0.0-beta.90**
 
 ## Contact Me!
 
@@ -557,6 +557,14 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.90** — `unicornviz/audio/profiles.py`: sigma-matches-
+  hint-band pass across all 16 audio profiles — `bpm_prior_sigma` now
+  derives from each profile's own hand-dialed `bpm_hint_min`/`max`
+  instead of being independently authored. `electronic` re-confirmed
+  enabled (deliberate vocal-presence control pair against `house`);
+  `hardstyle` `bpm_hint_min` 145→155 (mu 150→160); `drum_and_bass`
+  `bpm_hint` 168-178→165-180. See auto-vj-01's own changelog (rc.59)
+  and [docs/adr/vj-system.md](docs/adr/vj-system.md).
 - **1.0.0-beta.89** — `unicornviz/audio/capture.py`'s
   `_candidate_monitor_devices()` now logs a `WARNING` (naming the
   unmatched hint and every visible input device) when a configured

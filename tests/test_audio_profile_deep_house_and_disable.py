@@ -247,13 +247,16 @@ def test_hyphy_disabled_and_tightened_pending_real_library_material() -> None:
     the same pass: bpm_prior_sigma 0.20 -> 0.15, spectral_centroid_sigma
     600 (wide tier) -> 400 (medium, the dataclass default) -- 'wide' was
     never re-justified for hyphy the way it was for house's genuinely
-    diverse library content. See docs/adr/vj-system.md."""
+    diverse library content. 2026-08-14: 0.15 -> 0.13, sigma-matches-
+    hint-band pass (see house's own field comment in profiles.py) --
+    consistent with, not a reversal of, the sharpening above. See
+    docs/adr/vj-system.md."""
     hyphy = get_profile('hyphy')
     assert hyphy.enabled is False
     assert hyphy.name == 'Hyphy / Trap'
     assert 'hyphy' not in enabled_profiles()
     assert 'hyphy' in PROFILES   # still directly resolvable, not eliminated
-    assert hyphy.bpm_prior_sigma == 0.15
+    assert hyphy.bpm_prior_sigma == 0.13
     assert hyphy.spectral_centroid_sigma == 400.0
     # Band itself untouched -- tightening is about discrimination sharpness
     # within the band, not closing an overlap gap (100-118 was already

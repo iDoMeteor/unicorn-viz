@@ -1093,6 +1093,125 @@ is a legitimate call, not a leftover TODO.
 
 ---
 
+## Sigma-Matches-Hint-Band Pass: 16 Profiles, Reversing the 2026-08-10 Independence Note (2026-08-14)
+
+Same day, digging further into the hint-alignment investigation above.
+Complete mu/sigma/hint table pulled for all 16 profiles; the pattern was
+stark — almost every profile's authored `bpm_hint_min`/`max` sat at only
+0.2-0.5σ from `bpm_prior_mu`, far tighter than a real 1σ `tempo_fit`
+tolerance. Recommended fix at the time: loosen the packager's
+`hint_alignment_pct` diagnostic to match the real (looser) sigma-derived
+tolerance, leave the hand-authored hint bands alone.
+
+**Owner's call: the opposite direction.** "i think that's the exact
+opposite of your recommendation? :p" — correct. The owner put real time
+into hand-dialing `bpm_hint_min`/`max` as the actual intended per-genre
+expectation; rather than loosen the diagnostic to match an
+independently-authored sigma, `bpm_prior_sigma` now **derives from** the
+hint band instead — reversing the 2026-08-10 house-family consolidation's
+explicit "independently authored from mu/sigma, not derived from either"
+design.
+
+**Three explicit value changes, owner-specified:**
+
+- `electronic`: re-confirmed `enabled=True` after a brief accidental
+  disable mid-conversation — this is the owner's deliberate control pair
+  for validating the vocal-presence discriminator actually works (house
+  has vocals, electronic doesn't, every other axis — including now
+  sigma — matches exactly).
+- `hardstyle`: `bpm_hint_min` 145→155. Surfaced a real inconsistency
+  before implementing: `bpm_prior_mu` (150) would sit *outside* its own
+  new hint range (155-165). Resolved via question to the owner: `mu`
+  moves to 160 (midpoint), matching the treatment every other profile
+  gets rather than leaving an asymmetric, off-center prior.
+- `drum_and_bass`: `bpm_hint` 168-178 → 165-180 (mu=174 already sat
+  inside both, no shift needed).
+
+**Formula:** for each profile, `sigma = max(|log2(hint_min/mu)|,
+|log2(hint_max/mu)|) * 1.05` (log2 space, matching `tempo_fit`'s own
+comparison basis; small buffer so the far edge lands just past 1σ, not
+exactly on it), rounded to 2 decimals.
+
+**The floor collision, found mid-implementation, not assumed away:**
+`_profile_score()`'s recommender-side tempo sigma floor (`max(0.08,
+...)`) turned out to bind for **11 of 16 profiles** — their hint-derived
+sigma computes below 0.08, so all 11 land on the identical floored value
+regardless of how differently wide their own hint bands actually are.
+Investigated the floor's own history before proceeding (owner: "revisit
+the .08 floor, give me the whole story") — full account:
+
+- Two *different* floors exist: the detector's `_MIN_PROFILE_PRIOR_SIGMA
+  = 0.45` (beat_grid.py, protects live ACF search from a profile prior
+  dominating real acoustic evidence) and the recommender's `0.08`
+  (auto_vj.py, governs how sharply a tempo mismatch counts as scoring
+  evidence against a candidate genre). Unifying them was tried (P2-E,
+  2026-08-04) and reverted two days later after it silently defanged
+  tempo-mismatch evidence — a real live session where the correct
+  spectral fingerprint match (`deep_house`, cosine similarity 0.879 vs
+  `psytrance`'s 0.776) lost the composite anyway, because at the
+  unified 0.45 a 30 BPM miss only cost `tempo_fit` -0.26 raw (~-0.5
+  weighted) against a ~12-term composite; reverted to 0.08, the same
+  miss costs -2.02 raw (~-4.0 weighted) — enough to matter. Full account
+  in the "Recommender Sigma-Floor Revert" section (2026-08-06) above.
+- The floor's original design intent, stated explicitly in that same
+  revert's own account: a pure safety backstop, deliberately set below
+  *every* profile's real authored sigma so it would never actually bind
+  — "0.08 is below every profile's value and never actually binds."
+  Today's pass is the first time any profile has legitimately wanted a
+  sigma tighter than that assumption held.
+- Owner's answer to "why 0.08 specifically, not some other small
+  number": "it was good enough at the time" — there's no derived-from-
+  an-incident origin story for the exact value the way there is for 0.45
+  and the revert back to 0.08; only the *direction* (low enough to not
+  defang mismatch evidence) is documented.
+- **Directionally, lowering the floor further is consistent with, not a
+  reversal of, its own stated philosophy** ("recommender's tempo_fit
+  term... where sharp discrimination is exactly what's wanted").
+- **Owner's read on the one real risk (the `_GAUSSIAN_FIT_X_CLIP=6.0`
+  clip capping how negative one mismatched candidate's penalty can go):
+  not a concern, and clarifies why.** The clip never touches a *correct*
+  candidate's score — a matching genre's diff sits near 0, nowhere near
+  the 6σ clip regardless of how tight sigma gets. It only caps how hard
+  an already-wrong candidate gets penalized, so it can't discourage or
+  slow down genuinely fast, accurate tempo/genre tracking (a track or DJ
+  set legitimately moving ambient → house → techno within one song) —
+  switching itself is governed by the decider's cooldowns/margins, not
+  by this clip. The real, distinct risk (not what the owner was asking
+  about, worth keeping separate): ordinary per-tick measurement jitter
+  around a *stable, unchanged* true tempo could start reading as
+  evidence against the correct genre if sigma gets tight enough — a
+  noise-sensitivity question, not a "punishing correct fast detection"
+  question. No specific lower-floor number identified as safe yet.
+
+**Decision: floor not changed in this pass.** Set aside for an isolated
+A/B test (owner: "there is other pending stuff to test and i want to a/b
+that in isolation... we'll hold the commit/push on that iteration until
+we make a determination") — a "before" session runs against this
+commit's profile values with the floor still at 0.08, then a follow-up
+session runs with a candidate lower floor, compared directly. This
+commit is the "before" state.
+
+**Verified:** full profile/beat-tracker test suite green after one
+expected update — `test_hyphy_disabled_and_tightened_pending_real_
+library_material` had a hardcoded `bpm_prior_sigma == 0.15` assertion,
+updated to `0.13` (hyphy is hint-derived, not floor-bound, so its value
+genuinely changed rather than landing on the floor like most of the
+roster). The psytrance/deep_house sigma-floor-revert regression test and
+the mu-falls-inside-own-hint-range drift-canary test both still pass
+unmodified — psytrance's own sigma moving 0.16→0.08 only sharpens the
+same mismatch penalty the original test exercises, doesn't flip its
+outcome. `_RECOMMENDER_VERSION` → `1.0.0-rc.11`,
+`_VJ_WEIGHTS_DOC_VERSION` → `38`, `auto_vj.py` `__version__` →
+`1.0.0-rc.59`.
+
+Also, unrelated to the profile work but landed the same session:
+inline comments added at the owner's request — `_V2_PHASE_TOL`'s field
+comment ("Jason says do NOT change this, it's super dialed") and both
+confidence-blend call sites ("Downbeat regularity confidence idea &
+math by Jason").
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
