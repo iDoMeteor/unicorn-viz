@@ -426,9 +426,20 @@ def test_is_downbeat_fires_exactly_once_per_four_beats() -> None:
     # tuning (this test started failing the same session _V2_PHASE_TOL and
     # the ACF/phase blend both changed, purely because the trailing-beat
     # count shifted from 0 to 1 -- not a real downbeat-detection bug).
-    assert beat_count // 4 == downbeat_count, (
-        f'expected one downbeat per 4 beats (± a trailing partial bar), '
-        f'got {beat_count} beats / {downbeat_count} downbeats'
+    # 2026-08-14: beat-position analysis (downbeat confidence gating) is now
+    # always on -- previously an opt-in analysis_mode_enabled flag, off by
+    # default, so this test never saw the gate at all. The very first bar
+    # can land below analysis_downbeat_confidence_min before phase_confidence/
+    # acf_confidence converge (region consistency itself needs >= 8 beat
+    # positions and reads 0.0 before that), suppressing at most one extra
+    # downbeat on top of the trailing-partial-bar effect above -- this is
+    # the gate doing its job, not a bug. Widened from an exact match to a
+    # tolerance of at most 1.
+    diff = beat_count // 4 - downbeat_count
+    assert 0 <= diff <= 1, (
+        f'expected one downbeat per 4 beats (± a trailing partial bar, ± one '
+        f'gated warmup bar), got {beat_count} beats / {downbeat_count} '
+        f'downbeats (diff={diff})'
     )
 
 
@@ -447,7 +458,7 @@ def test_beat_index_starts_at_negative_one_and_increments_once_per_beat() -> Non
 
 def test_downbeat_confidence_blend_uses_documented_weights() -> None:
     """region 45% + phase-coherence 30% + acf quality 15% + density 10%."""
-    bt = BeatTracker({'analysis_mode_enabled': True})
+    bt = BeatTracker({})
     bt._bpm = 120.0
 
     # Force each component to a known, distinct value so the blend can be
@@ -469,7 +480,7 @@ def test_downbeat_confidence_coh_and_base_are_independent_signals() -> None:
     """Regression guard for the 2026-07-06 bug: coh and base must be able to
     differ. If they were silently the same underlying value again, setting
     them to different numbers here and reading them back would fail."""
-    bt = BeatTracker({'analysis_mode_enabled': True})
+    bt = BeatTracker({})
     bt._phase_confidence = 0.9
     bt._acf_confidence = 0.1
 
@@ -478,20 +489,14 @@ def test_downbeat_confidence_coh_and_base_are_independent_signals() -> None:
     assert bt._acf_confidence == 0.1
 
 
-def test_downbeat_confidence_equals_raw_confidence_when_analysis_mode_off() -> None:
-    bt = BeatTracker({'analysis_mode_enabled': False})
-    bt._confidence = 0.42
-
-    assert bt._compute_downbeat_confidence(now=0.0) == pytest.approx(0.42)
-
-
 def test_is_downbeat_gated_below_analysis_confidence_threshold() -> None:
-    """With analysis mode on and an artificially low downbeat confidence
-    (region consistency forced to 0 -- can't accumulate real beat-position
-    history in a short synthetic run), is_downbeat must not fire even
-    though is_beat does."""
+    """Beat-position analysis is always on (2026-08-14 -- previously an
+    opt-in analysis_mode_enabled flag, ripped out; see docs/adr/vj-system.md
+    for why leaving it optional was itself a bug). With an artificially low
+    downbeat-confidence threshold (region consistency starts at 0 -- can't
+    accumulate real beat-position history in a short synthetic run),
+    is_downbeat must not fire even though is_beat does."""
     bt = BeatTracker({
-        'analysis_mode_enabled': True,
         'analysis_downbeat_confidence_min': 0.9,  # deliberately unreachable
     })
     _run_steady_click_track(bt, bpm=120.0, duration_s=10.0)
@@ -516,6 +521,37 @@ def test_is_downbeat_gated_below_analysis_confidence_threshold() -> None:
 
     assert saw_beat, 'is_beat should still fire regardless of the downbeat gate'
     assert not saw_downbeat, 'is_downbeat must not fire below an unreachable confidence gate'
+
+
+def test_analysis_mode_enabled_config_key_is_inert() -> None:
+    """A stale config.toml left over from before 2026-08-14 (when this was
+    an opt-in analysis_mode_enabled flag) must not silently disable
+    beat-position analysis -- there's no code path left that reads this
+    key at all, so passing it (True or False) must be a complete no-op:
+    downbeat gating and the beat-position map behave identically either
+    way. Guards against a future refactor accidentally reviving the flag
+    and reintroducing the exact bug 2026-08-14 removed."""
+    def _confidence_min_gate_holds(cfg_extra: dict) -> bool:
+        bt = BeatTracker({'analysis_downbeat_confidence_min': 0.9, **cfg_extra})
+        _run_steady_click_track(bt, bpm=120.0, duration_s=10.0)
+        dt = 1.0 / 60.0
+        t = 10.0
+        next_onset = 10.0
+        audio = _audio()
+        saw_downbeat = False
+        while t < 14.0:
+            onsets = None
+            if t >= next_onset:
+                onsets = [_FakeOnset(next_onset)]
+                next_onset += 0.5
+            bt.update(dt, audio, onsets=onsets, t=t)
+            saw_downbeat = saw_downbeat or bt.is_downbeat
+            t += dt
+        return not saw_downbeat   # True == gate held (no downbeat fired)
+
+    assert _confidence_min_gate_holds({'analysis_mode_enabled': False})
+    assert _confidence_min_gate_holds({'analysis_mode_enabled': True})
+    assert _confidence_min_gate_holds({})
 
 
 # ---------------------------------------------------------------------------
@@ -876,11 +912,17 @@ def test_v2_phase_tol_is_018() -> None:
 def test_downbeat_regularity_independent_of_acf_and_phase_confidence() -> None:
     """The dbc term folded into the top-level confidence blend must never
     read _acf_confidence/_phase_confidence -- unlike _last_downbeat_confidence
-    (which internally blends 30% phase + 15% acf, and with analysis_mode off
-    just echoes self._confidence itself), that would make self._confidence
-    partly echo its own recent history every bar."""
+    (which internally blends 30% phase + 15% acf, and used to just echo
+    self._confidence when analysis_mode was off), that would make
+    self._confidence partly echo its own recent history every bar.
+
+    Locks onto a steady click track first so region consistency/density
+    reflect real beat-position history (a fresh tracker's beat-position map
+    is empty -- both terms would read 0.0 regardless of acf/phase, making
+    the independence check trivially true rather than a real test).
+    """
     bt = BeatTracker({})
-    bt._bpm = 124.0
+    _run_steady_click_track(bt, bpm=124.0, duration_s=10.0)
 
     bt._acf_confidence = 0.0
     bt._phase_confidence = 0.0
@@ -891,41 +933,43 @@ def test_downbeat_regularity_independent_of_acf_and_phase_confidence() -> None:
     high = bt._downbeat_regularity(bt._last_t)
 
     assert low == pytest.approx(high)
+    assert low > 0.0, 'expected real beat-position history to produce a nonzero dbc term'
 
 
 def test_confidence_blend_is_six_two_two() -> None:
     """self._confidence = 0.6*acf + 0.2*phase + 0.2*downbeat_regularity,
     exercised via _absorb_onset (the same formula also lives in
-    _estimate_tempo_acf). analysis_mode is off (default) so region
-    consistency is a constant 1.0 and, with no beat-position history yet,
-    density is 0.0 -- dbc = (0.45*1.0 + 0.10*0.0) / 0.55.
+    _estimate_tempo_acf). Locks onto a steady click track first so
+    downbeat_regularity reflects real beat-position history instead of the
+    insufficient-history 0.0 floor (region consistency needs >= 8 beat
+    positions; a fresh tracker has none). Reads back the actual
+    acf_confidence/phase_confidence/downbeat_regularity the call used,
+    rather than assuming exact values -- with real history in play, a
+    single onset's exact effect on the phase_confidence weighted-average
+    isn't 1.0 on the nose the way it is on a fresh tracker.
     """
     bt = BeatTracker({})
-    bt._bpm = 124.0
-    bt._phase = 0.0   # on-beat -> hit, so phase_confidence lands at exactly 1.0
-    bt._acf_confidence = 0.5
+    t = _run_steady_click_track(bt, bpm=124.0, duration_s=10.0)
 
-    bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+    bt._absorb_onset(t, strength=3.0, band_weight=1.0)
 
-    dbc = 0.45 / 0.55
-    expected = 0.6 * 0.5 + 0.2 * 1.0 + 0.2 * dbc
+    dbc = bt._downbeat_regularity(bt._last_t)
+    expected = 0.6 * bt._acf_confidence + 0.2 * bt._phase_confidence + 0.2 * dbc
     assert bt._confidence == pytest.approx(expected)
+    assert dbc > 0.0, 'expected real beat-position history to produce a nonzero dbc term'
 
 
 def test_confidence_does_not_echo_its_own_prior_value() -> None:
     """Regression guard for the exact bug this design avoided: seeding
-    self._confidence with an extreme prior value must not influence the
-    freshly recomputed value at all (it would, if the dbc term were
-    _last_downbeat_confidence with analysis_mode off, since that method
-    just returns self._confidence verbatim)."""
+    self._confidence (and _last_downbeat_confidence, the field that used to
+    silently alias it) with an extreme prior value must not influence the
+    freshly recomputed value at all."""
     def _confidence_after(seed: float) -> float:
         bt = BeatTracker({})
-        bt._bpm = 124.0
-        bt._phase = 0.0
-        bt._acf_confidence = 0.5
+        t = _run_steady_click_track(bt, bpm=124.0, duration_s=10.0)
         bt._confidence = seed
         bt._last_downbeat_confidence = seed
-        bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+        bt._absorb_onset(t, strength=3.0, band_weight=1.0)
         return bt._confidence
 
     assert _confidence_after(0.0) == pytest.approx(_confidence_after(1.0))

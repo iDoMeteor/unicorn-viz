@@ -790,14 +790,15 @@ sum `1.0` (`÷ 0.55`). Genuinely independent of `acf`/`phase`: verified by
 a test that sets `_acf_confidence`/`_phase_confidence` to `0.0` then
 `1.0` and asserts `_downbeat_regularity()`'s return value doesn't move.
 
-**Known limitation, documented rather than hidden:**
-`_analysis_region_consistency()` itself returns a constant `1.0` when
-`analysis_mode_enabled` is `False` (see its own early-return). So with
-the project's default config, `_downbeat_regularity()` is a near-constant
-`~0.82` floor (`0.45 × 1.0 ÷ 0.55`) plus whatever on-beat density
-contributes on top — safe (no loop) but not a strongly discriminating
-signal unless `analysis_mode` is enabled. Worth revisiting if `dbc`'s
-contribution to live confidence turns out flatter than expected.
+**Known limitation, documented rather than hidden (superseded the same
+day — see the next entry):** `_analysis_region_consistency()` itself
+returned a constant `1.0` when `analysis_mode_enabled` was `False` (see
+its own early-return). So with the project's default config,
+`_downbeat_regularity()` was a near-constant `~0.82` floor (`0.45 × 1.0 ÷
+0.55`) plus whatever on-beat density contributed on top — safe (no loop)
+but not a strongly discriminating signal unless `analysis_mode` was
+enabled. Flagged as worth revisiting; got revisited within the hour once
+the owner asked what `analysis_mode` actually did.
 
 **Verified:** `test_beat_tracker_v2.py` — `_V2_PHASE_TOL == 0.18`;
 `_downbeat_regularity()` unaffected by `acf_confidence`/`phase_confidence`
@@ -809,6 +810,90 @@ does not move the freshly recomputed confidence at all. Full
 `test_beat_tracker_v2.py` suite green (68 tests). `_DETECTOR_VERSION` →
 `1.0.0-rc.17`, `_VJ_WEIGHTS_DOC_VERSION` → `35`, `auto_vj.py`
 `__version__` → `1.0.0-rc.56`.
+
+---
+
+## `analysis_mode_enabled` Removed Entirely — Always On (2026-08-14)
+
+Same day, immediately after the entry above. Owner asked what
+`analysis_mode_enabled` precisely did (prompted by the "known limitation"
+note above) and separately whether Ctrl+T enables it (it doesn't — Ctrl+T
+only toggles the corpus writers + decision log via `enable_trainers()`;
+`analysis_mode_enabled` is a `config.toml`-only value read once at
+`BeatTracker.__init__`, no runtime setter anywhere in the codebase).
+
+Answering precisely required enumerating every branch gated on it:
+
+1. `_append_beat_position()` — a no-op when off; `_beat_position_map`
+   never fills.
+2. `_analysis_region_consistency()` — hardcoded `1.0` when off instead of
+   a real computed score.
+3. `_compute_downbeat_confidence()` — short-circuited to
+   `return self._confidence` verbatim when off, not an independent signal.
+4. The large-tempo-jump guard's region-consistency cross-check — inert
+   when off.
+5. Downbeat firing itself — unconditional every bar when off, instead of
+   gated by `analysis_downbeat_confidence_min`.
+
+Owner's reaction: this means every install that never explicitly set
+`analysis_mode_enabled = true` (the packaged default was `false`) was
+running a measurably weaker detector — unconditional downbeats, no
+jump-guard cross-check, fake downbeat confidence — without any way to
+notice, since none of it errors or logs differently. "We don't want to
+cripple our guy when we roll out and not even realize it." The owner's
+own `config.toml` already had it set `true` (has, seemingly, always),
+which is exactly the trap: it worked fine for the one machine that always
+had it on, and would have shipped broken-by-default anywhere else.
+
+**Decision:** don't just flip the default — remove the flag. Given the
+choice between "default `true`, stays a toggle, big warning comment" and
+"rip it out, hardcode always-on," owner chose the latter: no way to ever
+disable it again, not even by accident.
+
+**Change:** `_analysis_mode_enabled` field deleted from `__init__`; all
+five call sites above collapsed to their always-on branch (the
+conditional and the off-branch code both removed, not just short-
+circuited). `analysis_mode_enabled` removed from `config.toml` (the
+owner's own file — normally never touched without asking first, but
+removing this exact key is what was explicitly requested) and
+`config.full.example.toml`. The five tunable parameters underneath it
+(`analysis_map_beats`, `analysis_region_min_beats`, `analysis_region_tol`,
+`analysis_region_confidence_min`, `analysis_downbeat_confidence_min`)
+are untouched and remain config-driven — only the on/off switch is gone.
+
+**Direct consequence for the previous entry's "known limitation":**
+`_downbeat_regularity()`'s region-consistency term is no longer a
+`~0.82` floor under default config — it's always the real computed
+signal now, since there's no more "off" state for it to degrade into.
+
+**Test fallout, all expected and fixed in the same commit, not silently
+tolerated:** two tests broke from turning gating on unconditionally.
+`test_is_downbeat_fires_exactly_once_per_four_beats` had assumed
+unconditional downbeat firing (true before this change, since the test
+never set `analysis_mode_enabled`); with gating always active, the very
+first bar can land below `analysis_downbeat_confidence_min` before
+`phase_confidence`/`acf_confidence` converge, suppressing at most one
+extra downbeat on top of the already-documented trailing-partial-bar
+effect — widened from an exact match to a tolerance of at most 1, with
+the reasoning recorded inline. And `test_confidence_blend_is_six_two_two`
+(this session's own new test, added for the previous entry) had assumed
+region consistency reads as a constant `1.0` on a fresh tracker — no
+longer true now that it's a real computed value requiring beat-position
+history; rewritten to lock onto a steady click track first and read back
+the actual `acf_confidence`/`phase_confidence`/`downbeat_regularity`
+values the call used rather than asserting hardcoded expectations. A new
+`test_analysis_mode_enabled_config_key_is_inert` guards against a future
+refactor reviving the flag: passing the old key (`True`, `False`, or
+omitted) must be a complete no-op.
+
+**Verified:** full `test_beat_tracker_v2.py` suite green (68 tests, after
+the two fixes above), plus 271 tests across
+`test_beat_grid_tracker_v1.py`/`test_beat_tracker_v3.py`/
+`test_auto_vj_phrase_structure.py`/`test_bpm_detector_audit_regressions.py`/
+`test_bpm_eval.py`/`test_corpus_writers.py`/`test_auto_vj_shadow_engine.py`/
+`test_analyzer_detector_bands.py`/`test_package_training_set.py`.
+`_DETECTOR_VERSION` → `1.0.0-rc.18`, `_VJ_WEIGHTS_DOC_VERSION` → `36`,
+`auto_vj.py` `__version__` → `1.0.0-rc.57`.
 
 ---
 

@@ -195,9 +195,9 @@ log_decisions = false
 # sequence_training_window_s = 2.0                # analysis window (~1 bar)
 # sequence_training_heartbeat_interval_s = 1.0    # fallback when BPM unavailable
 
-# Optional v2 analysis mode: short rolling beat-position map used for
-# downbeat confidence gating and large tempo-lane shift validation.
-# analysis_mode_enabled = true
+# v2/v3 beat-position analysis: always on (2026-08-14, previously an
+# opt-in analysis_mode_enabled flag -- removed; see docs/adr/vj-system.md).
+# These tune it; they don't turn it off.
 # analysis_map_beats = 64
 # analysis_region_min_beats = 8
 # analysis_region_tol = 0.20
