@@ -178,6 +178,12 @@ seed = 0
 [auto_vj]
 enabled = false
 beat_tracker_engine = "v2"   # v2 (default) | legacy
+# beat_tracker_shadow_engine = "v2"   # runs a second tracker in parallel purely
+#   for offline A/B logging (bpm_shadow/confidence_shadow/shadow_engine in the
+#   corpus) -- never drives anything live. Off by default: doubles detector
+#   CPU work for a comparison nobody's reviewing unless you're actively
+#   validating a new engine (e.g. this project's own v3-vs-v2 validation,
+#   or a future v4-vs-v3 one). See docs/adr/training-model.md.
 profile = "normie"   # chill | normie | raver | user
 auto_profile_enabled = false
 log_decisions = false

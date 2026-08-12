@@ -86,7 +86,10 @@ Scores 5 dimensions:
 2. `tempo_plausibility` — BPM range believable for genre
 3. `confidence_reliability` — confidence correlates with actual lock behaviour
 4. `musical_alignment` — beat grid aligns with perceived musical structure
-5. `external_agreement` — alignment with Essentia reference BPM (null if unavailable)
+5. `external_agreement` — alignment with Essentia reference BPM (always null
+   as of 2026-08-14 — see "Fake Essentia Reference BPM Removed" below; no
+   real independent BPM source is currently captured anywhere in the
+   corpus, so this dimension has nothing to score against)
 
 Per-song `lock_coverage_pct` in the LLM payload uses the same
 `_BPM_LOCK_CONFIDENCE_FLOOR = 0.45` threshold as the scorecard.
@@ -356,6 +359,71 @@ sessions before promoting it to the active `beat_tracker_engine` — run a
 batch of sessions in shadow mode first, review `bpm_agreement_pct` /
 `bpm_delta_median` trends across packaged buckets, then switch.
 
+**2026-08-14: v2 shadow disabled pending v4.** `beat_tracker_shadow_engine`
+served its purpose validating v3 against v2 (see `docs/adr/vj-system.md`'s
+shadow-mode entries) — v3 is now the settled active engine, and running a
+full second `BeatTracker.update()` pass every frame purely for a
+comparison nobody's actively reviewing is wasted detector CPU. Turned off
+by setting `config.toml`'s `[auto_vj] beat_tracker_shadow_engine` to
+`""` (empty — the code's own default when the key is absent; no code
+change needed, `AutoVJController.__init__` already skips constructing
+`self._shadow_grid` when this is falsy). `bpm_shadow`/`confidence_shadow`/
+`shadow_engine` fields and `shadow_engine_comparison` simply stop
+appearing in new corpus rows/LLM payloads — every consumer already
+handles their absence (`None`-guarded in `auto_vj.py`, omitted-section
+handling here). **Re-enable by setting `beat_tracker_shadow_engine` back
+to a tracker name (e.g. `"v3"`, run against a v4 candidate) when v4 work
+starts** — this is the mechanism that exists for exactly that.
+
+## Fake Essentia Reference BPM Removed (2026-08-14)
+
+**Bug, not a design gap:** `package_training_set.py`'s `_build_detector_payload()`
+built `essentia_bpm` from `float(live.get('bpm', 0.0) or 0.0)` — reading
+the `bpm` field out of a `live_corpus` JSONL row and labeling it
+"Essentia." But `auto_vj.py`'s `_build_live_training_row()` has an
+explicit, dated comment: Spotify's Get Audio Features endpoints were
+deprecated Nov 2024 and are permanently unavailable, so "live detector
+signals are the only source" for `bpm` in that row — for every audio
+source, always. There is a genuine `essentia.standard.RhythmExtractor2013()`
+call in `spotify_controller.py` (`_extract_live_audio_features()`,
+writing a real independent BPM under `stream_bpm`), but its only caller
+was commented out (see "Live corpus capture moved to Auto VJ's per-beat
+sequence writer" in that file) once this project's Top Strategy Finding
+#1, "the wrong writer was tuned," landed — so that real Essentia data
+has never actually reached the corpus this packager reads. Confirmed
+empirically against an archived corpus bucket: live_corpus rows have
+`bpm`/`bpm_confidence`/`bpm_shadow`/`mixer_bpm` but no `stream_bpm` or
+any other Essentia-derived field.
+
+Net effect: every `external_agreement` score and every "close to/deviated
+from the Essentia BPM" per-song rationale line an LLM detector report
+ever produced was the detector being compared against a copy of its own
+output and presented as external validation. Discovered while doing an
+independent v3/v2-shadow comparison by hand and asking why the LLM
+report's per-song claims about Essentia didn't match anything actually
+in the corpus.
+
+**Fix:** removed the fabrication entirely (`_build_detector_payload`'s
+`live_rows` parameter and the `live_by_key` lookup it built, the
+`essentia_bpm`/`essentia_bpm_confidence`/`essentia_bpm_delta` per-song
+fields, `essentia_available`/`essentia_summary` in the payload, and the
+now-fully-dead `_build_essentia_summary()` function) rather than fixing
+it forward — there was no real per-session Essentia data to correctly
+attach in its place. The prompt's `essentia_note` already had a designed
+"no data" fallback path (`external_agreement` scored `null`) that existed
+but was never actually reached because of the bug; it's now unconditional.
+No test in `tests/test_package_training_set.py` asserted on the buggy
+behavior (verified before removing), so nothing needed updating there.
+
+**Real independent BPM is not entirely absent from the system** —
+dj-mixer-01's `mixer_bpm` field (already captured in every live_corpus
+row, already honestly named, sourced from `vj_api.get_bpm(exclude='auto_vj')`)
+is genuine ground truth for dj-mixer-sourced sessions. It was never wired
+into `external_agreement` scoring at all (this bug used a different,
+fake field instead) — wiring it in for dj-mixer sessions specifically
+would be a legitimate follow-up, not implemented here since it wasn't
+what was asked.
+
 ---
 
 ## Superseded Decisions
@@ -372,7 +440,10 @@ batch of sessions in shadow mode first, review `bpm_agreement_pct` /
 
 ## Open Questions
 
-- Essentia BPM external agreement not yet wired — `external_agreement` scores null.
+- No real independent BPM source is wired into `external_agreement` scoring — it
+  scores null unconditionally (see "Fake Essentia Reference BPM Removed,"
+  2026-08-14). Wiring dj-mixer-01's `mixer_bpm` in for dj-mixer sessions would be
+  a legitimate way to give this dimension something real to score.
 - `bpm_locked` field in live corpus rows is not yet set (would require auto_vj.py change to populate from Schmidt trigger state).
 - Per-profile `tactus_preference_ratio` override in AudioProfile (avoids global config pollution).
 - Automated 50-session genre sweep: pending manual baseline confirmation for house + chillstep.
