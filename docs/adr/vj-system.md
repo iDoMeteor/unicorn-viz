@@ -589,6 +589,65 @@ packaged corpus before considering it settled.
 
 ---
 
+## kr/dbc Observability, Added Ahead of the First Live-Driven Session (2026-08-14)
+
+Owner, before starting the first session with options A and B (rc.51,
+rc.52) actually live: "are we logging this new data in the training kit?
+if not, do that first so that we have that observability for the next
+run." Correct call, and it caught a real gap: `kick_regularity` and
+`downbeat_confidence` (the raw *inputs*) were already reaching the corpus
+(the former via `_build_live_training_row()`, the latter via
+`_detector_snapshot()`), but nothing about what the new mechanisms
+*did* with them was recorded anywhere — no way to tell, after the fact,
+whether the region-consistency guard or the kick-regularity scaling
+actually engaged during a given session, only what the raw inputs looked
+like. This is the same class of gap that made the 2026-08-13 morning
+drift (see the addendum on `set_profile()`, above) untraceable — no
+`log_decisions` telemetry for the mechanism in question at the moment it
+mattered.
+
+**Added, `beat_grid.py`:** two new public properties on `BeatTracker`
+(inherited by `BeatTrackerV3`) — `kick_regularity` (mirrors the private
+`_kick_regularity` the tracker is actually using, confirming round-trip
+correctness of the rc.52 wiring, not just what `auto_vj.py` computed) and
+`effective_tactus_ratio` (the live value of `_effective_tactus_ratio()`,
+so its deviation from the `tactus_preference_ratio` baseline is directly
+visible over a session rather than needing to be recomputed from
+`kick_regularity` after the fact). Three new session-cumulative counters
+— `tactus_fold_accepted_count`, `tactus_region_reject_count` (option A's
+guard specifically), `tactus_score_reject_count` — incremented inside
+`_tactus_fold_accepted()` itself, one per outcome, so a session's total
+tells you directly whether/how often each guard actually fired, not just
+whether the code path exists. Monotonically increasing, same convention
+as `beat_index`/`onset_count`.
+
+**Added, `auto_vj.py`:** all five fields wired into `_detector_snapshot()`
+with `getattr(..., default)` reads, defaulting to `0.0`/`0` for `v1`
+(`BeatGridTracker`, no tactus mechanism at all) rather than omitting the
+keys — downstream corpus/decision-log consumers expect a stable row
+schema. `_detector_snapshot()` is the single choke point that already
+reaches both the decision-log (`mark()` calls) and every sequence-corpus
+row (`_sequence_director_fields()`), so this one change gives full
+coverage in both places without touching either logging path directly.
+
+**Deliberately not a weights/behavior bump:** no constant changed, no
+decision logic changed (the counters are a pure side effect of an
+existing branch, the properties are pure reads) — `_DETECTOR_VERSION` and
+`_VJ_WEIGHTS_DOC_VERSION` are unchanged, per CLAUDE.md's explicit
+exemption for logging-only changes. The drop-in's own `__version__` still
+bumped (`1.0.0-rc.53`), since new corpus/decision-log fields are a real,
+user-facing addition to what the owner and training pipeline can see.
+
+**Verified:** seven new tests in `tests/test_beat_tracker_v2.py`
+(counter-increment behavior per outcome, counters starting at zero, both
+new properties matching their underlying private state) and two in
+`tests/test_auto_vj_shadow_engine.py`
+(`test_detector_snapshot_includes_kr_dbc_fields_when_grid_has_them`,
+`test_detector_snapshot_kr_dbc_fields_default_when_grid_lacks_them`).
+Full suite green (1672 passed), `ruff`/`bandit` clean.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing

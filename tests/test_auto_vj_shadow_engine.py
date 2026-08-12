@@ -15,6 +15,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 _AUTO_VJ_PATH = Path(__file__).resolve().parents[1] / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py'
 _AUTO_VJ_SPEC = importlib.util.spec_from_file_location('test_auto_vj_shadow_module', _AUTO_VJ_PATH)
 assert _AUTO_VJ_SPEC is not None and _AUTO_VJ_SPEC.loader is not None
@@ -79,6 +81,49 @@ def test_detector_snapshot_includes_shadow_fields_when_enabled() -> None:
     assert snap['confidence_shadow'] == 0.58
     assert snap['shadow_engine'] == '3.0.0'
     assert snap['bpm'] == 124.0    # active engine's own fields unaffected
+
+
+# ---- _detector_snapshot() kr/dbc fields (2026-08-14) ----------------------
+
+
+def test_detector_snapshot_includes_kr_dbc_fields_when_grid_has_them() -> None:
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0',
+        kick_regularity=0.72, effective_tactus_ratio=0.63,
+        tactus_fold_accepted_count=4, tactus_region_reject_count=2,
+        tactus_score_reject_count=11,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['kick_regularity'] == pytest.approx(0.72)
+    assert snap['effective_tactus_ratio'] == pytest.approx(0.63)
+    assert snap['tactus_fold_accepted_count'] == 4
+    assert snap['tactus_region_reject_count'] == 2
+    assert snap['tactus_score_reject_count'] == 11
+
+
+def test_detector_snapshot_kr_dbc_fields_default_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has no tactus mechanism at all -- must not
+    raise, must default to 0.0/0 rather than omitting the keys (downstream
+    corpus/decision-log consumers expect a stable schema)."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['kick_regularity'] == 0.0
+    assert snap['effective_tactus_ratio'] == 0.0
+    assert snap['tactus_fold_accepted_count'] == 0
+    assert snap['tactus_region_reject_count'] == 0
+    assert snap['tactus_score_reject_count'] == 0
 
 
 # ---- _build_live_training_row() shadow fields ----------------------------

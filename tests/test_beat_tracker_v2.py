@@ -288,6 +288,71 @@ def test_update_persists_kick_regularity_across_calls_when_omitted() -> None:
     assert bt._kick_regularity == pytest.approx(0.8), 'must persist, not reset to 0.0'
 
 
+# ---------------------------------------------------------------------------
+# 2026-08-14: session-cumulative tactus-guard telemetry (observability added
+# ahead of the first kr/dbc-driven live session).
+# ---------------------------------------------------------------------------
+
+
+def test_tactus_counters_start_at_zero() -> None:
+    bt = BeatTracker({})
+
+    assert bt.tactus_fold_accepted_count == 0
+    assert bt.tactus_region_reject_count == 0
+    assert bt.tactus_score_reject_count == 0
+
+
+def test_tactus_score_reject_increments_score_reject_count() -> None:
+    bt = BeatTracker({})
+    bt._analysis_region_consistency = lambda bpm_candidate: 1.0
+
+    bt._tactus_fold_accepted(cand_score=0.1, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0)
+
+    assert bt.tactus_score_reject_count == 1
+    assert bt.tactus_region_reject_count == 0
+    assert bt.tactus_fold_accepted_count == 0
+
+
+def test_tactus_region_reject_increments_region_reject_count() -> None:
+    bt = BeatTracker({})
+
+    def region(bpm_candidate: float) -> float:
+        return 0.9 if bpm_candidate == 160.0 else 0.2
+
+    bt._analysis_region_consistency = region
+
+    bt._tactus_fold_accepted(cand_score=0.9, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0)
+
+    assert bt.tactus_region_reject_count == 1
+    assert bt.tactus_score_reject_count == 0
+    assert bt.tactus_fold_accepted_count == 0
+
+
+def test_tactus_accept_increments_accepted_count() -> None:
+    bt = BeatTracker({})
+    bt._analysis_region_consistency = lambda bpm_candidate: 0.0   # pre-lock, guard inert
+
+    bt._tactus_fold_accepted(cand_score=0.9, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0)
+
+    assert bt.tactus_fold_accepted_count == 1
+    assert bt.tactus_region_reject_count == 0
+    assert bt.tactus_score_reject_count == 0
+
+
+def test_effective_tactus_ratio_property_matches_private_method() -> None:
+    bt = BeatTracker({'tactus_preference_ratio': 0.55})
+    bt._kick_regularity = 0.4
+
+    assert bt.effective_tactus_ratio == pytest.approx(bt._effective_tactus_ratio())
+
+
+def test_kick_regularity_property_matches_private_attribute() -> None:
+    bt = BeatTracker({})
+    bt._kick_regularity = 0.42
+
+    assert bt.kick_regularity == pytest.approx(0.42)
+
+
 def test_full_confidence_blend_eventually_converges_given_enough_steady_time() -> None:
     """Known real behavior, not just a hope: phase_confidence has no explicit
     initial sync step (see _absorb_onset/_advance_phase) and only converges
