@@ -897,6 +897,59 @@ the two fixes above), plus 271 tests across
 
 ---
 
+## `_V2_PHASE_TOL` 0.18 Regressed v3/v2-Shadow Agreement — Reverted to 0.14 (2026-08-14)
+
+Same day, next live session after the 0.18 + three-term-blend entry
+above. Owner's read after a bit of listening: "this version seems to
+suck but last run didn't."
+
+**Found the regression with data, not just the feeling.** The shadow
+engine (still on at this point — see the disable/re-enable entries
+elsewhere this same day) gave a controlled-ish before/after: the
+`favorites/i` bucket session ran before `0.18` landed, and the very next
+live session ran right after. Comparing v3/v2-shadow BPM agreement on
+the five tracks common to both:
+
+| Track | Before (0.14) | After (0.18) |
+|---|---|---|
+| Take Off (Blastersboyz Remix) | 100% agree (v3=116.09, v2=115.98) | 0% agree (v3=136.27, v2=121.07) |
+| Boom Clap (Ayfull Remix) | 93% agree | 0% agree |
+| Rock Wit U (Nylze Edit) | 84% agree (v3=120.52, v2=119.13) | 12% agree (v3=141.91, v2=133.66) |
+| Sexy Bitch (DJ Roller Club) | 100% agree | 100% agree (unaffected) |
+| Madonna Hung Up (Anzo) | 100% agree | 100% agree (unaffected) |
+
+Three of five tracks collapsed from near-perfect agreement to near-total
+disagreement, and on the affected tracks v3's own BPM reading moved
+meaningfully higher — "Take Off" reading 136 instead of 116 is not a
+clean octave error, just wrong. The two unaffected tracks are both
+straightforward four-on-the-floor material; the pattern looks specific
+to syncopated/complex-rhythm content, consistent with the original
+2026-08-10 concern that a wider phase tolerance "counts genuinely
+off-grid onsets... as on-beat" (see `_V2_PHASE_TOL`'s own field comment).
+
+**The only behaviorally-relevant change between the two sessions was the
+single commit that bumped `_V2_PHASE_TOL` to `0.18` and switched the
+confidence blend to three terms** — both landed together, so this alone
+doesn't prove which one is responsible. Decision: revert `_V2_PHASE_TOL`
+back to `0.14` first, in isolation, and re-evaluate before touching
+`downbeat_regularity`'s weight in the blend — a two-step revert rather
+than reverting both at once, so whichever step (if either alone) fixes
+it is known rather than assumed.
+
+**Noted irony, flagged rather than acted on unilaterally:** this
+regression was caught by the shadow-engine A/B comparison, which had
+just been scheduled for disable the same day (see the "v2 shadow
+disabled pending v4" entries elsewhere). Re-enabled rather than
+disabled, pending this investigation settling.
+
+**Verified:** full `test_beat_tracker_v2.py` suite green (68 tests) —
+`test_v2_phase_tol_is_018` renamed/updated to assert `0.14` again (the
+only test with a hardcoded expectation on this constant).
+`_DETECTOR_VERSION` → `1.0.0-rc.19`, `_VJ_WEIGHTS_DOC_VERSION` → `37`,
+`auto_vj.py` `__version__` → `1.0.0-rc.58`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
@@ -4849,6 +4902,34 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
 
 ## Open Questions
 
+- **2026-08-14, flagged not fixed:** `prime_tempo()`'s "external ground
+  truth is always authoritative" assumption (P0-B,
+  `docs/audits/2026-08-04-bpm-detector-audit.md`) failed on a real
+  track. "Keep Moving (Original Mix)" – Jsphn, dj-mixer-sourced:
+  `mixer_bpm` populated at `t=4.5s` with `77.05`, and `bpm` (v3) jumped
+  to the exact same value in the same tick and stayed there at `0.90`
+  confidence for the rest of the observed window (52s of corpus data).
+  Meanwhile `bpm_shadow` (v2, never primed) held steady at `126.53` the
+  whole time, and v3 itself had been reading `129.18` at `0.82-0.85`
+  confidence for the 4.5s right before the prime hit — a perfectly
+  healthy audio-driven lock, overwritten by an external tag with no
+  sanity check against it. `126.53`/`77.05` isn't a clean octave
+  relationship (`1.64×`, not `1.5×`/`2×`), so this doesn't look like a
+  correctable half/double-time case — it looks like the mixer's own
+  stored BPM tag for this track is itself wrong (plausibly its own
+  half-time misread), and `prime_tempo()` has no defense against that:
+  confidence is only ever raised, never lowered, and the tempo-hold
+  window is explicitly designed to resist the ACF fighting back
+  ("Refreshes the tempo-hold window so the ACF's own continuity guards
+  don't immediately fight the primed value on the next update"). Comb
+  filtering (`_V2_COMB_HARMONICS`, `_estimate_tempo_acf()`) is what
+  correctly found `129.18` in the first place — it isn't a comb-filter
+  failure, it's `prime_tempo()` overriding a working comb-filter result
+  with a wrong external number. Worth a design conversation (e.g. some
+  sanity check when the primed value is far from a currently-high-
+  confidence estimate and not a harmonic multiple of it) but not touched
+  here — a real detector-trust-model change, not a constant tweak, and
+  the standing flag-and-confirm policy applies.
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
 - ~~`centroid_fit`'s Gaussian used a fixed 400 Hz sigma for every profile~~

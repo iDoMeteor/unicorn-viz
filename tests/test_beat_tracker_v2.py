@@ -901,12 +901,15 @@ def test_absorb_onset_band_weight_defaults_to_1_for_legacy_callers() -> None:
     assert bt._phase_confidence == pytest.approx(1.0)
 
 
-def test_v2_phase_tol_is_018() -> None:
-    """2026-08-14: reverted from 0.14 back to 0.18 (owner call, felt 'kinda
-    hot' at 0.14 on live material). Module-level constant, no tracker
-    method exercises it directly -- lock this in so a future tweak has to
-    touch this test too."""
-    assert _MOD._V2_PHASE_TOL == pytest.approx(0.18)
+def test_v2_phase_tol_is_014() -> None:
+    """2026-08-14: 0.14 -> 0.18 -> back to 0.14. The 0.18 + three-term-blend
+    combo measurably regressed v3/v2-shadow agreement on syncopated
+    material (3 of 5 tracks in a real session dropped from 84-100% to
+    0-12% agreement); reverting phase_tol first, in isolation, before
+    touching downbeat_regularity's weight too. Module-level constant, no
+    tracker method exercises it directly -- lock this in so a future
+    tweak has to touch this test too."""
+    assert _MOD._V2_PHASE_TOL == pytest.approx(0.14)
 
 
 def test_downbeat_regularity_independent_of_acf_and_phase_confidence() -> None:

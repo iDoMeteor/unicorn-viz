@@ -424,6 +424,27 @@ fake field instead) — wiring it in for dj-mixer sessions specifically
 would be a legitimate follow-up, not implemented here since it wasn't
 what was asked.
 
+## `meta:||` Fake Per-Song Entry (2026-08-14)
+
+Same day, next packaged bucket. `_song_key()` falls back to
+`f'meta:{title}|{artist}|{album}'` when a sequence-corpus row has no
+`track_id`. A boundary/transition row with no `track_id` **and** no
+`title`/`artist` either — one frame captured right at a track change,
+before now-playing metadata has populated yet — produces the literal
+key `"meta:||"`. `_build_detector_payload()` grouped it like any other
+song and reported it to the LLM as a real one-row track; it showed up
+verbatim as `### meta:||` in a real `detector_score.md` ("Single frame
+track; perfect lock coverage and confidence").
+
+**Fix:** skip song-groups whose key is the `meta:` fallback with both
+`title` and `artist` empty — excluded from `per_song` and `song_count`
+(previously `song_count` counted raw `songs` dict entries, including
+this phantom one, so it could disagree with `len(per_song)`; now both
+come from the same post-filter count). A new `skipped_unidentified_rows`
+payload field records how many rows were excluded this way, so the
+exclusion is visible in the payload rather than silently vanishing.
+Regression test: `test_build_detector_payload_skips_fully_unidentified_rows`.
+
 ---
 
 ## Superseded Decisions

@@ -109,6 +109,27 @@ def test_build_detector_payload_fallback_key_when_no_track_id() -> None:
     assert payload['per_song'][0]['key'].startswith('meta:')
 
 
+def test_build_detector_payload_skips_fully_unidentified_rows() -> None:
+    """A boundary/transition row with no track_id AND no title/artist (e.g.
+    one captured right at a track change, before now-playing metadata
+    populates) used to fall back to the literal key 'meta:||' and get
+    reported as its own fake "song" -- caught live when it showed up as
+    '### meta:||' in a real detector_score.md. Must be excluded from
+    per_song and song_count, and counted in skipped_unidentified_rows."""
+    real_row = _make_seq_row(track_id='aaa', title='Song A')
+    stray_row = _make_seq_row()
+    del stray_row['spotify_track_id']
+    stray_row['spotify_title'] = ''
+    stray_row['spotify_artist'] = ''
+
+    payload = _build_detector_payload([real_row, stray_row], 'set-a', 'a')
+
+    keys = {s['key'] for s in payload['per_song']}
+    assert 'meta:||' not in keys
+    assert payload['song_count'] == len(payload['per_song']) == 1
+    assert payload['skipped_unidentified_rows'] == 1
+
+
 def test_build_detector_payload_lock_coverage() -> None:
     locked_rows = [_make_seq_row(confidence=0.72) for _ in range(5)]
     unlocked_rows = [_make_seq_row(confidence=0.20) for _ in range(5)]
