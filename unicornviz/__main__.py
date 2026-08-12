@@ -161,6 +161,13 @@ def _build_parser() -> argparse.ArgumentParser:
     training.add_argument('--dj-mixer-output-device', help='Override [dj_mixer] output_device for this run. Defaults to --audio-device if not given (the same sink used for capture).')
     training.add_argument('--media-source', action='store_true', help='Force-enable media-01 and auto-play for this run. Records Auto VJ training data unless --no-training.')
     training.add_argument('--media-dir', help='Override [media] media_dir for this run.')
+    training.add_argument(
+        '--media-favorites', action='store_true',
+        help="Boot media-01 into the named playlist 'favorites' (not the "
+             'separate hearted-tracks favorites set), unshuffled, playing '
+             'once through with no repeat -- a deterministic, repeatable '
+             'training run instead of the shuffled full library.',
+    )
 
     logging_group = parser.add_argument_group('logging')
     logging_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NONE'], help='Console/file log level; NONE disables all logging.')
@@ -231,6 +238,14 @@ def _build_overrides(args: argparse.Namespace) -> dict:
         put('media', 'auto_play', True)
         put('media', 'media_dir', args.media_dir)
         put('auto_vj', 'auto_exit_after_finale', True)
+    if args.media_favorites:
+        # 'favorites' is a named playlist in the playlists store, not the
+        # separate hearted-tracks favorites set -- see
+        # MediaController._maybe_boot_playlist(). shuffle/repeat overrides
+        # here are per-run only, never written back to config.toml.
+        put('media', 'boot_playlist', 'favorites')
+        put('media', 'shuffle', False)
+        put('media', 'repeat', 'off')
 
     put('dj_mixer', 'autoplay_boot_set', args.dj_mixer_set)
     put('dj_mixer', 'autoplay_boot_delay_s', args.dj_mixer_start_delay)

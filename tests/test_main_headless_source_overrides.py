@@ -108,6 +108,26 @@ def test_media_source_absent_produces_no_media_overrides() -> None:
     assert 'media' not in overrides
 
 
+def test_media_favorites_selects_playlist_disables_shuffle_and_repeat() -> None:
+    args = _parse(['--media-source', '--media-favorites'])
+
+    overrides = _build_overrides(args)
+
+    assert overrides['media']['boot_playlist'] == 'favorites'
+    assert overrides['media']['shuffle'] is False
+    assert overrides['media']['repeat'] == 'off'
+
+
+def test_media_favorites_absent_produces_no_boot_playlist_override() -> None:
+    args = _parse(['--media-source'])
+
+    overrides = _build_overrides(args)
+
+    assert 'boot_playlist' not in overrides.get('media', {})
+    assert 'shuffle' not in overrides.get('media', {})
+    assert 'repeat' not in overrides.get('media', {})
+
+
 def test_both_sources_can_be_forced_independently() -> None:
     """Not a realistic training-daemon invocation (only one --source is ever
     selected), but the CLI itself doesn't forbid it -- confirms the two

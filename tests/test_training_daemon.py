@@ -136,6 +136,10 @@ def test_media_source_passes_the_right_flags_and_pulse_sink(monkeypatch) -> None
     assert '--media-source' in cmd
     idx = cmd.index('--media-dir')
     assert cmd[idx + 1] == '/music/library'
+    # 2026-08-14: --media-favorites always pairs with --source media --
+    # boots the named 'favorites' playlist, unshuffled, no repeat, instead
+    # of the shuffled full library. See media-01 0.21.0's boot_playlist.
+    assert '--media-favorites' in cmd
     assert '--dj-mixer-source' not in cmd
     assert calls[0]['env']['PULSE_SINK'] == 'unicorn-training'
 

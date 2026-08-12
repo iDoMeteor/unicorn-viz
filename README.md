@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.85**
+**Version 1.0.0-beta.87**
 
 ## Contact Me!
 
@@ -557,6 +557,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.87** — New `--media-favorites` CLI flag: pairs with
+  `--media-source` to boot media-01 into its named `favorites` playlist,
+  unshuffled, no repeat, instead of the shuffled full library --
+  training-daemon `--source media` now always uses it. See media-01
+  0.21.0 and training-kit-01 0.15.9's own changelogs.
 - **1.0.0-beta.85** — New detector-facing band channel: `unicornviz/audio/analyzer.py` gains `AudioData.bass_det`/`mid_det`/`treble_det` (`unicornviz/effects/base.py`), computed from the same pre-curve input as `bass`/`mid`/`treble` but through a separately-tuned `_shape()` gain (bass `2.0` vs. the effects-facing `6.6`; mid/treble unchanged, already well-tuned) -- fixes real `bass` readings pegging near ceiling almost always (median `0.97-0.98` across every director mode, verified against real session data) by giving the detector a channel with actual dynamic range instead of sharing the effects-tuned saturating curve. Effects and existing `bass`/`mid`/`treble` consumers are unaffected. Companion change in auto-vj-01 (`band_blend`'s z-score now reads the new channel) -- see that drop-in's own changelog and [docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md](docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md).
 - **1.0.0-beta.84** — Fixed the `centroid_fit` formula-mismatch bug: `unicornviz/audio/analyzer.py` gains a public `PERC_BAND_CENTERS_HZ` constant (geometric-mean center Hz of the 64 log-spaced perceptual bands, matching `tools/gen_spectral_fingerprints.py`'s own `_centers`), which the Auto VJ recommender now uses to compute the live spectral centroid over `audio.bands` instead of the raw linear-FFT bin array -- the same basis every profile's `spectral_centroid_mu` was already derived in, closing the structural mismatch. Purely additive to core; no existing analyzer output changed. Companion change in auto-vj-01 -- see that drop-in's own changelog and [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Recommender centroid_fit Weight Cut + tech_house Disabled" (addendum).
 - **1.0.0-beta.83** — `tech_house` disabled in `unicornviz/audio/profiles.py` (`enabled=False`, same disable-not-delete pattern as `hyphy`), pending a library with enough tech_house-specific material to recalibrate `spectral_centroid_mu` against a real measured average -- it sat closest of any profile to `peak_time` on `bpm_prior_mu` and leaned on a known-buggy centroid signal to break that tie. Still directly resolvable via `get_profile('tech_house')`. Companion change in auto-vj-01 (recommender `centroid_fit` weight `0.8 → 0.5`, same open formula-mismatch bug) -- see that drop-in's own changelog and [docs/adr/vj-system.md](docs/adr/vj-system.md) § "Recommender centroid_fit Weight Cut + tech_house Disabled".
