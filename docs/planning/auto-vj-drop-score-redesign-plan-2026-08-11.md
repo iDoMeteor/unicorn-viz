@@ -537,3 +537,19 @@ from-scratch redesign — that decision point isn't reached yet.
   relative check (section 4c).
 - Per-mood/genre slope-influence window (explicitly deferred, not
   designed here).
+
+## 7. Also on the RC2 plate (added 2026-08-13, not part of drop_score itself)
+
+Recorded here per owner instruction to bundle everything deferred to RC2 in
+one punch list, even though this item is recommender-side, not drop_score.
+See `docs/adr/vj-system.md` "BPM as a Hard Recommender Pre-Filter" for the
+full writeup and design decisions (owner-approved, not yet built):
+
+- Gate recommender candidates on BPM plausibility *before* scoring the
+  other terms (centroid/zcr/onset/etc.) — reject profiles whose declared
+  BPM range doesn't (± a 15% margin) contain the currently-locked tempo,
+  rather than letting `tempo_fit` be outvoted by other weighted terms the
+  way it was when `chillstep` won a session with BPM solidly locked in the
+  high 120s/low 130s. Owner-approved design, explicitly deferred: land
+  `kr`/`dbc` first, let it run a few days, then put this on the RC2 plate
+  alongside the drop_score work above.

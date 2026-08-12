@@ -155,6 +155,78 @@ def test_acf_rival_score_falls_back_to_score_floor_when_best_bpm_invalid() -> No
     assert rival == pytest.approx(bt._acf_score_floor)
 
 
+# ---------------------------------------------------------------------------
+# Tactus fold-down guard (2026-08-13): candidate must clear the score ratio
+# AND not be a measurably worse fit for the observed beat spacing.
+# ---------------------------------------------------------------------------
+
+
+def test_tactus_fold_rejected_when_score_ratio_not_cleared() -> None:
+    bt = BeatTracker({})
+    bt._analysis_region_consistency = lambda bpm_candidate: 1.0  # would pass region alone
+
+    accepted = bt._tactus_fold_accepted(
+        cand_score=0.5, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0,
+    )
+
+    assert accepted is False, 'score ratio (default 0.55) not cleared by 0.5/1.0'
+
+
+def test_tactus_fold_accepted_when_score_clears_and_no_beat_history_yet() -> None:
+    """_analysis_region_consistency returns 0.0 with no beat-position
+    history -- the guard must not block a fold before there is any real
+    evidence to judge it against (pre-lock behavior unchanged from before
+    this guard existed)."""
+    bt = BeatTracker({})
+    bt._analysis_region_consistency = lambda bpm_candidate: 0.0
+
+    accepted = bt._tactus_fold_accepted(
+        cand_score=0.9, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0,
+    )
+
+    assert accepted is True
+
+
+def test_tactus_fold_rejected_when_candidate_fits_beat_spacing_much_worse() -> None:
+    """The actual bug this guard closes: a candidate can clear the raw
+    comb-filter score ratio while being a clearly worse explanation of the
+    recently observed beat spacing than the lane it would replace."""
+    bt = BeatTracker({})
+
+    def region(bpm_candidate: float) -> float:
+        return 0.9 if bpm_candidate == 160.0 else 0.2   # candidate fits far worse
+
+    bt._analysis_region_consistency = region
+
+    accepted = bt._tactus_fold_accepted(
+        cand_score=0.9, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0,
+    )
+
+    assert accepted is False, (
+        '0.2 is well below 0.9 * _TACTUS_REGION_GUARD_RATIO (0.70) -- '
+        'a candidate this much worse at explaining the beat spacing '
+        'should not be allowed to fold even though it scores well'
+    )
+
+
+def test_tactus_fold_accepted_when_candidate_fits_beat_spacing_comparably() -> None:
+    """A genuinely valid fold (candidate explains the beat spacing about as
+    well as the current lane) must still be allowed through -- this guard
+    rejects clearly worse fits, not close calls."""
+    bt = BeatTracker({})
+
+    def region(bpm_candidate: float) -> float:
+        return 0.9 if bpm_candidate == 160.0 else 0.8   # comparable fit
+
+    bt._analysis_region_consistency = region
+
+    accepted = bt._tactus_fold_accepted(
+        cand_score=0.9, best_score=1.0, cur_bpm=160.0, cand_bpm=80.0,
+    )
+
+    assert accepted is True
+
+
 def test_full_confidence_blend_eventually_converges_given_enough_steady_time() -> None:
     """Known real behavior, not just a hope: phase_confidence has no explicit
     initial sync step (see _absorb_onset/_advance_phase) and only converges

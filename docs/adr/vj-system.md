@@ -402,6 +402,119 @@ clean. `_DETECTOR_VERSION` → `1.0.0-rc.12`, `_VJ_WEIGHTS_DOC_VERSION` →
 
 ---
 
+## BPM as a Hard Recommender Pre-Filter (2026-08-13, design agreed, deferred to RC2)
+
+Owner's idea, prompted by watching the recommender dip into `chillstep`
+(range `78-112`) during a solid high-120s/low-130s lock: instead of
+`tempo_fit` being one weighted term among several that can be outvoted by
+the others (exactly what happened there), gate the candidate profile set on
+BPM plausibility *first*, and only score the surviving candidates on
+centroid/zcr/onset/etc. Owner's framing: "bpm is our backbone... so what if
+using bpm as our primary truth source at the top of the chain... we then
+pick only the genres in that bpm range and THEN start with our other
+intel." This is a strengthening of the genre-reads-BPM direction, not a new
+coupling — it doesn't reopen anything the two entries above closed, since
+genre still never writes back to the tempo estimator.
+
+**Design decisions, owner calls:**
+
+1. **Margin:** a flat **15% tolerance** beyond each profile's declared BPM
+   range (not a literal hard cutoff at the raw hint boundary, and not a
+   sigma-based Gaussian membership as this document originally floated) —
+   e.g. a `118-126` range effectively gates at `~100.3-144.9`. Simpler to
+   implement and reason about than a per-profile sigma computation.
+2. **Coverage:** the union of all profiles' (margin-widened) BPM ranges
+   should cover essentially all real-world BPMs the library contains; any
+   gap found during implementation should be closed by widening the
+   specific profile(s) with the gap, not by special-casing the gate logic.
+3. **Empty-candidate-set fallback (should be rare once 2 is handled):**
+   fall back to the profile whose range is *numerically nearest* the
+   current BPM, rather than freezing on stale state or erroring.
+4. **Sequencing, explicit:** not built now. `kr`/`dbc` (this document,
+   section above and below) lands first and runs for a few days of real
+   sessions before this is scheduled — bundled onto the RC2 punch list
+   alongside the `drop_score` redesign and music-theory-audit items. See
+   `docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md` section 7.
+
+**Expected effect once built:** directly prevents the triggering incident
+(a profile whose range doesn't contain the locked BPM at all can no longer
+win regardless of how well it scores on other terms) and, per the design
+intent, should make the remaining weighted terms do real discriminating
+work specifically *among* tempo-plausible, overlapping-range genres (e.g.
+`house`/`tech_house`/`deep_house`, already documented as inseparable on
+tempo alone) rather than being asked to out-vote a wrong tempo range
+entirely.
+
+---
+
+## Tactus Fold-Down Gains a Region-Consistency Guard — kr/dbc Option A (2026-08-13)
+
+Same conversation, first half of the kick-regularity/downbeat-confidence
+disambiguation work agreed on earlier: `_estimate_tempo_acf()`'s tactus
+descent loop only ever checked raw comb-filter score
+(`cand_score >= best_score * tactus_preference_ratio`) when deciding
+whether to fold to a candidate octave-down/2:3/3:4 lane. Score alone can't
+distinguish "this candidate's period is a genuinely better musical pulse"
+from "this candidate's period happens to score well but doesn't actually
+land on the track's real accents" — it's a property of the ACF's own
+windowed periodicity estimate, not a check against actual observed onset
+timing.
+
+**Fix:** the accept decision moved into a new method, `_tactus_fold_
+accepted()` (mirrors `_acf_rival_score`'s existing pattern of a small,
+directly-unit-testable helper rather than inline loop logic), which adds a
+second, independent requirement: the candidate's `_analysis_region_
+consistency()` (the same beat-grid self-consistency signal
+`downbeat_confidence` and the large-jump guard already use) must not be
+below `_TACTUS_REGION_GUARD_RATIO` (`0.70`, first-cut value) of the current
+lane's own region-consistency. Inert before enough beat-position history
+exists — `_analysis_region_consistency` returns `0.0` pre-lock, and the
+guard is skipped whenever the current lane's own reading is `0.0`, so it
+never blocks a fold during cold start, only once there's real evidence to
+judge candidates against.
+
+**Explicit design constraint, same conversation:** `tactus_preference_
+ratio`/`tactus_check_bpm` must stay global constants (a single
+per-session value, user-configurable via `config.toml`'s `[auto_vj]`
+block) and must never become per-profile. A profile-driven fold-eagerness
+value would reopen the exact truth-directionality bug the "Genre Never
+Writes to an Established Tempo" entry above closed the same day: BPM →
+recommender picks a profile → profile's fold-eagerness biases which
+octave lane the tracker locks to → that changes BPM → feeds back into
+which profile scores best. Owner's own framing when raised: "that could
+trigger truth directionality problem again tho? lol" — correct, and now
+written down as a hard constraint on this constant rather than left as an
+open question next time someone considers making it profile-aware.
+
+**Also validated, same conversation:** before touching anything, checked
+whether the existing `tactus_preference_ratio = 0.55` value is actually
+mistuned, using `runtime/dj_mixer_tracks.json` as ground truth for the
+first time this session — cross-referenced 54 confidently-tracked songs
+(confidence ≥ 0.55) across every packaged `favorites` corpus: `44/54`
+exact match, `0` clean half-time/double-time folds, `3` borderline 2/3- or
+3/4-ratio cases, all on "Edit"/"Remix"/"Mashup" titles (plausibly the
+DJ-pool internal-tempo-variation case the owner flagged, not obviously a
+tactus bug). No evidence the value needs retuning; left unchanged.
+
+**Not done here:** kr/dbc option B — piping `kick_regularity` (currently
+computed in `auto_vj.py`, independent of the tracker's own lock state)
+down into `beat_grid.py` to modulate fold eagerness per-track from a real
+acoustic measurement rather than a static constant. Owner's sequencing,
+explicit: "a first...test.... then b....test/tweak/test, decide" — a
+separate, larger interface change, scoped as its own follow-up.
+
+**Verified:** four new tests in `tests/test_beat_tracker_v2.py`
+(`test_tactus_fold_rejected_when_score_ratio_not_cleared`,
+`test_tactus_fold_accepted_when_score_clears_and_no_beat_history_yet`,
+`test_tactus_fold_rejected_when_candidate_fits_beat_spacing_much_worse`,
+`test_tactus_fold_accepted_when_candidate_fits_beat_spacing_comparably`),
+same monkeypatch-`_analysis_region_consistency` pattern already
+established by `test_downbeat_confidence_blend_uses_documented_weights`.
+Full suite green (1659 passed), `ruff`/`bandit` clean.
+`_DETECTOR_VERSION` → `1.0.0-rc.13`, `_VJ_WEIGHTS_DOC_VERSION` → `31`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
