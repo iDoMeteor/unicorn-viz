@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-03
+Last updated: 2026-08-14
 
 This document records architectural decisions for the Auto VJ training pipeline:
 corpus design, scoring, packager logic, headless session infrastructure, and

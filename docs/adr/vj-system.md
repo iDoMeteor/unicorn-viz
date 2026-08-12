@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 This document records architectural decisions for the live VJ runtime: beat
 detection engine, lock state management, audio profile system, and the
@@ -947,6 +947,149 @@ disabled, pending this investigation settling.
 only test with a hardcoded expectation on this constant).
 `_DETECTOR_VERSION` → `1.0.0-rc.19`, `_VJ_WEIGHTS_DOC_VERSION` → `37`,
 `auto_vj.py` `__version__` → `1.0.0-rc.58`.
+
+---
+
+## 2026-08-14 Session Summary — RC1-Candidate Detector Configuration
+
+One long session, rc.53 through rc.58, closing out on a configuration
+validated against ~90 minutes of real, organic (non-mixer-primed)
+session data across two full training-set buckets
+(`favorites/j`, `favorites/k`) plus a third in progress
+(`training-house-01/a`). Recording what shipped, what was learned, and
+the current settings snapshot in one place, since the individual
+entries above are each scoped to a single change.
+
+### What shipped (rc.53 → rc.58)
+
+- **rc.53** — kr/dbc observability (`kick_regularity`,
+  `effective_tactus_ratio`, three tactus-guard counters) logged ahead
+  of the first live-driven session.
+- **rc.54** — strength/band-weighted phase coherence: `_phase_confidence`
+  weights each onset by `band_weight` (bass fraction of flux) × a
+  saturating function of `strength`, instead of counting every onset
+  equally. The real fix for `phase_confidence`'s structural ~0.3-0.4 cap.
+- **rc.55** — confidence blend `0.7/0.3` → `0.8/0.2` ACF/phase (the
+  pre-stated fallback once rc.54 alone didn't raise confidence enough).
+- **rc.56** — `_V2_PHASE_TOL` `0.14` → `0.18` + blend becomes three-term
+  (`0.6×acf + 0.2×phase + 0.2×downbeat_regularity`, a new,
+  deliberately phase/acf-independent method — region consistency +
+  on-beat density only, avoiding the feedback loop a naive
+  `_last_downbeat_confidence` reuse would have caused).
+- **rc.57** — `analysis_mode_enabled` removed entirely, hardcoded
+  always-on. It had been an opt-in flag defaulting `false`; every
+  install that never explicitly enabled it ran degenerate downbeat
+  gating, a jump-guard with no region-consistency cross-check, and a
+  fake `downbeat_confidence`. Discovered while explaining what the
+  flag did — turned into a real fix, not just an explanation.
+- **rc.58** — `_V2_PHASE_TOL` `0.18` → back to `0.14`, reverting a real,
+  data-confirmed regression (v3/v2-shadow agreement 84-100% → 0-12% on
+  3 of 5 tracks). See the two entries directly above.
+
+Alongside the detector work: training-kit-01's packager fixed twice
+(0.15.10 — a fabricated "Essentia BPM" that was actually always the
+detector's own output, invalidating every past `external_agreement`
+score; 0.15.11 — a `"meta:||"` fake per-song entry from boundary rows
+with zero identifying metadata). `beat_tracker_shadow_engine` was
+disabled, then re-enabled the same day once it caught the rc.56
+regression live — it's the mechanism that made this whole
+investigation possible, worth remembering next time disabling it looks
+tempting.
+
+### What we learned, beyond the individual fixes
+
+- **The v3/v2 shadow comparison isn't as clean a baseline as it looks.**
+  `BeatTrackerV3` only overrides `set_profile()` — `_absorb_onset()`/
+  `_estimate_tempo_acf()` (and therefore the confidence blend, phase
+  tolerance, everything tuned this session) are shared code. A
+  v3/v2 disagreement is really "how do these formulas interact with
+  v3's freeze-while-locked behavior vs. v2's constant re-priming," not
+  a clean new-code-vs-old-code A/B. Keep this in mind before reading
+  future shadow-comparison numbers as more isolating than they are.
+- **`prime_tempo()`'s "external ground truth is always authoritative"
+  assumption (P0-B, `docs/audits/2026-08-04-bpm-detector-audit.md`,
+  2026-08-04) doesn't hold universally.** Found live: "Keep Moving
+  (Original Mix)" — dj-mixer tagged it 77 BPM, the detector had
+  independently, correctly locked 129.18 BPM at 0.82-0.85 confidence,
+  and the mixer's tag won anyway, unconditionally, with no sanity
+  check. Confirmed the fix by replaying the same track later in a
+  media-01-only (unprimed) session: clean 125.42 BPM, v3/v2 exact
+  agreement. **Flagged as an open question below, not fixed** — a
+  detector-trust-model change needs its own sign-off, not a
+  same-night tuning tweak.
+- **Two months of historical "0.900 confidence, 100% lock coverage"
+  training buckets were an artifact, not detector performance.**
+  Every one of them (`garbage/e`, `library/a`/`b`, `favorites/a-d`,
+  `training-house-01/a`, spanning 2026-08-09 through 2026-08-11
+  ~10:14) was a continuous dj-mixer-sourced session — the same
+  `prime_tempo()` confidence floor dominating for the session's
+  near-entire duration, not organic audio-driven confidence. Any BPM
+  tuning done by eyeballing those sessions' numbers was tuning against
+  a floor, not against the detector's real behavior. Sessions from
+  `favorites/e` onward (2026-08-11 ~11:13+) are real, organic,
+  media-01-sourced data — that's the trustworthy baseline going
+  forward for anything BPM-detector-related.
+- **A LLM detector score being harsh doesn't automatically mean it's
+  wrong** (contrast with the fabricated-Essentia case above, where it
+  was) — `favorites/j`'s 2.75/5 explicitly cited "low shadow engine
+  BPM agreement (30.4%)," which was the real rc.56 regression, not a
+  hallucination. Worth reading LLM rationale for whether it's citing
+  something checkable against real corpus data before dismissing or
+  trusting it either way.
+- **The two-to-three tracks that stayed hardest to agree on all
+  night — "Take Off (Blastersboyz Remix)," "Rock Wit U (Nylze Edit),"
+  "You And I (Original Mix)"** — were already imperfect before any of
+  tonight's changes (`Rock Wit U` was 84% agreement even on the
+  original clean baseline, never 100%). Owner's read: "those are both
+  super difficult songs" — genuinely hard material, not a lingering
+  bug. `favorites/k`'s full-session numbers back this up: 90.6% overall
+  agreement, 14 of 16 tracks at 97-100%, only those same few tracks
+  short of it.
+
+### Current settings snapshot (2026-08-14, end of session)
+
+```toml
+[auto_vj]
+beat_tracker_engine = "v3"
+beat_tracker_shadow_engine = "v2"   # re-enabled; see note below
+analysis_downbeat_confidence_min = 0.30
+log_decisions = true
+live_training_enabled = true
+sequence_training_enabled = true    # separate key from live_training_enabled -- both
+                                     # needed for headless runs to capture the rich
+                                     # per-tick sequence corpus, not just live-corpus
+```
+
+```text
+_V2_PHASE_TOL = 0.14
+Confidence blend: 0.6*acf_confidence + 0.2*phase_confidence + 0.2*downbeat_regularity
+analysis_mode: always on (no config key -- see rc.57 above)
+_DETECTOR_VERSION = 1.0.0-rc.19
+_VJ_WEIGHTS_DOC_VERSION = 37
+auto_vj.py __version__ = 1.0.0-rc.58
+```
+
+### RC1-candidate status
+
+**Validated as a strong candidate for the detector's own eventual RC1
+tuning generation** — real organic session data (`favorites/j`,
+`favorites/k`, `training-house-01/a` in progress), 90.6% v3/v2
+agreement on a full 56-minute mixed-difficulty set, 100% agreement on
+an easy house set, no fabricated telemetry in the validating data (the
+`prime_tempo()`/Essentia/`meta:||` artifacts above are all excluded or
+fixed). **Not** a claim that every open item is resolved — two things
+explicitly remain open, tracked below rather than blocking this note:
+(1) `prime_tempo()`'s unconditional external-trust model, (2)
+`downbeat_regularity`'s real contribution is still not isolated from
+`_V2_PHASE_TOL` by a controlled test — both flagged in Open Questions,
+neither is a known-broken blocker, both are "worth a closer look
+before calling the tuning fully final."
+
+**`beat_tracker_shadow_engine` is currently re-enabled** — turn it back
+off (empty/absent) once this configuration is confirmed stable across
+a few more sessions, or leave it on if the owner decides the
+regression-catching value outweighs the CPU cost going forward; either
+is a legitimate call, not a leftover TODO.
 
 ---
 
@@ -4929,7 +5072,29 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
   sanity check when the primed value is far from a currently-high-
   confidence estimate and not a harmonic multiple of it) but not touched
   here — a real detector-trust-model change, not a constant tweak, and
-  the standing flag-and-confirm policy applies.
+  the standing flag-and-confirm policy applies. **Addendum, same day:**
+  replayed the same track later in an unprimed (media-01-only) session
+  — clean, consistent `125.42` BPM, v3/v2 exact agreement, confirming
+  the detector's own read was right both times. Recommended direction
+  discussed with the owner: not a 50/50 blend (still rewards a wrong
+  tag, just less) and not a blanket "is the mixer garbage" check (no
+  way to know in advance) — a **gate**: keep `prime_tempo()`'s full-trust
+  behavior when there's nothing to contradict it, but skip the override
+  (or accept it without the confidence floor, so audio evidence can
+  immediately out-vote it) when the detector already has a confident,
+  converged estimate that the primed value doesn't roughly match or
+  isn't a clean harmonic of. Not implemented — recorded here as the
+  agreed direction for whenever this gets picked up, not a decision to
+  build it now.
+- **2026-08-14, flagged not fixed:** `downbeat_regularity`'s real
+  contribution to the confidence blend (rc.56) is still not isolated
+  from `_V2_PHASE_TOL`'s own effect by a controlled test — both changed
+  in the same commit, and the live A/B evidence available (shadow vs.
+  active) is confounded by both trackers sharing the same blend code
+  (see the 2026-08-14 session summary above). Recommended next step if
+  this gets revisited: a synthetic click-track test that isolates
+  `downbeat_regularity`'s weight alone, not another round of live
+  session comparison.
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
 - ~~`centroid_fit`'s Gaussian used a fixed 400 Hz sigma for every profile~~
