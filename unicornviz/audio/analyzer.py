@@ -107,10 +107,20 @@ _VOCAL_FMR_RECOMPUTE_FRAMES = 8   # throttle the modulation FFT; ~130-190ms at t
 
 @dataclass(frozen=True)
 class OnsetEvent:
-    """A detected onset with audio-time timestamp and relative strength."""
+    """A detected onset with audio-time timestamp and relative strength.
 
-    t: float         # audio time (seconds) at detection
-    strength: float  # z-score above adaptive threshold (>= 1.0)
+    2026-08-14: ``band_weight`` added for BeatTracker's strength/band-
+    weighted phase coherence (see beat_grid.py's ``_absorb_onset()``) --
+    the fraction of this onset's flux that came from the bass/kick band,
+    0..1. Defaults to 1.0 (fully bass-attributed) for any caller that
+    constructs an ``OnsetEvent`` without it, matching this field's
+    absence in the pre-2026-08-14 behavior, where every onset was treated
+    as equally diagnostic of phase regardless of which band triggered it.
+    """
+
+    t: float                    # audio time (seconds) at detection
+    strength: float              # z-score above adaptive threshold (>= 1.0)
+    band_weight: float = 1.0     # fraction of this onset's flux from the bass band, 0..1
 
 
 class Analyzer:
@@ -671,7 +681,16 @@ class Analyzer:
                 # P1: queue the onset event for the BeatTracker to consume
                 if len(self._onset_queue) == self._onset_queue.maxlen:
                     log.debug('Onset queue overflow — dropping oldest event')
-                self._onset_queue.append(OnsetEvent(now, max(1.0, float(strength))))
+                # 2026-08-14: band_weight -- what fraction of this onset's
+                # flux was bass-band (data.bass_flux, already computed
+                # above) vs. the rest of the spectrum. Clipped to [0, 1]:
+                # `flux` includes the rms_rise term (not band-attributed),
+                # so the raw ratio can slightly exceed 1.0 on a broadband
+                # transient. See OnsetEvent's field comment.
+                band_weight = float(np.clip(data.bass_flux / max(1e-6, flux), 0.0, 1.0))
+                self._onset_queue.append(
+                    OnsetEvent(now, max(1.0, float(strength)), band_weight)
+                )
 
         self._env_prev_flux = flux
         return data

@@ -769,6 +769,103 @@ def test_confidence_floor_does_not_apply_before_any_prime() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 2026-08-14: strength/band-weighted phase coherence -- the real fix for
+# phase_confidence's structural cap, superseding the flat per-onset
+# hit/miss buffer.
+# ---------------------------------------------------------------------------
+
+
+def test_absorb_onset_strong_bass_hit_pushes_confidence_toward_one() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.0   # on-beat -> hit
+
+    bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)   # strong, fully bass
+
+    assert bt._phase_confidence == pytest.approx(1.0)
+
+
+def test_absorb_onset_strong_bass_miss_drags_confidence_to_zero() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.5   # off-beat -> miss
+
+    bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)   # strong, fully bass
+
+    assert bt._phase_confidence == pytest.approx(0.0)
+
+
+def test_absorb_onset_weak_treble_miss_barely_moves_an_established_confidence() -> None:
+    """The actual bug this rework closes: real music generates plenty of
+    legitimately off-beat hi-hat/fill onsets that a correct lock has no
+    business explaining away. A weak, treble-heavy miss should carry
+    almost no weight against an already-established high confidence."""
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.0
+    for _ in range(10):   # establish a confident, all-hit history
+        bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+    before = bt._phase_confidence
+    assert before == pytest.approx(1.0)
+
+    bt._phase = 0.5   # off-beat -> miss
+    bt._absorb_onset(0.0, strength=1.0, band_weight=0.05)   # weak, almost no bass
+
+    assert bt._phase_confidence > 0.9, (
+        f'a weak treble miss should barely dent an established high '
+        f'confidence, dropped to {bt._phase_confidence} from {before}'
+    )
+
+
+def test_absorb_onset_bass_miss_drags_harder_than_treble_miss() -> None:
+    """Same prior state, same magnitude miss -- a bass-heavy miss is real
+    evidence against the lock and must hurt more than a treble-heavy one."""
+    def _confidence_after_miss(band_weight: float) -> float:
+        bt = BeatTracker({})
+        bt._bpm = 124.0
+        bt._phase = 0.0
+        for _ in range(10):
+            bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+        bt._phase = 0.5
+        bt._absorb_onset(0.0, strength=3.0, band_weight=band_weight)
+        return bt._phase_confidence
+
+    bass_miss = _confidence_after_miss(1.0)
+    treble_miss = _confidence_after_miss(0.05)
+
+    assert bass_miss < treble_miss
+
+
+def test_absorb_onset_zero_band_weight_never_updates_phase_confidence_alone() -> None:
+    """A pure-treble onset (band_weight=0.0) contributes zero weight either
+    way -- must not raise (division-by-zero guard) and must leave
+    phase_confidence exactly where it was, hit or miss."""
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.0
+    bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+    before = bt._phase_confidence
+
+    bt._phase = 0.5   # would be a miss, but band_weight=0.0 carries no evidence
+    bt._absorb_onset(0.1, strength=3.0, band_weight=0.0)
+
+    assert bt._phase_confidence == pytest.approx(before)
+
+
+def test_absorb_onset_band_weight_defaults_to_1_for_legacy_callers() -> None:
+    """Callers that don't pass band_weight (pre-2026-08-14 call sites,
+    synthetic onsets without the field) get the old fully-diagnostic
+    behavior -- confirms the default arg, not just OnsetEvent's."""
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.0
+
+    bt._absorb_onset(0.0, 3.0)   # no band_weight arg
+
+    assert bt._phase_confidence == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
 # Downbeat callback scheduling
 # ---------------------------------------------------------------------------
 

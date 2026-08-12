@@ -103,3 +103,50 @@ def test_genuine_transient_after_warmup_produces_onset() -> None:
     onsets = a.drain_onsets()
     assert len(onsets) >= 1, 'Genuine transient must produce at least one onset'
     assert onsets[0].strength > 0.0, 'Onset strength must be positive'
+
+
+def _make_tone_block(hz: float, n: int = 1024, amp: float = 0.9, rate: int = _RATE) -> np.ndarray:
+    """Pure sine burst concentrated at `hz`, for band_weight discrimination."""
+    t = np.arange(n, dtype=np.float32) / rate
+    return (amp * np.sin(2.0 * np.pi * hz * t)).astype(np.float32)
+
+
+def _first_onset_after_warmup(hz: float):
+    a = Analyzer(fft_bands=_BANDS)
+    silence = np.zeros(1024, dtype=np.float32)
+    t = 0.0
+    step = 1024 / _RATE
+    for _ in range(60):
+        a.process(silence, t=t)
+        a.drain_onsets()
+        t += step
+    a.process(_make_tone_block(hz), t=t)
+    onsets = a.drain_onsets()
+    assert len(onsets) >= 1, f'{hz} Hz tone must produce at least one onset'
+    return onsets[0]
+
+
+def test_onset_band_weight_is_high_for_a_bass_transient() -> None:
+    """2026-08-14: band_weight feeds BeatTracker's strength/band-weighted
+    phase coherence -- a kick-region transient (well inside _BASS_HZ,
+    40-180 Hz) should read as strongly bass-attributed."""
+    onset = _first_onset_after_warmup(80.0)
+
+    assert onset.band_weight > 0.7, f'expected a bass-heavy onset, got band_weight={onset.band_weight}'
+
+
+def test_onset_band_weight_is_low_for_a_treble_transient() -> None:
+    """A treble-region transient (well inside _TREBLE_HZ, 3200-12000 Hz,
+    e.g. a hi-hat) should read as weakly bass-attributed -- this is the
+    signal a wrongly-timed hi-hat shouldn't be allowed to drag phase
+    confidence down as hard as a wrongly-timed kick would."""
+    onset = _first_onset_after_warmup(8000.0)
+
+    assert onset.band_weight < 0.3, f'expected a treble-heavy onset, got band_weight={onset.band_weight}'
+
+
+def test_onset_band_weight_defaults_to_1_when_unset() -> None:
+    from unicornviz.audio.analyzer import OnsetEvent
+    ev = OnsetEvent(t=1.0, strength=1.5)
+
+    assert ev.band_weight == 1.0

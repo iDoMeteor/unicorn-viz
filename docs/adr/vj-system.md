@@ -648,6 +648,76 @@ Full suite green (1672 passed), `ruff`/`bandit` clean.
 
 ---
 
+## Strength/Band-Weighted Phase Coherence — the Real Fix (2026-08-14)
+
+The fix deferred since the 2026-08-11 confidence-blend addendum ("Real
+fix (agreed, not yet built): weight phase coherence by onset strength/
+band so kick/bass-region onsets count toward the hit-rate and hi-hat/
+fill onsets don't count against it"), built the same day the owner
+launched the first kr/dbc-driven live session and asked for it to run in
+parallel.
+
+**Root problem, restated:** `_phase_confidence` was a flat hit-rate —
+every onset in the rolling `_V2_COHERENCE_WINDOW` counted equally toward
+"did onsets land on-beat," regardless of whether it was a kick (expected
+to land on-beat) or a hi-hat/fill (not expected to, in syncopated or
+busy material). Real session data showed this structurally capped
+`phase_confidence` around `~0.3-0.4` even during genuinely stable,
+correctly-locked stretches — not because the lock was bad, but because
+real music generates onsets a correct lock has no business explaining
+away. The 2026-08-11 fix (confidence blend `0.5/0.5 → 0.7/0.3`) was an
+explicit stopgap standing in for this, not a resolution.
+
+**Fix, core (`unicornviz/audio/analyzer.py`):** `OnsetEvent` gains
+`band_weight: float = 1.0` — the fraction of the onset's flux that came
+from the bass band, computed at the exact moment of detection from
+`data.bass_flux` (already computed for downbeat detection) relative to
+total `flux`, clipped to `[0, 1]` since `flux` includes an
+unattributed `rms_rise` term. Default `1.0` preserves the old "every
+onset is fully diagnostic" behavior for any caller that doesn't supply
+it (backward compatible — `test_audio_blocking_reader.py`'s direct
+`OnsetEvent(t=..., strength=...)` construction still works unchanged).
+
+**Fix, `beat_grid.py`:** `_absorb_onset()` (previously `_strength`,
+underscore-prefixed and unused — the strength parameter existed but did
+nothing) now computes `weight = band_weight * min(1.0, strength /
+_V2_PHASE_STRENGTH_SATURATION)` (saturation `2.0`, "roughly one MAD unit
+above threshold" reaches full weight) and uses it to feed two new
+parallel deques, `_coherence_hit_weight`/`_coherence_total_weight`,
+replacing the flat `_coherence_buf`. `_phase_confidence` becomes `sum(hit
+weights) / sum(total weights)` — a strong, bass-heavy onset that misses
+still drags confidence down hard (real evidence against the lock,
+unchanged from before); a weak or treble-heavy onset barely moves it
+either way, hit or miss (it was never expected to land on the beat, so
+it isn't evidence against a lock when it doesn't). Left unchanged
+(rather than reset toward `0.0`) when a window's total weight is
+`~0`, so a stretch of nothing but weak treble onsets doesn't produce a
+noisy, near-meaningless ratio.
+
+**Confidence-blend ratio deliberately untouched:** `0.7/0.3` stays as-is
+in this commit. This rework is the thing the ratio was compensating for,
+but the owner's framing was explicit: evaluate `phase_confidence`
+against real session data with the rework live before touching the
+ratio, and if discrimination still isn't good enough, the stated
+fallback is `0.8/0.2` (more ACF-weighted) — not an assumed revert toward
+`0.5/0.5`.
+
+**Verified:** three new tests in `tests/test_analyzer_onset_dedup.py`
+using synthesized sine bursts at 80 Hz (bass) vs 8000 Hz (treble) to
+confirm `band_weight` actually discriminates on real spectral content,
+not just a formula in isolation, plus a default-value test. Six new
+tests in `tests/test_beat_tracker_v2.py` covering: strong-bass-hit pushes
+confidence toward `1.0`; strong-bass-miss drags it toward `0.0`;
+weak-treble-miss barely dents an established high confidence; a
+same-magnitude bass-miss hurts more than a treble-miss (the core
+discrimination claim, tested comparatively); a zero-band-weight onset
+never moves confidence and doesn't divide-by-zero; the `band_weight`
+parameter defaults to `1.0` for legacy call sites. Full suite green
+(1683 passed), `ruff`/`bandit` clean. `_DETECTOR_VERSION` →
+`1.0.0-rc.15`, `_VJ_WEIGHTS_DOC_VERSION` → `33`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing

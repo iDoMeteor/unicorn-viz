@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.87**
+**Version 1.0.0-beta.88**
 
 ## Contact Me!
 
@@ -557,6 +557,13 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.88** — `unicornviz/audio/analyzer.py`'s `OnsetEvent` gains
+  `band_weight` (bass fraction of the onset's flux, 0..1, computed from
+  the already-existing `data.bass_flux`) — feeds auto-vj-01's new
+  strength/band-weighted phase coherence (the real fix for
+  `phase_confidence`'s structural cap). Default `1.0` keeps existing
+  onset consumers unaffected. See auto-vj-01's own changelog and
+  [docs/adr/vj-system.md](docs/adr/vj-system.md).
 - **1.0.0-beta.87** — New `--media-favorites` CLI flag: pairs with
   `--media-source` to boot media-01 into its named `favorites` playlist,
   unshuffled, no repeat, instead of the shuffled full library --
