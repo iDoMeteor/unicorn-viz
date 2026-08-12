@@ -865,6 +865,72 @@ def test_absorb_onset_band_weight_defaults_to_1_for_legacy_callers() -> None:
     assert bt._phase_confidence == pytest.approx(1.0)
 
 
+def test_v2_phase_tol_is_018() -> None:
+    """2026-08-14: reverted from 0.14 back to 0.18 (owner call, felt 'kinda
+    hot' at 0.14 on live material). Module-level constant, no tracker
+    method exercises it directly -- lock this in so a future tweak has to
+    touch this test too."""
+    assert _MOD._V2_PHASE_TOL == pytest.approx(0.18)
+
+
+def test_downbeat_regularity_independent_of_acf_and_phase_confidence() -> None:
+    """The dbc term folded into the top-level confidence blend must never
+    read _acf_confidence/_phase_confidence -- unlike _last_downbeat_confidence
+    (which internally blends 30% phase + 15% acf, and with analysis_mode off
+    just echoes self._confidence itself), that would make self._confidence
+    partly echo its own recent history every bar."""
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+
+    bt._acf_confidence = 0.0
+    bt._phase_confidence = 0.0
+    low = bt._downbeat_regularity(bt._last_t)
+
+    bt._acf_confidence = 1.0
+    bt._phase_confidence = 1.0
+    high = bt._downbeat_regularity(bt._last_t)
+
+    assert low == pytest.approx(high)
+
+
+def test_confidence_blend_is_six_two_two() -> None:
+    """self._confidence = 0.6*acf + 0.2*phase + 0.2*downbeat_regularity,
+    exercised via _absorb_onset (the same formula also lives in
+    _estimate_tempo_acf). analysis_mode is off (default) so region
+    consistency is a constant 1.0 and, with no beat-position history yet,
+    density is 0.0 -- dbc = (0.45*1.0 + 0.10*0.0) / 0.55.
+    """
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._phase = 0.0   # on-beat -> hit, so phase_confidence lands at exactly 1.0
+    bt._acf_confidence = 0.5
+
+    bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+
+    dbc = 0.45 / 0.55
+    expected = 0.6 * 0.5 + 0.2 * 1.0 + 0.2 * dbc
+    assert bt._confidence == pytest.approx(expected)
+
+
+def test_confidence_does_not_echo_its_own_prior_value() -> None:
+    """Regression guard for the exact bug this design avoided: seeding
+    self._confidence with an extreme prior value must not influence the
+    freshly recomputed value at all (it would, if the dbc term were
+    _last_downbeat_confidence with analysis_mode off, since that method
+    just returns self._confidence verbatim)."""
+    def _confidence_after(seed: float) -> float:
+        bt = BeatTracker({})
+        bt._bpm = 124.0
+        bt._phase = 0.0
+        bt._acf_confidence = 0.5
+        bt._confidence = seed
+        bt._last_downbeat_confidence = seed
+        bt._absorb_onset(0.0, strength=3.0, band_weight=1.0)
+        return bt._confidence
+
+    assert _confidence_after(0.0) == pytest.approx(_confidence_after(1.0))
+
+
 # ---------------------------------------------------------------------------
 # Downbeat callback scheduling
 # ---------------------------------------------------------------------------

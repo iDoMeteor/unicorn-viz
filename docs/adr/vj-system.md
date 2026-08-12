@@ -751,6 +751,67 @@ nothing needed updating for the new value itself.
 
 ---
 
+## `_V2_PHASE_TOL` Reverted to 0.18 + Three-Term Confidence Blend with `downbeat_regularity` (2026-08-14)
+
+Same day, next live session after the 0.8/0.2 fallback above. Two owner
+calls together: `_V2_PHASE_TOL` felt "kinda hot" at `0.14` on live
+material — reverted to the original `0.18` (see the row's own 2026-08-10
+history; `0.14` was never a validated value, just "sounds pretty tight
+against your test" on one session). And: pick up the `downbeat_confidence`
+possible-tweak noted in the entry above — fold it into the confidence
+blend at `0.2`, cutting `acf` from `0.8` to `0.6` to make room (`phase`
+left at `0.2`, unchanged). Sums to `1.0`.
+
+**Caught before implementing, not after:** asked directly whether this
+creates a feedback loop — does `downbeat_confidence` influence
+`phase_confidence`/`acf_confidence`? Checking `_compute_downbeat_confidence()`
+(the existing per-bar `_last_downbeat_confidence` producer) found the
+answer is more subtle than a clean no. `dbc` never feeds back into
+`phase_confidence`/`acf_confidence` (correct, no cycle in that direction),
+but the reverse isn't true: `_compute_downbeat_confidence()` already
+blends `30% phase_confidence + 15% acf_confidence` internally, and — the
+sharper problem — when `analysis_mode_enabled` is `False` (the project
+default, including the currently-running live session), it skips that
+blend entirely and just `return float(self._confidence)` verbatim. Had
+`_last_downbeat_confidence` been folded into `self._confidence` as
+planned, that would have made confidence at bar N partly equal to
+confidence at bar N-1, compounding indefinitely — a genuine echo, not
+fresh evidence, and it would have been silent (no crash, no obviously
+wrong number, just steadily wrong dynamics).
+
+**Fix:** new `_downbeat_regularity(now)` method, used in the blend
+instead of `_last_downbeat_confidence`. Reuses only the two
+`_compute_downbeat_confidence()` terms that never read
+`phase_confidence`/`acf_confidence` — beat-position region consistency
+(`_analysis_region_consistency()`) and on-beat density (now factored out
+into a shared `_beat_position_density()` helper so the two methods can't
+drift apart) — renormalized from their original `0.45`/`0.10` weights to
+sum `1.0` (`÷ 0.55`). Genuinely independent of `acf`/`phase`: verified by
+a test that sets `_acf_confidence`/`_phase_confidence` to `0.0` then
+`1.0` and asserts `_downbeat_regularity()`'s return value doesn't move.
+
+**Known limitation, documented rather than hidden:**
+`_analysis_region_consistency()` itself returns a constant `1.0` when
+`analysis_mode_enabled` is `False` (see its own early-return). So with
+the project's default config, `_downbeat_regularity()` is a near-constant
+`~0.82` floor (`0.45 × 1.0 ÷ 0.55`) plus whatever on-beat density
+contributes on top — safe (no loop) but not a strongly discriminating
+signal unless `analysis_mode` is enabled. Worth revisiting if `dbc`'s
+contribution to live confidence turns out flatter than expected.
+
+**Verified:** `test_beat_tracker_v2.py` — `_V2_PHASE_TOL == 0.18`;
+`_downbeat_regularity()` unaffected by `acf_confidence`/`phase_confidence`
+extremes; the three-term blend formula matches `0.6*acf + 0.2*phase +
+0.2*dbc` exactly for known inputs; and the specific regression this
+whole investigation was about — seeding `self._confidence` (and
+`_last_downbeat_confidence`) with an extreme prior value before a call
+does not move the freshly recomputed confidence at all. Full
+`test_beat_tracker_v2.py` suite green (68 tests). `_DETECTOR_VERSION` →
+`1.0.0-rc.17`, `_VJ_WEIGHTS_DOC_VERSION` → `35`, `auto_vj.py`
+`__version__` → `1.0.0-rc.56`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
