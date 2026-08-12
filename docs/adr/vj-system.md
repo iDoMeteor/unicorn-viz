@@ -103,6 +103,88 @@ active `beat_tracker_engine`. All shadow calls are wrapped in try/except
 that only logs at debug level — a shadow-engine failure can never affect
 the active engine or director.
 
+### Addendum (2026-08-12): the freeze had no hysteresis — a real overnight regression, traced and closed
+
+The "20 BPM hot" incident above was one *specific* trigger (a rapid
+multi-profile-switch churn). A structurally related but distinct gap
+survived the original fix: `set_profile()`'s freeze check
+(`self._confidence >= self._PRIOR_FREEZE_CONFIDENCE`) was re-evaluated
+fresh from the *instantaneous* confidence reading on every call, with no
+memory of having been frozen a moment ago. Real tracks routinely dip
+below `0.55` mid-track for entirely normal reasons — a breakdown, a quiet
+passage — and the very next `set_profile()` call during that dip fell
+through to a full re-prime, exactly as if the lock had been genuinely
+lost.
+
+**Found via a real overnight training session** (`favorites/g`,
+~9.4 hours, 56 tracks, `sequence-corpus-20260812T011427Z.jsonl`). Owner,
+live: "our bpm detector is really nailing it the vast majority of the
+time," followed the next morning by a scorecard showing session-wide BPM
+median `88.6` and `chillstep` at 83% of both recommended and active
+profile — for a playlist that had locked correctly for months
+(cross-checked against `favorites/b`/`c`/`d`, all pre-dating any of that
+week's tuning: the same tracks, by title, consistently read `125-134
+BPM`). Traced one track ("Thriller (Tim Cosmos 2025 Rework)")
+chronologically through the overnight session and found the exact
+mechanism:
+
+```text
+pos=0.5-169s   bpm=110.9-115.2  profile=house/peak_time  (correct-ish)
+pos=189.6s     bpm=105.7        recommended flips to chillstep
+pos=209.5s     bpm=102.5        profile=chillstep APPLIED; bpm keeps drifting down
+...            ends that play around 99.5
+[track replays -- tracker state carries over, no reset between plays]
+pos=2.6s       bpm=83.9         profile=chillstep (inherits the drifted end-state)
+...            drifts across the replay, ends around 84-96
+[replays again]
+pos=21.4s      bpm=87.7         profile=chillstep
+...            ends around 83-84
+```
+
+Not a one-shot mistake — a **compounding, multi-play feedback loop**.
+Once `chillstep` (`bpm_prior_mu=95`) got applied during a momentary
+confidence dip, its soft prior nudged the next ACF estimate down, which
+made the track look more like `chillstep` to the recommender, which
+reapplied it, repeating for as many replays as the ~9-hour session gave
+it time for — each replay inheriting the previous one's drifted-down
+end state rather than starting fresh. `set_profile()`'s own soft-prior
+design (not a hard search-range clamp, precisely to avoid this class of
+risk — see P0-A, `docs/audits/2026-08-04-bpm-detector-audit.md`) reduced
+the risk but didn't close it: a soft nudge sustained over many hours and
+many repeats is still enough to ratchet a lock away from truth.
+
+**Fix:** give the freeze the same acquire/release hysteresis this file
+already uses for the BPM lock itself
+(`AutoVJController._BPM_LOCK_CONFIDENCE`/`_BPM_LOCK_RELEASE_CONFIDENCE`,
+same Schmidt-trigger shape) — new `_PRIOR_FREEZE_RELEASE_CONFIDENCE =
+0.28` and a sticky `self._prior_frozen` flag (new `BeatTrackerV3.
+__init__` override; the class previously inherited `BeatTracker.__init__`
+unchanged). Once frozen, stays frozen through any dip down to the
+release threshold, not just above the acquire one. `_reset_tempo_lock()`
+still unfreezes correctly with no separate override needed — it drives
+confidence to exactly `0.0`, well under `0.28`, so the hysteresis logic
+naturally unfreezes on the next `set_profile()` call after a real
+silence/track reset. `_DETECTOR_VERSION` → `1.0.0-rc.10`,
+`_VJ_WEIGHTS_DOC_VERSION` → `28`.
+
+**Also worth recording:** the "recommender fell off a cliff" and
+"centroid_fit stuck on ambient" incidents earlier the same week (see
+"Recommender `centroid_fit` Weight Cut..." below) were investigated and
+fixed on their own terms, correctly, but this finding means at least
+some of that week's apparent recommender instability may have had this
+same root cause contributing underneath it — a drifting BPM changes
+`tempo_fit` for every candidate simultaneously, which looks like
+recommender noise from the recommender's side even when the recommender
+itself is scoring correctly against a wrong input. Not re-litigated here;
+flagged so it isn't mistaken for two unrelated coincidences.
+
+**Verified:** `test_set_profile_stays_frozen_through_a_mid_range_
+confidence_dip` and `test_set_profile_unfreezes_only_below_release_
+threshold` added (`tests/test_beat_tracker_v3.py`); all 8 pre-existing
+`BeatTrackerV3` tests still pass unchanged (none of them previously
+exercised a partial dip, so none needed updating). Full suite green,
+`ruff`/`bandit` clean.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

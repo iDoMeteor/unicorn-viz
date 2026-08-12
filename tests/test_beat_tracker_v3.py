@@ -138,6 +138,49 @@ def test_set_profile_reprimes_again_after_unlock() -> None:
     assert tr._prior_mu == 145.0   # re-primed after the lock was lost
 
 
+def test_set_profile_stays_frozen_through_a_mid_range_confidence_dip() -> None:
+    """2026-08-12: the actual incident this hysteresis closes. A real track
+    dipping to e.g. 0.40 mid-track (well above the release threshold, 0.28,
+    but below the acquire one, 0.55) is completely normal -- a breakdown, a
+    quiet passage -- and must not reopen re-priming. Before this fix, the
+    freeze was re-evaluated fresh from the instantaneous confidence on every
+    call, so this exact dip fell through to a full re-prime and (per a real
+    overnight session) compounded into a multi-hour BPM drift. See the
+    BeatTrackerV3 class docstring's 2026-08-12 addendum."""
+    tr = BeatTrackerV3({})
+    tr._bpm = 124.0
+    tr._confidence = 0.65
+    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))  # freezes
+    before_mu = tr._prior_mu
+    assert before_mu != 95.0
+
+    tr._confidence = 0.40   # dips below acquire (0.55) but above release (0.28)
+    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))
+
+    assert tr._prior_mu == before_mu, (
+        'a mid-range confidence dip must not unfreeze the prior -- this is '
+        'exactly the gap that let a recommender-applied profile drag a '
+        'correctly-locked BPM over a real overnight session'
+    )
+
+
+def test_set_profile_unfreezes_only_below_release_threshold() -> None:
+    """The other half of the hysteresis pair: a dip that actually clears the
+    release threshold (0.28) is a real signal the lock may be gone, and
+    should still re-open re-priming -- the fix adds a dead zone, it doesn't
+    remove the unfreeze path entirely."""
+    tr = BeatTrackerV3({})
+    tr._bpm = 124.0
+    tr._confidence = 0.65
+    tr.set_profile(_FakeProfile(mu=95.0, sigma=0.50))  # freezes
+    assert tr._prior_mu != 145.0
+
+    tr._confidence = 0.20   # below release threshold (0.28)
+    tr.set_profile(_FakeProfile(mu=145.0, sigma=0.16))
+
+    assert tr._prior_mu == 145.0, 'a dip below the release threshold must unfreeze'
+
+
 def test_set_profile_none_is_noop_like_v2() -> None:
     tr = BeatTrackerV3({})
     tr._bpm = 124.0
