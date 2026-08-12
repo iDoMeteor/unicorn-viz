@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.88**
+**Version 1.0.0-beta.89**
 
 ## Contact Me!
 
@@ -557,6 +557,16 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.89** — `unicornviz/audio/capture.py`'s
+  `_candidate_monitor_devices()` now logs a `WARNING` (naming the
+  unmatched hint and every visible input device) when a configured
+  `--audio-device` hint matches nothing and silently falls back to the
+  system default input. Previously silent — a headless/unattended
+  session (e.g. training-kit-01's daemon) could run an entire session
+  against the wrong device with zero errors in the log. Found live-
+  probing the exact media-01 + training-daemon code path (VLC +
+  `PULSE_SINK` + this device-matching function) after a session came
+  back with zero audio energy across every tick.
 - **1.0.0-beta.88** — `unicornviz/audio/analyzer.py`'s `OnsetEvent` gains
   `band_weight` (bass fraction of the onset's flux, 0..1, computed from
   the already-existing `data.bass_flux`) — feeds auto-vj-01's new

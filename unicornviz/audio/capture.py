@@ -213,6 +213,22 @@ def _candidate_monitor_devices(
             and not (is_linux and _is_alsa(d))
             and not (is_linux and _is_pseudo_input(str(d.get('name', ''))))
         ]
+        if not matches:
+            # A configured hint that matches nothing silently fell through to
+            # the system default input device below -- previously logged
+            # nowhere, so a headless run (no one watching the window) could
+            # run an entire session against the wrong device (e.g. a muted
+            # default mic) and produce a full session of real-looking,
+            # all-zero audio data with no error anywhere in the log.
+            input_names = [
+                d['name'] for d in devices if d.get('max_input_channels', 0) >= 1
+            ]
+            log.warning(
+                'Audio: device hint %r matched no input device (of %d visible); '
+                'falling back to the system default input. Visible input '
+                'devices: %s',
+                hint, len(input_names), input_names,
+            )
         return matches or [None]
 
     # Compute one best rank per device to avoid duplicate candidates.

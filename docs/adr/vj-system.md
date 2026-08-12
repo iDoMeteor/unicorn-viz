@@ -718,6 +718,39 @@ parameter defaults to `1.0` for legacy call sites. Full suite green
 
 ---
 
+## Confidence Blend `0.7/0.3` → `0.8/0.2` — Live Fallback Applied (2026-08-14)
+
+Same day as the strength/band-weighted phase-coherence rework above,
+next live session. Owner's read, first song in: BPM and genre both
+"totally nailing it," but confidence still read too low even with the
+rework live. Per the fallback the owner pre-stated in the rc.54 commit
+message ("stated fallback if discrimination still isn't sufficient is
+`0.8/0.2`, not an assumed revert toward `0.5/0.5`"), applied that
+directly rather than guessing at a new value — both blend sites in
+`beat_grid.py` (`_estimate_tempo_acf()` and `_absorb_onset()`) moved
+from `0.7 × acf + 0.3 × phase` to `0.8 × acf + 0.2 × phase`.
+
+**kr/dbc considered and deferred, not adopted here.** Mid-conversation,
+asked directly whether `kick_regularity`/`downbeat_confidence` had been
+folded into this blend — they hadn't; both remain separate gates
+(`kick_regularity` scales tactus-fold eagerness via
+`_effective_tactus_ratio()`; `downbeat_confidence` gates analysis-driven
+downbeat acceptance via `_analysis_downbeat_confidence_min`), never
+confidence-blend terms. Owner's call: `downbeat_confidence` specifically
+is "an interesting addition" worth considering for the blend, but
+explicitly held pending how this run performs — noted here as a
+possible future tweak, not queued for implementation. If it does get
+picked up, it would need its own flag-and-confirm pass per the standing
+detector-change policy, same as this ratio bump got.
+
+**Verified:** full `test_beat_tracker_v2.py` suite green (64 tests) at
+the new ratio; no test asserted the literal `0.7/0.3` constant, so
+nothing needed updating for the new value itself.
+`_DETECTOR_VERSION` → `1.0.0-rc.16`, `_VJ_WEIGHTS_DOC_VERSION` → `34`,
+`auto_vj.py` `__version__` → `1.0.0-rc.55`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing

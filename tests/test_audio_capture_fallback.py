@@ -204,6 +204,39 @@ def test_candidate_order_prefers_default_input_first(monkeypatch) -> None:
     assert candidates[0] is None
 
 
+def test_unmatched_device_hint_falls_back_to_default_with_a_warning(monkeypatch, caplog) -> None:
+    """A configured --audio-device hint that matches nothing used to fall
+    back to the system default input device with zero logging -- a
+    headless/unattended session could run entirely against the wrong
+    device (silent) and look identical to a healthy run in the logs.
+    """
+    class _NoMatchSD:
+        @staticmethod
+        def query_devices(device=None, kind=None):
+            if kind == 'input':
+                return {'name': 'default-input'}
+            if device is not None:
+                return {'name': f'device-{device}', 'max_input_channels': 2, 'hostapi': 0}
+            return [
+                {'name': 'Built-in Microphone', 'max_input_channels': 1, 'hostapi': 0},
+            ]
+
+        @staticmethod
+        def query_hostapis():
+            return [{'name': 'PipeWire'}]
+
+    monkeypatch.setattr(capture_mod, 'sd', _NoMatchSD())
+    monkeypatch.setattr(capture_mod, '_SD_AVAILABLE', True)
+
+    import logging
+    with caplog.at_level(logging.WARNING, logger=capture_mod.log.name):
+        candidates = capture_mod._candidate_monitor_devices('unicorn-training')
+
+    assert candidates == [None]
+    assert any('unicorn-training' in rec.message for rec in caplog.records)
+    assert any('no input device' in rec.message for rec in caplog.records)
+
+
 def test_a_silent_source_does_not_probe_every_frame(monkeypatch) -> None:
     """The framerate collapse.
 
