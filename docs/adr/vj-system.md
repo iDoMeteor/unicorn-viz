@@ -328,6 +328,51 @@ mark_stamps_recommender_version` kept — both still valid (the constant
 and the version-stamping are independent of which formula is active).
 Full suite green, `ruff`/`bandit` clean.
 
+### Addendum (same night): the revert alone wasn't enough — weight raised back to 0.7
+
+Owner, ~20-25 minutes into a fresh session on the reverted formula: "we're
+doing better on the recommender action but not sure we're back to as
+good as it was when i wanted to lock it down last night." Checked
+directly rather than guessing — compared the live post-revert session
+against the last known-good overnight session (`favorites/d`, confirmed
+via commit timestamps to predate every piece of that day's centroid work
+entirely: it ran 2026-08-10 23:11 → 2026-08-11 06:14, the earliest
+centroid commit that day landed at 08:05).
+
+`ambient` was no longer dominant — confirmed fixed, one pulled example
+showed a genuinely healthy `mean_centroid` (`2199.7 Hz`, nowhere near the
+incident's ~400-800 Hz) and a plausible reason for that specific pick
+(`zcr_fit` favored `ambient` decisively during a real low-ZCR, `0.036`,
+quiet moment). But the composite was measurably *less stable* than the
+overnight baseline:
+
+| | `favorites/d` (last known-good) | live, post-revert |
+| --- | --- | --- |
+| `mismatch_pct` (recommended ≠ active) | `11.5%` | `39.8%` |
+| switch rate | ~`0.16`/min | ~`0.5`/min |
+
+Best explanation: `centroid_fit`'s weight had drifted to `0.3` (the
+cumulative effect of two cuts that night — `0.8→0.5` that morning,
+`0.5→0.3` alongside the revert), down from `0.8` during the overnight
+baseline. Centroid was a real, moderately-weighted timbre discriminator
+at `0.8`; at `0.3` it's nearly inert, leaving `zcr_fit`/`onset_fit`
+proportionally more sway over close calls, which reads as noisier
+switching. Caveat on the comparison itself: small sample (8 tracks, ~20
+minutes, session still running when checked) and a different playlist
+than the overnight baseline (that one leaned house-heavy; this one
+peak_time/hard_techno/hardstyle), so not perfectly apples-to-apples —
+flagged, not treated as final.
+
+**Decision:** `centroid_fit` weight `0.3 → 0.7` — a deliberate middle
+value, not a full return to `0.8`, while the owner runs a longer
+(multi-hour) validation session on the reverted formula. Restoring
+functional weight to a term whose *own* live-formula-vs-`mu` mismatch is
+still open and unresolved (same caveat as ever, see above) is worth
+being explicit about: this raises how much a known-imperfect signal
+influences picks again, in exchange for the composite's overall
+stability. `_RECOMMENDER_VERSION` → `1.0.0-rc.10`,
+`_VJ_WEIGHTS_DOC_VERSION` → `26`.
+
 ---
 
 ## `hardgroove` Eliminated Entirely (2026-08-11)
