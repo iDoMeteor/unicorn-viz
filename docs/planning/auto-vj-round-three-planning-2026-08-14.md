@@ -10,7 +10,10 @@ Status: draft — capturing open design questions for the philosophizing
   `0.3 → 0.4`, `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`
   logging, `long_candidate_spread`/`long_candidate_median` logging,
   continuous phrase-clock logging, `spectral_flux_smooth`/`bass_flux_fast`
-  logging, and a second shadow-engine slot. Everything else is still
+  logging, a second shadow-engine slot (turned on in `config.toml`:
+  `beat_tracker_shadow2_engine = "legacy"`), and sub-lag peak
+  interpolation gated behind `acf_peak_interpolation_enabled` (off by
+  default — an A/B test in progress, see § 6). Everything else is still
   proposal-stage, marked as such inline.
 Last updated: 2026-08-14
 
@@ -368,7 +371,7 @@ director (phrasing) and the recommender (a section-change signal could
 sharpen genre-fit timing), and it's real design work, not a
 same-session integration. Parked here for the philosophizing days.
 
-## 6. Raw comb-filter argmax wandering — root cause found, fix proposed, not yet implemented
+## 6. Raw comb-filter argmax wandering — root cause found, fix shipped behind an A/B flag
 
 **The finding.** Every one of the 17:56 session's wandering candidates
 (`120`, `133.33`, `139.53`, `142.86`, `146.34`, `150`, `153.85`,
@@ -419,17 +422,40 @@ That should tighten the persistence check's natural candidate spread at
 high BPM specifically, which is exactly where § 3's `6.0` threshold
 question is hardest to reason about today.
 
-**Not implemented this round — flagged for confirmation first, not
-silently shipped.** This changes the numeric value of *every* BPM
-reading, not just the wandering cases: all of today's tuned gate-stack
-constants (lock-band %, persistence spread, jump-confidence thresholds)
-were tuned against the current grid-quantized behavior, and the existing
-`test_beat_tracker_v2.py` suite likely encodes exact converged values in
-several places that would need re-baselining. Real, well-justified fix —
-but real blast radius, so it's a proposal here, not a diff, pending
-owner sign-off. `acf_top_candidates` and the newly-added
-`long_candidate_spread`/`long_candidate_median` (§ 3) are already logged
-to help validate this fix's actual effect once it ships.
+**Shipped, gated off by default, for a sequential A/B test.** Owner:
+"we should test this very soon, we'll consider my next run the A for
+this and the one directly after we'll do the B w/that fix." Implemented
+in `_estimate_tempo_acf()`, applied once after every `peak_idx`
+reassignment (raw-dominance override, tactus fold, density guard) has
+already settled — refines the *reported* BPM without changing *which*
+bin wins, so none of the existing accept/reject gate decisions change,
+only the numeric precision of the value that clears them. Gated behind
+`_V2_ACF_INTERPOLATION_ENABLED` (config key
+`acf_peak_interpolation_enabled`), **default `False`** specifically so
+run A (baseline) and run B (fixed) are two real, comparable sessions
+rather than depending on commit timing. New
+`acf_interpolation_delta_bpm` property/corpus field logs exactly how
+much interpolation moved a given cycle's reading — `0.0` for the entire
+A run (proof the flag was off), nonzero during B wherever it engages.
+`_DETECTOR_VERSION` → `1.0.0-rc.25`.
+
+**Flip it on for the B run:** `config.toml`'s `[auto_vj]` block has
+`# acf_peak_interpolation_enabled = true` commented out, ready to
+uncomment. Existing `acf_top_candidates`,
+`long_candidate_spread`/`long_candidate_median` (§ 3), and the new
+`acf_interpolation_delta_bpm` together should be enough to judge the B
+run: whether the wandering candidates in a similar situation tighten up,
+and by how much.
+
+**Known open risk, not yet resolved:** this changes the numeric value of
+every BPM reading, not just the wandering cases — all of today's tuned
+gate-stack constants (lock-band %, persistence spread, jump-confidence
+thresholds) were tuned against the current grid-quantized behavior.
+`tests/test_beat_tracker_v2.py`'s existing convergence tests all still
+pass with the flag off (the default they run under); a full test pass
+with the flag forced on has not been done and may need re-baselining
+before this could ever become the *default* behavior, even if the A/B
+result looks good.
 
 ## 7. v1/v2/v3 BPM accuracy logging
 
@@ -544,55 +570,93 @@ any term that itself depends on the current BPM reading (`tempo_fit`,
 `top_cand_fit`) must be excluded from this scoring, or it's circular
 again.
 
-**Scope questions, not yet resolved:** (1) does this apply only
-pre-lock (candidate disambiguation at cold start, same safe window v3
-already uses for its own prime) or continuously (more powerful, but
-reopens the backward-flow question this time for genuinely
-tempo-independent terms — probably fine, but should be argued
-explicitly, not assumed); (2) how is "agreement" scored — nearest
-candidate to the winning genre's `bpm_hint_min/max` band, or a softer
-distance-weighted term; (3) is this a candidate to fold into the real
-next-gen v3 architecture directly (owner floated "v3 or pre-v3"), or
-worth a small pre-v3 experiment first if the lift is genuinely small.
-Given how much of the machinery already exists (all six fit terms are
-already computed every cycle, per § 7a's scorecard data), a pre-v3 spike
-restricted to the pre-lock window looks like the lower-risk way to test
-whether it helps before committing it to the next architecture
-generation.
+**Scope refinement (owner, this round): consult only when confidence is
+already low.** Resolves scope question (1) below with a third option,
+better than either original one: gate on **confidence, not lock state**
+— only consult the tempo-independent genre-fit terms when `acf_conf` (or
+the blended `confidence`) is already below some threshold, i.e. exactly
+the situations where the primary evidence is ambiguous and a second,
+independent signal is actually useful. This is a good fit for two
+reasons: (a) it naturally minimizes backward-flow risk without having to
+argue the continuous case is safe — when confidence is already high, the
+genre-fit terms are never consulted at all, so they structurally can't
+override good direct evidence; (b) it's a direct match for the 17:56
+incident itself — the cold-start candidate that started the whole
+34-minute episode was accepted at `acf_conf=0.32`, exactly the kind of
+low-confidence moment this would apply to. Still open: the specific
+threshold (candidate: reuse `_V2_STARTUP_CONFIDENCE`'s own value, so it
+applies exactly at the moments evidence is already being treated as
+marginal — or a separate, purpose-tuned threshold).
+
+**Other scope questions, not yet resolved:** (1) whether this needs its
+own lock-state restriction on top of the confidence gate above, or
+whether confidence alone is a sufficient guard; (2) how "agreement" is
+scored — nearest candidate to the winning genre's `bpm_hint_min/max`
+band, or a softer distance-weighted term; (3) is this a candidate to
+fold into the real next-gen v3 architecture directly (owner floated "v3
+or pre-v3"), or worth a small pre-v3 experiment first if the lift is
+genuinely small. Given how much of the machinery already exists (all six
+fit terms are already computed every cycle, per § 7a's scorecard data),
+a pre-v3 spike restricted to low-confidence moments looks like the
+lower-risk way to test whether it helps before committing it to the next
+architecture generation.
+
+## 9. Full models config menu (deferred to rc2, not rc1)
+
+Owner: add a real in-app config menu covering the full set of
+selectable/tunable models — detector engine (`beat_tracker_engine`),
+both shadow slots (`beat_tracker_shadow_engine`/
+`beat_tracker_shadow2_engine`), and whatever the recommender/director
+model selection looks like once it has more than one option — instead of
+hand-editing `config.toml` for every engine/model change, which is where
+all of this round's config changes (shadow2, the interpolation A/B flag)
+currently live. **Explicitly scoped for rc2, not rc1** — this is a UI/
+config-surface feature, not a detector-behavior fix, and shouldn't
+compete with rc1 stabilization work. Not designed yet: where it lives in
+the overlay/hotkey system, what "model" needs to mean generically enough
+to cover detector engines today and whatever the recommender/director
+gain later, and whether it's read-only (observability: "what's active
+right now") or read-write (can actually flip an engine live without an
+app restart — note `_V2_ANALYSIS_DOWNBEAT_CONFIDENCE_MIN`'s own field
+comment: at least one existing detector constant is explicitly "not
+hot-reloaded," so live-switching may not be uniformly possible across
+every candidate setting without further work).
 
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix
-(128→114); `_V2_STARTUP_CONFIDENCE` `0.3 → 0.4` (`_DETECTOR_VERSION` →
-`1.0.0-rc.24`); `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`
-logging; `long_candidate_spread`/`long_candidate_median` logging (the
-persistence check's own median/spread, previously computed and
-discarded); continuous phrase-clock logging (`bars_since_track_start`/
-`bars_since_phase_entry`/`phrase_neutral_bars_left`, every row, not just
-at transitions); `spectral_flux_smooth`/`bass_flux_fast` logging; a
-second, independent shadow-engine slot (`beat_tracker_shadow2_engine`,
-`bpm_shadow2`/`confidence_shadow2`/`shadow2_engine`).
+(128→114); `_V2_STARTUP_CONFIDENCE` `0.3 → 0.4`; `bpm_lock_gain_confidence`/
+`bpm_lock_release_confidence` logging; `long_candidate_spread`/
+`long_candidate_median` logging (the persistence check's own median/
+spread, previously computed and discarded); continuous phrase-clock
+logging (`bars_since_track_start`/`bars_since_phase_entry`/
+`phrase_neutral_bars_left`, every row, not just at transitions);
+`spectral_flux_smooth`/`bass_flux_fast` logging; a second, independent
+shadow-engine slot (`beat_tracker_shadow2_engine`, now turned on in
+`config.toml` as `"legacy"` alongside the existing `"v2"` shadow);
+sub-lag peak interpolation (`acf_interpolation_delta_bpm` logging),
+shipped disabled by default behind `acf_peak_interpolation_enabled` for
+a sequential A/B test. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
 
 **Proposed, awaiting consensus before implementation:**
 - Fold `BeatTrackerV3`'s fix into `BeatTracker` (v2) directly; retire the
   `v3` subclass name for reuse by the real next-gen engine (§ 7b).
-- Sub-lag (parabolic) peak interpolation in `_estimate_tempo_acf()` — a
-  concrete, well-justified fix for the argmax-wandering root cause found
-  this round, real blast radius (changes every BPM reading's numeric
-  precision, likely needs test re-baselining), not shipped without
-  sign-off (§ 6).
 - Per-song v1/v2/v3 agreement table with mixer-library + LLM external
   checks (§ 7a) — the shadow2 slot needed for this now exists; the
   actual agreement-table logic doesn't yet.
-- Genre-fit-weighted candidate scoring using tempo-independent terms
-  (§ 8).
+- Genre-fit-weighted candidate scoring, confidence-gated (only consulted
+  when `acf_conf` is already low — owner's refinement this round) using
+  tempo-independent terms (§ 8).
+- A full in-app config menu for detector/shadow model selection —
+  explicitly scoped for rc2, not rc1 (§ 9, new this round).
 
 **Investigated and answered this round:**
 - *Why does the raw comb-filter argmax wander?* Root cause found (§ 6):
   ACF lag-grid resolution coarsens sharply at higher BPM (`3.75` BPM per
   lag step at `150` BPM vs. `0.94` at `75` BPM) — the 17:56 session's
   "10 different candidates" were 10 consecutive integer lags, not 10
-  competing tempos. Fix proposed, not shipped (see above).
+  competing tempos. Fix shipped behind an A/B flag, not yet the default
+  (see above) — the A/B result itself is the next open question.
 - *Would a specific spread threshold (8/10/12/15) have converged faster?*
   Answer: can't be determined responsibly from the existing ~1 Hz
   decision-tick log — it undersamples the real ~7.5 Hz per-cycle
@@ -601,9 +665,13 @@ second, independent shadow-engine slot (`beat_tracker_shadow2_engine`,
   instrumentation gap instead of guessing (§ 3).
 
 **Still open:**
+- **The interpolation A/B result itself** — owner's next session is the
+  A (baseline) run, the one after is B (flag flipped on via the
+  commented-out `config.toml` line). Compare `acf_interpolation_delta_bpm`,
+  `long_candidate_spread`, and `acf_top_candidates` between the two (§ 6).
 - Whether `_V2_LARGE_JUMP_PERSISTENCE_CYCLES`'s spread threshold (6.0,
   not the 25-cycle count) needs to move — now answerable from real data
-  once the new `long_candidate_spread` logging captures a session (§ 3).
+  once a session captures the new `long_candidate_spread` logging (§ 3).
 - Whether `_BPM_LOCK_CONFIDENCE` (0.55) is too permissive specifically
   for a cold-start lock, distinct from the startup-confidence floor
   already raised this round (§ 4).
@@ -612,6 +680,8 @@ second, independent shadow-engine slot (`beat_tracker_shadow2_engine`,
 - Which phrase *role* (HOLD/RISE/PEAK/FALL) was queried at a given tick
   — not logged, since `_phrase_bias(role)` has no single persistent
   "current role" field to read (§ 5).
+- The confidence-gate threshold for § 8's genre-fit consultation
+  (candidate: reuse `_V2_STARTUP_CONFIDENCE`, or a separate value).
 
 **Rolling rear-view-mirror windows (4/8/16/32-beat):** real design work,
 explicitly not for immediate integration per the owner — candidate uses

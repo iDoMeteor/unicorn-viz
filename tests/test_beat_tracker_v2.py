@@ -1518,3 +1518,46 @@ def test_long_candidate_spread_reads_the_cached_value() -> None:
     bt._long_candidate_median = 124.0
     assert bt.long_candidate_spread == pytest.approx(3.5)
     assert bt.long_candidate_median == pytest.approx(124.0)
+
+
+# ---------------------------------------------------------------------------
+# Sub-lag (parabolic) peak interpolation A/B test flag (2026-08-14, round three)
+# ---------------------------------------------------------------------------
+
+def test_acf_interpolation_disabled_by_default() -> None:
+    """Owner: 'we'll consider my next run the A for this and the one
+    directly after we'll do the B w/that fix' -- must default off so the
+    A run reproduces today's exact (unfixed) behavior."""
+    assert _MOD._V2_ACF_INTERPOLATION_ENABLED is False
+    bt = BeatTracker({})
+    assert bt._interpolation_enabled is False
+
+
+def test_acf_interpolation_config_flag_reaches_instance() -> None:
+    bt = BeatTracker({'acf_peak_interpolation_enabled': True})
+    assert bt._interpolation_enabled is True
+
+
+def test_acf_interpolation_delta_stays_zero_when_disabled() -> None:
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=151.0, duration_s=30.0, jitter_s=0.01)
+    assert bt.acf_interpolation_delta_bpm == 0.0
+
+
+def test_acf_interpolation_delta_is_nonzero_when_enabled() -> None:
+    """A deliberately off-grid tempo (151 BPM sits between two integer-lag
+    grid points near the coarse high-BPM end of the search range) --
+    interpolation should engage and move the reading a bounded, non-trivial
+    amount. Upper bound is generous (a properly clamped +-0.5 lag-step
+    correction should never approach it) -- guards against a math error
+    producing an unbounded result, not a precise tuning assertion."""
+    bt = BeatTracker({'acf_peak_interpolation_enabled': True})
+    _run_steady_click_track(bt, bpm=151.0, duration_s=30.0, jitter_s=0.01)
+    assert bt.acf_interpolation_delta_bpm != 0.0
+    assert abs(bt.acf_interpolation_delta_bpm) < 10.0
+
+
+def test_acf_interpolation_delta_property_reads_the_cached_value() -> None:
+    bt = BeatTracker({})
+    bt._acf_interpolation_delta_bpm = -1.25
+    assert bt.acf_interpolation_delta_bpm == pytest.approx(-1.25)

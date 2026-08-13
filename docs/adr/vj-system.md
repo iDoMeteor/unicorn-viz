@@ -2202,6 +2202,43 @@ All four are detailed with full reasoning in
 kept in sync with this entry. `auto_vj.py` `__version__` → `1.0.0-rc.70`;
 training-kit-01 → `0.16.4`.
 
+**Round Three, continued once more: the interpolation fix shipped as an
+A/B flag, both shadows turned on, a scope refinement, and an rc2 idea.**
+Same night, immediate follow-up:
+
+- **Sub-lag (parabolic) peak interpolation** — the fix proposed above
+  for the argmax-wandering root cause — implemented in
+  `_estimate_tempo_acf()`, applied once after `peak_idx` is finally
+  settled (does not change which bin wins, only refines the reported
+  BPM). Shipped **disabled by default**
+  (`_V2_ACF_INTERPOLATION_ENABLED = False`, config key
+  `acf_peak_interpolation_enabled`) specifically so it can be A/B tested
+  as two real sessions rather than depending on commit timing — owner:
+  "we should test this very soon, we'll consider my next run the A for
+  this and the one directly after we'll do the B w/that fix." New
+  `acf_interpolation_delta_bpm` property/corpus field, `0.0` for the
+  entire A run by construction. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
+  `config.toml` has `acf_peak_interpolation_enabled = true` ready,
+  commented out, to flip on for the B run.
+- **Both shadow engines turned on**, per owner request:
+  `beat_tracker_shadow_engine = "v2"` (already on) plus the new
+  `beat_tracker_shadow2_engine = "legacy"` (v1) — the active `v3` engine
+  now runs alongside both v2 and v1 shadows simultaneously in
+  `config.toml`.
+- **Genre-fit-weighted candidate scoring (§ 8 of the planning doc),
+  scope refined:** owner: "consult only when conf is low." Gate on
+  confidence, not lock state — only consult the tempo-independent
+  genre-fit terms when `acf_conf` is already low, i.e. exactly the
+  ambiguous moments where a second signal is useful, and structurally
+  safe against backward-flow since high-confidence readings never
+  consult it at all. Not implemented; recorded as the resolved scoping
+  question in the planning doc.
+- **New: a full in-app config menu** for detector/shadow model
+  selection, explicitly scoped for **rc2, not rc1** — added to the
+  planning doc (§ 9) as a roadmap item, not started.
+
+`auto_vj.py` `__version__` → `1.0.0-rc.71`; training-kit-01 → `0.16.5`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
