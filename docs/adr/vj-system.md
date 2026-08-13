@@ -1926,6 +1926,46 @@ wobble to a wrong resting value anymore) without addressing why the
 wobble happens. `acf_top_candidates`/`last_tactus_fold` are the tools to
 keep investigating this with from real session data going forward.
 
+### Round two, same session: tracking + a live report
+
+Live-testing the combined fix, owner reported it's "doing pretty awesome"
+but "thrashing a little bit... not in the wobble zone" — a real, milder
+texture of jumpiness distinct from the collapse just fixed. Checked the
+live session directly (`logs/autovj-20260813T134619.jsonl`, 20 min, 1191
+rows, BPM range 81-176 matching the reported "160+ down to mid-110s"):
+median tick-to-tick change is tiny (`0.09 BPM/sec`, mostly calm), but
+~12% of ticks show `>1 BPM/sec` movement, up to a `15 BPM/sec` spike
+(plausibly a real fast transition, given the range) — a real, quantified,
+if modest, signal. That session predates the counters below, so which of
+those fast moments were legitimate transitions vs. residual noise isn't
+yet distinguishable; the next session will have that data.
+
+**Idea floated, not yet built:** a second, slower smoothing layer purely
+at the point of publication (HUD/recommender-facing), sitting on top of
+the existing fast internal `self._bpm` rather than replacing it — "let it
+breathe" without slowing the internal gates. Owner's own caveat, unprompted:
+smoothing the *only* visible number risks hiding the exact kind of
+flicker that let them catch tonight's real bugs live. Recommendation
+given, not yet actioned: keep the raw, fast value in the training corpus
+regardless of what gets smoothed for display, so post-hoc diagnosis never
+loses resolution even if the live view calms down. Awaiting a decision.
+
+**Tracking added so the new persistence window doesn't go stale like
+several other gate constants did before this session.** Owner: "we need
+to track and tune that persistence window eventually maybe.. let's not
+let that hide on us like others have." New session-cumulative counters —
+`large_jump_persistence_wait_count`/`_reject_count`/`_cleared_count` — plus
+matching `_detector_snapshot()` fields, mirroring the existing tactus
+counters' "how often does each outcome happen" role. Verified against the
+83→123 large-jump test: `reject_count=24`, `cleared_count=10` before the
+jump was accepted — real, useful signal, not just plumbing. Pure logging
+— `_DETECTOR_VERSION`/`_VJ_WEIGHTS_DOC_VERSION` not bumped, same
+exemption as `acf_top_candidates`. New tests:
+`test_large_jump_persistence_counters_start_at_zero`,
+`test_large_jump_persistence_counters_move_during_a_real_transition`,
+plus 2 new `_detector_snapshot()` field tests. Full suite green (1721
+tests). `auto_vj.py` `__version__` → `1.0.0-rc.66`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

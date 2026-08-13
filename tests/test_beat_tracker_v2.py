@@ -1444,3 +1444,39 @@ def test_last_tactus_fold_property_populated_after_a_fold_decision() -> None:
 
     assert bt.last_tactus_fold != ''
     assert ':' in bt.last_tactus_fold and '->' in bt.last_tactus_fold
+
+
+def test_large_jump_persistence_counters_start_at_zero() -> None:
+    bt = BeatTracker({})
+    assert bt.large_jump_persistence_wait_count == 0
+    assert bt.large_jump_persistence_reject_count == 0
+    assert bt.large_jump_persistence_cleared_count == 0
+
+
+def test_large_jump_persistence_counters_move_during_a_real_transition() -> None:
+    """2026-08-14, later still still (round two): owner asked for tracking
+    on this exact constant specifically so it doesn't go untuned and
+    forgotten the way several others did before this session -- "let's not
+    let that hide on us like others have." reject_count shows the check
+    actively filtering candidates that haven't proven consistent yet;
+    cleared_count shows how many made it through to the confidence/region
+    check right after. wait_count is not asserted here -- the long-window
+    deque fills during ordinary locked operation (any lock running longer
+    than large_jump_persistence_cycles worth of time already has a full
+    window before a transition even starts), so it's realistically always
+    0 outside the first few seconds of a cold start."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+    assert bt.large_jump_persistence_reject_count == 0
+    assert bt.large_jump_persistence_cleared_count == 0
+
+    _run_steady_click_track(bt, bpm=123.0, duration_s=30.0, start_t=60.0, jitter_s=0.01)
+
+    assert bt.large_jump_persistence_reject_count > 0, (
+        'expected the persistence check to reject at least one candidate '
+        'before the sustained evidence for the new tempo won out'
+    )
+    assert bt.large_jump_persistence_cleared_count > 0, (
+        'expected the persistence check to eventually clear the way for '
+        'the real tempo change to be accepted'
+    )

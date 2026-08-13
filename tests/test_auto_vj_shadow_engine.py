@@ -237,6 +237,43 @@ def test_detector_snapshot_region_consistency_and_tactus_fold_default_when_grid_
     assert snap['last_tactus_fold'] == ''
 
 
+def test_detector_snapshot_reads_large_jump_persistence_counters() -> None:
+    """2026-08-14, later still still (round two): owner asked to track the
+    long-window persistence check's own engagement so it doesn't go
+    untuned and forgotten the way several other gate constants did before
+    this session."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', large_jump_persistence_wait_count=2,
+        large_jump_persistence_reject_count=24, large_jump_persistence_cleared_count=10,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['large_jump_persistence_wait_count'] == 2
+    assert snap['large_jump_persistence_reject_count'] == 24
+    assert snap['large_jump_persistence_cleared_count'] == 10
+
+
+def test_detector_snapshot_large_jump_persistence_counters_zero_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has no such mechanism -- must not raise, must
+    default to 0 rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['large_jump_persistence_wait_count'] == 0
+    assert snap['large_jump_persistence_reject_count'] == 0
+    assert snap['large_jump_persistence_cleared_count'] == 0
+
+
 # ---- _build_live_training_row() shadow fields ----------------------------
 
 
