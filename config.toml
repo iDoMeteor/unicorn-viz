@@ -140,6 +140,13 @@ sequence_training_enabled = true
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # auto_exit_after_finale = false
+# Smooths only the HUD "BPM: nnn" readout (code default: on); every other
+# consumer (gates, director timing, recommender scoring, training-corpus
+# logging) always reads the fast raw value. Off here for now -- soaking
+# with the raw, unsmoothed number visible while validating this week's
+# detector changes. See docs/adr/vj-system.md.
+published_bpm_smoothing_enabled = false
+published_bpm_smoothing_s = 4.0
 
 [control_room]
 enabled = false

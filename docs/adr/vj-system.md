@@ -1940,15 +1940,50 @@ if modest, signal. That session predates the counters below, so which of
 those fast moments were legitimate transitions vs. residual noise isn't
 yet distinguishable; the next session will have that data.
 
-**Idea floated, not yet built:** a second, slower smoothing layer purely
-at the point of publication (HUD/recommender-facing), sitting on top of
-the existing fast internal `self._bpm` rather than replacing it — "let it
-breathe" without slowing the internal gates. Owner's own caveat, unprompted:
+**Idea floated, then built the same session:** a second, slower smoothing
+layer purely at the point of publication, sitting on top of the existing
+fast internal `self._bpm` rather than replacing it — "let it breathe"
+without slowing the internal gates. Owner's own caveat, unprompted:
 smoothing the *only* visible number risks hiding the exact kind of
-flicker that let them catch tonight's real bugs live. Recommendation
-given, not yet actioned: keep the raw, fast value in the training corpus
-regardless of what gets smoothed for display, so post-hoc diagnosis never
-loses resolution even if the live view calms down. Awaiting a decision.
+flicker that let them catch tonight's real bugs live.
+
+**Scope, deliberately narrow:** only `hud_bpm_label` (the primary "BPM:
+nnn" HUD readout, `overlays.py:1828` via `App._hud_state['auto_vj_bpm']`)
+reads the smoothed value, via a new `published_bpm` property. Everything
+else that reads `self._grid.bpm` — the accept/reject gate stack,
+`_timing_scale_from_bpm()` (director hold durations), ping-pong/downbeat
+scheduling, `_reco_samples` (recommender `tempo_fit` scoring),
+`publish_bpm()` (the cross-drop-in BPM hint bus other drop-ins consume),
+`_detector_snapshot()` (training-corpus logging) — is entirely unaffected
+and keeps reading the fast, raw value, exactly the recommendation from
+above: full diagnostic resolution preserved in the corpus regardless of
+what the HUD shows. The secondary status-pill BPM text
+(`_pill()`/`self._status_text`) was deliberately left unsmoothed too, to
+keep this first cut small and easy to reason about — can extend later if
+wanted.
+
+**Implementation:** `AutoVJController._update_published_bpm(bpm, dt)`,
+called once per `update()` cycle. A time-constant EMA
+(`alpha = 1 - exp(-dt/tau)`, not a fixed per-frame alpha) so the amount of
+smoothing doesn't silently depend on frame rate. Two deliberate snap
+cases, not smoothed: no-lock → locked snaps instantly (a first reading
+shouldn't visibly ramp up from 0, which would look like the detector
+warming up rather than a clean lock), and losing lock entirely snaps to 0
+immediately (silence/reset must be reflected right away, not linger on a
+stale number — smoothing is for cosmetic jitter, not for hiding a real
+reset event).
+
+**Config**, `[auto_vj]` in `config.toml`: `published_bpm_smoothing_enabled`
+(bool, code default `true`) and `published_bpm_smoothing_s` (float, default
+`4.0`, first-cut value not yet tuned against real data). Owner: default it
+on, but set to `false` in the owner's own `config.toml` for now — "we'll
+let this soak for a while" with the raw number visible during validation.
+
+**Verified:** 8 new tests in `tests/test_auto_vj_published_bpm.py`
+(disabled-smoothing exactness, first-lock snap, lock-loss snap, lag
+behavior on a jump, convergence over several time constants, frame-rate
+independence, `hud_bpm_label` reading the smoothed value not the raw
+one). Full suite green (1729 tests).
 
 **Tracking added so the new persistence window doesn't go stale like
 several other gate constants did before this session.** Owner: "we need
