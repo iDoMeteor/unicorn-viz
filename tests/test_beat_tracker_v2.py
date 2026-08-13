@@ -939,17 +939,21 @@ def test_downbeat_regularity_independent_of_acf_and_phase_confidence() -> None:
     assert low > 0.0, 'expected real beat-position history to produce a nonzero dbc term'
 
 
-def test_confidence_blend_is_six_two_two() -> None:
-    """self._confidence = 0.6*acf + 0.2*phase + 0.2*downbeat_regularity,
-    exercised via _absorb_onset (the same formula also lives in
-    _estimate_tempo_acf). Locks onto a steady click track first so
-    downbeat_regularity reflects real beat-position history instead of the
-    insufficient-history 0.0 floor (region consistency needs >= 8 beat
-    positions; a fresh tracker has none). Reads back the actual
-    acf_confidence/phase_confidence/downbeat_regularity the call used,
-    rather than assuming exact values -- with real history in play, a
-    single onset's exact effect on the phase_confidence weighted-average
-    isn't 1.0 on the nose the way it is on a fresh tracker.
+def test_confidence_blend_is_sixtyfive_ten_twentyfive() -> None:
+    """self._confidence = 0.65*acf + 0.1*phase + 0.25*downbeat_regularity
+    (2026-08-14, later still: re-tuned from 0.6/0.2/0.2 -- phase_confidence
+    chronically capped ~0.30 even on locked, correct stretches per real
+    session data, so its share was trimmed onto acf/downbeat_regularity,
+    the two terms showing real dynamic range). Exercised via _absorb_onset
+    (the same formula also lives in _estimate_tempo_acf). Locks onto a
+    steady click track first so downbeat_regularity reflects real
+    beat-position history instead of the insufficient-history 0.0 floor
+    (region consistency needs >= 8 beat positions; a fresh tracker has
+    none). Reads back the actual acf_confidence/phase_confidence/
+    downbeat_regularity the call used, rather than assuming exact values --
+    with real history in play, a single onset's exact effect on the
+    phase_confidence weighted-average isn't 1.0 on the nose the way it is
+    on a fresh tracker.
     """
     bt = BeatTracker({})
     t = _run_steady_click_track(bt, bpm=124.0, duration_s=10.0)
@@ -957,9 +961,12 @@ def test_confidence_blend_is_six_two_two() -> None:
     bt._absorb_onset(t, strength=3.0, band_weight=1.0)
 
     dbc = bt._downbeat_regularity(bt._last_t)
-    expected = 0.6 * bt._acf_confidence + 0.2 * bt._phase_confidence + 0.2 * dbc
+    expected = 0.65 * bt._acf_confidence + 0.1 * bt._phase_confidence + 0.25 * dbc
     assert bt._confidence == pytest.approx(expected)
     assert dbc > 0.0, 'expected real beat-position history to produce a nonzero dbc term'
+    assert bt.downbeat_regularity == pytest.approx(dbc), (
+        'downbeat_regularity property must be cached from the same blend computation'
+    )
 
 
 def test_confidence_does_not_echo_its_own_prior_value() -> None:

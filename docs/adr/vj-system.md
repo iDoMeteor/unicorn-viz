@@ -1509,6 +1509,109 @@ letter). `_RECOMMENDER_VERSION` → `1.0.0-rc.12`. `_VJ_WEIGHTS_DOC_VERSION`
 
 ---
 
+## Downbeat Regularity Logging + Confidence Blend Re-Tune (2026-08-14, later still again)
+
+Owner live-tested the one-way-flow cut immediately after it landed and
+reported it reads "way off" on the current run — but also, unprompted,
+recognized this as the detector finally being genuinely isolated for the
+first time, and reasoned through why the old two-way coupling had
+existed at all: some material (their example: Daft Punk's "One More
+Time," which has very little audio energy in the kick/bass region for
+long stretches) plausibly needs the detector to *listen differently*, not
+just get a different tempo number handed to it.
+
+**Answered, not implemented:** that's two different kinds of "genre
+influence," and only one was ever the bug. Value-bias (a profile's
+`bpm_prior_mu`/`sigma` nudging the search toward a specific number) is
+what got removed — it can't help, it can only mislead, since it's a
+guess made with the least evidence the recommender ever has. Method
+adaptation (listen differently based on what's actually audible) is a
+real, separate idea — and the detector already has a version of it,
+driven by *measurement* rather than a genre label: `kick_regularity` (an
+observed signal, not a guess) already auto-tightens the tactus
+fold-down's eagerness as measured kick regularity falls
+(`_effective_tactus_ratio()`). Whether that existing mechanism is enough
+for genuinely kick-sparse material, or needs to go further, is an open
+question — not pursued further this session pending a concrete failure
+case (right BPM but low confidence? wrong BPM entirely? bouncing?) rather
+than a plausible-sounding theory, given how many theories this exact
+investigation has needed to verify against real data before trusting
+them.
+
+**Key detection, separately asked:** would it help resolve the octave
+(60/120/240 BPM) ambiguity discussed earlier? No — key/pitch and
+tempo/rhythm are orthogonal musical dimensions. The octave-disambiguation
+job is already done by the comb-filter's own harmonic-summing (fundamental
+plus up to 3 harmonics, `_V2_COMB_HARMONICS`) plus the generic,
+genre-agnostic cold-start prior (`120 BPM, σ=0.55`) — both purely
+rhythmic mechanisms.
+Key information wouldn't add anything to that specific problem.
+
+**Real gap found while explaining the confidence-blend math: `downbeat_
+regularity` (the blend's third term) was never independently logged.**
+Only `downbeat_confidence` was — a *different*, composite metric that
+already has phase/acf baked in (30%/15%, per `_downbeat_regularity()`'s
+own docstring warning against confusing the two). Added `BeatTracker.
+downbeat_regularity`, a cached property mirroring `acf_confidence`/
+`phase_confidence`'s existing exposure pattern (both call sites of the
+blend now stash the freshly-computed value in `self._downbeat_regularity_
+value` before using it), and a matching `_detector_snapshot()` field in
+`auto_vj.py`.
+
+**Pulled real numbers immediately, from the live-running session**
+(`logs/autovj-*.jsonl`, 1118 locked rows, 25 min in):
+
+| Term | Weight (was) | Mean | stdev | Range |
+| --- | --- | --- | --- | --- |
+| `acf_confidence` | 0.6 | 0.63 | 0.25 | 0.12–1.00 |
+| `phase_confidence` | 0.2 | 0.32 | 0.14 | 0.00–0.89 |
+| `downbeat_confidence` *(proxy, not the real blend term)* | 0.2 | 0.51 | 0.11 | 0.00–0.82 |
+
+Per-track breakdown showed no clean "improves over the session" trend
+(first-half mean confidence `0.573` vs. second-half `0.533`, actually
+lower) — variance tracks per-track material, not elapsed time.
+`phase_confidence` sitting at `~0.32` mean, essentially unchanged from
+the `~0.3-0.4` cap the 2026-08-11 investigation found, despite the
+band/strength-weighted phase-coherence rework (`_V2_PHASE_STRENGTH_
+SATURATION`) landing in between — that rework was supposed to be "the
+real fix" for exactly this. It measurably helped (validated live at the
+time: BPM/genre correct from the first song), but the underlying cap
+persists.
+
+**Working theory for the cap, not yet confirmed:** `phase_confidence` is
+a weighted hit-rate — every onset's weight (`band_weight × saturating
+strength`) counts fully in the denominator whether it hits or misses,
+and only counts in the numerator on a hit. A strong, bass-weighted onset
+that's a legitimate syncopated bass stab or subdivision (common in
+house/techno-family material — this project's primary test genres, not
+an edge case) drags the ratio down exactly as hard as a real lock error
+would, because the metric can't distinguish "wrong lock" from "correct
+lock, syncopated bassline." If true, this is a structural ceiling on the
+metric itself for this material, not a bug in the weighting logic — the
+weighting already correctly protects against irrelevant (treble/weak)
+onsets, it just can't protect against relevant-but-legitimately-off-grid
+ones. **Flagged as open, not fixed.**
+
+**Weight re-tune, landed:** `0.6/0.2/0.2 → 0.65/0.1/0.25` (ACF/phase/
+downbeat_regularity) — `phase_confidence`'s share trimmed to `0.1` to
+reflect that it isn't discriminating as strongly as the other two, freed
+weight split evenly onto `acf_confidence` and `downbeat_regularity`
+(`+0.05` each), both of which showed real dynamic range in the same data
+pull. Framed explicitly by the owner as *not* a fix for the phase cap —
+"lowering the expectations for confidence" given a known structural
+weakness, versus solving the weakness itself.
+
+**Verified:** full suite green (1698 tests) after both changes,
+including 2 new tests for the new `downbeat_regularity` logging field, 1
+updated test for the new blend ratio (renamed from
+`test_confidence_blend_is_six_two_two` to reflect the new weights), and a
+new assertion that the property reads back the exact value the blend
+computation used. `_DETECTOR_VERSION` → `1.0.0-rc.21`,
+`_VJ_WEIGHTS_DOC_VERSION` → `40`, `auto_vj.py` `__version__` →
+`1.0.0-rc.62`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing

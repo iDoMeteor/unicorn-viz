@@ -163,6 +163,42 @@ def test_detector_snapshot_acf_top_candidates_empty_when_grid_lacks_it() -> None
     assert snap['acf_top_candidates'] == ''
 
 
+# ---- _detector_snapshot() downbeat_regularity (2026-08-14, later still) ---
+
+
+def test_detector_snapshot_reads_downbeat_regularity() -> None:
+    """BeatTracker.downbeat_regularity (the confidence blend's third term,
+    cached from the most recent blend computation) was never logged --
+    only downbeat_confidence, a different composite metric that already
+    has phase/acf baked in. Added alongside the 0.6/0.2/0.2 -> 0.65/0.1/
+    0.25 weight re-tune so the real term can be checked against data."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', downbeat_regularity=0.47,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['downbeat_regularity'] == pytest.approx(0.47)
+
+
+def test_detector_snapshot_downbeat_regularity_zero_when_grid_lacks_it() -> None:
+    """v1 (BeatGridTracker) has no downbeat_regularity property -- must not
+    raise, must default to 0.0 rather than omitting the key."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['downbeat_regularity'] == 0.0
+
+
 # ---- _build_live_training_row() shadow fields ----------------------------
 
 
