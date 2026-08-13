@@ -503,6 +503,35 @@ pick up the same change automatically.
 plus all 85 pre-existing tests in that file still green (no prompt-text
 regression). `training-kit-01` version `0.15.11 → 0.16.0`.
 
+## LLM Prompt: Fourth Constant Category — BPM-Value Accept/Reject Gating (2026-08-14, later still again)
+
+Same night, immediately after auto-vj-01 promoted its entire BPM-value
+accept/reject gate stack (10 constants — `_V2_STARTUP_CONFIDENCE`,
+`_V2_LARGE_JUMP_CONFIDENCE`, `_V2_MAX_BPM_STEP`,
+`_V2_ANALYSIS_REGION_CONFIDENCE_MIN`, etc. — see `docs/adr/vj-system.md`
+"BPM-Value Accept/Reject Gate Stack") from bare `cfg.get()` literals to
+named module constants, directly implicated in a real carry-over incident
+(BPM frozen across a track change). These were invisible to
+`_DETECTOR_CONSTANT_DEFAULTS` and therefore to the LLM prompt entirely,
+despite governing the single most consequential detector question a
+session can raise: does the published BPM value actually update at all.
+
+Added all ten to `_DETECTOR_CONSTANT_DEFAULTS`, and a fourth category
+paragraph to `_build_combined_prompt()`'s existing three-category
+breakdown (tempo VALUE search / lock STATE gating / phase-lock CONFIDENCE
+smoothing — see the 2026-08-10 entry above for why that separation
+exists at all): "BPM-value ACCEPT/REJECT gating," explaining these gate
+whether a freshly-computed candidate is accepted as the new BPM at all,
+keyed on raw `acf_confidence` and never the published confidence blend —
+and pointing the LLM at `mismatch_pct`/`switch_history` around a
+`track_id`/title change as the most direct evidence to check for this
+category specifically.
+
+**Verified:** 1 new test,
+`test_build_combined_prompt_includes_bpm_value_accept_reject_gate_category`,
+plus the full existing suite green. `training-kit-01` version
+`0.16.0 → 0.16.1`.
+
 ---
 
 ## Superseded Decisions

@@ -937,6 +937,21 @@ def test_build_combined_prompt_separates_confidence_smoothing_from_tempo_accurac
     assert 'must name the' in prompt and 'exact payload field' in prompt
 
 
+def test_build_combined_prompt_includes_bpm_value_accept_reject_gate_category() -> None:
+    """2026-08-14, later still again: a fourth constant category, distinct
+    from the three above -- the gate stack deciding whether a freshly
+    computed ACF candidate is actually ACCEPTED as the new published BPM
+    at all, gated on raw acf_confidence, never the published confidence
+    blend. Directly implicated in a real carry-over incident (BPM frozen
+    across a track change) the same night."""
+    detector_payload = {'essentia_available': False}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert 'BPM-value ACCEPT/REJECT gating' in prompt
+    assert '_V2_LARGE_JUMP_CONFIDENCE' in prompt
+    assert '_V2_MAX_BPM_STEP' in prompt
+    assert '_V2_ANALYSIS_REGION_CONFIDENCE_MIN' in prompt
+
+
 def test_format_tuning_recommendations_md_renders_detector_and_director_sections() -> None:
     tuning = {
         'overall_assessment': 'Solid session overall.',

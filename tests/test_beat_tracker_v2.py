@@ -13,6 +13,7 @@ rather than eyeballed from a real audio file.
 from __future__ import annotations
 
 import importlib.util
+import random
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -47,12 +48,28 @@ def _run_steady_click_track(
     duration_s: float,
     start_t: float = 0.0,
     fps: float = 60.0,
+    jitter_s: float = 0.0,
+    seed: int = 1,
 ) -> float:
-    """Feed a perfectly steady onset stream at `bpm` for `duration_s` seconds.
+    """Feed a perfectly steady (or lightly jittered) onset stream at `bpm`
+    for `duration_s` seconds.
 
     Returns the final simulated time `t` so callers can continue the timeline
-    (e.g. into a silence gap) without losing sync.
+    (e.g. into a silence gap, or straight into a second tempo) without
+    losing sync.
+
+    jitter_s (2026-08-14, later still): +-uniform jitter applied to each
+    onset's timing. 0.0 (the default) reproduces the original perfectly
+    periodic behavior every existing test here depends on. A small nonzero
+    jitter (e.g. 0.01) matters for large-jump-across-a-track-change tests
+    specifically -- a perfectly regular click train's exact-integer-ratio
+    periodicity is a degenerate case for the comb filter's harmonic-summing
+    (a half-tempo candidate's own 2nd harmonic literally coincides with the
+    true fundamental), which can bias candidate selection in a way real
+    (never perfectly periodic) audio does not reproduce as strongly. See
+    docs/adr/vj-system.md.
     """
+    rng = random.Random(seed) if jitter_s else None
     period = 60.0 / bpm
     dt = 1.0 / fps
     t = start_t
@@ -63,7 +80,7 @@ def _run_steady_click_track(
         onsets = None
         if t >= next_onset:
             onsets = [_FakeOnset(next_onset)]
-            next_onset += period
+            next_onset += period + (rng.uniform(-jitter_s, jitter_s) if rng else 0.0)
         tracker.update(dt, audio, onsets=onsets, t=t)
         t += dt
     return t
@@ -633,6 +650,59 @@ def test_tempo_hold_freezes_bpm_once_confidence_clears_the_hold_gate() -> None:
     # Not bit-exact: the hold window can lapse and re-refresh over a long
     # run, allowing residual EMA micro-drift. The point is no *jump*.
     assert bt.bpm == pytest.approx(locked_bpm, abs=0.05)
+
+
+def test_fresh_lock_converges_correctly_on_123_bpm_material() -> None:
+    """Baseline: a cold-start lock (no prior track, no carry-over state at
+    all) on genuinely 123 BPM material converges to the right tempo. This
+    isolates the track-change/carry-over scenario below from a general
+    "does the algorithm handle 123 BPM" question -- it does, cleanly, from
+    cold start."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=123.0, duration_s=90.0, jitter_s=0.01)
+
+    assert bt.bpm == pytest.approx(123.0, abs=3.0)
+
+
+def test_large_jump_gate_no_longer_freezes_forever_across_a_track_change() -> None:
+    """2026-08-14, later still: real live incident (packaged as
+    assets/training/sets/garbage/k) -- BPM frozen at 83.35 with confidence
+    0.91+ straight across a track change into a song with a genuinely
+    different (~123 BPM) real tempo. Root cause: the large-jump accept
+    gate previously required BOTH acf_conf >= large_jump_confidence AND
+    region-consistency against *recent* beat positions -- but recent beat
+    positions are necessarily built under the OLD tempo, so a brand-new
+    tempo candidate could never satisfy region-consistency no matter how
+    strong its ACF evidence was. Verified directly (manual A/B against the
+    pre-fix AND-logic, not asserted here since it requires monkeypatching
+    the module source): under the old logic, BPM stayed bit-exact at 83.33
+    for the entire post-transition window. Under the OR-logic fix
+    (region-consistency is now an alternate acceptance path, not an
+    additional mandatory one), BPM moves substantially away from the old
+    lock once strong contrary evidence arrives -- confirmed here.
+
+    This does NOT assert convergence to exactly 123 -- a fresh cold-start
+    lock reaches 123 cleanly (see the test above), but a transition FROM
+    an existing lock does not reach it as cleanly within this window,
+    which appears to be a separate, still-open question about how the
+    tactus fold-down's region-consistency check behaves differently when
+    prior beat-position history exists vs. when it doesn't (cold start:
+    region-consistency is inert with no history; transition: the OLD
+    lock's real history is still there to check candidates against). See
+    docs/adr/vj-system.md -- flagged as an open investigation, not
+    resolved by this fix.
+    """
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+    locked_bpm = bt.bpm
+    assert locked_bpm == pytest.approx(83.33, abs=1.0), 'test premise: locked near 83'
+
+    _run_steady_click_track(bt, bpm=123.0, duration_s=90.0, start_t=60.0, jitter_s=0.01)
+
+    assert abs(bt.bpm - locked_bpm) > 15.0, (
+        f'expected real movement away from the stale {locked_bpm:.2f} lock once strong '
+        f'contrary evidence arrived; got bpm={bt.bpm:.2f} (frozen solid pre-fix)'
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1246,3 +1316,73 @@ def test_drop_score_bass_gated_reweight_caps_a_bass_free_breakdown() -> None:
         f'drop_score={bt.drop_score:.3f} during a bass-free breakdown -- '
         'should sit well under every rebooted mood-profile floor (>= 0.60)'
     )
+
+
+# ---------------------------------------------------------------------------
+# BPM-value accept/reject gate stack: named constants + new observability
+# properties (2026-08-14, later still)
+# ---------------------------------------------------------------------------
+
+def test_gate_stack_constants_have_the_retuned_values() -> None:
+    """Promoted from bare cfg.get() literals to named module constants the
+    same night five of them were retuned (owner review of the garbage/k
+    carry-over incident). Source-text guard, same pattern as the
+    recommender sigma-floor test: catches any of these silently drifting
+    back toward their old values."""
+    assert _MOD._V2_STARTUP_CONFIDENCE == pytest.approx(0.3)
+    assert _MOD._V2_LARGE_JUMP_CONFIDENCE == pytest.approx(0.5)
+    assert _MOD._V2_LOW_BPM_FAST_CONFIDENCE == pytest.approx(0.45)
+    assert _MOD._V2_MAX_BPM_STEP == pytest.approx(5.0)
+    assert _MOD._V2_ANALYSIS_REGION_CONFIDENCE_MIN == pytest.approx(0.40)
+    # Unchanged this pass, but promoted to named constants alongside the
+    # above for LLM-tuning visibility -- confirm they still match their
+    # pre-existing values.
+    assert _MOD._V2_MIN_UPDATE_CONFIDENCE == pytest.approx(0.25)
+    assert _MOD._V2_LOCK_BAND_PCT == pytest.approx(0.16)
+    assert _MOD._V2_LOCK_BAND_MIN == pytest.approx(10.0)
+    assert _MOD._V2_TEMPO_HOLD_S == pytest.approx(10.0)
+    assert _MOD._V2_LOW_BPM_GUARD == pytest.approx(115.0)
+    assert _MOD._V2_FAST_BPM_GUARD == pytest.approx(130.0)
+
+
+def test_gate_stack_constants_actually_drive_instance_defaults() -> None:
+    """The promotion (cfg.get(key, BARE_LITERAL) -> cfg.get(key, _V2_NAMED))
+    must not have silently detached the named constant from what the
+    tracker actually uses when unconfigured."""
+    bt = BeatTracker({})
+    assert bt._startup_confidence == pytest.approx(_MOD._V2_STARTUP_CONFIDENCE)
+    assert bt._large_jump_confidence == pytest.approx(_MOD._V2_LARGE_JUMP_CONFIDENCE)
+    assert bt._low_bpm_fast_confidence == pytest.approx(_MOD._V2_LOW_BPM_FAST_CONFIDENCE)
+    assert bt._max_bpm_step == pytest.approx(_MOD._V2_MAX_BPM_STEP)
+    assert bt._analysis_region_confidence_min == pytest.approx(_MOD._V2_ANALYSIS_REGION_CONFIDENCE_MIN)
+
+
+def test_region_consistency_property_starts_at_zero() -> None:
+    """0.0 before any large-jump candidate has ever been evaluated (most
+    updates are small in-band nudges that never touch this check)."""
+    bt = BeatTracker({})
+    assert bt.region_consistency == 0.0
+
+
+def test_region_consistency_property_populated_by_a_large_jump_evaluation() -> None:
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+    _run_steady_click_track(bt, bpm=123.0, duration_s=90.0, start_t=60.0, jitter_s=0.01)
+
+    assert bt.region_consistency != 0.0, 'a large jump was clearly evaluated by t=150s'
+
+
+def test_last_tactus_fold_property_starts_empty() -> None:
+    bt = BeatTracker({})
+    assert bt.last_tactus_fold == ''
+
+
+def test_last_tactus_fold_property_populated_after_a_fold_decision() -> None:
+    """160 BPM material is above the tactus-check threshold (115) and
+    routinely folds -- see test_locks_onto_steady_100_bpm_click_track's
+    own comment on 160 -> ~82 half-time folding by design."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=160.0, duration_s=30.0)
+
+    assert bt.last_tactus_fold != ''
+    assert ':' in bt.last_tactus_fold and '->' in bt.last_tactus_fold

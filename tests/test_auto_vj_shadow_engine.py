@@ -199,6 +199,44 @@ def test_detector_snapshot_downbeat_regularity_zero_when_grid_lacks_it() -> None
     assert snap['downbeat_regularity'] == 0.0
 
 
+def test_detector_snapshot_reads_region_consistency_and_last_tactus_fold() -> None:
+    """2026-08-14, later still again: the BPM-value accept/reject gate
+    stack was entirely invisible in the training corpus -- only its
+    cumulative tactus counters and the raw acf_confidence were ever
+    logged. region_consistency is the large-jump gate's own check;
+    last_tactus_fold is the most recent individual fold decision, not
+    just a tally. Added the same night a real carry-over incident
+    (garbage/k) exposed the gap."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', region_consistency=0.62,
+        last_tactus_fold='accepted:150.00->75.00',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['region_consistency'] == pytest.approx(0.62)
+    assert snap['last_tactus_fold'] == 'accepted:150.00->75.00'
+
+
+def test_detector_snapshot_region_consistency_and_tactus_fold_default_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has neither mechanism -- must not raise, must
+    default to 0.0/'' rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['region_consistency'] == 0.0
+    assert snap['last_tactus_fold'] == ''
+
+
 # ---- _build_live_training_row() shadow fields ----------------------------
 
 

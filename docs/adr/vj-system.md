@@ -1612,6 +1612,198 @@ computation used. `_DETECTOR_VERSION` → `1.0.0-rc.21`,
 
 ---
 
+## BPM-Value Accept/Reject Gate Stack: Promoted, Retuned, Chicken-and-Egg Fixed (2026-08-14, later still again)
+
+Direct continuation of the garbage/k carry-over incident. Owner asked a
+precise question that reframed the whole night's confidence-tuning work:
+"is there a separate place the actual bpm is being derived?" — suspecting,
+correctly, that tonight's confidence-blend re-tuning had never touched
+whatever actually decides the published BPM *value*.
+
+### Where BPM value actually comes from, and why confidence-tuning never touched it
+
+Traced in full: `_estimate_tempo_acf()` computes a fresh candidate every
+cycle regardless of confidence, but a **separate, raw, per-cycle number** —
+`acf_conf` (`min(1.0, acf_peak_ratio/3.0)`, cached as `self._acf_confidence`
+and exposed via the `acf_confidence` property) — gates whether that
+candidate is ever accepted as the new `self._bpm`. This is **not** the
+published `self._confidence` blend (0.65/0.1/0.25 ACF/phase/downbeat_
+regularity, tonight's earlier work). Two different numbers computed in the
+same method, doing completely different jobs. The full accept/reject gate
+stack a fresh candidate has to clear, every one keyed on `acf_conf`, never
+`self._confidence`:
+
+1. Startup/update floor (`acf_conf` vs. `_min_update_confidence`/
+   `_startup_confidence` depending on cold vs. locked).
+2. Tempo-hold window — refused outright if `acf_conf >= 0.45` while inside
+   `_tempo_hold_until_t`.
+3. Candidate persistence (P5 hardening) — must reappear ≥3 consecutive
+   cycles, spread ≤4 BPM.
+4. Large-jump guard — outside the lock band, requires
+   `acf_conf >= _large_jump_confidence`.
+5. Region-consistency guard (Mixxx-inspired) — see the chicken-and-egg
+   fix below.
+6. Low→fast lane guard — extra-strict confidence for a ≤115→≥130 jump.
+7. EMA smoothing, capped at `_max_bpm_step` per accepted update.
+
+**Answer to "is confidence-tuning why we broke this": yes, but the exact
+mechanism is already gone.** Before tonight's earlier one-way-flow cut,
+`AutoVJController._sync_grid_audio_profile()` gated its push into the beat
+tracker on the *published* `self._confidence` (`if conf <
+self._audio_profile_sync_min_confidence: return`, default `0.35`). Every
+past confidence-blend increase (the 0.4/0.6 → 0.5/0.5 → 0.7/0.3 → 0.8/0.2 →
+0.6/0.2/0.2 progression, spanning 2026-08-10 through tonight) made that gate
+clear *more* easily/often — meaning more frequent genre-profile pushes into
+the detector's ACF prior, each one a chance to corrupt BPM search via wrong-
+genre bias, exactly the mechanism the one-way-flow cut removed a few hours
+earlier the same night. The "obtuse feedback loop" the owner suspected was
+real, named precisely, and already closed — just not connected to this
+specific worry until asked directly. Confirmed: with `_sync_grid_audio_
+profile()` gone, `self._confidence` no longer has *any* path back into BPM
+value determination, even indirectly through the recommender (the
+recommender's own `manager.set_profile()` call only reaches `Analyzer`, not
+the beat tracker, as of the one-way-flow cut).
+
+### Ten constants promoted, five retuned
+
+All ten gate-stack thresholds were bare `cfg.get(key, LITERAL)` defaults in
+`BeatTracker.__init__` — invisible to `weights-and-thresholds.md`, to
+`training-kit-01`'s LLM tuning prompt, to everything. Promoted to named
+`_V2_*` module constants (same pattern as `_V2_PHASE_TOL` etc.), and five
+retuned per direct owner review — see `weights-and-thresholds.md`'s new
+"BPM-value accept/reject gate stack" section for the full table and
+per-constant rationale (`_V2_STARTUP_CONFIDENCE` `0.55→0.3`,
+`_V2_LARGE_JUMP_CONFIDENCE` `0.72→0.5`, `_V2_LOW_BPM_FAST_CONFIDENCE`
+`0.80→0.45`, `_V2_MAX_BPM_STEP` `3.0→5.0`,
+`_V2_ANALYSIS_REGION_CONFIDENCE_MIN` `0.58→0.40`). Owner's explicit framing:
+first-cut values pending real data now that the stack is actually visible —
+"we're going to have to tune & inspect this whole damn thing with a
+microscope."
+
+### The region-consistency chicken-and-egg (fixed)
+
+Gate 5 previously required **both** `acf_conf >= large_jump_confidence`
+**and** region-consistency (recent beat positions must also fit the new
+candidate) — AND logic. But recent beat positions are necessarily built
+under the *old* tempo; a genuinely new tempo can never have history
+consistent with it until it's already been accepted. This made gate 4
+nearly pointless for real track-boundary jumps: no matter how strong the
+ACF evidence, gate 5 would reject anyway, because "region-consistent with
+a tempo that has zero history" is not a thing that can happen.
+
+**Verified directly, not just reasoned through:** forced the pre-fix AND
+logic back in (temporary monkeypatch, not committed) and ran a tracker
+locked at 83 BPM through 90 seconds of clearly-different 123 BPM material —
+BPM stayed **bit-exact at 83.33 the entire time**. With the fix (AND → OR:
+strong direct confidence is now sufficient on its own; region-consistency
+remains a valid *alternate* path for smaller, confidence-borderline drifts)
+— same scenario, BPM moved substantially away from the stale lock. Real
+regression test: `test_large_jump_gate_no_longer_freezes_forever_across_a_
+track_change` (`tests/test_beat_tracker_v2.py`).
+
+### Found while testing, not resolved: cold-start vs. transition asymmetry
+
+The OR fix demonstrably breaks the permanent freeze, but the jump doesn't
+cleanly land on the correct new tempo either. Controlled comparison:
+
+- **Cold start** (fresh `BeatTracker`, no prior lock, straight onto ~123
+  BPM material): converges correctly, `~124 BPM`.
+- **Transition** (locked at 83 BPM, then fed the *same* ~123 BPM material):
+  drifts toward a slower subdivision instead (a clean noiseless click track
+  drifted to `~74-80 BPM`; the same material with light jitter reached only
+  `~107 BPM` after 90s, still short of 123).
+
+Same underlying audio, different outcome, purely a function of prior lock
+state. The raw comb-filter's own top-3 candidates (now visible via
+`acf_top_candidates`, tonight's earlier logging addition — this is exactly
+the kind of case that addition exists for) showed a half-tempo candidate
+(`~61.86 BPM`, i.e. `123/2`) consistently outscoring the true `~122-125 BPM`
+candidates in the transition case, something the cold-start case never
+exhibited on the same generator. Leading theory, not confirmed: an
+interaction between the tactus fold-down's own region-consistency check
+(`_tactus_fold_accepted()`, which is *inert* with zero beat-position
+history — true at cold start — but *not* inert once the old lock's real
+history exists) and the still-live old-tempo history during a transition.
+**Not fixed — flagged as the next investigation**, now that
+`region_consistency` and `last_tactus_fold` (below) are actually logged to
+work with.
+
+### New logging
+
+- `BeatTracker.region_consistency` — the large-jump gate's own check,
+  cached from the most recent large-jump evaluation. Deliberately
+  documented as distinct from `downbeat_regularity`'s *internal* region
+  term (that one checks the currently-locked tempo every confidence-blend
+  cycle; this checks a large-jump *candidate*, only when one is being
+  evaluated) — easy to conflate, so both docstrings cross-reference each
+  other.
+- `BeatTracker.last_tactus_fold` — owner: "we also need to log the fold
+  decisions for the tactus stuff." The existing `tactus_fold_accepted_
+  count`/`tactus_region_reject_count`/`tactus_score_reject_count` counters
+  (2026-08-13/14) show *how often* each outcome happens; this compact
+  string (`'accepted:150.00->75.00'` etc.) shows *which* fold each one was,
+  overwritten each evaluation.
+- Both new `_detector_snapshot()` fields, `0.0`/`''` for v1
+  (`BeatGridTracker`), which has neither mechanism.
+- `_DETECTOR_CONSTANT_DEFAULTS` in `training-kit-01`'s `package_training_
+  set.py` gains all ten gate-stack constants under a new, explicitly
+  distinct fourth category in the LLM prompt ("BPM-value ACCEPT/REJECT
+  gating," alongside the existing tempo-VALUE-search / lock-STATE-gating /
+  phase-lock-CONFIDENCE-smoothing categories) — the exact category
+  distinction this whole investigation needed, now available for future
+  LLM tuning recommendations to reason about correctly instead of
+  guessing. `training-kit-01` `0.16.0 → 0.16.1`.
+
+### Answered, not yet fixed: the tempo-hold gate may be actively counter-productive during a jump
+
+Owner, precisely: "confident lane changes crawl at 3 BPM/update while
+refreshing the 10s hold — same signature as the old '20 hot' bug, different
+mechanism." Confirmed by re-reading the gate: it blocks re-evaluation
+specifically when `acf_conf >= 0.45` — i.e. *strong* evidence gets blocked,
+weak evidence is what's allowed through to the rest of the gate stack — and
+`_tempo_hold_until_t` is refreshed to `now + tempo_hold_s` after **every**
+accepted update, including a `_max_bpm_step`-capped partial step mid-jump.
+Net effect during a genuine tempo change: confident evidence about the new
+tempo repeatedly gets blocked by the very mechanism meant to protect a
+*stable* lock, and progress only happens on cycles where confidence
+happens to dip. Empirically consistent with the real `garbage/k` data (`acf_
+confidence` visibly fluctuating 1.00 → 0.34 → 0.90 across the frozen
+stretch) and with the region-consistency test needing a full 90s (not 30s)
+to even reach a large-jump evaluation once. **Not implemented — owner
+explicitly still deciding between two directions** (don't refresh the hold
+on an out-of-band step, only once actually converged; or shorten/remove the
+refresh during an in-progress jump specifically) and asked for analysis, not
+a unilateral fix, given this exact code path's incident history. Recorded
+in Open Questions.
+
+### Also answered, no code change
+
+- **Why clamp `acf_peak_ratio`?** Not "use the new score whenever it beats
+  the rival" — `acf_conf = min(1.0, acf_peak_ratio/3.0)` is a continuous
+  ratio-based confidence: a tied score (ratio `1.0`) gives `acf_conf ≈
+  0.33`, and separation of `3×` or more all saturate to `1.0` — diminishing
+  returns past a clearly-decisive margin, not a binary threshold.
+- **Why does region-consistency exist at all / why was the system more
+  responsive before?** Most of the gate stack is individually-reasonable
+  incremental hardening (P4/P5, Mixxx-inspired guard, kr/dbc) added over
+  time to stop specific *within-track* noise patterns — none were designed
+  with "a track just changed and the tempo legitimately jumped 40 BPM" in
+  mind, and their combined effect made a real jump nearly as hard to accept
+  as a fake one. If living memory of it working better predates some of
+  these landing, that would explain it directly.
+
+**Verified:** full suite green (1713 tests) including 8 new tests across
+`tests/test_beat_tracker_v2.py` (gate-constant values + instance wiring,
+`region_consistency`/`last_tactus_fold` property behavior, cold-start vs.
+transition convergence, the core large-jump-no-longer-frozen regression),
+`tests/test_auto_vj_shadow_engine.py` (2 new `_detector_snapshot()` field
+tests), and `tests/test_package_training_set.py` (1 new prompt-category
+test). `_DETECTOR_VERSION` → `1.0.0-rc.22`, `_VJ_WEIGHTS_DOC_VERSION` →
+`42`, `auto_vj.py` `__version__` → `1.0.0-rc.64`, `training-kit-01`
+`0.16.0 → 0.16.1`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
@@ -5614,6 +5806,31 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
   this gets revisited: a synthetic click-track test that isolates
   `downbeat_regularity`'s weight alone, not another round of live
   session comparison.
+- **2026-08-14, flagged not fixed:** the tempo-hold gate (`_tempo_hold_
+  until_t`) blocks re-evaluation specifically when `acf_conf >= 0.45` and
+  refreshes on every accepted update, including a `_max_bpm_step`-capped
+  partial step mid-jump — meaning strong evidence about a genuinely new
+  tempo repeatedly gets blocked by the mechanism meant to protect a stable
+  lock, and a large-jump convergence only makes progress on cycles where
+  confidence happens to dip. Same failure signature as the old "20 hot"
+  bug (BPM parked at a wrong value while reading confidently), different
+  mechanism. See "BPM-Value Accept/Reject Gate Stack" above. Owner is
+  weighing two directions, not yet decided: don't refresh the hold on a
+  step that's still outside the lock band (only once actually converged),
+  or shorten/eliminate the refresh specifically during an in-progress
+  jump. Not implemented.
+- **2026-08-14, flagged not fixed:** a *transition* from an existing lock
+  onto genuinely different tempo material doesn't converge as cleanly as a
+  *cold-start* lock on the identical material — same generator, same raw
+  audio, different lock-state history, different outcome (cold start:
+  correct convergence to ~124 BPM; transition: drifts toward a half-tempo
+  subdivision instead). Leading theory: an interaction between the tactus
+  fold-down's own region-consistency check (inert with zero beat-position
+  history, as at cold start; not inert once an old lock's real history
+  exists) and the still-live old-tempo history right after a transition.
+  Not confirmed. `region_consistency`/`last_tactus_fold` (both newly
+  logged, same session) are the tools to investigate this with next. See
+  "BPM-Value Accept/Reject Gate Stack" above.
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
 - ~~`centroid_fit`'s Gaussian used a fixed 400 Hz sigma for every profile~~
