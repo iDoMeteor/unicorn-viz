@@ -1804,6 +1804,130 @@ test). `_DETECTOR_VERSION` → `1.0.0-rc.22`, `_VJ_WEIGHTS_DOC_VERSION` →
 
 ---
 
+## Tempo-Hold Gate Removed + Grid-Split Wobble Fixed (2026-08-14, the morning after)
+
+Direct continuation of the previous entry's two open questions. Owner
+confirmed a real, live session hit the exact "stable then collapsed to
+sub-100 BPM" pattern the transition-asymmetry investigation was chasing,
+and asked precisely: what `tempo_hold_s` did the simulation actually use
+(10s, the default — never touched), and to check the training data for
+the just-ended, not-yet-packaged session (`logs/autovj-20260813T132520.jsonl`,
+the more recent of two short sessions in `logs/`).
+
+### The transition asymmetry was the tempo-hold gate all along
+
+Investigated the leading theory from the previous entry (beat-position-map
+contamination from the old tempo biasing the tactus fold-down's
+region-consistency check). Confirmed the phenomenon is real —
+`region_consistency(123)` reads `0.00` for 30+ seconds after a transition
+while `region_consistency(83)` stays high — but a direct A/B (manually
+clearing the map at the transition boundary) changed **nothing** about the
+BPM trajectory. Ruled out as the driver.
+
+Disabled the tempo-hold gate as a diagnostic instead: with it, a synthetic
+83→123 transition crawled to only `110.3 BPM` after 150 seconds; without
+it, the same transition reached `122.5 BPM` within 15 seconds and settled
+at `125.0`. That's the whole mystery — not a comb-filter or tactus problem,
+the gate itself (see the previous entry's "answered, no code change"
+section for the mechanism: it blocks *strong* evidence, not weak, and
+refreshes on every accepted update including a partial jump step).
+
+**Then tested the owner's own proposed fix** (don't refresh the hold on an
+out-of-band step) rather than assuming full removal was the only answer —
+it worked on the single scenario tested (`110.3 → 118.3`), a real
+improvement.
+
+### The real test: a 20-transition-pair sweep
+
+Owner asked directly: simulate both fixes against transitions among
+`{86, 112, 124, 132, 148}` BPM, every ordered pair (20 total, lock 60s then
+transition 90s each).
+
+| Variant | Converged within 90s (tol 3 BPM) | Typical convergence |
+| --- | --- | --- |
+| Current (gate active) | 4/20 | never, or 24-89s |
+| Owner's fix (no refresh on out-of-band steps) | 4/20 | **~identical to current** |
+| Gate fully disabled | **20/20** | **5-9s**, almost every pair |
+
+The single-scenario result for the owner's fix didn't generalize — across
+the full matrix it barely differs from the unfixed baseline (several rows
+are numerically identical to the decimal: `112→124`, `132→124`, `148→124`,
+`148→132`). Full removal is unambiguously the answer. Correction recorded
+on the record rather than left standing: the earlier single-test claim
+that the owner's fix "measurably works" was an overclaim from
+non-representative sampling.
+
+**Owner's response, verbatim on how they landed on that specific test
+matrix:** "did i randomly out of thin air pick some good numbers or what!
+that's called being connected to the aether ;)" — decision: **remove the
+gate.**
+
+### The real anomaly, and the real fix
+
+The same 20-pair sweep surfaced a second, separate finding: every
+transition landing on **124 BPM specifically** converged to `~101.65`
+regardless of starting tempo, even with the gate fully disabled — a
+consistent, reproducible miss the other four targets didn't share. Owner:
+"make sure we have the training data required to look at comb & lag grid
+(my suspicion)."
+
+Verified the suspicion directly: `124 BPM`'s two nearest points on the
+ACF's discrete lag grid are `122.449` and `125.0` — a 2.55 BPM gap, with
+124.0 sitting inside it. Extending the test duration to 180s and running
+10 different jitter seeds showed this isn't a hard, deterministic failure
+— 6/10 seeds converged correctly, but 2/10 got stuck at a wrong value even
+after a full 180 seconds. **Then found the live confirmation independently**
+(before connecting the two): a real session (`logs/autovj-20260813T132520.jsonl`,
+the requested unpackaged session) showed a clean, `acf_confidence=1.00`
+lock at `127.33 BPM` collapsing to `91.37` over ~12 seconds with **no
+track change at all** — same pattern, live, mid-track. `acf_top_candidates`
+and `last_tactus_fold` (both logged since the previous entry) made the
+mechanism visible directly in the corpus: the raw comb-filter argmax
+itself moved to a competing 2:3-related candidate (`84.51`, against the
+`127.66` lock) for several consecutive cycles — not a fold-down decision,
+the raw correlator's own peak wandered.
+
+**Fix:** `_V2_LARGE_JUMP_PERSISTENCE_CYCLES = 25` (~3.3s at the ACF's
+~7.5 Hz re-estimation cadence) — a new, separate, much longer-window
+version of the existing `candidate_history` persistence check
+(`candidate_window`, default 5 cycles, under one second), consulted only
+when a candidate is outside the lock band: requires the raw candidate to
+have stayed consistent (median/spread) across the last 25 cycles before
+the large-jump gate is even considered. In-band nudges are entirely
+unaffected — same responsiveness as before for ordinary stable-lock
+tracking.
+
+**Verified:** the 3 seeds that previously got stuck (worst: `101.65`/
+`115.99`/`106.92` instead of `~124-125`) all now converge correctly
+(worst final error `22.35 BPM → 0.0`). Re-ran the full 20-pair sweep:
+still `20/20` converged, worst final error `1.33 BPM`, convergence `6.5-12s`
+— a few seconds slower than without the check (the 3.3s minimum wait), far
+faster than the pre-hold-gate-removal baseline. Owner, live-testing the
+combined fix while this was being written up: "latest build doing great @
+128bpm to stream right now."
+
+**Verified in the test suite:** full suite green (1717 tests). New:
+`test_large_jump_persistence_check_prevents_the_grid_split_wobble`
+(parametrized over the 3 previously-failing seeds), plus updates to the
+now-removed hold-gate's own test (renamed, since the behavior it validated
+no longer exists as an explicit mechanism — steady-state stability still
+holds, now as an emergent property of having no different evidence to
+react to) and a simplification of `region_consistency`'s own property test
+(the end-to-end version became timing-dependent once the persistence check
+changed exactly when that code path gets exercised; replaced with a direct
+cached-value check, same pattern as `last_tactus_fold`'s own test).
+`_DETECTOR_VERSION` → `1.0.0-rc.23`, `_VJ_WEIGHTS_DOC_VERSION` → `43`,
+`auto_vj.py` `__version__` → `1.0.0-rc.65`.
+
+**Still open:** why the raw comb-filter argmax wanders to a competing
+candidate in the first place, on real music, for a few seconds at a time
+— the persistence fix contains the *consequence* (nothing rides the
+wobble to a wrong resting value anymore) without addressing why the
+wobble happens. `acf_top_candidates`/`last_tactus_fold` are the tools to
+keep investigating this with from real session data going forward.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
@@ -5806,31 +5930,27 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
   this gets revisited: a synthetic click-track test that isolates
   `downbeat_regularity`'s weight alone, not another round of live
   session comparison.
-- **2026-08-14, flagged not fixed:** the tempo-hold gate (`_tempo_hold_
+- ~~**2026-08-14, flagged not fixed:** the tempo-hold gate (`_tempo_hold_
   until_t`) blocks re-evaluation specifically when `acf_conf >= 0.45` and
-  refreshes on every accepted update, including a `_max_bpm_step`-capped
-  partial step mid-jump — meaning strong evidence about a genuinely new
-  tempo repeatedly gets blocked by the mechanism meant to protect a stable
-  lock, and a large-jump convergence only makes progress on cycles where
-  confidence happens to dip. Same failure signature as the old "20 hot"
-  bug (BPM parked at a wrong value while reading confidently), different
-  mechanism. See "BPM-Value Accept/Reject Gate Stack" above. Owner is
-  weighing two directions, not yet decided: don't refresh the hold on a
-  step that's still outside the lock band (only once actually converged),
-  or shorten/eliminate the refresh specifically during an in-progress
-  jump. Not implemented.
-- **2026-08-14, flagged not fixed:** a *transition* from an existing lock
+  refreshes on every accepted update...~~ — **resolved 2026-08-14, the
+  morning after.** Gate removed entirely — a 20-transition-pair sweep
+  showed 4/20 converged with it vs. 20/20 without (almost all within
+  5-9s); the owner's own alternate proposal (don't refresh the hold on an
+  out-of-band step) was tested head-to-head and was 5-10× slower with no
+  compensating benefit, so full removal won. See "BPM-Value Accept/Reject
+  Gate Stack" and "Tempo-Hold Gate Removed + Grid-Split Wobble Fixed"
+  below.
+- ~~**2026-08-14, flagged not fixed:** a *transition* from an existing lock
   onto genuinely different tempo material doesn't converge as cleanly as a
-  *cold-start* lock on the identical material — same generator, same raw
-  audio, different lock-state history, different outcome (cold start:
-  correct convergence to ~124 BPM; transition: drifts toward a half-tempo
-  subdivision instead). Leading theory: an interaction between the tactus
-  fold-down's own region-consistency check (inert with zero beat-position
-  history, as at cold start; not inert once an old lock's real history
-  exists) and the still-live old-tempo history right after a transition.
-  Not confirmed. `region_consistency`/`last_tactus_fold` (both newly
-  logged, same session) are the tools to investigate this with next. See
-  "BPM-Value Accept/Reject Gate Stack" above.
+  *cold-start* lock...~~ — **resolved 2026-08-14, the morning after.**
+  Was the tempo-hold gate above, not a tactus-fold/region-consistency
+  effect as first suspected — confirmed by a direct A/B (clearing the
+  beat-position map at the transition boundary changed nothing; disabling
+  the hold gate alone fixed it). Fixing the gate surfaced a *separate*
+  real issue — a "grid-split wobble" near tempos that fall in a gap in
+  the ACF's discrete lag grid — fixed the same session with
+  `_V2_LARGE_JUMP_PERSISTENCE_CYCLES`. See "Tempo-Hold Gate Removed +
+  Grid-Split Wobble Fixed" below.
 - Should `tactus_preference_ratio` be per-AudioProfile rather than a global config key?
 - Consider widening `phase_tol` to 0.22 to nudge the natural equilibrium above 0.40 (now closer to the 0.55 gain threshold).
 - ~~`centroid_fit`'s Gaussian used a fixed 400 Hz sigma for every profile~~
