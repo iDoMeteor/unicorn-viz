@@ -622,6 +622,115 @@ comment: at least one existing detector constant is explicitly "not
 hot-reloaded," so live-switching may not be uniformly possible across
 every candidate setting without further work).
 
+## 10. Minimum lock dwell time — new idea, grounded in a live session
+
+Owner, watching a live 2026-08-14 19:45 session (`logs/autovj-20260813T194512.jsonl`,
+v3 active + v2 shadow, interpolation flag correctly off — see below):
+"totally started out right on point but collapsed quickly to sub 100
+instead of mid 120s... moved back in to proper range... collapsed
+again. maybe we do need some kind of minimum lock length to prevent the
+churn, a standard musical amount.. like 16/32 bars?"
+
+**The pattern, confirmed in the log.** In the session's first ~226
+seconds (before any clear track-change silence gap), on what looks like
+one track: BPM correctly reads `122.4` by `t=14`, climbs to `124.7` by
+`t=26`, then drifts down to `100.3` by `t=34`, bottoms near `88.3` by
+`t=59`, partially recovers to `112-117` by `t=110`, fully recovers to
+`120.4` by `t=195`, then drifts back down to `105.3` by `t=228`. `bpm_locked`
+toggled **38 times over the session's 11.9 minutes** (~1 flip every
+19s). Session scorecard: lock `42.0%`, mean confidence `0.408`, reco
+churn `1.95/min`, low-margin `60.7%` of recommender decisions — all
+consistent with the owner's description, not an isolated glitch.
+
+**Root cause is different from — and complements — everything fixed so
+far.** The large-jump gate stack (persistence check, confidence
+thresholds, `_V2_MAX_BPM_STEP`) only ever governs jumps **outside** the
+lock band (`_V2_LOCK_BAND_PCT=0.16`/`_V2_LOCK_BAND_MIN=10.0`). It was
+actively engaging in this session (`large_jump_persistence_reject_count`
+reached `1089`, `cleared_count` reached `284` by session end — real,
+frequent evaluation, unlike the 17:56 session where it never cleared
+once) and doing its job on genuinely large jumps. But the `122→88`
+collapse happened as a sequence of **in-band steps**: e.g. `124.73 →
+105.17` in one step is a `19.56` BPM move, and `124.73 * 0.16 = 19.96` —
+just barely *inside* the lock band, so it clears with **zero** extra
+scrutiny, no persistence check, no confidence floor beyond the ordinary
+per-cycle minimum (`_V2_MIN_UPDATE_CONFIDENCE=0.25`). At `120+` BPM, 16%
+is a wide allowance (~19-20 BPM) for a single "ordinary nudge." Nothing
+in the current gate stack resists a *sequence* of such individually-
+legal nudges accumulating into a large net drift over tens of seconds —
+that gap is exactly what a minimum dwell time would close.
+
+**Why 16/32 bars fits the data well.** The observed oscillation period
+(correct → collapsed → recovered → collapsed again) ran roughly 60-100
+seconds. At a locked tempo around 100-124 BPM, 16 bars (64 beats) spans
+roughly `31-38s`; 32 bars spans `62-77s` — the same order of magnitude as
+what was actually observed. A dwell requirement in that range is a
+plausible fit, not an arbitrary guess.
+
+**Design sketch, not implemented — needs its own scoping pass, distinct
+from a simple constant retune:**
+- A bar-relative (not fixed-seconds) counter, most naturally hung off the
+  same downbeat-firing mechanism `_advance_phrase_clock()` already uses
+  (§ 5) — bars-since-lock, not seconds-since-lock, so it scales with
+  tempo automatically the way the owner's original rolling-window idea
+  (§ 5) also wanted.
+- What it should actually restrict: candidates here (a) block ALL
+  updates until the dwell elapses (too blunt — would also block a real
+  fast track change for the same window); (b) block only **downward-
+  drifting in-band updates** specifically, since the failure mode here is
+  directional erosion, not noise in general; (c) require the SAME new
+  direction to be confirmed by K consecutive dwell-checks before
+  accepting the cumulative move, similar in spirit to the large-jump
+  persistence check (§ 3) but applied to the in-band case that check
+  doesn't cover at all today.
+- Interaction with the large-jump gate needs to be explicit: a genuine
+  track change is usually a jump big enough to clear the *existing*
+  large-jump path already (which has its own, separate persistence
+  logic) — a dwell timer should not add friction there. The risk is
+  specifically making the *existing* lock too sticky to respond to a
+  real large-but-just-inside-lock-band tempo change (e.g. a DJ's pitch-
+  bent transition that lands within 16% of the outgoing track).
+
+**Not implemented this round.** Real, well-grounded proposal (both the
+mechanism gap and the 16/32-bar magnitude are supported by this
+session's own data), but it's a new gate category, not a threshold
+tweak — belongs in the same "propose, don't silently ship" bucket as § 6's
+interpolation fix. Recorded here for the next design pass.
+
+## 11. Live session check-in: v1/v2/v3, new captures, config status (2026-08-14, 19:45 session)
+
+**Shadow2 (v1) is NOT present in this session.** Only `bpm_shadow`/
+`confidence_shadow`/`shadow_engine` (v2) appear in every row;
+`bpm_shadow2` never appears at all. `beat_tracker_shadow2_engine`
+selection is read at `AutoVJController.__init__` time like the rest of
+`self._cfg`, so it only takes effect on the next app restart — this
+session was launched before that config change was picked up. **Next
+restart will pick it up** and give the real three-way comparison.
+
+**v2 vs v3: 100% identical across the entire session (638 compared
+rows, mean/median/max diff all `0.000`).** Strong empirical confirmation
+of § 7b's code-reading finding: `BeatTrackerV3` differs from `BeatTracker`
+by exactly one overridden method (`set_profile()`), and the only
+production call site that would ever exercise that difference (genre-
+driven re-priming mid-track) was removed entirely at `_DETECTOR_VERSION`
+rc.20 (the one-way-flow cut). With that call site gone, v3's guard is
+currently pure defense-in-depth — verified now with real data, not just
+by reading the code. Strengthens the case for folding v3's fix into v2
+directly and retiring the subclass name for the real next-gen engine, as
+proposed in § 7b.
+
+**Interpolation flag confirmed correctly off:** `acf_interpolation_delta_bpm`
+read exactly `0.0` on every single row — this session is a clean "A"
+baseline. `config.toml` still has `acf_peak_interpolation_enabled`
+commented out, ready to flip for the "B" run whenever the owner is ready
+(§ 6).
+
+**Everything else from this round's capture sweep is present and
+populated:** `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`,
+`long_candidate_spread`/`long_candidate_median`,
+`spectral_flux_smooth`/`bass_flux_fast` all appear on every row with
+real (non-placeholder) values.
+
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix
@@ -663,8 +772,21 @@ a sequential A/B test. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
   candidates enough that a coarse reconstruction and the real gate's
   actual behavior (zero clears in 34 minutes) don't reconcile. Fixed the
   instrumentation gap instead of guessing (§ 3).
+- *Is v3 actually behaviorally different from v2 in production today?*
+  No — confirmed empirically, not just by reading code: `100%` exact
+  agreement across a full live session (§ 11), because the one call site
+  that would exercise `BeatTrackerV3`'s guard was already removed at
+  `_DETECTOR_VERSION` rc.20.
+- *Why did a live session collapse from correct (~122 BPM) to sub-100 and
+  back, repeatedly?* Root cause found (§ 10): in-band steps (inside
+  `_V2_LOCK_BAND_PCT`) accumulate drift with zero gating — the large-jump
+  gate stack only ever governs jumps *outside* the lock band. A minimum
+  lock dwell time (owner's proposal, 16/32 bars) is a well-grounded fix
+  for this specific gap, not implemented yet.
 
 **Still open:**
+- **Minimum lock dwell time** — new gate category (§ 10), design sketch
+  only, needs its own scoping pass before implementation.
 - **The interpolation A/B result itself** — owner's next session is the
   A (baseline) run, the one after is B (flag flipped on via the
   commented-out `config.toml` line). Compare `acf_interpolation_delta_bpm`,
