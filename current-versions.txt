@@ -15,7 +15,7 @@
   immersive-01                  0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.68         RC            module
+  auto-vj-01                    1.0.0-rc.69         RC            MISMATCH (readme=1.0.0-rc.68)
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -81,4 +81,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
+  ⚠  1 version mismatch(es): auto-vj-01
 

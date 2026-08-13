@@ -2056,14 +2056,13 @@ correction only.
 **Open threads, recorded for the "philosophizing" days ahead, not
 actioned this round:**
 
-- **Agent delegation.** Owner: "you have the ability to communicate with
-  *my* other pre-existing agents now... in the future, if i ask you to go
-  out of your domain (vj/training)... you should task them with it." One
-  peer session currently visible (`unicorn-viz-b6`); an overlay-manager
-  role was named as an example of where a request outside BPM/training
-  scope should be routed instead of handled directly. Saved as a
-  standing feedback memory (see `feedback-agent-delegation.md`) — no
-  out-of-domain request has come up yet to actually route.
+- **Agent delegation — corrected.** Initially misread as "auto-route
+  out-of-domain requests to peer agents" and saved as such; owner
+  corrected this immediately: "unsave that standing rule, that's not the
+  one i wanted you to find. just check with me directly if you need
+  something out of your area." The actual standing preference is to ask
+  first, not to autonomously hand off — corrected in memory
+  (`feedback-out-of-domain-ask-first.md`, replacing the earlier note).
 - **Rolling multi-beat windows ("rear-view mirror").** Owner's idea:
   track rolling `4/8/16/32`-beat windows (not fixed-seconds windows like
   tonight's `_V2_LARGE_JUMP_PERSISTENCE_CYCLES`) for two purposes —
@@ -2091,11 +2090,56 @@ actioned this round:**
   `beat_tracker_shadow_engine`) to run two simultaneously for a genuine
   three-way comparison. Not implemented — flagged for a scoping
   conversation before any code.
-- **`_has_bpm_lock()`'s own floor.** Owner: "we probably need to keep our
-  eye on that floor we're kinda tuning." No counter/tracking added yet —
-  candidate for the same "track new/actively-discussed constants" pattern
-  established after the large-jump persistence window, whenever this one
-  gets picked up.
+- **`_has_bpm_lock()`'s own floor — now tracked.** Owner: "we probably
+  need to keep our eye on that floor we're kinda tuning." Shipped
+  same-round: `_detector_snapshot()` gained `bpm_lock_gain_confidence`/
+  `bpm_lock_release_confidence`, echoing the existing `_BPM_LOCK_CONFIDENCE`
+  (`0.55`)/`_BPM_LOCK_RELEASE_CONFIDENCE` (`0.28`) constants on every
+  corpus row. Values unchanged — pure logging. `auto_vj.py` `__version__`
+  → `1.0.0-rc.69`.
+
+**Round Three, continued: a live case study, and a full planning doc.**
+Same night, a fresh session (`logs/autovj-20260813T175608.jsonl`)
+collapsed to `~76` BPM on what the owner described as "a pretty easy
+track," and was analyzed locally before packaging into the garbage sets.
+It turned out to be an unusually clean illustration of several of the
+mechanisms above acting together: a `0.32`-confidence candidate accepted
+right at the `_V2_STARTUP_CONFIDENCE=0.3` cold-start floor, one cycle
+later crossing `_BPM_LOCK_CONFIDENCE=0.55` via the downbeat-confidence
+term and locking; from there, `large_jump_persistence_reject_count`
+climbed from `0` to `137` over the session while
+`large_jump_persistence_cleared_count` never once left `0` — not because
+too few cycles had accumulated (the wait-count capped at `10` within the
+first ~5 seconds, matching the documented cold-start-fill behavior), but
+because the raw ACF kept finding candidates spanning roughly `88-166`
+BPM cycle to cycle, never converging tightly enough to clear the
+persistence gate's `6.0` BPM spread threshold. A genuinely new data
+point for the still-open "why does the argmax wander" question, not a
+resolution of it.
+
+A new planning document,
+[docs/planning/auto-vj-round-three-planning-2026-08-14.md](../planning/auto-vj-round-three-planning-2026-08-14.md),
+captures the full session write-up plus every other open thread from
+this round in one place: the complete `_V2_*` constant inventory with
+plain-language meanings (owner: "list all the v2 specific values and
+their meanings"), the "is 25 cycles too big" question (answer, from the
+session data: probably not the binding constraint — the spread threshold
+was), a precise `_phrase_bias()`/`_PHRASE_ROLE_BARS` writeup and the
+finding that phrase-clock state is barely captured in training data
+today (only at transition moments, not continuously), confirmation there
+is no real downbeat-phase re-anchoring mechanism in `beat_grid.py`
+("phase anchor" doesn't really exist), confirmation that `BeatTrackerV3`
+really is just one overridden method versus v2 (with a proposal to fold
+it in and retire the name for the real next-gen engine), a proposal to
+add v1 as a cheap second shadow engine, a v1/v2/v3 agreement-table
+design (internal shadow + mixer-library + LLM lookup), and a late-
+breaking owner idea — scoring raw ACF candidates against the
+recommender's *tempo-independent* genre-fit terms (spectral/timbral, not
+`tempo_fit` itself) as a candidate-disambiguation signal, distinct from
+the backward-flow bug v3 already guards against since it uses no
+tempo-dependent evidence. None of these are implemented; the planning
+doc is the durable place they live until the philosophizing days produce
+consensus.
 
 ---
 

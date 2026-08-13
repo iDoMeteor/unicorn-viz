@@ -274,6 +274,33 @@ def test_detector_snapshot_large_jump_persistence_counters_zero_when_grid_lacks_
     assert snap['large_jump_persistence_cleared_count'] == 0
 
 
+def test_detector_snapshot_reports_bpm_lock_schmidt_trigger_floors() -> None:
+    """2026-08-14, round three: owner asked to log the gain/release floor
+    that bpm_locked is actually measured against, not just the resulting
+    bool. Static per-class constants (not per-instance tunable), logged
+    every row."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['bpm_lock_gain_confidence'] == AutoVJController._BPM_LOCK_CONFIDENCE
+    assert snap['bpm_lock_release_confidence'] == AutoVJController._BPM_LOCK_RELEASE_CONFIDENCE
+
+
+def test_detector_snapshot_reports_bpm_lock_floors_when_grid_is_none() -> None:
+    inst = _bare_controller(None, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['bpm_lock_gain_confidence'] == AutoVJController._BPM_LOCK_CONFIDENCE
+    assert snap['bpm_lock_release_confidence'] == AutoVJController._BPM_LOCK_RELEASE_CONFIDENCE
+
+
 # ---- _build_live_training_row() shadow fields ----------------------------
 
 
