@@ -34,6 +34,16 @@ log = logging.getLogger(__name__)
 
 _FFT_BANDS = 512
 _SMOOTHING = 0.75          # exponential smoothing coefficient
+# 2026-08-14: fallback/default only -- never trust this as "the" rate. It was
+# a hardcoded constant used directly everywhere below, never reconciled with
+# AudioCapture's actual detected device rate (AudioManager.sample_rate,
+# capture.py's _open_stream() already queries the real device and can land
+# on 44100 or other rates, not just 48000). Found auditing a live session
+# where a ~7-13 BPM overshoot was suspected to be a sample-rate mismatch --
+# that specific incident turned out NOT to be this (the device really was
+# 48000 Hz all night, confirmed from the session log), but the mismatch
+# risk itself was real and latent. See Analyzer.set_sample_rate() below and
+# docs/adr/vj-system.md.
 _ASSUMED_SAMPLE_RATE = 48000
 
 # 2026-08-11: detector-facing _shape() gains -- see AudioData.bass_det's own
@@ -216,8 +226,17 @@ class Analyzer:
         self._band_var_treble: float = 1e-4
         self._band_alpha: float = 0.08  # EMA coefficient for running stats
 
+        # 2026-08-14: real device sample rate, synced by AudioManager via
+        # set_sample_rate() once capture is live (and on every subsequent
+        # frame, in case of a mid-session device/fallback switch -- the sync
+        # call is a cheap early-return no-op when the rate hasn't changed).
+        # Starts at the module-level fallback since the real rate isn't
+        # known yet at construction time. See _ASSUMED_SAMPLE_RATE's own
+        # comment and docs/adr/vj-system.md.
+        self._sample_rate: int = _ASSUMED_SAMPLE_RATE
+
         self._n_fft = self._bands * 2
-        self._bin_hz = _ASSUMED_SAMPLE_RATE / max(1, self._n_fft)
+        self._bin_hz = self._sample_rate / max(1, self._n_fft)
 
         # Wave 3.1 — scratch buffers to avoid per-frame heap allocation
         self._spectrum_work: np.ndarray = np.zeros(fft_bands, dtype=np.float32)
@@ -228,7 +247,7 @@ class Analyzer:
         edges_hz = np.logspace(
             np.log10(_PERC_F_MIN), np.log10(_PERC_F_MAX), _PERC_N_BANDS + 1,
         )
-        bin_hz = _ASSUMED_SAMPLE_RATE / max(1, fft_bands * 2)
+        bin_hz = self._sample_rate / max(1, fft_bands * 2)
         self._perc_edges: np.ndarray = np.clip(
             np.round(edges_hz / bin_hz).astype(int), 0, fft_bands - 1,
         )
@@ -274,6 +293,24 @@ class Analyzer:
             getattr(self._profile, 'onset_treble_emphasis', 1.0)
         )
     
+    def set_sample_rate(self, rate: int) -> None:
+        """Sync the analyzer's assumed sample rate to the real capture rate.
+
+        Called by AudioManager once capture is live, and again on every
+        analysis frame thereafter (cheap early-return when unchanged) so a
+        mid-session device/fallback switch to a differently-rated device
+        can't leave this silently stale. Recomputes ``_bin_hz`` (the FFT
+        bin-to-Hz mapping used by spectral centroid and the perceptual
+        64-band bucketing) and the onset-envelope/vocal-heuristic ``dt``
+        terms, which read ``_sample_rate`` directly. See
+        ``_ASSUMED_SAMPLE_RATE``'s own comment.
+        """
+        rate = int(rate)
+        if rate <= 0 or rate == self._sample_rate:
+            return
+        self._sample_rate = rate
+        self._bin_hz = self._sample_rate / max(1, self._n_fft)
+
     def set_profile(self, profile: AudioProfile) -> None:
         """Switch to a new profile and recalculate frequency bands."""
         self._profile = profile
@@ -573,7 +610,7 @@ class Analyzer:
         else:
             data.vocal_hnr = 0.0
             vocal_energy = 0.0
-        vocal_dt = len(pcm) / _ASSUMED_SAMPLE_RATE
+        vocal_dt = len(pcm) / self._sample_rate
         self._push_vocal_envelope(vocal_dt, vocal_energy)
         self._vocal_fmr_frame_count += 1
         if self._vocal_fmr_frame_count >= _VOCAL_FMR_RECOMPUTE_FRAMES:
@@ -657,7 +694,7 @@ class Analyzer:
         )
 
         # P2: push flux into the time-based envelope ring
-        dt = len(pcm) / _ASSUMED_SAMPLE_RATE
+        dt = len(pcm) / self._sample_rate
         self._push_envelope(dt, flux)
 
         # P1+P2+P3: onset detection with MAD threshold and adaptive refractory

@@ -126,6 +126,43 @@ def test_detector_snapshot_kr_dbc_fields_default_when_grid_lacks_them() -> None:
     assert snap['tactus_score_reject_count'] == 0
 
 
+# ---- _detector_snapshot() acf_top_candidates (2026-08-14) -----------------
+
+
+def test_detector_snapshot_formats_acf_top_candidates() -> None:
+    """BeatTracker.top_candidates (prior-free, top-3 bpm/normalised-score
+    pairs, already computed every ACF cycle for top_cand_fit scoring) was
+    never logged anywhere -- added so a tempo-ambiguous session can be
+    checked against what the comb filter actually saw as competing
+    candidates, not just the one BPM that won."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0',
+        top_candidates=[(122.5, 0.412), (112.03, 0.355), (145.1, 0.233)],
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['acf_top_candidates'] == '122.50:0.412,112.03:0.355,145.10:0.233'
+
+
+def test_detector_snapshot_acf_top_candidates_empty_when_grid_lacks_it() -> None:
+    """v1 (BeatGridTracker) has no top_candidates property -- must not
+    raise, must default to an empty string rather than omitting the key."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['acf_top_candidates'] == ''
+
+
 # ---- _build_live_training_row() shadow fields ----------------------------
 
 

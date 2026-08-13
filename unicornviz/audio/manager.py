@@ -295,6 +295,11 @@ class AudioManager:
             if block is None:
                 continue
             last_seq = new_seq
+            # 2026-08-14: sync the analyzer to the real capture rate every
+            # frame -- a cheap early-return no-op when unchanged, but keeps
+            # a mid-session device/fallback switch to a differently-rated
+            # device from silently going stale. See Analyzer.set_sample_rate.
+            self._analyzer.set_sample_rate(self._capture.sample_rate)
             # Heavy work: numpy FFT releases the GIL → render thread runs freely.
             self._analyzer.process(block, out=self._back_buf)
             onsets = self._analyzer.drain_onsets()

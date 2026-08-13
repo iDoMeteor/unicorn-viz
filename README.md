@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.90**
+**Version 1.0.0-beta.91**
 
 ## Contact Me!
 
@@ -557,6 +557,16 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.91** — `unicornviz/audio/analyzer.py`: `_ASSUMED_SAMPLE_RATE`
+  was a hardcoded `48000` constant used directly for the FFT bin→Hz
+  mapping and onset/vocal-envelope `dt` math, never reconciled with
+  `AudioCapture`'s actual detected device rate. New
+  `Analyzer.set_sample_rate()`, synced by `AudioManager` every analysis
+  frame (cheap no-op when unchanged) so a mid-session device/fallback
+  switch to a differently-rated device can't go stale. Found auditing a
+  live session for a suspected sample-rate-mismatch bug — that specific
+  incident turned out not to be this, but the mismatch risk itself was
+  real and latent. See [docs/adr/vj-system.md](docs/adr/vj-system.md).
 - **1.0.0-beta.90** — `unicornviz/audio/profiles.py`: sigma-matches-
   hint-band pass across all 16 audio profiles — `bpm_prior_sigma` now
   derives from each profile's own hand-dialed `bpm_hint_min`/`max`

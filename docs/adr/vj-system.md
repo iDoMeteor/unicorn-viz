@@ -1212,6 +1212,163 @@ math by Jason").
 
 ---
 
+## Live Session Follow-Up: Sample Rate, Cold-Start Priming, ACF Logging, Ambient Misfire (2026-08-14)
+
+Same night, a fresh Spotify-sourced session (`playerctl+webapi`, first
+time tested tonight) surfaced a real, cross-verified detector-accuracy
+issue: two tracks both settling near 122 BPM while the owner's own
+tap-tempo (repeated several times) and Spotify's own displayed BPM both
+independently agreed on 112-114. Four follow-up items, each investigated
+or shipped this session:
+
+### 1. Sample-rate mismatch — ruled out, but a real latent bug found anyway
+
+Investigated as the leading hypothesis (a fixed-ratio scaling error would
+produce exactly this shape of symptom). Ruled out conclusively: the
+session log shows exactly one audio device opened for the entire night
+(`Built-in Audio Analog Stereo`, 48000 Hz), used identically across
+media-01/dj-mixer/Spotify, and more fundamentally, `beat_grid.py`'s BPM
+math never touches sample-rate or frame-count math at all — onset
+timestamps are wall-clock (`time.monotonic()`) deltas throughout, so a
+sample-rate mismatch structurally could not scale reported BPM through
+this pipeline even if one existed.
+
+Did find a real, separate, latent bug while checking:
+`unicornviz/audio/analyzer.py`'s `_ASSUMED_SAMPLE_RATE = 48000` was a
+hardcoded module constant, used directly for the FFT bin→Hz mapping
+(spectral centroid, 64-band perceptual bucketing) and the onset/vocal
+envelope `dt` terms, never reconciled with `AudioCapture`'s actual
+detected device rate — despite `AudioManager.sample_rate`'s own
+docstring already stating the contract this violated ("consumers... must
+derive Nyquist from this rather than assuming a fixed sample rate").
+Moot for tonight's specific incident (the device genuinely was 48000 Hz
+all night) but a real, previously-unnoticed landmine for any session on
+a 44100 Hz device.
+
+**Fix:** `Analyzer.set_sample_rate(rate)` — updates `self._sample_rate`
+(now an instance attribute, `_ASSUMED_SAMPLE_RATE` demoted to
+fallback-only default) and recomputes `_bin_hz`; cheap early-return
+no-op when the rate hasn't changed. `AudioManager._analysis_worker()`
+calls it every frame, right before `Analyzer.process()` — not just once
+at startup, so a mid-session device/fallback switch to a differently-
+rated device can't leave it silently stale either. Verified: 4 new tests
+in `tests/test_analyzer_sample_rate_sync.py` plus the existing
+audio/analyzer/capture suites (200+ tests) green.
+
+### 2. Cold-start profile priming — confirmed the owner's read, precisely
+
+Owner's question, verbatim: "do we *have* to prime at start? OH! that
+min prior sigma is killing all our new work is what you're saying!?"
+Traced `BeatTrackerV3.set_profile()` (the active engine): per the
+2026-08-13 rewrite, it's a **complete no-op the instant `self._bpm >
+0.0`** — priming only ever happens once, at cold start (track load /
+after a silence-reset), never again for the rest of that track. That
+one-time call computes `_acf_prior` (`beat_grid.py:2000-2011`) via
+`sigma = max(_MIN_PROFILE_PRIOR_SIGMA, profile.bpm_prior_sigma)` — and
+`_MIN_PROFILE_PRIOR_SIGMA = 0.45` is larger than *every* profile's
+post-sigma-matching-pass value (max is `chillstep`'s `0.30`), so the
+floor always wins. **Confirmed: tonight's entire 16-profile sigma-
+matching pass has zero effect on the detector's own cold-start prior —
+it only ever uses 0.45, exactly as it did before that pass.** That part
+was already known/intended (0.45 and the recommender's 0.08 are
+deliberately different concerns, per the 2026-08-06 revert). What's new:
+because `_acf_prior` is computed once and never recomputed again for the
+rest of the track (no matter how many times the recommender's opinion
+changes afterward), **whatever profile happened to be active at that one
+cold-start moment exerts a fixed, unchanging multiplicative bias
+(`score = comb_score * prior`) on every ACF re-estimation cycle for the
+track's *entire* remaining duration** — not just the first few seconds.
+A wrong or premature genre guess at track load (e.g. defaulting toward
+`house`, μ=122, before real evidence accumulates) could plausibly explain
+both the slow multi-minute drift observed and why it never fully reached
+112-114: the raw comb-filter evidence for the true tempo has to fight a
+static 0.45-wide pull toward 122 for the whole song, not just the
+opening seconds.
+
+**Not fixed this session** — this is the same code path as two prior
+incidents (the 2026-08-12 freeze/hysteresis fix and the 2026-08-13
+rewrite that superseded it), high enough stakes to warrant a specific
+decision rather than a same-night tweak. Real options on the table,
+recorded for whenever this gets picked up: (a) don't prime at cold start
+at all, let the ACF search start fully unweighted; (b) keep priming but
+let `_acf_prior`'s influence decay back toward uniform over some window
+as real evidence accumulates, instead of staying frozen for the whole
+track; (c) something else. Flagged in Open Questions below.
+
+### 3. ACF top candidates never logged — now they are
+
+Owner: "why aren't we capturing the acf score arrays in the training
+data? let's do that!" `BeatTracker.top_candidates` (prior-free top-3
+`(bpm, normalised comb-filter score)` pairs, already computed every ACF
+re-estimation cycle purely for `top_cand_fit` scoring) was never exposed
+to the decision log or training corpus at all — confirmed by grep, the
+only `top_candidates=` logged anywhere was a same-named but *unrelated*
+local in the profile-recommendation event (top-3 *genre* candidates by
+composite score, not ACF tempo hypotheses — a naming collision, not the
+same data).
+
+**Fix:** new `acf_top_candidates` field in `_detector_snapshot()`
+(auto_vj.py), compact `'bpm:score,bpm:score,...'` string matching the
+existing `top3` formatting convention, empty string for v1
+(`BeatGridTracker`, which has no such property). Pure logging addition —
+`_DETECTOR_VERSION`/`_VJ_WEIGHTS_DOC_VERSION` not bumped, same exemption
+already established for the kr/dbc observability commit. Verified: 2 new
+tests in `tests/test_auto_vj_shadow_engine.py`. This directly enables
+closing the gap the sample-rate investigation couldn't reach on its
+own — the next tempo-ambiguous session can show whether 112 and 122 (or
+similar) were both real, competing comb-filter candidates, confirming or
+ruling out the tactus-ambiguity hypothesis from real data instead of
+inference.
+
+### 4. Ambient winning over an obvious four-on-the-floor track — root cause, with numbers
+
+Owner, live: "right now ambient/chill is winning even tho there is def a
+four on the floor regular boom kick @ this 120bpm." Pulled
+`term_values_by_candidate` (already logged, per-candidate per-term
+breakdown) for every `profile_recommendation` event where `ambient` won
+tonight (58 events, spanning 6 tracks) and averaged each term's value for
+`ambient` against whichever profile it beat, weighted by
+`_DEFAULT_RECO_WEIGHTS` to see each term's actual contribution to the
+margin:
+
+| Term | Weight | Ambient − rival (raw) | Weighted contribution |
+| --- | --- | --- | --- |
+| `centroid_fit` | 0.7 | +1.2022 | **+0.8415** |
+| `zcr_fit` | 0.6 | +0.7383 | **+0.4430** |
+| `spectral_shape_fit` | 1.2 | +0.1518 | +0.1822 |
+| `onset_fit` | 1.0 | +0.0885 | +0.0885 |
+| `vocal_hnr_fit` | 0.3 | +0.1900 | +0.0570 |
+| `vocal_fmr_fit` | 0.4 | +0.0458 | +0.0183 |
+| `top_cand_fit` | 0.4 | +0.0428 | +0.0171 |
+| `band_fit` | 1.2 | +0.0035 | +0.0042 |
+| `kick_regularity_fit` | 0.7 | −0.2065 | −0.1445 |
+| `tempo_fit` | 2.0 | −0.2571 | **−0.5142** |
+
+Net: ambient's average winning margin was ~0.99, and `centroid_fit` alone
+supplies +0.84 of it — the dominant driver by a wide margin, `zcr_fit` a
+distant second. `tempo_fit` and `kick_regularity_fit` both correctly
+favor the rival (as they should for a track with a real regular kick) —
+ambient wins *despite* worse tempo and kick-regularity fit, purely on
+centroid/ZCR. This is the same bug class as the 2026-08-11 "stuck on
+ambient 94% of a session" incident (see "Ambient Bias — Root Cause &
+Fix" below): `centroid_fit`'s live linear-FFT measurement and each
+profile's `expected_bands`-derived `spectral_centroid_mu` are
+structurally different formulas that don't compare like-for-like — a
+known, still-open formula-mismatch bug, currently only mitigated by a
+weight cut (`centroid_fit` at `0.7`), not fixed. Not touched this
+session — recorded as hard evidence for whenever that formula-mismatch
+work gets picked up, with a real reproducible case (`ambient` vs.
+`house`/`deep_house` on obviously kick-driven material) rather than a
+general symptom description.
+
+**Verified:** all four items — sample-rate fix (200+ existing tests +
+4 new), ACF logging (2 new tests) — green; the priming investigation and
+ambient term table are pure analysis, no code changed, nothing to
+regression-test. `unicornviz.__version__` → `1.0.0-beta.91`,
+`auto_vj.py` `__version__` → `1.0.0-rc.60`.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
