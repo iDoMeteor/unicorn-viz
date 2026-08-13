@@ -1378,7 +1378,7 @@ def test_gate_stack_constants_have_the_retuned_values() -> None:
     carry-over incident). Source-text guard, same pattern as the
     recommender sigma-floor test: catches any of these silently drifting
     back toward their old values."""
-    assert _MOD._V2_STARTUP_CONFIDENCE == pytest.approx(0.3)
+    assert _MOD._V2_STARTUP_CONFIDENCE == pytest.approx(0.4)
     assert _MOD._V2_LARGE_JUMP_CONFIDENCE == pytest.approx(0.5)
     assert _MOD._V2_LOW_BPM_FAST_CONFIDENCE == pytest.approx(0.45)
     assert _MOD._V2_MAX_BPM_STEP == pytest.approx(5.0)
@@ -1480,3 +1480,41 @@ def test_large_jump_persistence_counters_move_during_a_real_transition() -> None
         'expected the persistence check to eventually clear the way for '
         'the real tempo change to be accepted'
     )
+
+
+def test_long_candidate_spread_and_median_start_at_zero() -> None:
+    """0.0 before any large-jump candidate has ever been evaluated, same
+    convention as region_consistency."""
+    bt = BeatTracker({})
+    assert bt.long_candidate_spread == 0.0
+    assert bt.long_candidate_median == 0.0
+
+
+def test_long_candidate_spread_and_median_populate_during_a_real_transition() -> None:
+    """2026-08-14, round three: previously computed inline inside the
+    persistence check and discarded every evaluation -- a real session
+    needed to reconstruct these from the much coarser decision-tick log
+    and could not do so precisely (see docs/adr/vj-system.md). Cached now
+    so a future session has ground truth instead of reconstruction."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+    assert bt.long_candidate_spread == 0.0
+    assert bt.long_candidate_median == 0.0
+
+    _run_steady_click_track(bt, bpm=123.0, duration_s=30.0, start_t=60.0, jitter_s=0.01)
+
+    assert bt.long_candidate_spread >= 0.0
+    assert bt.long_candidate_median > 0.0
+    # The check that let the transition through requires this exact
+    # invariant -- see _estimate_tempo_acf()'s large-jump gate.
+    assert bt.long_candidate_spread <= 6.0
+
+
+def test_long_candidate_spread_reads_the_cached_value() -> None:
+    """Pure pass-through, same pattern as region_consistency's own direct
+    test."""
+    bt = BeatTracker({})
+    bt._long_candidate_spread = 3.5
+    bt._long_candidate_median = 124.0
+    assert bt.long_candidate_spread == pytest.approx(3.5)
+    assert bt.long_candidate_median == pytest.approx(124.0)

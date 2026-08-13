@@ -45,10 +45,11 @@ def test_load_beat_grid_cls_v2_unaffected_by_v3_addition() -> None:
 # ---- _detector_snapshot() shadow fields ----------------------------------
 
 
-def _bare_controller(grid, shadow_grid) -> AutoVJController:
+def _bare_controller(grid, shadow_grid, shadow2_grid=None) -> AutoVJController:
     inst = object.__new__(AutoVJController)
     inst._grid = grid
     inst._shadow_grid = shadow_grid
+    inst._shadow2_grid = shadow2_grid
     inst._last_onset_count = 3
     inst._bpm_lock_active = True
     return inst
@@ -80,6 +81,41 @@ def test_detector_snapshot_includes_shadow_fields_when_enabled() -> None:
     assert snap['bpm_shadow'] == 146.3
     assert snap['confidence_shadow'] == 0.58
     assert snap['shadow_engine'] == '3.0.0'
+    assert snap['bpm'] == 124.0    # active engine's own fields unaffected
+
+
+def test_detector_snapshot_omits_shadow2_fields_when_disabled() -> None:
+    grid = SimpleNamespace(bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+                            ENGINE_VERSION='3.0.0')
+    inst = _bare_controller(grid, None, None)
+
+    snap = inst._detector_snapshot()
+
+    assert 'bpm_shadow2' not in snap
+    assert 'confidence_shadow2' not in snap
+    assert 'shadow2_engine' not in snap
+
+
+def test_detector_snapshot_includes_both_shadow_slots_independently() -> None:
+    """2026-08-14, round three: second, independent shadow slot -- for a
+    real three-way v1/v2/v3 comparison, not mutually exclusive with the
+    first shadow. See
+    docs/planning/auto-vj-round-three-planning-2026-08-14.md § 7."""
+    grid = SimpleNamespace(bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+                            energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+                            ENGINE_VERSION='3.0.0')
+    shadow = SimpleNamespace(bpm=146.3, confidence=0.58, ENGINE_VERSION='2.0.0')
+    shadow2 = SimpleNamespace(bpm=73.2, confidence=0.71, ENGINE_VERSION='1.0.0')
+    inst = _bare_controller(grid, shadow, shadow2)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['bpm_shadow'] == 146.3
+    assert snap['shadow_engine'] == '2.0.0'
+    assert snap['bpm_shadow2'] == 73.2
+    assert snap['confidence_shadow2'] == 0.71
+    assert snap['shadow2_engine'] == '1.0.0'
     assert snap['bpm'] == 124.0    # active engine's own fields unaffected
 
 
@@ -274,6 +310,73 @@ def test_detector_snapshot_large_jump_persistence_counters_zero_when_grid_lacks_
     assert snap['large_jump_persistence_cleared_count'] == 0
 
 
+def test_detector_snapshot_reads_long_candidate_spread_and_median() -> None:
+    """2026-08-14, round three: the persistence check's own median/spread,
+    previously computed and discarded every evaluation, now cached and
+    logged so the 6.0 BPM spread threshold can be judged from ground
+    truth instead of reconstructed from the coarser decision-tick log."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', long_candidate_spread=3.2, long_candidate_median=123.5,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['long_candidate_spread'] == pytest.approx(3.2)
+    assert snap['long_candidate_median'] == pytest.approx(123.5)
+
+
+def test_detector_snapshot_long_candidate_spread_zero_when_grid_lacks_it() -> None:
+    """v1 (BeatGridTracker) has no such mechanism -- must not raise, must
+    default to 0.0 rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['long_candidate_spread'] == 0.0
+    assert snap['long_candidate_median'] == 0.0
+
+
+def test_detector_snapshot_reads_flux_fields() -> None:
+    """2026-08-14, round three: found via a front-to-back sweep over every
+    public BeatTracker property -- both are real, already-computed inputs
+    to drop_score, but were never logged."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', spectral_flux_smooth=1.25, bass_flux_fast=0.87,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['spectral_flux_smooth'] == pytest.approx(1.25)
+    assert snap['bass_flux_fast'] == pytest.approx(0.87)
+
+
+def test_detector_snapshot_flux_fields_zero_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has no such mechanism -- must not raise, must
+    default to 0.0 rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['spectral_flux_smooth'] == 0.0
+    assert snap['bass_flux_fast'] == 0.0
+
+
 def test_detector_snapshot_reports_bpm_lock_schmidt_trigger_floors() -> None:
     """2026-08-14, round three: owner asked to log the gain/release floor
     that bpm_locked is actually measured against, not just the resulting
@@ -328,5 +431,28 @@ def test_build_live_training_row_includes_shadow_fields_when_enabled() -> None:
     assert row['bpm_shadow'] == 146.3
     assert row['confidence_shadow'] == 0.58
     assert row['shadow_engine'] == '3.0.0'
+    assert row['bpm'] == 124.0
+
+
+def test_build_live_training_row_omits_shadow2_fields_when_disabled() -> None:
+    audio, spotify, state, mgr, grid, _shadow = _row_args(None)
+    row = _build_live_training_row(audio, spotify, state, mgr, grid)
+    assert 'bpm_shadow2' not in row
+    assert 'confidence_shadow2' not in row
+    assert 'shadow2_engine' not in row
+
+
+def test_build_live_training_row_includes_both_shadow_slots_independently() -> None:
+    """2026-08-14, round three: second, independent shadow slot -- for a
+    real three-way v1/v2/v3 comparison."""
+    audio, spotify, state, mgr, grid, _shadow = _row_args(None)
+    shadow = SimpleNamespace(bpm=146.3, confidence=0.58, ENGINE_VERSION='2.0.0')
+    shadow2 = SimpleNamespace(bpm=73.2, confidence=0.71, ENGINE_VERSION='1.0.0')
+    row = _build_live_training_row(audio, spotify, state, mgr, grid, shadow_grid=shadow, shadow2_grid=shadow2)
+    assert row['bpm_shadow'] == 146.3
+    assert row['shadow_engine'] == '2.0.0'
+    assert row['bpm_shadow2'] == 73.2
+    assert row['confidence_shadow2'] == 0.71
+    assert row['shadow2_engine'] == '1.0.0'
     assert row['bpm'] == 124.0
     assert row['engine_version'] == '2.0.0'   # active engine, distinct from shadow_engine

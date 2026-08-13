@@ -5,8 +5,13 @@ Status: draft — capturing open design questions for the philosophizing
   days ahead per the owner's own framing ("we're going to continue on
   philosophizing about all this the next few days, planning some
   plans... keep a round 3 planning doc and once we reach consensus we'll
-  knock it out and prepare for the real v3"). Nothing in this document is
-  implemented yet except where explicitly marked done.
+  knock it out and prepare for the real v3"). Shipped so far this round:
+  `_timing_scale_from_bpm` neutral-point fix, `_V2_STARTUP_CONFIDENCE`
+  `0.3 → 0.4`, `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`
+  logging, `long_candidate_spread`/`long_candidate_median` logging,
+  continuous phrase-clock logging, `spectral_flux_smooth`/`bass_flux_fast`
+  logging, and a second shadow-engine slot. Everything else is still
+  proposal-stage, marked as such inline.
 Last updated: 2026-08-14
 
 ## Context
@@ -76,16 +81,33 @@ several of the mechanisms below acting together:
   the detector's tempo search — see `docs/adr/vj-system.md`, "One-Way
   Flow" entry).
 
+**Correction once the full session was in hand.** The session was still
+recording when the analysis above was written (the log kept growing
+mid-draft). The complete session — 64.7 minutes, 3794 detector ticks —
+shows the wrong `~76` BPM lock persisted for roughly **34 minutes**
+(`t=38432` to `t=40508`), not the ~2.4-minute window the scorecard
+happened to capture first. It self-corrected on its own, without any code
+change, once a later real track change produced a new, internally
+*stable* candidate that could actually clear the persistence gate (BPM
+climbed `85.08 → 91.17 → 97.74` in three consecutive cycles right at
+`t=40508.4` — a clean multi-cycle escape, not a gradual drift). The rest
+of that 65-minute session (81 `mode_transition` events total) shows the
+detector tracking a wide, plausible range of tempos afterward (roughly
+100-155 BPM across several more tracks) without any comparable long
+stuck period recurring. This matters for § 3 below: it means the
+persistence gate *can* recover on its own given a genuinely stable new
+candidate — the 17:56 track's raw candidates just never were stable
+enough to qualify for ~34 minutes straight.
+
 **What this session does *not* answer:** *why* the very first raw
 candidate at cold start was `75.95` rather than something near the true
 tempo, and *why* the raw comb-filter argmax bounces across such a wide
 range (88-166) every cycle rather than repeatedly finding the same
-competing value. Both are the subject of § 5/§ 6 below — this session's
-data is a good input to that investigation, not a substitute for it.
-Not yet decided: whether this session gets packaged into `garbage/` as
-originally planned, or held out as a labeled regression fixture given
-how cleanly it demonstrates the premature-lock + gate-can't-recover
-combination — owner's call.
+competing value. § 6 below now has a concrete answer to the second
+question. Not yet decided: whether this session gets packaged into
+`garbage/` as originally planned, or held out as a labeled regression
+fixture given how cleanly it demonstrates the premature-lock +
+gate-can't-recover combination — owner's call.
 
 ## 2. Full `_V2_*` gate/tunable inventory (beat_grid.py)
 
@@ -175,36 +197,57 @@ on every cycle, not only during large-jump evaluations, so in steady
 locked operation it's already full well before any jump is even
 considered).
 
-The honest answer from § 1's real data: **the count of 25 doesn't
-appear to be the binding constraint in that session** — the deque
-filled in ~5 seconds (10 wait-cycles) and then every subsequent
-evaluation failed on the *spread* check (`> 6.0` BPM), not on
-insufficient history. Lowering 25 to, say, 15 wouldn't have changed the
-outcome there, because the candidates spanned roughly 75 BPM of range,
-nowhere near tight enough to satisfy `spread <= 6.0` regardless of
-window length. Two real, distinct knobs exist here and the session data
-only speaks to one:
+**Tried to answer precisely from the real session log — hit a real
+instrumentation limit.** The corpus logs at a coarse ~1 Hz decision-tick
+rate; the real persistence check runs on raw per-ACF-cycle candidates at
+~7.5 Hz. That means each corpus row is one sample of roughly 7-8 real
+cycles that happened silently in between, so *reconstructing* the exact
+25-cycle/3.3s window from the existing log necessarily undercounts real
+cycle-to-cycle diversity — a rolling-window analysis over the logged
+`last_tactus_fold` values (proxy for the raw candidate) showed 45-86% of
+short (~3-6s) windows *would* have cleared spread thresholds from 6 up to
+15 in the 17:56 session's stuck period, yet the real gate cleared **zero
+times** in ~34 minutes. The two don't reconcile — the true per-cycle
+picture is noisier than the coarse log can show, so no specific number
+(8? 10? 15?) can be responsibly recommended from this data alone.
+
+**Fixed properly instead of guessing at a threshold:** rather than widen
+6.0 on a hunch, `BeatTracker.long_candidate_spread`/`long_candidate_median`
+now cache the exact values `_estimate_tempo_acf()` already computes and
+compares against `6.0` every evaluation — logged in `_detector_snapshot()`
+starting this round (`_DETECTOR_VERSION` → `1.0.0-rc.24`). The next
+session that hits this gate will have ground truth instead of a
+reconstruction, and the threshold question can be answered for real
+rather than approximated.
+
+**Startup confidence raised as the interim mitigation.**
+`_V2_STARTUP_CONFIDENCE` `0.3 → 0.4` (owner, this round) — the 17:56
+session's cold-start candidate was accepted at `acf_conf=0.32`, barely
+above the old `0.3` floor, and turned out to be the octave-family error
+that started the whole 34-minute episode. `0.4` sits at the midpoint
+between that incident's floor and the pre-2026-08-14 value (`0.55`) —
+asks for slightly stronger first evidence before locking at all, without
+fully reverting the original reasoning for lowering it (cheap early
+self-correction). This doesn't touch the persistence window itself; it
+targets the *other* real lever in this incident — how easily a wrong
+lock forms in the first place, not just how hard it is to escape one.
+
+**Two distinct knobs, only one touched this round:**
 
 1. **Window length (25 cycles)** — trades reaction speed for stability.
-   Shorter reacts faster to a real transition but is more exposed to
-   short wobbles (the original bug this constant fixed). Real data
-   hasn't yet shown 25 being *too slow* to matter in practice (both the
-   wobble fix and the 20-pair sweep converged within a few seconds
-   either way) — no evidence yet that it should move.
-2. **Spread threshold (6.0 BPM)** — this is what actually gated the
-   17:56 session, and it's arguably working *correctly*: the raw
-   candidates really were that unstable, and accepting a jump into that
-   much noise would likely have been worse, not better. The real
-   problem it's exposing is upstream — § 6, the comb-filter argmax
-   wandering across a >75 BPM range cycle to cycle on real material.
+   No evidence yet that it's too slow to matter in practice (the wobble
+   fix and the 20-pair sweep both converged within a few seconds) — not
+   touched.
+2. **Spread threshold (6.0 BPM)** — not touched either, pending real
+   per-cycle data from the new logging above. The 17:56 session's
+   candidates spanned roughly 75+ BPM at the coarse sampling rate — likely
+   still too wide to clear even a generous threshold — but per the
+   instrumentation-limit finding above, that can't be stated with
+   confidence from the existing log.
 
-**Recommendation, not yet acted on:** don't touch 25 (or 6.0) yet — the
-17:56 session is one data point, and moving either without more sessions
-risks re-introducing the wobble this gate was built to fix. Worth
-re-examining once § 6's investigation gives some sense of *why* the
-argmax wanders that far, since a fix there might shrink the natural
-spread of legitimate candidates and make 6.0 workable again without
-touching the window length at all.
+Both knobs stay where they are until a session with the new
+`long_candidate_spread` logging gives real per-cycle numbers to reason
+from.
 
 ## 4. `_has_bpm_lock()`'s own floor
 
@@ -275,17 +318,30 @@ rolling buffers instead of one, and whether this should *replace*
 `_V2_LARGE_JUMP_PERSISTENCE_CYCLES` or run alongside it as an additional
 signal.
 
-**Are the phrase vars captured for training today? No, only sparsely.**
-`_bars_since_phase_entry`/`_bars_since_track_start`/
-`_phrase_neutral_bars_left` are **not** in the regular per-tick
-`_detector_snapshot()`/corpus payload at all. `phrase_bias_terms` (the
-per-term breakdown dict) is logged **only** at the moment of an actual
-`_mark_mode_transition()` call — i.e. only when a transition fires, not
-continuously. There is no rolling trace of the phrase clock's state
-today. Any real rolling-window design work (for either use case above)
-would need continuous logging of at least `bars_since_phase_entry` and
-the role, not just the sparse transition-triggered snapshot that exists
-now.
+**Are the phrase vars captured for training today? They are now — shipped
+this round.** Was: only `phrase_bias_terms` (the per-term breakdown dict),
+logged **only** at the moment of an actual `_mark_mode_transition()` call
+— i.e. only when a transition fires, not continuously; `_bars_since_
+phase_entry`/`_bars_since_track_start`/`_phrase_neutral_bars_left`
+weren't in the regular per-tick corpus payload at all. Owner: "capture
+them all!" as the opening move of a front-to-back pass over the whole
+intelligence system. All three are now in `_sequence_director_fields()`
+(`bars_since_track_start`/`bars_since_phase_entry`/
+`phrase_neutral_bars_left`), continuous on every sequence-corpus row, not
+just at transitions — a real prerequisite for any rolling-window
+phrasing work is now in place. Not yet captured: which *role*
+(HOLD/RISE/PEAK/FALL) was actually queried at a given tick — `_phrase_
+bias(role)` is called inline at each decision site with an explicit role
+argument, not read from a single persistent "current role" field, so
+there isn't a clean scalar to log there without inventing one; left as a
+follow-up if the rolling-window work needs it.
+
+**Same front-to-back pass also found two unrelated logging gaps,
+fixed the same way:** `BeatTracker.spectral_flux_smooth`/`bass_flux_fast`
+(the two raw inputs `drop_score` is built from) existed as public
+properties but were never logged — now in `_detector_snapshot()`
+alongside everything else. Neither changes any decision logic; pure
+observability, same as the phrase-clock fields above.
 
 **What about the phase anchor?** There isn't a real one, and this is
 worth flagging on its own. `beat_grid.py`'s downbeat detection
@@ -312,19 +368,68 @@ director (phrasing) and the recommender (a section-change signal could
 sharpen genre-fit timing), and it's real design work, not a
 same-session integration. Parked here for the philosophizing days.
 
-## 6. Raw comb-filter argmax wandering — next after this run
+## 6. Raw comb-filter argmax wandering — root cause found, fix proposed, not yet implemented
 
-Still open, and § 1's session is a strong real-world case to start from:
-the raw ACF argmax bounced across roughly 88-166 BPM cycle to cycle on
-genuinely regular kick material (`kick_regularity` 0.75-0.88 throughout).
-Candidates like `120`, `133.33`, `146.34`, `150`, `162.16` don't look
-like a single stable competing harmonic — they look like the comb
-filter's peak selection itself is unstable near this material's true
-tempo, possibly because ACF lag-grid resolution coarsens at these BPMs
-(short lags → fewer samples per lag bucket) the same way the known
-124-BPM grid-split gap does, just wider. `acf_top_candidates` and
-`last_tactus_fold` are both logged now specifically to support this
-investigation. Owner: dig into this after the next run, not this round.
+**The finding.** Every one of the 17:56 session's wandering candidates
+(`120`, `133.33`, `139.53`, `142.86`, `146.34`, `150`, `153.85`,
+`157.89`, `162.16`, `166.67`...) turns out to sit on a **consecutive
+integer lag**, one sample apart, at the ACF's native `_V2_ENV_RATE=100`
+Hz envelope resolution. Converting each back with `lag = 6000 / bpm`:
+`50, 45, 43, 42, 41, 40, 39, 38, 37, 36` — ten values, all but one
+literally adjacent integers. This isn't several genuinely distinct
+competing tempo hypotheses; it's the *same* underlying periodicity
+landing on different neighboring lag bins from cycle to cycle, because
+at this material's true tempo the lag grid itself is coarse.
+
+**Why it's coarse specifically in this range.** `BPM = 6000 / lag`, so
+`d(BPM)/d(lag) = -6000 / lag²` — the BPM-per-lag-step granularity gets
+*worse* the shorter the lag (the faster the tempo). At `lag=40` (~150
+BPM), one lag step is **3.75 BPM**. At `lag=80` (~75 BPM, where this
+session's wrong lock actually sat), one lag step is only **0.94 BPM** —
+4x finer. This is the same phenomenon as the already-known 124-BPM
+grid-split gap (`122.45`/`125.0`, a 2.55 BPM gap), just structurally
+worse the faster the true tempo is, and it explains why the wrong lock
+itself stayed comparatively stable (`75.95 → 73.63 → 74.41 → 72.95`, a
+few-BPM drift consistent with 1-lag-step jitter at the *finer*
+resolution down there) while the real, faster tempo it should have found
+kept hopping across a wide BPM range at the *coarser* resolution up
+there.
+
+**Proposed fix: sub-lag (parabolic) peak interpolation.** A standard,
+well-established DSP technique — after `_estimate_tempo_acf()` picks the
+integer-lag `peak_idx`, fit a parabola through `score[peak_idx-1]`,
+`score[peak_idx]`, `score[peak_idx+1]` and solve for the true (fractional)
+peak location:
+
+```text
+delta = 0.5 * (score[i-1] - score[i+1]) / (score[i-1] - 2*score[i] + score[i+1])
+refined_lag = lag[i] + delta        # delta typically in [-0.5, 0.5]
+```
+
+This recovers sub-sample precision from the *existing* comb-filter score
+array — no new signal processing, no additional CPU cost worth
+mentioning (three extra array reads and a division per cycle). It
+wouldn't necessarily stop the argmax from jumping between genuinely
+distinct integer lags when several are close in score, but it would make
+each cycle's *reading* far more numerically continuous — two adjacent
+lags that both represent essentially the same real periodicity (this
+session's actual failure mode) would interpolate to nearly the same
+refined BPM instead of jumping the full 3-4 BPM grid step between them.
+That should tighten the persistence check's natural candidate spread at
+high BPM specifically, which is exactly where § 3's `6.0` threshold
+question is hardest to reason about today.
+
+**Not implemented this round — flagged for confirmation first, not
+silently shipped.** This changes the numeric value of *every* BPM
+reading, not just the wandering cases: all of today's tuned gate-stack
+constants (lock-band %, persistence spread, jump-confidence thresholds)
+were tuned against the current grid-quantized behavior, and the existing
+`test_beat_tracker_v2.py` suite likely encodes exact converged values in
+several places that would need re-baselining. Real, well-justified fix —
+but real blast radius, so it's a proposal here, not a diff, pending
+owner sign-off. `acf_top_candidates` and the newly-added
+`long_candidate_spread`/`long_candidate_median` (§ 3) are already logged
+to help validate this fix's actual effect once it ships.
 
 ## 7. v1/v2/v3 BPM accuracy logging
 
@@ -383,17 +488,21 @@ class name is picked); worth a full session's worth of shadow-A/B
 validation before flipping the default, mirroring how the original
 v2→v3 shadow validation was done.
 
-**7c. v1 as a second, cheap shadow — proposed, cost estimated as low:**
-Today's shadow mechanism supports exactly one shadow engine
-(`self._shadow_grid`) alongside the active one. Adding v1 as a *second*
-simultaneous shadow (v3 active, v2 shadow as today, v1 as a new second
-shadow) would need a second shadow slot mirrored from the existing
-pattern (`self._shadow2_grid`, a second `beat_tracker_shadow2_engine`
-config key, matching `_detector_snapshot()`/corpus fields). Given v1's
-documented `<0.3ms/frame` cost, this is cheap to run for "a few training
-sessions for some quick tests" as proposed — real implementation, not
-yet started, parked for consensus alongside the v3-fold-into-v2
-proposal above since both touch the same engine-selection code.
+**7c. v1 as a second, cheap shadow — shipped this round.** Today's shadow
+mechanism previously supported exactly one shadow engine
+(`self._shadow_grid`) alongside the active one. Added a second,
+independent shadow slot (`self._shadow2_grid`, config key
+`beat_tracker_shadow2_engine`, defaults empty/off) mirroring the existing
+pattern exactly — its own `bpm_shadow2`/`confidence_shadow2`/
+`shadow2_engine` fields in both `_detector_snapshot()` and
+`_build_live_training_row()`, updated every frame alongside the first
+shadow, independently configurable (e.g. `active=v3, shadow=v2,
+shadow2=legacy` runs all three simultaneously). Given v1's documented
+`<0.3ms/frame` cost, cheap to run for "a few training sessions for some
+quick tests" as proposed. Not yet done: actually turning it on for a
+training run and reading the results — that's the owner's call on when.
+Still parked for consensus: the v3-fold-into-v2 proposal above (7b),
+which is a behavioral change, unlike this pure-capability addition.
 
 **7d. Priming, not overriding — already correct, confirmed against the
 code, not a gap.** The distinction the owner drew ("listen to the
@@ -454,29 +563,55 @@ generation.
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix
-(128→114); `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`
-logging.
+(128→114); `_V2_STARTUP_CONFIDENCE` `0.3 → 0.4` (`_DETECTOR_VERSION` →
+`1.0.0-rc.24`); `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`
+logging; `long_candidate_spread`/`long_candidate_median` logging (the
+persistence check's own median/spread, previously computed and
+discarded); continuous phrase-clock logging (`bars_since_track_start`/
+`bars_since_phase_entry`/`phrase_neutral_bars_left`, every row, not just
+at transitions); `spectral_flux_smooth`/`bass_flux_fast` logging; a
+second, independent shadow-engine slot (`beat_tracker_shadow2_engine`,
+`bpm_shadow2`/`confidence_shadow2`/`shadow2_engine`).
 
 **Proposed, awaiting consensus before implementation:**
 - Fold `BeatTrackerV3`'s fix into `BeatTracker` (v2) directly; retire the
   `v3` subclass name for reuse by the real next-gen engine (§ 7b).
-- Add v1 (`BeatGridTracker`) as a second simultaneous shadow engine for
-  a few test sessions (§ 7c).
+- Sub-lag (parabolic) peak interpolation in `_estimate_tempo_acf()` — a
+  concrete, well-justified fix for the argmax-wandering root cause found
+  this round, real blast radius (changes every BPM reading's numeric
+  precision, likely needs test re-baselining), not shipped without
+  sign-off (§ 6).
 - Per-song v1/v2/v3 agreement table with mixer-library + LLM external
-  checks (§ 7a).
-- Continuous (not just transition-triggered) phrase-clock logging, as a
-  prerequisite for any rolling-window phrasing work (§ 5).
+  checks (§ 7a) — the shadow2 slot needed for this now exists; the
+  actual agreement-table logic doesn't yet.
+- Genre-fit-weighted candidate scoring using tempo-independent terms
+  (§ 8).
 
-**Investigated, not yet resolved:**
-- Why the raw comb-filter argmax wanders across a wide range on some
-  real material (§ 6) — the 17:56 session is a strong real example to
-  start from.
+**Investigated and answered this round:**
+- *Why does the raw comb-filter argmax wander?* Root cause found (§ 6):
+  ACF lag-grid resolution coarsens sharply at higher BPM (`3.75` BPM per
+  lag step at `150` BPM vs. `0.94` at `75` BPM) — the 17:56 session's
+  "10 different candidates" were 10 consecutive integer lags, not 10
+  competing tempos. Fix proposed, not shipped (see above).
+- *Would a specific spread threshold (8/10/12/15) have converged faster?*
+  Answer: can't be determined responsibly from the existing ~1 Hz
+  decision-tick log — it undersamples the real ~7.5 Hz per-cycle
+  candidates enough that a coarse reconstruction and the real gate's
+  actual behavior (zero clears in 34 minutes) don't reconcile. Fixed the
+  instrumentation gap instead of guessing (§ 3).
+
+**Still open:**
 - Whether `_V2_LARGE_JUMP_PERSISTENCE_CYCLES`'s spread threshold (6.0,
-  not the 25-cycle count) needs to move, pending § 6's outcome (§ 3).
+  not the 25-cycle count) needs to move — now answerable from real data
+  once the new `long_candidate_spread` logging captures a session (§ 3).
 - Whether `_BPM_LOCK_CONFIDENCE` (0.55) is too permissive specifically
-  for a cold-start lock (§ 4).
+  for a cold-start lock, distinct from the startup-confidence floor
+  already raised this round (§ 4).
 - `beat_grid.py`'s lack of any real downbeat-phase re-anchoring
   mechanism (§ 5, "phase anchor").
+- Which phrase *role* (HOLD/RISE/PEAK/FALL) was queried at a given tick
+  — not logged, since `_phrase_bias(role)` has no single persistent
+  "current role" field to read (§ 5).
 
 **Rolling rear-view-mirror windows (4/8/16/32-beat):** real design work,
 explicitly not for immediate integration per the owner — candidate uses

@@ -900,3 +900,44 @@ def test_drop_fizzle_lands_in_cruise_when_energy_not_low() -> None:
     inst._update_director(dt=1 / 60, state=SimpleNamespace(), audio=SimpleNamespace(spectral_flux=0.0))
 
     assert inst._mode == 'CRUISE'
+
+
+# ---------------------------------------------------------------------------
+# _sequence_director_fields() phrase-clock logging (2026-08-14, round three)
+# ---------------------------------------------------------------------------
+
+
+def _bare_sequence_fields_controller(**overrides) -> AutoVJController:
+    inst = _bare_controller(**overrides)
+    inst._mode = 'CRUISE'
+    inst._profile = 'house'
+    inst._grid = None
+    inst._recommended_profile_key = ''
+    return inst
+
+
+def test_sequence_director_fields_includes_phrase_clock_state() -> None:
+    """Owner: 'capture them all!' -- the phrase clock (bars_since_track_
+    start/bars_since_phase_entry/phrase_neutral_bars_left) previously had
+    no continuous corpus trace at all, only the sparse phrase_bias_terms
+    snapshot at an actual transition. See
+    docs/planning/auto-vj-round-three-planning-2026-08-14.md."""
+    inst = _bare_sequence_fields_controller(
+        _bars_since_track_start=12, _bars_since_phase_entry=5, _phrase_neutral_bars_left=2,
+    )
+
+    fields = inst._sequence_director_fields(audio=SimpleNamespace(), state=SimpleNamespace(effect_name='plasma'))
+
+    assert fields['bars_since_track_start'] == 12
+    assert fields['bars_since_phase_entry'] == 5
+    assert fields['phrase_neutral_bars_left'] == 2
+
+
+def test_sequence_director_fields_phrase_clock_defaults_to_zero() -> None:
+    inst = _bare_sequence_fields_controller()
+
+    fields = inst._sequence_director_fields(audio=SimpleNamespace(), state=SimpleNamespace(effect_name=''))
+
+    assert fields['bars_since_track_start'] == 0
+    assert fields['bars_since_phase_entry'] == 0
+    assert fields['phrase_neutral_bars_left'] == 0

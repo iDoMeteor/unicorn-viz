@@ -2137,9 +2137,70 @@ breaking owner idea — scoring raw ACF candidates against the
 recommender's *tempo-independent* genre-fit terms (spectral/timbral, not
 `tempo_fit` itself) as a candidate-disambiguation signal, distinct from
 the backward-flow bug v3 already guards against since it uses no
-tempo-dependent evidence. None of these are implemented; the planning
-doc is the durable place they live until the philosophizing days produce
-consensus.
+tempo-dependent evidence. None of these were implemented in that pass;
+the planning doc is the durable place they live until the philosophizing
+days produce consensus.
+
+**Round Three, continued further: root cause found, an instrumentation
+gap fixed instead of a guess, and four more capture items shipped.** Same
+night, immediate follow-up on four of the planning doc's threads:
+
+1. **"Would a spread threshold of 8/10/12/15 have converged faster?"**
+   Tried to answer precisely from the 17:56 session's full log (which
+   had, by then, finished recording — 64.7 minutes, 3794 ticks; the wrong
+   `~76` BPM lock turned out to have persisted for **~34 minutes**, not
+   the ~2.4-minute window the scorecard first captured, self-correcting
+   only once a later real track change produced an internally stable new
+   candidate). A rolling-window reconstruction from the logged
+   `last_tactus_fold` values suggested 45-86% of short windows would
+   clear thresholds from 6 to 15 — but the real gate cleared **zero**
+   times in those 34 minutes. The two don't reconcile: the corpus logs at
+   ~1 Hz while the real persistence check runs on ~7.5 Hz per-cycle
+   candidates, so any reconstruction from the existing log necessarily
+   undersamples real cycle-to-cycle diversity. No specific number can be
+   responsibly recommended from this data. Fixed the actual gap instead:
+   `BeatTracker.long_candidate_spread`/`long_candidate_median` now cache
+   the exact values `_estimate_tempo_acf()` already computes and compares
+   against `6.0` every evaluation, logged from now on — the next session
+   that hits this gate has ground truth, not a reconstruction.
+2. **`_V2_STARTUP_CONFIDENCE` `0.3 → 0.4`** as the interim mitigation the
+   data *does* support: the 17:56 session's cold-start candidate was
+   accepted at `acf_conf=0.32`, barely above the old `0.3` floor, and was
+   the octave-family error that started the whole 34-minute episode.
+   `0.4` sits at the midpoint between that incident's floor and the
+   pre-2026-08-14 value (`0.55`) — targets how easily a wrong lock forms,
+   distinct from the persistence-window question above (how hard it is
+   to escape one). `_DETECTOR_VERSION` → `1.0.0-rc.24`.
+3. **Wandering argmax — root cause found.** Every one of the 17:56
+   session's ~10 "competing" candidates (`120`, `133.33`, ... `166.67`)
+   converts back (`lag = 6000 / bpm` at `_V2_ENV_RATE=100` Hz) to
+   consecutive integer lags `36-50` — the same underlying periodicity
+   landing on different adjacent lag bins, not genuinely distinct tempo
+   hypotheses. `d(BPM)/d(lag) = -6000/lag²` means the grid is coarse
+   specifically at higher BPM (`3.75` BPM/step at `150` BPM vs. `0.94` at
+   `75`) — the same phenomenon as the known 124-BPM grid-split gap, just
+   structurally worse the faster the tempo. Proposed fix: standard
+   parabolic sub-lag peak interpolation in `_estimate_tempo_acf()` — real
+   blast radius (every BPM reading's numeric precision changes, existing
+   tests likely need re-baselining), so flagged as a proposal in the
+   planning doc, not shipped without sign-off.
+4. **Front-to-back capture sweep, per owner request ("capture them
+   all!... this time front to back").** Continuous phrase-clock logging
+   (`bars_since_track_start`/`bars_since_phase_entry`/
+   `phrase_neutral_bars_left`, now in every `_sequence_director_fields()`
+   row, not just at an actual transition); `spectral_flux_smooth`/
+   `bass_flux_fast` (drop_score's own raw inputs, found as existing but
+   never-logged `BeatTracker` properties); a second, independent
+   shadow-engine slot (`beat_tracker_shadow2_engine`,
+   `bpm_shadow2`/`confidence_shadow2`/`shadow2_engine`) so v1
+   (`BeatGridTracker`, confirmed `<0.3ms/frame`) can run alongside the
+   existing v2/v3 shadow for a real three-way agreement comparison,
+   per owner: "adding another one for legacy should be pretty easy?"
+
+All four are detailed with full reasoning in
+[docs/planning/auto-vj-round-three-planning-2026-08-14.md](../planning/auto-vj-round-three-planning-2026-08-14.md),
+kept in sync with this entry. `auto_vj.py` `__version__` → `1.0.0-rc.70`;
+training-kit-01 → `0.16.4`.
 
 ---
 
