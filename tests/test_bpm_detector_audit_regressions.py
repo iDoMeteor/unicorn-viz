@@ -409,6 +409,18 @@ def test_recommender_never_pushes_a_profile_into_the_beat_tracker() -> None:
     assert 'self._shadow_grid.set_profile(' not in src
 
 
+def test_timing_scale_neutral_bpm_is_114_not_128() -> None:
+    """2026-08-14, later still still (round three): owner, ASAP, mid this
+    week's BPM detector work: "holy crap! make neutral 114, asap!" --
+    128 was a bare inline literal never promoted to a named constant.
+    Confirms the actual scaling math, not just the constant's value: at
+    the new neutral point, scale must be exactly 1.0."""
+    assert _AUTO_VJ._TIMING_SCALE_NEUTRAL_BPM == pytest.approx(114.0)
+    stub = SimpleNamespace(_grid=SimpleNamespace(confidence=0.8, bpm=114.0))
+    scale = _AUTO_VJ.AutoVJController._timing_scale_from_bpm(stub)
+    assert scale == pytest.approx(1.0)
+
+
 class _FakeVjApiNoBpm:
     def get_bpm(self, exclude: str = '') -> float:
         return 0.0

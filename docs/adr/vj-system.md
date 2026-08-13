@@ -2003,6 +2003,102 @@ tests). `auto_vj.py` `__version__` → `1.0.0-rc.66`.
 
 ---
 
+## Round Three: Timing-Scale Neutral Point, a Research Correction, and Open Threads (2026-08-14, round three)
+
+Same session, after the display-only BPM smoothing landed. Owner reported
+the list still "not really very accurate... close but not close enough" —
+one concrete data point: "off by 7 right now (Dreamin' (feat. Daya))" per
+both their own tapping and Spotify's own display. Consistent with the
+still-open "why does the raw comb-filter argmax wander" question from the
+previous entry — not yet investigated further this round, recorded as a
+live data point for whenever that gets picked up.
+
+**`_timing_scale_from_bpm()` neutral point, ASAP fix.** Owner: "holy crap!
+make neutral 114, asap!" `128` was a bare inline literal, never a named
+constant, never tracked in `weights-and-thresholds.md` despite scaling
+*every* timing-related hold duration in the director (build/breakdown/
+drop/impact/climax). Promoted to `_TIMING_SCALE_NEUTRAL_BPM = 114.0`.
+New test: `test_timing_scale_neutral_bpm_is_114_not_128` (asserts both the
+constant's value and that the scale is exactly `1.0` at the new neutral
+point, not just checking the number). `_DIRECTOR_VERSION` → `1.0.0-rc.4`
+— its first move since `rc.3`. `_VJ_WEIGHTS_DOC_VERSION` → `44`,
+`auto_vj.py` `__version__` → `1.0.0-rc.68`.
+
+**Research correction: `vj_api.get_bpm()` is not comparison-only.** Owner
+pushed back on an earlier research summary ("this does not sound
+correct?"), specifically: "auto-vj-01... reads (excluding itself) from
+this bus, but its own HUD/corpus/director logic reads `self._grid.bpm`
+directly, not through `get_bpm()`." True but incomplete, and the missing
+piece matters: `vj_api.get_bpm(exclude='auto_vj')` is called from **two**
+places, not one:
+
+- `_get_mixer_bpm()` (auto_vj.py:4510) — corpus-logging only, feeds the
+  `mixer_bpm` field on keyframe events for post-hoc comparison against
+  `self._grid.bpm`. No effect on detector state. This is the call the
+  original summary was describing.
+- **Directly inside `_update_profile_recommendation()`** (auto_vj.py:3866,
+  the P0-B block) — when a fresh non-self hint exists on the bus (in
+  practice, dj-mixer-01's own per-track analysis), calls
+  `self._grid.prime_tempo(mixer_bpm)`. This **does** feed back into the
+  detector's own tracked BPM.
+
+This second call site is real, intentional, and *not* affected by the
+one-way-flow cut earlier this week — that cut was specifically about the
+**recommender's own genre classification** never writing back to the
+detector (a guess, made with the least evidence the recommender ever
+has). `prime_tempo()` from an external, independently-measured source
+(dj-mixer's own analysis) is a different, deliberately-preserved channel
+— already documented as such in the one-way-flow entry above, just not
+connected clearly enough in the follow-up research summary that got
+challenged here. No code changed; this is a documentation/accuracy
+correction only.
+
+**Open threads, recorded for the "philosophizing" days ahead, not
+actioned this round:**
+
+- **Agent delegation.** Owner: "you have the ability to communicate with
+  *my* other pre-existing agents now... in the future, if i ask you to go
+  out of your domain (vj/training)... you should task them with it." One
+  peer session currently visible (`unicorn-viz-b6`); an overlay-manager
+  role was named as an example of where a request outside BPM/training
+  scope should be routed instead of handled directly. Saved as a
+  standing feedback memory (see `feedback-agent-delegation.md`) — no
+  out-of-domain request has come up yet to actually route.
+- **Rolling multi-beat windows ("rear-view mirror").** Owner's idea:
+  track rolling `4/8/16/32`-beat windows (not fixed-seconds windows like
+  tonight's `_V2_LARGE_JUMP_PERSISTENCE_CYCLES`) for two purposes —
+  (1) a beat-relative, tempo-scaled alternative/supplement to the
+  persistence check (at `174` BPM, `32` beats ≈ `11s`; at `86` BPM, `32`
+  beats ≈ `22s` — automatically scales instead of a fixed `~3.3s`), and
+  (2) self-derived phrase/structure detection for the director, useful
+  specifically for sources with no external mixer `section_role` hint
+  (Spotify, media-01) where `_phrase_bias()`'s external-match terms
+  currently have nothing to key off. Genuinely promising, not
+  implemented — a real design candidate for the next round, not a quick
+  tweak.
+- **v1/v2/v3 accuracy comparison in the scoring report.** Owner: "can we
+  log v1/v2/v3 bpm scores and compare them each time in scoring report,
+  just each one's accuracy %." Needs a scope decision before building:
+  "accuracy" requires ground truth, and this project does not fabricate
+  ground truth where none exists (see "Fake Essentia Reference BPM
+  Removed" above — the exact incident this note exists to avoid
+  repeating). Two real options, not mutually exclusive: (a) **agreement
+  %** between engines (v1/v2/v3 pairwise) — always computable, no ground
+  truth needed, honest about what it measures; (b) true **accuracy %**
+  against `mixer_bpm` specifically for dj-mixer-sourced sessions, where
+  real independent ground truth exists. Also requires extending the
+  shadow mechanism (currently exactly one shadow engine at a time,
+  `beat_tracker_shadow_engine`) to run two simultaneously for a genuine
+  three-way comparison. Not implemented — flagged for a scoping
+  conversation before any code.
+- **`_has_bpm_lock()`'s own floor.** Owner: "we probably need to keep our
+  eye on that floor we're kinda tuning." No counter/tracking added yet —
+  candidate for the same "track new/actively-discussed constants" pattern
+  established after the large-jump persistence window, whenever this one
+  gets picked up.
+
+---
+
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
 
 Follow-up to the `hardgroove` elimination below, same session: reviewing
