@@ -445,6 +445,64 @@ payload field records how many rows were excluded this way, so the
 exclusion is visible in the payload rather than silently vanishing.
 Regression test: `test_build_detector_payload_skips_fully_unidentified_rows`.
 
+## LLM Prompt: Real BPM Ground Truth + Dynamic-Set Flexibility (2026-08-14, later still)
+
+Owner reviewed the `90m-house-deep-classic-peak/a` reports (the recommender
+report's own rationale flagged "Detected BPM frequently outside the active
+profile's hint range") and asked for two prompt improvements before the
+next session: enlighten the LLM about the actual per-profile BPM
+expectations it's judging against, and give it a way to distinguish real
+detector/recommender flux from expected DJ-mix/mashup content.
+
+**1. Full BPM ground truth added.** `_load_profile_expected_values()`
+previously read only `spectral_centroid_mu`/`zcr_mu`/`onset_density_mu`
+from `unicornviz.audio.profiles.PROFILES` — no BPM field at all. The LLM
+was judging `hint_integration` ("is the active profile's BPM range
+well-aligned with detected BPM?") with zero visibility into what that
+range actually is, inferring it purely from `switch_history` context.
+Now also reads `bpm_hint_min`/`bpm_hint_max` (the owner-dialed real
+expectation) and `bpm_prior_mu`/`bpm_prior_sigma` (what the recommender's
+own `tempo_fit` term scores against internally) for every profile that
+defines them, rendered in `_format_profile_expected_values_block()` as
+`bpm_hint=118-126, bpm_mu=122.0(σ=0.051)` alongside the existing spectral
+line. Part 4's tuning-recommendations section gained a matching
+`tempo_fit` row in its "each fit metric is a Gaussian match" list, and an
+explicit instruction to use the new fields as `hint_integration`'s ground
+truth.
+
+**2. Dynamic-set flexibility guidance added.** The prompt had no concept
+of a DJ mix, mashup, blend, or VIP/bootleg edit — a track legitimately
+spanning multiple tempos or genres (the correct, intended content for
+that kind of track) risked being scored identically to a standard
+single-song, single-tempo track drifting or misclassifying. New guidance
+paragraph, placed once up front and referenced from both the detector's
+`tempo_plausibility` dimension and the recommender's whole dimension
+list: use each song's title/display string as the signal (words like
+"Mashup", "Blend", "Bootleg", "VIP Mix", "Edit" in a DJ-edit sense, or a
+title joining two songs/artists with "vs"/"x"/"+"/"/"), and for tracks
+matching those patterns, do not penalize `tempo_plausibility` (detector)
+or `profile_accuracy`/`switch_timing`/`hint_integration`/
+`mismatch_management` (recommender) for changes tracking a real,
+audible shift in the underlying music. Reserve those penalties for
+standard tracks where a change has no such justification. Told to say so
+in the rationale rather than guess, when genuinely uncertain.
+
+Both changes are prompt/context additions only — no scoring rubric
+dimension was added, removed, or reweighted, and no payload field
+computation changed (only what's *included* in the LLM-facing text).
+`score_existing_buckets.py` needed no separate update: it dynamically
+loads `package_training_set.py` via `importlib` and calls its
+`_score_detector_with_llm`/`_build_combined_prompt` directly, so both
+pick up the same change automatically.
+
+**Verified:** 4 new tests in `tests/test_package_training_set.py` —
+`test_load_profile_expected_values_includes_bpm_fields`,
+`test_format_profile_expected_values_block_renders_bpm_fields_when_present`,
+`test_format_profile_expected_values_block_omits_bpm_fields_when_absent`,
+`test_build_combined_prompt_includes_dynamic_set_flexibility_guidance` —
+plus all 85 pre-existing tests in that file still green (no prompt-text
+regression). `training-kit-01` version `0.15.11 → 0.16.0`.
+
 ---
 
 ## Superseded Decisions

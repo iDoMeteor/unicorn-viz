@@ -514,6 +514,23 @@ def test_load_profile_expected_values_matches_live_roster() -> None:
         assert values[key]['onset'] == pytest.approx(profile.onset_density_mu)
 
 
+def test_load_profile_expected_values_includes_bpm_fields() -> None:
+    """2026-08-14: the LLM prompt never told the model what BPM each profile
+    actually expects -- hint_integration scoring had no ground truth to check
+    against. bpm_hint_min/max/bpm_mu/bpm_sigma now ride alongside the
+    spectral fields for every profile that defines them."""
+    from unicornviz.audio.profiles import PROFILES
+
+    values = _load_profile_expected_values()
+    for key, profile in PROFILES.items():
+        assert values[key]['bpm_mu'] == pytest.approx(profile.bpm_prior_mu)
+        assert values[key]['bpm_sigma'] == pytest.approx(profile.bpm_prior_sigma)
+        if profile.bpm_hint_min is not None:
+            assert values[key]['bpm_hint_min'] == pytest.approx(profile.bpm_hint_min)
+        if profile.bpm_hint_max is not None:
+            assert values[key]['bpm_hint_max'] == pytest.approx(profile.bpm_hint_max)
+
+
 def test_format_profile_expected_values_block_empty() -> None:
     assert 'unable to load' in _format_profile_expected_values_block({})
 
@@ -529,6 +546,27 @@ def test_format_profile_expected_values_block_renders_all_entries() -> None:
     assert 'centroid=1500 Hz' in block
     assert 'zcr=0.060' in block
     assert 'onset=2.5/s' in block
+
+
+def test_format_profile_expected_values_block_renders_bpm_fields_when_present() -> None:
+    values = {
+        'house': {
+            'centroid': 1500.0, 'zcr': 0.06, 'onset': 2.5,
+            'bpm_hint_min': 118.0, 'bpm_hint_max': 126.0,
+            'bpm_mu': 122.0, 'bpm_sigma': 0.0505,
+        },
+    }
+    block = _format_profile_expected_values_block(values)
+    assert 'bpm_hint=118-126' in block
+    assert 'bpm_mu=122.0' in block
+    assert 'σ=0.051' in block
+
+
+def test_format_profile_expected_values_block_omits_bpm_fields_when_absent() -> None:
+    values = {'house': {'centroid': 1500.0, 'zcr': 0.06, 'onset': 2.5}}
+    block = _format_profile_expected_values_block(values)
+    assert 'bpm_hint=' not in block
+    assert 'bpm_mu=' not in block
 
 
 def test_reco_weights_line_used_consistently_in_both_prompt_spots() -> None:
@@ -654,6 +692,21 @@ def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> Non
     for stale_name in ('lofi:', 'jazz:', 'classical:', 'minimal:', 'metal:', 'industrial:', 'reggae:'):
         assert stale_name not in prompt, f'stale profile {stale_name!r} leaked into prompt'
     assert 'house:' in prompt
+
+
+def test_build_combined_prompt_includes_dynamic_set_flexibility_guidance() -> None:
+    """2026-08-14: the LLM used to have no way to distinguish a standard
+    single-tempo track from a DJ mix/mashup/blend where tempo and genre
+    changes mid-track are the correct, intended content -- risking penalizing
+    tempo_plausibility/hint_integration/etc for real musical shifts. The
+    guidance must appear once, up front, and be referenced from both the
+    detector's tempo_plausibility and the recommender's dimension list."""
+    detector_payload = {'essentia_available': False}
+    director_payload = {}
+    prompt = _build_combined_prompt(detector_payload, director_payload, None)
+    assert 'Mashup' in prompt
+    assert 'do NOT penalize tempo_plausibility' in prompt
+    assert 'dynamic-set note above' in prompt
 
 
 # ---- Tier 2: genre-tag ground-truth accuracy --------------------------------
