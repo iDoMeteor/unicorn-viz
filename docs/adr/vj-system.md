@@ -1295,6 +1295,12 @@ let `_acf_prior`'s influence decay back toward uniform over some window
 as real evidence accumulates, instead of staying frozen for the whole
 track; (c) something else. Flagged in Open Questions below.
 
+> **Superseded the same night** — see "One-Way Flow: Recommender→Detector
+> Genre Coupling Cut Entirely" below. Option (a) was tried literally (a
+> fully flat ACF prior) and found unsafe; the actual fix landed was
+> neither (a) nor (b) as scoped above, but removing genre priming from
+> the live pipeline entirely, at any point in a track's timeline.
+
 ### 3. ACF top candidates never logged — now they are
 
 Owner: "why aren't we capturing the acf score arrays in the training
@@ -1366,6 +1372,140 @@ general symptom description.
 ambient term table are pure analysis, no code changed, nothing to
 regression-test. `unicornviz.__version__` → `1.0.0-beta.91`,
 `auto_vj.py` `__version__` → `1.0.0-rc.60`.
+
+---
+
+## One-Way Flow: Recommender→Detector Genre Coupling Cut Entirely (2026-08-14, later still)
+
+Direct continuation of the cold-start-priming investigation above, same
+night. Owner's response to the two options recorded there (decay the
+prior back toward uniform over time, or don't prime at cold start at
+all): pushed back hard on both, pointing out an apparent contradiction —
+"we already fixed this" (recommender has zero influence post-lock)
+immediately followed by "genre bias can still apply pre-lock." Owner's
+read: **that's not two different things that happen to coexist, it's one
+architectural mistake** — detector and recommender should be a strict
+one-way flow, detector feeding recommender, never the reverse, full stop.
+Not a decaying nudge (rejected the proposal above outright), not a
+gated-but-still-real prime — a true cut.
+
+**Agreed, and it's a materially better fix than either option this ADR
+had on the table.** Both prior options preserved *some* form of genre
+writing back into the detector; the owner's framing removes the entire
+class of bug at the root instead of bounding its blast radius.
+
+**Tried option (a) literally first, found it unsafe.** Made
+`beat_grid.py`'s `_setup_acf_arrays()` build a fully flat (`np.ones_like`)
+`_acf_prior` instead of the generic `120 BPM, σ=0.55` Gaussian it builds
+today. Result, run against the existing test suite:
+
+- A plain, unambiguous 120 BPM click track locked onto **61.22 BPM** — a
+  clean half-tempo (octave) error.
+- `test_locked_bpm_does_not_drift_toward_mismatched_profile` (the
+  regression test validating the detector resists a wrong profile) got
+  **worse**, not better: BPM drifted to `75.83` instead of holding near
+  `124`.
+
+Root cause: the *generic* (non-genre) cold-start prior was doing real
+work the raw comb-filter can't do alone — resolving octave/harmonic
+ambiguity, a well-known limitation of autocorrelation-based tempo
+detection. Removing all bias removed that too. **Reverted** — this was
+never committed; both repos were confirmed clean before moving on.
+
+**Actual fix: keep the generic prior, cut genre-specific priming
+entirely, at any point in a track's timeline.** The generic
+`120 BPM, σ=0.55` prior in `_setup_acf_arrays()` is untouched — it isn't
+genre-specific (not tied to any profile's `bpm_prior_mu`) and its
+octave-disambiguation job is real and necessary, confirmed by the
+experiment above. What's removed is the only path that ever pushed a
+*genre-specific* profile into the tracker:
+`AutoVJController._sync_grid_audio_profile()`, along with its two call
+sites and the five now-dead bookkeeping attributes it alone used
+(`_last_audio_profile_key`, `_audio_profile_candidate_key`,
+`_audio_profile_candidate_since_t`, `_audio_profile_sync_hold_s`,
+`_audio_profile_sync_min_confidence`). `BeatTracker.set_profile()` /
+`BeatTrackerV3.set_profile()` are unchanged and still directly
+unit-tested — only their live wiring from the recommender is gone. The
+decider's own bookkeeping reset (`_maybe_apply_recommended_audio_
+profile()`, formerly commented "Do NOT push to the BPM tracker here...")
+is simplified to match: `AudioManager.set_profile()` still updates the
+profile key and the analyzer's spectral-feature setup
+(`Analyzer.set_profile()`, unrelated to tempo, used for
+`centroid_fit`/`spectral_shape_fit` measurement) — it just never reaches
+the beat tracker.
+
+`prime_tempo()` (external ground-truth BPM, e.g. dj-mixer's own
+per-track analysis) is a completely separate mechanism and untouched —
+that's real, independently-measured evidence being fed in, not the
+recommender's own genre guess, and stays a legitimate one-way channel
+into the detector.
+
+**Why this is strictly better than the "decay" idea floated earlier:**
+the detector's floor `_MIN_PROFILE_PRIOR_SIGMA = 0.45` was validated
+(2026-08-06 revert, `test_bpm_detector_audit_regressions.py`) specifically
+against a scenario where a genre prior gets applied *after* real tempo
+evidence already exists mid-track — exactly what a decaying post-lock
+nudge would have reintroduced, reopening a risk that test was written to
+close. Cutting the coupling entirely sidesteps that tension rather than
+re-litigating it: with no genre-specific prior ever applied to the
+detector, `_MIN_PROFILE_PRIOR_SIGMA` has no live case left to bind
+against — see its own entry in `weights-and-thresholds.md` for the
+"now inert" note.
+
+**Two related recommender-side changes, same session, same reasoning
+pass:**
+
+- **`band_fit` retired.** Asked directly ("should we eliminate band
+  fit?") while reviewing the composite term formulas: `band_fit` was a
+  coarse 3-band (bass/mid/treble energy-weight) L1 distance against a
+  profile's `bass_weight`/`mid_weight`/`treble_weight` — conceptually the
+  same frequency-distribution signal `spectral_shape_fit`'s 64-band
+  cosine similarity against `expected_bands` already measures at far
+  higher resolution, without `band_fit`'s coarseness. Combined weight on
+  one underlying signal was `1.2 + 1.2 = 2.4`, more than `tempo_fit`'s own
+  `2.0` — double-counting, not two independent signals. Removed the term,
+  its weight entry, and the now-unused `band_triples`/per-sample
+  bass-mid-treble accumulation feeding it.
+- **`centroid_fit` `0.7 → 0.5`.** Owner: "lower centroid to .5 for sure."
+  Directly justified by this same night's ambient-misclassification
+  term-attribution table (see the Live Session Follow-Up entry above):
+  `centroid_fit` supplied `+0.84` of ambient's average `+0.99`
+  wrong-answer margin, the single dominant driver, tracing to the
+  still-open 2026-08-11 formula-mismatch bug (linear-FFT live measurement
+  vs. log-band-derived `spectral_centroid_mu`). Not a fix of that bug —
+  still open. Owner's plan going forward: monitor `centroid_fit` against
+  real, non-DJ-edit web-player session data (the exact source that
+  surfaced tonight's whole investigation) before tuning it further.
+
+**Recommender tempo sigma floor unclamped: `0.08 → 0.02`.** Owner: "yes
+unclamp and drop the floor to 0.02. do now." The sigma-matches-hint-band
+pass earlier the same night (see that entry above) had computed each of
+16 profiles' true hint-band-derived sigma, but 11 came out tighter than
+the then-current `0.08` recommender floor and were rounded *up* to `0.08`
+during authoring — specifically so the stored number wouldn't diverge
+from what would actually bind. That rationale no longer applies at the
+same strength once the detector/recommender coupling above is cut: the
+floor's only remaining job is the recommender's own scoring sharpness.
+Promoted the bare `0.08` literal to a named constant,
+`_TEMPO_FIT_SIGMA_FLOOR = 0.02` (auto_vj.py), safely under every real
+profile's true value (tightest: `dubstep` at `0.0218`), and unclamped all
+11 affected profiles in `unicornviz/audio/profiles.py` back to their true
+computed sigma (4-decimal precision, since several distinct genres —
+e.g. `trance` `0.0446` vs. `hardstyle` `0.0481` — would otherwise collapse
+onto the same 2-decimal value). See `weights-and-thresholds.md`'s profile
+sigma table for the full before/after.
+
+**Verified:** full suite green (1696 tests) after all four changes,
+including a new source-text guard
+(`test_recommender_never_pushes_a_profile_into_the_beat_tracker`) that
+fails if `_sync_grid_audio_profile` or a `self._grid.set_profile(`/
+`self._shadow_grid.set_profile(` call site reappears in `auto_vj.py`, and
+an updated sigma-floor guard test for the new `0.02`/named-constant form.
+`_DETECTOR_VERSION` → `1.0.0-rc.20` (the live behavioral change lives in
+`auto_vj.py`, not `beat_grid.py`, but the detector subsystem's actual
+behavior changed — bumped on the spirit of the versioning rule, not the
+letter). `_RECOMMENDER_VERSION` → `1.0.0-rc.12`. `_VJ_WEIGHTS_DOC_VERSION`
+→ `39`. `auto_vj.py` `__version__` → `1.0.0-rc.61`.
 
 ---
 

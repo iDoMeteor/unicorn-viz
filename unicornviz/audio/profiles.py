@@ -236,14 +236,20 @@ PROFILES: Dict[str, AudioProfile] = {
         # intended per-genre expectation, so sigma now derives FROM the
         # hint band instead of the other way around: sigma set so +-1
         # sigma (log2 space) just covers [bpm_hint_min, bpm_hint_max],
-        # rounded with a small buffer. House's hint-band-matched value
-        # (0.05) sits below the 0.08 recommender floor, so 0.08 is what's
-        # actually live -- the floor, not this authored value, is the
-        # binding constraint for every fast/tight genre in this roster
-        # (see docs/adr/vj-system.md for the full list). Applied
-        # identically across all 16 profiles in the same pass.
+        # rounded with a small buffer. Applied identically across all 16
+        # profiles in the same pass.
+        # 2026-08-14 (same night): unclamped. House's true hint-band value
+        # (0.0505) originally sat below the recommender's tempo_fit sigma
+        # floor (0.08 at the time), so the *stored* value here was rounded
+        # up to 0.08 to match what would actually bind -- discarding the
+        # true, sharper number. Recommender/detector genre coupling was cut
+        # entirely the same night (see docs/adr/vj-system.md), and the
+        # runtime floor dropped 0.08 -> 0.02, well under every profile's
+        # true value (tightest: dubstep at 0.0218) -- so every profile now
+        # stores and uses its real hint-band-derived sigma, full range
+        # 0.0218-0.30 across the roster, nothing clamped away.
         bpm_prior_mu=122.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0505,
         bpm_hint_min=118.0,
         bpm_hint_max=126.0,
         spectral_centroid_mu=2650.0,
@@ -298,9 +304,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # 118-124 (overlapping house's old 120-128) to 112-118, adjacent to
         # but no longer overlapping house's new 118-126.
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.04, floored to the recommender's 0.08.
+        # comment) -- derived value 0.04, unclamped the same night (see house's own field comment).
         bpm_prior_mu=115.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.04,
         bpm_hint_min=112.0,
         bpm_hint_max=118.0,
         # Warmer/less bright than house (1500 Hz) -- the chord stabs and
@@ -365,9 +371,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # (overlapping house's old 120-128 across 6 of its 8 BPM span) to
         # 127-134, adjacent to house's new 118-126, no longer overlapping.
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.04, floored to the recommender's 0.08.
+        # comment) -- derived value 0.04, unclamped the same night (see house's own field comment).
         bpm_prior_mu=130.5,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0412,
         bpm_hint_min=127.0,
         bpm_hint_max=134.0,
         # 2026-08-09: 2550 -> 2900 (LLM tuning rec from `library/a`, observed
@@ -413,9 +419,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.35,
         onset_treble_emphasis=1.15,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.07, floored to the recommender's 0.08.
+        # comment) -- derived value 0.07, unclamped the same night (see house's own field comment).
         bpm_prior_mu=130.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0683,
         bpm_hint_min=126.0,
         bpm_hint_max=136.0,
         spectral_centroid_mu=2350.0,
@@ -458,9 +464,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.3,
         onset_treble_emphasis=0.9,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.04, floored to the recommender's 0.08.
+        # comment) -- derived value 0.04, unclamped the same night (see house's own field comment).
         bpm_prior_mu=138.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0446,
         bpm_hint_min=134.0,
         bpm_hint_max=142.0,
         spectral_centroid_mu=2000.0,
@@ -501,14 +507,14 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.35,
         onset_treble_emphasis=1.00,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.05, floored to the recommender's 0.08.
+        # comment) -- derived value 0.05, unclamped the same night (see house's own field comment).
         # NOTE: this profile's prior sigma (previously 0.16) is the fixture
         # value tests/test_bpm_detector_audit_regressions.py's sigma-floor-
         # revert regression test is built around -- re-verified passing
         # after this change (the mismatch penalty only got sharper, same
         # winner), but check that test first if this value moves again.
         bpm_prior_mu=145.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0532,
         bpm_hint_min=140.0,
         bpm_hint_max=149.0,
         spectral_centroid_mu=2150.0,
@@ -570,14 +576,10 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.75,
         # Same band as house -- tempo is not the discriminator, vocal
         # presence is. See house's own field comment for the sigma-
-        # tightening rationale (recommender-scoring floor is 0.08).
-        # 2026-08-14: sigma-matches-hint-band pass, same as house -- the
-        # hint-band-derived value (0.05) is below the recommender's 0.08
-        # floor (auto_vj.py's _profile_score()), so 0.08 is what's
-        # actually live either way. Kept identical to house on purpose --
-        # see docs/adr/vj-system.md.
+        # tightening/unclamping rationale; kept identical to house on
+        # purpose. See docs/adr/vj-system.md.
         bpm_prior_mu=122.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0505,
         bpm_hint_min=118.0,
         bpm_hint_max=126.0,
         spectral_centroid_mu=2650.0,
@@ -620,9 +622,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.25,
         onset_treble_emphasis=0.95,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.06, floored to the recommender's 0.08.
+        # comment) -- derived value 0.06, unclamped the same night (see house's own field comment).
         bpm_prior_mu=148.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0627,
         bpm_hint_min=142.0,
         bpm_hint_max=154.0,
         spectral_centroid_mu=2450.0,
@@ -669,9 +671,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # expectation). mu moved to 160 (midpoint of the new 155-165 band --
         # it can't stay at 150, which would sit outside its own hint range).
         # sigma-matches-hint-band pass (see house's own field comment) --
-        # derived value 0.05, floored to the recommender's 0.08.
+        # derived value 0.0481, unclamped the same night.
         bpm_prior_mu=160.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0481,
         bpm_hint_min=155.0,
         bpm_hint_max=165.0,
         spectral_centroid_mu=1550.0,
@@ -714,9 +716,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # 2026-08-14: owner widened bpm_hint 168-178 -> 165-180 (dialed-in
         # expectation; mu=174 still sits comfortably inside it, no shift
         # needed). sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.08, right at the recommender's floor.
+        # comment) -- derived value 0.0805, now stored and used directly (unclamped the same night; was previously rounded to 0.08, effectively at the old floor anyway).
         bpm_prior_mu=174.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0805,
         bpm_hint_min=165.0,
         bpm_hint_max=180.0,
         spectral_centroid_mu=1700.0,
@@ -763,9 +765,9 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_mid_emphasis=1.10,
         onset_treble_emphasis=0.70,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.02, floored to the recommender's 0.08.
+        # comment) -- derived value 0.02, unclamped the same night (see house's own field comment).
         bpm_prior_mu=140.0,
-        bpm_prior_sigma=0.08,
+        bpm_prior_sigma=0.0218,
         bpm_hint_min=138.0,
         bpm_hint_max=142.0,
         spectral_centroid_mu=950.0,

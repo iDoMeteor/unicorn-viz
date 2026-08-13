@@ -378,14 +378,35 @@ def test_fast_override_uses_shorter_cooldown_than_normal_path() -> None:
 # are what apply).
 # ---------------------------------------------------------------------------
 
-def test_recommender_sigma_floor_source_is_0_08_not_0_45() -> None:
-    """Guard against silently re-introducing the P2-E floor. Deliberately a
+def test_recommender_sigma_floor_source_is_0_02_not_0_45_or_0_08() -> None:
+    """Guard against silently re-introducing the P2-E floor (0.45) or the
+    pre-2026-08-14 floor (0.08, from when profile sigmas were rounded up to
+    it during authoring -- see docs/adr/vj-system.md). Deliberately a
     source-text check, not a re-derivation of the scoring math: the point is
     to catch the exact constant regressing, the same pattern
     test_bpm_eval_beat_grid_path_points_to_auto_vj_01 uses in
     test_corpus_writers.py."""
     src = _AUTO_VJ_PATH.read_text(encoding='utf-8')
-    assert "sigma = max(0.08, float(getattr(profile, 'bpm_prior_sigma'" in src
+    assert '_TEMPO_FIT_SIGMA_FLOOR = 0.02' in src
+    assert "sigma = max(_TEMPO_FIT_SIGMA_FLOOR, float(getattr(profile, 'bpm_prior_sigma'" in src
+
+
+def test_recommender_never_pushes_a_profile_into_the_beat_tracker() -> None:
+    """2026-08-14: recommender -> detector genre coupling was cut entirely
+    (one-way flow: detector feeds tempo_fit; the recommender's genre pick
+    never feeds the tracker's BPM prior back, not even gated). Previously
+    _sync_grid_audio_profile() pushed a hold+confidence-gated profile into
+    self._grid.set_profile() / self._shadow_grid.set_profile() once per
+    frame -- but that gate only protected a locked tracker; a wrong genre
+    guess made *before* the tracker's first lock (its least-audio-context,
+    least reliable window) still permanently biased ACF search for the rest
+    of the track, since set_profile() only ever primes once. Source-text
+    guard, same pattern as the sigma-floor test above: the mechanism must
+    not quietly come back. See docs/adr/vj-system.md."""
+    src = _AUTO_VJ_PATH.read_text(encoding='utf-8')
+    assert '_sync_grid_audio_profile' not in src
+    assert 'self._grid.set_profile(' not in src
+    assert 'self._shadow_grid.set_profile(' not in src
 
 
 class _FakeVjApiNoBpm:
