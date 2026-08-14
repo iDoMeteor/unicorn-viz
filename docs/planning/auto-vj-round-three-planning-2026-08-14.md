@@ -14,7 +14,10 @@ Status: draft — capturing open design questions for the philosophizing
   `beat_tracker_shadow2_engine = "legacy"`), sub-lag peak interpolation
   gated behind `acf_peak_interpolation_enabled` (off by default — an A/B
   test in progress, see § 6), `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (§ 10),
-  and `BeatTrackerV3` retired/consolidated into `BeatTracker` (§ 7b).
+  `BeatTrackerV3` retired/consolidated into `BeatTracker` (§ 7b), and
+  two `library/c` LLM tuning recommendations applied:
+  `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` and
+  `phrase_under_over_hold_mult` `0.6 → 0.7` (§ 12).
   Everything else is still
   proposal-stage, marked as such inline.
 Last updated: 2026-08-14
@@ -767,6 +770,50 @@ populated:** `bpm_lock_gain_confidence`/`bpm_lock_release_confidence`,
 `spectral_flux_smooth`/`bass_flux_fast` all appear on every row with
 real (non-placeholder) values.
 
+## 12. `library/c` packaged: LLM score notably improved, two recommendations applied
+
+Owner packaged the night's sessions into a fresh `library/c` set and
+asked for a check: "llm score notably improved! i honestly didn't expect
+that." Confirmed with a clean same-track before/after: "Thriller (Tim
+Cosmos 2025 Rework) – Michael Jackson" scored `19.6%` lock coverage in
+an old `garbage/d` bucket (2026-08-11, well before any of this round's
+fixes) and `59.5%` on the identical file in `library/c` tonight —
+roughly 3x, on genuinely harder material (18 tracks of mashups, extended
+mixes, bootlegs, reworks) than the clean single-track reference sets
+(`library/a`/`b`, `4.4/5` overall but `100%` lock coverage across every
+track — an easy baseline, not a fair comparison point). `library/c`'s
+own overall scores: detector `3.25/5` (lock stability `3/5`, up from
+`garbage/d`'s `1/5` on comparable material), recommender `2.75/5`,
+director `2.5/5`. The director's low "Build Quality"/"Opportunity
+Usage" scores matched the already-known `drop_without_recent_build=47`
+lint finding from § 11 — owner: "a lot of these dj tracks drop w/o
+builds, no worries," so not treated as a real issue.
+
+**Two of the scoring pass's four tuning recommendations applied,
+owner-approved directly:** "let's go ahead and move the lock release
+conf & phase under over as recommended, after we get into library
+diversity we'll re-visit all the centroid stuff."
+
+- `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` — LLM: "frequent lock
+  changes suggest slightly tightening the release confidence to
+  stabilize lock states."
+- `phrase_under_over_hold_mult` `0.6 → 0.7` — LLM: "builds were rushed;
+  slightly increasing this multiplier could smooth transition timing."
+
+Both are director-scoped constants (`AutoVJController`), not detector —
+`_DIRECTOR_VERSION` → `1.0.0-rc.5`.
+
+**Deferred, not applied — explicitly for a later library-diversity
+pass:** `hard_techno`/`house` spectral-centroid recalibrations
+(`centroid_mu` `2450→3700`/`2650→4000`) and a `kick_regularity_fit`
+weight bump (`0.9→1.2`). Not rejected, just sequenced for later per the
+owner's own framing.
+
+Consistent with the project's advisory-only LLM-tuning policy — nothing
+here was auto-applied by packaging; each accepted change was reviewed
+and approved individually, same as every other constant change this
+round.
+
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix
@@ -784,8 +831,11 @@ shipped disabled by default behind `acf_peak_interpolation_enabled` for
 a sequential A/B test; `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (in-band step
 size that was letting a ~20 BPM single-cycle drift through ungated);
 `BeatTrackerV3` retired and consolidated into `BeatTracker` (confirmed
-by 100% live-session agreement first). `_DETECTOR_VERSION` →
-`1.0.0-rc.27`.
+by 100% live-session agreement first); two `library/c` LLM tuning
+recommendations, owner-approved directly:
+`_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` and
+`phrase_under_over_hold_mult` `0.6 → 0.7` (§ 12). `_DETECTOR_VERSION` →
+`1.0.0-rc.27`; `_DIRECTOR_VERSION` → `1.0.0-rc.5`.
 
 **Proposed, awaiting consensus before implementation:**
 - Minimum lock dwell time — new gate category for the in-band drift gap
@@ -803,6 +853,10 @@ by 100% live-session agreement first). `_DETECTOR_VERSION` →
   behavior just retired above, but owner asked it be noted as worth
   revisiting once recommender work resumes, not closed off permanently
   (§ 7b).
+- `hard_techno`/`house` spectral-centroid recalibrations and a
+  `kick_regularity_fit` weight bump from `library/c`'s LLM scoring pass —
+  explicitly deferred to a later library-diversity pass, not rejected
+  (§ 12).
 
 **Investigated and answered this round:**
 - *Why does the raw comb-filter argmax wander?* Root cause found (§ 6):

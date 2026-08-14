@@ -2311,6 +2311,46 @@ All of this is detailed in
 §§ 7b, 10, 11. `auto_vj.py` `__version__` → `1.0.0-rc.72`;
 training-kit-01 → `0.16.6`.
 
+**Round Three, closing the loop: `library/c` packaged, LLM score
+notably improved, two recommendations applied.** Owner packaged the
+night's sessions into a fresh `library/c` set and asked for a check —
+"llm score notably improved! i honestly didn't expect that." A clean
+same-track before/after made the story concrete: "Thriller (Tim Cosmos
+2025 Rework) – Michael Jackson" scored `19.6%` lock coverage in an old
+`garbage/d` bucket (2026-08-11, pre-round-three) and `59.5%` on the
+identical file in tonight's `library/c` — roughly 3x, on genuinely
+harder material than the clean single-track reference sets (`library/a`/
+`b`, `4.4/5` overall but `100%` lock coverage across the board — an easy
+baseline, not a fair comparison point). `library/c`'s own overall
+scores: detector `3.25/5` (lock stability `3/5`), recommender `2.75/5`,
+director `2.5/5` — the director's low "Build Quality"/"Opportunity
+Usage" scores matched the already-known `drop_without_recent_build=47`
+lint finding, which the owner had already dismissed as expected DJ
+behavior ("a lot of these dj tracks drop w/o builds, no worries").
+
+The scoring pass's `tuning_recommendations.md` included four
+suggestions; owner approved two directly, deferred two: "let's go ahead
+and move the lock release conf & phase under over as recommended, after
+we get into library diversity we'll re-visit all the centroid stuff."
+
+- **Applied:** `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` ("frequent
+  lock changes suggest slightly tightening the release confidence to
+  stabilize lock states") and `phrase_under_over_hold_mult` `0.6 → 0.7`
+  ("builds were rushed; slightly increasing this multiplier could smooth
+  transition timing"). Both director-scoped constants (`AutoVJController`).
+  `_DIRECTOR_VERSION` → `1.0.0-rc.5`.
+- **Deferred, not applied:** `hard_techno`/`house` spectral-centroid
+  recalibrations (`centroid_mu` `2450→3700`/`2650→4000`) and a
+  `kick_regularity_fit` weight bump (`0.9→1.2`) — explicitly held for a
+  later library-diversity pass per the owner's own sequencing, not
+  rejected.
+
+Consistent with the project's advisory-only LLM-tuning policy
+(`tuning_recommendations.md`'s own disclaimer, and
+`docs/adr/training-model.md`) — nothing here was auto-applied; each
+accepted change was reviewed and approved individually. `auto_vj.py`
+`__version__` → `1.0.0-rc.73`; training-kit-01 → `0.16.7`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
