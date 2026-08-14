@@ -63,6 +63,7 @@ def _make_seq_row(
     mixer_bpm: float | None = None,
     track_path: str = '',
     is_playing: bool = True,
+    bpm_locked: bool | None = None,
 ) -> dict:
     row: dict = {
         'spotify_track_id': track_id,
@@ -74,6 +75,12 @@ def _make_seq_row(
         'beat_index': beat_index,
         'analysis_generated_at': ts,
         'is_playing': is_playing,
+        # 2026-08-14, round three: bpm_locked (the real Schmidt-trigger
+        # state) defaults to mirroring the stateless confidence-floor
+        # check when not given explicitly, so existing tests that vary
+        # `confidence` to simulate locked/unlocked rows keep behaving as
+        # they always did -- see _lock_pct_stateful() in the module.
+        'bpm_locked': bpm_locked if bpm_locked is not None else confidence >= _BPM_LOCK_CONFIDENCE_FLOOR,
     }
     if event_type:
         row['event_type'] = event_type
@@ -85,6 +92,7 @@ def _make_seq_row(
 
 
 _trim_idle_bookends = _MOD._trim_idle_bookends
+_lock_pct_stateful = _MOD._lock_pct_stateful
 
 
 # ---- _trim_idle_bookends (2026-08-14, round three) ---------------------------
@@ -151,7 +159,65 @@ def test_write_scorecard_excludes_idle_bookends_from_lock_coverage(tmp_path: Pat
 
     content = scorecard_path.read_text(encoding='utf-8')
     assert 'Sequence rows: `5`' in content
-    assert 'Beat lock coverage (confidence ≥ 0.45): `100.0%`' in content
+    assert 'stateless proxy' in content and '`100.0%`' in content
+
+
+# ---- _lock_pct_stateful (2026-08-14, round three) -----------------------------
+# Owner: "let's fix that logging & packaging issue regarding lock state.. i want
+# to be able to compare what we were using vs what we *should* be using."
+
+
+def test_lock_pct_stateful_basic() -> None:
+    rows = (
+        [_make_seq_row(bpm_locked=True) for _ in range(3)]
+        + [_make_seq_row(bpm_locked=False) for _ in range(1)]
+    )
+    assert _lock_pct_stateful(rows) == pytest.approx(75.0)
+
+
+def test_lock_pct_stateful_empty_is_zero() -> None:
+    assert _lock_pct_stateful([]) == 0.0
+
+
+def test_lock_pct_stateful_diverges_from_the_stateless_proxy() -> None:
+    """The whole point: a row can read as 'locked' under the stateless
+    confidence-floor check while the real Schmidt-trigger state (with
+    hysteresis) says otherwise, and vice versa -- these are genuinely
+    different signals, not two ways of writing the same number."""
+    rows = [
+        _make_seq_row(confidence=0.9, bpm_locked=False),   # high confidence, but state says unlocked
+        _make_seq_row(confidence=0.1, bpm_locked=True),    # low confidence, but hysteresis held the lock
+    ]
+    stateless = round(100.0 * sum(1 for r in rows if r['bpm_confidence'] >= 0.45) / len(rows), 1)
+    stateful = round(_lock_pct_stateful(rows), 1)
+    assert stateless == 50.0
+    assert stateful == 50.0
+    # Same aggregate by coincidence in this 2-row case, but which specific
+    # rows count differs entirely -- confirm the two checks disagree on
+    # individual rows, not just happen to share a coincidental average.
+    stateless_per_row = [r['bpm_confidence'] >= 0.45 for r in rows]
+    stateful_per_row = [bool(r['bpm_locked']) for r in rows]
+    assert stateless_per_row != stateful_per_row
+
+
+def test_write_scorecard_lock_rating_scores_against_stateful_not_stateless(tmp_path: Path) -> None:
+    """A session with decent stateless confidence coverage but a real
+    Schmidt-trigger state that was mostly unlocked must score LOW --
+    "what we should be using," not the stateless proxy."""
+    rows = [_make_seq_row(confidence=0.5, bpm_locked=False) for _ in range(20)]
+    seq_path = tmp_path / 'sequence-corpus.jsonl'
+    seq_path.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+    live_path = tmp_path / 'live-corpus.jsonl'
+    live_path.write_text('', encoding='utf-8')
+    bucket_dir = tmp_path / 'set-a' / 'a'
+    bucket_dir.mkdir(parents=True)
+
+    _scorecard_path, lock_rating, _director = _write_scorecard(bucket_dir, live_path, seq_path)
+
+    # confidence=0.5 clears the stateless 0.45 floor (would score well on
+    # the old metric) but bpm_locked=False the whole session -- the
+    # rating must reflect the real, mostly-unlocked state.
+    assert lock_rating <= 2
 
 
 # ---- _build_detector_payload ------------------------------------------------
@@ -213,6 +279,28 @@ def test_build_detector_payload_lock_coverage() -> None:
     unlocked_rows = [_make_seq_row(confidence=0.20) for _ in range(5)]
     payload = _build_detector_payload(locked_rows + unlocked_rows, 'set-a', 'a')
     assert payload['beat_lock']['coverage_pct'] == pytest.approx(50.0)
+
+
+def test_build_detector_payload_lock_coverage_stateful_diverges_from_stateless() -> None:
+    """2026-08-14, round three: coverage_pct_stateful (real bpm_locked
+    state) and coverage_pct (stateless confidence-floor proxy) are
+    genuinely different signals -- confirmed with an aggregate divergence,
+    not just individual rows disagreeing while averaging out the same."""
+    rows = (
+        # Clears the stateless floor but the real hysteresis state says
+        # unlocked for most of these (e.g. a brief, noisy confidence spike
+        # that never actually flipped the Schmidt trigger).
+        [_make_seq_row(confidence=0.9, bpm_locked=False) for _ in range(6)]
+        + [_make_seq_row(confidence=0.9, bpm_locked=True) for _ in range(2)]
+        # Below the stateless floor but the hysteresis held the lock from
+        # before the dip.
+        + [_make_seq_row(confidence=0.1, bpm_locked=True) for _ in range(2)]
+    )
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['beat_lock']['coverage_pct'] == pytest.approx(80.0)          # 8/10 clear the floor
+    assert payload['beat_lock']['coverage_pct_stateful'] == pytest.approx(40.0)  # only 4/10 actually locked
+    assert payload['per_song'][0]['lock_coverage_pct'] == pytest.approx(80.0)
+    assert payload['per_song'][0]['lock_coverage_pct_stateful'] == pytest.approx(40.0)
 
 
 def test_build_detector_payload_empty_rows() -> None:

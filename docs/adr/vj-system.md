@@ -2796,6 +2796,61 @@ directly against the raw decision log:
    concentrated in two tracks with more dynamic content, nothing
    alarming.
 
+**Round Three, the morning after (part four): the training packager was
+scoring lock quality against the wrong signal all along.** Checking
+`training-house-01/c`'s own LLM score (3.5/5, "moderate lock churn")
+against a manual read of the same session turned up a real,
+previously-invisible gap: every lock-quality computation in
+`package_training_set.py` — `scorecard.md`'s rating, `_compute_local_
+scores`'s detector responsiveness score, and the LLM prompt itself —
+used a **stateless**, memoryless per-row check
+(`bpm_confidence >= _BPM_LOCK_CONFIDENCE_FLOOR`, `0.45`) exclusively.
+The live app's actual lock indicator, `bpm_locked`, is a **stateful**
+Schmidt trigger with hysteresis (gain `_BPM_LOCK_CONFIDENCE` `0.55`,
+release `_BPM_LOCK_RELEASE_CONFIDENCE` `0.25`) that rides straight
+through an ordinary confidence wobble without ever reading as
+unlocked — but that field was already being logged on every corpus row
+and simply never read by the packaging/scoring code. A single noisy
+heartbeat sample during a ride-through dip counted fully against the
+stateless stat, meaning every past scorecard and LLM verdict was
+measuring something meaningfully stricter than what the session
+actually did.
+
+New `_lock_pct_stateful()` reads the real field. Owner: "let's fix that
+logging & packaging issue regarding lock state.. i want to be able to
+compare what we were using vs what we *should* be using, so we can sort
+of see how they compare and how our previous interpretations may have
+been skewed." Landed as an addition, not a swap: `coverage_pct_stateful`
+/ `lock_coverage_pct_stateful` now sit alongside the original stateless
+fields everywhere (`scorecard.md`, the LLM detector payload, `_compute_
+local_scores`'s `_meta`), and the rating/scoring decisions that used to
+read the stateless number now read the stateful one instead. The LLM
+prompt's `lock_stability`/`confidence_reliability` guidance was updated
+to explain the distinction and score primarily against the stateful
+figure.
+
+Retroactive comparison across four already-packaged sessions (re-running
+both checks directly against their saved sequence-corpus files, no
+re-packaging needed) found a strikingly consistent gap:
+
+| Session | Rows | Stateless % | Stateful % | Delta |
+|---|---|---|---|---|
+| `library/g` (overnight marathon) | 60,926 | 76.5% | 99.5% | +23.0 |
+| `library/h` (morning) | 11,406 | 74.7% | 97.0% | +22.2 |
+| `garbage/m` (Shabba Ranks flub) | 1,574 | 58.2% | 80.4% | +22.2 |
+| `training-house-01/c` | 16,394 | 76.9% | 98.8% | +21.9 |
+
+The gap holds at almost exactly +22 points across every session
+regardless of how good or bad the session actually was — three of the
+four sessions were actually running at 97-99.5% real lock quality all
+night, not the mid-70s the stateless proxy reported every time. `garbage/
+m`'s own stateful figure (80.4%) is real evidence the gap is not a flat
+correction that would launder a genuinely bad session into looking
+fine — it's still the lowest of the four, correctly reflecting that
+session's real octave-ambiguity stalls (see the entry above), just from
+a less pessimistic baseline than the stateless number suggested.
+`training-kit-01` → `0.18.0`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
