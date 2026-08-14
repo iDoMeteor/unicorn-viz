@@ -2851,6 +2851,51 @@ session's real octave-ambiguity stalls (see the entry above), just from
 a less pessimistic baseline than the stateless number suggested.
 `training-kit-01` → `0.18.0`.
 
+**Round Three, the morning after (part five): real Essentia was silently
+dead on arrival.** Checking `favorites/l` (the "highest scores yet"
+session) for a specific owner-reported data point — "Memories," where
+the mixer's stored analysis said `128` and the owner's own tap said
+`135+` — turned up that `essentia_bpm`/`essentia_key` had been `None`
+for every song in every session since the real Essentia wiring shipped
+earlier this round, despite `track_path` being populated correctly
+(17,681 of 17,683 rows in this session alone). Root cause:
+`_load_extract_audio_features()` loads `training_lib.py` dynamically via
+`importlib.util.spec_from_file_location()` + `module_from_spec()` +
+`exec_module()`, but never registered the module in `sys.modules`
+before executing it. `training_lib.py` defines a frozen+slots
+`@dataclass`, and `dataclasses` looks itself up via
+`sys.modules[cls.__module__]` while the class body is still executing —
+without registration that lookup returns `None`, `dataclass()` raises
+`AttributeError`, and the surrounding `except Exception` swallowed it
+silently, returning `None` from the loader every time. Every essentia
+unit test shipped alongside the original wiring mocked the loader
+entirely, so none of them ever exercised the real path — exactly why it
+shipped broken and stayed that way through several packaged sessions
+without a single error surfacing anywhere.
+
+Fixed with the standard `sys.modules[spec.name] = mod` registration
+(the same pattern `tests/test_training_optional_essentia.py` already
+used correctly, for reference). Also applied proactively to
+`_load_live_detector_constants()`/`_load_live_reco_weights()` — latent,
+not yet triggered since `beat_grid.py`/`auto_vj.py` don't currently
+define a slotted dataclass, but the same bug shape. New unmocked
+regression test calls the real loader against the real
+`training_lib.py` with a synthetic WAV file (works whether or not
+Essentia itself is installed, since the bug was in loading the module
+at all).
+
+With the fix, real Essentia and the live detector agree closely on
+"Memories" — **131.9 BPM** (Essentia, offline, against the actual file)
+vs. **132.6 BPM** (live detector's own session median) — while the
+mixer's stored analysis (128) and the owner's manual tap (135+) sit on
+either side of that agreement cluster. Two independent methods landing
+within 1 BPM of each other, both meaningfully closer to the owner's own
+tap than the mixer's stored number, is exactly the kind of real,
+triangulated evidence the standing `essentia_note` caveat ("it is
+*possible* that our live bpm detection is, or may become, more accurate
+than other methods") was written to eventually be tested against.
+`training-kit-01` → `0.18.1`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

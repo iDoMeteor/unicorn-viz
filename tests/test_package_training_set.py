@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
+import wave
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 
@@ -384,6 +387,45 @@ def test_build_detector_payload_essentia_fields_default_none_without_track_path(
     payload = _build_detector_payload(rows, 'set-a', 'a')
     assert payload['per_song'][0]['essentia_bpm'] is None
     assert payload['per_song'][0]['essentia_key'] is None
+
+
+def test_load_extract_audio_features_real_loader_returns_a_working_function(tmp_path: Path) -> None:
+    """2026-08-14, round three, caught live: every other essentia test in
+    this file mocks _load_extract_audio_features() entirely, so none of
+    them ever exercised the real module-loading path -- which was
+    silently broken the whole time real Essentia wiring was "live."
+    training_lib.py defines a frozen+slots @dataclass; dataclasses looks
+    itself up via sys.modules[cls.__module__] while the class body is
+    still executing, and raises AttributeError on None if the loaded
+    module was never registered in sys.modules first. Real-world
+    evidence: a live session's essentia_bpm/essentia_key were None for
+    every single song despite track_path being populated for nearly all
+    17,683 rows. This test calls the REAL loader, unmocked, against the
+    REAL training_lib.py -- a regression here means external_agreement
+    goes silently dark again. Uses a synthetic WAV (the stdlib fallback
+    path) so it passes whether or not Essentia itself is installed --
+    the bug was in loading the module at all, not in Essentia specifically.
+    """
+    extract = _MOD._load_extract_audio_features()
+    assert extract is not None, (
+        'the real training_lib.py failed to load -- see the module-registration '
+        'comment on _load_extract_audio_features()'
+    )
+
+    audio_path = tmp_path / 'tone.wav'
+    sample_rate = 44_100
+    t = np.arange(sample_rate, dtype=np.float32) / sample_rate
+    samples = (0.2 * np.sin(2.0 * math.pi * 440.0 * t)).astype(np.float32)
+    pcm = (samples * 32767).astype('<i2')
+    with wave.open(str(audio_path), 'wb') as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(pcm.tobytes())
+
+    result = extract(audio_path)
+    assert result['analysis_status'] == 'ok'
+    assert result['duration_s'] > 0.0
 
 
 def test_build_detector_payload_essentia_fields_default_none_when_file_missing(tmp_path: Path) -> None:
