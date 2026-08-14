@@ -15,10 +15,10 @@ Status: draft — capturing open design questions for the philosophizing
   gated behind `acf_peak_interpolation_enabled` (off by default — an A/B
   test in progress, see § 6), `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (§ 10),
   `BeatTrackerV3` retired/consolidated into `BeatTracker` (§ 7b), and
-  two `library/c` LLM tuning recommendations applied:
-  `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` and
-  `phrase_under_over_hold_mult` `0.6 → 0.7` (§ 12).
-  Everything else is still
+  three `library/c` LLM tuning recommendations applied:
+  `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3`,
+  `phrase_under_over_hold_mult` `0.6 → 0.7`, and `kick_regularity_fit`
+  `0.9 → 1.2` (§ 12). Everything else is still
   proposal-stage, marked as such inline.
 Last updated: 2026-08-14
 
@@ -796,25 +796,39 @@ Usage" scores matched the already-known `drop_without_recent_build=47`
 lint finding from § 11 — owner: "a lot of these dj tracks drop w/o
 builds, no worries," so not treated as a real issue.
 
-**Two of the scoring pass's four tuning recommendations applied,
-owner-approved directly:** "let's go ahead and move the lock release
-conf & phase under over as recommended, after we get into library
-diversity we'll re-visit all the centroid stuff."
+**Three of the scoring pass's four tuning recommendations now applied,
+all owner-approved directly.** First pass: "let's go ahead and move the
+lock release conf & phase under over as recommended, after we get into
+library diversity we'll re-visit all the centroid stuff."
 
 - `_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` — LLM: "frequent lock
   changes suggest slightly tightening the release confidence to
-  stabilize lock states."
+  stabilize lock states." Director-scoped (`AutoVJController`).
 - `phrase_under_over_hold_mult` `0.6 → 0.7` — LLM: "builds were rushed;
   slightly increasing this multiplier could smooth transition timing."
+  Director-scoped. `_DIRECTOR_VERSION` → `1.0.0-rc.5`.
 
-Both are director-scoped constants (`AutoVJController`), not detector —
-`_DIRECTOR_VERSION` → `1.0.0-rc.5`.
+**Then, after being asked for the exact equation and current weight
+table, reconsidered on the spot:** "let's bring it to 1.2, wth! i have
+confidence in it as well and it's one of our newer additions, earning
+it's way up the ladder!"
+
+- `kick_regularity_fit` `0.9 → 1.2` in `_DEFAULT_RECO_WEIGHTS` —
+  recommender-scoped. `_RECOMMENDER_VERSION` → `1.0.0-rc.14`.
 
 **Deferred, not applied — explicitly for a later library-diversity
-pass:** `hard_techno`/`house` spectral-centroid recalibrations
-(`centroid_mu` `2450→3700`/`2650→4000`) and a `kick_regularity_fit`
-weight bump (`0.9→1.2`). Not rejected, just sequenced for later per the
-owner's own framing.
+pass:** only the `hard_techno`/`house` spectral-centroid recalibrations
+now remain (`centroid_mu` `2450→3700`/`2650→4000`). Not rejected, just
+sequenced for later per the owner's own framing.
+
+**Side note on attribution:** owner recalled `kick_regularity` as a
+personal contribution and asked whether there's a "Jason" comment on it.
+Checked directly — the codebase's only `Jason`-signed comments
+(`beat_grid.py`) are on `downbeat_regularity` (a related but distinct
+detector confidence-blend term), not on `kick_regularity_fit` (this
+recommender term) or the shared `kick_regularity` measurement itself
+(`_compute_kick_regularity()`). Reported as found, no comment added
+without confirming which specific piece is meant.
 
 Consistent with the project's advisory-only LLM-tuning policy — nothing
 here was auto-applied by packaging; each accepted change was reviewed
@@ -838,11 +852,13 @@ shipped disabled by default behind `acf_peak_interpolation_enabled` for
 a sequential A/B test; `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (in-band step
 size that was letting a ~20 BPM single-cycle drift through ungated);
 `BeatTrackerV3` retired and consolidated into `BeatTracker` (confirmed
-by 100% live-session agreement first); two `library/c` LLM tuning
+by 100% live-session agreement first); three `library/c` LLM tuning
 recommendations, owner-approved directly:
-`_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3` and
-`phrase_under_over_hold_mult` `0.6 → 0.7` (§ 12). `_DETECTOR_VERSION` →
-`1.0.0-rc.27`; `_DIRECTOR_VERSION` → `1.0.0-rc.5`.
+`_BPM_LOCK_RELEASE_CONFIDENCE` `0.28 → 0.3`,
+`phrase_under_over_hold_mult` `0.6 → 0.7`, and `kick_regularity_fit`
+`0.9 → 1.2` (§ 12). `_DETECTOR_VERSION` → `1.0.0-rc.27`;
+`_DIRECTOR_VERSION` → `1.0.0-rc.5`; `_RECOMMENDER_VERSION` →
+`1.0.0-rc.14`.
 
 **Proposed, awaiting consensus before implementation:**
 - Minimum lock dwell time — new gate category for the in-band drift gap
@@ -860,10 +876,11 @@ recommendations, owner-approved directly:
   behavior just retired above, but owner asked it be noted as worth
   revisiting once recommender work resumes, not closed off permanently
   (§ 7b).
-- `hard_techno`/`house` spectral-centroid recalibrations and a
-  `kick_regularity_fit` weight bump from `library/c`'s LLM scoring pass —
-  explicitly deferred to a later library-diversity pass, not rejected
-  (§ 12).
+- `hard_techno`/`house` spectral-centroid recalibrations from
+  `library/c`'s LLM scoring pass — explicitly deferred to a later
+  library-diversity pass, not rejected (§ 12). (`kick_regularity_fit`'s
+  weight bump, the other recommendation in this batch, was applied on
+  reconsideration — see "Shipped this round" above.)
 
 **Investigated and answered this round:**
 - *Why does the raw comb-filter argmax wander?* Root cause found (§ 6):

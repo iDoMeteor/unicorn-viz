@@ -2351,6 +2351,30 @@ Consistent with the project's advisory-only LLM-tuning policy
 accepted change was reviewed and approved individually. `auto_vj.py`
 `__version__` → `1.0.0-rc.73`; training-kit-01 → `0.16.7`.
 
+**Round Three, one more: `kick_regularity_fit` earns its way up.** Owner
+asked for the exact equation and current weight table, then reconsidered
+the deferred `kick_regularity_fit` bump on the spot: "let's bring it to
+1.2, wth! i have confidence in it as well and it's one of our newer
+additions, earning it's way up the ladder!" Applied —
+`kick_regularity_fit` `0.9 → 1.2` in `_DEFAULT_RECO_WEIGHTS`.
+`_RECOMMENDER_VERSION` → `1.0.0-rc.14`. Only the `hard_techno`/`house`
+spectral-centroid recalibrations from `library/c` remain deferred to the
+library-diversity pass now.
+
+The owner also asked whether there's a "Jason" attribution comment on
+`kick_regularity_fit`, recalling it as a personal contribution.
+Checked directly: the codebase's only `Jason`-signed comments
+(`beat_grid.py`) are on **`downbeat_regularity`** — a related but
+distinct signal (the detector's own confidence-blend term, "Downbeat
+regularity confidence idea & math by Jason. ;D") — not on
+`kick_regularity_fit` (the recommender's term, `auto_vj.py`) or
+`kick_regularity` (the underlying shared measurement,
+`_compute_kick_regularity()`). Reported honestly rather than assumed or
+fabricated; no attribution comment added without direct confirmation of
+which specific piece the owner means.
+
+`auto_vj.py` `__version__` → `1.0.0-rc.74`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
