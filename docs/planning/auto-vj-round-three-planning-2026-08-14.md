@@ -918,6 +918,64 @@ recommeder or director right now, we're focused on detector stuff
 still" — recommender/director items from scoring reports get flagged,
 not chased, while this phase stays detector-focused.
 
+## 15. Lock band tightened from measured jitter; a real-scaling-function idea for the next architecture
+
+`kick_regularity_fit` pulled back `1.2 → 1.0` per `library/e`'s LLM
+report ("less correlated... in this session"), owner-approved directly.
+The `0.25` release-confidence fix was verified live: the first full
+session running it from the start hit the best numbers of the night
+(lock `83.1%`, `2.45` toggles/min, `0.559` mean confidence).
+
+**The "floor" hunch — investigated, not acted on.** Owner noticed
+`_BPM_LOCK_RELEASE_CONFIDENCE` now equals `_V2_MIN_UPDATE_CONFIDENCE`
+and wondered if the floor itself should drop too. Checked directly:
+they gate different signals (blended `confidence` vs. raw
+`acf_confidence` — the shared value is coincidence, not identity), and
+in a healthy session `acf_confidence` was below `0.25` on only `3.1%` of
+locked rows. Not a chronic bottleneck right now — flagged for re-check
+on a rockier session rather than changed blind.
+
+**Lock band tightened a second time, this time from first-principles
+measurement rather than a single incident.** Owner: "do you think 8% is
+still too large... what about the 10.0 floor, how do you think that is
+performing?" Measured real cycle-to-cycle jitter directly (1440 samples,
+healthy locked session): median `0.04` BPM, p90 `1.04`, p95 `2.3`, p99
+`11.0`. The prior `0.08`/`10.0` band was still letting the top 1-2%
+noise tail through completely ungated. Tempo-split the same data and
+found the asymmetry the owner suspected: low-BPM material (chillstep,
+this project's problem child) has *tighter* jitter (p95 `1.60`) than
+high-BPM (`2.26`) yet the old flat floor gave it *more* relative slack.
+Shipped: `_V2_LOCK_BAND_PCT` `0.08 → 0.03`, `_V2_LOCK_BAND_MIN`
+`10.0 → 4.0`. `_DETECTOR_VERSION` → `1.0.0-rc.28`.
+
+**Open design question for the real v3, not implemented tonight.**
+Owner's closing question: "we should also consider, for round three,
+having them scale in a proportional way with bpm range that we control
+rather than letting them swing in just a random what other math happens
+to be doing way." Exactly right about the current shape — `max(flat,
+bpm*pct)` produces an emergent crossover (currently `133` BPM,
+`4.0/0.03`) that nobody designed, it's just wherever two independently-
+tuned numbers happen to intersect. Two design directions worth
+comparing when this gets picked up for real:
+
+1. **Derive it analytically from the ACF's own resolution.** The lag
+   grid's BPM-per-step is `d(BPM)/d(lag) = -BPM²/6000` (at
+   `_V2_ENV_RATE=100` Hz) — a known, closed-form function of BPM, not
+   something that needs fitting. A band like `k * BPM² / 6000` (single
+   constant `k` to tune) would be a genuinely continuous,
+   mechanistically-justified curve instead of a two-piece `max()`.
+2. **Fit a curve directly to real jitter-vs-BPM data** (this round's own
+   measurement, extended across more sessions/tempo buckets) rather than
+   assuming the analytical grid-resolution model is the whole story —
+   real jitter includes onset-timing noise and material-dependent
+   variance the pure grid-quantization model doesn't capture.
+
+Either approach replaces two independently-chosen constants with one
+deliberately-shaped function. Worth revisiting once interpolation (which
+changes what "grid resolution" even means for the detector) is a settled
+default rather than still being A/B tested in parallel — the two
+questions are coupled, not independent.
+
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix

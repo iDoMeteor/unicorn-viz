@@ -2464,6 +2464,65 @@ recommender/director items surfaced by scoring reports (e.g. `library/d`'s
 `tempo_fit`/`centroid_fit` suggestions) are flagged when they appear but
 not pursued further while this phase stays detector-focused.
 
+**Round Three, `kick_regularity_fit` pulled back; lock band tightened
+again from measured data.** `library/e`'s LLM report recommended pulling
+`kick_regularity_fit` back from `1.2` ("less correlated with correct
+recommendations in this session"); owner-approved directly ("let's take
+KRF from 1.2 to 1.0 as suggested"). Applied: `1.2 → 1.0`.
+`_RECOMMENDER_VERSION` → `1.0.0-rc.15`.
+
+Live-session verification of the `0.25` release-confidence fix (§ above)
+confirmed it working — the first session running it from the start hit
+the best numbers of the entire night (lock `83.1%`, `2.45` toggles/min,
+mean confidence `0.559`, all better than every prior session).
+
+**Owner's "floor" hunch, investigated with real data.** Owner noticed
+`_BPM_LOCK_RELEASE_CONFIDENCE` (`0.25`) now matches
+`_V2_MIN_UPDATE_CONFIDENCE` and asked whether the floor itself, or both
+together, should move lower. Checked directly against the live session:
+`_V2_MIN_UPDATE_CONFIDENCE` gates raw `acf_confidence` (a different
+signal from the blended `confidence` the release floor gates — the
+shared `0.25` is a coincidence of value, not the same quantity), and
+while locked, `acf_confidence` was below `0.25` on only `3.1%` of rows —
+not currently a chronic bottleneck in a healthy session. No change made;
+flagged that a rockier session would be the place to re-check this.
+
+**Lock band tightened a second time, this round from first principles
+rather than a single incident.** Owner: "do you think 8% is still too
+large... what about the 10.0 floor, how do you think that is
+performing?" Measured real cycle-to-cycle jitter directly from a healthy
+locked session (1440 samples): median `0.04` BPM, p90 `1.04`, p95 `2.3`,
+p99 `11.0`. The `0.08`/`10.0` band (from the prior tightening, above)
+was still letting through the top 1-2% noise tail completely ungated —
+exactly the tail where real problems live, and unnecessary now that the
+large-jump path is verified working well and fast for genuine
+transitions. Splitting the same data by tempo also surfaced an
+asymmetry: low-BPM material (chillstep/downtempo, the problem child most
+of the night) has *tighter* natural jitter than high-BPM (p95 `1.60` vs.
+`2.26`, consistent with the ACF lag grid being finer at low BPM — the
+same mechanism behind the interpolation fix's root cause) yet the old
+flat `10.0` floor gave it a *wider* relative allowance. Owner: "let's do
+both, now! i'm hardcore like that." Applied: `_V2_LOCK_BAND_PCT`
+`0.08 → 0.03`, `_V2_LOCK_BAND_MIN` `10.0 → 4.0`. `_DETECTOR_VERSION` →
+`1.0.0-rc.28`.
+
+**Open design question for the real next-gen engine, not implemented:**
+owner, closing out the night: "we should also consider, for round
+three, having them scale in a proportional way with bpm range that we
+control rather than letting them swing in just a random what other math
+happens to be doing way." The current `max(flat_floor, bpm * pct)` shape
+is exactly that — an emergent crossover point (currently ~133 BPM)
+nobody actually designed, just wherever two independently-chosen numbers
+happen to intersect. Recorded as a design candidate in the planning doc
+(§ 15) rather than acted on tonight: since the ACF's own lag-grid
+resolution is an analytically known function of BPM
+(`d(BPM)/d(lag) = -BPM²/6000`), the "expected noise floor" at a given
+tempo could be derived directly from that formula instead of fit as two
+arbitrary constants — a single continuous, mechanistically-justified
+curve rather than a two-piece `max()`. Worth revisiting once
+interpolation (which changes what "grid resolution" even means) is a
+settled default, not explored in parallel with it.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

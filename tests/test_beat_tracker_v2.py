@@ -1467,16 +1467,20 @@ def test_gate_stack_constants_have_the_retuned_values() -> None:
     assert _MOD._V2_LOW_BPM_FAST_CONFIDENCE == pytest.approx(0.45)
     assert _MOD._V2_MAX_BPM_STEP == pytest.approx(5.0)
     assert _MOD._V2_ANALYSIS_REGION_CONFIDENCE_MIN == pytest.approx(0.40)
-    # 2026-08-14, round three, live-session follow-up: 0.16 -> 0.08 --
-    # a single in-band step (19.56 BPM at ~125 BPM) slid through with
-    # zero gating under the old value and drove a repeated collapse/
-    # recover pattern in a live session. See docs/adr/vj-system.md.
-    assert _MOD._V2_LOCK_BAND_PCT == pytest.approx(0.08)
+    # 2026-08-14, round three, live-session follow-up: 0.16 -> 0.08 -- a
+    # single in-band step (19.56 BPM at ~125 BPM) slid through with zero
+    # gating under the old value and drove a repeated collapse/recover
+    # pattern in a live session. Then, same night, next session: 0.08 ->
+    # 0.03, and _V2_LOCK_BAND_MIN 10.0 -> 4.0 -- real measured
+    # cycle-to-cycle jitter (p95 ~2.3 BPM) showed the ~10 BPM band was
+    # still letting through the top 1-2% noise tail ungated. See
+    # docs/adr/vj-system.md.
+    assert _MOD._V2_LOCK_BAND_PCT == pytest.approx(0.03)
+    assert _MOD._V2_LOCK_BAND_MIN == pytest.approx(4.0)
     # Unchanged this pass, but promoted to named constants alongside the
     # above for LLM-tuning visibility -- confirm they still match their
     # pre-existing values.
     assert _MOD._V2_MIN_UPDATE_CONFIDENCE == pytest.approx(0.25)
-    assert _MOD._V2_LOCK_BAND_MIN == pytest.approx(10.0)
     assert _MOD._V2_TEMPO_HOLD_S == pytest.approx(10.0)
     assert _MOD._V2_LOW_BPM_GUARD == pytest.approx(115.0)
     assert _MOD._V2_FAST_BPM_GUARD == pytest.approx(130.0)
