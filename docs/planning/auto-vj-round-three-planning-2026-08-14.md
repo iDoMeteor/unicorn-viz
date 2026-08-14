@@ -976,6 +976,21 @@ changes what "grid resolution" even means for the detector) is a settled
 default rather than still being A/B tested in parallel — the two
 questions are coupled, not independent.
 
+**Shipped same night, logging only.** Owner's own addition: "we code
+them both up but just log both for one session with everything else as
+is, and see what we think of each." Both candidates now compute and log
+every cycle a tempo is established — `lock_band_candidate_analytical`
+(`k=1.0` lag-grid steps at the current BPM) and
+`lock_band_candidate_empirical` (`3.0` BPM flat, from real jitter — an
+OLS regression against tonight's own data found no clean BPM-dependence,
+so this candidate directly tests whether the whole "scale with BPM" idea
+even holds up empirically). `lock_band_bpm` also added, exposing the
+real live value so all three sit on the same row for direct comparison.
+**Neither candidate gates anything — the actual accept/reject gate is
+unchanged**, still reading only `_V2_LOCK_BAND_MIN`/`_V2_LOCK_BAND_PCT`.
+Data to review once the next overnight session (with everything else
+from tonight also live) is packaged in the morning.
+
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix

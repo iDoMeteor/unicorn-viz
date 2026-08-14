@@ -1653,3 +1653,57 @@ def test_acf_interpolation_delta_property_reads_the_cached_value() -> None:
     bt = BeatTracker({})
     bt._acf_interpolation_delta_bpm = -1.25
     assert bt.acf_interpolation_delta_bpm == pytest.approx(-1.25)
+
+
+# ---------------------------------------------------------------------------
+# Lock-band candidate shapes: logged only, never gate anything (2026-08-14,
+# round three) -- owner: "code them both up but just log both for one
+# session with everything else as is, and see what we think of each."
+# ---------------------------------------------------------------------------
+
+def test_lock_band_candidates_start_at_zero() -> None:
+    bt = BeatTracker({})
+    assert bt.lock_band_bpm == 0.0
+    assert bt.lock_band_candidate_analytical == 0.0
+    assert bt.lock_band_candidate_empirical == 0.0
+
+
+def test_lock_band_bpm_matches_the_real_live_formula() -> None:
+    """lock_band_bpm must track max(_V2_LOCK_BAND_MIN, bpm*_V2_LOCK_BAND_PCT)
+    exactly -- it's read-only instrumentation for the real gate, not an
+    independent computation that could drift from it."""
+    bt = BeatTracker({})
+    bt._bpm = 200.0   # comfortably above the flat-floor/pct crossover
+    expected = max(_MOD._V2_LOCK_BAND_MIN, 200.0 * _MOD._V2_LOCK_BAND_PCT)
+    assert bt.lock_band_bpm == pytest.approx(expected)
+
+
+def test_lock_band_candidates_populate_once_locked() -> None:
+    """Unlike long_candidate_spread (only updated during an actual
+    out-of-band evaluation), these update on every cycle that reaches the
+    self._bpm > 0.0 block -- by design, so every row is directly
+    comparable, not just rows where a large jump happened to be
+    evaluated. Populates as soon as a real tempo is established."""
+    bt = BeatTracker({})
+    assert bt.lock_band_candidate_analytical == 0.0
+
+    _run_steady_click_track(bt, bpm=123.0, duration_s=30.0, jitter_s=0.01)
+
+    # Analytical: k * bpm^2 / (60 * _V2_ENV_RATE), k=1.0 by default.
+    assert bt.lock_band_candidate_analytical > 0.0
+    # Empirical candidate is a flat constant regardless of tempo.
+    assert bt.lock_band_candidate_empirical == pytest.approx(
+        _MOD._V2_LOCK_BAND_CANDIDATE_EMPIRICAL_BPM
+    )
+
+
+def test_lock_band_candidates_never_affect_the_real_gate() -> None:
+    """The candidates are logged-only by construction -- this locks in
+    that guarantee at the constant level: the real formula must still
+    read only _V2_LOCK_BAND_MIN/_V2_LOCK_BAND_PCT, not either candidate."""
+    bt = BeatTracker({})
+    bt._bpm = 130.0
+    real = bt.lock_band_bpm
+    bt._lock_band_candidate_analytical = 999.0
+    bt._lock_band_candidate_empirical = 999.0
+    assert bt.lock_band_bpm == pytest.approx(real)
