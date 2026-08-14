@@ -2375,6 +2375,55 @@ which specific piece the owner means.
 
 `auto_vj.py` `__version__` → `1.0.0-rc.74`.
 
+**Round Three, closing: the B run — interpolation A/B result, and a
+standing caveat for future external references.** Owner packaged the
+interpolation B run (`library/d`, session `autovj-20260813T214252.jsonl`,
+47.7 min) and asked for independent analysis alongside the LLM report.
+
+**The A/B result, on the exact metric the persistence gate checks
+(`long_candidate_spread`, compared against `6.0` every large-jump
+evaluation):**
+
+| Metric | A (`library/c`, interp off) | B (`library/d`, interp on) |
+|---|---:|---:|
+| `long_candidate_spread` mean | `44.62` | `37.45` |
+| `long_candidate_spread` median | `42.42` | `41.02` |
+| fraction `<= 6.0` (gate would clear) | `8.5%` | `19.9%` |
+| lock % | `68.6%` | `77.9%` |
+| lock toggles/min | `4.55` | `3.00` |
+| mean confidence | `0.513` | `0.547` |
+| v1 (shadow2) mean disagreement | `25.6` BPM | `22.2` BPM |
+| `acf_interpolation_delta_bpm` engagement | `0%` (confirmed off) | `98.0%` of cycles; mean abs delta `0.20` BPM, median `0.09`, max `2.21` |
+
+Interpolation engaged on nearly every cycle (as expected — most peaks
+aren't exactly on-grid) with small, bounded corrections, and the
+fraction of large-jump evaluations tight enough to clear the persistence
+gate roughly **doubled** (`8.5% → 19.9%`). Lock stability, churn, and
+mean confidence all moved the same direction. LLM scores were mixed on
+the surface (detector `3.25/5` unchanged, "Lock Stability" dimension
+read `2/5` vs. `3/5` — but recommender `3.0/5` and director `3.0/5` both
+improved from `2.75`/`2.5`) — the *direct* metric comparison above is the
+more reliable signal for judging this specific mechanism. Not yet
+promoted to the default (`_V2_ACF_INTERPOLATION_ENABLED` stays `False`
+pending the owner's own call after the overnight "C" run, which bundles
+this with every other round-three change).
+
+**LLM scoring standing caveat.** Owner, reflecting on the same night's
+measured improvement: "we also need a note for the llm scoring, that it
+is *possible* that our live bpm detection is, or may become, more
+accurate than other methods... we're not there yet, but we were close
+once." `essentia_note` (training-kit-01's LLM prompt) extended: whenever
+`external_agreement` stops being null in a future session, the LLM must
+not assume the external reference beats the in-house detector by
+default — treat a disagreement as open unless the session's own data
+(low confidence, real candidate instability) supports the detector being
+wrong.
+
+**Next: owner starting an overnight "C" run** with every round-three
+change live together (tighter lock band, consolidated engine, three
+LLM-recommended weight/constant changes, interpolation on, v1 shadow2)
+— the first session to combine all of it.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
