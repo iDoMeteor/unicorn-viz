@@ -2424,6 +2424,46 @@ change live together (tighter lock band, consolidated engine, three
 LLM-recommended weight/constant changes, interpolation on, v1 shadow2)
 — the first session to combine all of it.
 
+**Round Three, self-correction: the "C" run caught a real regression in
+the same night's own work.** Partway through the overnight run, owner:
+"i don't think c run is doing as well as b run... it's def not doing as
+well." Checked the live session directly rather than assuming — two
+findings:
+
+1. Interpolation was already on (`94%` cycle engagement, confirmed) —
+   not the cause, contrary to the owner's first suspicion.
+2. `_BPM_LOCK_RELEASE_CONFIDENCE`'s `0.28 → 0.3` change (applied
+   earlier this round, see above) was backwards: raising the *release*
+   floor narrows the hysteresis band (gain `0.55` minus release),
+   making a lock *easier* to lose, not harder — the opposite of its own
+   "stabilize lock states" rationale. Confirmed directly against the
+   live session: `71%` of its lock-loss events happened at a confidence
+   that would have survived under the original `0.28`.
+
+Owner: "let's try release confidence .25? .26? what's your math say?"
+Backtested both candidates against the full actual lock-loss confidence
+distributions of two real sessions (the "C" run in progress, 30 events;
+the "B" run, 71 events) rather than guessing: `0.25` retained more locks
+than `0.26` at both (C: `4/30` vs. `5/30` still release; B: `20/71` vs.
+`25/71`), and `0.25` lines up exactly with `_V2_MIN_UPDATE_CONFIDENCE`
+(`beat_grid.py`'s own floor for accepting any BPM update at all) — a
+principled stopping point rather than an arbitrary pick between two
+close numbers. Applied: `_BPM_LOCK_RELEASE_CONFIDENCE` `0.3 → 0.25`.
+`_DIRECTOR_VERSION` → `1.0.0-rc.6`; `auto_vj.py` `__version__` →
+`1.0.0-rc.75`.
+
+`_BPM_LOCK_CONFIDENCE`'s own pending recommendation (`0.55 → 0.6`, from
+`library/d`, the gain/acquire threshold — a different constant from the
+release floor above) is deliberately **not** acted on yet — owner:
+"let's just keep our eye on that over the next couple runs and see if
+that recommendation changes." Watching, not applying.
+
+Owner, separately, mid-session: "btw we're not concerned w/ recommeder
+or director right now, we're focused on detector stuff still" —
+recommender/director items surfaced by scoring reports (e.g. `library/d`'s
+`tempo_fit`/`centroid_fit` suggestions) are flagged when they appear but
+not pursued further while this phase stays detector-focused.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

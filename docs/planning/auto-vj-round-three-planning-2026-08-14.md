@@ -888,6 +888,35 @@ to combine every round-three change live together (tighter lock band,
 consolidated engine, three applied LLM-recommended weight/constant
 changes, interpolation on, v1 shadow2 all at once).
 
+## 14. Self-correction, mid-"C"-run: `_BPM_LOCK_RELEASE_CONFIDENCE` was backwards
+
+Owner, partway through the overnight run: "i don't think c run is doing
+as well as b run... it's def not doing as well." Checked live rather
+than assuming: interpolation was already on (`94%` engagement, not the
+cause). The actual cause — `_BPM_LOCK_RELEASE_CONFIDENCE`'s `0.28 → 0.3`
+change from § 12 was backwards: raising the *release* floor narrows the
+hysteresis band, making a lock easier to lose, contradicting its own
+"stabilize" rationale. Confirmed against the live session: `71%` of its
+lock-loss events happened at a confidence that would have survived
+under the original `0.28`.
+
+Owner: "let's try release confidence .25? .26? what's your math say?"
+Backtested both against two real sessions' full lock-loss confidence
+distributions (C: 30 events, B: 71 events) — `0.25` won both, and
+matches `_V2_MIN_UPDATE_CONFIDENCE` exactly. Applied:
+`_BPM_LOCK_RELEASE_CONFIDENCE` `0.3 → 0.25`. `_DIRECTOR_VERSION` →
+`1.0.0-rc.6`.
+
+`_BPM_LOCK_CONFIDENCE`'s own pending `library/d` recommendation
+(`0.55 → 0.6`, the gain/acquire threshold, a different constant) stays
+unapplied — owner: "let's just keep our eye on that over the next
+couple runs and see if that recommendation changes." Watching only.
+
+**Scope reminder, same message thread:** "we're not concerned w/
+recommeder or director right now, we're focused on detector stuff
+still" — recommender/director items from scoring reports get flagged,
+not chased, while this phase stays detector-focused.
+
 ## Summary of what's actually decided vs. still open
 
 **Shipped this round:** `_timing_scale_from_bpm` neutral point fix
