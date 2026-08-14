@@ -2571,6 +2571,62 @@ guessed at, since tonight's sessions never exercised DnB/hardstyle
 material. `unicornviz.__version__` → `1.0.0-beta.92`; `auto_vj.py`
 `__version__` → `1.0.0-rc.79`.
 
+**Round Three, the morning after: startup confidence raised, `library/g`
+and `library/h` reviewed.** Two overnight/morning sessions packaged and
+reviewed. `library/g` (444 min, the session that ran through the night)
+confirmed the rc.28 lock-band tightening (`0.03`/`4.0`) was live for the
+whole run, but landed before the dual lock-band candidate logging and
+the two audit cross-check fields (`5deb790`/`6b4fedc`) — both committed
+minutes after the session had already started, so `g` carries none of
+that data. `library/h` (82 min) surfaced two real findings:
+
+1. Owner: "raise start up lock conf." `_V2_STARTUP_CONFIDENCE` `0.4 →
+   0.45`. No fresh marginal-case incident this round to justify a
+   specific target — `h`'s own cold start locked at `acf_conf=1.00`,
+   nowhere near either threshold — so this is a conservative further
+   step past the rc.24 fix, not a data-driven retune. Confirmed by
+   reading the gate site directly that this constant fires *only* on a
+   session's first-ever lock (`self._bpm <= 0.0`); every later re-lock,
+   including at track boundaries, is gated by `_V2_MIN_UPDATE_CONFIDENCE`
+   instead — so the wide spread of per-track "first lock after a track
+   change" confidences observed in `h` (0.35 to 0.90) is irrelevant to
+   this constant and wasn't used to tune it.
+2. Owner: "humming seems to trip the detector up? (steady man track)."
+   "Steady Man (Original Mix)" alone accounted for 12 of `h`'s 45 lock
+   transitions (6 gains/6 losses, 27% of the session's churn from one
+   track out of 20); a second track ("La Trompeta") accounted for 6
+   more — together 40% of the session's churn from 2 of 20 tracks, while
+   9 of 20 tracks locked cleanly with zero transitions. Row-level
+   inspection during Steady Man's hunting windows shows `kick_regularity`
+   repeatedly collapsing toward `0.0` while `bass`/`energy` stay high —
+   consistent with a low-transient-density passage (no lyric/vocal-content
+   signal exists to confirm "humming" specifically, but the behavioral
+   fingerprint fits). Cross-session comparison against the same track in
+   `library/f` (older code, pre-rc.28 lock band) showed 24 transitions
+   there vs. 12 in `h` — the tightening roughly halved churn on this
+   specific hard track without eliminating it. Same-song comparisons
+   across `library/e`/`f`/`g`/`h` more broadly showed strong before/after
+   evidence for the rc.28 tightening ("What Is Love"/"Rain Over Me": 6
+   transitions in `f` → 0 in `g`; "You And I": 12 in `e` → 0 in `g`;
+   "Touch The Sky": 26 in `e` → 2 in `g`) alongside a handful of same-song,
+   same-code (`g` vs. `h`) pairs that behaved differently between
+   sessions ("Move Ya Body," "Scream & Shout," "Pull Over I I": 0
+   transitions in `g`, 2-4 in `h`, with real BPM excursions down to the
+   60s-90s in `h` that weren't present in `g`) — flagged as an open
+   reproducibility question (session/mix context dependence, not a code
+   regression, since both sessions ran identical detector code) rather
+   than investigated further this round.
+
+Also caught and fixed a real staleness gap while cross-checking commit
+timestamps: `training-kit-01`'s `_DETECTOR_CONSTANT_DEFAULTS` fallback
+table still had `_BPM_LOCK_RELEASE_CONFIDENCE` at the mis-tuned `0.3`
+instead of the corrected `0.25` (only affects that tool's standalone
+fallback path when auto-vj-01 isn't present in the checkout — no
+packaged session was ever actually affected). Synced, along with the new
+`_V2_STARTUP_CONFIDENCE` value. `_DETECTOR_VERSION` → `1.0.0-rc.29`;
+`_VJ_WEIGHTS_DOC_VERSION` → `53`; `auto_vj.py` `__version__` →
+`1.0.0-rc.80`; `training-kit-01` → `0.16.11`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)
