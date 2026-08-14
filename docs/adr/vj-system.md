@@ -2672,7 +2672,14 @@ wired up.** Four owner requests in one message, all landed:
    alongside the tempo it already publishes (`0.185.0`). auto-vj-01
    captures it into every live/sequence corpus row as a new `track_path`
    column, via a new `_get_mixer_track_path()` mirroring the existing
-   `_get_mixer_bpm()` exactly (`1.0.0-rc.83`).
+   `_get_mixer_bpm()` exactly (`1.0.0-rc.83`). media-01 publishes on the
+   same bus too (new `_publish_track_path()`, called from `update()`,
+   `0.22.0`) — owner, moments later: "essentia should work on media
+   player data as well, those are using the same local files as the
+   mixer." Both sources publish under their own name (`dj_mixer`/
+   `media`), so `get_track_path()`'s existing freshest-wins logic picks
+   whichever is actually playing without either drop-in knowing about
+   the other.
 4. **Real `external_agreement` data, wired up at last.** Owner: "why are
    we not getting essentia data for our tracks... let's wire it up! and
    the mixer one too, each get their own column(s) in the corpii." The
