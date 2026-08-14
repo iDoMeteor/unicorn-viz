@@ -2729,6 +2729,73 @@ scope for this idea; the signal should stay simple and metadata-driven,
 built only for sources that can say so directly, whenever this gets
 picked back up.
 
+**Round Three, the morning after (part three): a real 100+ second
+convergence stall, diagnosed; two persistence-cycle candidates logged;
+playlist self-naming fixed for mixer/media.** Owner reported a real live
+session (140 BPM → an 88 BPM Shabba Ranks "Steady Man" accident in the
+queue, then → a 133 BPM track), packaged as `garbage/m` and analyzed
+directly against the raw decision log:
+
+1. **`_BPM_LOCK_RELEASE_CONFIDENCE` cleared as a suspect.** Owner's own
+   hypothesis ("maybe our release floor is too low now?") was checked
+   against the data and ruled out: that constant only gates the
+   `bpm_locked` display/state flag (visibly flickering True/False in
+   the log while the BPM *value* sat completely frozen underneath it) —
+   a different mechanism from what was actually observed.
+2. **Root cause: the real 25-cycle large-jump-persistence gate, not
+   idle, but losing a war of attrition against genuinely multi-modal
+   candidates.** Both transitions froze for 100+ seconds; `large_jump_
+   persistence_reject_count` climbed by ~100-150 during each stall,
+   meaning fresh candidates were proposed and rejected every cycle, not
+   nothing happening. `long_candidate_median` swung wildly the whole
+   time — 139, 107, 92, 86, 127, 171, 82 in one stretch — real,
+   harmonically-related readings (reggae/dancehall's one-drop groove is
+   a classic case for this), not noise. The gate's only criterion is
+   "has the recent window gotten quiet," with no notion of which
+   candidate is more likely correct, so when it does eventually clear,
+   it's a coin-flip which cluster won — the first transition landed
+   briefly on a wrong alias (147 BPM) before gliding to the correct 88.44
+   and holding ~49s, then crept back up through 93→108→115→111→108→105
+   for the rest of the track; the second transition was still stuck at
+   105.78 when the owner ended the session. Same underlying gap as audit
+   finding T5 (no octave/harmonic-disambiguation policy), manifesting via
+   the persistence gate specifically rather than a simple half/double
+   error — full write-up and fix proposal in
+   [docs/planning/auto-vj-round-three-planning-2026-08-14.md](../planning/auto-vj-round-three-planning-2026-08-14.md)
+   § 17.
+3. **Two logged-only candidates for the persistence window itself.**
+   Owner: "i told you that 25 candidates was too many! test some more
+   reasonable values for that." `_V2_LARGE_JUMP_PERSISTENCE_CYCLES_
+   CANDIDATE_SHORT` (10) / `_MEDIUM` (15) evaluated in parallel with the
+   real 25-cycle window, own `large_jump_persistence_cleared_count_
+   short`/`_medium` and `..._reject_count_short`/`_medium` properties —
+   gates nothing yet, pending real comparative data. `_DETECTOR_VERSION`
+   → `1.0.0-rc.31`.
+4. **Playlist self-naming fixed for dj-mixer-01 and media-01 sessions.**
+   Separately, owner: "our training packager is supposed to be
+   self-naming it's playlist when the data is available (and it should
+   be from the mixer & mediaplayer) but i'm having to type it in every
+   time." Root cause: `package_training_set.py`'s existing playlist-name
+   inference reads `playlist_context.get('name')` from the active
+   now-playing snapshot — real, working logic, but only ever populated
+   by spotify-01. media-01's snapshot had a `playlist_context` key that
+   was hardcoded `None` despite `self.active_playlist` already being
+   real, tracked state; dj-mixer-01's snapshot didn't have the key at
+   all, despite `Browser.active_set` (`sets` mode) being its own
+   equivalent saved-crate/playlist concept. Both now populate the same
+   `{'id', 'name', 'uri', 'total_tracks', 'owner'}` shape spotify-01
+   uses, `None` when no named playlist/set is actually active (matching
+   Spotify's own "not in a playlist" behavior) — media-01 `0.23.0`,
+   dj-mixer-01 `0.186.0`.
+5. **Live session check-in, first real data for two of tonight's
+   earlier additions.** A concurrently-running "house training 01"
+   session (started right at this round's first commit) showed 97.8%
+   lock coverage over 30 minutes, mostly clean single-track spans — and
+   the first live engagement data for the sparse-evidence gate shipped
+   earlier this round: 86 `kick_evidence_reject_count` over the session,
+   concentrated in two tracks with more dynamic content, nothing
+   alarming.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

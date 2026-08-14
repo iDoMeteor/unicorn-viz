@@ -1529,3 +1529,111 @@ at — it needs real fast-genre session data this project doesn't have
 from tonight, and guessing at a policy without that data would be
 exactly the kind of unvalidated tuning this whole night's methodology
 has been arguing against.
+
+---
+
+## 17. T5 proposal: real evidence at last, and a scoped first fix
+
+### 17.1 What changed since § 16.7
+
+§ 16.7 above left T5 (no octave/harmonic-disambiguation policy)
+deliberately untouched: "it needs real fast-genre session data this
+project doesn't have from tonight, and guessing at a policy without
+that data would be exactly the kind of unvalidated tuning this whole
+night's methodology has been arguing against." That data has now
+arrived — not from DnB/hardstyle as originally envisioned, but from a
+different genre in the same failure category: reggae/dancehall's
+one-drop groove, via an accidental 140 → 88 BPM (Shabba Ranks, "Steady
+Man") transition in `garbage/m`. See the ADR's "Round Three, the
+morning after (part three)" entry for the full diagnostic trace. The
+short version: two real track-boundary transitions each froze the
+published BPM for 100+ seconds, not from inactivity but from the
+large-jump-persistence gate rejecting dozens of genuinely multi-modal
+candidates every cycle — real, harmonically-related readings the raw
+ACF kept finding, with no mechanism to prefer the true fundamental over
+an alias.
+
+### 17.2 What the persistence-cycles candidates (§ above) do and don't fix
+
+Tonight's `_V2_LARGE_JUMP_PERSISTENCE_CYCLES_CANDIDATE_SHORT`/`_MEDIUM`
+logging (10/15 cycles vs. the real 25) tests a *different* lever: how
+often the window gets *evaluated*, not what it does with a genuinely
+multi-modal candidate stream. A shorter window checks more often, which
+should shorten the average wait for a "lucky" quiet stretch even under
+the same ambiguity — but it doesn't change the fact that when a real
+one-drop-style track offers 2-3 competing readings, *any* window size
+is picking among them essentially by chance. It's a complementary,
+already-shipped, zero-risk lever, not a substitute for the fix below.
+
+### 17.3 Proposed fixes, ranked by scope
+
+**Option A — reset the persistence window on acceptance (small, safe,
+recommended as the first landing).** Currently, once the persistence
+gate finally accepts a jump, `_long_candidate_history` (and now the two
+candidate deques) keep whatever mix of old/new readings they already
+had — a `deque(maxlen=N)` only replaces entries FIFO, so a freshly
+accepted 88.44 still has to "outvote" leftover contamination for the
+next `N` cycles. This is very likely why the *second* half of the
+observed failure happened at all: after correctly landing on 88.44 and
+holding it ~49s, the value crept back up through the same alias family
+(93→108→115→...) rather than staying put. Clearing all three deques
+(and their cleared/reject counters' *history*, not the cumulative
+counters themselves) the moment a large jump is actually accepted would
+give the newly-locked tempo a clean slate instead of an already-half-
+contaminated window. Self-contained, no new signal needed, directly
+testable with the exact logging infrastructure already shipped tonight
+(compare reject-rate-after-acceptance before/after). This is the piece
+I'd fold into round three now, pending the owner's go-ahead — it's a
+few lines, mechanically obvious, and low-risk because it can only
+*remove* stale evidence, never fabricate new evidence to accept a wrong
+jump faster.
+
+**Option B — track-boundary reset via the deferred track-reset
+signal.** Directly addresses the "outgoing track's tail poisons the
+incoming track" mechanism identified earlier this round (§ above, "an
+explicit track-reset signal" — already discussed and *deliberately
+deferred* by the owner this same session). Would compose naturally with
+Option A (both clear the same deques, just on different triggers) but
+depends on infrastructure the owner explicitly asked to hold off on.
+**Not proposed for this round** — noting the connection so it isn't
+re-discovered as a surprise whenever the reset-signal idea gets picked
+back up.
+
+**Option C — octave-fold the persistence window itself (large,
+real T5 fix, NOT proposed for this round).** The architecturally
+"correct" fix: before computing the window's spread/median, fold each
+raw candidate toward the window's own dominant harmonic family (reusing
+the comb-filter/tactus-fold machinery `_effective_tactus_ratio()`/
+`_tactus_fold_accepted()` already use for single-candidate fold
+decisions, but applied to clustering a whole window rather than one
+candidate against the current lock). This is genuine new engineering,
+not a constant retune: it needs a clustering step that doesn't exist
+yet, and — critically — no way exists to backtest it against historical
+sessions, because raw per-cycle ACF candidates were never logged (only
+the coarse ~1s decision-tick snapshots survive). Any version of this
+would need to ship as pure logging first (log what the fold *would*
+have decided, same "compare before committing" discipline as
+everything else this round) before ever gating on it, and would benefit
+from a synthetic multi-modal-candidate test harness (the same style
+already used to validate the tempo-hold-gate removal's 20-pair sweep)
+rather than relying on real sessions alone.
+
+### 17.4 Recommendation: fold Option A now, hold B and C
+
+T5 is real and large enough to matter — it just cost a real session two
+multi-minute stalls in one set — but it is **not** large enough, as a
+*whole*, to knock out in the final stretch of an already-long night
+without proper testing infrastructure for the parts that need it
+(Option C specifically). The right split: **Option A is small, safe,
+and testable with what already exists — propose landing it this round,
+pending explicit go-ahead** (per the standing "flag + confirm before
+detector changes" policy). **Option B stays deferred** with the
+track-reset-signal idea it depends on. **Option C is real-v3-adjacent
+work** — it deserves its own dedicated session with a synthetic
+multi-modal-candidate harness (extending the existing 20-pair
+transition sweep pattern to cover *competing* candidates, not just a
+single clean tempo change), not a rushed implementation against one
+incident. This keeps the v2-final-candidate checkpoint (§ 16.4)
+protected while still making forward progress on a finding that's now
+backed by two real incidents in one session rather than a purely
+theoretical audit flag.
