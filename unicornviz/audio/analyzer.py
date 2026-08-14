@@ -398,6 +398,27 @@ class Analyzer:
             # reading it this frame. Sticky like a real tempo estimate;
             # only overwritten by the next confident feed.
 
+    @property
+    def refractory_s(self) -> float:
+        """The currently active BPM-derived onset refractory, in seconds
+        (2026-08-14, round three, audit cross-check item 12.8 #1).
+
+        `0.0` when no confident BPM estimate is active (falls back to the
+        strength-scaled cooldown instead -- see `set_expected_bpm()`'s own
+        docstring). Exposed publicly so a drop-in can log it without
+        reaching into `_refractory_s` directly (see CLAUDE.md's Public
+        Runtime Surface Rules). Added specifically to test a candidate
+        root-cause mechanism flagged by `docs/audits/2026-08-13-bpm-
+        tempo-detection-audit.md` (finding T4) and cross-checked in
+        `docs/planning/auto-vj-round-three-planning-2026-08-14.md` § 12.2:
+        at a wrong, locked-in-error BPM, this refractory can suppress
+        every other true beat at the source, making the onset evidence
+        itself agree with the wrong lock. Logging this value is the cheap
+        first half of testing that hypothesis; see that section for the
+        full reasoning and the offline check it enables.
+        """
+        return float(self._refractory_s) if self._refractory_s is not None else 0.0
+
     # ------------------------------------------------------------------
     # P2 — time-based onset envelope helpers
     # ------------------------------------------------------------------

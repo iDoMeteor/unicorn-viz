@@ -1707,3 +1707,47 @@ def test_lock_band_candidates_never_affect_the_real_gate() -> None:
     bt._lock_band_candidate_analytical = 999.0
     bt._lock_band_candidate_empirical = 999.0
     assert bt.lock_band_bpm == pytest.approx(real)
+
+
+# ---------------------------------------------------------------------------
+# phase_confidence_calibrated (2026-08-14, round three, audit cross-check
+# item 12.8 #3) -- rescales phase_confidence so its chance floor
+# (2*_V2_PHASE_TOL) reads as 0.0 instead of a nonzero "zero point."
+# ---------------------------------------------------------------------------
+
+def test_phase_confidence_calibrated_maps_chance_floor_to_zero() -> None:
+    bt = BeatTracker({})
+    bt._phase_confidence = 2.0 * bt._phase_tol   # exactly chance level
+    assert bt.phase_confidence_calibrated == pytest.approx(0.0)
+
+
+def test_phase_confidence_calibrated_maps_one_to_one() -> None:
+    bt = BeatTracker({})
+    bt._phase_confidence = 1.0
+    assert bt.phase_confidence_calibrated == pytest.approx(1.0)
+
+
+def test_phase_confidence_calibrated_clamps_below_chance_to_zero() -> None:
+    """A reading below the chance floor (possible transiently) must not
+    go negative."""
+    bt = BeatTracker({})
+    bt._phase_confidence = 0.0
+    assert bt.phase_confidence_calibrated == pytest.approx(0.0)
+
+
+def test_phase_confidence_calibrated_does_not_mutate_the_raw_value() -> None:
+    """Reporting-only -- the raw phase_confidence (and hence the
+    confidence blend) must be completely unaffected."""
+    bt = BeatTracker({})
+    bt._phase_confidence = 0.35
+    _ = bt.phase_confidence_calibrated
+    assert bt.phase_confidence == pytest.approx(0.35)
+
+
+def test_phase_confidence_calibrated_tracks_a_real_configured_tolerance() -> None:
+    """Uses the instance's own _phase_tol (config-overridable), not the
+    module default -- matches the actual chance floor for this tracker's
+    real configuration, not a hardcoded assumption."""
+    bt = BeatTracker({'phase_tolerance': 0.20})
+    bt._phase_confidence = 0.40   # exactly 2*0.20
+    assert bt.phase_confidence_calibrated == pytest.approx(0.0)

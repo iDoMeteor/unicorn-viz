@@ -2523,6 +2523,54 @@ curve rather than a two-piece `max()`. Worth revisiting once
 interpolation (which changes what "grid resolution" even means) is a
 settled default, not explored in parallel with it.
 
+**Round Three, the dual lock-band candidates shipped, then the closing
+study mission.** Owner's own addition to the scaling-function idea
+above: "we code them both up but just log both for one session with
+everything else as is, and see what we think of each." Shipped, pure
+logging: `lock_band_candidate_analytical` (`k=1.0` lag-grid steps at the
+current BPM) and `lock_band_candidate_empirical` (a flat `3.0` BPM
+constant from real measured jitter — an OLS regression against real data
+found no clean BPM-dependence, so this candidate directly tests whether
+BPM-scaling holds up at all), plus `lock_band_bpm` exposing the real
+live value for a same-row three-way comparison. Neither candidate gates
+anything; the actual gate is unchanged.
+
+Also fixed a staged-but-unstaged oversight from earlier the same round
+(`__version__`/`_VJ_WEIGHTS_DOC_VERSION` bumped in source but not
+included in a prior commit) and, separately, twice this same night,
+recovered from an *accidentally* detached HEAD in both submodules —
+`git submodule update` checking out the SHA the main repo's index still
+had recorded, before the pointer bump landed — via a plain `git checkout
+<branch>` each time. Neither was intentional or destructive; noted here
+only because CLAUDE.md's Git History Safety section treats detached HEAD
+as a hard-stop condition worth a paper trail even when the recovery is
+routine.
+
+Closing the night: owner asked for a full study pass — "we had an
+individual expert analysis of all our work do a full audit and plan for
+official v3 as well as then evaluate our current plans for round 3...
+check out their notes in your round 3 doc and 2026-08-13-bpm-tempo-
+detection-audit.md... update the docs as you wish, but no deletions,"
+while explicitly reserving tonight's current point as the best candidate
+for a final v2 detector, distinct from whatever "official v3" design
+work comes next. Full findings-by-finding cross-reference, two more
+pure-logging additions the audit itself proposed as the cheap first
+step toward its T2/T4 findings (`analyzer_refractory_s`,
+`phase_confidence_calibrated` — new public `Analyzer.refractory_s`
+property in core), an explicit v2-final-candidate checkpoint, and the
+v3/HMM roadmap synthesis are all in
+[docs/planning/auto-vj-round-three-planning-2026-08-14.md](../planning/auto-vj-round-three-planning-2026-08-14.md)
+§ 16 — not duplicated here in full. Headline finding: tonight's
+interpolation fix (§ 6) and the audit's own #1-ranked recommendation
+(T1, parabolic peak interpolation) are the same fix, arrived at
+independently, before this study pass ever opened either document — real
+convergent validation in both directions. The one finding with zero
+round-three activity in any direction is T5 (no explicit octave policy
+for fast genres) — flagged plainly as the biggest remaining gap, not
+guessed at, since tonight's sessions never exercised DnB/hardstyle
+material. `unicornviz.__version__` → `1.0.0-beta.92`; `auto_vj.py`
+`__version__` → `1.0.0-rc.79`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

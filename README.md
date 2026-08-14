@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.91**
+**Version 1.0.0-beta.92**
 
 ## Contact Me!
 
@@ -557,6 +557,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.92** — `unicornviz/audio/analyzer.py`: new public
+  `Analyzer.refractory_s` property exposing the BPM-fed onset refractory
+  (`set_expected_bpm()`'s internal `_refractory_s`) without a drop-in
+  needing to reach across the module boundary. Added to test a candidate
+  root-cause mechanism for BPM-lock entrenchment flagged by
+  `docs/audits/2026-08-13-bpm-tempo-detection-audit.md` (finding T4): a
+  confident-but-wrong BPM estimate can suppress every other true beat at
+  the source, making the onset evidence itself agree with the wrong
+  lock. See [docs/adr/vj-system.md](docs/adr/vj-system.md).
 - **1.0.0-beta.91** — `unicornviz/audio/analyzer.py`: `_ASSUMED_SAMPLE_RATE`
   was a hardcoded `48000` constant used directly for the FFT bin→Hz
   mapping and onset/vocal-envelope `dt` math, never reconciled with

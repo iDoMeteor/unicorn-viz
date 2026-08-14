@@ -534,3 +534,78 @@ def test_build_live_training_row_includes_both_shadow_slots_independently() -> N
     assert row['shadow2_engine'] == '1.0.0'
     assert row['bpm'] == 124.0
     assert row['engine_version'] == '2.0.0'   # active engine, distinct from shadow_engine
+
+
+# ---- _audio_profile_snapshot() analyzer_refractory_s (2026-08-14, round
+# three, audit cross-check item 12.8 #1) -----------------------------------
+
+
+def _bare_audio_profile_controller(manager) -> AutoVJController:
+    inst = object.__new__(AutoVJController)
+    inst._app = SimpleNamespace(_audio_manager=manager)
+    return inst
+
+
+def test_audio_profile_snapshot_reads_analyzer_refractory_s() -> None:
+    """New field testing a candidate root-cause mechanism (audit T4): a
+    confident-but-wrong BPM can suppress every other true beat at the
+    source via this refractory, entrenching the wrong lock."""
+    manager = SimpleNamespace(
+        get_profile_key=lambda: 'house',
+        get_profile=lambda: SimpleNamespace(name='House', preferred_bpm_range=lambda: (118.0, 126.0)),
+        refractory_s=0.328125,
+    )
+    inst = _bare_audio_profile_controller(manager)
+
+    snap = inst._audio_profile_snapshot()
+
+    assert snap['analyzer_refractory_s'] == pytest.approx(0.328125)
+
+
+def test_audio_profile_snapshot_refractory_s_zero_when_manager_lacks_it() -> None:
+    """Older core without the property -- must not raise, must default to
+    0.0 rather than omitting the key."""
+    manager = SimpleNamespace(
+        get_profile_key=lambda: 'house',
+        get_profile=lambda: SimpleNamespace(name='House', preferred_bpm_range=lambda: (118.0, 126.0)),
+    )
+    inst = _bare_audio_profile_controller(manager)
+
+    snap = inst._audio_profile_snapshot()
+
+    assert snap['analyzer_refractory_s'] == 0.0
+
+
+def test_audio_profile_snapshot_omits_everything_when_manager_is_none() -> None:
+    inst = _bare_audio_profile_controller(None)
+    assert inst._audio_profile_snapshot() == {}
+
+
+# ---- _detector_snapshot() phase_confidence_calibrated (2026-08-14, round
+# three, audit cross-check item 12.8 #3) ------------------------------------
+
+
+def test_detector_snapshot_reads_phase_confidence_calibrated() -> None:
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='3.0.0', phase_confidence_calibrated=0.42,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['phase_confidence_calibrated'] == pytest.approx(0.42)
+
+
+def test_detector_snapshot_phase_confidence_calibrated_zero_when_grid_lacks_it() -> None:
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['phase_confidence_calibrated'] == 0.0
