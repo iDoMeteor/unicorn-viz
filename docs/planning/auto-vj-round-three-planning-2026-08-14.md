@@ -112,7 +112,8 @@ candidate at cold start was `75.95` rather than something near the true
 tempo, and *why* the raw comb-filter argmax bounces across such a wide
 range (88-166) every cycle rather than repeatedly finding the same
 competing value. § 6 below now has a concrete answer to the second
-question. Not yet decided: whether this session gets packaged into
+question; § 12.2 (audit cross-check) offers a testable candidate
+mechanism for *both*, via the analyzer's BPM-fed refractory. Not yet decided: whether this session gets packaged into
 `garbage/` as originally planned, or held out as a labeled regression
 fixture given how cleanly it demonstrates the premature-lock +
 gate-can't-recover combination — owner's call.
@@ -255,7 +256,9 @@ lock forms in the first place, not just how hard it is to escape one.
 
 Both knobs stay where they are until a session with the new
 `long_candidate_spread` logging gives real per-cycle numbers to reason
-from.
+from. (§ 12.3: the spread threshold and § 6's interpolation flag are
+coupled — sequence the decision after the B run, and see the
+relative-threshold argument there before retuning `6.0` at all.)
 
 ## 4. `_has_bpm_lock()`'s own floor
 
@@ -467,6 +470,9 @@ by how much, against the A run's numbers above as the baseline.
 every BPM reading, not just the wandering cases — all of today's tuned
 gate-stack constants (lock-band %, persistence spread, jump-confidence
 thresholds) were tuned against the current grid-quantized behavior.
+(§ 12.3 verifies the interpolated value does reach both persistence
+deques — so the B run can genuinely move `long_candidate_spread` — and
+proposes what to watch, split by BPM lane.)
 `tests/test_beat_tracker_v2.py`'s existing convergence tests all still
 pass with the flag off (the default they run under); a full test pass
 with the flag forced on has not been done and may need re-baselining
@@ -591,7 +597,8 @@ That distinction (tempo-independent evidence only) is exactly what would
 need to hold for this to avoid reintroducing the same class of bug —
 any term that itself depends on the current BPM reading (`tempo_fit`,
 `top_cand_fit`) must be excluded from this scoring, or it's circular
-again.
+again. (§ 12.5 argues `onset_fit` belongs on the excluded list too —
+onset density is refractory-shaped, and the refractory is BPM-fed.)
 
 **Scope refinement (owner, this round): consult only when confidence is
 already low.** Resolves scope question (1) below with a third option,
@@ -905,9 +912,266 @@ recommendations, owner-approved directly:
   "current role" field to read (§ 5).
 - The confidence-gate threshold for § 8's genre-fit consultation
   (candidate: reuse `_V2_STARTUP_CONFIDENCE`, or a separate value).
+- The audit cross-check items (§ 12): the refractory-feedback hypothesis
+  for the 17:56 collapse (12.2, checkable against the existing log
+  before any code change), the coupled spread-threshold/interpolation
+  sequencing (12.3), the phase-confidence 0.28 chance floor as the
+  candidate root cause of the "chronic ~0.30 cap" investigation (12.4),
+  and the ranked low-hanging-fruit menu (12.8).
 
 **Rolling rear-view-mirror windows (4/8/16/32-beat):** real design work,
 explicitly not for immediate integration per the owner — candidate uses
 identified for both the persistence gate (§ 3) and phrase detection
 (§ 5), serious enough to warrant its own follow-up planning doc once
 scoped further.
+
+---
+
+## 12. Audit cross-check pass (2026-08-14) — comments & round-3 low-hanging fruit
+
+Added at the owner's request, cross-checking this doc against the two
+audits (`docs/audits/2026-08-11-auto-vj-music-theory-audit.md`,
+`docs/audits/2026-08-13-bpm-tempo-detection-audit.md`). Everything here
+is the audit agent's own analysis, re-verified against `beat_grid.py` at
+`_DETECTOR_VERSION 1.0.0-rc.27` (not against the older rc.8 the tempo
+audit originally read) — the audit finding numbers (T1, T2, T4...) refer
+to the 2026-08-13 doc. Comments only; nothing here is shipped.
+
+### 12.1 Overall read
+
+This round independently converged on, or directly implemented, several
+of the audits' recommendations: § 6's interpolation *is* audit T1/R1
+(and the A/B-flag discipline is better process than the audit asked
+for); the strength/band-weighted phase coherence is T2's third
+recommendation; the hold-skip gate removal and guard loosening address
+T3's "confident lane changes crawl" finding — the 20-pair simulation
+(4/20 → 20/20 converging) is exactly the plateau mechanism T3 predicted,
+now measured. The v2/v3 consolidation and the instrumentation-first
+stance on § 3's spread threshold are both sound. No objection to
+anything shipped this round; the comments below are about what's still
+open.
+
+### 12.2 §1's two unanswered questions — a testable candidate mechanism: the BPM-fed refractory (audit T4)
+
+The analyzer's onset refractory is set from the tracker's own estimate:
+`clip(0.70 * 60/bpm, 0.18, 0.50)` (`analyzer.py:392`), fed every frame
+with the blended confidence, active whenever `confidence >= 0.5`. At the
+17:56 session's `75.95` lock that clamps to **0.50 s — longer than the
+true beat period of a ~120-150 BPM track (0.40-0.50 s)**. During every
+high-confidence stretch, the analyzer was therefore suppressing roughly
+every other true beat *at the source*. That one mechanism would explain
+all three open observations at once:
+
+- **Entrenchment** — the surviving, half-rate onset stream genuinely
+  supports ~76 BPM; the evidence itself was being filtered into
+  agreement with the wrong lock (same self-confirmation shape as the
+  P0-A clamp removed in the 2026-08-04 round, one layer down).
+- **Raw-candidate instability** — an irregularly-thinned pulse stream
+  (which beats survive depends on onset timing jitter vs. the cooldown
+  boundary) scatters comb energy across the harmonic family instead of
+  concentrating it at one lag; the observed 88-166 wandering is that
+  family. § 6's grid-coarseness finding is real and compounds it, but
+  grid quantization alone predicts hopping between *adjacent* lags —
+  the refractory thinning is a candidate for why the *whole family* lit
+  up.
+- **Why escape needed a track change** — only a silence gap or a new,
+  stable periodicity could out-compete an onset stream being actively
+  reshaped to fit the incumbent.
+
+Honesty caveat: the feedback only engages at `confidence >= 0.5` and
+falls back to the strength-scaled cooldown below it, so the starvation
+was intermittent, not constant — this is a *candidate* mechanism,
+not a confirmed root cause. It is cheaply checkable, though, twice
+over: (a) offline, against the existing 17:56 log — during stuck
+high-confidence stretches the per-row `onset_count` rate should ceiling
+at ≈ 1/0.50 s = 2.0 onsets/s, an unmistakable signature; (b) live,
+by logging the analyzer's active `_refractory_s` into
+`_detector_snapshot()` (pure logging, same pattern as everything else
+shipped this round).
+
+**The targeted fix, if confirmed** (flag+confirm per standing policy):
+suspend the BPM-fed refractory whenever the tracker's own candidate
+evidence disagrees with the lock — e.g. while
+`abs(long_candidate_median − self._bpm) > jump_limit` — falling back to
+the strength-scaled cooldown. The state needed for that condition
+exists precisely because of this round's `long_candidate_median`
+logging work; the change is a few lines in the `set_expected_bpm()`
+call path, and it closes the last self-confirmation loop the
+2026-08-04 fixes left open.
+
+**Bearing on § 10 (in-band downward erosion):** the refractory also
+predicts the *directionality*. Every accepted downward in-band step
+lengthens the refractory (`60/bpm` grows), which thins more true
+onsets, which strengthens slower candidates — a positive-feedback
+ratchet that only works downhill. That fits the observed pattern
+(repeated collapses, always downward, never upward drift). The dwell
+timer treats the symptom and is still worth having; the refractory
+guard treats a cause. Recommend evaluating them together.
+
+### 12.3 §3 and §6 are coupled: don't retune the spread threshold before the interpolation decision, then make it relative (audit T1)
+
+The adjacent-lag BPM gap exceeds 4 BPM above ~155 BPM (5.04 at 174) —
+so with interpolation off, grid jitter *alone* can hold
+`long_candidate_spread` above thresholds in fast lanes, and the flat
+`6.0` is also *relatively* stricter exactly where the grid is noisier
+(6.0 BPM ≈ 8% at 75 BPM but 4% at 150). Two consequences:
+
+1. **Sequencing:** any spread-threshold decision made from a session
+   with the flag off will be invalidated by turning it on. Decide the
+   interpolation default first; § 3's question second.
+2. **Shape:** once interpolation settles, make both persistence
+   thresholds **relative** (a % of the window median — ~3% is the
+   starting candidate) rather than absolute BPM: the short window's
+   `4.0` and the long window's `6.0` both currently encode a
+   tempo-dependent strictness nobody chose.
+
+Verified against rc.27 for the B run's sake: the interpolated value is
+applied to `best_bpm` *before* both `_candidate_history` and
+`_long_candidate_history` appends, so the B run can genuinely move the
+spread numbers. What to watch: `long_candidate_spread` p50 split by BPM
+lane (above/below ~140) — the interpolation should collapse the fast
+lane's spread specifically; if it doesn't move there, something is off.
+
+### 12.4 The phase-confidence "chronic ~0.30 cap" has a mathematical floor at 0.28 (audit T2)
+
+With `_V2_PHASE_TOL = 0.14` (locked, not proposing a change), a
+*completely random* onset-to-phase relationship lands in the ±14%
+window `2 × 0.14 = 28%` of the time. Strength weighting doesn't move
+that expectation (weights apply to hits and misses alike in a random
+stream). So the observed ~0.30 cap on correct, locked stretches is
+statistically indistinguishable from **zero usable phase information as
+currently measured** — which is implausible for a genuinely locked
+four-on-the-floor stretch, and turns the "separate, still-open
+investigation" flagged at the blend re-tune into a sharper question:
+either the strength-weighted on-beat fraction really is near-chance
+(the off-beat-onsets hypothesis), or something mechanical is
+mismeasuring phase error. One cheap discriminator: log the **signed
+phase-error distribution** (median + IQR over the coherence window).
+Median ≈ 0 with wide IQR → genuinely off-beat onset mix → the fix is
+expectation-setting per genre. Median displaced from 0 → mechanical
+(oscillator/onset timestamp skew) → fixable directly.
+
+Two follow-ons, both cheap:
+
+- Report phase confidence **chance-corrected**:
+  `max(0, (hit_rate − 0.28) / 0.72)` — the number becomes a true 0-to-1
+  quantity, and future `_V2_PHASE_TOL` changes stop silently moving the
+  scale (each historical retune 0.18 → 0.12 → 0.14 moved the chance
+  floor 0.36 → 0.24 → 0.28, contaminating before/after comparisons).
+- `_BPM_LOCK_RELEASE_CONFIDENCE = 0.28`: under the old 0.5/0.5 blend
+  this sat exactly on the phase chance floor; under the new
+  0.65/0.1/0.25 blend the phase share is small, so the coincidence
+  matters less — but restating both Schmidt constants in
+  chance-corrected terms would make § 4's floor question well-posed
+  instead of scale-dependent.
+
+On § 4's cold-start half specifically: `downbeat_regularity` (0.25 of
+the blend) measures self-consistency of the *just-established* grid —
+at cold start it is incumbent-confirming by construction (a wrong lock
+beats regularly against its own wrong grid). Candidate: exclude the
+regularity term (or require the ACF term alone to clear the gain
+threshold) for the first N cycles after a cold start, which is exactly
+the 17:56 failure window without touching established-lock behavior.
+
+### 12.5 §8: exclude `onset_fit` from the "tempo-independent" term set
+
+`onset_density` is shaped by the BPM-fed refractory (12.2) — while any
+lock exists, onset density is *not* tempo-independent; a wrong slow
+lock thins the onset stream toward slow-genre onset-density
+expectations. The 17:56 session is consistent with this: the active
+profile during the stuck period was chillstep. If § 8's
+low-confidence-gated consultation includes `onset_fit`, a wrong lock
+can recruit exactly the corroboration § 8 is designed to seek. Exclude
+it alongside `tempo_fit`/`top_cand_fit` (or land 12.2's refractory
+guard first, which weakens the contamination at its source).
+`centroid_fit`/`zcr_fit`/`spectral_shape_fit`/`vocal_*_fit` are
+genuinely tempo-independent and fine. Otherwise § 8's
+confidence-gated design is well-scoped — the gate answers the
+backward-flow concern structurally, as the doc argues.
+
+### 12.6 §5/§10: bar-relative counters, the missing anchor, and frame-rate coupling
+
+The dwell timer (bars-since-lock) and the 4/8/16/32-beat windows both
+count in bars — counting is phase-agnostic, so the missing downbeat
+anchor (§ 5) doesn't block them. But any *phrase-aligned* use of the
+same windows will need the anchor, and the audits' cheap causal option
+fits this codebase: accumulate bass-band onset strength into the 4
+`_bar_beat_count` phase bins and periodically rotate the counter so the
+argmax bin is beat 1 (kick-on-the-one accent voting), with the mixer's
+section hint syncing bar phase — not just the phrase clock — when
+present. The offline half (auto `beat_offset`, item E in
+`drop-ins/dj-mixer-01/docs/offline-analysis-accuracy-plan.md`) upgrades
+the hint side of that for free.
+
+Also, from audit F7, worth honoring while designing the new windows:
+every existing smoothing constant is per-frame (the energy-history
+deque is 240 *frames* with a `>= 2 s` age check — above ~120 fps the
+check never passes and slope detection dies), so time constants shift
+with render fps. New rolling windows should be specified in
+bars/seconds and stepped on time, not frames — and the energy-history
+deque itself is a small, self-contained fix in the same spirit.
+
+### 12.7 §7a: adopt the field's metric conventions for the agreement table
+
+Recommend the per-song table report **Acc1/Acc2** (the MIREX
+convention: within ±4% = Acc1; also counting 1/2×, 2×, 1/3×, 3× = Acc2)
+and classify each disagreement as *octave-family* (ratio ≈ 2, 1/2, 3/2,
+3/4, 4/3 — the 17:56 class) vs. *unrelated*. That split makes octave
+errors a first-class number instead of folded into generic
+disagreement, matches how every published tempo estimator is scored
+(so the detector becomes comparable to the literature), and costs
+nothing beyond the arithmetic. The GiantSteps EDM tempo set (public,
+Beatport-derived; see the 2026-08-13 audit's Part I.4) is the
+ready-made offline complement to the owner's own library. On the LLM
+column: the planned lower weighting is consistent with standing owner
+policy (LLM tempo recall is not audio ground truth); suggest recording
+it as a *tiebreaker only*, never sufficient alone to mark a track
+"verified."
+
+### 12.8 Low-hanging fruit menu for round 3 (from the audits, smallest first)
+
+Each line: what, size, which finding it discharges. Items marked ⚑
+touch detector behavior and get flag+confirm per standing policy;
+unmarked items are logging/reporting only.
+
+1. **Log the analyzer's active `_refractory_s`** per snapshot row +
+   run the onset-rate check against the existing 17:56 log — pure
+   logging + one offline analysis; confirms or kills 12.2 before any
+   behavior change.
+2. **Signed phase-error distribution logging** (median/IQR per
+   coherence window) — discriminates 12.4's two hypotheses; feeds the
+   already-open phase-confidence investigation.
+3. **Chance-corrected phase-confidence readout** — one formula in the
+   reporting path (12.4); keeps future tol changes from moving the
+   scale.
+4. ⚑ **Refractory guard** — suspend BPM-fed refractory while
+   `long_candidate_median` disagrees with the lock out-of-band (12.2);
+   a few lines, closes the last self-confirmation loop.
+5. ⚑ **ACF overlap normalization** — divide each `acf[i]` by
+   `(n − lag)` (audit T6); one line, removes a structural few-percent
+   tilt toward faster lanes present in every estimate.
+6. ⚑ **Envelope pulse-strength clamp** — `log1p` or percentile-cap
+   onset strengths at pulse-write time (audit T6); one line, stops a
+   single freak transient from dominating the 8 s ACF window.
+7. ⚑ **Relative persistence thresholds** — after the interpolation A/B
+   decides (12.3); two one-line changes.
+8. ⚑ **Cold-start blend guard** — ACF-only (or regularity-excluded)
+   confidence for the first N cycles (12.4); directly targets § 4's
+   open question.
+9. **Acc1/Acc2 + octave-family classification in the § 7a table** —
+   scorecard-side only (12.7).
+10. **Time-bound the energy history** (240-frame deque → time-based)
+    — small, prevents silent breakage on high-refresh displays (12.6);
+    full dt-based smoothing can wait for the real v3.
+
+Bigger, explicitly *not* round-3-sized, parked for the real v3 design:
+bar-phase accent voting (12.6); and the observation that this round's
+gate stack — persistence windows, jump confidence, dwell timers — is
+converging, piece by hand-tuned piece, on what the literature's
+standard architecture (madmom-style DBN: tempo states, one transition
+prior, comb-score observations) expresses as a single small explicit
+model. A pure-numpy HMM over quantized tempo lanes is buildable within
+the no-dependency constraint and would replace seven interacting gates
+with one tunable matrix; the 2026-08-13 audit's Part III item 7 sketches
+it. If "real v3" means an architecture generation, that is the
+strongest candidate frame for it.
