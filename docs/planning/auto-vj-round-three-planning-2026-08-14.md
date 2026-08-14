@@ -441,13 +441,24 @@ much interpolation moved a given cycle's reading — `0.0` for the entire
 A run (proof the flag was off), nonzero during B wherever it engages.
 `_DETECTOR_VERSION` → `1.0.0-rc.25`.
 
-**Flip it on for the B run:** `config.toml`'s `[auto_vj]` block has
-`# acf_peak_interpolation_enabled = true` commented out, ready to
-uncomment. Existing `acf_top_candidates`,
+**A run complete, B run starting.** `logs/autovj-20260813T202616.jsonl`
+(60.3 min, flag confirmed off the whole way — `acf_interpolation_delta_bpm`
+read `0.0` on every row) is the A baseline, run on the same code as the
+`_V2_LOCK_BAND_PCT` retune and `BeatTrackerV3` consolidation (both
+shipped the same round, so A already reflects those two fixes, not
+pre-round-three behavior): lock `68.6%` (up from `41.6%` on the
+pre-retune baseline), mean confidence `0.513`, `57` single-cycle jumps
+`>10` BPM correctly routed through the large-jump gate (`4492` rejects
+vs. `1231` clears), v1 shadow2 data collected for the first time (huge
+disagreement vs. v2/v3, `25.6` BPM mean diff — expected, v1 is the
+deliberately simple engine). `config.toml` now has
+`acf_peak_interpolation_enabled = true` (owner: "oh man, i thought that
+interp flag was on.. turn it on and i'll start a new run") — the next
+session is the real B run. Existing `acf_top_candidates`,
 `long_candidate_spread`/`long_candidate_median` (§ 3), and the new
-`acf_interpolation_delta_bpm` together should be enough to judge the B
-run: whether the wandering candidates in a similar situation tighten up,
-and by how much.
+`acf_interpolation_delta_bpm` together should be enough to judge it:
+whether the wandering candidates in a similar situation tighten up, and
+by how much, against the A run's numbers above as the baseline.
 
 **Known open risk, not yet resolved:** this changes the numeric value of
 every BPM reading, not just the wandering cases — all of today's tuned
