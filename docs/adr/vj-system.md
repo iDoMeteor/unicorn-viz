@@ -2239,6 +2239,78 @@ Same night, immediate follow-up:
 
 `auto_vj.py` `__version__` → `1.0.0-rc.71`; training-kit-01 → `0.16.5`.
 
+**Round Three, live-session watch: the churn pattern explained, lock band
+tightened, v2/v3 consolidated.** Same night, the owner watched a fresh
+session (`logs/autovj-20260813T194512.jsonl`, v3 active + v2 shadow, the
+interpolation flag correctly off) in real time and reported: "totally
+started out right on point but collapsed quickly to sub 100 instead of
+mid 120s... moved back in to proper range... collapsed again."
+
+**Root cause found, distinct from everything fixed earlier this round.**
+The large-jump gate stack only ever governs jumps *outside* the lock
+band. In this session it was demonstrably active
+(`large_jump_persistence_reject_count` reached `1089`,
+`cleared_count` reached `284`) and doing its job on genuinely large
+jumps — but the observed `122 → 88` BPM collapse happened as a sequence
+of **in-band** steps: `124.73 → 105.17` in one step is `19.56` BPM, and
+under the old `_V2_LOCK_BAND_PCT=0.16`, `124.73 * 0.16 = 19.96` — just
+inside the band, so it cleared with zero extra scrutiny. `bpm_locked`
+toggled 38 times over 11.9 minutes. Nothing in the gate stack resisted a
+*sequence* of individually-legal in-band nudges compounding into a large
+drift — a gap distinct from (and complementary to) the out-of-band
+persistence check.
+
+**`_V2_LOCK_BAND_PCT` `0.16 → 0.08`, shipped immediately.** Owner: "i
+guess we should consider a large jump gate something more appropriate,
+that's pretty huge for a one-song swing, or even a two song swing... let's
+change it to 8, now please." Now roughly converges with the flat
+`_V2_LOCK_BAND_MIN=10.0` floor around 125 BPM instead of nearly doubling
+it. `_DETECTOR_VERSION` → `1.0.0-rc.26`.
+
+**`v2` vs `v3`: 100% identical across the entire session (638 compared
+rows, mean/median/max diff all `0.000`).** Direct empirical confirmation
+of the code-reading finding from the entry above — `BeatTrackerV3`'s one
+override currently has zero live effect, since its only production
+trigger was removed at rc.20. Owner: "yea let's consolidate v2/v3."
+`BeatTrackerV3`'s guard folded directly into `BeatTracker.set_profile()`;
+the subclass retired entirely. `beat_tracker_engine = "v3"` remains a
+working config value — `_load_beat_grid_cls()` now resolves it to the
+same class as `"v2"`, with a deprecation log line — freeing the name for
+the real next-generation engine. `_DETECTOR_VERSION` → `1.0.0-rc.27`.
+Migrated `tests/test_beat_tracker_v3.py`'s still-relevant coverage into
+`tests/test_beat_tracker_v2.py` and deleted the old file; updated
+`_load_beat_grid_cls()`'s own tests in `test_auto_vj_shadow_engine.py`.
+
+**Noted for later, not reopened now:** owner, same message: "blocking
+genre re-priming after lock is an idea worth re-visiting when we get
+back to recommender work." Saved as a standing project memory
+(`genre-repriming-after-lock-revisit.md`) so it isn't lost between
+sessions — the retirement above is a default removal, not a permanent
+close on the underlying question.
+
+**Minimum lock dwell time — new idea, not implemented.** Owner, same
+live-session observation: "maybe we do need some kind of minimum lock
+length to prevent the churn, a standard musical amount.. like 16/32
+bars?" The observed ~60-100s oscillation period maps plausibly to
+16-32 bars at the locked tempo — but a fixed-seconds mechanism would not
+scale with tempo the way a bar-relative one would. Design sketch
+recorded in the planning doc (§ 10), not implemented — real new gate
+category (what it restricts, how it interacts with the existing
+large-jump path), not a threshold tweak. Owner revised the test range
+after the lock-band retune above: "32 bars too long... will test 8 & 16
+first when we get there."
+
+**Shadow2 (v1) confirmed absent this session** — config picked up only
+on the next app restart, consistent with `_V2_ANALYSIS_DOWNBEAT_
+CONFIDENCE_MIN`'s own precedent of detector config not being
+hot-reloaded. Owner's next session (starting after this response) will
+have it.
+
+All of this is detailed in
+[docs/planning/auto-vj-round-three-planning-2026-08-14.md](../planning/auto-vj-round-three-planning-2026-08-14.md)
+§§ 7b, 10, 11. `auto_vj.py` `__version__` → `1.0.0-rc.72`;
+training-kit-01 → `0.16.6`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

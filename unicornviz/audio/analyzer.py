@@ -338,7 +338,7 @@ class Analyzer:
         drop_score/band_blend computation. drop-ins/auto-vj-01/beat_grid.py
         runs the identical formula (same math, same default alpha) as two
         further independent copies with their own mean/var state -- one in
-        BeatGridTracker, one in BeatTracker/BeatTrackerV3 -- so a tuning
+        BeatGridTracker, one in BeatTracker -- so a tuning
         change made only here does not reach the detector, and vice versa.
         Same underlying signal, three independently-drifting z-score
         trackers. See docs/adr/vj-system.md "Recommender centroid_fit

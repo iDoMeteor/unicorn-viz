@@ -30,16 +30,26 @@ _build_live_training_row = _AUTO_VJ_MODULE._build_live_training_row
 # ---- _load_beat_grid_cls('v3') ------------------------------------------
 
 
-def test_load_beat_grid_cls_v3_resolves_to_beat_tracker_v3() -> None:
+def test_load_beat_grid_cls_v3_is_a_deprecated_alias_for_v2() -> None:
+    """2026-08-14, round three: BeatTrackerV3 retired -- its one override
+    folded directly into BeatTracker once real session data showed zero
+    live behavioral difference. 'v3' now resolves to the same class as
+    'v2', kept only so existing configs don't break. See
+    docs/adr/vj-system.md."""
     cls = _load_beat_grid_cls('v3')
-    assert cls.__name__ == 'BeatTrackerV3'
-    assert cls.ENGINE_VERSION == '3.0.0'
-
-
-def test_load_beat_grid_cls_v2_unaffected_by_v3_addition() -> None:
-    cls = _load_beat_grid_cls('v2')
     assert cls.__name__ == 'BeatTracker'
     assert cls.ENGINE_VERSION == '2.0.0'
+
+
+def test_load_beat_grid_cls_v2_and_v3_resolve_to_equivalent_classes() -> None:
+    """Each call re-execs beat_grid.py as a fresh module (see
+    _load_beat_grid_cls's own implementation), so this can't assert
+    identity across two separate calls -- checks the two resolve to the
+    same class by name/version instead."""
+    v2_cls = _load_beat_grid_cls('v2')
+    v3_cls = _load_beat_grid_cls('v3')
+    assert v2_cls.__name__ == v3_cls.__name__ == 'BeatTracker'
+    assert v2_cls.ENGINE_VERSION == v3_cls.ENGINE_VERSION == '2.0.0'
 
 
 # ---- _detector_snapshot() shadow fields ----------------------------------

@@ -11,9 +11,11 @@ Status: draft — capturing open design questions for the philosophizing
   logging, `long_candidate_spread`/`long_candidate_median` logging,
   continuous phrase-clock logging, `spectral_flux_smooth`/`bass_flux_fast`
   logging, a second shadow-engine slot (turned on in `config.toml`:
-  `beat_tracker_shadow2_engine = "legacy"`), and sub-lag peak
-  interpolation gated behind `acf_peak_interpolation_enabled` (off by
-  default — an A/B test in progress, see § 6). Everything else is still
+  `beat_tracker_shadow2_engine = "legacy"`), sub-lag peak interpolation
+  gated behind `acf_peak_interpolation_enabled` (off by default — an A/B
+  test in progress, see § 6), `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (§ 10),
+  and `BeatTrackerV3` retired/consolidated into `BeatTracker` (§ 7b).
+  Everything else is still
   proposal-stage, marked as such inline.
 Last updated: 2026-08-14
 
@@ -498,21 +500,28 @@ genuinely separate, much simpler architecture — IOI-median based, no
 ACF/comb-filter/phase-oscillator at all, `ENGINE_VERSION = '1.0.0'`,
 documented cost `< 0.3ms/frame` ("lightweight," confirmed).
 
-**Recommendation (not yet actioned — needs consensus):** fold v3's fix
-directly into v2's own `set_profile()` and retire the `BeatTrackerV3`
-subclass, rather than keep carrying it as a separate engine name. It's
-purely additive (never worse than v2's old behavior, only prevents the
-specific backward-flow case), so there's no real tradeoff being
-preserved by keeping it distinct. This also frees the name "v3" for the
-actual next-generation engine the owner referenced ("prepare for the
-real v3 incoming very soon") instead of colliding with today's
-one-method patch. If accepted: `beat_tracker_engine` config would need
-`"v3"` to keep resolving (alias to the now-fixed v2, with a deprecation
-log line) rather than break existing `config.toml`s outright; `_DETECTOR_VERSION`
-would bump (real behavior change: v2 itself changes, not just which
-class name is picked); worth a full session's worth of shadow-A/B
-validation before flipping the default, mirroring how the original
-v2→v3 shadow validation was done.
+**Shipped this round.** Owner, after seeing the 100% agreement result
+from § 11's live session: "yea let's consolidate v2/v3." `BeatTrackerV3`'s
+guard folded directly into `BeatTracker.set_profile()`; the subclass
+retired entirely. `beat_tracker_engine = "v3"` remains a working config
+value — `_load_beat_grid_cls()` now resolves it to the same `BeatTracker`
+class as `"v2"`, with a deprecation log line — so existing configs don't
+break, and the name is free for the real next-generation engine. Pure
+gain, no tradeoff given up: the behavior was purely additive to begin
+with (never worse than v2's old always-reprime behavior, only prevents
+the specific backward-flow case), and the A/B validation this
+recommendation asked for had already effectively happened live.
+`_DETECTOR_VERSION` → `1.0.0-rc.27`.
+
+**Noted for later, not reopened now:** owner, same message: "blocking
+genre re-priming after lock is an idea worth re-visiting when we get
+back to recommender work." The behavior being retired here (a genre
+profile freely re-priming the tempo prior even after a lock is
+established) was removed as a *default* because it caused real
+incidents when driven by the recommender's own inference — but the
+underlying question of whether *some* controlled genre-driven re-priming
+belongs back in the picture once the recommender itself is more mature
+is explicitly left open, not closed off, for that future work.
 
 **7c. v1 as a second, cheap shadow — shipped this round.** Today's shadow
 mechanism previously supported exactly one shadow engine
@@ -645,27 +654,43 @@ consistent with the owner's description, not an isolated glitch.
 **Root cause is different from — and complements — everything fixed so
 far.** The large-jump gate stack (persistence check, confidence
 thresholds, `_V2_MAX_BPM_STEP`) only ever governs jumps **outside** the
-lock band (`_V2_LOCK_BAND_PCT=0.16`/`_V2_LOCK_BAND_MIN=10.0`). It was
-actively engaging in this session (`large_jump_persistence_reject_count`
-reached `1089`, `cleared_count` reached `284` by session end — real,
-frequent evaluation, unlike the 17:56 session where it never cleared
-once) and doing its job on genuinely large jumps. But the `122→88`
-collapse happened as a sequence of **in-band steps**: e.g. `124.73 →
-105.17` in one step is a `19.56` BPM move, and `124.73 * 0.16 = 19.96` —
-just barely *inside* the lock band, so it clears with **zero** extra
-scrutiny, no persistence check, no confidence floor beyond the ordinary
-per-cycle minimum (`_V2_MIN_UPDATE_CONFIDENCE=0.25`). At `120+` BPM, 16%
-is a wide allowance (~19-20 BPM) for a single "ordinary nudge." Nothing
-in the current gate stack resists a *sequence* of such individually-
-legal nudges accumulating into a large net drift over tens of seconds —
-that gap is exactly what a minimum dwell time would close.
+lock band. It was actively engaging in this session
+(`large_jump_persistence_reject_count` reached `1089`, `cleared_count`
+reached `284` by session end — real, frequent evaluation, unlike the
+17:56 session where it never cleared once) and doing its job on
+genuinely large jumps. But the `122→88` collapse happened as a sequence
+of **in-band steps**: e.g. `124.73 → 105.17` in one step is a `19.56`
+BPM move, and under the *old* `_V2_LOCK_BAND_PCT=0.16`,
+`124.73 * 0.16 = 19.96` — just barely *inside* the lock band, so it
+cleared with **zero** extra scrutiny, no persistence check, no
+confidence floor beyond the ordinary per-cycle minimum
+(`_V2_MIN_UPDATE_CONFIDENCE=0.25`). Nothing in the gate stack resisted a
+*sequence* of such individually-legal nudges accumulating into a large
+net drift over tens of seconds.
 
-**Why 16/32 bars fits the data well.** The observed oscillation period
-(correct → collapsed → recovered → collapsed again) ran roughly 60-100
-seconds. At a locked tempo around 100-124 BPM, 16 bars (64 beats) spans
-roughly `31-38s`; 32 bars spans `62-77s` — the same order of magnitude as
-what was actually observed. A dwell requirement in that range is a
-plausible fit, not an arbitrary guess.
+**Partially addressed already, same round.** Owner: "let's change it to
+8, now please." `_V2_LOCK_BAND_PCT` `0.16 → 0.08` shipped immediately
+(§ "Full `_V2_*` gate/tunable inventory" above has the updated table) —
+roughly halves the in-band allowance (now converging with the flat
+`_V2_LOCK_BAND_MIN=10.0` floor around 125 BPM instead of nearly doubling
+it), so more of what used to slip through ungated now has to clear the
+large-jump gate stack instead. This directly shrinks the size of any
+single in-band step, but does **not** by itself add a dwell-time/
+persistence mechanism for the in-band case specifically — a sequence of
+several now-smaller in-band nudges could still in principle accumulate
+into a large drift. Minimum lock dwell time (below) remains a distinct,
+not-yet-implemented idea for closing that residual gap, and gives the
+16/32-bar question below a materially different (smaller, slower-moving)
+starting point to test against than the pre-retune numbers.
+
+**16/32 bars → revised to 8/16.** Owner: "32 bars too long... will test
+8 & 16 first when we get there." Original 16/32 estimate was fit to the
+*pre-retune* oscillation period (60-100s at the old, wider `16%` in-band
+allowance); with `_V2_LOCK_BAND_PCT` now tighter, the natural drift rate
+this mechanism would need to resist is already reduced, making a shorter
+dwell window plausible. 8 bars (100-124 BPM) spans roughly `15-19s`; 16
+bars spans `31-38s`. Test candidates when this gets implemented: **8 and
+16**, not 32.
 
 **Design sketch, not implemented — needs its own scoping pass, distinct
 from a simple constant retune:**
@@ -745,11 +770,16 @@ shadow-engine slot (`beat_tracker_shadow2_engine`, now turned on in
 `config.toml` as `"legacy"` alongside the existing `"v2"` shadow);
 sub-lag peak interpolation (`acf_interpolation_delta_bpm` logging),
 shipped disabled by default behind `acf_peak_interpolation_enabled` for
-a sequential A/B test. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
+a sequential A/B test; `_V2_LOCK_BAND_PCT` `0.16 → 0.08` (in-band step
+size that was letting a ~20 BPM single-cycle drift through ungated);
+`BeatTrackerV3` retired and consolidated into `BeatTracker` (confirmed
+by 100% live-session agreement first). `_DETECTOR_VERSION` →
+`1.0.0-rc.27`.
 
 **Proposed, awaiting consensus before implementation:**
-- Fold `BeatTrackerV3`'s fix into `BeatTracker` (v2) directly; retire the
-  `v3` subclass name for reuse by the real next-gen engine (§ 7b).
+- Minimum lock dwell time — new gate category for the in-band drift gap
+  `_V2_LOCK_BAND_PCT` alone doesn't fully close; candidates revised to
+  **8 and 16 bars** (owner: "32 bars too long"), design sketch only (§ 10).
 - Per-song v1/v2/v3 agreement table with mixer-library + LLM external
   checks (§ 7a) — the shadow2 slot needed for this now exists; the
   actual agreement-table logic doesn't yet.
@@ -757,7 +787,11 @@ a sequential A/B test. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
   when `acf_conf` is already low — owner's refinement this round) using
   tempo-independent terms (§ 8).
 - A full in-app config menu for detector/shadow model selection —
-  explicitly scoped for rc2, not rc1 (§ 9, new this round).
+  explicitly scoped for rc2, not rc1 (§ 9).
+- Controlled genre-driven re-priming after lock — explicitly the
+  behavior just retired above, but owner asked it be noted as worth
+  revisiting once recommender work resumes, not closed off permanently
+  (§ 7b).
 
 **Investigated and answered this round:**
 - *Why does the raw comb-filter argmax wander?* Root cause found (§ 6):
@@ -780,13 +814,15 @@ a sequential A/B test. `_DETECTOR_VERSION` → `1.0.0-rc.25`.
 - *Why did a live session collapse from correct (~122 BPM) to sub-100 and
   back, repeatedly?* Root cause found (§ 10): in-band steps (inside
   `_V2_LOCK_BAND_PCT`) accumulate drift with zero gating — the large-jump
-  gate stack only ever governs jumps *outside* the lock band. A minimum
-  lock dwell time (owner's proposal, 16/32 bars) is a well-grounded fix
-  for this specific gap, not implemented yet.
+  gate stack only ever governs jumps *outside* the lock band.
+  `_V2_LOCK_BAND_PCT` tightened same round (see "Shipped" above); a
+  minimum lock dwell time remains a distinct, not-yet-implemented idea
+  for the residual gap (§ 10).
 
 **Still open:**
 - **Minimum lock dwell time** — new gate category (§ 10), design sketch
-  only, needs its own scoping pass before implementation.
+  only, test candidates 8/16 bars, needs its own scoping pass before
+  implementation.
 - **The interpolation A/B result itself** — owner's next session is the
   A (baseline) run, the one after is B (flag flipped on via the
   commented-out `config.toml` line). Compare `acf_interpolation_delta_bpm`,

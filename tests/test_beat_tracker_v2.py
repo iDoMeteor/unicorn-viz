@@ -809,6 +809,90 @@ def test_set_profile_without_hints_leaves_bpm_range_unconstrained() -> None:
 
 
 # ---------------------------------------------------------------------------
+# set_profile(): pre-lock-only guard (2026-08-14, round three)
+#
+# Formerly BeatTrackerV3's one and only behavioral difference from v2 --
+# folded directly into BeatTracker itself once a full live session showed
+# 100% BPM agreement between the two (the one call site that ever fed a
+# genre-specific profile into an already-locked tracker had already been
+# removed at _DETECTOR_VERSION rc.20's one-way-flow cut). Migrated from the
+# now-deleted tests/test_beat_tracker_v3.py. See docs/adr/vj-system.md.
+# ---------------------------------------------------------------------------
+
+def test_set_profile_is_noop_once_bpm_established() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._confidence = 0.65
+    before_mu = bt._prior_mu
+
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+
+    assert bt._prior_mu == before_mu   # untouched
+    assert bt._bpm == 124.0            # bpm itself never touched by set_profile
+
+
+def test_set_profile_stays_inert_regardless_of_confidence() -> None:
+    """2026-08-13: superseded an earlier confidence-gated freeze entirely --
+    once a tempo exists there is no confidence reading, high or low, that
+    reopens re-priming. See set_profile()'s own docstring."""
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._confidence = 0.05   # about as low as it gets, short of a real reset
+    before_mu = bt._prior_mu
+
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=95.0, bpm_prior_sigma=0.50))
+
+    assert bt._prior_mu == before_mu, (
+        'no confidence reading should reopen re-priming while bpm > 0 -- '
+        'the coupling from genre back into tempo should not exist at all, '
+        'not just be gated tighter'
+    )
+
+
+def test_set_profile_fully_reprimes_when_bpm_zero() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 0.0
+    bt._confidence = 0.9    # confidence is irrelevant to this gate entirely
+
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+
+    assert bt._prior_mu == 145.0
+
+
+def test_set_profile_reprimes_again_after_unlock() -> None:
+    bt = BeatTracker({})
+    bt._bpm = 124.0
+    bt._confidence = 0.65
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+    assert bt._prior_mu != 145.0   # inert the first time, bpm already established
+
+    bt._reset_tempo_lock()
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+
+    assert bt._prior_mu == 145.0   # re-primed after bpm reset to 0.0
+
+
+def test_set_profile_locked_then_unlocked_end_to_end() -> None:
+    """Direct end-to-end version of the guard: lock on a real steady
+    stream, confirm a mismatched profile doesn't move the prior, then
+    confirm it does once the lock is reset. Mirrors the old v2-vs-v3 A/B
+    test, but there is only one engine now."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=124.0, duration_s=130.0)
+    assert bt._bpm > 0.0 and bt._confidence >= 0.55, (
+        f'did not reach lock confidence before profile switch '
+        f'(bpm={bt._bpm}, confidence={bt._confidence})'
+    )
+
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+    assert bt._prior_mu != 145.0, 'locked tracker must not re-prime toward a new profile'
+
+    bt._reset_tempo_lock()
+    bt.set_profile(SimpleNamespace(bpm_prior_mu=145.0, bpm_prior_sigma=0.16))
+    assert bt._prior_mu == 145.0, 'unlocked tracker should re-prime normally'
+
+
+# ---------------------------------------------------------------------------
 # prime_tempo() -- P0-B external ground-truth BPM (e.g. dj-mixer)
 # ---------------------------------------------------------------------------
 
@@ -1383,11 +1467,15 @@ def test_gate_stack_constants_have_the_retuned_values() -> None:
     assert _MOD._V2_LOW_BPM_FAST_CONFIDENCE == pytest.approx(0.45)
     assert _MOD._V2_MAX_BPM_STEP == pytest.approx(5.0)
     assert _MOD._V2_ANALYSIS_REGION_CONFIDENCE_MIN == pytest.approx(0.40)
+    # 2026-08-14, round three, live-session follow-up: 0.16 -> 0.08 --
+    # a single in-band step (19.56 BPM at ~125 BPM) slid through with
+    # zero gating under the old value and drove a repeated collapse/
+    # recover pattern in a live session. See docs/adr/vj-system.md.
+    assert _MOD._V2_LOCK_BAND_PCT == pytest.approx(0.08)
     # Unchanged this pass, but promoted to named constants alongside the
     # above for LLM-tuning visibility -- confirm they still match their
     # pre-existing values.
     assert _MOD._V2_MIN_UPDATE_CONFIDENCE == pytest.approx(0.25)
-    assert _MOD._V2_LOCK_BAND_PCT == pytest.approx(0.16)
     assert _MOD._V2_LOCK_BAND_MIN == pytest.approx(10.0)
     assert _MOD._V2_TEMPO_HOLD_S == pytest.approx(10.0)
     assert _MOD._V2_LOW_BPM_GUARD == pytest.approx(115.0)
