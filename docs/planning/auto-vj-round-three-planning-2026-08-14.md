@@ -166,14 +166,15 @@ from the confidence blend above):
 | Constant | Value | Meaning |
 |---|---:|---|
 | `_V2_MIN_UPDATE_CONFIDENCE` | 0.25 | Already-locked: floor to accept *any* update, even in-band |
-| `_V2_STARTUP_CONFIDENCE` | 0.3 | Cold-start floor (`self._bpm <= 0.0` only) — this is exactly the gate the 17:56 session's `0.32` candidate barely cleared |
-| `_V2_LOCK_BAND_PCT` / `_V2_LOCK_BAND_MIN` | 0.16 / 10.0 | ±16% or ±10 BPM (whichever's larger) = "normal" range; nothing below applies inside this band |
+| `_V2_STARTUP_CONFIDENCE` | 0.4 *(was 0.3, then 0.55 originally — see § 3)* | Cold-start floor (`self._bpm <= 0.0` only) — raised after a real session locked at `0.32` (barely above the old `0.3`) on a lower-octave error that took ~34 minutes to self-correct |
+| `_V2_LOCK_BAND_PCT` / `_V2_LOCK_BAND_MIN` | 0.08 / 10.0 *(pct was 0.16 — see § 10)* | `max(10, bpm*8%)` = "normal" range; nothing below applies inside this band. Tightened after a live session showed a single in-band step (19.56 BPM at ~125 BPM) sliding through the old 16% ungated and driving a repeated collapse/recover pattern |
 | `_V2_TEMPO_HOLD_S` | 10.0 | Now *only* feeds the `primed_confidence` floor in `prime_tempo()` — the gate that used to read this for hold-skip stickiness was removed entirely this session |
 | `_V2_LOW_BPM_GUARD` / `_V2_FAST_BPM_GUARD` | 115.0 / 130.0 | "Low lane" ceiling / "fast lane" floor for the guard below |
 | `_V2_LOW_BPM_FAST_CONFIDENCE` | 0.45 | Extra confidence required specifically for a low→fast lane crossing (was 0.80) |
 | `_V2_LARGE_JUMP_CONFIDENCE` | 0.5 | Confidence required for *any* jump outside the lock band (was 0.72) — the primary gate a real track-boundary change has to clear |
 | `_V2_MAX_BPM_STEP` | 5.0 | EMA step cap — even a fully-accepted jump arrives over multiple cycles, not instantly (was 3.0) |
 | `_V2_LARGE_JUMP_PERSISTENCE_CYCLES` | 25 | See § 5 — separate, longer persistence window gating only large jumps |
+| `_V2_ACF_INTERPOLATION_ENABLED` | `True` in this session's `config.toml` *(code default `False`)* | Sub-lag parabolic peak interpolation — see § 6. Refines the reported BPM to sub-grid precision after `peak_idx` is chosen; doesn't change which grid point wins. Root-caused a real wandering-argmax bug (10 "different" candidates that were actually 10 consecutive integer lags for the same periodicity) to ACF lag-grid coarseness at high BPM. A/B tested: the fraction of large-jump evaluations tight enough to clear the `6.0` spread threshold roughly doubled with it on (`8.5% → 19.9%`) |
 
 **Tempo-pick hardening for sparse/slow material:**
 
