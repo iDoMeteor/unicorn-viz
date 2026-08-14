@@ -62,6 +62,7 @@ def _make_seq_row(
     ts: str = '2026-06-20T10:00:00',
     mixer_bpm: float | None = None,
     track_path: str = '',
+    is_playing: bool = True,
 ) -> dict:
     row: dict = {
         'spotify_track_id': track_id,
@@ -72,6 +73,7 @@ def _make_seq_row(
         'bpm_confidence': confidence,
         'beat_index': beat_index,
         'analysis_generated_at': ts,
+        'is_playing': is_playing,
     }
     if event_type:
         row['event_type'] = event_type
@@ -80,6 +82,76 @@ def _make_seq_row(
     if track_path:
         row['track_path'] = track_path
     return row
+
+
+_trim_idle_bookends = _MOD._trim_idle_bookends
+
+
+# ---- _trim_idle_bookends (2026-08-14, round three) ---------------------------
+
+
+def test_trim_idle_bookends_drops_leading_and_trailing_idle_rows() -> None:
+    rows = (
+        [_make_seq_row(is_playing=False) for _ in range(3)]
+        + [_make_seq_row(is_playing=True) for _ in range(5)]
+        + [_make_seq_row(is_playing=False) for _ in range(4)]
+    )
+    trimmed = _trim_idle_bookends(rows)
+    assert len(trimmed) == 5
+    assert all(r['is_playing'] for r in trimmed)
+
+
+def test_trim_idle_bookends_preserves_a_real_mid_session_gap() -> None:
+    """A genuine pause between tracks mid-session is real content (or at
+    least not pre-roll/post-roll padding) -- must not be trimmed, only
+    contiguous idle runs touching the very start/end."""
+    rows = (
+        [_make_seq_row(is_playing=True) for _ in range(3)]
+        + [_make_seq_row(is_playing=False) for _ in range(2)]
+        + [_make_seq_row(is_playing=True) for _ in range(3)]
+    )
+    trimmed = _trim_idle_bookends(rows)
+    assert len(trimmed) == 8
+    assert trimmed == rows
+
+
+def test_trim_idle_bookends_all_idle_returns_empty() -> None:
+    rows = [_make_seq_row(is_playing=False) for _ in range(4)]
+    assert _trim_idle_bookends(rows) == []
+
+
+def test_trim_idle_bookends_empty_input() -> None:
+    assert _trim_idle_bookends([]) == []
+
+
+def test_trim_idle_bookends_no_idle_rows_is_a_no_op() -> None:
+    rows = [_make_seq_row(is_playing=True) for _ in range(4)]
+    assert _trim_idle_bookends(rows) == rows
+
+
+def test_write_scorecard_excludes_idle_bookends_from_lock_coverage(tmp_path: Path) -> None:
+    """Owner: 'fix the zero energy rows from the beginning & ends.' A
+    session left idle (app open, nothing playing) before/after the real
+    set must not count against beat_lock coverage -- confirmed via a
+    scorecard built from rows that would score very differently with vs.
+    without the idle padding."""
+    rows = (
+        [_make_seq_row(is_playing=False, confidence=0.0) for _ in range(20)]
+        + [_make_seq_row(is_playing=True, confidence=0.9) for _ in range(5)]
+        + [_make_seq_row(is_playing=False, confidence=0.0) for _ in range(20)]
+    )
+    seq_path = tmp_path / 'sequence-corpus.jsonl'
+    seq_path.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+    live_path = tmp_path / 'live-corpus.jsonl'
+    live_path.write_text('', encoding='utf-8')
+    bucket_dir = tmp_path / 'set-a' / 'a'
+    bucket_dir.mkdir(parents=True)
+
+    scorecard_path, _lock, _director = _write_scorecard(bucket_dir, live_path, seq_path)
+
+    content = scorecard_path.read_text(encoding='utf-8')
+    assert 'Sequence rows: `5`' in content
+    assert 'Beat lock coverage (confidence ≥ 0.45): `100.0%`' in content
 
 
 # ---- _build_detector_payload ------------------------------------------------
