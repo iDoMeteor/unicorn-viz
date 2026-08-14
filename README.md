@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.92**
+**Version 1.0.0-beta.93**
 
 ## Contact Me!
 
@@ -557,6 +557,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.93** — New shared track-path hint bus on `App`/`VJApi`
+  (`publish_track_path`/`get_track_path`, mirrors the existing
+  `publish_bpm`/`get_bpm` bus exactly): lets a source that knows a real
+  local file for what's playing (dj-mixer-01) publish it for an offline
+  consumer (training-kit-01's packaging step) to run independent
+  analysis (Essentia) against, without either side depending on the
+  other. Also corrects a version-header gap: `unicornviz/__init__.py`
+  was never bumped to `1.0.0-beta.92` when that entry below landed.
+  See [docs/adr/vj-system.md](docs/adr/vj-system.md).
 - **1.0.0-beta.92** — `unicornviz/audio/analyzer.py`: new public
   `Analyzer.refractory_s` property exposing the BPM-fed onset refractory
   (`set_expected_bpm()`'s internal `_refractory_s`) without a drop-in

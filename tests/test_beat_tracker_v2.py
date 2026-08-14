@@ -50,6 +50,7 @@ def _run_steady_click_track(
     fps: float = 60.0,
     jitter_s: float = 0.0,
     seed: int = 1,
+    kick_regularity: float | None = 1.0,
 ) -> float:
     """Feed a perfectly steady (or lightly jittered) onset stream at `bpm`
     for `duration_s` seconds.
@@ -68,6 +69,15 @@ def _run_steady_click_track(
     true fundamental), which can bias candidate selection in a way real
     (never perfectly periodic) audio does not reproduce as strongly. See
     docs/adr/vj-system.md.
+
+    kick_regularity (2026-08-14, round three, the morning after part two):
+    fed to every update() call, default 1.0 -- honest for this fixture, a
+    perfectly regular click train genuinely has maximal kick regularity,
+    and it keeps every pre-existing test here exercising what it always
+    tested rather than incidentally tripping the new sparse-evidence
+    update gate (which needs kick_regularity supplied at all to ever see
+    anything but its 0.0 persisted default). Pass a low value, or None to
+    suppress it entirely, in tests that specifically exercise that gate.
     """
     rng = random.Random(seed) if jitter_s else None
     period = 60.0 / bpm
@@ -81,7 +91,7 @@ def _run_steady_click_track(
         if t >= next_onset:
             onsets = [_FakeOnset(next_onset)]
             next_onset += period + (rng.uniform(-jitter_s, jitter_s) if rng else 0.0)
-        tracker.update(dt, audio, onsets=onsets, t=t)
+        tracker.update(dt, audio, onsets=onsets, t=t, kick_regularity=kick_regularity)
         t += dt
     return t
 
@@ -1751,3 +1761,117 @@ def test_phase_confidence_calibrated_tracks_a_real_configured_tolerance() -> Non
     bt = BeatTracker({'phase_tolerance': 0.20})
     bt._phase_confidence = 0.40   # exactly 2*0.20
     assert bt.phase_confidence_calibrated == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Sparse-evidence update gate (2026-08-14, round three, the morning after,
+# part two) -- owner: "humming seems to trip the detector up? (steady man
+# track)". See _V2_MIN_KICK_EVIDENCE's own comment in beat_grid.py.
+# ---------------------------------------------------------------------------
+
+def test_kick_evidence_constants_are_first_cut_pending_data() -> None:
+    assert _MOD._V2_KICK_EVIDENCE_ALPHA == pytest.approx(0.15)
+    assert _MOD._V2_MIN_KICK_EVIDENCE == pytest.approx(0.12)
+
+
+def test_kick_evidence_config_overrides_wire_through() -> None:
+    bt = BeatTracker({'kick_evidence_alpha': 0.5, 'min_kick_evidence': 0.9})
+    assert bt._kick_evidence_alpha == pytest.approx(0.5)
+    assert bt._min_kick_evidence == pytest.approx(0.9)
+
+
+def test_kick_evidence_smooth_starts_at_zero() -> None:
+    bt = BeatTracker({})
+    assert bt.kick_evidence_smooth == 0.0
+    assert bt.kick_evidence_reject_count == 0
+
+
+def test_cold_start_lock_is_unaffected_by_zero_kick_evidence() -> None:
+    """The gate only applies to already-locked updates (self._bpm > 0.0);
+    the initial lock must not be blocked by kick_evidence_smooth still
+    sitting at its 0.0 default -- gating cold-start on it could prevent
+    ever acquiring a first lock at all (kick_regularity legitimately
+    starts at 0.0 too, see _effective_tactus_ratio()'s own docstring)."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=124.0, duration_s=5.0, kick_regularity=None)
+
+    # Loose tolerance deliberately: once the cold-start lock succeeds, the
+    # gate immediately suppresses every further refinement (kick_regularity
+    # never supplied here, by design), so this is checking against the
+    # very first accepted candidate median rather than a time-converged
+    # value -- the point under test is that a lock happens at all, not
+    # its precision.
+    assert bt.bpm == pytest.approx(124.0, abs=6.0)
+
+
+def test_sustained_low_kick_evidence_holds_the_lock_through_a_tempo_change() -> None:
+    """Real Steady Man behavior, reproduced: once locked, sustained low
+    kick_regularity (a sparse/low-transient passage) must hold the
+    current BPM rather than chase a new candidate, even across what would
+    otherwise be a large, eventually-converging tempo change."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=124.0, duration_s=10.0, kick_regularity=1.0)
+    locked_bpm = bt.bpm
+    assert locked_bpm == pytest.approx(124.0, abs=3.0)
+
+    _run_steady_click_track(
+        bt, bpm=90.0, duration_s=20.0, start_t=10.0, jitter_s=0.01, kick_regularity=0.02,
+    )
+
+    assert bt.bpm == pytest.approx(locked_bpm, abs=0.5), (
+        'BPM must not move while kick evidence stays below the floor'
+    )
+    assert bt.kick_evidence_reject_count > 0
+    assert bt.kick_evidence_smooth < _MOD._V2_MIN_KICK_EVIDENCE
+
+
+def test_recovered_kick_evidence_lets_a_real_tempo_change_through() -> None:
+    """Same setup as above, but evidence recovers partway through the new
+    tempo -- the gate must release once kick_evidence_smooth climbs back
+    above the floor, not hold the lock forever."""
+    bt = BeatTracker({})
+    t = _run_steady_click_track(bt, bpm=124.0, duration_s=10.0, kick_regularity=1.0)
+
+    t = _run_steady_click_track(
+        bt, bpm=90.0, duration_s=3.0, start_t=t, jitter_s=0.01, kick_regularity=0.0,
+    )
+    assert bt.bpm == pytest.approx(124.0, abs=3.0), 'still held during the low-evidence stretch'
+
+    _run_steady_click_track(
+        bt, bpm=90.0, duration_s=20.0, start_t=t, jitter_s=0.01, kick_regularity=1.0,
+    )
+
+    assert bt.bpm == pytest.approx(90.0, abs=3.0), (
+        'must converge to the real new tempo once evidence recovers'
+    )
+
+
+def test_kick_evidence_smooth_resets_on_silence_but_reject_count_does_not() -> None:
+    """Matches acf_confidence/phase_confidence's own reset-on-silence
+    behavior (_reset_tempo_lock()) -- but the reject counter is session-
+    cumulative, same convention as large_jump_persistence_*_count, and
+    must survive a reset so a corpus row-to-row delta reflects real
+    engagement across the whole session, not just since the last gap."""
+    bt = BeatTracker({'silence_reset_s': 2.0})
+    _run_steady_click_track(bt, bpm=124.0, duration_s=10.0, kick_regularity=1.0)
+    t = _run_steady_click_track(
+        bt, bpm=90.0, duration_s=3.0, start_t=10.0, jitter_s=0.01, kick_regularity=0.0,
+    )
+    assert bt.kick_evidence_reject_count > 0
+    reject_count_before = bt.kick_evidence_reject_count
+
+    dt = 1.0 / 60.0
+    audio = _audio()
+    while t < 10.0 + 3.0 + 2.5:
+        bt.update(dt, audio, onsets=None, t=t)
+        if bt.bpm == 0.0:
+            break
+        t += dt
+
+    assert bt.kick_evidence_smooth == 0.0
+    # Monotonic, not frozen-at-capture: the gate can still fire on ACF
+    # re-evaluations in the cycles before the silence reset actually
+    # lands (self._bpm is still > 0 until then). What must hold is that
+    # _reset_tempo_lock() itself never zeroes this session-cumulative
+    # counter, same convention as large_jump_persistence_*_count.
+    assert bt.kick_evidence_reject_count >= reject_count_before

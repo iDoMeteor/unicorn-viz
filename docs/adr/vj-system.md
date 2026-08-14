@@ -2627,6 +2627,101 @@ packaged session was ever actually affected). Synced, along with the new
 `_VJ_WEIGHTS_DOC_VERSION` → `53`; `auto_vj.py` `__version__` →
 `1.0.0-rc.80`; `training-kit-01` → `0.16.11`.
 
+**Round Three, the morning after (part two): sparse-evidence update
+gate, two `library/h` LLM recs applied, and real `external_agreement`
+wired up.** Four owner requests in one message, all landed:
+
+1. **Two `library/h` LLM tuning recommendations applied directly**
+   ("let's try those now, wth"): `spectral_shape_fit` `1.2 → 1.4`
+   (recommender) and `phrase_under_over_hold_mult` `0.7 → 0.8`
+   (director). `_RECOMMENDER_VERSION` → `1.0.0-rc.16`,
+   `_DIRECTOR_VERSION` → `1.0.0-rc.7`.
+2. **New sparse-evidence update gate** (`_V2_KICK_EVIDENCE_ALPHA`
+   `0.15`, `_V2_MIN_KICK_EVIDENCE` `0.12`) — the fix for the "humming"
+   observation above. Already-locked BPM updates now additionally
+   require an EMA of `kick_regularity` (`kick_evidence_smooth`) to clear
+   a floor, holding the current lock instead of chasing an ACF candidate
+   the recent audio doesn't have the rhythmic structure to support.
+   Distinct lever from `_effective_tactus_ratio()`'s existing
+   `kick_regularity` use (that tightens *which* candidate wins a fold;
+   this suppresses accepting any update at all). Raw `kick_regularity`
+   was too noisy cycle-to-cycle to gate on directly — it swung `0.0` to
+   `0.8+` within a few cycles even during a correctly-locked stretch in
+   real session data — hence the EMA. New `kick_evidence_smooth`/
+   `kick_evidence_reject_count` properties, logged per-row, specifically
+   so the two first-cut constants can be tuned from real engagement data
+   rather than guessed at twice: owner, "let's do that, and be sure to
+   log and monitor the relevant details so we can tune it if needed."
+   Discovering this gate's existing tests never passed `kick_regularity`
+   at all (it silently persists at its `0.0` default) surfaced a real
+   test-fixture gap — every pre-existing tempo-change test in
+   `test_beat_tracker_v2.py` and `test_bpm_detector_audit_regressions.py`
+   would have frozen after first lock under the new gate; both files'
+   `_run_steady_click_track()` helpers now default `kick_regularity=1.0`
+   (honest for a perfectly regular synthetic click train) so existing
+   coverage keeps testing what it always tested. `_DETECTOR_VERSION` →
+   `1.0.0-rc.30`.
+3. **New shared track-path hint bus** (`App`/`VJApi`
+   `publish_track_path`/`get_track_path`, mirrors the existing
+   `publish_bpm`/`get_bpm` bus exactly) so dj-mixer-01 can tell an
+   offline consumer which real local file is playing. `unicornviz.
+   __version__` → `1.0.0-beta.93` (also corrects a version-header gap:
+   `unicornviz/__init__.py` was never bumped to `beta.92` when that
+   entry landed — caught while making this bump). dj-mixer-01's
+   `_exchange_bpm()` now publishes the playing deck's `track_path`
+   alongside the tempo it already publishes (`0.185.0`). auto-vj-01
+   captures it into every live/sequence corpus row as a new `track_path`
+   column, via a new `_get_mixer_track_path()` mirroring the existing
+   `_get_mixer_bpm()` exactly (`1.0.0-rc.83`).
+4. **Real `external_agreement` data, wired up at last.** Owner: "why are
+   we not getting essentia data for our tracks... let's wire it up! and
+   the mixer one too, each get their own column(s) in the corpii." The
+   answer to the original question: it was never a DJ-pool-vs-other-
+   source issue — no real Essentia data existed ANYWHERE in the pipeline
+   (a prior version faked one by copying the detector's own BPM and
+   mislabeling it, removed the same night it shipped — see the
+   `library/g`/`h` review entry above). Separately, a genuinely real,
+   working, already-installed-on-this-machine Essentia integration
+   existed the whole time in `training_lib.py::extract_audio_features()`
+   (`tools/training/`, used by the separate `build_corpus.py` offline
+   toolchain) — just never wired to `package_training_set.py`'s
+   scorecard pipeline. Now it is: each per-song entry in
+   `_build_detector_payload` gains `mixer_bpm_median` (dj-mixer-01's own
+   independent BPM, median over the song's rows, zero-placeholder rows
+   excluded) and `essentia_bpm`/`essentia_key` (real offline analysis
+   against the actual file at `track_path`, when one exists and points
+   at a readable file — currently dj-mixer-01 sessions only; Spotify/
+   media/streams have no local file). Neither is folded into a
+   precomputed agreement score — each is its own column, and the LLM
+   reasons from the raw numbers, per the owner's explicit instruction.
+   The prompt's `essentia_note` is now computed per-session instead of a
+   static string: honestly says how many of this session's songs have
+   real reference data and to score the rest as no-data, while keeping
+   the existing standing caveat that a disagreement is not automatically
+   the detector's fault. `essentia` added to
+   `tools/training/requirements.txt` only, per owner instruction — core
+   `requirements.txt` and every other drop-in's are untouched.
+   `training-kit-01` → `0.17.0`.
+
+**Documented, deliberately deferred: an explicit track-reset signal.**
+In response to the `library/g` vs. `h` boundary-carry-over finding above
+(a messy outgoing track's tail can poison the incoming track's initial
+lock), the natural fix would be an explicit "track changed, clear your
+carried state" signal fired at the real moment of a track change, for
+sources that can actually know one happened — the mixer, a media player,
+`playerctl` for anything MPRIS-capable. Owner: "for the right sources...
+we could send a track reset signal... but for streams etc we can't do
+that unless we try to determine track changes and that seems to be that
+it would introduce a whole new pandora's box that we probably shouldn't
+open... i agree with your suggestion, but let's just document & defer it
+for a while." The blocker is specifically stream sources (internet
+radio, anything without real track-boundary metadata) — building
+track-change *detection* from audio content alone (a novel, separate
+subsystem, not a small add-on) to support them is explicitly out of
+scope for this idea; the signal should stay simple and metadata-driven,
+built only for sources that can say so directly, whenever this gets
+picked back up.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

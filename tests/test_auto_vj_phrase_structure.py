@@ -201,6 +201,31 @@ def test_get_mixer_bpm_passes_through_a_valid_hint() -> None:
     assert inst._get_mixer_bpm() == 128.5
 
 
+def test_get_mixer_track_path_returns_empty_when_vj_api_lacks_get_track_path() -> None:
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=SimpleNamespace())  # no get_track_path at all
+    assert inst._get_mixer_track_path() == ''
+
+
+def test_get_mixer_track_path_returns_empty_on_lookup_error() -> None:
+    class _Raising:
+        def get_track_path(self, exclude=''):
+            raise RuntimeError('boom')
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=_Raising())
+    assert inst._get_mixer_track_path() == ''
+
+
+def test_get_mixer_track_path_passes_through_a_valid_hint() -> None:
+    class _Vj:
+        def get_track_path(self, exclude=''):
+            assert exclude == 'auto_vj'
+            return '/music/crates/track.mp3'
+    inst = _bare_controller()
+    inst._app = SimpleNamespace(vj_api=_Vj())
+    assert inst._get_mixer_track_path() == '/music/crates/track.mp3'
+
+
 def test_maybe_record_section_change_seeds_without_firing_on_first_hint() -> None:
     """The very first hint seen must not fire a transition -- there is no
     prior section to have transitioned from, and app startup mid-song

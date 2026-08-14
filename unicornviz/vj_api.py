@@ -189,6 +189,29 @@ class VJApi:
         fn = getattr(self._app, 'get_bpm', None)
         return float(fn(str(exclude))) if callable(fn) else 0.0
 
+    def publish_track_path(self, source: str, path: str) -> None:
+        """Publish a local file path on the shared hint bus (under *source*).
+
+        A source that knows a real local file for what's currently playing
+        (e.g. dj-mixer-01, loading from its own crate folder) publishes
+        here so an offline consumer (training-kit-01's packaging step) may
+        read it via :meth:`get_track_path` and run independent analysis
+        against the actual audio -- without either side depending on the
+        other. Degrades to a no-op on older cores.
+        """
+        fn = getattr(self._app, 'publish_track_path', None)
+        if callable(fn):
+            fn(str(source), path)
+
+    def get_track_path(self, exclude: str = '') -> str:
+        """Return the freshest non-stale track-path hint from a source !=
+        *exclude*, or '' when no usable hint exists.
+
+        Degrades to '' on older cores.
+        """
+        fn = getattr(self._app, 'get_track_path', None)
+        return str(fn(str(exclude))) if callable(fn) else ''
+
     def publish_section(self, source: str, payload: dict) -> None:
         """Publish a song-structure hint on the shared hint bus (under *source*).
 

@@ -387,6 +387,39 @@ def test_detector_snapshot_flux_fields_zero_when_grid_lacks_them() -> None:
     assert snap['bass_flux_fast'] == 0.0
 
 
+def test_detector_snapshot_reads_kick_evidence_fields() -> None:
+    """2026-08-14, round three, the morning after (part two): the new
+    sparse-evidence update gate's own signal and engagement counter."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='2.0.0', kick_evidence_smooth=0.42,
+        kick_evidence_reject_count=7,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['kick_evidence_smooth'] == pytest.approx(0.42)
+    assert snap['kick_evidence_reject_count'] == 7
+
+
+def test_detector_snapshot_kick_evidence_fields_default_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has no such mechanism -- must not raise, must
+    default to 0.0/0 rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['kick_evidence_smooth'] == 0.0
+    assert snap['kick_evidence_reject_count'] == 0
+
+
 def test_detector_snapshot_reads_acf_interpolation_delta() -> None:
     """2026-08-14, round three: A/B instrumentation for the sub-lag peak
     interpolation proposal (gated off by default). Nonzero only once the

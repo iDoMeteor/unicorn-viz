@@ -63,7 +63,17 @@ def _audio(bass: float = 0.5, mid: float = 0.3, treble: float = 0.2, flux: float
 
 
 def _run_steady_click_track(tracker, *, bpm: float, duration_s: float,
-                             start_t: float = 0.0, fps: float = 60.0) -> float:
+                             start_t: float = 0.0, fps: float = 60.0,
+                             kick_regularity: float | None = 1.0) -> float:
+    """kick_regularity defaults to 1.0 (2026-08-14, round three, the
+    morning after part two): honest for this fixture -- a perfectly
+    regular click train genuinely has maximal kick regularity -- and
+    keeps this file's own tests exercising what they always tested
+    rather than incidentally tripping the new sparse-evidence update
+    gate, which needs kick_regularity supplied at all to ever see
+    anything but its 0.0 persisted default. See
+    tests/test_beat_tracker_v2.py's identical fixture for the gate's own
+    dedicated coverage."""
     period = 60.0 / bpm
     dt = 1.0 / fps
     t = start_t
@@ -75,7 +85,7 @@ def _run_steady_click_track(tracker, *, bpm: float, duration_s: float,
         if t >= next_onset:
             onsets = [_FakeOnset(next_onset)]
             next_onset += period
-        tracker.update(dt, audio, onsets=onsets, t=t)
+        tracker.update(dt, audio, onsets=onsets, t=t, kick_regularity=kick_regularity)
         t += dt
     return t
 

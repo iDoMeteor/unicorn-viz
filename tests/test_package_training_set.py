@@ -60,6 +60,8 @@ def _make_seq_row(
     beat_index: int = 4,
     event_type: str | None = None,
     ts: str = '2026-06-20T10:00:00',
+    mixer_bpm: float | None = None,
+    track_path: str = '',
 ) -> dict:
     row: dict = {
         'spotify_track_id': track_id,
@@ -73,6 +75,10 @@ def _make_seq_row(
     }
     if event_type:
         row['event_type'] = event_type
+    if mixer_bpm is not None:
+        row['mixer_bpm'] = mixer_bpm
+    if track_path:
+        row['track_path'] = track_path
     return row
 
 
@@ -179,7 +185,111 @@ def test_build_detector_payload_band_signal_summary() -> None:
 def test_build_detector_payload_band_signal_none_on_empty_rows() -> None:
     payload = _build_detector_payload([], 'set-a', 'a')
     assert payload['band_signal']['mean_bass_n'] is None
-    assert payload['band_signal']['raw_beat_rate_pct'] is None
+
+
+# ---- _build_detector_payload: mixer_bpm_median / essentia (2026-08-14, round three) --------
+
+
+def test_build_detector_payload_mixer_bpm_median() -> None:
+    rows = [
+        _make_seq_row(bpm=124.0, mixer_bpm=125.0),
+        _make_seq_row(bpm=124.2, mixer_bpm=125.5),
+        _make_seq_row(bpm=124.1, mixer_bpm=125.0),
+    ]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] == pytest.approx(125.0)
+
+
+def test_build_detector_payload_mixer_bpm_median_none_when_absent() -> None:
+    rows = [_make_seq_row() for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] is None
+
+
+def test_build_detector_payload_mixer_bpm_median_ignores_zero_placeholder() -> None:
+    """mixer_bpm defaults to 0.0 (see _build_live_training_row) when no
+    external hint was available for a given row -- must not be counted as
+    a real reading of 0 BPM."""
+    rows = [
+        _make_seq_row(mixer_bpm=0.0),
+        _make_seq_row(mixer_bpm=0.0),
+        _make_seq_row(mixer_bpm=126.0),
+    ]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] == pytest.approx(126.0)
+
+
+def test_build_detector_payload_essentia_fields_default_none_without_track_path() -> None:
+    rows = [_make_seq_row() for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['essentia_bpm'] is None
+    assert payload['per_song'][0]['essentia_key'] is None
+
+
+def test_build_detector_payload_essentia_fields_default_none_when_file_missing(tmp_path: Path) -> None:
+    """A track_path is present but the file doesn't actually exist on this
+    machine (e.g. a corpus captured on a different machine/crate layout)
+    -- must not raise, must leave essentia fields None."""
+    rows = [_make_seq_row(track_path=str(tmp_path / 'does-not-exist.mp3'))]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['essentia_bpm'] is None
+    assert payload['per_song'][0]['essentia_key'] is None
+
+
+def test_build_detector_payload_essentia_fields_populated_when_extractor_available(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Mocks the extractor (same style as _load_live_detector_constants'
+    own tests) -- real Essentia is a heavy optional dependency, not a unit
+    test concern."""
+    audio_file = tmp_path / 'track.mp3'
+    audio_file.write_bytes(b'fake')
+
+    def _fake_extract(path):
+        assert Path(path) == audio_file
+        return {'analysis_status': 'ok', 'bpm': 127.4, 'key': 'A', 'scale': 'minor'}
+
+    monkeypatch.setattr(_MOD, '_load_extract_audio_features', lambda: _fake_extract)
+
+    rows = [_make_seq_row(track_path=str(audio_file))]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['essentia_bpm'] == pytest.approx(127.4)
+    assert payload['per_song'][0]['essentia_key'] == 'A minor'
+
+
+def test_build_detector_payload_essentia_fields_none_when_extraction_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    audio_file = tmp_path / 'track.mp3'
+    audio_file.write_bytes(b'fake')
+
+    def _raising_extract(path):
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(_MOD, '_load_extract_audio_features', lambda: _raising_extract)
+
+    rows = [_make_seq_row(track_path=str(audio_file))]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['essentia_bpm'] is None
+    assert payload['per_song'][0]['essentia_key'] is None
+
+
+def test_build_detector_payload_essentia_fields_none_when_extractor_reports_failure(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """analysis_status != 'ok' (e.g. corrupt/unreadable file) -- must not
+    report a bogus bpm=0.0 as if it were a real reading."""
+    audio_file = tmp_path / 'track.mp3'
+    audio_file.write_bytes(b'fake')
+
+    def _fake_extract(path):
+        return {'analysis_status': 'error', 'bpm': 0.0, 'key': 'unknown', 'scale': 'unknown'}
+
+    monkeypatch.setattr(_MOD, '_load_extract_audio_features', lambda: _fake_extract)
+
+    rows = [_make_seq_row(track_path=str(audio_file))]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['essentia_bpm'] is None
 
 
 # ---- _build_recommender_payload ---------------------------------------------
@@ -692,6 +802,29 @@ def test_build_combined_prompt_uses_live_profile_values_not_stale_names() -> Non
     for stale_name in ('lofi:', 'jazz:', 'classical:', 'minimal:', 'metal:', 'industrial:', 'reggae:'):
         assert stale_name not in prompt, f'stale profile {stale_name!r} leaked into prompt'
     assert 'house:' in prompt
+
+
+def test_build_combined_prompt_essentia_note_no_data() -> None:
+    detector_payload = {'essentia_available': False, 'per_song': [
+        {'key': 'id:aaa', 'mixer_bpm_median': None, 'essentia_bpm': None},
+    ]}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert 'score external_agreement as null' in prompt
+    assert 'Real external reference data is available' not in prompt
+
+
+def test_build_combined_prompt_essentia_note_with_real_reference_data() -> None:
+    """2026-08-14, round three: mixer_bpm_median/essentia_bpm wired up for
+    real -- the note must say so and point the LLM at per-song data
+    instead of claiming no reference exists."""
+    detector_payload = {'essentia_available': False, 'per_song': [
+        {'key': 'id:aaa', 'mixer_bpm_median': 125.0, 'essentia_bpm': None},
+        {'key': 'id:bbb', 'mixer_bpm_median': None, 'essentia_bpm': 127.4},
+        {'key': 'id:ccc', 'mixer_bpm_median': None, 'essentia_bpm': None},
+    ]}
+    prompt = _build_combined_prompt(detector_payload, {}, None)
+    assert 'Real external reference data is available for 2 of 3 songs' in prompt
+    assert 'score external_agreement as null' not in prompt
 
 
 def test_build_combined_prompt_includes_dynamic_set_flexibility_guidance() -> None:

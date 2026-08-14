@@ -517,6 +517,15 @@ class App:
         # other. See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
         # section 6.
         self._section_hints: dict[str, tuple[dict, float]] = {}
+        # source -> (local file path, monotonic timestamp). Mirrors
+        # _bpm_hints exactly -- a source that knows a real local file for
+        # what's currently playing (dj-mixer-01's own crate folder) can
+        # publish it for an offline consumer (training-kit-01's packaging
+        # step) to run independent analysis (e.g. Essentia) against,
+        # without either side depending on the other. 2026-08-14, round
+        # three: wired up alongside real Essentia/mixer_bpm external-
+        # agreement columns -- see docs/adr/vj-system.md.
+        self._track_path_hints: dict[str, tuple[str, float]] = {}
         # source -> (payload dict, monotonic timestamp). Mirrors
         # _section_hints exactly, one level up: sections say where you are
         # in a *track*, this says where you are in the *night* -- the set
@@ -822,6 +831,33 @@ class App:
             if ts > best_t:
                 best_bpm, best_t = bpm, ts
         return best_bpm
+
+    # -- shared track-path hint bus (offline-analysis interop) ---------------
+
+    _TRACK_PATH_HINT_TTL_S = 5.0
+
+    def publish_track_path(self, source: str, path: str) -> None:
+        """Publish a local file path under *source* for other drop-ins to read.
+
+        Same TTL/staleness pattern as publish_bpm(). An empty/whitespace
+        path is not stored (nothing to offer an offline consumer).
+        """
+        text = str(path or '').strip()
+        if text and str(source):
+            self._track_path_hints[str(source)] = (text, time.monotonic())
+
+    def get_track_path(self, exclude: str = '') -> str:
+        """Return the freshest non-stale track-path hint from a source !=
+        *exclude*, or '' when no usable hint exists."""
+        now = time.monotonic()
+        best_path = ''
+        best_t = -1.0
+        for src, (path, ts) in self._track_path_hints.items():
+            if src == exclude or (now - ts) > self._TRACK_PATH_HINT_TTL_S:
+                continue
+            if ts > best_t:
+                best_path, best_t = path, ts
+        return best_path
 
     # -- shared song-structure hint bus (phrase interop between drop-ins) ----
 

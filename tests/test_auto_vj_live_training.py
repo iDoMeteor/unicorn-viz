@@ -187,9 +187,11 @@ def test_build_live_training_row_captures_mixer_bpm_and_section_hint() -> None:
     row = _build_live_training_row(
         audio, {}, state, None, grid,
         mixer_bpm=128.5, section_hint=section_hint,
+        track_path='/music/crates/track.mp3',
     )
 
     assert row['mixer_bpm'] == 128.5
+    assert row['track_path'] == '/music/crates/track.mp3'
     assert row['section_role'] == 'PEAK'
     assert row['section_tier'] == 'major'
     assert row['section_label'] == 'drop'
@@ -214,6 +216,7 @@ def test_build_live_training_row_mixer_bpm_and_section_default_when_absent() -> 
     row = _build_live_training_row(audio, {}, state, None, grid)
 
     assert row['mixer_bpm'] == 0.0
+    assert row['track_path'] == ''
     assert 'section_role' not in row
 
 
