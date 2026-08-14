@@ -320,6 +320,46 @@ def test_detector_snapshot_large_jump_persistence_counters_zero_when_grid_lacks_
     assert snap['large_jump_persistence_cleared_count'] == 0
 
 
+def test_detector_snapshot_reads_large_jump_persistence_candidate_counters() -> None:
+    """2026-08-14, round three, the morning after (part three): logged-only
+    10/15-cycle candidates alongside the real 25-cycle counters above."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='2.0.0',
+        large_jump_persistence_cleared_count_short=5,
+        large_jump_persistence_reject_count_short=40,
+        large_jump_persistence_cleared_count_medium=8,
+        large_jump_persistence_reject_count_medium=30,
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['large_jump_persistence_cleared_count_short'] == 5
+    assert snap['large_jump_persistence_reject_count_short'] == 40
+    assert snap['large_jump_persistence_cleared_count_medium'] == 8
+    assert snap['large_jump_persistence_reject_count_medium'] == 30
+
+
+def test_detector_snapshot_large_jump_persistence_candidate_counters_zero_when_grid_lacks_them() -> None:
+    """v1 (BeatGridTracker) has no such mechanism -- must not raise, must
+    default to 0 rather than omitting the keys."""
+    grid = SimpleNamespace(
+        bpm=124.0, confidence=0.6, downbeat_confidence=0.3,
+        energy=0.5, energy_slope=0.1, drop_score=0.2, beat_phase=0.1,
+        ENGINE_VERSION='1.0.0',
+    )
+    inst = _bare_controller(grid, None)
+
+    snap = inst._detector_snapshot()
+
+    assert snap['large_jump_persistence_cleared_count_short'] == 0
+    assert snap['large_jump_persistence_reject_count_short'] == 0
+    assert snap['large_jump_persistence_cleared_count_medium'] == 0
+    assert snap['large_jump_persistence_reject_count_medium'] == 0
+
+
 def test_detector_snapshot_reads_long_candidate_spread_and_median() -> None:
     """2026-08-14, round three: the persistence check's own median/spread,
     previously computed and discarded every evaluation, now cached and

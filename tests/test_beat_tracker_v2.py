@@ -1584,6 +1584,58 @@ def test_large_jump_persistence_counters_move_during_a_real_transition() -> None
     )
 
 
+# ---------------------------------------------------------------------------
+# Large-jump-persistence-cycles candidates, logged only (2026-08-14, round
+# three, the morning after, part three) -- owner: "i told you that 25
+# candidates was too many! test some more reasonable values for that."
+# ---------------------------------------------------------------------------
+
+def test_large_jump_persistence_candidate_constants_are_shorter_than_the_real_value() -> None:
+    assert _MOD._V2_LARGE_JUMP_PERSISTENCE_CYCLES_CANDIDATE_SHORT == 10
+    assert _MOD._V2_LARGE_JUMP_PERSISTENCE_CYCLES_CANDIDATE_MEDIUM == 15
+    assert (
+        _MOD._V2_LARGE_JUMP_PERSISTENCE_CYCLES_CANDIDATE_SHORT
+        < _MOD._V2_LARGE_JUMP_PERSISTENCE_CYCLES_CANDIDATE_MEDIUM
+        < _MOD._V2_LARGE_JUMP_PERSISTENCE_CYCLES
+    )
+
+
+def test_large_jump_persistence_candidate_counters_start_at_zero() -> None:
+    bt = BeatTracker({})
+    assert bt.large_jump_persistence_cleared_count_short == 0
+    assert bt.large_jump_persistence_reject_count_short == 0
+    assert bt.large_jump_persistence_cleared_count_medium == 0
+    assert bt.large_jump_persistence_reject_count_medium == 0
+
+
+def test_large_jump_persistence_candidate_counters_move_during_a_real_transition() -> None:
+    """Same transition as the real-gate test above -- the shorter windows
+    must engage too, and (being shorter) must not lag behind the real
+    25-cycle window's own engagement."""
+    bt = BeatTracker({})
+    _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+    assert bt.large_jump_persistence_reject_count_short == 0
+    assert bt.large_jump_persistence_reject_count_medium == 0
+
+    _run_steady_click_track(bt, bpm=123.0, duration_s=30.0, start_t=60.0, jitter_s=0.01)
+
+    assert bt.large_jump_persistence_reject_count_short > 0
+    assert bt.large_jump_persistence_cleared_count_short > 0
+    assert bt.large_jump_persistence_reject_count_medium > 0
+    assert bt.large_jump_persistence_cleared_count_medium > 0
+
+
+def test_large_jump_persistence_candidate_counters_never_gate_the_real_bpm() -> None:
+    """Logged only -- must have zero effect on what BPM actually gets
+    accepted, same guarantee as the lock-band candidates."""
+    bt_with = BeatTracker({})
+    bt_without = BeatTracker({})
+    for bt in (bt_with, bt_without):
+        _run_steady_click_track(bt, bpm=83.0, duration_s=60.0)
+        _run_steady_click_track(bt, bpm=123.0, duration_s=30.0, start_t=60.0, jitter_s=0.01)
+    assert bt_with.bpm == pytest.approx(bt_without.bpm)
+
+
 def test_long_candidate_spread_and_median_start_at_zero() -> None:
     """0.0 before any large-jump candidate has ever been evaluated, same
     convention as region_consistency."""
