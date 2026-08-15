@@ -1886,6 +1886,39 @@ existing recommendation (§ 8.4) to build Option C as its own dedicated
 session with a synthetic multi-modal-candidate harness, rather than
 opening a new, narrower proposal.
 
+**Follow-up question, answered with real numbers: would raising raw
+ACF's weight help?** Owner: "are you sorta saying we should raise the
+weight of the raw acf as a consideration?" — a reasonable read of
+"even the most lenient threshold couldn't rescue it," but checking the
+actual `acf_top_candidates` field (explicitly the **raw, prior-free**
+comb-filter score — see its own comment in `beat_grid.py`, "Deliberately
+sourced from the RAW comb_score (no prior applied)... P1-C in
+`docs/audits/2026-08-04-bpm-detector-audit.md`") for `chillstep/a`'s
+stuck stretch shows the opposite is true:
+
+```text
+bpm=124.99  candidates: 127.66:0.524, 63.16:0.157, 98.36:0.104   (3.3x)
+bpm=127.51  candidates: 127.66:0.282, 122.45:0.120, 61.86:0.099  (2.8x)
+bpm=127.62  candidates: 127.66:0.263, 61.86:0.128, 122.45:0.118  (2.1x)
+```
+
+No prior involved anywhere in these numbers — the doubled candidate's
+**raw** comb score beats the half-tempo candidate's by 2.1-3.3x on its
+own. `_V2_RAW_DOMINANCE_RATIO` (§ 2.1) is literally "let raw evidence
+override the prior when raw evidence is clearly stronger" — the
+existing mechanism this idea would tune — but here the raw evidence
+already agrees with the wrong answer, decisively. Raising raw ACF's
+influence would make this specific failure shape *more* confident, not
+less: the prior isn't suppressing a correct raw signal, the raw signal
+itself is already wrong. This is a clean, numeric confirmation of the
+working hypothesis above (a loud, clean percussive layer at the doubled
+rate dominates the autocorrelation on its own fundamental-lag strength,
+independent of harmonic bookkeeping) and reinforces — rather than
+opens — the case for Option C specifically: the fix has to *recognize*
+that a strong peak is harmonically explainable as 2x of a plausible
+weaker peak and prefer the sub-multiple, which a raw-score weight
+knob structurally cannot do.
+
 **Status: corrected and closed as a standalone item.** No code changed
 either before or after the correction. Nothing here is flagged for
 implementation — it folds into Option C's already-deferred scope.
