@@ -1637,3 +1637,40 @@ incident. This keeps the v2-final-candidate checkpoint (§ 16.4)
 protected while still making forward progress on a finding that's now
 backed by two real incidents in one session rather than a purely
 theoretical audit flag.
+
+### 17.1 Update: synthetic sweep evidence (2026-08-14, later still)
+
+Owner: "run us a sim test across most of the bpm spectrum... expand the
+test w/the distractors and run again." Built `drop-ins/auto-vj-01/tools/
+bpm_sweep_sim.py` (saved for reuse, not a one-off) — a few simulated
+hours of tempo changes across 72-182 BPM run through a real `BeatTracker`
+in a tight dt-stepped loop, real time under two minutes. `--distractors`
+adds a second, weaker onset train at 2x/0.5x/1.5x the target, the closest
+a pure-synthetic harness can get to the real harmonic-ambiguity failures
+found the same night.
+
+Two results worth folding into the record:
+
+1. **§ 17.2's persistence-cycles question, answered directly.** 10 vs.
+   15 vs. 25 cycles are statistically indistinguishable across every
+   metric tested (convergence rate, time-to-converge, final accuracy),
+   with or without distractors. Real, controlled evidence — not just
+   the real-session logging still accumulating — that the window size
+   was never the lever for the `garbage/m` stalls; it only ever
+   promised a modest, low-risk convergence-speed edge, exactly as
+   flagged in the original write-up.
+2. **The 3:2 (triplet) distractor is worse than either octave
+   distractor**, not a lesser cousin of the octave case: 33.3% of
+   segments never converged within their hold window at all (vs.
+   ~9-12% for a 2x distractor, a 0.5x distractor, or no distractor).
+   Octave errors are the textbook, well-studied case in the beat-
+   tracking literature; this result says triplet/shuffle-feel ambiguity
+   deserves at least equal billing in whatever Option C ends up scoring
+   candidates against — a plain "check 2x and 0.5x" fold would miss the
+   harder of the two failure modes this project has actually hit.
+
+Caveat unchanged from § 17.3's own framing: a synthetic click train is
+*more* harmonically ambiguous than real music (zero timbral distinction
+between the true beat and its alias), so these failure rates are an
+upper bound, not a real-world estimate — real sessions tonight showed
+roughly 2-3 problem tracks per 20-30 track set, not 1 in 3.
