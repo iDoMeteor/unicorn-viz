@@ -96,6 +96,7 @@ def _make_seq_row(
 
 _trim_idle_bookends = _MOD._trim_idle_bookends
 _lock_pct_stateful = _MOD._lock_pct_stateful
+_warn_if_essentia_unavailable = _MOD._warn_if_essentia_unavailable
 
 
 # ---- _trim_idle_bookends (2026-08-14, round three) ---------------------------
@@ -492,6 +493,49 @@ def test_build_detector_payload_essentia_fields_none_when_extractor_reports_fail
     rows = [_make_seq_row(track_path=str(audio_file))]
     payload = _build_detector_payload(rows, 'set-a', 'a')
     assert payload['per_song'][0]['essentia_bpm'] is None
+
+
+# ---- _warn_if_essentia_unavailable (2026-08-14, round three) ------------------
+# Owner: "why didn't essentia run?" -- root cause was packaging running under a
+# Python without essentia installed, silently swallowed by extract_audio_
+# features()'s own broad except. Owner: "yes please" (make it loud).
+
+
+def _reset_essentia_warned_flag(monkeypatch) -> None:
+    monkeypatch.setattr(_MOD, '_ESSENTIA_WARNED_THIS_PROCESS', False)
+
+
+def test_warn_if_essentia_unavailable_no_op_without_track_path(monkeypatch, caplog) -> None:
+    _reset_essentia_warned_flag(monkeypatch)
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+    rows = [_make_seq_row()]  # no track_path
+    with caplog.at_level('WARNING'):
+        _warn_if_essentia_unavailable(rows)
+    assert caplog.text == ''
+
+
+def test_warn_if_essentia_unavailable_no_op_when_essentia_is_installed(monkeypatch, caplog) -> None:
+    _reset_essentia_warned_flag(monkeypatch)
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: object())  # "found"
+    rows = [_make_seq_row(track_path='/some/real/path.mp3')]
+    with caplog.at_level('WARNING'):
+        _warn_if_essentia_unavailable(rows)
+    assert caplog.text == ''
+
+
+def test_warn_if_essentia_unavailable_warns_once(monkeypatch, caplog) -> None:
+    _reset_essentia_warned_flag(monkeypatch)
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+    rows = [_make_seq_row(track_path='/some/real/path.mp3')]
+
+    with caplog.at_level('WARNING'):
+        _warn_if_essentia_unavailable(rows)
+        _warn_if_essentia_unavailable(rows)  # second call: must not repeat
+
+    warnings = [r for r in caplog.records if r.levelname == 'WARNING']
+    assert len(warnings) == 1
+    assert 'essentia' in warnings[0].message.lower()
+    assert '.venv' in warnings[0].message
 
 
 # ---- _build_recommender_payload ---------------------------------------------
