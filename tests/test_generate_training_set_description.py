@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -447,3 +448,25 @@ def test_generate_with_llm_raises_when_response_has_no_text(monkeypatch: pytest.
     with patch('urllib.request.urlopen', return_value=_mock_urlopen_response({})):
         with pytest.raises(RuntimeError, match='did not contain output text'):
             _MOD._generate_with_llm('gpt-5.3-codex', {})
+
+
+# ---------------------------------------------------------------------------
+# _load_dotenv_fallback() — mirrors package_training_set.py's loader of the
+# same name; this script is also directly runnable standalone, so it needs
+# its own copy rather than relying on packaging having already loaded .env.
+# ---------------------------------------------------------------------------
+
+def test_load_dotenv_fallback_sets_missing_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / '.env').write_text('OPENAI_API_KEY=sk-from-dotenv\n', encoding='utf-8')
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    _MOD._load_dotenv_fallback(tmp_path)
+    assert os.environ['OPENAI_API_KEY'] == 'sk-from-dotenv'
+
+
+def test_load_dotenv_fallback_never_overrides_real_shell_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / '.env').write_text('OPENAI_API_KEY=sk-from-dotenv\n', encoding='utf-8')
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-real-shell-value')
+    _MOD._load_dotenv_fallback(tmp_path)
+    assert os.environ['OPENAI_API_KEY'] == 'sk-real-shell-value'

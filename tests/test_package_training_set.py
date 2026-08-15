@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import os
 import wave
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +24,7 @@ _build_detector_payload = _MOD._build_detector_payload
 _song_key = _MOD._song_key
 _run_llm_scoring = _MOD._run_llm_scoring
 _detect_llm_provider = _MOD._detect_llm_provider
+_load_dotenv_fallback = _MOD._load_dotenv_fallback
 _score_lock_quality = _MOD._score_lock_quality
 _BPM_LOCK_CONFIDENCE_FLOOR = _MOD._BPM_LOCK_CONFIDENCE_FLOOR
 _cleanup_stale_empty_corpus_files = _MOD._cleanup_stale_empty_corpus_files
@@ -729,6 +731,33 @@ def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path, caplog
     # after activating .venv in a shell that never had the key exported.
     assert 'venv' in caplog.text
     assert 'echo $OPENAI_API_KEY' in caplog.text
+
+
+# ---- _load_dotenv_fallback ---------------------------------------------------
+
+
+def test_load_dotenv_fallback_no_op_without_env_file(tmp_path: Path) -> None:
+    with patch.dict('os.environ', {}, clear=False):
+        _load_dotenv_fallback(tmp_path)  # no .env present -- must not raise
+
+
+def test_load_dotenv_fallback_sets_missing_keys(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / '.env').write_text(
+        '# comment\n\nOPENAI_API_KEY=sk-from-dotenv\nANTHROPIC_API_KEY="sk-ant-quoted"\n',
+        encoding='utf-8',
+    )
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
+    _load_dotenv_fallback(tmp_path)
+    assert os.environ['OPENAI_API_KEY'] == 'sk-from-dotenv'
+    assert os.environ['ANTHROPIC_API_KEY'] == 'sk-ant-quoted'  # surrounding quotes stripped
+
+
+def test_load_dotenv_fallback_never_overrides_real_shell_value(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / '.env').write_text('OPENAI_API_KEY=sk-from-dotenv\n', encoding='utf-8')
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-real-shell-value')
+    _load_dotenv_fallback(tmp_path)
+    assert os.environ['OPENAI_API_KEY'] == 'sk-real-shell-value'
 
 
 # ---- _run_llm_summary (2026-08-09: consolidated console summary) -----------
