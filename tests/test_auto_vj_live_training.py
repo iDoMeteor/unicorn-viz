@@ -325,6 +325,107 @@ def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> N
     assert row['danceability'] == pytest.approx(0.205)
 
 
+class _FakeLiveCorpusWriter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[dict, bool]] = []
+
+    def upsert(self, row: dict, *, force_flush: bool = False) -> bool:
+        self.calls.append((row, force_flush))
+        return True
+
+
+def _make_record_live_training_row_stub(*, writer=None, bpm: float = 125.0):
+    """Minimal AutoVJController-like stub for _record_live_training_row()."""
+    return SimpleNamespace(
+        _live_corpus_writer=writer if writer is not None else _FakeLiveCorpusWriter(),
+        _grid=SimpleNamespace(bpm=bpm, confidence=0.8),
+        _audio_manager=None,
+        _shadow_grid=None,
+        _shadow2_grid=None,
+        _live_training_last_change_counter=-1,
+        _live_training_last_track_id='',
+        _compute_kick_regularity=lambda: 0.5,
+        _get_mixer_bpm=lambda: 0.0,
+        _get_mixer_track_path=lambda: '',
+        _get_section_hint=lambda: None,
+    )
+
+
+def test_record_live_training_row_writes_without_now_playing_availability() -> None:
+    """2026-08-15: no longer requires spotify.available/is_playing -- a
+    session where the now-playing source never resolves a track identity
+    (this bug's real trigger case) must still capture live-corpus rows as
+    long as the detector has a real BPM."""
+    stub = _make_record_live_training_row_stub()
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    spotify = {'available': False, 'is_playing': False}  # no identity ever resolved
+
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, spotify)
+
+    assert len(stub._live_corpus_writer.calls) == 1
+
+
+def test_record_live_training_row_skips_when_no_real_bpm() -> None:
+    """The BPM check is the real, source-independent gate now -- still enforced."""
+    stub = _make_record_live_training_row_stub(bpm=0.0)
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=0.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, {})
+
+    assert stub._live_corpus_writer.calls == []
+
+
+def test_record_live_training_row_change_counter_zero_force_flushes() -> None:
+    """2026-08-15: `spotify.get('change_counter', -1) or -1` collapsed a
+    legitimate change_counter of 0 into -1 (falsy-0 triggers `or`), which
+    then failed the `change_counter >= 0` check and could never
+    force-flush. change_counter=0, differing from the fresh session's
+    initial -1 sentinel, must now be recognized as a real change."""
+    stub = _make_record_live_training_row_stub()
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    spotify = {'change_counter': 0}
+
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, spotify)
+
+    assert len(stub._live_corpus_writer.calls) == 1
+    _row, force_flush = stub._live_corpus_writer.calls[0]
+    assert force_flush is True
+    assert stub._live_training_last_change_counter == 0
+
+
+def test_record_live_training_row_logs_a_warning_on_capture_failure(caplog: pytest.LogCaptureFixture) -> None:
+    """2026-08-15: this exact silent-swallow shape (a real failure invisible
+    without DEBUG-level logging) is what made the zero-live-corpus-rows
+    session that found this bug so hard to diagnose after the fact."""
+    class _RaisingWriter:
+        def upsert(self, row: dict, *, force_flush: bool = False) -> bool:
+            raise RuntimeError('disk full')
+
+    stub = _make_record_live_training_row_stub(writer=_RaisingWriter())
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+
+    with caplog.at_level('WARNING'):
+        _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, {})
+
+    assert 'disk full' in caplog.text
+
+
 def test_build_live_training_row_captures_every_audiodata_field_except_fft_waveform() -> None:
     """2026-08-09: bass/mid/treble/bass_n/mid_n/treble_n/beat/bass_flux/
     mid_flux/vocal_hnr/vocal_fmr now reach every corpus row this function
