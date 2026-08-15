@@ -717,12 +717,18 @@ def test_run_llm_scoring_overrides_a_hallucinated_scored_at(tmp_path: Path) -> N
     assert det_data['scored_at'] == result['scored_at']
 
 
-def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path) -> None:
+def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path, caplog) -> None:
     rows = [_make_seq_row()]
-    with patch.dict('os.environ', {'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': ''}, clear=False):
+    with patch.dict('os.environ', {'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': ''}, clear=False), \
+         caplog.at_level('WARNING'):
         result = _run_llm_scoring(tmp_path, rows, 'set-a', 'a')
     assert result is None
     assert not (tmp_path / 'session_score.json').exists()
+    # 2026-08-15: the warning must call out that this is a shell/environment
+    # issue, not a venv issue -- owner mistook a missing key for venv fallout
+    # after activating .venv in a shell that never had the key exported.
+    assert 'venv' in caplog.text
+    assert 'echo $OPENAI_API_KEY' in caplog.text
 
 
 # ---- _run_llm_summary (2026-08-09: consolidated console summary) -----------
