@@ -1674,3 +1674,31 @@ Caveat unchanged from § 17.3's own framing: a synthetic click train is
 between the true beat and its alias), so these failure rates are an
 upper bound, not a real-world estimate — real sessions tonight showed
 roughly 2-3 problem tracks per 20-30 track set, not 1 in 3.
+
+## 18. v3 roadmap item: faster-than-real-time headless training
+
+Owner: "can we run headless training sessions w/local tracks @ faster
+than real-time speed?? that would be awesome!" ... "put it on the plan
+for v3."
+
+Currently real-time-locked because the Analyzer captures from an actual
+audio device and everything downstream (envelope decay, phase
+advancement, hold durations) runs off wall-clock time. The way around
+it: decode a file directly (soundfile/PyAV, already used elsewhere in
+the project) instead of capturing from a device, and feed the decoded
+PCM into the Analyzer/BeatTracker pipeline with simulated timestamps
+advancing by samples-processed rather than `time.monotonic()` — the
+same technique `tools/bpm_sweep_sim.py` (§ 17.1) already uses for
+synthetic onsets, just with real decoded audio. FFT/onset detection
+should run well faster than 1x realtime on real hardware for offline
+batch work.
+
+Real scope, not a flag flip: needs a genuine headless-batch code path
+that skips rendering, skips the mixer's real audio-output device, and
+doesn't lock to wall-clock anywhere in the chain — including dj-mixer-
+01's own crossfade/stem engine if auto-mix content (not just plain
+sequential files) is wanted. Natural extension of the existing headless-
+training plan (dj-mixer-01/media-01 as sources, see the plan file from
+earlier this session) rather than a separate effort. Not scoped further
+than this for now — v3-adjacent infrastructure work, tracked here so it
+isn't lost.
