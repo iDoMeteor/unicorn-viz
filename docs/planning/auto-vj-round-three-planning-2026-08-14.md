@@ -966,6 +966,152 @@ comment: at least one existing detector constant is explicitly "not
 hot-reloaded," so live-switching may not be uniformly possible across
 every candidate setting without further work).
 
+### 4.4 "Cheater mode" #1: manual mood-selector nudge as a production stopgap (2026-08-15)
+
+Owner: "another cheat... when the vj changes the mood to <x>, the bpm
+detector will heavily favor choosing bpms in that range, as a way to
+solve that problem for production stream usage until we have enough
+data to dial it in, get r3/v3 done, etc? i think we were moving in that
+direction once, and kinda halfway there on the mood selector side."
+
+**Where this actually stands today — further along than "halfway," in a
+specific way.** `BeatTracker.set_profile()` (would reprime the tempo
+search from a genre's `bpm_prior_mu`/`sigma`) still exists, fully coded
+and still unit-tested directly — but its only production call site,
+`AutoVJController._sync_grid_audio_profile()`, was **removed entirely**
+as part of the one-way-flow cut (`weights-and-thresholds.md`'s
+`_MIN_PROFILE_PRIOR_SIGMA` row: "effectively inert in production...
+only its live wiring from the recommender is gone"). So right now,
+genre/mood selection — manual *or* automatic — has **zero** live effect
+on the BPM detector. Not gated, disconnected.
+
+**Why it was disconnected, worth restating plainly since a new proposal
+here needs to not reopen it.** Two real incidents (2026-07-18,
+2026-08-12) where the *recommender's own automatic* genre guess fed
+back into the tempo prior — genre inference partly depends on the
+current BPM reading (`tempo_fit`), so that's circular: a wrong guess
+could drag an already-correct lock toward the wrong genre's range over
+minutes to hours. A hard `bpm_hint_min`/`max` search-range clamp was
+also tried earlier and reverted, because a wrongly-applied profile
+could permanently hide the true tempo from the search entirely (see
+`set_profile()`'s own docstring, § 3.2b).
+
+**Why a manual mood-selector trigger is architecturally different, not
+the same bug in a new coat.** Both incidents share one root cause: the
+trigger was an *inference*, not a genuine external decision. A human
+explicitly picking a mood off the selector is categorically different
+— it's not something the detector itself produced, it's real outside
+information, the same category `prime_tempo()` already trusts for
+dj-mixer's own per-track analysis (§ 3.2d — that path was never touched
+by either incident or the cut). The safety property that matters is
+narrow and enforceable: **the trigger must be a genuine manual action,
+never the recommender's automatic profile switch.**
+
+**Proposed design, not implemented:**
+
+1. Re-wire *only* the manual hotkey path (`unicornviz/hotkeys.py`'s
+   profile cycling, `AudioManager.set_profile()`) to feed the new mood
+   into the detector. The recommender's automatic path
+   (`auto_vj.py:4682`, `manager.set_profile(recommended_key)`) stays
+   cut exactly as it is today — no exceptions, this is the one hard
+   line the design can't blur.
+2. Route it through **`prime_tempo()`**, not a revived
+   `set_profile()` call — already-proven, already-safe machinery:
+   confidence only ever raised not lowered, refreshes the tempo-hold
+   window so the ACF's own continuity guards don't immediately fight
+   it. `set_profile()`'s soft prior-reweight also still no-ops once
+   `self._bpm > 0.0` (§ 3.2b), so it wouldn't even fire post-lock —
+   exactly the situation where a live operator would want to intervene
+   on an already-wrong lock. Feed `prime_tempo()` the best real raw ACF
+   candidate (from `acf_top_candidates`, already computed every cycle —
+   see § 8.7's evidence section for what this data looks like) that
+   falls inside the newly-selected mood's `bpm_hint_min`/`max`, rather
+   than blindly forcing the profile's central `bpm_prior_mu` — an
+   audio-grounded correction, not a fabricated number.
+3. No hard search-range clamp — same lesson as the reverted
+   `bpm_hint_min`/`max` clamp attempt. This nudges, it doesn't cage.
+
+**A concrete complication found while researching this, not yet
+resolved:** `dubstep`'s own profile currently hard-codes a narrow
+`bpm_hint_min=138`/`bpm_hint_max=142` band (comment: "keeps the ACF
+locked to the produced tempo instead of folding down to the perceived
+half-time pulse"), modeling only the "140 produced, 70 perceived"
+half-time story. Owner, after actually listening through a full
+dubstep set for the first time from a genre-analysis point of view
+(§ Phase 5's `2hr-dubstep` entry, once packaged): "dub step *is* legit
+70-100 AND 130-160 lol" — real, separately-produced tempo bands, not
+just one produced tempo and its perceptual half-time illusion. The
+`2hr-dubstep` session's own BPM distribution backs this up: 19.0% of
+readings in 70-100, 50.9% in 130-160, both real mass, not noise (see
+Phase 5). If mood-selector nudging is built against dubstep's *current*
+hint band, it would actively fight roughly half of genuinely correct
+dubstep readings. Worth widening `bpm_hint_min`/`max` (or moving to a
+genuinely bimodal representation, if the profile schema can support
+one) before this cheat mode would work well for dubstep specifically —
+flagged here, not changed yet, pending the owner's review of the full
+`2hr-dubstep` analysis.
+
+**Status: proposed, awaiting owner input.** Not implemented. Owner:
+"write it up... i'll have more input about it later."
+
+### 4.5 "Cheater mode" #2: tap-tempo as a 30-second high-trust seed (2026-08-15)
+
+Owner: "we recently built in a bpm tapper... so let's put it to work,
+vj taps out a beat w/0 key.. and then hits enter while the tempo tapped
+is displayed, we send that to the detector and have him highly weight
+that signal and look for best match for next 30s while it tries to
+lock in on what's going on."
+
+**What already exists.** `Overlays.bpm_tap()` (`unicornviz/overlays.py`,
+bound to KP 0 in `hotkeys.py`) is a real, working feature today — but a
+pure HUD readout. It tracks tap timestamps, computes a BPM from the
+retained consecutive intervals, and renders a top-right "TAP nnn.n BPM"
+readout while `bpm_tapper_active()` is true (within `BPM_TAP_HOLD_S` of
+the last tap). It has **no existing connection to the detector at
+all** — the tapped value is currently display-only, thrown away the
+moment the readout times out.
+
+**Proposed design, not implemented:**
+
+1. New binding: `Enter`/`KP Enter`, scoped to fire *only* while
+   `bpm_tapper_active()` is true (so it doesn't collide with the many
+   existing context-specific `SDLK_RETURN`/`SDLK_KP_ENTER` menu-confirm
+   bindings elsewhere in `hotkeys.py` — those are all gated to their own
+   menu/overlay modes already; this needs the same discipline, checked
+   before those handlers claim the key).
+2. On confirm, send the tapped BPM to the detector as an explicit,
+   maximally-authoritative external hint — arguably *more* authoritative
+   than the mood-selector nudge in § 4.4, since it's a literal real-time
+   human tapping the actual beat, not a genre label. Same safety
+   property as § 4.4 applies for the same reason: a human's real-time
+   tap is genuine external ground truth, not the detector's own
+   inference, so it doesn't reopen the backward-flow class of bug either.
+3. **Genuinely new engineering, not a `prime_tempo()` reuse this
+   time.** `prime_tempo()` is a one-shot nudge to the search prior for
+   the *next* re-estimation cycle, then the tracker behaves exactly as
+   it normally would from there. "Look for best match for next 30s
+   while it tries to lock in" is a sustained, time-bounded *elevated
+   trust window* — a different shape of mechanism. Needs a new
+   `_tap_prime_until_t` (or similarly-named) timestamp field: for the
+   30s after confirm, pin the Gaussian prior's mu tightly to the tapped
+   value (much tighter sigma than any profile's, since this is a
+   real-time human measurement, not a genre-level guess) and relax the
+   normal gate stack's persistence/confidence requirements specifically
+   for candidates near the tapped value, so a real lock can form fast
+   without fighting the standard large-jump-persistence machinery built
+   for the opposite problem (resisting spurious jumps). After the
+   window expires (or once a stable lock forms within it, whichever the
+   design favors), revert cleanly to normal profile-driven behavior —
+   no permanent state change, no lingering bias past the window.
+4. Same non-negotiable as § 4.4: this is manual-trigger-only by
+   construction (there's no automatic path to a keyboard tap), so the
+   circularity concern doesn't apply here at all — worth stating
+   explicitly since it's the cleanest of the two proposals on that
+   front.
+
+**Status: proposed, awaiting owner input.** Not implemented. Owner:
+"write it up... i'll have more input about it later."
+
 ---
 
 ## Phase 5 — Library Packaging & LLM Scoring Runs
@@ -1081,6 +1227,63 @@ to combine every round-three change live together (tighter lock band,
 consolidated engine, three applied LLM-recommended weight/constant
 changes, interpolation on, v1 shadow2 all at once). (Its results are
 covered in § 1.4/§ 1.5.)
+
+### 5.3 `2hr-dubstep` packaged — first real dedicated-genre run since the two 2026-08-15 fixes, and dubstep's own hint band is too narrow
+
+Owner deliberately chose dubstep for a dedicated 2-3 session run
+following the `chillstep/a` investigation (§ 8.7) — the genre with the
+strongest, most widely-known real-world octave-ambiguity reputation
+(the "140 produced / 70 perceived" convention). First real validation
+that both of the same day's production fixes actually work end to end:
+`live-corpus-20260815T171241Z.jsonl` has 34 real rows (the `.env`
+LLM-key fix and the live-corpus availability-gate fix, § "auto-vj-01"
+`1.0.0-rc.86`, both landed *before* this session started), and a full
+LLM report generated (`detector_score.md` etc. all present — the
+missing-API-key bug from `chillstep/a` did not recur).
+
+**Overall: healthy, unremarkable in a good way.** 144.25 min, 21,072
+sequence rows. LLM: **4.0/5 overall** (Lock Stability, Tempo
+Plausibility, Confidence Reliability, Musical Alignment all `4/5`).
+Lock `86.3%`, tactus-fold reject `93.6%` — squarely inside the
+94-99%-band established as the universal baseline in § 8.7's
+cross-session table, not an outlier like `chillstep/a`. `kick_regularity`
+mean/median `0.682`/`0.760` — also normal-range, not elevated the way
+`chillstep/a`'s was. v1/v2 (shadow2) disagreement mean `21.94`, median
+`16.56` — higher than the healthiest sessions in § 8.7's table but not
+dramatically so, consistent with a genre known for real tempo ambiguity
+without being a stuck-lock incident.
+
+**The BPM distribution independently confirms the owner's own listening
+call.** Owner, after listening through a full set from a genre-analysis
+point of view for the first time: "dub step *is* legit 70-100 AND
+130-160 lol." Real numbers back it up — **19.0%** of readings in
+70-100, **50.9%** in 130-160, both substantial, genuine mass, not one
+dominant band with noise around it (`105-125`, the gap between the two
+real bands, is only `25.2%`, consistent with genuine transitional/
+mixed content rather than the "everything piles into one wrong band"
+shape `chillstep/a` showed).
+
+**A concrete, actionable side-finding: `dubstep`'s own `AudioProfile`
+can't see half of what real dubstep actually is.** `unicornviz/audio/
+profiles.py`'s `dubstep` entry hard-codes `bpm_prior_mu=140.0`,
+`bpm_hint_min=138.0`, `bpm_hint_max=142.0` — the tightest sigma
+(`0.0218`) of the entire profile roster, deliberately narrow by design
+("keeps the ACF locked to the produced tempo instead of folding down to
+the perceived half-time pulse" — modeling only the "one produced tempo,
+one perceptual illusion" story). Real session data says that's an
+incomplete model of the genre: most of `2hr-dubstep`'s real BPM mass
+falls well outside `138-142` in *both* directions. This plausibly
+explains why the recommender almost never actually selects the
+`dubstep` profile even on a dedicated dubstep set (`140` ticks out of
+`21,072`, `0.7%` — `peak_time` and `chillstep` dominate instead,
+`67.4%` and `25.4%`): `tempo_fit` for a profile whose hint band only
+covers a sliver of the genre's real tempo range will usually score
+poorly even on genuine dubstep audio. Directly relevant to § 4.4's
+mood-selector cheat mode, which would inherit this same blind spot if
+built against the profile's current values. **Not changed yet** —
+flagged for the owner's review, consistent with validating a weight
+against real data before touching it rather than assuming it was
+tuned correctly (same discipline as everywhere else in this document).
 
 ---
 
@@ -2008,6 +2211,21 @@ possible at all.
   tempo-independent terms (§ 4.2).
 - A full in-app config menu for detector/shadow model selection —
   explicitly scoped for rc2, not rc1 (§ 4.3).
+- **"Cheater mode" #1** — manual mood-selector change re-primes the
+  detector via `prime_tempo()`, scoped to manual triggers only, never
+  the recommender's automatic path; production stopgap, not a
+  replacement for T5/Option C. Design proposed, not implemented,
+  awaiting owner input (§ 4.4).
+- **"Cheater mode" #2** — tap-tempo (existing `Overlays.bpm_tap()`
+  HUD feature, currently display-only) wired to a new 30-second
+  elevated-trust window on `Enter` confirm; genuinely new engineering,
+  not a `prime_tempo()` reuse. Design proposed, not implemented,
+  awaiting owner input (§ 4.5).
+- `dubstep`'s own `bpm_hint_min`/`max` (currently `138-142`, far
+  narrower than the genre's real bimodal 70-100/130-160 range per
+  `2hr-dubstep`'s own data) — flagged, not changed, since § 4.4 would
+  inherit the same blind spot if built against the current values
+  (§ 5.3).
 - Controlled genre-driven re-priming after lock — explicitly the
   behavior just retired above, but owner asked it be noted as worth
   revisiting once recommender work resumes, not closed off permanently
