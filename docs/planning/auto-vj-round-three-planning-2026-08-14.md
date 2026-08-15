@@ -1702,3 +1702,102 @@ training plan (dj-mixer-01/media-01 as sources, see the plan file from
 earlier this session) rather than a separate effort. Not scoped further
 than this for now — v3-adjacent infrastructure work, tracked here so it
 isn't lost.
+
+### 17.5 Update: 142-track real Essentia comparison (2026-08-15) — the harmonic-family problem is broader than 2:1/3:2
+
+Owner: "run essetia against the over-night run if you can please, and
+report." Ran the (now-fixed, see the `training-kit-01` essentia-loader
+entries in `docs/adr/vj-system.md`) real extractor against every track
+in `library/i` (10.1 hours, 142 unique tracks, 100% real local file
+paths via media-01). 100% extraction success.
+
+**Aggregate:** median disagreement between our detector's session BPM
+median and Essentia's offline read is a tight **1.75 BPM** — most of the
+library agrees closely. Mean is **5.18 BPM**, pulled up by a real
+minority tail, not spread evenly. 51.4% agree within 2 BPM outright.
+
+**The surprise:** correcting for the octave/triplet ratios (2:1, 1.5:1)
+this whole document has focused on moved the "within 2 BPM" figure by
+*zero* tracks (73/142 both ways). The real disagreement tail isn't
+mostly octave/triplet confusion. Manually checking the worst
+disagreements found several clustering near **5:4 (1.25×)** and a clean
+**4:3 (1.33×)** instead — ratio families this write-up hadn't been
+watching for at all. Whatever Option C ends up scoring candidates
+against needs to cover this wider family, not just powers of 2 and 3:2.
+
+**A confirmed, three-way-agreed ground-truth miss.** Two tracks —
+"Shake That Monkey (Nylze Edit)" and "Doo Wop That Thing (Nylze Edit)"
+— are a clean case, not an ambiguous one. Owner, from direct listening
+and dj-mixer-01's own independent stored analysis: both are genuinely
+**100 BPM** ("mixer agrees w/us, def 100bpm"). Essentia read 99.8 and
+100.0 — dead on. Our live detector's *session median* landed at 133.0
+and 133.3 — almost exactly **4:3** of the true tempo, on both tracks,
+from the same editor. Owner's own diagnosis of the mechanism: both have
+"complex overlapping vocals [that] are much faster than the beat" with
+bass hits concentrated at the very beginning and end of each track —
+long stretches with no strong bass-region anchor at all, just a fast
+vocal cadence for the comb filter to latch onto instead. (Aside from the
+owner, independently: "messes up some of the projectM visualizers too"
+— this track's audio characteristics confuse more than one downstream
+analysis.) This is the single most confidently-wrong result found all
+night — not a genuinely ambiguous track like "Endlessly," a real miss
+with three independent sources (ear, mixer, Essentia) agreeing against
+the live detector's own session-median reading.
+
+**The rest of the worst-disagreement list turned out to be mostly real
+musical complexity, not detector failure** — owner's own close-listening
+notes on each:
+- **"Ring My Bell" (152.8 vs. Essentia 123.9):** genuinely complex —
+  comes in via a 125 transition into a congo/bongo-heavy percussion
+  section that pushes the *owner's own tapped tempo* up to ~130 during
+  that section (raw detector read as high as 140 there), before the
+  track settles into a bass/synth section "w/o so much congo/bongo" at
+  low-mid 120s — right where Essentia's 123.9 sits. Real, first-ever
+  confirmed evidence for the "bongos/congos messing us up" hypothesis
+  from earlier the same night — not a joke, an actual measured effect,
+  though notably it pushed the owner's *own ear* around too, not just
+  the algorithm.
+- **"Fluid" (150.8 vs. Essentia 122.1):** owner describes a "solid
+  120-123" track with a breakdown dipping to 113 (recovers slowly, and
+  "seems stuck there" the second time it's played — an inconsistency
+  matching the reproducibility question flagged earlier this round) plus
+  a "complex secondary 128 bpm overlap" in the second half. Essentia's
+  122.1 matches the described steady-state well; the live detector's
+  150.8 doesn't correspond to anything the owner describes hearing at
+  all — this one reads as a genuine miss, not explained by musical
+  complexity the way "Ring My Bell" was.
+- **"Take My Pain Away" (151.8 vs. Essentia 124.0):** owner describes
+  "solid bass intro around 120" into "vocal driven mid 120s," then
+  "mostly solid 120" for the rest, despite "complex vocals most of the
+  song." Essentia's 124.0 matches closely; 151.8 again doesn't match
+  anything described — another likely genuine miss.
+- **"Last Night X I Want It That Way" (mashup, 128.0 vs. Essentia
+  102.0):** the owner's most detailed note describes a track that
+  genuinely has three real tempo layers — a "distinct 100 bass kick,"
+  a "sub-beat overlay around 120" in places, and a "mids driven 130bpm"
+  outro after a complex non-bassy climax and a separate bassy breakdown.
+  Essentia locked onto the clearest layer (the distinct 100 kick); the
+  live detector locked onto a different, also-real layer (the ~120/130
+  region). Owner: "doing pretty good this run right now... not sure
+  about last night" — this is the "Endlessly" pattern again: a track
+  that doesn't have one correct answer, not a failure on either side.
+
+**Methodological note the owner flagged separately, worth recording:**
+last night's session ran with crossfade off entirely — hard cuts between
+every track, "the first time in a long time.. if ever" — so none of this
+comparison is contaminated by the auto-mix/crossfade-bleed confound
+found in `90m-house-deep-classic-peak/b` earlier tonight. `library/i`'s
+142-track comparison is about as clean a per-track accuracy read as this
+project has produced so far.
+
+**Net effect on the T5 proposal (§ 17.3):** Option C (comb-filter
+harmonic-family scoring for the persistence window) now has a much
+richer, real target — not just 2:1/1.5:1, but 4:3 and 5:4 too — and one
+confirmed, triangulated example (Shake That Monkey / Doo Wop That Thing)
+of exactly the failure shape it would need to catch: a long vocal-heavy,
+bass-sparse stretch where the comb filter has nothing strong at the true
+tempo to anchor to. Still not proposed for implementation this round —
+this sharpens the target, it doesn't change the recommendation to build
+it as its own dedicated session with a synthetic multi-modal-candidate
+harness (now including 4:3/5:4 distractors alongside 2:1/1.5:1 in
+`tools/bpm_sweep_sim.py`) rather than rushed against one incident.
