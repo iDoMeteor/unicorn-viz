@@ -2896,6 +2896,17 @@ triangulated evidence the standing `essentia_note` caveat ("it is
 than other methods") was written to eventually be tested against.
 `training-kit-01` → `0.18.1`.
 
+**Round Three, the morning after (part six): startup confidence raised
+again, `0.45 → 0.6`.** Owner: "let's change the cold start confidence
+lock score to .6 please." Same conservative-further-step pattern as the
+rc.29 bump (`0.4 → 0.45`) — no fresh marginal-case incident driving this
+one either, just a further deliberate tightening of how much evidence
+the very first lock of a session needs before it's accepted. Still gates
+only `self._bpm <= 0.0`; every later re-lock (including at track
+boundaries) goes through `_V2_MIN_UPDATE_CONFIDENCE` (`0.25`) unchanged.
+`_DETECTOR_VERSION` → `1.0.0-rc.32`. See
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md`.
+
 ---
 
 ## Recommender `centroid_fit` Weight Cut + `tech_house` Disabled (2026-08-11)

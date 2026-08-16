@@ -1472,7 +1472,7 @@ def test_gate_stack_constants_have_the_retuned_values() -> None:
     carry-over incident). Source-text guard, same pattern as the
     recommender sigma-floor test: catches any of these silently drifting
     back toward their old values."""
-    assert _MOD._V2_STARTUP_CONFIDENCE == pytest.approx(0.45)
+    assert _MOD._V2_STARTUP_CONFIDENCE == pytest.approx(0.6)
     assert _MOD._V2_LARGE_JUMP_CONFIDENCE == pytest.approx(0.5)
     assert _MOD._V2_LOW_BPM_FAST_CONFIDENCE == pytest.approx(0.45)
     assert _MOD._V2_MAX_BPM_STEP == pytest.approx(5.0)
