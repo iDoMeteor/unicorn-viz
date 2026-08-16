@@ -1927,3 +1927,14 @@ def test_kick_evidence_smooth_resets_on_silence_but_reject_count_does_not() -> N
     # _reset_tempo_lock() itself never zeroes this session-cumulative
     # counter, same convention as large_jump_persistence_*_count.
     assert bt.kick_evidence_reject_count >= reject_count_before
+
+
+def test_detector_version_exposed_as_class_attribute_matching_module_constant() -> None:
+    """2026-08-15: DETECTOR_VERSION mirrors ENGINE_VERSION's own pattern --
+    exposed on the class so a caller holding an instance (AutoVJController)
+    can log it without a second dynamic module load. Owner: "add the
+    detector version to something in the training logs" -- comparing a
+    track's BPM behavior across sessions needs to rule out "the code
+    changed" before concluding an ambiguity is real."""
+    assert BeatTracker.DETECTOR_VERSION == _MOD._DETECTOR_VERSION
+    assert BeatTracker.DETECTOR_VERSION != ''

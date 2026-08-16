@@ -290,6 +290,89 @@ def test_spotify_snapshot_falls_back_on_older_core_without_hub_accessor() -> Non
     assert snap == {'title': 'Old Core'}
 
 
+class _FakeSequenceCorpusWriter:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+
+    def should_capture_heartbeat(self, now, beat_index, interval_s) -> bool:
+        return True
+
+    def append(self, row: dict, *, is_keyframe: bool, event_id: str = '') -> bool:
+        self.rows.append(row)
+        return True
+
+
+def _make_sequence_heartbeat_stub(*, writer=None):
+    """Minimal AutoVJController-like stub for _record_sequence_heartbeat().
+
+    self._grid stays None -- _detector_snapshot() already has a graceful
+    all-defaults path for that case, which keeps this stub focused on the
+    version-stamping logic under test rather than every detector field.
+    _sequence_director_fields/_detector_snapshot are wired to the real
+    unbound methods (not re-implemented here) since _record_sequence_
+    heartbeat() calls them as self.<method>(...), which a plain
+    SimpleNamespace won't resolve without an explicit attribute.
+    """
+    stub = SimpleNamespace(
+        _sequence_corpus_writer=writer if writer is not None else _FakeSequenceCorpusWriter(),
+        _grid=None,
+        _audio_manager=None,
+        _shadow_grid=None,
+        _shadow2_grid=None,
+        _sequence_training_heartbeat_interval_s=1.0,
+        _version_stamped_this_session=False,
+        _mode='CRUISE',
+        _profile='chill',
+        _bars_since_track_start=0,
+        _bars_since_phase_entry=0,
+        _phrase_neutral_bars_left=0,
+        _recommended_profile_key='',
+        _compute_kick_regularity=lambda: 0.5,
+        _get_mixer_bpm=lambda: 0.0,
+        _get_mixer_track_path=lambda: '',
+        _get_section_hint=lambda: None,
+        # Class attributes on the real AutoVJController -- a plain
+        # SimpleNamespace doesn't inherit them, so _detector_snapshot()
+        # (which reads self._BPM_LOCK_CONFIDENCE/_RELEASE_CONFIDENCE)
+        # needs them stubbed explicitly. Values match the real defaults.
+        _BPM_LOCK_CONFIDENCE=0.55,
+        _BPM_LOCK_RELEASE_CONFIDENCE=0.28,
+    )
+    stub._detector_snapshot = lambda: _AUTO_VJ_MODULE.AutoVJController._detector_snapshot(stub)
+    stub._sequence_director_fields = (
+        lambda audio, state: _AUTO_VJ_MODULE.AutoVJController._sequence_director_fields(stub, audio, state)
+    )
+    return stub
+
+
+def test_record_sequence_heartbeat_stamps_versions_on_first_row_only() -> None:
+    """2026-08-15: detector/director/recommender versions don't change
+    mid-session, so only the first captured row needs them -- every row
+    would just be redundant bytes at scale. Owner: "add the detector
+    version to something in the training logs... doesn't have to be every
+    row by any means tho since it won't change during a single session."""
+    stub = _make_sequence_heartbeat_stub()
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto', effect_name='')
+    spotify = {'available': True, 'is_playing': True}
+
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
+
+    rows = stub._sequence_corpus_writer.rows
+    assert len(rows) == 2
+    assert 'detector_version' in rows[0]
+    assert rows[0]['director_version'] == _AUTO_VJ_MODULE._DIRECTOR_VERSION
+    assert rows[0]['recommender_version'] == _AUTO_VJ_MODULE._RECOMMENDER_VERSION
+    assert 'detector_version' not in rows[1]
+    assert 'director_version' not in rows[1]
+    assert 'recommender_version' not in rows[1]
+    assert stub._version_stamped_this_session is True
+
+
 def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> None:
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
