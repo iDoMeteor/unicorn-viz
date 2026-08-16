@@ -1285,6 +1285,49 @@ flagged for the owner's review, consistent with validating a weight
 against real data before touching it rather than assuming it was
 tuned correctly (same discipline as everywhere else in this document).
 
+### 5.4 `90m-hyphy` packaged — best-scoring session yet, and "Shake That Monkey" locked correctly for the first time
+
+Owner: "hyphy set is packaged!... it wasn't actually all hyphy, it was
+by hyphy artists but def dipped into just straight old school rap/r&b
+stuff... but overall seemed pretty good." Tracklist confirms it — E-40,
+Too $hort, Mac Dre, 8Ball & MJG, Keak Da Sneak: Bay Area hyphy plus some
+Memphis-school rap, exactly as described, not a data problem.
+
+**Best LLM score of any session analyzed this round: 4.75/5** (Tempo
+Plausibility, Confidence Reliability, Musical Alignment all `5/5`).
+Lock `98.4%` over 79.75 min, only 14 gain/14 loss events — very stable.
+BPM median `102`, mostly `80-109` (14.5%/23.7%/32.3% across those three
+buckets) — genuine old-school-rap/hyphy tempo territory. Tactus-fold
+reject rate `89.4%` — a touch lower than the 94-99% baseline elsewhere
+in this document (§ 8.7's table), meaning slightly more accepts than
+usual; `kick_regularity` normal (`0.664`/`0.696`, not elevated the way
+`chillstep/a`'s was). Both of the day's earlier production fixes held
+up again here: 20 real live-corpus rows, full LLM report generated.
+
+**"Shake That Monkey" locked correctly this time — the same track that
+was confirmed wrong twice before.** This is the recurring character
+from § 8.6 (`library/i`: session-median `133.0` vs. true `100`, a clean
+4:3 fold, three-way-triangulated as wrong by ear/mixer/Essentia) and
+`garbage/n` (reproducibility check, wrong again at `133.9`). This
+session: **v2 (active) median `103.8` BPM, range `100.3-105.7`, locked
+`509/509` rows** — correct, and tight. **v1 (shadow2, the simpler
+engine) landed on `132.9`** — almost exactly the same wrong value v2
+itself got stuck on twice before. Read together: the active engine is
+not deterministically broken on this track (it can and did find the
+right answer under the right conditions), while the simpler engine
+independently discovered the *same* wrong alias — evidence the ~133
+reading is a real, recurring feature of this specific track's audio
+(the fast overlapping vocal cadence, per the owner's own § 8.6
+description) that more than one algorithm can fall into, not an
+implementation quirk unique to v2. Softens "reproducible failure" to
+something more precise: a real coin-flip between two competing
+periodicities that landed right this time. **Not yet folded into
+§ 8.6** — owner wants to confirm the three sessions ran the same
+`_DETECTOR_VERSION` first (the corpus didn't carry that field until
+this session — see auto-vj-01 `1.0.0-rc.87`, shipped same day)
+before treating this as a genuine same-code reproducibility data point
+rather than an old-code-vs-fixed-code artifact.
+
 ---
 
 ## Phase 6 — Audit Cross-Check Pass (2026-08-14)
@@ -2125,6 +2168,90 @@ knob structurally cannot do.
 **Status: corrected and closed as a standalone item.** No code changed
 either before or after the correction. Nothing here is flagged for
 implementation — it folds into Option C's already-deferred scope.
+
+### 8.8 A conceptual capstone: some tracks don't have a single correct BPM, and no amount of better signal processing fixes that (2026-08-15)
+
+Owner, walking through the `2hr-dubstep` set and the `90m-hyphy` results
+right after: rhythm perception is personal, not absolute — different
+people (and different musical roles: a drummer's read on a track's
+pulse, a guitarist's, a *dancer's* — the operationally relevant one for
+a club/dance-music VJ system specifically, since the target audience is
+dancing to it) genuinely lock onto different rhythmic layers within the
+same piece of music as "the beat," when a track has more than one real,
+internally-coherent periodicity happening at once. The image that
+crystallized it, and the one to keep using: at a dubstep show, one
+group of people is slow-walking to the true half-time bass pulse in one
+corner while ravers are bouncing off the walls to the doubled layer
+right next to them — *to the same track, at the same moment* — and both
+groups are correctly on-beat. Neither reading is wrong. The track
+itself is playing two legitimate, harmonically-locked rhythms
+simultaneously (the faster one hits exactly twice for every one of the
+slower one's downbeats, always in phase), and which one a given
+listener's brain foregrounds as "the beat" isn't a fact about the audio
+that better analysis could uncover — it's closer to an individual,
+subjective anchor point, the same way "beauty" doesn't reduce to a
+single objectively-correct answer.
+
+**Why this reframes the T5 investigation, not just adds an anecdote to
+it.** Everything this document has called "octave/harmonic-family
+ambiguity" up to this point has implicitly assumed one true tempo exists
+and the job is finding it despite noisy or misleading evidence. That
+framing is exactly right for some of the tracks already documented here
+— **"Shake That Monkey"** (§ 8.6) has three *independent* sources
+converging on the same single answer (the owner's own ear, dj-mixer-01's
+stored analysis, and Essentia all landing on 100 BPM) and `90m-hyphy`'s
+own v1/v2 split (§ 5.4: v2 correct at 103.8, v1 wrong at 132.9 — the
+*same* wrong value v2 itself landed on in two earlier sessions) reads as
+one real answer that's just hard for any given algorithm to consistently
+find, not two equally-valid answers. That's still squarely Option C's
+target: real ground truth, obscured by
+weak comb-filter evidence at the true tempo.
+
+But **"Endlessly"** (from the `45m-chillstep` session, referenced in
+§ 8.6 — owner tapped 60, 70, *and* 120 on the same song, Spotify said
+202) and **"Last Night X I Want It That
+Way"** (§ 8.6 — already independently written up as "doesn't have one
+correct answer, not a failure on either side" before this framing had a
+name) don't fit that shape at all. Neither does the `2hr-dubstep`
+session's own BPM distribution (§ 5.3): 19.0% of readings genuinely in
+70-100, 50.9% genuinely in 130-160, both real substantial mass, not one
+dominant band with noise scattered around it. For tracks like these,
+there may be no single answer for Option C's harmonic-family scoring to
+converge on *even in principle* — both candidates are real, both are
+"correct" by some listener's reasonable anchor, and picking one over the
+other via better signal processing alone is solving the wrong kind of
+problem.
+
+**The practical implication: two different classes of "ambiguous"
+track, needing two different kinds of fix.**
+
+- **Class A — one true tempo, obscured by weak/misleading raw
+  evidence.** Fixable by better signal processing. This is what Option C
+  (§ 8.3) is actually for, and what most of Phase 8's evidence base
+  (`chillstep/a`'s § 8.7 correction, the 142-track Essentia comparison's
+  confirmed misses in § 8.6) supports building it against.
+- **Class B — two (or more) genuinely co-existing, harmonically-locked
+  rhythms, no single ground truth to converge on.** Not fixable by
+  better signal processing, *by construction* — there's nothing wrong
+  with the detector's evidence-weighing on these tracks, because there
+  is no single right weighing to find. This is exactly the situation
+  where external context earns its keep instead of being a stopgap:
+  § 4.4's manual mood-selector nudge and § 4.5's tap-tempo seed aren't
+  just production workarounds for Class B tracks — they may be the
+  *actual correct* long-term mechanism for them, since genre/operator
+  intent is a legitimate tiebreaker exactly where the audio itself
+  doesn't have one to offer.
+
+**Not yet actionable, and not meant to be — this doesn't change
+anything about what's already proposed.** No new work item comes out of
+this beyond what §§ 4.4/4.5/8.3 already carry. What it does change: how
+to *read* future ambiguous-track findings before reaching for Option C
+by default. A track worth checking against multiple independent sources
+first (like "Shake That Monkey" was) is a Class A candidate; a track
+where the owner's own ear finds several different, all-plausible taps
+(like "Endlessly") is more likely Class B, and no amount of comb-filter
+harmonic-family scoring should be expected to "solve" it down to one
+number.
 
 ---
 
