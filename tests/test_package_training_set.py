@@ -101,18 +101,18 @@ _lock_pct_stateful = _MOD._lock_pct_stateful
 _warn_if_essentia_unavailable = _MOD._warn_if_essentia_unavailable
 
 
-# ---- _trim_idle_bookends (2026-08-14, round three) ---------------------------
+# ---- _trim_idle_bookends (2026-08-14, round three; 2026-08-16: is_playing -> bpm > 0) --
 
 
 def test_trim_idle_bookends_drops_leading_and_trailing_idle_rows() -> None:
     rows = (
-        [_make_seq_row(is_playing=False) for _ in range(3)]
-        + [_make_seq_row(is_playing=True) for _ in range(5)]
-        + [_make_seq_row(is_playing=False) for _ in range(4)]
+        [_make_seq_row(bpm=0.0) for _ in range(3)]
+        + [_make_seq_row(bpm=124.0) for _ in range(5)]
+        + [_make_seq_row(bpm=0.0) for _ in range(4)]
     )
     trimmed = _trim_idle_bookends(rows)
     assert len(trimmed) == 5
-    assert all(r['is_playing'] for r in trimmed)
+    assert all(r['bpm'] > 0.0 for r in trimmed)
 
 
 def test_trim_idle_bookends_preserves_a_real_mid_session_gap() -> None:
@@ -120,9 +120,9 @@ def test_trim_idle_bookends_preserves_a_real_mid_session_gap() -> None:
     least not pre-roll/post-roll padding) -- must not be trimmed, only
     contiguous idle runs touching the very start/end."""
     rows = (
-        [_make_seq_row(is_playing=True) for _ in range(3)]
-        + [_make_seq_row(is_playing=False) for _ in range(2)]
-        + [_make_seq_row(is_playing=True) for _ in range(3)]
+        [_make_seq_row(bpm=124.0) for _ in range(3)]
+        + [_make_seq_row(bpm=0.0) for _ in range(2)]
+        + [_make_seq_row(bpm=124.0) for _ in range(3)]
     )
     trimmed = _trim_idle_bookends(rows)
     assert len(trimmed) == 8
@@ -130,7 +130,7 @@ def test_trim_idle_bookends_preserves_a_real_mid_session_gap() -> None:
 
 
 def test_trim_idle_bookends_all_idle_returns_empty() -> None:
-    rows = [_make_seq_row(is_playing=False) for _ in range(4)]
+    rows = [_make_seq_row(bpm=0.0) for _ in range(4)]
     assert _trim_idle_bookends(rows) == []
 
 
@@ -139,7 +139,20 @@ def test_trim_idle_bookends_empty_input() -> None:
 
 
 def test_trim_idle_bookends_no_idle_rows_is_a_no_op() -> None:
-    rows = [_make_seq_row(is_playing=True) for _ in range(4)]
+    rows = [_make_seq_row(bpm=124.0) for _ in range(4)]
+    assert _trim_idle_bookends(rows) == rows
+
+
+def test_trim_idle_bookends_ignores_is_playing_now_that_bpm_gates_it() -> None:
+    """2026-08-16: is_playing reflects whichever now-playing source is
+    active (dj mixer/media/Spotify) and is unreliable when the real audio
+    isn't coming from that source at all -- e.g. a web stream playing
+    while an unused Spotify window sits open, paused. Real bpm > 0 is the
+    source-independent signal now; is_playing=False must no longer trim a
+    row that has a genuine detected tempo. Owner: "it's stupid that data
+    collection was wired up only to support spotify.. we don't really
+    even train on spotify, just verify." """
+    rows = [_make_seq_row(bpm=124.0, is_playing=False) for _ in range(4)]
     assert _trim_idle_bookends(rows) == rows
 
 
@@ -150,9 +163,9 @@ def test_write_scorecard_excludes_idle_bookends_from_lock_coverage(tmp_path: Pat
     scorecard built from rows that would score very differently with vs.
     without the idle padding."""
     rows = (
-        [_make_seq_row(is_playing=False, confidence=0.0) for _ in range(20)]
-        + [_make_seq_row(is_playing=True, confidence=0.9) for _ in range(5)]
-        + [_make_seq_row(is_playing=False, confidence=0.0) for _ in range(20)]
+        [_make_seq_row(bpm=0.0, confidence=0.0) for _ in range(20)]
+        + [_make_seq_row(bpm=124.0, confidence=0.9) for _ in range(5)]
+        + [_make_seq_row(bpm=0.0, confidence=0.0) for _ in range(20)]
     )
     seq_path = tmp_path / 'sequence-corpus.jsonl'
     seq_path.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')

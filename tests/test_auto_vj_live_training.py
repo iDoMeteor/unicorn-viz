@@ -373,6 +373,45 @@ def test_record_sequence_heartbeat_stamps_versions_on_first_row_only() -> None:
     assert stub._version_stamped_this_session is True
 
 
+def test_record_sequence_heartbeat_captures_without_now_playing_availability() -> None:
+    """2026-08-16: no longer requires spotify.available/is_playing -- that
+    dict reflects whichever now-playing source is active and is
+    unreliable when the real audio isn't coming from that source at all
+    (e.g. a web stream playing while an unused Spotify window sits open,
+    paused). Caught live: two full sessions (41 and 121 real minutes)
+    never captured a single heartbeat row because is_playing read False
+    the entire time despite genuine ongoing playback. Owner: "it's
+    stupid that data collection was wired up only to support spotify..
+    we don't really even train on spotify, just verify." """
+    stub = _make_sequence_heartbeat_stub()
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto', effect_name='')
+    spotify = {'available': False, 'is_playing': False}
+
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
+
+    assert len(stub._sequence_corpus_writer.rows) == 1
+
+
+def test_record_sequence_heartbeat_handles_a_missing_spotify_snapshot() -> None:
+    """_spotify_snapshot() can return None (no now-playing hub, no
+    fallback subsystem) -- must not crash now that the early `not
+    spotify` guard is gone."""
+    stub = _make_sequence_heartbeat_stub()
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto', effect_name='')
+
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, None)
+
+    assert len(stub._sequence_corpus_writer.rows) == 1
+
+
 def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> None:
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
