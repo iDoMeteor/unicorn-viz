@@ -7120,6 +7120,50 @@ max-raw/max-compressed track the log-compression formula exactly, window
 pruning). `auto_vj.py` `__version__` → `1.0.0-rc.92`,
 `_VJ_WEIGHTS_DOC_VERSION` → `60`.
 
+## Onset-Strength Runaway Bug: MAD Floor Fixed + Cap Added (2026-08-17, later still)
+
+The new `onset_strength_max_raw` logging above found something the very
+session it landed: a real value of `1,171,176,147`. Root cause in
+`unicornviz/audio/analyzer.py` (core, not auto-vj-01):
+`Analyzer._onset_threshold()`'s `mad = median(|flux - median|) + 1e-6` --
+`1e-6` is a literal-division-by-zero guard, not a reasoned floor. During
+a near-silent/degenerate flux stretch real MAD collapses toward zero, and
+the strength computation two lines away (`(flux - threshold) / mad`)
+divides by almost nothing on the next real transient.
+
+Owner: "look into that mad floor/clamp issue.. what is the most proper?
+can u sim it up and give us the best running start?" Built `tools/
+onset_strength_mad_floor_harness.py` (main repo, not the drop-in --
+this is core code) and swept candidate floors/formula shapes against
+three synthetic scenarios: the pathological case (degenerate quiet ->
+real transient), a genuinely quiet section with a weak-but-real onset
+(must stay discriminable, not collapse to indistinguishable-from-noise),
+and normal/loud material (a floor fix should be a true no-op once real
+MAD already exceeds it). Two findings shaped the fix:
+
+1. `max(raw_mad, floor)` beats `raw_mad + floor` (the live formula's
+   shape) -- the additive form keeps inflating MAD, and dulling
+   strength, even on well-populated material once the floor value grows;
+   `max()` -- the same floor idiom `beat_grid.py` uses throughout --
+   only engages when real MAD would actually be smaller than the floor.
+2. `_BEAT_ABS_FLOOR` (`0.02`, already established for `threshold`'s own
+   absolute floor) is the right floor value for `mad` too, not a fresh
+   arbitrary constant -- it fully tames the pathological case (~48 vs.
+   ~980K+ in simulation) while keeping real weak-vs-loud discrimination
+   alive in genuinely quiet material (2.45x, vs. collapsing to 1.0x at a
+   more aggressive `0.05` floor).
+
+Landed `mad = max(raw_mad, _BEAT_ABS_FLOOR)`, plus a new
+`_ONSET_STRENGTH_CAP = 50.0` hard clamp at the strength computation site
+-- independent of the floor fix, a backstop for whatever the floor
+doesn't anticipate, protecting every consumer of raw strength (not just
+`beat_grid.py`'s own log-compression, which only protects the ACF
+envelope specifically). Confirmed directly against the real `Analyzer`
+(not just the synthetic harness): the exact "silence then kick" scenario
+already covered by `tests/test_analyzer_onset_dedup.py` hits the cap
+exactly (`50.0`) under the fix -- this is the live regression case, not
+a hypothetical. Core `unicornviz.__version__` → `1.0.0-beta.98`.
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

@@ -97,6 +97,20 @@ _ENV_WINDOW_S = 1.5         # seconds of flux history
 _ENV_LEN = int(_ENV_RATE * _ENV_WINDOW_S)   # 150 samples
 _BEAT_MAD_K = 1.80          # threshold = median + k * MAD
 _BEAT_ABS_FLOOR = 0.02      # minimum absolute threshold (silences silence triggers)
+# 2026-08-17: onset-strength cap, a defense-in-depth backstop independent
+# of the mad floor fix below -- see that constant's own comment for the
+# live incident (onset_strength_max_raw hit 1,171,176,147 in a real
+# session). Bounds `strength` regardless of *why* it got large (this
+# floor's own edge cases, a genuine clipping/dropout transient, anything
+# not anticipated here), without touching legitimate strong-vs-weak
+# ordering: tools/onset_strength_mad_floor_harness.py's scenario 1 showed
+# the floor fix alone already tames the pathological case to ~48-97, so
+# 50.0 sits comfortably above every realistic value while still bounding
+# the unanticipated case. Downstream, _pulse_envelope() (beat_grid.py)
+# log-compresses on top of this anyway -- the cap protects every OTHER
+# consumer of raw strength (e.g. _absorb_onset(), training-corpus
+# logging) that isn't compression-protected.
+_ONSET_STRENGTH_CAP = 50.0
 
 # Vocal-presence heuristics (Auto VJ profile recommender). Neither vocal_hnr
 # nor vocal_fmr is a true vocal detector -- see AudioData docstring comments
@@ -439,10 +453,29 @@ class Analyzer:
 
         Uses median + k*MAD which is robust against flux spikes and
         does not collapse on steady material the way mean+std does.
+
+        2026-08-17: mad's floor changed from `+ 1e-6` (a literal-division-
+        -by-zero guard, not a reasoned floor) to `max(raw_mad,
+        _BEAT_ABS_FLOOR)`. A live session's new onset_strength_max_raw
+        logging (drop-ins/auto-vj-01) caught mad collapsing toward zero
+        during a near-silent/degenerate flux stretch, then the next real
+        transient dividing by almost nothing at the strength call site
+        (`(flux - threshold) / mad`) and producing a strength of
+        1,171,176,147. `_BEAT_ABS_FLOOR` already encodes "the smallest
+        meaningful flux scale" for `threshold`; reusing it here (rather
+        than a fresh, untethered constant) applies the same belief to
+        `mad`, and `max()` -- the same floor idiom beat_grid.py uses
+        throughout (e.g. `max(_V2_LOCK_BAND_MIN, bpm*_V2_LOCK_BAND_PCT)`)
+        -- makes it a true no-op once real mad already exceeds the floor,
+        unlike `+ 1e-6`'s literal-addition shape (which, at a larger
+        floor value, would keep inflating mad and dulling strength even
+        on well-populated material -- see tools/onset_strength_mad_floor_
+        harness.py's scenario 3 for the empirical comparison). See
+        _ONSET_STRENGTH_CAP's own comment for the independent backstop.
         """
         arr = self._env_buf if self._env_filled else self._env_buf[:max(1, self._env_write_idx)]
         med = float(np.median(arr))
-        mad = float(np.median(np.abs(arr - med))) + 1e-6
+        mad = max(float(np.median(np.abs(arr - med))), _BEAT_ABS_FLOOR)
         threshold = med + _BEAT_MAD_K * mad + _BEAT_ABS_FLOOR
         return threshold, mad
 
@@ -746,8 +779,11 @@ class Analyzer:
                 # so the raw ratio can slightly exceed 1.0 on a broadband
                 # transient. See OnsetEvent's field comment.
                 band_weight = float(np.clip(data.bass_flux / max(1e-6, flux), 0.0, 1.0))
+                # 2026-08-17: hard cap, independent of the mad-floor fix
+                # above -- see _ONSET_STRENGTH_CAP's own comment.
+                clamped_strength = min(max(1.0, float(strength)), _ONSET_STRENGTH_CAP)
                 self._onset_queue.append(
-                    OnsetEvent(now, max(1.0, float(strength)), band_weight)
+                    OnsetEvent(now, clamped_strength, band_weight)
                 )
 
         self._env_prev_flux = flux

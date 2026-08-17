@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from unicornviz.audio.analyzer import Analyzer
+from unicornviz.audio.analyzer import Analyzer, _BEAT_ABS_FLOOR, _ONSET_STRENGTH_CAP
 
 
 _BANDS = 512
@@ -103,6 +103,57 @@ def test_genuine_transient_after_warmup_produces_onset() -> None:
     onsets = a.drain_onsets()
     assert len(onsets) >= 1, 'Genuine transient must produce at least one onset'
     assert onsets[0].strength > 0.0, 'Onset strength must be positive'
+    # 2026-08-17: this exact scenario (real silence -> real kick) is the
+    # pathological case a live session's onset_strength_max_raw logging
+    # caught -- strength hit 1,171,176,147 before the mad-floor fix + cap
+    # (see _BEAT_ABS_FLOOR/_ONSET_STRENGTH_CAP's own comments). Confirmed
+    # directly: this test's own kick block hits the cap exactly (50.0)
+    # under the fix, so the upper-bound assertion below is not
+    # theoretical -- it's the live regression case.
+    assert onsets[0].strength <= _ONSET_STRENGTH_CAP
+
+
+def test_silence_then_kick_mad_stays_at_or_above_the_abs_floor() -> None:
+    """After all-zero (degenerate) silence, mad must floor at _BEAT_ABS_
+    FLOOR, not collapse toward the old 1e-6 literal-division-by-zero
+    guard -- the direct cause of the runaway-strength bug."""
+    a = Analyzer(fft_bands=_BANDS)
+    silence = np.zeros(1024, dtype=np.float32)
+    t = 0.0
+    step = 1024 / _RATE
+    for _ in range(60):
+        a.process(silence, t=t)
+        a.drain_onsets()
+        t += step
+    _threshold, mad = a._onset_threshold()
+    assert mad >= _BEAT_ABS_FLOOR
+
+
+def test_onset_strength_never_exceeds_the_cap_across_many_kicks() -> None:
+    """Defense-in-depth: even several back-to-back real transients never
+    produce a strength above _ONSET_STRENGTH_CAP, regardless of how large
+    the underlying flux spike is."""
+    a = Analyzer(fft_bands=_BANDS)
+    silence = np.zeros(1024, dtype=np.float32)
+    t = 0.0
+    step = 1024 / _RATE
+    for _ in range(60):
+        a.process(silence, t=t)
+        a.drain_onsets()
+        t += step
+    all_onsets = []
+    for seed_offset in range(5):
+        rng = np.random.default_rng(100 + seed_offset)
+        kick = (0.95 * rng.standard_normal(1024)).clip(-1.0, 1.0).astype(np.float32)
+        a.process(kick, t=t)
+        all_onsets.extend(a.drain_onsets())
+        # Long gap so the refractory doesn't suppress the next kick.
+        t += 2.0
+        a.process(silence, t=t)
+        a.drain_onsets()
+    assert all_onsets, 'Expected at least one onset across the repeated-kick sweep'
+    for ev in all_onsets:
+        assert ev.strength <= _ONSET_STRENGTH_CAP
 
 
 def _make_tone_block(hz: float, n: int = 1024, amp: float = 0.9, rate: int = _RATE) -> np.ndarray:

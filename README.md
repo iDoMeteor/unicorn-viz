@@ -557,6 +557,26 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.98** — Fixed a runaway onset-strength bug in
+  `unicornviz/audio/analyzer.py`: `Analyzer._onset_threshold()`'s MAD
+  floor was `+ 1e-6` (a literal-division-by-zero guard, not a reasoned
+  floor) -- during a near-silent/degenerate flux stretch, real MAD
+  collapses toward zero, and the next real transient's strength
+  computation (`(flux - threshold) / mad`) divides by almost nothing.
+  Caught live via new training-corpus logging: a real session's
+  `onset_strength_max_raw` hit 1,171,176,147. Simulated candidate fixes
+  against synthetic pathological/quiet/normal-material scenarios
+  (`tools/onset_strength_mad_floor_harness.py`) before landing:
+  `mad = max(raw_mad, _BEAT_ABS_FLOOR)` (reuses the existing threshold
+  floor rather than a fresh arbitrary constant; `max()` — the same floor
+  idiom `beat_grid.py` uses throughout — makes it a true no-op once real
+  MAD already exceeds the floor, unlike the old `+`-shaped floor, which
+  kept dulling strength even on well-populated material). Landed
+  alongside a defense-in-depth `_ONSET_STRENGTH_CAP = 50.0` hard clamp,
+  independent of the floor fix, protecting every consumer of raw
+  strength (not just `beat_grid.py`'s own log-compression). Owner: "look
+  into that mad floor/clamp issue.. what is the most proper? can u sim
+  it up and give us the best running start?"
 - **1.0.0-beta.97** — Audio Bass Machine tuning pass, from screenshots.
   - **Subwoofer**: the woofer was oversized and its basket rim ran under the
     tweeters. Driver shrunk and the tweeters pulled clear, so nothing overlaps.
