@@ -557,6 +557,18 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.96** — swept the collapsed sparkle hash out of every remaining
+  effect. Audio Chromogram used the same
+  `hash21(floor(frag * 0.5) + floor(t * 20.0))` idiom fixed in beta.95, and
+  three more (`tech-01`'s Threat Matrix and Reactor Breach, `vector-01`'s
+  Laser Tunnel) used the sin-based `hash11(floor(t * ~30))` variant, whose
+  argument reaches ~300000 and degrades `sin()` into GPU-dependent mush.
+  Both hashes now wrap their input before hashing. Measured over a 40x40
+  patch, the sparkle field goes from **1 distinct value at t=10000 to 1234** —
+  it was not merely banded at a typical randomised start time, it was
+  completely dead. Eleven files in total across four repos (games-01 0.13.2,
+  tech-01, vector-01, core); one line each, no visual design changed.
+
 - **1.0.0-beta.95** — Audio Bass Machine 2.0, from screenshot review.
   - **The spectrum bars were upside down.** They hung *down* from the top
     edge, which reads as an inverted analyser and made both the subwoofer and
