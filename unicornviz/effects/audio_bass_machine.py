@@ -77,7 +77,25 @@ out vec4 fragColor;
 #define PI  3.14159265
 #define TAU 6.28318530
 
+// Mixer palette (drop-ins/dj-mixer-01/ui.py) — the deck accents, so the gear
+// reads as part of the same rig instead of drifting into muddy browns.
+const vec3 MIX_CYAN    = vec3(0.00, 0.71, 1.00);
+const vec3 MIX_PINK    = vec3(1.00, 0.35, 0.78);
+const vec3 MIX_GREEN   = vec3(0.24, 1.00, 0.63);
+const vec3 MIX_AMBER   = vec3(1.00, 0.69, 0.00);
+const vec3 MIX_MAGENTA = vec3(0.92, 0.27, 0.80);
+const vec3 MIX_YELLOW  = vec3(1.00, 0.82, 0.27);
+
+const float SCENE_SCALE = 0.72;
+
+// Bounded hash input. The classic idiom here added floor(t*20) straight into
+// hash21(); with iTime starting anywhere up to 10000 that term reaches ~12000,
+// and hash21's first multiply (x123.34) then lands past float32's usable
+// mantissa — the "random" field collapses to a fixed ~15-value lattice, which
+// is the regular dotted grid this used to show. Everything entering a hash is
+// wrapped small first.
 float hash21(vec2 p) {
+    p = mod(p, 512.0);
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
@@ -90,17 +108,11 @@ float sdBox(vec2 p, vec2 b) {
 }
 float sdRound(vec2 p, vec2 b, float r) { return sdBox(p, b - r) - r; }
 float fill(float d, float soft) { return smoothstep(soft, -soft, d); }
-// Paint a layer, tracking coverage, so the machine composites *over* the
-// surroundings instead of being added to them — an additive machine lets the
-// backdrop's pressure rings shine straight through the cabinet.
 void paint(inout vec3 o, inout float cov, vec3 c, float m) {
     m = clamp(m, 0.0, 1.0);
     o = mix(o, c, m);
     cov = max(cov, m);
 }
-// The gear is drawn in its own space then shrunk to fit: at 1:1 a cabinet
-// 0.60 half-tall overflows a screen that is only 0.5 half-tall.
-const float SCENE_SCALE = 0.66;
 
 // Band lookup with linear interpolation, so ladders and grooves read smooth.
 float band(float x) {
@@ -110,66 +122,132 @@ float band(float x) {
     return mix(iBands[i], iBands[j], fract(x));
 }
 
-vec3 cabinetTint() {
-    if (iTint < 0.25) return vec3(0.10, 0.11, 0.14);          // graphite
-    if (iTint < 0.50) return mix(vec3(0.28, 0.16, 0.06), vec3(0.35, 0.20, 0.08), 0.5);  // wood
-    if (iTint < 0.75) return vec3(0.10, 0.06, 0.16);          // aubergine
-    return vec3(0.05, 0.12, 0.14);                            // teal steel
+// Accent pair for this activation, always drawn from the mixer palette.
+vec3 accentA() {
+    if (iTint < 0.25) return MIX_CYAN;
+    if (iTint < 0.50) return MIX_PINK;
+    if (iTint < 0.75) return MIX_GREEN;
+    return MIX_AMBER;
+}
+vec3 accentB() {
+    if (iTint < 0.25) return MIX_PINK;
+    if (iTint < 0.50) return MIX_CYAN;
+    if (iTint < 0.75) return MIX_MAGENTA;
+    return MIX_CYAN;
+}
+// Cabinet stays dark and neutral so the neon reads; it is tinted toward the
+// accent rather than toward wood.
+vec3 cabinetTint() { return mix(vec3(0.045, 0.050, 0.070), accentA() * 0.10, 0.6); }
+
+// ── spectrum: real bars, pegged flush to the bottom edge, growing upward ────
+// Bars used to hang *down* from the top edge, which reads as an upside-down
+// analyser — a spectrum grows up off the surface it stands on.
+vec3 spectrumBars(vec2 q, float baseY, float halfW, float maxH, vec3 hot, out float cov) {
+    cov = 0.0;
+    vec3 o = vec3(0.0);
+    if (abs(q.x) > halfW + 0.02 || q.y < baseY - 0.02 || q.y > baseY + maxH + 0.06)
+        return o;
+    const float N = 28.0;
+    float u = (q.x + halfW) / (2.0 * halfW);
+    float idx = floor(u * N);
+    float f = fract(u * N);
+    float v = clamp(band(idx / (N - 1.0)), 0.0, 1.6);
+    float h = 0.03 + v * maxH;
+    float barW = 0.34;                       // in cell units, leaves a gap
+    float inBar = smoothstep(0.5 + barW, 0.5 + barW - 0.10, abs(f - 0.5) * 2.0);
+    float inH = smoothstep(0.004, -0.004, q.y - (baseY + h));
+    float above = step(baseY, q.y);
+    float m = inBar * inH * above;
+    // Cool at the bottom, hot at the tip.
+    vec3 c = mix(MIX_CYAN, hot, clamp((q.y - baseY) / max(h, 1e-3), 0.0, 1.0));
+    paint(o, cov, c * (0.75 + v * 1.3), m);
+    // Peak cap.
+    paint(o, cov, vec3(1.0),
+          inBar * above * smoothstep(0.012, 0.0, abs(q.y - (baseY + h))) * 0.9);
+    return o;
 }
 
-// Wet neon running down a face — the drip.
-float drips(vec2 q, float top, float width, float tb, float seed) {
-    float lanes = 26.0;
-    float lane = floor((q.x + width) / (2.0 * width) * lanes);
+// ── drips: wet paint running down from the top edge, with a fat bead ────────
+float dripMask(vec2 q, float topY, float halfW, float tb, float seed) {
+    if (abs(q.x) > halfW) return 0.0;
+    const float LANES = 30.0;
+    float u = (q.x + halfW) / (2.0 * halfW);
+    float lane = floor(u * LANES);
     float h = hash21(vec2(lane, seed));
-    float flow = fract(tb * (0.10 + h * 0.28) + h);
-    float len = 0.05 + h * 0.22;
-    float dy = top - q.y;
-    float across = abs(fract((q.x + width) / (2.0 * width) * lanes) - 0.5);
-    return smoothstep(0.30, 0.0, across)
-         * step(0.0, dy) * smoothstep(len * flow + 0.02, 0.0, dy)
-         * step(abs(q.x), width);
+    float flow = fract(tb * (0.07 + h * 0.16) + h);
+    float len = 0.10 + h * 0.30;
+    float tip = topY - flow * len;
+    float dy = topY - q.y;
+    float across = abs(fract(u * LANES) - 0.5) * 2.0;
+    float w = 0.42 - flow * 0.12;
+    float streak = smoothstep(w, w * 0.35, across) * step(0.0, dy) * step(q.y, topY)
+                 * smoothstep(-0.02, 0.03, q.y - tip);
+    // Heavy bead at the running end.
+    float bead = smoothstep(0.020, 0.0,
+                            length(vec2(across * 0.022, q.y - tip))) * (0.5 + h);
+    return clamp(streak + bead, 0.0, 1.0);
 }
 
-// Shared speaker driver, used by the subwoofer and both boombox woofers.
-// `exc` is the cone excursion in [0,1]; the cone visibly moves with it.
+// ── neon level trough with a bead dancing along it ──────────────────────────
+vec3 beadBar(vec2 q, vec2 hb, float level, float tb, vec3 c, out float cov) {
+    cov = 0.0;
+    vec3 o = vec3(0.0);
+    float d = sdRound(q, hb, hb.y);
+    if (d > 0.05) return o;
+    paint(o, cov, vec3(0.02, 0.025, 0.04), fill(d, 0.004));           // trough
+    o += c * fill(abs(d) - 0.005, 0.003) * (1.2 + iTreble * 1.2);      // neon rim
+    // Filled portion.
+    float lv = clamp(level, 0.0, 1.0);
+    float x0 = -hb.x + 0.012;
+    float x1 = mix(x0, hb.x - 0.012, lv);
+    o += c * fill(sdRound(vec2(q.x - (x0 + x1) * 0.5, q.y),
+                          vec2(max(0.0, (x1 - x0) * 0.5), hb.y * 0.45), hb.y * 0.4),
+                  0.004) * 1.1;
+    // The bead: rides the level, with a little overshoot bounce and a trail.
+    float bx = x1 + sin(tb * 7.0) * 0.012 * lv;
+    float bd = length((q - vec2(bx, 0.0)) / vec2(1.0, 1.15));
+    o += mix(vec3(1.0), c, 0.35) * smoothstep(hb.y * 0.95, 0.0, bd) * (1.6 + iBass * 1.2);
+    o += c * smoothstep(hb.y * 2.6, 0.0, bd) * 0.55;
+    cov = max(cov, fill(d, 0.004));
+    return o;
+}
+
+// Shared speaker driver. `exc` is the cone excursion in [0,1].
 vec4 driver(vec2 q, float r, float exc, vec3 tint, float tb) {
-    if (length(q) > r * 1.35) return vec4(0.0);
+    if (length(q) > r * 1.38) return vec4(0.0);
     vec3 o = vec3(0.0);
     float cov = 0.0;
     float d = length(q);
     float a = atan(q.y, q.x);
 
-    // Basket rim + mounting bolts.
-    paint(o, cov, tint * 1.7, fill(abs(d - r * 1.14) - r * 0.09, 0.004));
+    paint(o, cov, mix(vec3(0.18, 0.19, 0.23), accentA() * 0.35, 0.4),
+          fill(abs(d - r * 1.16) - r * 0.10, 0.004));
     for (int i = 0; i < 8; i++) {
         float ba = float(i) / 8.0 * TAU + 0.2;
-        vec2 bp = vec2(cos(ba), sin(ba)) * r * 1.14;
-        paint(o, cov, vec3(0.70, 0.74, 0.80) * (0.6 + iTreble * 0.7),
+        vec2 bp = vec2(cos(ba), sin(ba)) * r * 1.16;
+        paint(o, cov, vec3(0.72, 0.76, 0.84) * (0.6 + iTreble * 0.7),
               fill(length(q - bp) - r * 0.045, 0.003));
     }
 
-    // Rubber surround: a torus that rolls outward as the cone pushes.
     float surR = r * 0.92 + exc * r * 0.05;
     float roll = 0.55 + 0.45 * cos((d - surR) / (r * 0.10) * PI);
-    paint(o, cov, vec3(0.06, 0.06, 0.07) * (0.6 + roll * 0.9),
+    paint(o, cov, vec3(0.05, 0.05, 0.06) * (0.6 + roll * 0.9),
           fill(abs(d - surR) - r * 0.10, 0.005));
 
-    // Cone: concentric ridges, brighter as it comes toward the viewer.
+    // Cone: convex, lit from upper-left so it reads as coming toward you.
     float coneR = r * 0.86;
     float bulge = 1.0 - pow(clamp(d / coneR, 0.0, 1.0), 2.0);
     float lift = bulge * exc;
-    float ridges = 0.5 + 0.5 * sin(d / coneR * 26.0 - lift * 6.0);
-    vec3 cc = mix(tint * 0.75, palette(iHue + 0.05), 0.30);
-    cc *= 0.35 + ridges * 0.30 + lift * 1.15;
-    cc += tint * 0.5 * pow(max(0.0, cos(a - 0.7)), 3.0) * bulge;
+    float ridges = 0.5 + 0.5 * sin(d / coneR * 24.0 - lift * 6.0);
+    vec3 cc = mix(accentB() * 0.55, accentA(), 0.35);
+    cc *= 0.28 + ridges * 0.26 + lift * 1.25;
+    cc += accentA() * 0.55 * pow(max(0.0, cos(a - 2.2)), 3.0) * bulge;
     paint(o, cov, cc, fill(d - coneR, 0.005));
 
-    // Dust cap with a moving chrome specular.
     float capR = r * 0.30;
-    vec3 capc = mix(vec3(0.85, 0.88, 0.95), palette(iHue + 0.4), 0.35);
+    vec3 capc = mix(vec3(0.88, 0.92, 1.0), accentA(), 0.30);
     float spec = pow(max(0.0, 1.0 - length(q - vec2(-capR * 0.35, capR * 0.4)) / (capR * 0.9)), 3.0);
-    paint(o, cov, capc * (0.30 + exc * 0.9) + vec3(1.0) * spec * (0.5 + iTreble),
+    paint(o, cov, capc * (0.28 + exc * 0.95) + vec3(1.0) * spec * (0.5 + iTreble),
           fill(d - capR, 0.004));
     return vec4(o, cov);
 }
@@ -178,7 +256,6 @@ vec4 driver(vec2 q, float r, float exc, vec3 tint, float tb) {
 vec3 backdrop(vec2 p, float A, float tb) {
     vec3 col;
     if (iBackdrop == 0) {
-        // Neon floor grid receding to a horizon.
         col = mix(vec3(0.010, 0.006, 0.028), vec3(0.030, 0.010, 0.050), v_uv.y);
         float hz = -0.10;
         if (p.y < hz) {
@@ -187,44 +264,43 @@ vec3 backdrop(vec2 p, float A, float tb) {
             float lx = smoothstep(0.05, 0.0, abs(fract(p.x * persp) - 0.5));
             float lz = smoothstep(0.05, 0.0, abs(fract(persp + tb * 0.35) - 0.5));
             float fade = smoothstep(0.0, 0.12, depth) * smoothstep(0.75, 0.15, depth);
-            col += mix(vec3(0.15, 0.55, 1.0), palette(iHue), 0.5)
-                 * (lx * 0.6 + lz) * fade * (0.35 + iBass * 0.55);
+            col += mix(MIX_CYAN, MIX_MAGENTA, 0.4) * (lx * 0.6 + lz) * fade
+                 * (0.35 + iBass * 0.55);
         }
     } else if (iBackdrop == 1) {
-        // Stacked speaker wall.
-        col = vec3(0.012, 0.010, 0.016);
-        vec2 c = floor(vec2(p.x * 3.2, p.y * 3.2));
-        vec2 f = fract(vec2(p.x * 3.2, p.y * 3.2)) - 0.5;
+        // Speaker wall — the cells now pump individually off the spectrum
+        // instead of sitting there as static camouflage.
+        col = vec3(0.010, 0.009, 0.015);
+        vec2 g = vec2(p.x * 3.2, p.y * 3.2);
+        vec2 c = floor(g);
+        vec2 f = fract(g) - 0.5;
         float h = hash21(c);
-        float ring = fill(abs(length(f) - 0.30) - 0.045, 0.02);
-        col += mix(palette(iHue + h * 0.4), vec3(0.3), 0.4) * ring
-             * (0.10 + iBass * 0.35 + h * 0.05);
-        col += vec3(0.05) * fill(abs(max(abs(f.x), abs(f.y)) - 0.47) - 0.01, 0.01);
+        float v = band(fract(h * 3.7));
+        float ring = fill(abs(length(f) - (0.26 + v * 0.06)) - 0.05, 0.02);
+        col += mix(accentA(), accentB(), h) * ring * (0.06 + v * 0.55 + iBass * 0.25);
+        col += vec3(0.04) * fill(abs(max(abs(f.x), abs(f.y)) - 0.47) - 0.01, 0.01);
     } else {
-        // City lights behind haze.
-        col = mix(vec3(0.020, 0.008, 0.030), vec3(0.004, 0.006, 0.020), v_uv.y);
-        float lane = floor(p.x * 40.0);
+        // Skyline whose towers rise and fall with the spectrum.
+        col = mix(vec3(0.022, 0.008, 0.032), vec3(0.004, 0.006, 0.020), v_uv.y);
+        float lane = floor(p.x * 34.0);
         float h = hash21(vec2(lane, 3.0));
-        float bh = -0.20 + h * 0.34;
+        float v = band(fract(h * 5.1));
+        float bh = -0.34 + h * 0.22 + v * 0.26;
         float b = step(p.y, bh) * step(-0.55, p.y);
-        // Narrow towers with a fine window grid — a coarse grid here reads as
-        // a block of noise rather than a skyline.
-        float gap = smoothstep(0.12, 0.30, abs(fract(p.x * 40.0) - 0.5));
-        col += mix(palette(iHue + h), vec3(0.18, 0.26, 0.55), 0.55) * b * gap * 0.09;
-        float win = step(0.72, hash21(floor(vec2(p.x * 150.0, p.y * 110.0))));
-        col += vec3(1.0, 0.82, 0.48) * win * b * gap * 0.22;
+        float gap = smoothstep(0.12, 0.30, abs(fract(p.x * 34.0) - 0.5));
+        col += mix(accentA(), MIX_MAGENTA, h) * b * gap * (0.07 + v * 0.30);
+        col += MIX_YELLOW * step(0.72, hash21(floor(vec2(p.x * 120.0, p.y * 90.0))))
+             * b * gap * 0.20;
     }
 
-    // Pressure rings blasting outward — the room reacting to the low end.
     for (int i = 0; i < 4; i++) {
         float ph = fract(iRing * 0.35 + float(i) * 0.25);
         float rr = ph * 1.7;
         float ring = smoothstep(0.05, 0.0, abs(length(p) - rr)) * (1.0 - ph);
-        col += palette(iHue + 0.15 + float(i) * 0.08) * ring
+        col += mix(accentA(), accentB(), float(i) * 0.33) * ring
              * (0.20 + iBass * 0.75) * (0.4 + iPunch * 1.2);
     }
-    // Low-end haze.
-    col += palette(iHue + 0.55) * exp(-dot(p, p) * 1.6) * (0.03 + iBass * 0.20);
+    col += accentB() * exp(-dot(p, p) * 1.6) * (0.03 + iBass * 0.20);
     return col;
 }
 
@@ -235,36 +311,47 @@ vec4 sceneSubwoofer(vec2 p, float tb) {
     float cov = 0.0;
     vec2 q = p / (1.0 + iPunch * 0.05 + iBass * 0.04);
 
-    // Cabinet.
-    float cabD = sdRound(q, vec2(0.62, 0.60), 0.06);
+    // Feet, so the box can never read upside down.
+    for (int s = -1; s <= 1; s += 2) {
+        paint(o, cov, vec3(0.10, 0.11, 0.13),
+              fill(sdRound(q - vec2(float(s) * 0.40, -0.60), vec2(0.09, 0.045), 0.02), 0.005));
+    }
+
+    float cabD = sdRound(q - vec2(0.0, 0.02), vec2(0.60, 0.54), 0.05);
     float cab = fill(cabD, 0.006);
     paint(o, cov, tint, cab);
-    o += palette(iHue + 0.5) * drips(q, 0.58, 0.60, tb, 5.0) * cab * 1.5;
-    o += mix(vec3(0.8, 0.85, 0.95), palette(iHue + 0.2), 0.4)
-       * fill(abs(cabD) - 0.007, 0.004) * (0.7 + iTreble * 1.1);
+    o += accentB() * dripMask(q, 0.54, 0.58, tb, 5.0) * cab * 1.7;
+    o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(cabD) - 0.006, 0.004)
+       * (0.8 + iTreble * 1.1);
 
-    // Bass ports either side, exhaling on the beat.
+    // Ports flank the driver rather than crowding the base.
     for (int s = -1; s <= 1; s += 2) {
-        vec2 pp = q - vec2(float(s) * 0.47, -0.40);
-        paint(o, cov, vec3(0.02), fill(length(pp) - 0.085, 0.005));
-        o += palette(iHue + 0.3) * fill(abs(length(pp) - 0.085) - 0.008, 0.004)
-           * (0.6 + iBass);
+        vec2 pp = q - vec2(float(s) * 0.47, 0.14);
+        paint(o, cov, vec3(0.015), fill(length(pp) - 0.070, 0.005));
+        o += accentA() * fill(abs(length(pp) - 0.070) - 0.008, 0.004) * (0.8 + iBass * 1.2);
         for (int i = 0; i < 3; i++) {
             float ph = fract(iRing * 0.5 + float(i) * 0.34);
-            float rr = 0.085 + ph * 0.30;
-            o += palette(iHue + 0.3) * smoothstep(0.030, 0.0, abs(length(pp) - rr))
+            o += accentA() * smoothstep(0.026, 0.0, abs(length(pp) - (0.070 + ph * 0.26)))
                * (1.0 - ph) * (0.15 + iPunch * 0.9);
         }
     }
 
-    // The driver itself.
-    vec4 dv = driver(q - vec2(0.0, -0.02), 0.40, iBass, tint, tb);
+    vec4 dv = driver(q - vec2(0.0, 0.14), 0.33, iBass, tint, tb);
     o = mix(o, dv.rgb, dv.a);
     cov = max(cov, dv.a);
 
-    // Badge.
-    paint(o, cov, mix(vec3(0.9, 0.85, 0.6), palette(iHue), 0.4) * (0.35 + iMid * 0.7),
-          fill(sdRound(q - vec2(0.0, 0.48), vec2(0.16, 0.035), 0.02), 0.004));
+    // Neon level trough with the bead dancing along it.
+    float bc;
+    vec3 bar = beadBar(q - vec2(0.0, -0.20), vec2(0.42, 0.036),
+                       clamp(iBass * 0.75 + iMid * 0.25, 0.0, 1.0), tb, accentA(), bc);
+    o = mix(o, bar, bc);
+    o += bar * (1.0 - bc);
+    cov = max(cov, bc);
+
+    // Spectrum pegged to the cabinet's bottom edge, growing up.
+    float sc;
+    o += spectrumBars(q - vec2(0.0, 0.0), -0.48, 0.52, 0.13, accentB(), sc);
+    cov = max(cov, sc);
     return vec4(o, cov);
 }
 
@@ -272,69 +359,66 @@ vec4 sceneBoombox(vec2 p, float tb) {
     vec3 tint = cabinetTint();
     vec3 o = vec3(0.0);
     float cov = 0.0;
-    vec2 q = p / (1.0 + iPunch * 0.04);
+    // Shrunk so the handle clears the frame instead of being cropped.
+    vec2 q = p / (0.86 + iPunch * 0.03);
 
     // Carry handle.
-    float hd = abs(length((q - vec2(0.0, 0.42)) / vec2(1.0, 0.85)) - 0.26) - 0.022;
-    paint(o, cov, vec3(0.16, 0.16, 0.18), fill(hd, 0.005) * step(q.y, 0.62));
+    float hd = abs(length((q - vec2(0.0, 0.40)) / vec2(1.0, 0.90)) - 0.24) - 0.020;
+    paint(o, cov, vec3(0.14, 0.15, 0.18), fill(hd, 0.005) * step(q.y, 0.66));
 
-    // Body.
-    float bodyD = sdRound(q, vec2(0.78, 0.40), 0.05);
+    float bodyD = sdRound(q, vec2(0.74, 0.40), 0.05);
     float body = fill(bodyD, 0.006);
     paint(o, cov, tint, body);
-    o += palette(iHue + 0.45) * drips(q, 0.38, 0.76, tb, 9.0) * body * 1.4;
-    o += mix(vec3(0.8, 0.85, 0.95), palette(iHue + 0.2), 0.4)
-       * fill(abs(bodyD) - 0.006, 0.004) * (0.7 + iTreble * 1.0);
+    o += accentB() * dripMask(q, 0.40, 0.72, tb, 9.0) * body * 1.6;
+    o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(bodyD) - 0.006, 0.004)
+       * (0.8 + iTreble * 1.0);
 
-    // Twin woofers.
+    // Twin woofers, pulled outward so nothing overlaps them.
     for (int s = -1; s <= 1; s += 2) {
-        vec4 dv = driver(q - vec2(float(s) * 0.50, -0.03), 0.24, iBass, tint, tb);
+        vec4 dv = driver(q - vec2(float(s) * 0.47, 0.11), 0.185, iBass, tint, tb);
         o = mix(o, dv.rgb, dv.a);
         cov = max(cov, dv.a);
     }
 
-    // Tape deck with turning reels.
-    vec2 dq = q - vec2(0.0, 0.10);
-    float deckD = sdRound(dq, vec2(0.21, 0.13), 0.02);
-    paint(o, cov, vec3(0.05, 0.05, 0.07), fill(deckD, 0.004));
-    o += vec3(0.35, 0.85, 1.0) * fill(abs(deckD) - 0.004, 0.003) * 0.8;
+    // Tape deck, centred between them.
+    vec2 dq = q - vec2(0.0, 0.19);
+    float deckD = sdRound(dq, vec2(0.155, 0.095), 0.02);
+    paint(o, cov, vec3(0.04, 0.045, 0.06), fill(deckD, 0.004));
+    o += accentA() * fill(abs(deckD) - 0.004, 0.003) * 1.1;
     for (int s = -1; s <= 1; s += 2) {
-        vec2 rq = dq - vec2(float(s) * 0.095, 0.0);
-        paint(o, cov, vec3(0.55, 0.40, 0.20), fill(length(rq) - 0.055, 0.004));
+        vec2 rq = dq - vec2(float(s) * 0.072, 0.0);
+        paint(o, cov, mix(vec3(0.10, 0.11, 0.14), accentB() * 0.5, 0.5),
+              fill(length(rq) - 0.045, 0.004));
         for (int k = 0; k < 3; k++) {
             float a = iSpin * 2.2 + float(k) / 3.0 * TAU;
             vec2 dir = vec2(cos(a), sin(a));
             float along = dot(rq, dir);
-            float perp = length(rq - dir * along);
-            paint(o, cov, vec3(0.95, 0.85, 0.6),
-                  smoothstep(0.007, 0.0, perp) * step(0.0, along) * step(along, 0.050));
+            paint(o, cov, MIX_YELLOW,
+                  smoothstep(0.006, 0.0, length(rq - dir * along))
+                  * step(0.0, along) * step(along, 0.040));
         }
-        paint(o, cov, vec3(0.10), fill(length(rq) - 0.016, 0.003));
+        paint(o, cov, vec3(0.05), fill(length(rq) - 0.013, 0.003));
     }
 
-    // Real 64-band EQ ladder across the front.
-    for (int i = 0; i < 16; i++) {
-        float fi = float(i);
-        float v = band(fi / 15.0);
-        float h = 0.02 + v * 0.10;
-        vec2 eq = q - vec2(-0.30 + fi * 0.04, -0.28 + h * 0.5);
-        paint(o, cov, palette(iHue + fi * 0.03 + 0.1) * (0.6 + v * 1.6),
-              fill(sdRound(eq, vec2(0.014, h * 0.5), 0.005), 0.003));
-    }
-
-    // VU needles: bass on the left, mid on the right.
+    // VU pair below the deck, still clear of the woofers.
     for (int s = -1; s <= 1; s += 2) {
-        vec2 vq = q - vec2(float(s) * 0.30, 0.24);
-        float dial = fill(sdRound(vq, vec2(0.10, 0.055), 0.015), 0.004);
-        paint(o, cov, vec3(0.90, 0.86, 0.70) * 0.30, dial);
+        vec2 vq = q - vec2(float(s) * 0.085, -0.03);
+        float dial = fill(sdRound(vq, vec2(0.078, 0.048), 0.014), 0.004);
+        paint(o, cov, vec3(0.06, 0.07, 0.09), dial);
+        o += accentA() * fill(abs(sdRound(vq, vec2(0.078, 0.048), 0.014)) - 0.003, 0.002) * 0.9;
         float lvl = (s < 0) ? iBass : iMid;
         float a = PI * 0.75 - clamp(lvl, 0.0, 1.4) * PI * 0.5;
         vec2 dir = vec2(cos(a), sin(a));
-        float along = dot(vq - vec2(0.0, -0.03), dir);
-        float perp = length((vq - vec2(0.0, -0.03)) - dir * along);
-        o += vec3(1.0, 0.25, 0.15) * smoothstep(0.005, 0.0, perp)
-           * step(0.0, along) * step(along, 0.075) * dial * 3.0;
+        float along = dot(vq - vec2(0.0, -0.028), dir);
+        float perp = length((vq - vec2(0.0, -0.028)) - dir * along);
+        o += MIX_PINK * smoothstep(0.004, 0.0, perp)
+           * step(0.0, along) * step(along, 0.062) * dial * 3.2;
     }
+
+    // Spectrum across the full width, pegged to the body's bottom edge.
+    float sc;
+    o += spectrumBars(q, -0.355, 0.66, 0.155, MIX_AMBER, sc);
+    cov = max(cov, sc);
     return vec4(o, cov);
 }
 
@@ -344,57 +428,115 @@ vec4 sceneTurntable(vec2 p, float tb) {
     float cov = 0.0;
     vec2 q = p / (1.0 + iPunch * 0.03);
 
-    // Plinth.
-    float plD = sdRound(q - vec2(0.0, -0.03), vec2(0.80, 0.52), 0.05);
+    float plD = sdRound(q, vec2(0.78, 0.50), 0.05);
     float plinth = fill(plD, 0.006);
     paint(o, cov, tint, plinth);
-    o += palette(iHue + 0.4) * drips(q - vec2(0.0, -0.03), 0.46, 0.78, tb, 13.0) * plinth * 1.4;
-    o += mix(vec3(0.8, 0.85, 0.95), palette(iHue + 0.2), 0.4)
-       * fill(abs(plD) - 0.006, 0.004) * (0.7 + iTreble * 1.0);
+    // The slab used to be flat and dead — brushed metal, a lit seam and a
+    // corner glow give it something to look at.
+    float brush = 0.5 + 0.5 * sin(q.y * 260.0 + hash21(floor(vec2(q.y * 120.0, 1.0))) * 6.0);
+    o += accentA() * plinth * brush * 0.035;
+    o += accentB() * plinth
+       * smoothstep(0.55, 0.0, length(q - vec2(0.52, -0.34))) * (0.10 + iBass * 0.25);
+    o += accentA() * fill(abs(sdRound(q, vec2(0.70, 0.43), 0.04)) - 0.0025, 0.002) * 0.5;
+    o += accentB() * dripMask(q, 0.50, 0.76, tb, 13.0) * plinth * 1.6;
+    o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(plD) - 0.006, 0.004)
+       * (0.8 + iTreble * 1.0);
 
-    // Platter and record.
-    vec2 rq = q - vec2(-0.10, -0.02);
+    vec2 rq = q - vec2(-0.20, 0.06);
     float d = length(rq);
-    paint(o, cov, vec3(0.13, 0.13, 0.15), fill(d - 0.42, 0.006));
+    paint(o, cov, vec3(0.10, 0.11, 0.14), fill(d - 0.36, 0.006));
 
     float a = atan(rq.y, rq.x) + iSpin;
-    float t01 = clamp((d - 0.10) / 0.28, 0.0, 1.0);
+    float t01 = clamp((d - 0.09) / 0.24, 0.0, 1.0);
     float v = band(1.0 - t01);
     float groove = 0.5 + 0.5 * sin(d * 320.0 + v * 26.0 - iSpin * 2.0);
-    vec3 vinyl = vec3(0.045, 0.045, 0.055) * (0.55 + groove * 0.75);
-    vinyl += mix(palette(iHue + 0.1), vec3(1.0), 0.35)
+    vec3 vinyl = vec3(0.040, 0.040, 0.050) * (0.55 + groove * 0.75);
+    vinyl += mix(accentA(), vec3(1.0), 0.35)
            * pow(max(0.0, cos(a - 0.6)), 6.0) * (0.10 + v * 0.55 + iTreble * 0.25);
-    paint(o, cov, vinyl, fill(d - 0.38, 0.005));
+    paint(o, cov, vinyl, fill(d - 0.32, 0.005));
 
-    // Label.
-    vec3 lc = palette(iHue + 0.6) * (0.55 + 0.45 * step(0.5, fract(a / TAU * 6.0)));
-    paint(o, cov, lc * (0.7 + iMid * 0.8), fill(d - 0.115, 0.004));
-    paint(o, cov, vec3(0.02), fill(d - 0.014, 0.003));        // spindle hole
+    vec3 lc = mix(accentB(), MIX_MAGENTA, 0.4) * (0.55 + 0.45 * step(0.5, fract(a / TAU * 6.0)));
+    paint(o, cov, lc * (0.7 + iMid * 0.8), fill(d - 0.10, 0.004));
+    paint(o, cov, vec3(0.02), fill(d - 0.012, 0.003));
 
-    // Strobe dots around the platter rim, as on a real deck.
-    o += mix(vec3(1.0, 0.9, 0.5), palette(iHue), 0.3)
-       * smoothstep(0.016, 0.0, abs(d - 0.405))
-       * step(0.5, fract(a / TAU * 40.0)) * (0.5 + iTreble * 0.9);
+    // Rim blocks: most are plain strobe marks, but a travelling group lights up
+    // in colour and rides around with the platter glow.
+    float slot = a / TAU * 40.0;
+    float sIdx = floor(slot);
+    float on = step(0.5, fract(slot));
+    float chase = fract(sIdx / 40.0 - iSpin * 0.05);
+    float hot = smoothstep(0.10, 0.0, min(chase, 1.0 - chase));
+    vec3 blockCol = mix(vec3(1.0, 0.95, 0.8),
+                        palette(iHue + sIdx * 0.02 + tb * 0.15), hot);
+    o += blockCol * smoothstep(0.016, 0.0, abs(d - 0.343)) * on
+       * (0.5 + iTreble * 0.9 + hot * (1.6 + iBass * 1.4));
 
-    // Tonearm tracking inward across the disc.
-    float track = 0.34 - 0.16 * fract(iSpin * 0.012);
-    vec2 pivot = vec2(0.46, 0.26);
-    vec2 head = vec2(-0.10, -0.02) + vec2(cos(-0.55), sin(-0.55)) * track;
+    float track = 0.30 - 0.14 * fract(iSpin * 0.012);
+    vec2 pivot = vec2(0.46, 0.30);
+    vec2 head = vec2(-0.20, 0.06) + vec2(cos(-0.55), sin(-0.55)) * track;
     vec2 ad = normalize(head - pivot);
     float along = dot(q - pivot, ad);
-    float perp = length((q - pivot) - ad * along);
     float armLen = length(head - pivot);
-    paint(o, cov, vec3(0.75, 0.78, 0.85),
-          smoothstep(0.010, 0.006, perp) * step(0.0, along) * step(along, armLen));
-    paint(o, cov, vec3(0.85, 0.30, 0.25), fill(length(q - head) - 0.030, 0.004));
-    paint(o, cov, vec3(0.30, 0.32, 0.38), fill(length(q - pivot) - 0.055, 0.005));
+    paint(o, cov, vec3(0.78, 0.81, 0.88),
+          smoothstep(0.010, 0.006, length((q - pivot) - ad * along))
+          * step(0.0, along) * step(along, armLen));
+    paint(o, cov, MIX_PINK, fill(length(q - head) - 0.026, 0.004));
+    paint(o, cov, vec3(0.26, 0.28, 0.34), fill(length(q - pivot) - 0.050, 0.005));
+
+    // Pitch fader filling the dead space on the right.
+    float bc;
+    vec3 bar = beadBar(q - vec2(0.44, -0.16), vec2(0.20, 0.030),
+                       clamp(iMid * 0.8 + iBass * 0.2, 0.0, 1.0), tb, accentA(), bc);
+    o = mix(o, bar, bc);
+    o += bar * (1.0 - bc);
+    cov = max(cov, bc);
+
+    float sc;
+    o += spectrumBars(q, -0.445, 0.70, 0.145, MIX_GREEN, sc);
+    cov = max(cov, sc);
     return vec4(o, cov);
+}
+
+// Shooting laser streaks + rainbow drips, replacing the old sparkle field.
+vec3 lasersAndDrips(vec2 p, float A, float tb) {
+    vec3 col = vec3(0.0);
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float seed = hash21(vec2(fi, floor(tb * 0.35 + fi * 7.0)));
+        float ph = fract(tb * 0.35 + fi * 0.37);
+        float ang = seed * TAU;
+        vec2 dir = vec2(cos(ang), sin(ang));
+        vec2 nrm = vec2(-dir.y, dir.x);
+        vec2 origin = (vec2(seed, hash21(vec2(fi + 9.0, floor(tb * 0.35)))) - 0.5)
+                    * vec2(A * 1.6, 1.4);
+        float along = dot(p - origin, dir);
+        float perp = dot(p - origin, nrm);
+        float headPos = (ph * 2.4 - 0.6) * A;
+        float body = smoothstep(0.0, 0.35, headPos - along) * step(along, headPos);
+        float streak = smoothstep(0.010, 0.0, abs(perp)) * body;
+        float head = exp(-pow(along - headPos, 2.0) * 260.0 - perp * perp * 900.0);
+        vec3 lc = palette(iHue + seed + tb * 0.05);
+        col += lc * (streak * 0.9 + head * 2.2) * sin(ph * PI) * (0.4 + iTreble * 1.1);
+    }
+    // Rainbow drips down the screen edges.
+    float edge = smoothstep(0.55, 0.95, abs(p.x) / (A * 0.5));
+    float lane = floor(p.x * 26.0);
+    float h = hash21(vec2(lane, 21.0));
+    float flow = fract(tb * (0.10 + h * 0.22) + h);
+    float top = 0.52;
+    float dy = top - p.y;
+    float len = 0.25 + h * 0.55;
+    float across = abs(fract(p.x * 26.0) - 0.5) * 2.0;
+    float drip = smoothstep(0.35, 0.0, across) * step(0.0, dy)
+               * smoothstep(len * flow + 0.03, 0.0, dy);
+    col += palette(iHue + h * 0.9 + 0.2) * drip * edge * (0.25 + iMid * 0.6);
+    return col;
 }
 
 void main() {
     float A = iResolution.x / max(iResolution.y, 1.0);
     vec2 p = (v_uv - 0.5) * vec2(A, 1.0) / max(iZoom, 0.05);
-    float tb = mod(iTime, 600.0);
+    float tb = mod(iTime, 120.0);
 
     vec3 col = backdrop(p, A, tb);
 
@@ -404,10 +546,8 @@ void main() {
                                  : sceneTurntable(mp, tb);
     col = mix(col, machine.rgb, machine.a);
 
-    // Beat strobe + sparkle.
     col += palette(iHue + 0.7) * iBeat * 0.10;
-    float sp = hash21(floor(v_uv * iResolution * 0.5) + floor(tb * 20.0));
-    col += vec3(0.9, 0.92, 1.0) * step(0.9965, sp) * (0.3 + iTreble * 0.8) * iGlitter;
+    col += lasersAndDrips(p, A, tb) * iGlitter;
 
     col *= smoothstep(1.45, 0.20, length(v_uv - 0.5));
     col = col / (1.0 + col * 0.55);

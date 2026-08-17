@@ -557,6 +557,39 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.95** — Audio Bass Machine 2.0, from screenshot review.
+  - **The spectrum bars were upside down.** They hung *down* from the top
+    edge, which reads as an inverted analyser and made both the subwoofer and
+    the record player look flipped. They are now real bars pegged flush to
+    each cabinet's **bottom** edge and growing upward, with peak caps. Drips
+    are a separate layer again — wet paint with a heavy bead, running down
+    from the top edge, where gravity actually points.
+  - **Colours pulled from the mixer palette** (`drop-ins/dj-mixer-01/ui.py`):
+    cyan / pink / green / amber / magenta. The old wood-and-olive tints read
+    as mud; cabinets are now dark and neutral so the neon carries the frame.
+  - **Boombox refitted** — shrunk so the carry handle clears the frame instead
+    of being cropped, woofers pulled outward, and the EQ moved to the full
+    width of the bottom edge, so nothing overlaps anything.
+  - **Subwoofer**: the grey pulsing badge is now a neon level trough with a
+    bead dancing along it; ports moved up to flank the driver; feet added so
+    the box can never read upside down.
+  - **Record player**: brushed-metal plinth with a lit seam and corner glow
+    instead of a flat slab; a travelling group of rim blocks lights up in
+    colour and chases around with the platter glow; a pitch fader fills the
+    dead space.
+  - Backdrops react now — the speaker wall's cells and the skyline's towers
+    pump off the spectrum instead of sitting there as static camouflage.
+  - **Fixed the "ASCII dots".** The sparkle idiom
+    `hash21(floor(frag * 0.5) + floor(t * 20.0))` feeds a term reaching
+    ~12000 into a hash whose first multiply is x123.34, landing past
+    float32's usable mantissa. Measured over a 40x40 patch it degrades from
+    **1197 distinct values at t=0 to 15 at t=600s** — a fixed lattice, i.e.
+    the regular dotted grid. Because `self.time` starts at a random value up
+    to 10000, nearly every instance began in the collapsed regime. `hash21`
+    now wraps its input, and the field is replaced with shooting laser
+    streaks and rainbow edge drips. **The same idiom appears in 8 other
+    effects and is deliberately not touched here.**
+
 - **1.0.0-beta.94** — BPM tapper Enter-confirm: pressing `Enter` while
   the KP-0 tap readout is live now sends the tapped BPM to the Auto VJ
   detector as a 30-second elevated-trust window (degrades to a flash
