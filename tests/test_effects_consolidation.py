@@ -20,7 +20,7 @@ _REPO = Path(__file__).resolve().parents[1]
 # --- Expected taxonomy (the settled consolidation map) -----------------------
 CORE_NAMES = {
     'Audio Spectrum', 'Audio Spectrogram', 'Audio Tracks', 'Audio Waveforms',
-    'Audio Centroid', 'Audio Sine', 'Audio Chromogram',
+    'Audio Centroid', 'Audio Sine', 'Audio Chromogram', 'Audio Bass Machine',
 }
 PACK_NAMES = {
     'psychedelic-01': {'Plasma', 'Kaleidoscope', 'Psychedelic'},
@@ -49,7 +49,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 63
+EXPECTED_TOTAL = 64
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:

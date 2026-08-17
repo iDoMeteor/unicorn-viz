@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.93**
+**Version 1.0.0-beta.94**
 
 ## Contact Me!
 
@@ -557,6 +557,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.94** — BPM tapper Enter-confirm: pressing `Enter` while
+  the KP-0 tap readout is live now sends the tapped BPM to the Auto VJ
+  detector as a 30-second elevated-trust window (degrades to a flash
+  message when auto-vj-01 is absent). New `Overlays.bpm_tap_value`
+  property; help overlay line added. Also: `dubstep` audio profile's
+  BPM hint band widened `138-142` → `70-160` from real session data
+  (the genre's two genuine tempo bands; detector-side prior unchanged),
+  and detector-facing analyzer feedback unchanged — see auto-vj-01
+  `1.0.0-rc.90` for the paired drop-in changes.
 - **1.0.0-beta.93** — New shared track-path hint bus on `App`/`VJApi`
   (`publish_track_path`/`get_track_path`, mirrors the existing
   `publish_bpm`/`get_bpm` bus exactly): lets a source that knows a real

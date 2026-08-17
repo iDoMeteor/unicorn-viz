@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.93       BETA          module
+  core (unicornviz)             1.0.0-beta.94       BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.186.0             alpha ▲       module
@@ -15,7 +15,7 @@
   immersive-01                  0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.89         RC            MISMATCH (readme=1.0.0-rc.84)
+  auto-vj-01                    1.0.0-rc.90         RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@
   unicorn-tears-01              1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  vector-01                     0.9.1               alpha ▲       module
+  vector-01                     0.10.0              alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
   banner-01                     0.8.1               alpha         module
@@ -81,5 +81,4 @@
 ────────────────────────────────────────────────────────────────────────────
 
   42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
-  ⚠  1 version mismatch(es): auto-vj-01
 
