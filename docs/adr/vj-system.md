@@ -7164,6 +7164,62 @@ already covered by `tests/test_analyzer_onset_dedup.py` hits the cap
 exactly (`50.0`) under the fix -- this is the live regression case, not
 a hypothetical. Core `unicornviz.__version__` → `1.0.0-beta.98`.
 
+## Lock Hysteresis Isolated at Last: Release Value, Not the Gap (2026-08-17, later still)
+
+`_BPM_LOCK_RELEASE_CONFIDENCE` had walked `0.28 → 0.3 → 0.25 → 0.3 → 0.2
+→ 0.35` across this whole multi-day investigation, every single move
+justified by a real-session comparison that also changed something else
+at the same time (round three's broader batch, the ACF fix, the
+genre-evidence reweight). `0.35` landed as `training-house-01/f` and was
+the worst house result yet — confirmed with a clean same-track paired
+comparison against `e` (all 6 opening tracks worse, one nearly halved:
+`89.9% → 46.2%` lock coverage).
+
+Owner: "so .25 release then lock should be .55, or .3 then .6? what do
+you think our optimal settings are for those two?" — then, to actually
+answer it instead of guessing from another confounded comparison: "yea
+let's try synth with: .30/.6, .25/.6, .20/.6, .30/.55, .25/.55, .20/.55
+... and then apply the best and i'll run a long one."
+
+Built `tools/lock_hysteresis_gap_harness.py` (`auto-vj-01`): replays the
+real, already-captured confidence trace from four `training-house-01`
+sessions (`c`/`d`/`e`/`f`) through the *exact* Schmidt-trigger state
+machine (`AutoVJController.update()`'s own logic, ported verbatim) under
+all 6 candidate `(release, gain)` pairs, holding the real audio/detector/
+confidence numbers completely fixed — the one isolated test this
+constant never got in its whole history.
+
+**Result reframed the question.** It was never really about the
+gain-minus-release "gap": two pairs sharing the identical `0.30` gap
+(`0.30`/`0.60` vs. `0.25`/`0.55`) produced `17.55` vs. `6.48` mean
+churn/1000 rows — wildly different. The **release value itself** is the
+dominant lever, almost independent of gain: `release=0.30` churned high
+regardless of gain (`17.55-20.52`), `release=0.25` dropped sharply to
+`5.48-6.48`, `release=0.20` lowest of all (`1.87-2.00`) — gain `0.6` vs.
+`0.55` only ever produced a `~15%` difference at a fixed release value.
+
+But the harness measures hysteresis *stability*, not detector *accuracy*
+— it has no ground truth for whether a held lock is actually right, only
+whether it stayed held. Owner's own real-session read on `0.20`
+(`training-house-01/e`, the lowest-churn setting ever tested live): "i
+thought e was not very good" — despite it winning on every metric this
+session was originally scored on (confidence, lock coverage, LLM score).
+A sticky lock holds a stale/wrong BPM longer too; that cost doesn't show
+up in a churn count.
+
+**Landed `0.25`.** It's the one prior release-confidence value ever
+validated against real backtested lock-loss data (rc.6, above — not just
+a session-level comparison), it sits at the elbow between `0.30`'s
+confirmed-bad churn and `0.20`'s confirmed-not-great real-session
+experience, and it's a real `~3x` churn improvement over `0.30` per this
+harness's own numbers. `gain` stays at `0.6` (harness confirms it's
+still marginally better than `0.55` at every release value, and it was
+independently validated on its own merits already). `_DIRECTOR_VERSION`
+→ `1.0.0-rc.10`, `auto_vj.py` `__version__` → `1.0.0-rc.93`,
+`_VJ_WEIGHTS_DOC_VERSION` → `61` (also caught and fixed: the doc header's
+own `Director version` had been stale at `rc.8` since the tweaker/mood
+work landed at `rc.9`).
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
