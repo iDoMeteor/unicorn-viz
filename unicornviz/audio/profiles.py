@@ -768,8 +768,29 @@ PROFILES: Dict[str, AudioProfile] = {
         # comment) -- derived value 0.02, unclamped the same night (see house's own field comment).
         bpm_prior_mu=140.0,
         bpm_prior_sigma=0.0218,
-        bpm_hint_min=138.0,
-        bpm_hint_max=142.0,
+        # 2026-08-17: hint band widened 138-142 -> 70-160 from real session
+        # data (2hr-dubstep: 19.0% of readings in 70-100 AND 50.9% in
+        # 130-160 -- two genuine produced-tempo bands, not one tempo plus
+        # its half-time illusion; owner: "dub step *is* legit 70-100 AND
+        # 130-160 lol"). The old sliver actively fought half of correct
+        # dubstep readings in every hint-band consumer (HUD range, the
+        # mood-prime in-band candidate pick).
+        # 2026-08-17, later still: 70-160 -> 140-160. A single min/max range
+        # is inherently inclusive of everything between its ends -- it was
+        # never meant to also validate the 100-130 gap between the two real
+        # produced-tempo bands, just their union, and this schema can't
+        # express a union until bimodal hint-band support exists (flagged
+        # below). Narrowed to the upper, on-`bpm_prior_mu` band alone as the
+        # safer interim single range; the low (70-100) band goes
+        # unrepresented in hint-band consumers until dual-range support
+        # lands. Owner: "change dubstp to 140-160 until we add support for
+        # dual ranges, it was not intended to be *inclusive*." Deliberately
+        # hints-only: bpm_prior_mu/sigma above stay narrow -- the
+        # detector-side anti-halftime-fold prior is a separate,
+        # separately-validated concern, and a bimodal prior needs a schema
+        # change (flagged in the round-three plan § 5.3, owner's call).
+        bpm_hint_min=140.0,
+        bpm_hint_max=160.0,
         spectral_centroid_mu=950.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.095,

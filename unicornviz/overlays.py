@@ -442,7 +442,7 @@ class Overlays:
                 ('e', 'EQ / spectrum'),
                 ('a / A', 'Audio source selector menu'),
                 ('Ctrl+A', 'Audio source selector menu (alternate)'),
-                ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev'),
+                ('Alt+A / Alt+Shift+A', 'BPM Profile next / prev (includes auto)'),
                 ('KP 0', 'BPM tapper (readout top right while tapping)'),
                 ('m', 'System monitor modal'),
                 ('Alt+M', 'MIDI device selector'),
@@ -1270,6 +1270,15 @@ void main() {
         else:
             self._bpm_tap_value = 0.0
         return self._bpm_tap_value
+
+    @property
+    def bpm_tap_value(self) -> float:
+        """The current tapped BPM readout value (0.0 = not enough taps).
+
+        2026-08-17: exposed for the Enter-confirm path (hotkeys.py ->
+        Auto VJ tap-tempo trust window); previously display-only state.
+        """
+        return float(self._bpm_tap_value)
 
     def bpm_tapper_active(self, now: float | None = None) -> bool:
         """Whether the readout should show (tapped within the hold window)."""

@@ -1556,6 +1556,30 @@ class HotkeyHandler:
             # tapping (no flash message: the readout IS the feedback).
             o.bpm_tap()
 
+        elif (sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER)
+                and o.bpm_tapper_active()):
+            # Enter while the tapper readout is live — send the tapped BPM
+            # to the Auto VJ detector as a 30s elevated-trust window
+            # (2026-08-17, "cheater mode" #2; see
+            # drop-ins/auto-vj-01/docs and the round-three plan § 4.5).
+            # Guarded to tapper-active only so every existing
+            # menu/overlay-scoped Enter binding (all of which are handled
+            # in their own modal branches above) is unaffected. Degrades
+            # to a no-op flash when the auto-vj drop-in is absent.
+            _vj = a.auto_vj_controller
+            _tapped = float(getattr(o, 'bpm_tap_value', 0.0) or 0.0)
+            if _vj is not None and _tapped > 0.0 and hasattr(_vj, 'confirm_tap_tempo'):
+                try:
+                    _ok = bool(_vj.confirm_tap_tempo(_tapped))
+                except Exception:
+                    _ok = False
+                if _ok:
+                    o.flash_message(f'TAP {_tapped:.1f} BPM → Auto VJ (30s trust)', 1.6)
+                else:
+                    o.flash_message(f'TAP {_tapped:.1f} BPM rejected', 1.2)
+            else:
+                o.flash_message('BPM tap: Auto VJ unavailable', 1.2)
+
         elif sym == sdl2.SDLK_k:
             if (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_ALT):
                 _refresh_webcam_editor_payload()
@@ -1570,25 +1594,47 @@ class HotkeyHandler:
 
         elif sym == sdl2.SDLK_a:
             if (mod & sdl2.KMOD_ALT) and (mod & sdl2.KMOD_SHIFT):
-                # Alt+Shift+A — previous audio profile (wraps around)
-                profiles = self._audio.list_profiles()
-                current_key = self._audio.get_profile_key()
+                # Alt+Shift+A — previous audio profile, now including 'auto'
+                # in the cycle (2026-08-17: owner, "let's have both mood &
+                # genre selectors have an 'auto' option that releases the
+                # vj's over-ride"). Routed through AutoVJController.
+                # cycle_audio_profile() when the drop-in is present -- it
+                # both cycles and disables/re-enables the recommender's
+                # auto-apply decider in one place, closing the gap where a
+                # manual pick had no way back to auto. Falls back to the
+                # old raw-list cycle (no 'auto' entry) when the drop-in is
+                # absent, per the drop-in independence rule.
+                _vj = a.auto_vj_controller
                 current_profile = self._audio.get_profile()
-                current_idx = profiles.index(current_key) if current_key in profiles else 0
-                prev_idx = (current_idx - 1) % len(profiles)
-                prev_profile = self._audio.set_profile(profiles[prev_idx])
-                o.flash_message(f'BPM Profile: {prev_profile.name}', 1.2)
-                log.info('Audio profile changed: %s → %s', current_profile.name, prev_profile.name)
+                if _vj is not None and hasattr(_vj, 'cycle_audio_profile'):
+                    label = _vj.cycle_audio_profile(self._audio, reverse=True)
+                    o.flash_message(f'BPM Profile: {label}', 1.2)
+                    log.info('Audio profile changed: %s → %s', current_profile.name, label)
+                else:
+                    profiles = self._audio.list_profiles()
+                    current_key = self._audio.get_profile_key()
+                    current_idx = profiles.index(current_key) if current_key in profiles else 0
+                    prev_idx = (current_idx - 1) % len(profiles)
+                    prev_profile = self._audio.set_profile(profiles[prev_idx])
+                    o.flash_message(f'BPM Profile: {prev_profile.name}', 1.2)
+                    log.info('Audio profile changed: %s → %s', current_profile.name, prev_profile.name)
             elif mod & sdl2.KMOD_ALT:
-                # Alt+A — next audio profile (wraps around)
-                profiles = self._audio.list_profiles()
-                current_key = self._audio.get_profile_key()
+                # Alt+A — next audio profile, now including 'auto'. See the
+                # Alt+Shift+A branch above for the full rationale.
+                _vj = a.auto_vj_controller
                 current_profile = self._audio.get_profile()
-                current_idx = profiles.index(current_key) if current_key in profiles else 0
-                next_idx = (current_idx + 1) % len(profiles)
-                next_profile = self._audio.set_profile(profiles[next_idx])
-                o.flash_message(f'BPM Profile: {next_profile.name}', 1.2)
-                log.info('Audio profile changed: %s → %s', current_profile.name, next_profile.name)
+                if _vj is not None and hasattr(_vj, 'cycle_audio_profile'):
+                    label = _vj.cycle_audio_profile(self._audio)
+                    o.flash_message(f'BPM Profile: {label}', 1.2)
+                    log.info('Audio profile changed: %s → %s', current_profile.name, label)
+                else:
+                    profiles = self._audio.list_profiles()
+                    current_key = self._audio.get_profile_key()
+                    current_idx = profiles.index(current_key) if current_key in profiles else 0
+                    next_idx = (current_idx + 1) % len(profiles)
+                    next_profile = self._audio.set_profile(profiles[next_idx])
+                    o.flash_message(f'BPM Profile: {next_profile.name}', 1.2)
+                    log.info('Audio profile changed: %s → %s', current_profile.name, next_profile.name)
             elif (mod & sdl2.KMOD_CTRL) and (mod & sdl2.KMOD_SHIFT):
                 # Ctrl+Shift+A is intentionally unbound to avoid conflicts.
                 return

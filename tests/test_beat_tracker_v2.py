@@ -659,7 +659,14 @@ def test_bpm_stays_stable_on_continued_steady_material() -> None:
     locked_bpm = bt.bpm
 
     _run_steady_click_track(bt, bpm=120.0, duration_s=5.0, start_t=t)
-    assert bt.bpm == pytest.approx(locked_bpm, abs=0.05)
+    # 2026-08-17: tolerance widened 0.05 -> 0.25. With sub-lag
+    # interpolation on by default (round-three close-out), continued
+    # steady material may legitimately refine the reading a fraction of
+    # a BPM *toward the true tempo* between grid points -- that is the
+    # fix working, not drift. The assertion's real job (no runaway, no
+    # lane change on unchanged material) is preserved: 0.25 BPM is far
+    # below the lock band, let alone a lane.
+    assert bt.bpm == pytest.approx(locked_bpm, abs=0.25)
 
 
 def test_fresh_lock_converges_correctly_on_123_bpm_material() -> None:
@@ -1659,9 +1666,19 @@ def test_long_candidate_spread_and_median_populate_during_a_real_transition() ->
 
     assert bt.long_candidate_spread >= 0.0
     assert bt.long_candidate_median > 0.0
-    # The check that let the transition through requires this exact
-    # invariant -- see _estimate_tempo_acf()'s large-jump gate.
-    assert bt.long_candidate_spread <= 6.0
+    # 2026-08-17 re-baseline: the transition itself must have converged,
+    # via at least one acceptance that cleared the persistence gate --
+    # after which T5 Option A clears the deques (round-three close-out).
+    # The cached spread/median now legitimately reflect whatever the
+    # LAST large-jump evaluation saw, which post-acceptance is usually a
+    # correctly-REJECTED octave-alias candidate over a refilling window
+    # (verified directly: the accept-time spread was 0.81 <= limit; the
+    # end-of-run cache showed a rejected alias eval). So assert the
+    # things that actually encode "the gate worked": convergence, one
+    # reset, one clear.
+    assert bt.bpm == pytest.approx(123.0, abs=3.0)
+    assert bt.persistence_reset_count >= 1
+    assert bt._large_jump_persistence_cleared_count >= 1
 
 
 def test_long_candidate_spread_reads_the_cached_value() -> None:
@@ -1678,22 +1695,28 @@ def test_long_candidate_spread_reads_the_cached_value() -> None:
 # Sub-lag (parabolic) peak interpolation A/B test flag (2026-08-14, round three)
 # ---------------------------------------------------------------------------
 
-def test_acf_interpolation_disabled_by_default() -> None:
-    """Owner: 'we'll consider my next run the A for this and the one
-    directly after we'll do the B w/that fix' -- must default off so the
-    A run reproduces today's exact (unfixed) behavior."""
-    assert _MOD._V2_ACF_INTERPOLATION_ENABLED is False
+def test_acf_interpolation_enabled_by_default() -> None:
+    """2026-08-17 (round-three close-out): default flipped False -> True
+    after the sequential A/B validated interpolation on every direct
+    metric (library/c vs library/d -- persistence-gate clear rate
+    8.5% -> 19.9%, lock 68.6% -> 77.9%; plan § 5.2). The config key
+    still overrides in either direction (tests below)."""
+    assert _MOD._V2_ACF_INTERPOLATION_ENABLED is True
     bt = BeatTracker({})
-    assert bt._interpolation_enabled is False
+    assert bt._interpolation_enabled is True
 
 
 def test_acf_interpolation_config_flag_reaches_instance() -> None:
     bt = BeatTracker({'acf_peak_interpolation_enabled': True})
     assert bt._interpolation_enabled is True
+    # And the override works downward too, now that the default is True.
+    bt_off = BeatTracker({'acf_peak_interpolation_enabled': False})
+    assert bt_off._interpolation_enabled is False
 
 
 def test_acf_interpolation_delta_stays_zero_when_disabled() -> None:
-    bt = BeatTracker({})
+    # Explicitly disabled since 2026-08-17 (the default is now enabled).
+    bt = BeatTracker({'acf_peak_interpolation_enabled': False})
     _run_steady_click_track(bt, bpm=151.0, duration_s=30.0, jitter_s=0.01)
     assert bt.acf_interpolation_delta_bpm == 0.0
 

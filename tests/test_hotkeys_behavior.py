@@ -431,3 +431,53 @@ def test_w_toggles_now_spinning_overlay() -> None:
     handler.handle(sdl2.SDLK_w, 0)
     assert app.vj_api.now_spinning_toggles == 2
     assert any('OFF' in m for m in overlays.messages)
+
+
+# ---- Alt+A now routes through AutoVJController.cycle_audio_profile() ------
+# (2026-08-17: 'auto' added to the genre/BPM profile cycle, closing the
+# correction-vs-lock gap; see docs/adr/vj-system.md and
+# cycle_audio_profile()'s docstring. The VJ mood cycle (cycle_profile())
+# stays MIDI-only, unchanged -- no new keyboard binding was wanted there.)
+
+
+class _FakeAutoVJ:
+    def __init__(self) -> None:
+        self.audio_cycle_calls: list[tuple[object, bool]] = []
+
+    def cycle_audio_profile(self, audio_manager, reverse: bool = False) -> str:
+        self.audio_cycle_calls.append((audio_manager, reverse))
+        return 'auto' if reverse else 'dubstep'
+
+
+def test_alt_a_routes_through_auto_vj_cycle_audio_profile_when_present() -> None:
+    handler, app, overlays = _handler()
+    fake_vj = _FakeAutoVJ()
+    app.auto_vj_controller = fake_vj
+
+    handler.handle(sdl2.SDLK_a, sdl2.KMOD_ALT)
+
+    assert len(fake_vj.audio_cycle_calls) == 1
+    assert fake_vj.audio_cycle_calls[0][1] is False
+    assert any('dubstep' in m for m in overlays.messages)
+
+
+def test_alt_shift_a_routes_through_auto_vj_cycle_audio_profile_reversed() -> None:
+    handler, app, overlays = _handler()
+    fake_vj = _FakeAutoVJ()
+    app.auto_vj_controller = fake_vj
+
+    handler.handle(sdl2.SDLK_a, sdl2.KMOD_ALT | sdl2.KMOD_SHIFT)
+
+    assert len(fake_vj.audio_cycle_calls) == 1
+    assert fake_vj.audio_cycle_calls[0][1] is True
+    assert any('auto' in m for m in overlays.messages)
+
+
+def test_alt_a_falls_back_to_raw_cycle_without_auto_vj() -> None:
+    """Drop-in independence: with auto_vj_controller absent (None, the
+    fixture default), Alt+A must still work via the old raw profile list."""
+    handler, app, overlays = _handler()
+
+    handler.handle(sdl2.SDLK_a, sdl2.KMOD_ALT)
+
+    assert any('house' in m for m in overlays.messages)

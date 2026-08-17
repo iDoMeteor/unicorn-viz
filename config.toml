@@ -134,6 +134,18 @@ beat_tracker_engine = "v3"   # genre never writes back to an established tempo (
 beat_tracker_shadow_engine = "v2"   # re-enabled 2026-08-14: mid-investigation on a real v3/v2 regression (see docs/adr/vj-system.md); turn off again once phase_tol/blend settle
 beat_tracker_shadow2_engine = "legacy"   # 2026-08-14, round three: v1 running alongside the v2 shadow above for a three-way v1/v2/v3 comparison (see docs/adr/vj-system.md); <0.3ms/frame, cheap to leave on for a few sessions
 acf_peak_interpolation_enabled = true   # A/B test flag (docs/adr/vj-system.md round three) -- B run starts now (A was the 20260813T202616 session)
+# -- round-three close-out options (2026-08-17, detector rc.33 / auto-vj rc.90) --
+# All default ON (or to the values shown) in code; uncomment to override.
+bpm_lock_dwell_bars = 16.0            # minimum lock dwell window (bars); in-band drift beyond the pct below is routed through the large-jump gates; 0 disables; owner test candidates: 8 and 16 -- 16-bar variant active 2026-08-17, watch dwell_gated_count/refractory_guard_engaged_count/genre_evidence_applied_count/tap_prime_accept_count/persistence_reset_count/phase_error_median/phase_error_iqr in the corpus rows
+# bpm_lock_dwell_drift_pct = 0.04      # cumulative in-band drift budget from the lock anchor during the dwell window
+# refractory_guard_enabled = true      # suspend the BPM-fed analyzer refractory while candidate evidence disagrees with the lock (anti self-confirmation)
+# mood_prime_enabled = true            # manual audio-profile change primes the detector from the best in-band ACF candidate ("cheater mode" #1)
+# mood_prime_confidence = 0.7          # confidence used for the mood-prime (below the mixer bus's 0.9 -- a genre label is weaker evidence than a per-track analysis)
+# genre_candidate_scoring_enabled = true   # tempo-independent genre evidence reweights ACF candidates while acf_confidence is low ("consult only when unsure")
+# genre_candidate_gate_confidence = 0.5    # consult genre evidence only when the previous cycle's acf_confidence is below this
+# persistence_spread_pct = 0.035       # relative component of the large-jump persistence spread limit: max(6.0, pct * window median)
+# candidate_spread_pct = 0.03          # relative component of the short candidate-window spread limit: max(4.0, pct * median)
+# cold_start_guard_cycles = 25         # ACF cycles after cold start during which downbeat_regularity is excluded from the confidence blend
 postfx_cruise_slots = [1,2,3,4,5,6]
 log_decisions = true
 live_training_enabled = true

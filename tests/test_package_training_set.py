@@ -335,6 +335,51 @@ def test_build_detector_payload_set_description_included() -> None:
     assert payload['set_description'] == 'House night baseline run.'
 
 
+# ---- _build_live_corpus_snapshot / detector payload wiring (2026-08-17) -----
+
+
+def test_build_detector_payload_live_corpus_snapshot_defaults_empty() -> None:
+    """No live_rows passed (or none available) -- empty list, not missing/None,
+    so downstream JSON serialization and the prompt-note gate both behave
+    predictably."""
+    payload = _build_detector_payload([_make_seq_row()], 'set-a', 'a')
+    assert payload['live_corpus_snapshot'] == []
+
+
+def test_build_live_corpus_snapshot_skips_unidentified_and_idle_rows() -> None:
+    """Owner: 'send the live corpus to llm as well, i thought we were sending
+    *just* that to keep the package small.' Skips the no-identity
+    __live__:<source> fallback row and the stopped/idle teardown snapshot
+    LiveCorpusWriter leaves at session end -- neither says anything about a
+    specific track."""
+    live_rows = [
+        {'track_title': '', 'track_artist': '', 'bpm': 125.0, 'is_playing': False, 'track_status': 'stopped'},
+        {'track_title': 'Real Track', 'track_artist': 'Real Artist', 'bpm': 124.0,
+         'bpm_confidence': 0.8, 'is_playing': True, 'track_status': 'PLAYING',
+         'track_genre': 'House', 'profile': 'house'},
+    ]
+    snapshot = _MOD._build_live_corpus_snapshot(live_rows)
+    assert len(snapshot) == 1
+    assert snapshot[0]['title'] == 'Real Track'
+    assert snapshot[0]['artist'] == 'Real Artist'
+    assert snapshot[0]['bpm'] == 124.0
+    assert snapshot[0]['bpm_confidence'] == 0.8
+    assert snapshot[0]['track_genre'] == 'House'
+    assert snapshot[0]['profile'] == 'house'
+
+
+def test_build_detector_payload_includes_live_corpus_snapshot_when_provided() -> None:
+    live_rows = [
+        {'track_title': 'Live Track', 'track_artist': 'Live Artist', 'bpm': 128.0,
+         'bpm_confidence': 0.9, 'is_playing': True, 'track_status': 'PLAYING'},
+    ]
+    payload = _build_detector_payload([_make_seq_row()], 'set-a', 'a', live_rows=live_rows)
+    assert payload['live_corpus_snapshot'] == [{
+        'title': 'Live Track', 'artist': 'Live Artist', 'bpm': 128.0,
+        'bpm_confidence': 0.9, 'track_genre': None, 'profile': None,
+    }]
+
+
 def test_build_detector_payload_band_signal_summary() -> None:
     """2026-08-09: band_signal surfaces bass_n/mid_n/treble_n/bass_flux/
     mid_flux means and the real per-frame beat-onset rate -- data behind
@@ -1119,6 +1164,18 @@ def test_build_combined_prompt_essentia_note_with_real_reference_data() -> None:
     prompt = _build_combined_prompt(detector_payload, {}, None)
     assert 'Real external reference data is available for 2 of 3 songs' in prompt
     assert 'score external_agreement as null' not in prompt
+
+
+def test_build_combined_prompt_live_corpus_note_only_when_snapshot_present() -> None:
+    detector_payload_with = {'essentia_available': False, 'per_song': [], 'live_corpus_snapshot': [
+        {'title': 'A', 'artist': 'B', 'bpm': 124.0, 'bpm_confidence': 0.8, 'track_genre': None, 'profile': None},
+    ]}
+    prompt_with = _build_combined_prompt(detector_payload_with, {}, None)
+    assert 'live_corpus_snapshot is a compact' in prompt_with
+
+    detector_payload_without = {'essentia_available': False, 'per_song': [], 'live_corpus_snapshot': []}
+    prompt_without = _build_combined_prompt(detector_payload_without, {}, None)
+    assert 'live_corpus_snapshot is a compact' not in prompt_without
 
 
 def test_build_combined_prompt_includes_dynamic_set_flexibility_guidance() -> None:

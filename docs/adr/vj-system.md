@@ -6768,6 +6768,358 @@ training-pipeline concern; this entry exists here only because both touch
 
 ---
 
+## Round Three Close-Out Batch — one-shot implementation (2026-08-17)
+
+Owner: "let's see if we can knock out all of round 3 in one shot."
+Every remaining open item from `docs/planning/
+auto-vj-round-three-planning-2026-08-14.md` (minus the explicitly
+rc2-scoped config menu, the recommender-phase re-priming revisit, the
+deferred centroid recalibrations, T5 Options B/C, and the v3-scoped
+HMM/rolling-window/headless items) implemented in one batch: detector
+`1.0.0-rc.33`, auto-vj-01 `1.0.0-rc.90`, core `1.0.0-beta.94`, weights
+doc v58. Not committed pending owner review/test — this entry records
+the decisions.
+
+**Detector (`beat_grid.py`):** interpolation default `False → True`
+(the § 5.2 A/B validated it: gate-clear rate `8.5% → 19.9%`, lock
+`68.6% → 77.9%`); persistence spread limits become
+`max(flat, pct × window median)` (`6.0`/`0.035` long, `4.0`/`0.03`
+short — flat floors preserve all validated low/mid-tempo behavior, the
+pct term only loosens the fast lanes where the lag grid itself exceeds
+the old flat limits; sequenced deliberately after the interpolation
+default per the plan's § 6.3 coupling warning); T5 Option A (all four
+candidate deques cleared on every accepted large jump); accepted large
+jumps and tap-window matches **snap** to the candidate median instead
+of crawling through `max_bpm_step` (interaction fix: with Option A's
+freshly-cleared deques, a crawling jump would re-stall in the
+persistence warm-up for ~3.3 s per step; a 25-cycle-stable median that
+also cleared the confidence gate needs no further smoothing);
+minimum lock dwell (8-bar default, in-band cumulative drift beyond 4%
+of the lock anchor escalates into the large-jump gate stack — the
+design sketch's option (c), closing the in-band erosion gap);
+cold-start blend guard (first 25 cycles exclude `downbeat_regularity`
+— incumbent-confirming at cold start); genre-fit-weighted candidate
+scoring (bounded Gaussian reweight from tempo-independent recommender
+terms, consulted only while `acf_confidence < 0.5`); tap-tempo trust
+window (`tap_prime()`); ACF unbiased-length correction (`n/(n−lag)`,
+removing a structural fast-lane tilt); envelope pulse-strength
+log-compression; signed phase-error distribution (median/IQR) logging;
+energy-slope history time-bounded at 4 s (was 240 frames — broken
+above ~120 fps); `candidate_lock_disagreement` property.
+
+**Controller (`auto_vj.py`):** refractory guard — the BPM-fed analyzer
+refractory is suspended (confidence 0.0 → analyzer falls back to its
+strength-scaled cooldown) while the tracker's own long-window candidate
+median disagrees with the lock, closing the last self-confirmation
+channel (audit T4; the plan's § 7.5 sequenced this behind confirming
+data — implemented now per the owner's close-out instruction, with a
+`refractory_guard_enabled` kill switch and an engagement counter so the
+first real session both tests the hypothesis and bounds the risk);
+mood-prime on MANUAL audio-profile changes only (plan § 4.4 — the
+recommender's automatic apply path marks its own applications and is
+structurally excluded; primes via `prime_tempo()` from the best raw ACF
+candidate inside the new profile's hint band, never a fabricated
+number; no in-band candidate → no prime, logged as
+`mood_prime_skipped`); `confirm_tap_tempo()` public entry point;
+genre-evidence push (tempo-independent subtotal excludes `tempo_fit`,
+`top_cand_fit`, `onset_fit`, **and** `kick_regularity_fit` — the latter
+two are refractory-/onset-shaped per plan § 6.5); every new mechanism's
+engagement counters added to `_detector_snapshot()`.
+
+**Core (`unicornviz/`):** Enter-while-tapper-active hotkey →
+`confirm_tap_tempo()` (degrades to a flash when auto-vj-01 is absent;
+HELP_TEXT updated per the drop-in hotkey rule); `Overlays.bpm_tap_value`
+property; `dubstep` hint band widened `138-142 → 70-160` from
+`2hr-dubstep`'s measured bimodal distribution (hints only —
+`bpm_prior_mu/sigma` unchanged, the anti-halftime prior is a separate
+concern pending a bimodal schema decision).
+
+**Tools:** new `drop-ins/auto-vj-01/tools/bpm_agreement_report.py` —
+the § 3.2a per-song agreement table (active vs. shadow vs. shadow2,
+mixer-library reference via the track store, MIREX Acc1/Acc2 at ±4%,
+octave-family classification of disagreements incl. 4:3/5:4 per
+§ 8.6). The LLM column is deliberately unimplemented (separately
+scoped per the design; standing policy treats LLM tempo recall as
+tiebreaker-grade).
+
+**Deliberately NOT done:** the rc2 config menu (§ 4.3); controlled
+genre re-priming (recommender phase); `hard_techno`/`house` centroid
+recalibrations (deferred to a library-diversity pass); T5 Options B/C;
+the HMM/DBN architecture, rolling rear-view windows, and
+faster-than-real-time training (all v3-scoped); per-tick phrase-role
+logging (no clean scalar exists, per the plan's own finding).
+
+**Round Three Close-Out, first correction (2026-08-17, same day): a real
+regression found via a same-list before/after, and three fixes.**
+Packaged `training-house-01/d` (round three) against the immediately-
+prior `training-house-01/c` (same 32-track list, pre-round-three) and
+found `d` running measurably lower/noisier confidence than `c` — mean
+`0.504` vs. `0.593`, and `10.9%` of `d`'s rows sitting within `±0.05` of
+the `0.25` lock-release threshold vs. only `2.3%` for `c` — driving a
+10x increase in within-track lock toggles (`354` vs. `34`) on identical
+content. The worst 5 song-level disagreements between the two sessions
+skewed toward the same `4:3` harmonic family this whole investigation
+keeps finding (Squabble Up, Velvet After Dark Remix, Habits Stay High).
+
+Two immediate temp mitigations, owner's own call, explicitly
+provisional pending a same-list re-run: `_V2_GENRE_EVIDENCE_MAX_BOOST`
+`0.35 → 0.1` ("let's change the genre weight to 0.1, we need to do work
+before we use that") and `_BPM_LOCK_RELEASE_CONFIDENCE` `0.25 → 0.3`
+("let's change release threshold to 0.3 ... this is my idea for at
+least a temp fix, while we investigate yours"). The release-threshold
+change is *not* a re-opening of the `0.3 → 0.25` correction earlier in
+this document — that one was about the gain/release hysteresis gap
+being too narrow; this one is about the release threshold sitting in
+the middle of a noisier confidence band this round's other changes
+created. See `drop-ins/auto-vj-01/docs/weights-and-thresholds.md` for
+both constants' full rows.
+
+A third, code-level candidate was investigated directly rather than
+guessed at: the ACF unbiased-length correction (`n/(n−lag)`, above)
+was A/B tested against isolated in-memory copies of `beat_grid.py` on
+synthetic click tracks, with and without a competing `4:3` distractor
+onset train (the same ratio family behind the worst-5 song matches).
+Confirmed as a real, reproducible contributor — under the distractor
+stress test, the unmodified correction produced `18` lock toggles
+across two tempos vs. `4` for several dampened variants tested (a
+quarter-strength blend, a `sqrt` form, and a `1.10`-capped form all
+tied). A clean slow-tempo check (`72` BPM, no distractor) ruled out
+regressing the original fast-lane bias the correction exists to fix:
+the capped variant tested as functionally reverted right at the low
+end where that bias lives (its cap clips nearly all of the needed
+correction at `_V2_BPM_MIN`), while the `sqrt` form still applied a
+real, non-zero correction there. Owner: "go ahead and land #2" (the
+`sqrt` form). `n/(n-lag)` → `(n/(n-lag)) ** 0.5` in both the base-lag
+and harmonic-summing loops. See `beat_grid.py`'s own inline comment at
+the change site for the full methodology.
+
+All three changes land inside this same not-yet-committed batch —
+still `_DETECTOR_VERSION 1.0.0-rc.33` / `_DIRECTOR_VERSION` unchanged
+from the close-out bump above, since none of the three have been
+validated yet. A same-list (`training-house-01` + `favorites`) re-run
+with all three in place is planned before anything here is treated as
+settled.
+
+## Round Three Close-Out, first re-run (2026-08-17, later still): mixed results, and a mislabeled set
+
+A session packaged as `20260817-training---house-01/d` (CLI arg named it
+after the house training playlist) turned out, on inspection, to have
+kept playing the favorites content the deck was already loaded with —
+confirmed by comparing distinct-track sets: all 35 tracks in the new
+session's corpus match `favorites/m`/`favorites/l` exactly (35/35
+overlap both ways), vs. only 6/32 overlap with either
+`training-house-01` bucket. Owner: "it got named after the house
+training playlist because that's what i passed in from the cli but i
+think it played favorites anyway." Treated as the favorites-side
+re-run of the three-fix batch above (genre-evidence-boost `0.1`,
+release-confidence `0.3`, `sqrt`-dampened ACF); the house-side re-run
+against the same 32-track list from the c-vs-d regression is still
+outstanding.
+
+Compared to the two prior favorites sessions (`l`: pre-round-three,
+`m`: round three + genre/release fixes only, mid-session when the ACF
+fix landed so it does **not** carry that change):
+
+| | `l` (pre-r3) | `m` (r3 + genre/release) | new (r3 + all three) |
+|---|---|---|---|
+| BPM confidence median | 0.548 | 0.514 | 0.499 |
+| Lock coverage, real (`bpm_locked`) | 99.2% | 84.6% | 82.0% |
+| Lock coverage, stateless proxy | 77.8% | 63.5% | 65.8% |
+| Lock event churn | 9 / 8 | 217 / 215 | 187 / 187 |
+| LLM detector overall | — | 4.2/5 | 3.8/5 |
+
+Mixed: confidence and the stateless-proxy lock coverage both nudged
+back toward the `l` baseline after the ACF fix landed (`m` → new), but
+churn — the metric all three fixes specifically target — did not
+meaningfully improve (`217/215` → `187/187`, still ~20x `l`'s `9/8`),
+and real lock coverage kept falling rather than recovering. The
+synthetic ACF A/B harness showed a clean win in isolation; that has not
+yet shown up as a clean win on real content, though this comparison is
+confounded (different track list length reached, `m`'s early portion
+predates the ACF fix entirely, and round three's other structural
+changes — dwell requirement, cold-start guard, tap-tempo — are present
+in both `m` and new but not `l`).
+
+Squabble Up (one of the five owner-verified-~125 tracks from the
+original c-vs-d worst-5 list) is present in the new session: previously
+wrong at `162.8` (r3, pre-fix), now predominantly reading `106-107`
+(mode `107`, 24% of its rows; mode `104`, 19%) with only ~6% near the
+correct `125-126` — a different wrong answer, not a fix. `106.1 ≈ 125 ×
+6/7`, suggestive of a different harmonic-family confusion than before,
+not investigated further yet.
+
+**On the release-confidence threshold specifically** (owner's own
+question: "good effect, bad effect? too much? wrong way?") — the real
+data available doesn't isolate it. `_BPM_LOCK_RELEASE_CONFIDENCE` sits
+at `0.3` in both `m` and the new session (only the ACF fix differs
+between them), and churn is roughly flat across that pair (`217/215` →
+`187/187`) rather than climbing further — nothing here suggests `0.3`
+made things *worse* on top of round three's other changes. But the
+`l` → `m` jump (`9/8` → `217/215`) that originally motivated calling
+this a "temp mitigation... sensitive, examine after another run" can't
+be attributed to the release threshold alone from this data — `l`
+predates all of round three, not just the release-threshold change, so
+the comparison is confounded by everything else that landed at once
+(dwell requirement, cold-start guard, genre-evidence scoring,
+relative-persistence spread limits). Mechanically, raising the release
+floor from `0.25` toward `0.3` does exactly what the churn data shows:
+releases lock sooner as confidence dips, and real content's confidence
+sits close enough to that boundary (`m`/new medians `0.51/0.50`) that a
+lot of frames pass through the `0.25-0.3` band where a `0.05` change
+has outsized effect — consistent with the standing worry that this
+threshold sits mid-noise-band rather than at a clean separation. Not
+enough here to call it "wrong way," but also nothing here that clears
+it as "working as intended" — an isolated synthetic A/B (mirroring the
+ACF harness) would be needed to say more, and hasn't been built for
+this constant.
+
+Separately, applied both of this session's LLM tuning recommendations
+that weren't already in place (`tools/package_training_set.py`'s
+scoring pass on the same, misnamed set): `_BPM_LOCK_CONFIDENCE` `0.55 →
+0.6` ("Increased lock confidence threshold might reduce occasional
+low-confidence errors observed at stable tempos") and `tempo_fit`
+`2.0 → 2.2` ("Tempo alignment appears critical in this session,
+suggesting a slight upweight improving accuracy"). The report's third
+recommendation, `phrase_under_over_hold_mult` `0.7 → 0.8`, was already
+applied at rc.7 above — a stale duplicate suggestion, not a new change.
+Owner: "let's apply all three llm recommendations." Unlike the three
+temp-mitigation fixes above, these are direct LLM-recommendation
+adoptions in the same pattern as rc.5/rc.14/rc.15/rc.16, so they *do*
+carry version bumps: `_DIRECTOR_VERSION` → `1.0.0-rc.8`,
+`_RECOMMENDER_VERSION` → `1.0.0-rc.17`, `_VJ_WEIGHTS_DOC_VERSION` →
+`59`. The three-fix regression investigation above remains unsettled
+and unbumped pending the still-outstanding house-list re-run.
+
+## Manual-Override 'auto' Parity + 'tweaker' Mood (2026-08-17, later still)
+
+Two selectors exist for controlling the VJ's automatic decisions, and
+until this entry they had inconsistent, confusing manual-override
+behavior:
+
+- **VJ mood preset** (`chill`/`normie`/`raver`, `_PROFILE_PRESETS` /
+  `cycle_profile()` / `self._manual_profile`) — controls reactivity/
+  speed/zoom/effect-tag intensity, auto-selected from BPM range via
+  `_desired_auto_profile()` (chill ≤105 BPM, raver ≥126 BPM, normie
+  between; requires confidence ≥ `auto_profile_min_confidence` (0.45),
+  raver's own floor relaxed to ~0.34; **8s hold** before a new candidate
+  actually switches, plus a **120s cooldown** between switches regardless
+  of hold). `cycle_profile()` already implemented a full `'auto'`-capable
+  manual-override cycle, but it was wired to `register_midi_action_handler
+  ('auto_vj_profile_cycle', ...)` only -- no keyboard binding existed at
+  all, so the only way to know or change the mood was reading MIDI-pad LED
+  state. Owner: "the current indicator driven method is not very
+  intuitive we can kill that."
+- **Genre/BPM audio profile** (`house`/`dubstep`/`trance`/etc,
+  `AudioManager.set_profile()`, cycled via `Alt+A`/`Alt+Shift+A` in
+  `hotkeys.py`) — had no `'auto'` concept at all. A manual pick called
+  `audio_manager.set_profile()` directly with zero relationship to
+  `_profile_auto_reco_decider_enabled` (the recommender's automatic-apply
+  flag), so a manual correction had no persistence AND no explicit way
+  back to auto -- exactly the long-standing "correction vs lock" gap (see
+  memory `audio-profile-correction-vs-lock`): the recommender could
+  silently reassert its own pick later with nothing tracking that a
+  manual override had ever happened.
+
+Fix, both landed together (owner: "let's have both mood & genre selectors
+have an 'auto' option that releases the vj's over-ride"):
+
+- New `AutoVJController.cycle_audio_profile(audio_manager, reverse=False)`
+  -- mirrors `cycle_profile()`'s exact pattern for the genre/BPM profile:
+  cycles `['auto'] + audio_manager.list_profiles()`; landing on `'auto'`
+  re-enables `_profile_auto_reco_decider_enabled`; landing on a specific
+  key disables it and calls `set_profile()` directly, tagged the same
+  `'manual_override'` way as the mood cycle for the training pipeline.
+  New `_manual_audio_profile` tracks this cycle's own state, independent
+  of `_manual_profile` even though both currently share the one
+  `_profile_auto_reco_decider_enabled` flag (cycling either selector's
+  manual override off disables the decider; either's `'auto'` re-enables
+  it -- they are not separate locks, a deliberate simplification for now).
+- `hotkeys.py`'s `Alt+A`/`Alt+Shift+A` now route through
+  `cycle_audio_profile()` when `auto_vj_controller` is present, falling
+  back to the old raw profile-list cycle (no `'auto'` entry) when the
+  drop-in is absent -- drop-in independence preserved.
+- `cycle_profile()` (the mood cycle) itself is unchanged -- stays
+  MIDI-pad-only. An initial version of this change also wired it to a new
+  keyboard hotkey (`Alt+O`); reverted same day, owner: "i didn't ask for
+  a new hotkey... we already had ctrl+j-m.. alt+0 is an effect shortcut."
+  `Alt+O` also collides with the already-planned `Ctrl+Alt+O` Control Room
+  toggle (`docs/planning/hotkey-cross-platform-conflict-remap-plan-
+  2026-06-03.md`) -- a second, independent reason it was a poor pick even
+  setting the "wasn't asked for" issue aside.
+
+Also landed the same session, owner: "add a 'tweaker' mood that can only
+be manually selected that basically turns everything all the way up :)"
+-- a new `_PROFILE_PRESETS['tweaker']` entry, built from `raver` (the
+prior ceiling) with every VISUAL intensity/pacing dial pushed further:
+wider reactivity/speed/zoom range, faster slew, shorter effect dwell
+(6-20s vs raver's 12-40s), shorter cycle refractory, higher ping-pong/
+postfx/scrollfx trigger chances and rotation degrees. Deliberately left
+the director state-machine's own confidence/energy GATING thresholds
+(`mode_entry_min_confidence`, drop/climax entry scores, build/breakdown
+energy thresholds) at raver's values unchanged -- "all the way up" means
+visual output, not defeating the coherence gates that tie transitions to
+real audio evidence. `tweaker` is manual-only by construction:
+`_desired_auto_profile()` only ever returns `'chill'`/`'normie'`/
+`'raver'` literals, so it can never be BPM-auto-selected, only reached via
+`cycle_profile()`'s manual list -- verified by sweeping the full practical
+BPM/confidence range in `test_tweaker_is_never_returned_by_the_auto_bpm_
+selector`. Also extended the three `self._profile != 'raver'` ping-pong/
+postfx gates (`_maybe_start_auto_pingpong`, `_maybe_start_preset_pingpong`,
+the post-FX ping-pong auto-start) to `('raver', 'tweaker')` -- these were
+deliberately raver-exclusive high-energy features, and tweaker being
+"raver but more" should include them too.
+
+`_DIRECTOR_VERSION` → `1.0.0-rc.9`, `auto_vj.py` `__version__` →
+`1.0.0-rc.91`. Tests: `tests/test_auto_vj_target_labels_and_weights.py`
+(`cycle_audio_profile()` cycle/decider/reverse behavior, the tweaker
+preset's existence and intensity-dial comparison against raver, the
+never-auto-selected sweep) and `tests/test_hotkeys_behavior.py` (`Alt+A`/
+`Alt+Shift+A` routing through `AutoVJController` when present, falling
+back cleanly when absent).
+
+## Refractory Guard Band Decoupled + Onset-Strength Logging (2026-08-17, later still)
+
+Follow-up from asking "did you analyze the other new things and see if
+any of those need tweakin'" against real data from four post-round-three
+sessions (`training-house-01/d`+`e`, `favorites/m`+`n`), not just the
+synthetic harnesses built earlier the same day.
+
+**Refractory guard band.** `candidate_lock_disagreement` (the guard's
+detector half) was reusing the jump-gate's `_V2_LOCK_BAND_PCT`/`_MIN`
+(`0.03`/`4.0`) — a band `rc.26`/`rc.28` deliberately tightened for a
+different job (catching individual in-band erosion steps). Real data
+showed the guard engaging ~9-11 times/sec against that tight band,
+essentially continuous rather than the rare wrong-lock rescue it was
+designed for: a noisy real ACF candidate falls outside a `±3%`/`4` BPM
+band often even when the lock is genuinely fine. Split into its own
+`_V2_REFRACTORY_GUARD_BAND_PCT`/`_MIN` (`0.16`/`10.0` — the pre-
+tightening original values), config-overridable
+(`refractory_guard_band_pct`/`_min`), independent of any future jump-gate
+band retuning. Owner: "let's make the change you recommend to the
+refractory guard." `_DETECTOR_VERSION` → `1.0.0-rc.34`.
+
+**Onset-strength logging.** The envelope pulse-strength log-compression
+(`_pulse_envelope()`, `rc.33`) had zero real-session evidence — the only
+supporting data was `tools/pulse_compression_harness.py`'s synthetic A/B.
+Owner, on realizing the gap: "add the additional data we're missing, we
+shouldn't be missing anything! crikey lol." New `BeatTracker.
+onset_strength_max_raw`/`_max_compressed` properties, backed by a
+`_V2_ONSET_STRENGTH_WINDOW_S`-bounded (10s) rolling history of `(t, raw,
+compressed)` per onset — same time-bounding convention as
+`_V2_ENERGY_WINDOW_S`. Wired into `_detector_snapshot()` (so every
+sequence-corpus row carries the window's max of each) and into
+`package_training_set.py`'s "Round-Three Mechanism Engagement" scorecard
+section (session-wide max, `training-kit-01` → `0.21.0`) — the same
+gap-closing pattern `phase_error_median`/`_iqr` used for the phase-
+alignment investigation.
+
+Tests: `tests/test_round_three_closeout.py` (band-widening behavior with
+an in-between-the-two-bands median that must NOT read as disagreement
+under the new band, config overrides reach the instance, onset-strength
+max-raw/max-compressed track the log-compression formula exactly, window
+pruning). `auto_vj.py` `__version__` → `1.0.0-rc.92`,
+`_VJ_WEIGHTS_DOC_VERSION` → `60`.
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

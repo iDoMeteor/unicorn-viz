@@ -20,11 +20,14 @@ Status: draft — capturing open design questions for the philosophizing
   `phrase_under_over_hold_mult` `0.6 → 0.7`, and `kick_regularity_fit`
   `0.9 → 1.2` (§ 5.1). Everything else is still
   proposal-stage, marked as such inline.
-Last updated: 2026-08-15 — reorganized into nine phases (was mostly
-  chronological, with a duplicate `§ 12` and a duplicate `§ 17.1`); folded
+Last updated: 2026-08-17 — round-three close-out batch implemented in
+  one shot per the owner's instruction; see the "Round-three close-out
+  (2026-08-17)" section immediately before the Summary for the item-by-
+  item status. (2026-08-15: reorganized into nine phases — was mostly
+  chronological, with a duplicate `§ 12` and a duplicate `§ 17.1`; folded
   in the 2026-08-15 live-chillstep tactus-fold finding (§ 8.7). No content
   was removed — see "How this document is organized" below and the
-  verification note at the very end.
+  verification note at the very end.)
 
 ## Context
 
@@ -2283,12 +2286,80 @@ sequential files) is wanted. Natural extension of the existing headless-
 training plan (dj-mixer-01/media-01 as sources — see the "Headless
 Training: dj-mixer-01 and media-01 as Audio Sources" plan doc) rather
 than a separate effort. Not scoped further than this for now — v3-
-adjacent infrastructure work, tracked here so it isn't lost. (See § 7.6
+adjacent infrastructure work, tracked here so it isn't lost.
+**(Scoped 2026-08-17:** now fully phased in
+`docs/planning/auto-vj-v3-roadmap-and-accelerated-replay-2026-08-17.md`
+— key find: `training-kit-01/tools/bpm_eval.py` already runs the
+production Analyzer+BeatTracker offline at accelerated time, so Phase A
+is an extension of existing tooling, not a new build.) (See § 7.6
 for the *other* v3-scoped roadmap item from tonight, the HMM/DBN
 detector-architecture direction — a separate, algorithmic thread, not
 infrastructure like this one.)
 
 ---
+
+## Round-three close-out (2026-08-17): the one-shot implementation
+
+Owner: "let's see if we can knock out all of round 3 in one shot."
+Implemented in a single batch (detector `1.0.0-rc.33`, auto-vj
+`1.0.0-rc.90`, core `1.0.0-beta.94`, weights doc v58 — full decision
+record in `docs/adr/vj-system.md`'s "Round Three Close-Out Batch"
+entry; not committed pending owner review/test). Status of every item
+that was open above:
+
+- **Interpolation default** (§ 3.1/§ 5.2) — ON
+  (`_V2_ACF_INTERPOLATION_ENABLED = True`), per the B run's
+  across-the-board win.
+- **Relative persistence thresholds** (§ 2.2/§ 6.3) — shipped as
+  `max(flat, pct × median)` immediately behind the interpolation
+  default, honoring § 6.3's sequencing; flat floors keep every
+  validated session's behavior unchanged below the fast-lane crossover.
+- **T5 Option A** (§ 8.3/§ 8.4) — shipped, plus the interaction fix it
+  forced into the open: accepted large jumps now snap to the
+  25-cycle-validated median instead of crawling through
+  `max_bpm_step` (a crawl would re-stall in Option A's freshly-cleared
+  persistence window every cycle).
+- **Minimum lock dwell** (§ 1.2) — shipped as sketch option (c):
+  8-bar default window (`bpm_lock_dwell_bars`; 16 is one config edit
+  away for the owner's planned comparison), 4% cumulative in-band
+  drift budget from the lock anchor; excess drift is escalated into
+  the large-jump gate stack, not blocked.
+- **Genre-fit-weighted candidate scoring** (§ 4.2) — shipped,
+  confidence-gated at `acf_conf < 0.5`, tempo-independent terms only
+  (§ 6.5 honored: `onset_fit` AND `kick_regularity_fit` excluded along
+  with the two BPM-derived terms).
+- **Cheater mode #1** (§ 4.4) — shipped: manual audio-profile changes
+  prime via `prime_tempo()` from the best in-band raw ACF candidate;
+  the recommender's automatic path is structurally excluded (it marks
+  its own applications); no in-band candidate → no prime. The dubstep
+  hint band it depends on is widened (§ 5.3): `138-142 → 70-160`,
+  hints only, prior untouched.
+- **Cheater mode #2** (§ 4.5) — shipped: Enter while the KP-0 tapper
+  readout is live opens a 30 s trust window (`tap_prime()`: tight
+  prior around the tap, ±6% fast path through the gate stack, saved
+  prior restored exactly on expiry). HELP_TEXT updated.
+- **Refractory guard** (§ 6.2/§ 6.8 #4) — shipped ON with a
+  `refractory_guard_enabled` kill switch. Note: § 7.5 sequenced this
+  behind confirming data; implemented now per the close-out
+  instruction, and the engagement counter + `analyzer_refractory_s`
+  logging mean the first real session simultaneously tests the T4
+  hypothesis and bounds the risk.
+- **Remaining § 6.8 menu** — #2 (signed phase-error median/IQR), #5
+  (ACF `n/(n−lag)` correction), #6 (pulse-strength log-compression),
+  #8 (cold-start blend guard), #9 (Acc1/Acc2 + octave families, in the
+  new tool), #10 (time-bounded energy history) — all shipped.
+- **§ 3.2a agreement table** — shipped as
+  `tools/bpm_agreement_report.py` (per-song active/shadow/shadow2
+  agreement, mixer-library reference, Acc1/Acc2 ±4%, octave-family
+  classification incl. § 8.6's 4:3/5:4). The **LLM column is
+  deliberately not implemented** — it needs its own scoping pass per
+  the original design, and standing policy treats LLM tempo recall as
+  tiebreaker-grade.
+- **Not touched, per their own scoping:** § 4.3 config menu (rc2),
+  § 3.2b controlled re-priming (recommender phase), § 5.1's deferred
+  centroid recalibrations, T5 Options B/C, § 7.6 HMM/DBN, § 4.1
+  rolling windows, § 9.1 headless training, per-tick phrase-role
+  logging.
 
 ## Summary of what's actually decided vs. still open
 
