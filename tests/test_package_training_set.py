@@ -42,6 +42,7 @@ _format_recommender_accuracy_block = _MOD._format_recommender_accuracy_block
 _build_shadow_comparison = _MOD._build_shadow_comparison
 _summarize_engine_versions = _MOD._summarize_engine_versions
 _load_live_detector_constants = _MOD._load_live_detector_constants
+_load_live_director_constants = _MOD._load_live_director_constants
 _DETECTOR_CONSTANT_DEFAULTS = _MOD._DETECTOR_CONSTANT_DEFAULTS
 _DIRECTOR_CONSTANT_DEFAULTS = _MOD._DIRECTOR_CONSTANT_DEFAULTS
 _format_constants_line = _MOD._format_constants_line
@@ -1362,6 +1363,71 @@ def test_load_live_detector_constants_returns_none_when_auto_vj_absent(tmp_path:
     assert _load_live_detector_constants() is None
 
 
+def test_all_detector_constant_defaults_keys_are_live_readable() -> None:
+    """Every key in _DETECTOR_CONSTANT_DEFAULTS must actually resolve via
+    the live loader -- catches the specific failure mode found 2026-08-17:
+    a new beat_grid.py constant landing in code without ever being added
+    here, which silently means _load_live_detector_constants()'s own loop
+    (`for name in _DETECTOR_CONSTANT_DEFAULTS`) can never pick it up
+    either, live-read or not -- a constant has to be listed in the
+    fallback dict FIRST, with any value, before the live loader will ever
+    look for it. This doesn't catch a constant missing from the dict
+    entirely (nothing to iterate over) -- it catches every key that IS
+    listed actually resolving against real, loadable auto-vj-01 code."""
+    live = _load_live_detector_constants()
+    assert live is not None
+    missing = set(_DETECTOR_CONSTANT_DEFAULTS) - set(live)
+    assert not missing, f'Keys in _DETECTOR_CONSTANT_DEFAULTS did not resolve live: {missing}'
+
+
+def test_load_live_director_constants_matches_live_auto_vj_defaults() -> None:
+    """2026-08-17: closes the one gap _load_live_reco_weights()/
+    _load_live_detector_constants() didn't cover -- phrase_under_over_
+    hold_mult's _DIRECTOR_CONSTANT_DEFAULTS entry went stale (said 0.7,
+    shipped code was 0.8 since rc.7) and the LLM recommended "raising"
+    it to a value it already had. Confirms the live-read path actually
+    resolves and matches real AutoVJController._apply_profile_settings()
+    output, not just the fallback snapshot."""
+    import importlib.util as _ilu
+    repo_root = Path(__file__).resolve().parents[1]
+    av_spec = _ilu.spec_from_file_location(
+        'test_pts_live_director_auto_vj', repo_root / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py')
+    assert av_spec is not None and av_spec.loader is not None
+    av_mod = _ilu.module_from_spec(av_spec)
+    av_spec.loader.exec_module(av_mod)
+
+    inst = object.__new__(av_mod.AutoVJController)
+    inst._cfg = {}
+    inst._use_user_profile_overrides = False
+    inst._explicit_profile_override_keys = set()
+    inst._profile_defaults = av_mod._PROFILE_PRESETS[av_mod._DEFAULT_PROFILE]
+    inst._apply_profile_settings()
+
+    live = _load_live_director_constants()
+    assert live is not None
+    for name in _DIRECTOR_CONSTANT_DEFAULTS:
+        if name.startswith('_'):
+            assert live[name] == getattr(av_mod, name)
+        else:
+            assert live[name] == getattr(inst, f'_{name}')
+
+
+def test_load_live_director_constants_returns_none_when_auto_vj_absent(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / 'pyproject.toml').write_text('', encoding='utf-8')
+    (tmp_path / 'unicornviz').mkdir()
+    monkeypatch.setattr(_MOD, '_find_repo_root', lambda start: tmp_path)
+
+    assert _load_live_director_constants() is None
+
+
+def test_phrase_under_over_hold_mult_fallback_matches_shipped_code() -> None:
+    """Direct regression test for the exact stale-value incident: the
+    fallback (used only when auto-vj-01 is absent, but still meant to
+    "stay plausible" per its own module comment) must not silently
+    regress back to the old 0.7."""
+    assert _DIRECTOR_CONSTANT_DEFAULTS['phrase_under_over_hold_mult'] == 0.8
+
+
 def test_format_constants_line_uses_equals_not_multiply() -> None:
     """Distinct notation from _format_reco_weights_line()'s '×' -- these are
     independent thresholds, not composite-score multipliers."""
@@ -1373,8 +1439,9 @@ def test_build_combined_prompt_includes_detector_and_director_constants() -> Non
     detector_payload = {'essentia_available': False}
     prompt = _build_combined_prompt(detector_payload, {}, None)
     live_detector = _load_live_detector_constants() or _DETECTOR_CONSTANT_DEFAULTS
+    live_director = _load_live_director_constants() or _DIRECTOR_CONSTANT_DEFAULTS
     assert _format_constants_line(live_detector) in prompt
-    assert _format_constants_line(_DIRECTOR_CONSTANT_DEFAULTS) in prompt
+    assert _format_constants_line(live_director) in prompt
 
 
 def test_build_combined_prompt_weight_enum_includes_vocal_fit_terms() -> None:

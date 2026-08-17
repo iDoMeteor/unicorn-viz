@@ -689,6 +689,40 @@ require owner approval to change a weight or threshold value itself (that
 already follows the normal change-review process for the code touched);
 it only requires the doc and the version constant to move with the code.
 
+**A second, separate sync obligation covers the LLM tuning-scoring
+payload** (`drop-ins/training-kit-01/tools/package_training_set.py`) —
+distinct from the human-facing doc above, but triggered by the same list
+of changes. Found live, twice, before this rule existed:
+`phrase_boundary_bonus_mult` and later `phrase_under_over_hold_mult` each
+went stale in `_DIRECTOR_CONSTANT_DEFAULTS` (the LLM was told a value the
+shipped code had already moved past, and dutifully "recommended" the
+change that was already live). The detector and recommender dicts
+(`_DETECTOR_CONSTANT_DEFAULTS`, `_RECO_WEIGHT_DEFAULTS`) already have a
+live-read path (`_load_live_detector_constants()`,
+`_load_live_reco_weights()`) that reads straight from `beat_grid.py`/
+`auto_vj.py` at packaging time, so a stale *value* in those two dicts no
+longer reaches the LLM — but the live-read loop only checks names already
+listed in the fallback dict (`for name in _DETECTOR_CONSTANT_DEFAULTS`),
+so a **new** constant that's never added to the dict at all is invisible
+to the live reader too, live-read or not. `_DIRECTOR_CONSTANT_DEFAULTS`
+now has the equivalent live-read path too
+(`_load_live_director_constants()`, reading a bare `AutoVJController`
+instance's `_apply_profile_settings()` output), closing the gap that let
+`phrase_under_over_hold_mult` go stale a second time.
+
+**Agent duties:** any commit that adds a *new* tunable constant matching
+the trigger list above must, in the same commit, add it as a new key to
+whichever of `_DETECTOR_CONSTANT_DEFAULTS` / `_DIRECTOR_CONSTANT_DEFAULTS`
+/ `_RECO_WEIGHT_DEFAULTS` corresponds to its subsystem (any plausible
+value — the live reader will supply the real one at packaging time when
+auto-vj-01 is present; the literal here is only the offline fallback).
+Skipping this means the LLM never sees the constant at all, not even a
+stale reading of it. When the *value* of an existing constant changes,
+keeping these three dicts' fallback values current is good hygiene (per
+each dict's own "keep it plausible" comment) but is no longer load-bearing
+for a live packaging run, since the live readers supply the real value
+regardless of what the fallback says.
+
 ---
 
 ## Subsystem Versioning (Auto VJ: Detector / Director / Recommender)
