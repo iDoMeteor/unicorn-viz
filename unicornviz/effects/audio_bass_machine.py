@@ -242,6 +242,14 @@ vec4 driver(vec2 q, float r, float exc, vec3 tint, float tb) {
     vec3 cc = mix(accentB() * 0.55, accentA(), 0.35);
     cc *= 0.28 + ridges * 0.26 + lift * 1.25;
     cc += accentA() * 0.55 * pow(max(0.0, cos(a - 2.2)), 3.0) * bulge;
+    // Individual cone rings fire in sequence outward from the dust cap on a
+    // bass hit, so the cone reads as pumping rather than as a flat gradient.
+    const float NRING = 7.0;
+    float ri = floor(clamp(d / coneR, 0.0, 0.999) * NRING);
+    float front = (1.0 - iPunch) * (NRING + 1.5);
+    float rw = exp(-pow(ri - front, 2.0) * 1.6) * iPunch;
+    cc = mix(cc, palette(iHue + ri * 0.13 + 0.20), clamp(rw * 0.85, 0.0, 1.0));
+    cc += palette(iHue + ri * 0.13) * rw * (0.45 + iBass * 0.9);
     paint(o, cov, cc, fill(d - coneR, 0.005));
 
     float capR = r * 0.30;
@@ -324,25 +332,40 @@ vec4 sceneSubwoofer(vec2 p, float tb) {
     o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(cabD) - 0.006, 0.004)
        * (0.8 + iTreble * 1.1);
 
-    // Ports flank the driver rather than crowding the base.
+    // Tweeters flank the driver. Both were oversized before and their rings
+    // ran under the woofer's basket; pulled in and spaced clear of it.
     for (int s = -1; s <= 1; s += 2) {
-        vec2 pp = q - vec2(float(s) * 0.47, 0.14);
-        paint(o, cov, vec3(0.015), fill(length(pp) - 0.070, 0.005));
-        o += accentA() * fill(abs(length(pp) - 0.070) - 0.008, 0.004) * (0.8 + iBass * 1.2);
+        vec2 pp = q - vec2(float(s) * 0.47, 0.16);
+        float pd = length(pp);
+        paint(o, cov, vec3(0.015), fill(pd - 0.062, 0.005));
+        paint(o, cov, mix(vec3(0.80, 0.85, 0.95), accentA(), 0.45) * (0.35 + iTreble * 1.1),
+              fill(pd - 0.036, 0.004));
+        o += vec3(1.0) * fill(length(pp - vec2(-0.012, 0.012)) - 0.010, 0.006) * 0.5;
+        o += accentA() * fill(abs(pd - 0.062) - 0.007, 0.004) * (0.8 + iTreble * 1.4);
         for (int i = 0; i < 3; i++) {
             float ph = fract(iRing * 0.5 + float(i) * 0.34);
-            o += accentA() * smoothstep(0.026, 0.0, abs(length(pp) - (0.070 + ph * 0.26)))
+            o += accentA() * smoothstep(0.024, 0.0, abs(pd - (0.062 + ph * 0.22)))
                * (1.0 - ph) * (0.15 + iPunch * 0.9);
+        }
+        // Sparkles fired out of the tweeter when the highs hit.
+        for (int k = 0; k < 9; k++) {
+            float fk = float(k);
+            float sa = fk / 9.0 * TAU + hash21(vec2(fk, float(s) + 4.0)) * 6.28;
+            float ph = fract(iRing * 1.7 + fk * 0.117);
+            vec2 sq = pp - vec2(cos(sa), sin(sa)) * (0.055 + ph * 0.20);
+            o += mix(vec3(1.0), palette(iHue + fk * 0.11), 0.45)
+               * exp(-dot(sq, sq) * 4200.0) * (1.0 - ph)
+               * (0.5 + iTreble * 2.2) * (0.25 + iPunch * 1.5);
         }
     }
 
-    vec4 dv = driver(q - vec2(0.0, 0.14), 0.33, iBass, tint, tb);
+    vec4 dv = driver(q - vec2(0.0, 0.16), 0.255, iBass, tint, tb);
     o = mix(o, dv.rgb, dv.a);
     cov = max(cov, dv.a);
 
     // Neon level trough with the bead dancing along it.
     float bc;
-    vec3 bar = beadBar(q - vec2(0.0, -0.20), vec2(0.42, 0.036),
+    vec3 bar = beadBar(q - vec2(0.0, -0.25), vec2(0.42, 0.034),
                        clamp(iBass * 0.75 + iMid * 0.25, 0.0, 1.0), tb, accentA(), bc);
     o = mix(o, bar, bc);
     o += bar * (1.0 - bc);
@@ -369,7 +392,15 @@ vec4 sceneBoombox(vec2 p, float tb) {
     float bodyD = sdRound(q, vec2(0.74, 0.40), 0.05);
     float body = fill(bodyD, 0.006);
     paint(o, cov, tint, body);
-    o += accentB() * dripMask(q, 0.40, 0.72, tb, 9.0) * body * 1.6;
+    // Mask the drips out over the woofers. The drivers composite on top, but
+    // their coverage has thin gaps (between surround and basket rim, and
+    // outside the rim), so an unmasked drip bleeds through those rings.
+    float spk = 0.0;
+    for (int s = -1; s <= 1; s += 2) {
+        spk = max(spk, 1.0 - smoothstep(0.238, 0.256,
+                                        length(q - vec2(float(s) * 0.47, 0.11))));
+    }
+    o += accentB() * dripMask(q, 0.40, 0.72, tb, 9.0) * body * (1.0 - spk) * 1.6;
     o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(bodyD) - 0.006, 0.004)
        * (0.8 + iTreble * 1.0);
 
@@ -417,7 +448,7 @@ vec4 sceneBoombox(vec2 p, float tb) {
 
     // Spectrum across the full width, pegged to the body's bottom edge.
     float sc;
-    o += spectrumBars(q, -0.355, 0.66, 0.155, MIX_AMBER, sc);
+    o += spectrumBars(q, -0.355, 0.66, 0.125, MIX_AMBER, sc);
     cov = max(cov, sc);
     return vec4(o, cov);
 }
@@ -442,21 +473,21 @@ vec4 sceneTurntable(vec2 p, float tb) {
     o += mix(vec3(0.85, 0.9, 1.0), accentA(), 0.5) * fill(abs(plD) - 0.006, 0.004)
        * (0.8 + iTreble * 1.0);
 
-    vec2 rq = q - vec2(-0.20, 0.06);
+    vec2 rq = q - vec2(-0.20, 0.05);
     float d = length(rq);
-    paint(o, cov, vec3(0.10, 0.11, 0.14), fill(d - 0.36, 0.006));
+    paint(o, cov, vec3(0.10, 0.11, 0.14), fill(d - 0.305, 0.006));
 
     float a = atan(rq.y, rq.x) + iSpin;
-    float t01 = clamp((d - 0.09) / 0.24, 0.0, 1.0);
+    float t01 = clamp((d - 0.075) / 0.195, 0.0, 1.0);
     float v = band(1.0 - t01);
     float groove = 0.5 + 0.5 * sin(d * 320.0 + v * 26.0 - iSpin * 2.0);
     vec3 vinyl = vec3(0.040, 0.040, 0.050) * (0.55 + groove * 0.75);
     vinyl += mix(accentA(), vec3(1.0), 0.35)
            * pow(max(0.0, cos(a - 0.6)), 6.0) * (0.10 + v * 0.55 + iTreble * 0.25);
-    paint(o, cov, vinyl, fill(d - 0.32, 0.005));
+    paint(o, cov, vinyl, fill(d - 0.270, 0.005));
 
     vec3 lc = mix(accentB(), MIX_MAGENTA, 0.4) * (0.55 + 0.45 * step(0.5, fract(a / TAU * 6.0)));
-    paint(o, cov, lc * (0.7 + iMid * 0.8), fill(d - 0.10, 0.004));
+    paint(o, cov, lc * (0.7 + iMid * 0.8), fill(d - 0.085, 0.004));
     paint(o, cov, vec3(0.02), fill(d - 0.012, 0.003));
 
     // Rim blocks: most are plain strobe marks, but a travelling group lights up
@@ -468,20 +499,24 @@ vec4 sceneTurntable(vec2 p, float tb) {
     float hot = smoothstep(0.10, 0.0, min(chase, 1.0 - chase));
     vec3 blockCol = mix(vec3(1.0, 0.95, 0.8),
                         palette(iHue + sIdx * 0.02 + tb * 0.15), hot);
-    o += blockCol * smoothstep(0.016, 0.0, abs(d - 0.343)) * on
+    o += blockCol * smoothstep(0.014, 0.0, abs(d - 0.290)) * on
        * (0.5 + iTreble * 0.9 + hot * (1.6 + iBass * 1.4));
 
-    float track = 0.30 - 0.14 * fract(iSpin * 0.012);
-    vec2 pivot = vec2(0.46, 0.30);
-    vec2 head = vec2(-0.20, 0.06) + vec2(cos(-0.55), sin(-0.55)) * track;
+    // The arm twitches on every beat — a quick angular kick that settles, the
+    // way a stylus jumps in a groove.
+    float twitch = iBeat * sin(tb * 42.0) * 0.055;
+    float track = 0.245 - 0.115 * fract(iSpin * 0.012);
+    vec2 pivot = vec2(0.44, 0.27);
+    vec2 head = vec2(-0.20, 0.05) + vec2(cos(-0.55 + twitch), sin(-0.55 + twitch)) * track;
     vec2 ad = normalize(head - pivot);
     float along = dot(q - pivot, ad);
     float armLen = length(head - pivot);
     paint(o, cov, vec3(0.78, 0.81, 0.88),
-          smoothstep(0.010, 0.006, length((q - pivot) - ad * along))
+          smoothstep(0.008, 0.005, length((q - pivot) - ad * along))
           * step(0.0, along) * step(along, armLen));
-    paint(o, cov, MIX_PINK, fill(length(q - head) - 0.026, 0.004));
-    paint(o, cov, vec3(0.26, 0.28, 0.34), fill(length(q - pivot) - 0.050, 0.005));
+    paint(o, cov, MIX_PINK, fill(length(q - head) - 0.021, 0.004));
+    o += MIX_PINK * exp(-pow(length(q - head), 2.0) * 900.0) * iBeat * 1.4;
+    paint(o, cov, vec3(0.26, 0.28, 0.34), fill(length(q - pivot) - 0.042, 0.005));
 
     // Pitch fader filling the dead space on the right.
     float bc;

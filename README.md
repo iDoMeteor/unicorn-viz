@@ -557,6 +557,22 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.97** — Audio Bass Machine tuning pass, from screenshots.
+  - **Subwoofer**: the woofer was oversized and its basket rim ran under the
+    tweeters. Driver shrunk and the tweeters pulled clear, so nothing overlaps.
+    Tweeters gained domes and highlights (they read as drivers now, not holes)
+    and **fire sparkle bursts on the highs**. The cone's **individual rings now
+    colour-pulse outward from the dust cap on each bass hit** instead of
+    sitting as a flat gradient.
+  - **Boombox**: EQ ladder height trimmed, and **drips no longer leak past the
+    woofers** — the drivers composite on top, but their coverage has thin gaps
+    (between surround and basket rim, and outside the rim) that an unmasked
+    drip bled through, so the drip layer is now masked by the speaker discs.
+  - **Record player**: platter, record, label, rim blocks and tonearm all
+    scaled down, and **the arm twitches on every beat** — a quick angular kick
+    that settles, the way a stylus jumps in a groove, with a flash at the
+    headshell.
+
 - **1.0.0-beta.96** — swept the collapsed sparkle hash out of every remaining
   effect. Audio Chromogram used the same
   `hash21(floor(frag * 0.5) + floor(t * 20.0))` idiom fixed in beta.95, and
