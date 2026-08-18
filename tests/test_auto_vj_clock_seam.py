@@ -29,6 +29,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
 _AUTO_VJ_PATH = _REPO / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py'
@@ -88,6 +89,31 @@ def test_action_engine_defaults_to_live_monotonic(monkeypatch) -> None:
     engine = _MOD._ActionEngine({}, None)
     monkeypatch.setattr(_MOD.time, 'monotonic', lambda: 555.0)
     assert engine._now() == 555.0
+
+
+def test_constructor_clock_puts_startup_guard_on_audio_timebase() -> None:
+    """The 2026-08-18 CRUISE-lock bug: __init__ stamps the startup-grace
+    deadline through _now(); when the clock was injected only after
+    construction, that deadline stayed on the wall clock (~1e9 s) and
+    never expired on the audio clock (~1e2 s) — silently disabling the
+    entire director action body for whole replayed sessions."""
+    t = [100.0]
+    controller, _app = _STUB.make_headless_controller(
+        {'enabled': True, 'startup_grace_s': 90.0}, clock=lambda: t[0])
+    assert controller._startup_guard_until_t == pytest.approx(190.0)
+
+
+def test_late_set_clock_restamps_startup_guard(monkeypatch) -> None:
+    """Backstop for the same bug: late injection re-arms the guard on
+    the new clock's timebase instead of leaving a wall-clock stamp."""
+    monkeypatch.setattr(_MOD.time, 'monotonic', lambda: 5.0e8)
+    controller, _app = _STUB.make_headless_controller(
+        {'enabled': True, 'startup_grace_s': 90.0})
+    assert controller._startup_guard_until_t == pytest.approx(5.0e8 + 90.0)
+
+    t = [50.0]
+    controller.set_clock(lambda: t[0])
+    assert controller._startup_guard_until_t == pytest.approx(140.0)
 
 
 def test_controller_now_defaults_and_injects(monkeypatch) -> None:

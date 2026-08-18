@@ -339,6 +339,30 @@ decision log defaults OFF for the same reason (see the cfg comment in
 auto-switched NORMIE→RAVER at 131 BPM and produced 409 sequence-corpus
 rows. Covered by `tests/test_session_replay.py`.
 
+**CRUISE-lock fix (2026-08-18, tuning-team report).** The first
+Phase C.1 build had a timebase bug: `_startup_guard_until_t` was
+stamped in `__init__` on the wall clock *before* `set_clock()` could
+inject the audio clock, and since a wall-clock deadline (~1e9 s) never
+expires on an audio clock (~1e2 s) — and the startup-grace check
+returns out of the **entire** director action body — replayed sessions
+produced healthy detector/profile/corpus output but zero director
+activity (2h of house, all 16k rows CRUISE, drop_score averaging 0.669
+with nothing acting on it). Fixed in auto-vj-01 rc.95 /
+training-kit-01 0.25.1: the clock is now a **constructor** argument
+(`AutoVJController(..., clock=)`), `set_clock()` re-stamps the guard as
+a late-injection backstop, and the headless stub was made *reactive*
+(it applies effect swaps and param writes back into its state — a swap
+that never landed had the swap logic retrying every eligible tick) plus
+three stub return-shape fixes the guard had been hiding. Post-fix
+verification: the same 6-track playlist replay went from zero director
+events to 21 mode transitions and 12 drop fires with
+BUILD/DROP/BREAKDOWN all represented. The tuning team's detector-side
+deltas (confidence/lock-coverage/churn vs. live sessions) are NOT
+explained by this bug — the detector path sits above the guard — and
+should be re-measured on matched track lists; note the 2 s `--gap`
+does not trip the 15 s silence reset, so per-track cold starts are not
+the mechanism either.
+
 **Media-01 playlists work directly — no mixer involvement (correction,
 2026-08-18).** The first close-out write-up lumped media-01 into the
 Phase C part 2 dependency; the owner rightly pushed back ("media

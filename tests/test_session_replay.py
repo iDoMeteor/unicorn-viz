@@ -49,7 +49,11 @@ def two_track_session(tmp_path_factory) -> dict:
 
     out_dir = tmp / 'out'
     summary = session_replay.run_session(
-        files, max_duration_s=15.0, gap_s=1.0, out_dir=out_dir, seed=11)
+        files, max_duration_s=15.0, gap_s=1.0, out_dir=out_dir, seed=11,
+        # Short grace so this 32 s session can prove the startup guard
+        # actually EXPIRES on the audio clock (the 2026-08-18 CRUISE-lock
+        # bug left it stamped on the wall clock, never expiring).
+        extra_cfg={'startup_grace_s': 5.0})
     return {'summary': summary, 'out_dir': out_dir, 'files': files}
 
 
@@ -62,6 +66,10 @@ def test_session_summary_shape(two_track_session) -> None:
     # Wall-clock-decoupled: even tiny sessions must beat real time.
     assert summary['speedup'] > 2.0
     assert 'AUTO VJ' in summary['final_status']
+    # Startup grace (5 s here) must have expired on the AUDIO clock —
+    # a WARMUP pill after 32 s of audio means the guard deadline is on
+    # the wall-clock timebase again (the CRUISE-lock bug).
+    assert 'WARMUP' not in summary['final_status']
 
 
 def test_sequence_corpus_rows_are_audio_time_stamped(two_track_session) -> None:
