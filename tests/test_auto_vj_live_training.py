@@ -342,6 +342,10 @@ def _make_sequence_heartbeat_stub(*, writer=None):
     stub._sequence_director_fields = (
         lambda audio, state: _AUTO_VJ_MODULE.AutoVJController._sequence_director_fields(stub, audio, state)
     )
+    # Phase B clock seam (2026-08-18): heartbeat timestamps now read
+    # self._now(); the real method's getattr-defensive fallback keeps the
+    # pre-seam time.monotonic() semantics for this bare stub.
+    stub._now = lambda: _AUTO_VJ_MODULE.AutoVJController._now(stub)
     return stub
 
 

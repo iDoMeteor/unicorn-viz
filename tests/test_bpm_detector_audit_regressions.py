@@ -43,6 +43,14 @@ _AUTO_VJ = _load_module(_AUTO_VJ_PATH, 'test_bpm_audit_regressions_auto_vj')
 BeatTracker = _BEAT_GRID.BeatTracker
 
 
+def _bind_now(stub: SimpleNamespace) -> SimpleNamespace:
+    """Phase B clock seam (2026-08-18): controller timestamps now read
+    self._now(); binding the real method keeps the pre-seam
+    time.monotonic() semantics for these bare stubs."""
+    stub._now = lambda: _AUTO_VJ.AutoVJController._now(stub)
+    return stub
+
+
 class _FakeOnset:
     def __init__(self, t: float, strength: float = 1.0) -> None:
         self.t = t
@@ -202,7 +210,7 @@ def _make_recommender_stub(**overrides) -> SimpleNamespace:
     )
     for k, v in overrides.items():
         setattr(stub, k, v)
-    return stub
+    return _bind_now(stub)
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +230,7 @@ class _FakeVjApiWithBpm:
 
 def _make_reco_stub(*, mixer_bpm: float, grid) -> SimpleNamespace:
     app = SimpleNamespace(vj_api=_FakeVjApiWithBpm(mixer_bpm), _audio_manager=None)
-    return SimpleNamespace(
+    return _bind_now(SimpleNamespace(
         _app=app,
         _grid=grid,
         _profile_auto_reco_enabled=True,
@@ -240,7 +248,7 @@ def _make_reco_stub(*, mixer_bpm: float, grid) -> SimpleNamespace:
         _has_bpm_lock=lambda *a, **kw: True,
         _sequence_corpus_writer=None,
         _record_sequence_keyframe=lambda *a, **kw: None,
-    )
+    ))
 
 
 def test_recommender_cycle_primes_tracker_from_fresh_mixer_bpm() -> None:
@@ -447,7 +455,7 @@ def _make_full_reco_stub(*, bpm: float, centroid: float, zcr: float, onset_count
          'vocal_hnr': 0.0, 'vocal_fmr': 0.0}
         for i in range(n_samples)
     ])
-    return SimpleNamespace(
+    return _bind_now(SimpleNamespace(
         _app=app,
         _grid=SimpleNamespace(bpm=bpm, confidence=0.5, downbeat_confidence=0.4, top_candidates=[]),
         _engine=_FakeEngine(),
@@ -475,7 +483,7 @@ def _make_full_reco_stub(*, bpm: float, centroid: float, zcr: float, onset_count
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
         _sequence_corpus_writer=None,
         _record_sequence_keyframe=lambda *a, **kw: None,
-    )
+    ))
 
 
 def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -> None:

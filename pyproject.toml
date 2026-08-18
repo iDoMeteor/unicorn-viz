@@ -54,6 +54,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-ra"
+markers = [
+    "local_tracks: opt-in replay tests over local audio fixtures (set UNICORNVIZ_TRACK_FIXTURES)",
+]
 
 [tool.bandit]
 # Report Medium and High severity only (skips low-noise assertions / subprocess

@@ -108,6 +108,10 @@ def _make_stub(*, bpm: float = 124.0, centroid: float = 2000.0, zcr: float = 0.0
         _sequence_corpus_writer=object(),  # non-None: a real writer would be live
         _record_sequence_keyframe=sink,
     )
+    # Phase B clock seam (2026-08-18): recommender eval timestamps now read
+    # self._now(); the real method's getattr-defensive fallback keeps the
+    # pre-seam time.monotonic() semantics for this bare stub.
+    stub._now = lambda: _AUTO_VJ.AutoVJController._now(stub)
     return stub, sink
 
 

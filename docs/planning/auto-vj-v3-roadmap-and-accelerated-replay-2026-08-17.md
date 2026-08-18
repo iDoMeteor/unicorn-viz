@@ -1,12 +1,13 @@
 # Auto VJ v3 Roadmap + Accelerated Local-Track Replay — Plan (2026-08-17)
 
 Owner: unicorn-viz
-Status: planning only — no code; prepared while other VJ work is in
-  flight, for the next iteration. Consolidates the v3-scoped threads
-  scattered through `auto-vj-round-three-planning-2026-08-14.md`
-  (§ 7.4/§ 7.6/§ 8.3/§ 9.1) into one place, and scopes the owner's
-  priority item: **running tests with local tracks at an accelerated
-  rate of time** (§ 9.1).
+Status: Part 2 LANDED (Phases A + B + C part 1, 2026-08-18 — see
+  § 2.5; C part 2, mixer/media sources, remains a mixer-team
+  dependency); Part 1 Threads 1/3/4/5/6 remain future work. Originally planning-only,
+  consolidating the v3-scoped threads scattered through
+  `auto-vj-round-three-planning-2026-08-14.md` (§ 7.4/§ 7.6/§ 8.3/
+  § 9.1) into one place, plus the owner's priority item: **running
+  tests with local tracks at an accelerated rate of time** (§ 9.1).
 Last updated: 2026-08-18
 
 ---
@@ -287,3 +288,73 @@ whether the first fixture manifest is the full library or a curated
 ~50-track set spanning the known problem genres (chillstep, dubstep,
 DnB, R&B 4:3 cases — recommendation: curated set first, full library
 as a second tier).
+
+### 2.5 Landed (2026-08-18): Phases A + B, all eight prep items
+
+Owner: "do the prep work and knock out phase 1 & 2." Resolution of the
+open decisions above: the harness stayed in training-kit-01 (new
+`tools/track_replay.py` core; `bpm_eval.py` rebuilt on it in place, CLI
+back-compatible), and the first checked-in baseline is the **full
+library** (every track the mixer store has truth for), since the
+per-track cost turned out low enough (~150 s of audio in ~3 s) that
+curation wasn't buying anything; a curated problem-genre manifest
+remains a good idea for the `local_tracks` pytest tier specifically.
+
+What shipped, by prep item: (1) `stream_track()` in
+`track_replay.py`; (2) soundfile→PyAV mono decode +
+`set_sample_rate()`; (3) `--track-store` truth via dynamic reuse of
+`bpm_agreement_report.py`'s loader (folds + store parsing stay
+single-sourced); (4) Acc1/Acc2/fold + time-to-first-lock/toggles/
+steady-state + engagement counters, and `--baseline` diffing;
+(5) `--log-cycles` (per-ACF-cycle rows via a new logging-only
+`cycle_log_hook` in `beat_grid.py` — no detector version bump, nothing
+behavioral); (6) `local_tracks` marker + `UNICORNVIZ_TRACK_FIXTURES` +
+`fixtures.json` manifest (`tests/test_local_track_replay.py`);
+(7) first library baseline under
+`drop-ins/training-kit-01/tools/baselines/`; (8) the Phase B clock
+seam — `AutoVJController._now()`/`set_clock()`, `_ActionEngine(clock=)`,
+all 37 sites swept (38 counting a hidden `__import__('time')` one),
+plus `tools/headless_stub.py` (recording App/VJApi stand-ins; the full
+controller constructs and runs headless against them) and
+`tests/test_auto_vj_clock_seam.py`, whose equivalence test runs the
+same scripted session under two absurd wall-clock constants and
+asserts identical decision streams.
+
+**Phase C part 1 also landed (2026-08-18, owner: "was there a phase 3
+…? if not do that too"):** `tools/session_replay.py` (training-kit-01)
+drives the **full AutoVJController** — mode state machine, phrase
+clock, recommender, corpus writers — through sequential local files at
+~25× real time, using the Phase B seam plus the recording app stub. A
+now-playing source is emulated (track changes, `change_counter`,
+position, and the round-three track-path hint bus, so
+`bpm_agreement_report.py` can score the resulting corpus), the profile
+surface is a real-Analyzer-backed AudioManager mirror (one-way-flow
+rule preserved: `set_profile` touches the analyzer only, never a
+tracker), and corpus rows come out stamped with **audio time**
+(`capture_time`), feeding the existing packaging/LLM-scoring flow
+unchanged. Replay corpora default under `logs/replay/`, deliberately
+outside the `logs/` sweep `package_training_set.py` performs, and the
+decision log defaults OFF for the same reason (see the cfg comment in
+`run_session()`). First live check: a two-real-track session
+auto-switched NORMIE→RAVER at 131 BPM and produced 409 sequence-corpus
+rows. Covered by `tests/test_session_replay.py`. **Phase C part 2**
+(dj-mixer-01 / media-01 auto-mix as the source) is *not* built — it
+requires the mixer's crossfade/stem engine to accept the audio-time
+clock, a mixer-team dependency to negotiate, per the existing headless
+training plan.
+
+**Fidelity finding worth knowing about (found while validating item
+1):** the old `bpm_eval.py` loop stepped the tracker once per analyzer
+block with `t` = the block start, which made onset-event times coincide
+*exactly* with update times — an accidental gift to the detector's
+100 Hz envelope, whose pulse placement quantizes against the update
+clock. At the live 60 Hz cadence (what `stream_track()` now replicates)
+pulse placement jitters by ±1–2 envelope bins exactly as it does live,
+and sparse synthetic clicks score notably worse (e.g. the 120 BPM seed
+click no longer locks) while real library tracks are fine (11/12
+correct-fold on the first mixed dozen). Two consequences: seed-corpus
+numbers re-baseline downward — that's the harness getting *honest*,
+not the detector regressing — and there is a real, now-measurable live
+weakness on sparse material (envelope placement could use ev_t-exact
+writes rather than write-head placement; a v3-adjacent detector
+candidate, do NOT fix casually — it moves every tuned ACF constant).

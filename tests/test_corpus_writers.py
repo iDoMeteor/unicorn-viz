@@ -317,19 +317,21 @@ class TestNoOpStubs:
 # ---------------------------------------------------------------------------
 
 def test_bpm_eval_beat_grid_path_points_to_auto_vj_01() -> None:
-    """After moving bpm_eval.py to training-kit-01/tools/, _BEAT_GRID_PATH must
-    still point at auto-vj-01/beat_grid.py (not training-kit-01/beat_grid.py)."""
-    import ast
-
-    src = _BPM_EVAL_PATH.read_text(encoding='utf-8')
-    # Find the _BEAT_GRID_PATH assignment line and verify it references auto-vj-01
-    for line in src.splitlines():
-        if '_BEAT_GRID_PATH' in line and '=' in line:
-            assert 'auto-vj-01' in line, (
-                f'_BEAT_GRID_PATH in bpm_eval.py does not reference auto-vj-01:\n  {line}'
+    """bpm_eval.py must load the detector from auto-vj-01/beat_grid.py (not a
+    training-kit-01 copy). 2026-08-18: the load moved into
+    track_replay.load_beat_grid_module() when bpm_eval.py was rebuilt on the
+    replay core, so the guarded path expression lives there now."""
+    track_replay_path = _BPM_EVAL_PATH.parent / 'track_replay.py'
+    src = track_replay_path.read_text(encoding='utf-8')
+    for i, line in enumerate(src.splitlines()):
+        if 'def load_beat_grid_module' in line:
+            body = '\n'.join(src.splitlines()[i:i + 6])
+            assert "'auto-vj-01'" in body and "'beat_grid.py'" in body, (
+                f'load_beat_grid_module() does not reference '
+                f'auto-vj-01/beat_grid.py:\n{body}'
             )
             return
-    pytest.fail('_BEAT_GRID_PATH assignment not found in bpm_eval.py')
+    pytest.fail('load_beat_grid_module() not found in track_replay.py')
 
 
 def test_bpm_eval_beat_grid_file_exists() -> None:
