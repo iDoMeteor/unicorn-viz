@@ -7,13 +7,13 @@ Status: planning only — no code; prepared while other VJ work is in
   (§ 7.4/§ 7.6/§ 8.3/§ 9.1) into one place, and scopes the owner's
   priority item: **running tests with local tracks at an accelerated
   rate of time** (§ 9.1).
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 ---
 
 ## Part 1 — The v3 roadmap, summarized
 
-v3 is not one thing; it's five threads with an explicit ground rule.
+v3 is not one thing; it's six threads with an explicit ground rule.
 
 **The ground rule (§ 7.4, the v2-final-candidate checkpoint).** The
 current shipped detector — as of the round-three close-out batch,
@@ -69,10 +69,67 @@ centroid recalibrations; per-tick phrase-role logging if Thread 4
 needs it; the § 3.2a LLM external-check column, still separately
 scoped.
 
+**Thread 6 — a persisted perf log while training is on (2026-08-18,
+new).** Owner noticed a considerable render-frame-rate drop today and
+had no way to go back and check it — training-corpus rows carry no
+frame-rate or input-RMS signal at all, so a perf regression during a
+session is invisible after the fact. Checked what already exists
+before scoping this as new work, and it's a smaller lift than it
+sounds:
+
+- **Real per-frame FPS is already measured, just not logged.**
+  `App._last_frame_fps`/`_last_frame_ms` (`app.py`, computed every main-
+  loop iteration from actual `dt`, not the 60 fps target) already has a
+  public accessor — `VJApi.system_telemetry_snapshot()['fps']` — used
+  today by `control-room-01`'s HUD, never read by `auto-vj-01`.
+- **A real per-frame performance profiler already exists**, gated
+  behind `[logging] perf_frames` (or DEBUG level) — stage-by-stage
+  timing (events/MIDI/audio/auto_vj/effects/HUD/draw/swap/present) at a
+  slow-frame threshold (25ms) or every 120th frame otherwise. It only
+  ever reaches `log.debug()`, never a file, never the corpus. This is
+  the natural donor for a real perf log — the expensive part (timing
+  every stage) is already built and already running whenever perf
+  debug is on; it just needs a sink.
+- **RMS is a split story, worth getting right rather than assuming.**
+  `Analyzer.last_raw_rms` (pre-silence-gate input level) is tracked and
+  has a public accessor (`AudioManager.get_raw_input_rms()`), HUD-only
+  today, never in the corpus. Separately, every corpus row *already*
+  has a field literally called `rms` (`_build_live_training_row()`) —
+  but it's a different signal: post-gate, computed from the effect-
+  facing waveform buffer, not the analyzer's raw input level. A perf
+  log should carry the analyzer's `last_raw_rms` explicitly labeled as
+  such (e.g. `input_rms_raw`) so it isn't confused with the existing
+  corpus `rms` field, which stays as it is.
+- **Sizing:** per-frame at 60 fps into the sequence corpus (~1 Hz
+  heartbeat cadence today) would be far too fine-grained and heavy —
+  this wants its own sink, a separate `perf-<timestamp>.jsonl` written
+  alongside the other session logs (matching Phase A item 7's "the
+  corpus is the wrong place for this, log it separately" precedent for
+  per-cycle candidate data), sampled at the profiler's existing cadence
+  (slow-frame threshold + every-Nth-frame), gated the same way the
+  in-memory profiler already is so it costs nothing when training isn't
+  running. `input_rms_raw` and `fps`/`frame_ms` land in the same row.
+- **Packaging-side:** `package_training_set.py` would need to move this
+  new log file into the bucket alongside the existing ones (mechanical,
+  same pattern as every other log type it already archives) and
+  probably a short scorecard summary line (e.g. mean/p95 frame time,
+  slow-frame count) — not the full per-row detail, mirroring how the
+  "Round-Three Mechanism Engagement" section summarizes rather than
+  dumps.
+
+Owner: "are we capturing frame rate & rms in the training data?? i
+noticed frame rate has dropped considerably.. just noticed today, and
+we probably don't have a way to track that! we should capture a perf
+log when we have training on."
+
 Sequencing logic: **Thread 2 first** — it is the only thread that
 makes the others cheap to validate, it has immediate payoff for
 ordinary regression testing (the owner's ask), and it requires no
-detector-behavior changes at all.
+detector-behavior changes at all. **Thread 6 is a strong candidate to
+ride alongside Thread 2's own infrastructure work** (both are "make
+training sessions observable in ways they currently aren't," and both
+are small/mechanical relative to Threads 1/3/4) — sequencing between
+them is the owner's call, not decided here.
 
 ---
 
