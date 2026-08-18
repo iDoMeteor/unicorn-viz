@@ -50,6 +50,10 @@ _format_tuning_recommendations_md = _MOD._format_tuning_recommendations_md
 _build_director_payload = _MOD._build_director_payload
 _extract_director_events = _MOD._extract_director_events
 _write_scorecard = _MOD._write_scorecard
+_write_mixer_crossref_report = _MOD._write_mixer_crossref_report
+_parse_args = _MOD._parse_args
+_mixer_bpm_for_path = _MOD._mixer_bpm_for_path
+_MIXER_CROSSREF_SOURCES = _MOD._MIXER_CROSSREF_SOURCES
 
 _CORPUS_PATTERNS = [
     'live-corpus*.jsonl', 'live-autovj*.jsonl', 'live*.jsonl',
@@ -1578,3 +1582,133 @@ def test_next_bucket_dir_does_not_collide_with_existing_letter_buckets(tmp_path:
     assert (set_dir / 'a').is_dir()
     assert (set_dir / 'b').is_dir()
     assert (set_dir / 'c').is_dir()
+
+
+# ---- _write_mixer_crossref_report / _mixer_bpm_for_path (2026-08-18) --------
+
+
+def test_mixer_crossref_sources_are_media_and_replay_only() -> None:
+    assert _MIXER_CROSSREF_SOURCES == {'media-01', 'replay'}
+
+
+def test_mixer_bpm_for_path_direct_hit() -> None:
+    paths_map = {'/music/a.mp3': {'hash': 'h1'}}
+    tracks_map = {'h1': {'bpm': 127.4}}
+    assert _mixer_bpm_for_path('/music/a.mp3', paths_map, tracks_map) == pytest.approx(127.4)
+
+
+def test_mixer_bpm_for_path_basename_fallback_for_mount_mismatch() -> None:
+    """Same file, different mount point (e.g. the log was captured under
+    a different mount than the one packaging runs under) -- falls back to
+    matching by filename, mirroring bpm_agreement_report.py's own helper."""
+    paths_map = {'/mnt/old/library/track.mp3': {'hash': 'h1'}}
+    tracks_map = {'h1': {'bpm': 140.0}}
+    assert _mixer_bpm_for_path('/home/me/Music/track.mp3', paths_map, tracks_map) == pytest.approx(140.0)
+
+
+def test_mixer_bpm_for_path_no_entry_returns_zero() -> None:
+    assert _mixer_bpm_for_path('/music/unknown.mp3', {}, {}) == 0.0
+
+
+def test_mixer_bpm_for_path_empty_path_returns_zero() -> None:
+    assert _mixer_bpm_for_path('', {'/music/a.mp3': {'hash': 'h1'}}, {'h1': {'bpm': 120.0}}) == 0.0
+
+
+def test_write_mixer_crossref_report_none_when_no_qualifying_source(tmp_path: Path) -> None:
+    """A real dj-mixer-01 session (or Spotify/stream) already has mixer_bpm
+    and track_genre on the live bus -- no report needed, and none written."""
+    rows = [{**_make_seq_row(), 'metadata_source': 'dj-mixer-01'}]
+    assert _write_mixer_crossref_report(tmp_path, rows) is None
+    assert not (tmp_path / 'mixer_crossref.md').exists()
+
+
+def test_write_mixer_crossref_report_none_when_source_field_absent(tmp_path: Path) -> None:
+    rows = [_make_seq_row()]
+    assert _write_mixer_crossref_report(tmp_path, rows) is None
+
+
+def test_write_mixer_crossref_report_writes_table_for_media_source(tmp_path: Path, monkeypatch) -> None:
+    audio_file = tmp_path / 'track.mp3'
+    audio_file.write_bytes(b'fake')
+
+    monkeypatch.setattr(
+        _MOD, '_load_mixer_track_store',
+        lambda repo_root: ({str(audio_file): {'hash': 'h1'}}, {'h1': {'bpm': 128.0}}),
+    )
+    monkeypatch.setattr(_MOD, '_load_read_tags', lambda: lambda p: {'genre': 'House'})
+
+    rows = [
+        {
+            **_make_seq_row(bpm=127.5, track_path=str(audio_file), title='My Track', artist='My Artist'),
+            'track_title': 'My Track',
+            'track_artist': 'My Artist',
+            'metadata_source': 'media-01',
+            'recommended_profile_key': 'house',
+        },
+    ]
+    report_path = _write_mixer_crossref_report(tmp_path, rows)
+    assert report_path == tmp_path / 'mixer_crossref.md'
+    text = report_path.read_text(encoding='utf-8')
+    assert 'My Artist | My Track | 127.5 | 128.0 | house | House' in text
+
+
+def test_write_mixer_crossref_report_applies_to_replay_source(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(_MOD, '_load_mixer_track_store', lambda repo_root: ({}, {}))
+    monkeypatch.setattr(_MOD, '_load_read_tags', lambda: None)
+    rows = [{**_make_seq_row(), 'metadata_source': 'replay'}]
+    report_path = _write_mixer_crossref_report(tmp_path, rows)
+    assert report_path is not None
+    assert report_path.exists()
+
+
+def test_write_mixer_crossref_report_flags_unanalyzed_tracks(tmp_path: Path, monkeypatch) -> None:
+    """No mixer-store entry for this track -- reported by name in a
+    dedicated section rather than silently showing '--' with no
+    explanation, per the owner's "we should check" ask."""
+    monkeypatch.setattr(_MOD, '_load_mixer_track_store', lambda repo_root: ({}, {}))
+    monkeypatch.setattr(_MOD, '_load_read_tags', lambda: None)
+    rows = [{**_make_seq_row(title='Unscanned Track'), 'track_title': 'Unscanned Track',
+             'metadata_source': 'media-01'}]
+    report_path = _write_mixer_crossref_report(tmp_path, rows)
+    text = report_path.read_text(encoding='utf-8')
+    assert '1 of 1 track(s) have no mixer-store BPM entry' in text
+    assert 'Unscanned Track' in text
+
+
+def test_write_mixer_crossref_report_missing_file_does_not_raise(tmp_path: Path, monkeypatch) -> None:
+    """track_path present in the row but the file no longer exists on this
+    machine -- must not raise attempting the tag read."""
+    monkeypatch.setattr(_MOD, '_load_mixer_track_store', lambda repo_root: ({}, {}))
+    called = {'n': 0}
+
+    def _fake_read_tags(p):
+        called['n'] += 1
+        return {'genre': 'should-not-be-called'}
+
+    monkeypatch.setattr(_MOD, '_load_read_tags', lambda: _fake_read_tags)
+    rows = [{**_make_seq_row(track_path=str(tmp_path / 'gone.mp3')), 'metadata_source': 'media-01'}]
+    report_path = _write_mixer_crossref_report(tmp_path, rows)
+    assert report_path is not None
+    assert called['n'] == 0
+    assert 'should-not-be-called' not in report_path.read_text(encoding='utf-8')
+
+
+# ---- --corpus-dir / --logs-dir (2026-08-18, session_replay.py auto-package) --
+
+
+def test_parse_args_corpus_dir_and_logs_dir_default_none(monkeypatch) -> None:
+    monkeypatch.setattr('sys.argv', ['package_training_set.py'])
+    args = _parse_args()
+    assert args.corpus_dir is None
+    assert args.logs_dir is None
+
+
+def test_parse_args_corpus_dir_and_logs_dir_override(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py',
+        '--corpus-dir', str(tmp_path / 'corpus'),
+        '--logs-dir', str(tmp_path / 'logs'),
+    ])
+    args = _parse_args()
+    assert args.corpus_dir == tmp_path / 'corpus'
+    assert args.logs_dir == tmp_path / 'logs'

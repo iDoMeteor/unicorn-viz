@@ -125,6 +125,85 @@ def test_resolve_media_playlist(tmp_path: Path) -> None:
             'training - house 01', tmp_path / 'missing.json')
 
 
+# ---- auto-packaging (2026-08-18) --------------------------------------
+
+
+def test_replay_set_label_with_playlist() -> None:
+    assert session_replay._replay_set_label('training - house 01') == 'training - house 01 replay'
+
+
+def test_replay_set_label_without_playlist() -> None:
+    assert session_replay._replay_set_label(None) == 'adhoc replay'
+
+
+def test_run_packager_invokes_packager_with_isolated_dirs(tmp_path: Path, monkeypatch) -> None:
+    captured = {}
+
+    class _FakeCompleted:
+        returncode = 0
+
+    def _fake_run(cmd, cwd=None):
+        captured['cmd'] = cmd
+        captured['cwd'] = cwd
+        return _FakeCompleted()
+
+    monkeypatch.setattr(session_replay.subprocess, 'run', _fake_run)
+    out_dir = tmp_path / 'replay-out'
+    out_dir.mkdir()
+    summary = {'speedup': 12.3, 'tracks_played': ['a.mp3', 'b.mp3'], 'sequence_corpus_rows': 500}
+
+    rc = session_replay._run_packager(out_dir, 'my set replay', summary)
+    assert rc == 0
+    cmd = captured['cmd']
+    assert str(out_dir) in cmd
+    assert cmd.count(str(out_dir)) == 2  # --corpus-dir AND --logs-dir both point at it
+    assert '--playlist-name' in cmd
+    assert 'my set replay' in cmd
+    assert '--no-prompt' in cmd
+    notes = cmd[cmd.index('--session-notes') + 1]
+    assert '12.3x' in notes
+    assert 'ideas to pursue' in notes
+
+
+def test_main_skips_packaging_with_no_package_flag(tmp_path: Path, monkeypatch) -> None:
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=2.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    called = {'n': 0}
+    monkeypatch.setattr(session_replay, '_run_packager', lambda *a, **k: called.__setitem__('n', called['n'] + 1))
+
+    rc = session_replay.main([
+        '--tracks', str(audio), '--out-dir', str(tmp_path / 'out'),
+        '--max-duration', '2', '--no-package',
+    ])
+    assert rc == 0
+    assert called['n'] == 0
+
+
+def test_main_packages_by_default(tmp_path: Path, monkeypatch) -> None:
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=2.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    called = {}
+
+    def _fake_packager(out_dir, set_label, summary):
+        called['out_dir'] = out_dir
+        called['set_label'] = set_label
+        return 0
+
+    monkeypatch.setattr(session_replay, '_run_packager', _fake_packager)
+
+    rc = session_replay.main([
+        '--tracks', str(audio), '--out-dir', str(tmp_path / 'out'),
+        '--max-duration', '2',
+    ])
+    assert rc == 0
+    assert called['set_label'] == 'adhoc replay'
+    assert called['out_dir'] == tmp_path / 'out'
+
+
 def test_director_activity_summarized(two_track_session) -> None:
     # log_decisions is deliberately OFF in replay (its JSONL would land
     # in logs/, which package_training_set.py sweeps into buckets); the
