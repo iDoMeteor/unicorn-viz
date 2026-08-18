@@ -1535,3 +1535,46 @@ def test_format_tuning_recommendations_md_omits_empty_sections() -> None:
     assert '## Detector Constant Recommendations' not in md
     assert '## Director Constant Recommendations' not in md
     assert '## Advisory Only' in md
+
+
+# ---- bucket naming: letters -> 0-padded 3-digit numbers (2026-08-18) ------
+
+
+def test_bucket_name_is_zero_padded_three_digit_and_one_based() -> None:
+    assert _MOD._bucket_name(0) == '001'
+    assert _MOD._bucket_name(1) == '002'
+    assert _MOD._bucket_name(8) == '009'
+    assert _MOD._bucket_name(9) == '010'
+    assert _MOD._bucket_name(98) == '099'
+    assert _MOD._bucket_name(99) == '100'
+
+
+def test_bucket_name_grows_past_three_digits_without_truncation() -> None:
+    assert _MOD._bucket_name(998) == '999'
+    assert _MOD._bucket_name(999) == '1000'
+
+
+def test_next_bucket_dir_fills_first_unused_numeric_slot(tmp_path: Path) -> None:
+    set_dir = tmp_path / 'my-set'
+    set_dir.mkdir()
+    (set_dir / '001').mkdir()
+    (set_dir / '003').mkdir()  # a gap at 002
+    assert _MOD._next_bucket_dir(set_dir).name == '002'
+
+
+def test_next_bucket_dir_does_not_collide_with_existing_letter_buckets(tmp_path: Path) -> None:
+    """2026-08-18: existing letter-named buckets (from before this change)
+    must not be renamed or treated as occupying a numeric slot -- '001'
+    never equals 'a', so a set with a/b/c already in it just starts fresh
+    at '001' for its next bucket rather than continuing the letters."""
+    set_dir = tmp_path / 'old-set'
+    set_dir.mkdir()
+    (set_dir / 'a').mkdir()
+    (set_dir / 'b').mkdir()
+    (set_dir / 'c').mkdir()
+    next_dir = _MOD._next_bucket_dir(set_dir)
+    assert next_dir.name == '001'
+    # The pre-existing letter buckets are untouched.
+    assert (set_dir / 'a').is_dir()
+    assert (set_dir / 'b').is_dir()
+    assert (set_dir / 'c').is_dir()
