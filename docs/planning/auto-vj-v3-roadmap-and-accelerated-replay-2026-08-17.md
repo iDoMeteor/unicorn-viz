@@ -337,11 +337,24 @@ outside the `logs/` sweep `package_training_set.py` performs, and the
 decision log defaults OFF for the same reason (see the cfg comment in
 `run_session()`). First live check: a two-real-track session
 auto-switched NORMIE→RAVER at 131 BPM and produced 409 sequence-corpus
-rows. Covered by `tests/test_session_replay.py`. **Phase C part 2**
-(dj-mixer-01 / media-01 auto-mix as the source) is *not* built — it
-requires the mixer's crossfade/stem engine to accept the audio-time
-clock, a mixer-team dependency to negotiate, per the existing headless
-training plan.
+rows. Covered by `tests/test_session_replay.py`.
+
+**Media-01 playlists work directly — no mixer involvement (correction,
+2026-08-18).** The first close-out write-up lumped media-01 into the
+Phase C part 2 dependency; the owner rightly pushed back ("media
+player has its own cross-fade and isn't using the mixer's"). Correct
+framing: media-01 playlists are ordered lists of local files
+(`runtime/media_playlists.json`), which is exactly what the driver
+plays — `session_replay.py --playlist 'training - house 01'` replays
+one in playlist order today, reading the store read-only. The only
+media-01 fidelity gap is its own crossfade blending (replay plays
+sequential tracks with a silence gap instead of overlapping tails) —
+minor for training purposes, and if it ever matters it's a media-01
+question, not a mixer one. **Phase C part 2 proper** — dj-mixer-01
+*auto-mix* as the source, i.e. the mixer's crossfade/stem engine
+rendering the actual blended output on the audio-time clock — is the
+only piece with a mixer-team dependency, and the owner is explicitly
+not ready to make those mixer mods yet; it stays deferred.
 
 **Fidelity finding worth knowing about (found while validating item
 1):** the old `bpm_eval.py` loop stepped the tracker once per analyzer

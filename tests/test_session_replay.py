@@ -91,6 +91,32 @@ def test_track_path_hint_bus_reaches_the_corpus(two_track_session) -> None:
     assert seen == {'clip_a.wav', 'clip_b.wav'}
 
 
+def test_resolve_media_playlist(tmp_path: Path) -> None:
+    real = tmp_path / 'song.wav'
+    real.write_bytes(b'')
+    store = {
+        'playlists': {
+            'Training - House 01': [
+                str(real),
+                str(tmp_path / 'gone.mp3'),          # missing → skipped
+                {'path': str(real)},                 # dict entry tolerated
+            ],
+        },
+    }
+    store_path = tmp_path / 'media_playlists.json'
+    store_path.write_text(json.dumps(store), encoding='utf-8')
+
+    files = session_replay.resolve_media_playlist(
+        'training - house 01', store_path)  # case-insensitive
+    assert files == [real, real]
+
+    with pytest.raises(SystemExit):
+        session_replay.resolve_media_playlist('no such list', store_path)
+    with pytest.raises(SystemExit):
+        session_replay.resolve_media_playlist(
+            'training - house 01', tmp_path / 'missing.json')
+
+
 def test_director_activity_summarized(two_track_session) -> None:
     # log_decisions is deliberately OFF in replay (its JSONL would land
     # in logs/, which package_training_set.py sweeps into buckets); the
