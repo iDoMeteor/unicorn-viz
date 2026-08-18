@@ -336,7 +336,7 @@ def _make_sequence_heartbeat_stub(*, writer=None):
         # (which reads self._BPM_LOCK_CONFIDENCE/_RELEASE_CONFIDENCE)
         # needs them stubbed explicitly. Values match the real defaults.
         _BPM_LOCK_CONFIDENCE=0.6,
-        _BPM_LOCK_RELEASE_CONFIDENCE=0.25,
+        _BPM_LOCK_RELEASE_CONFIDENCE=0.225,
     )
     stub._detector_snapshot = lambda: _AUTO_VJ_MODULE.AutoVJController._detector_snapshot(stub)
     stub._sequence_director_fields = (
