@@ -159,6 +159,27 @@ class TestSequenceCorpusWriter:
         # Second shutdown must not raise
         w.shutdown()
 
+    def test_init_failure_logs_a_warning_not_debug(self, cw_mod, tmp_path: Path, caplog) -> None:
+        """2026-08-19: found live -- a real session played every track,
+        showed normal director activity, and still recorded zero sequence
+        rows, with nothing in stdout/stderr to explain it. Root cause was
+        this exact path swallowing a construction failure at log.debug
+        (invisible under the app's normal WARNING-level logging config),
+        which silently disables the writer -- every subsequent
+        should_capture_heartbeat()/append() call is then a guarded no-op
+        for the whole session. Must now surface at warning level."""
+        # A file where a directory is expected makes mkdir(parents=True)
+        # raise reliably, regardless of OS/permissions setup.
+        blocker = tmp_path / 'blocker'
+        blocker.write_text('not a directory', encoding='utf-8')
+        path = blocker / 'nested' / 'seq.jsonl'
+        with caplog.at_level('WARNING'):
+            w = cw_mod.SequenceCorpusWriter(path, enabled=True, window_s=2.0)
+        assert w.enabled is False
+        assert w._file is None
+        assert any(r.levelname == 'WARNING' and 'sequence corpus writer init failed' in r.message
+                   for r in caplog.records)
+
 
 # ---------------------------------------------------------------------------
 # 4. LiveCorpusWriter behaviour
@@ -338,3 +359,50 @@ def test_bpm_eval_beat_grid_file_exists() -> None:
     """The resolved beat_grid.py path must actually exist on disk."""
     expected = _REPO / 'drop-ins' / 'auto-vj-01' / 'beat_grid.py'
     assert expected.exists(), f'beat_grid.py not found at expected path: {expected}'
+
+
+# ---------------------------------------------------------------------------
+# 5. AutoVJController.shutdown() closes BOTH corpus writers (2026-08-19)
+# ---------------------------------------------------------------------------
+
+class _StubWriter:
+    def __init__(self) -> None:
+        self.shut_down = False
+
+    def shutdown(self) -> None:
+        self.shut_down = True
+
+
+class _StubEngine:
+    def shutdown(self) -> None:
+        pass
+
+
+def test_controller_shutdown_closes_sequence_writer_too(auto_vj_mod) -> None:
+    """Was missing entirely -- only _live_corpus_writer got shutdown()
+    called, leaking SequenceCorpusWriter's open file handle on every
+    controller shutdown (it opens eagerly at construction, unlike
+    LiveCorpusWriter which only opens lazily inside upsert()/flush())."""
+    inst = object.__new__(auto_vj_mod.AutoVJController)
+    inst._engine = _StubEngine()
+    inst._live_corpus_writer = _StubWriter()
+    inst._sequence_corpus_writer = _StubWriter()
+    inst._grid = None
+
+    inst.shutdown()
+
+    assert inst._live_corpus_writer.shut_down is True
+    assert inst._sequence_corpus_writer.shut_down is True
+
+
+def test_controller_shutdown_tolerates_missing_sequence_writer_attr(auto_vj_mod) -> None:
+    """hasattr guard must not raise if the attribute was never set."""
+    inst = object.__new__(auto_vj_mod.AutoVJController)
+    inst._engine = _StubEngine()
+    inst._live_corpus_writer = _StubWriter()
+    inst._grid = None
+    # _sequence_corpus_writer deliberately absent.
+
+    inst.shutdown()  # must not raise
+
+    assert inst._live_corpus_writer.shut_down is True

@@ -129,11 +129,11 @@ def test_resolve_media_playlist(tmp_path: Path) -> None:
 
 
 def test_replay_set_label_with_playlist() -> None:
-    assert session_replay._replay_set_label('training - house 01') == 'training - house 01 replay'
+    assert session_replay._replay_set_label('training - house 01') == 'training - house 01'
 
 
 def test_replay_set_label_without_playlist() -> None:
-    assert session_replay._replay_set_label(None) == 'adhoc replay'
+    assert session_replay._replay_set_label(None) == 'adhoc'
 
 
 def test_run_packager_invokes_packager_with_isolated_dirs(tmp_path: Path, monkeypatch) -> None:
@@ -152,17 +152,47 @@ def test_run_packager_invokes_packager_with_isolated_dirs(tmp_path: Path, monkey
     out_dir.mkdir()
     summary = {'speedup': 12.3, 'tracks_played': ['a.mp3', 'b.mp3'], 'sequence_corpus_rows': 500}
 
-    rc = session_replay._run_packager(out_dir, 'my set replay', summary)
+    rc = session_replay._run_packager(out_dir, 'my set', summary)
     assert rc == 0
     cmd = captured['cmd']
     assert str(out_dir) in cmd
     assert cmd.count(str(out_dir)) == 2  # --corpus-dir AND --logs-dir both point at it
     assert '--playlist-name' in cmd
-    assert 'my set replay' in cmd
+    assert 'my set' in cmd
     assert '--no-prompt' in cmd
+    assert '--sets-root' in cmd
+    assert cmd[cmd.index('--sets-root') + 1] == str(session_replay._ACCELERATED_SETS_ROOT)
     notes = cmd[cmd.index('--session-notes') + 1]
     assert '12.3x' in notes
     assert 'ideas to pursue' in notes
+
+
+def test_accelerated_sets_root_is_a_sibling_of_sets(tmp_path: Path) -> None:
+    assert session_replay._ACCELERATED_SETS_ROOT.name == 'accelerated'
+    assert session_replay._ACCELERATED_SETS_ROOT.parent.name == 'training'
+
+
+def test_run_session_default_out_dir_is_unique_per_call(tmp_path: Path) -> None:
+    """2026-08-19: two sequential calls with no explicit --out-dir must
+    never land in the same directory -- the bug that let a failed run's
+    orphaned corpus file get swept into an unrelated later run's bucket.
+    Uses the real repo's logs/replay/ (the actual default), so it cleans
+    up the two dirs it creates there afterward."""
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=1.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    s1 = session_replay.run_session([audio], max_duration_s=1.0, gap_s=0.1)
+    s2 = session_replay.run_session([audio], max_duration_s=1.0, gap_s=0.1)
+    try:
+        assert s1['out_dir'] != s2['out_dir']
+        default_root = session_replay._REPO / 'logs' / 'replay'
+        assert Path(s1['out_dir']).parent == default_root
+        assert Path(s2['out_dir']).parent == default_root
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(s1['out_dir'], ignore_errors=True)
+        _shutil.rmtree(s2['out_dir'], ignore_errors=True)
 
 
 def test_main_skips_packaging_with_no_package_flag(tmp_path: Path, monkeypatch) -> None:
@@ -200,7 +230,7 @@ def test_main_packages_by_default(tmp_path: Path, monkeypatch) -> None:
         '--max-duration', '2',
     ])
     assert rc == 0
-    assert called['set_label'] == 'adhoc replay'
+    assert called['set_label'] == 'adhoc'
     assert called['out_dir'] == tmp_path / 'out'
 
 

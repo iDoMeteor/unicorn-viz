@@ -52,6 +52,7 @@ _extract_director_events = _MOD._extract_director_events
 _write_scorecard = _MOD._write_scorecard
 _write_mixer_crossref_report = _MOD._write_mixer_crossref_report
 _parse_args = _MOD._parse_args
+_append_session_log = _MOD._append_session_log
 _mixer_bpm_for_path = _MOD._mixer_bpm_for_path
 _MIXER_CROSSREF_SOURCES = _MOD._MIXER_CROSSREF_SOURCES
 
@@ -1712,3 +1713,43 @@ def test_parse_args_corpus_dir_and_logs_dir_override(monkeypatch, tmp_path: Path
     args = _parse_args()
     assert args.corpus_dir == tmp_path / 'corpus'
     assert args.logs_dir == tmp_path / 'logs'
+
+
+def test_parse_args_sets_root_default_none(monkeypatch) -> None:
+    monkeypatch.setattr('sys.argv', ['package_training_set.py'])
+    assert _parse_args().sets_root is None
+
+
+def test_parse_args_sets_root_override(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--sets-root', str(tmp_path / 'accelerated'),
+    ])
+    assert _parse_args().sets_root == tmp_path / 'accelerated'
+
+
+# ---- _append_session_log sets_root disambiguation (2026-08-19) --------
+
+
+def test_append_session_log_default_sets_root_omits_prefix(tmp_path: Path) -> None:
+    training_root = tmp_path / 'training'
+    training_root.mkdir()
+    sets_root = training_root / 'sets'
+    set_dir = sets_root / 'my-playlist'
+    bucket_dir = set_dir / '001'
+    path = _append_session_log(training_root, sets_root, set_dir, bucket_dir,
+                                '2026-08-19', 4, 5, '')
+    text = path.read_text(encoding='utf-8')
+    assert 'session=my-playlist/001 ' in text
+    assert 'accelerated' not in text
+
+
+def test_append_session_log_nondefault_sets_root_gets_prefixed(tmp_path: Path) -> None:
+    training_root = tmp_path / 'training'
+    training_root.mkdir()
+    sets_root = training_root / 'accelerated'
+    set_dir = sets_root / 'my-playlist'
+    bucket_dir = set_dir / '001'
+    path = _append_session_log(training_root, sets_root, set_dir, bucket_dir,
+                                '2026-08-19', 4, 5, '')
+    text = path.read_text(encoding='utf-8')
+    assert 'session=accelerated/my-playlist/001 ' in text
