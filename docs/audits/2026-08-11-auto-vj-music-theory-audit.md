@@ -1,8 +1,8 @@
 # Auto VJ Music-Theory & Algorithms Audit (2026-08-11)
 
 Owner: unicorn-viz
-Status: complete — findings awaiting owner review; no code changed by this audit
-Last updated: 2026-08-11
+Status: complete + status addendum 2026-08-18 (see end) — findings F1-F4/F6/F8/F9 open pending the drop-score redesign; M2/M3 closed by the accelerated-replay infrastructure
+Last updated: 2026-08-18
 
 Scope: `drop-ins/auto-vj-01/` (detector `beat_grid.py`, director + recommender
 `auto_vj.py`), the shared analyzer path they consume
@@ -687,3 +687,81 @@ Sources consulted:
 - [FMP: Novelty-Based Segmentation (Foote)](https://www.audiolabs-erlangen.de/resources/MIR/FMP/C4/C4S4_NoveltySegmentation.html)
 - [Moelants — Preferred tempo reconsidered](https://www.semanticscholar.org/paper/Preferred-tempo-reconsidered.-Moelants/b0db06a5a8b2c1942afff5c317c5f6da55a7dcf7)
 - [Frontiers — Preferred tempo & low-frequency bias](https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2018.00349/full)
+
+---
+
+## Status addendum (2026-08-18): finding-by-finding, one week and ~40 commits later
+
+Everything below reflects the repo as of detector `1.0.0-rc.34`,
+director `1.0.0-rc.10`, recommender `1.0.0-rc.17`, weights doc v61,
+auto-vj `1.0.0-rc.95`, training-kit `0.25.x` — i.e. after the
+round-three close-out batch, the lock-release resolution, and the
+accelerated-replay landing (v3 plan Part 2, Phases A+B+C.1). The
+original findings text above is unchanged; this section only records
+what moved.
+
+**The headline change is methodological, not a finding fix:** the
+validation gaps this audit's M-section complained about are now largely
+closed by infrastructure. `track_replay.py`/`bpm_eval.py` replay real
+library audio through the production analyzer+detector at ~50× real
+time with MIREX Acc1/Acc2 ±4% + fold-family metrics (M2 → **done**),
+at live-equivalent cadences (M3 → **done, and vindicated** — see the
+new evidence note below), against the mixer store as ground truth at
+population scale: the first checked-in baseline covers **439 tracks:
+Acc1 86.6%, Acc2 95.7%, median error 1.37%, median time-to-first-lock
+3.5 s** (`drop-ins/training-kit-01/tools/baselines/`). The fold
+breakdown of the misses (3:2 ×14, 4:3 ×8, 5:4 ×5, 3:4 ×3, unrelated
+×19) is the first population-level measurement of exactly the fold
+families §B2 and the tempo audit's T5 predicted. `session_replay.py`
+additionally replays **full director sessions** (modes, drops, phrase
+clock, recommender, corpus writers) headless at ~25× — meaning the
+drop-score redesign, when it ships, can be validated director-in-the-
+loop against whole playlists instead of two archived sessions (M1's
+sample-size complaint). M1's ground-truth caveat itself (the mixer BPM
+is ACF-derived and shares fold-error classes) still stands and is now
+*more* load-bearing, since the baseline leans on the store; Acc2/fold
+reporting is the standing mitigation.
+
+**New evidence relevant to the "What is solid" section:** the onset →
+100 Hz envelope path has a real, previously invisible weakness. The old
+eval loop stepped the tracker once per analyzer block with `t` = block
+start, making onset times coincide exactly with update times; at the
+live 60 Hz frame cadence (now faithfully replayed), envelope pulse
+placement quantizes against the update clock with ±1–2 bin jitter —
+enough that a sparse 120 BPM synthetic click no longer locks, while
+dense real music is unaffected (439-track baseline above). This is a
+live-path property, not a replay artifact: pulse placement derives from
+the write head + `_env_t_acc` bookkeeping, not from `ev_t` directly.
+Logged in the v3 plan § 2.5 as a v3-adjacent candidate; do not fix
+casually — it moves every tuned ACF constant. The "textbook-good"
+verdict on onset detection stands; the *envelope writing* stage is the
+weak link on sparse material.
+
+Finding-by-finding:
+
+| # | Status | Note |
+|---|--------|------|
+| F1 (per-frame peak normalization) | **open** | Root cause untouched; the redesign plan (§4) is still draft. `bass_det` (4d) remains the shipped partial mitigation, as covered in the re-evaluation addendum above. |
+| F2 (fizzle vs. new sustain) | **open** | Blocked on the redesign shipping; unchanged. |
+| F3 (trigger normalization + mid+treble def) | **open** | Plan draft unchanged. |
+| F4 (asymmetric-alpha direction) | **open** | Plan draft unchanged. |
+| F5 (no downbeat estimation) | **open, now scheduled** | v3 roadmap Thread 4 (bass-accent voting as the cheap causal candidate); B4 is its offline twin. |
+| F6 (vacuous drop re-validation gate) | **open** | `_schedule_drop` unchanged since audit. |
+| F7 (per-frame smoothing constants) | **partially fixed** | Energy-slope history is now time-bounded (4 s, age-pruned) rather than frame-counted (round three). Other EMAs remain per-frame. The replay cadence experiment (above) empirically confirmed this class of dt-sensitivity. |
+| F8 (kick band is sub-bass) | **open** | `bands[0:6]` (~31–99 Hz) unchanged; the replay harness deliberately mirrors it as-is. |
+| F9 (sustain shape) | **open** | Plan draft unchanged. |
+| M1 (ground truth) | **partially addressed** | Population-scale validation now exists; the store-is-also-ACF caveat stands. |
+| M2 (metrics) | **done** | Acc1/Acc2 + fold classification live in `bpm_agreement_report.py`, `bpm_eval.py`, and training scorecard flow. |
+| M3 (fidelity rule) | **done** | `stream_track()` implements it; doing so surfaced the envelope-jitter finding. |
+| B1 (offline ACF quantization) | **live half done; offline open** | Live parabolic interpolation shipped rc.33 and A/B-validated (gate-clear 8.5→19.9 %, lock 68.6→77.9 %); dj-mixer-01's offline analyzer still has no interpolation (`ANALYSIS_VERSION` still 3; the mixer-facing plan doc exists, items unimplemented). |
+| B2 (no offline comb) | **open** | Mixer-side; the baseline's fold breakdown now quantifies the cost. |
+| B3 (key profiles) | **open** | Owner-gated, unchanged. |
+| B4 (offline downbeat manual-only) | **open** | Pairs with F5 / Thread 4. |
+| B5 (ground-truth caveats) | **standing** | See M1 note. |
+
+Detector-side context (fully covered in the 2026-08-13 tempo audit's own
+addendum, summarized here because the two audits share a spine): the
+round-three close-out shipped fixes for T1/T2/T4/T6-overlap/T6-pulse and
+the snap-don't-crawl recommendation; T5 gained Option A live and its
+Option C blocker (no per-cycle candidate logs) was removed by
+`--log-cycles`.

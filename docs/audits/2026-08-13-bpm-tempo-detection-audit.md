@@ -1,8 +1,8 @@
 # BPM / Tempo Detection Audit (2026-08-13)
 
 Owner: unicorn-viz
-Status: complete — findings awaiting owner review; no code changed by this audit
-Last updated: 2026-08-13
+Status: complete + status addendum 2026-08-18 (see end) — T1/T2/T4 fixed, T3/T5 partial, new T7; Part III recs 1-6 mostly landed
+Last updated: 2026-08-18
 
 Companion piece to the 2026-08-11 music-theory audit
 (`2026-08-11-auto-vj-music-theory-audit.md`), same treatment, scoped to
@@ -401,3 +401,89 @@ before shipping, per the established process.
 - [Hörschläger et al. SMC 2015 — Addressing tempo octave errors in electronic music (PDF)](https://www.ifs.tuwien.ac.at/~knees/publications/hoerschlaeger_etal_smc_2015.pdf)
 - [tempo_eval published reports](https://tempoeval.github.io/tempo_eval_report/hjdb.html)
 - [tagtraum — tempo estimation notes (Acc1/Acc2 conventions)](https://www.tagtraum.com/tempo_estimation.html)
+
+---
+
+# Status addendum (2026-08-18): what landed, what it measured, and one new finding
+
+As of detector `1.0.0-rc.34` / auto-vj `1.0.0-rc.95`. The round-three
+close-out (2026-08-17) plus the accelerated-replay landing (v3 plan
+Part 2) moved most of this audit's findings; original text above is
+unchanged.
+
+## Findings
+
+- **T1 (lag quantization + spread deadlock) — fixed and validated.**
+  Parabolic sub-lag interpolation shipped default-on (rc.33) after a
+  real A/B (gate-clear 8.5→19.9 %, lock 68.6→77.9 %); the persistence
+  spread limit is now relative (`max(6.0, 3.5 %)`), removing the ≥155
+  BPM deadlock. `acf_interpolation_delta_bpm` is logged per cycle.
+- **T2 (28 % phase-confidence chance floor) — addressed.**
+  `phase_confidence_calibrated` (chance-corrected rescale) ships in the
+  corpus; coherence is strength/band-weighted (kicks count, hi-hats
+  don't). The Schmidt release was re-derived empirically from four real
+  sessions via `lock_hysteresis_gap_harness.py` (0.35 → 0.25 → 0.225),
+  ending the multi-day constant walk this audit flagged as
+  chance-level-anchored.
+- **T3 (incumbent-bias stack / plateau) — partially addressed.**
+  Snap-don't-crawl (Part III rec 4) shipped: an accepted large jump
+  adopts the candidate median outright — and turned out to be *required*
+  by T5's Option A (a crawl re-stalls in the freshly cleared persistence
+  warm-up). The always-downward erosion ratchet gained the dwell gate
+  (8 bars/4 % anchor budget) as counter-pressure. The stack is still
+  seven interacting gates; the principled replacement remains v3
+  Thread 1 (HMM/DBN), now testable at batch scale via replay.
+- **T4 (refractory self-confirmation) — addressed.** The guard ships
+  (rc.33): analyzer feedback confidence forced to 0.0 while
+  `candidate_lock_disagreement`, with an engagement counter, and the
+  replay harness mirrors the guard so offline numbers include it.
+- **T5 (no octave policy; profile-mediated circularity) — partially
+  addressed, blocker removed.** Option A (persistence reset on accepted
+  jumps) is live; genre evidence now reaches candidate scoring only via
+  the tempo-independent-terms channel (gated on ambiguous ACF), and
+  manual evidence via tap-prime/mood-prime — the one-way-flow rule
+  held. The Option C blocker this audit named (no per-cycle candidate
+  logs) is gone: `bpm_eval.py --log-cycles` captures raw
+  candidates/folds/gates at full cycle rate over real audio. First
+  population-scale fold measurement (439-track baseline): 3:2 ×14,
+  4:3 ×8, 5:4 ×5, 3:4 ×3 — the exact families §II predicted, now
+  countable.
+- **T6 minors:** ACF overlap bias — fixed, twice (unbiased `n/(n−lag)`
+  rc.33, then sqrt-dampened rc.34 after the correction itself measurably
+  increased lock toggles under harmonic ambiguity; a controlled A/B
+  picked the sqrt form). Unbounded pulse strengths — fixed (log1p
+  compression at pulse time, plus a proper MAD floor upstream after a
+  live runaway). BPM-EMA alpha near-floor — open, still cosmetic.
+  Clock-epoch fragility — substantially mooted: the Phase B clock seam
+  routed all 38 wall-clock decision sites through an injectable clock,
+  and replay always supplies audio-time `t=`; the mixed-epoch corner
+  remains live-theoretical only. v1 fallback note — BeatTrackerV3 (the
+  frozen-prior subclass) was retired; the `v3` config name is reserved
+  for the real next generation.
+
+## New finding (T7, 2026-08-18) — envelope pulse placement quantizes against the update cadence
+
+Found while building the honest replay loop: the 100 Hz envelope writes
+onset pulses at the current write head (advanced by `_env_t_acc`
+bookkeeping), not at the event's own `ev_t`, so pulse placement jitters
+±1–2 bins depending on how update times interleave with block-stamped
+onset times. The old per-block eval loop hid this (updates coincided
+exactly with onset stamps — an accidentally clean pulse grid); the live
+60 Hz cadence does not. Consequence: sparse material suffers (a bare
+120 BPM click stops locking under the faithful loop) while dense real
+music is fine (Acc2 95.7 % over the 439-track library baseline).
+Candidate fix is ev_t-exact placement — **v3-adjacent, do not patch
+casually**: it re-tunes the effective sharpness of every ACF constant.
+Recorded in the v3 plan § 2.5.
+
+## Part III recommendations scorecard
+
+1 (interpolation): **live done**, offline (mixer) open. 2 (calibrate
+coherence): **done**. 3 (field metrics + data): Acc1/Acc2/folds
+**done** (agreement report, replay eval, 439-track baseline);
+GiantSteps and dev-side reference labelers still open. 4 (snap not
+crawl): **done**. 5 (octave policy + fold logging): logging **done**
+(tactus counters, fold classification, cycle logs); the written policy
+line still pending. 6 (refractory softening): **done**. 7 (HMM/DBN):
+open by design — v3 Thread 1, and the replay harness it needed for
+validation now exists.
