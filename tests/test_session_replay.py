@@ -165,6 +165,26 @@ def test_run_packager_invokes_packager_with_isolated_dirs(tmp_path: Path, monkey
     notes = cmd[cmd.index('--session-notes') + 1]
     assert '12.3x' in notes
     assert 'ideas to pursue' in notes
+    assert '--skip-llm-scoring' in cmd  # default: skipped for the accelerator
+
+
+def test_run_packager_llm_scoring_true_omits_skip_flag(tmp_path: Path, monkeypatch) -> None:
+    captured = {}
+
+    class _FakeCompleted:
+        returncode = 0
+
+    def _fake_run(cmd, cwd=None):
+        captured['cmd'] = cmd
+        return _FakeCompleted()
+
+    monkeypatch.setattr(session_replay.subprocess, 'run', _fake_run)
+    out_dir = tmp_path / 'replay-out'
+    out_dir.mkdir()
+    summary = {'speedup': 12.3, 'tracks_played': ['a.mp3'], 'sequence_corpus_rows': 500}
+
+    session_replay._run_packager(out_dir, 'my set', summary, llm_scoring=True)
+    assert '--skip-llm-scoring' not in captured['cmd']
 
 
 def test_accelerated_sets_root_is_a_sibling_of_sets(tmp_path: Path) -> None:
@@ -218,9 +238,10 @@ def test_main_packages_by_default(tmp_path: Path, monkeypatch) -> None:
 
     called = {}
 
-    def _fake_packager(out_dir, set_label, summary):
+    def _fake_packager(out_dir, set_label, summary, *, llm_scoring=False):
         called['out_dir'] = out_dir
         called['set_label'] = set_label
+        called['llm_scoring'] = llm_scoring
         return 0
 
     monkeypatch.setattr(session_replay, '_run_packager', _fake_packager)
@@ -232,6 +253,28 @@ def test_main_packages_by_default(tmp_path: Path, monkeypatch) -> None:
     assert rc == 0
     assert called['set_label'] == 'adhoc'
     assert called['out_dir'] == tmp_path / 'out'
+    assert called['llm_scoring'] is False  # default: skipped for the accelerator
+
+
+def test_main_llm_scoring_flag_passed_through(tmp_path: Path, monkeypatch) -> None:
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=2.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    called = {}
+
+    def _fake_packager(out_dir, set_label, summary, *, llm_scoring=False):
+        called['llm_scoring'] = llm_scoring
+        return 0
+
+    monkeypatch.setattr(session_replay, '_run_packager', _fake_packager)
+
+    rc = session_replay.main([
+        '--tracks', str(audio), '--out-dir', str(tmp_path / 'out'),
+        '--max-duration', '2', '--llm-scoring',
+    ])
+    assert rc == 0
+    assert called['llm_scoring'] is True
 
 
 def test_director_activity_summarized(two_track_session) -> None:
