@@ -7,12 +7,21 @@ repos:
         language: system
         files: ^(docs/|drop-ins/.*/docs/|REFERENCE\.md).*\.md$
         pass_filenames: true
-      - id: pytest
-        name: pytest
-        entry: .venv/bin/python -m pytest -q
+      # Commit-time: only the tests covering the files being committed.
+      #
+      # pre-commit stashes unstaged changes so hooks see just the commit, but
+      # `git stash` reverts regular files and NOT submodule working-tree
+      # contents. In a tree several sessions share, that pairs HEAD's copy of
+      # a test with a newer drop-in -- a combination that exists nowhere -- and
+      # tests coupled to in-flight drop-in code fail for reasons unrelated to
+      # the commit. Scoping by changed path makes that hybrid almost never
+      # matter; the full suite still gates every push below.
+      - id: pytest-scoped
+        name: pytest (scoped to changed files)
+        entry: .venv/bin/python tools/pytest_for_changes.py
         language: system
-        pass_filenames: false
-        always_run: true
+        files: \.(py|toml|txt|yaml)$
+        pass_filenames: true
       - id: glsl-validate
         name: glsl-validate
         entry: .venv/bin/python tools/validate_glsl.py
@@ -37,6 +46,15 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      # Push-time: the whole suite, so nothing reaches origin untested.
+      - id: pytest-full
+        name: pytest (full suite, pre-push)
+        entry: .venv/bin/python -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: pip-audit
         name: pip-audit
         entry: .venv/bin/pip-audit -r requirements.txt
