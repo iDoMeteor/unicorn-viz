@@ -105,6 +105,7 @@ def _make_seq_row(
 _trim_idle_bookends = _MOD._trim_idle_bookends
 _lock_pct_stateful = _MOD._lock_pct_stateful
 _warn_if_essentia_unavailable = _MOD._warn_if_essentia_unavailable
+_essentia_required_but_missing = _MOD._essentia_required_but_missing
 
 
 # ---- _trim_idle_bookends (2026-08-14, round three; 2026-08-16: is_playing -> bpm > 0) --
@@ -449,6 +450,40 @@ def test_build_detector_payload_mixer_bpm_median_ignores_zero_placeholder() -> N
     assert payload['per_song'][0]['mixer_bpm_median'] == pytest.approx(126.0)
 
 
+def test_build_detector_payload_mixer_bpm_median_falls_back_to_track_store(monkeypatch) -> None:
+    """2026-08-19: media-01/replay sessions never populate the live
+    mixer_bpm field (no live broadcast to read) -- when a track_path is
+    present, fall back to the same offline dj_mixer_tracks.json lookup
+    _write_mixer_crossref_report() uses, so external_agreement isn't left
+    with nothing at all just because the session wasn't dj-mixer-01."""
+    monkeypatch.setattr(
+        _MOD, '_load_mixer_track_store',
+        lambda repo_root: ({'/music/track.mp3': {'hash': 'h1'}}, {'h1': {'bpm': 128.4}}),
+    )
+    rows = [_make_seq_row(track_path='/music/track.mp3') for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] == pytest.approx(128.4)
+
+
+def test_build_detector_payload_mixer_bpm_median_live_field_wins_over_store(monkeypatch) -> None:
+    """A real dj-mixer-01 session already has the live mixer_bpm field --
+    the store lookup must never override an already-populated value."""
+    monkeypatch.setattr(
+        _MOD, '_load_mixer_track_store',
+        lambda repo_root: ({'/music/track.mp3': {'hash': 'h1'}}, {'h1': {'bpm': 999.0}}),
+    )
+    rows = [_make_seq_row(track_path='/music/track.mp3', mixer_bpm=125.0) for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] == pytest.approx(125.0)
+
+
+def test_build_detector_payload_mixer_bpm_median_none_when_store_has_no_entry(monkeypatch) -> None:
+    monkeypatch.setattr(_MOD, '_load_mixer_track_store', lambda repo_root: ({}, {}))
+    rows = [_make_seq_row(track_path='/music/unknown.mp3') for _ in range(3)]
+    payload = _build_detector_payload(rows, 'set-a', 'a')
+    assert payload['per_song'][0]['mixer_bpm_median'] is None
+
+
 def test_build_detector_payload_essentia_fields_default_none_without_track_path() -> None:
     rows = [_make_seq_row() for _ in range(3)]
     payload = _build_detector_payload(rows, 'set-a', 'a')
@@ -602,6 +637,113 @@ def test_warn_if_essentia_unavailable_warns_once(monkeypatch, caplog) -> None:
     assert len(warnings) == 1
     assert 'essentia' in warnings[0].message.lower()
     assert '.venv' in warnings[0].message
+
+
+# ---- _essentia_required_but_missing (2026-08-19) -----------------------------
+
+
+def test_essentia_required_but_missing_false_without_track_path(monkeypatch) -> None:
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+    assert _essentia_required_but_missing([_make_seq_row()]) is False
+
+
+def test_essentia_required_but_missing_false_when_essentia_installed(monkeypatch) -> None:
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: object())
+    rows = [_make_seq_row(track_path='/some/real/path.mp3')]
+    assert _essentia_required_but_missing(rows) is False
+
+
+def test_essentia_required_but_missing_true_when_needed_and_absent(monkeypatch) -> None:
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+    rows = [_make_seq_row(track_path='/some/real/path.mp3')]
+    assert _essentia_required_but_missing(rows) is True
+
+
+# ---- main() essentia pre-flight hard exit (2026-08-19) -----------------------
+# Owner: "let's turn this from a warning into an exit please, i keep forgetting"
+# -- a missing-venv session used to package fully with a silent warning
+# (easy to scroll past); now it's a pre-flight hard exit, before set_dir/
+# bucket_dir exist or anything is moved, so nothing needs undoing.
+
+
+def _write_corpus_pair(corpus_dir: Path, *, with_track_path: bool) -> None:
+    corpus_dir.mkdir(parents=True, exist_ok=True)
+    live_row = {**_make_seq_row(), 'analysis_generated_at': '2026-08-19T10:00:00'}
+    seq_row = _make_seq_row(track_path='/library/track.mp3' if with_track_path else '')
+    (corpus_dir / 'live-corpus-20260819T100000.jsonl').write_text(
+        json.dumps(live_row) + '\n', encoding='utf-8')
+    (corpus_dir / 'sequence-corpus-20260819T100000.jsonl').write_text(
+        json.dumps(seq_row) + '\n', encoding='utf-8')
+
+
+def test_main_exits_before_touching_anything_when_essentia_missing(tmp_path: Path, monkeypatch) -> None:
+    corpus_dir = tmp_path / 'corpus'
+    logs_dir = tmp_path / 'logs'
+    sets_root = tmp_path / 'sets'
+    _write_corpus_pair(corpus_dir, with_track_path=True)
+
+    monkeypatch.setattr(_MOD, '_detect_llm_provider', lambda: ('openai', 'fake-key'))
+    monkeypatch.setattr(_MOD, '_essentia_required_but_missing', lambda rows: True)
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--no-prompt', '--playlist-name', 'p',
+        '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
+        '--sets-root', str(sets_root),
+    ])
+
+    rc = _MOD.main()
+
+    assert rc == 1
+    assert (corpus_dir / 'live-corpus-20260819T100000.jsonl').exists()
+    assert (corpus_dir / 'sequence-corpus-20260819T100000.jsonl').exists()
+    assert not sets_root.exists() or not any(sets_root.iterdir())
+
+
+def test_main_skips_essentia_gate_with_skip_llm_scoring(tmp_path: Path, monkeypatch) -> None:
+    """--skip-llm-scoring means essentia is never invoked either way --
+    the pre-flight gate must not block a session that doesn't need it."""
+    corpus_dir = tmp_path / 'corpus'
+    logs_dir = tmp_path / 'logs'
+    sets_root = tmp_path / 'sets'
+    _write_corpus_pair(corpus_dir, with_track_path=True)
+
+    monkeypatch.setattr(_MOD, '_essentia_required_but_missing',
+                        lambda rows: (_ for _ in ()).throw(AssertionError('must not be called')))
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--no-prompt', '--playlist-name', 'p', '--skip-llm-scoring',
+        '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
+        '--sets-root', str(sets_root),
+    ])
+
+    rc = _MOD.main()
+
+    assert rc == 0
+    assert not (corpus_dir / 'live-corpus-20260819T100000.jsonl').exists()  # moved out
+    moved = list(sets_root.glob('p/*/live-corpus-20260819T100000.jsonl'))
+    assert len(moved) == 1
+
+
+def test_main_skips_essentia_gate_without_api_key(tmp_path: Path, monkeypatch) -> None:
+    """No LLM provider configured -- scoring (and essentia) never runs
+    either way, so the gate must not block on that basis."""
+    corpus_dir = tmp_path / 'corpus'
+    logs_dir = tmp_path / 'logs'
+    sets_root = tmp_path / 'sets'
+    _write_corpus_pair(corpus_dir, with_track_path=True)
+
+    monkeypatch.setattr(_MOD, '_detect_llm_provider', lambda: (None, None))
+    monkeypatch.setattr(_MOD, '_essentia_required_but_missing',
+                        lambda rows: (_ for _ in ()).throw(AssertionError('must not be called')))
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--no-prompt', '--playlist-name', 'p',
+        '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
+        '--sets-root', str(sets_root),
+    ])
+
+    rc = _MOD.main()
+
+    assert rc == 0
+    moved = list(sets_root.glob('p/*/live-corpus-20260819T100000.jsonl'))
+    assert len(moved) == 1
 
 
 # ---- _build_recommender_payload ---------------------------------------------
