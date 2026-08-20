@@ -201,6 +201,89 @@ about the cross fade.. for those sources could we detect when there
 are two tracks being faded/mixed...lock the detector and fire the
 reset at transition end?"
 
+**Correction (2026-08-20, same day): idea 1's unconditional reset is
+ruled out, not just "needs more validation."** Re-ran the same
+uncommitted patch against 2 different seeds each on `favorites` (56
+tracks — the largest, most "normal" library tested), `training - house
+01` (31 tracks), and `toughies` (11), with a matched no-patch baseline
+run immediately after on identical seeds for a clean before/after.
+Session-level aggregates (lock coverage, confidence) barely moved
+either way — this only shows up per-track:
+
+| playlist | baseline mean spread / flips (2-seed pairs) | idea-1 mean spread / flips |
+| --- | --- | --- |
+| favorites (56 tracks) | 2.34 / 4 | **4.89 / 6 — worse** |
+| training - house 01 (31 tracks) | 2.01 / 1 | 1.60 / 1 — a wash (fixed one track, broke a different one) |
+| toughies (11 tracks) | 7.69 / 2 | 3.78 / 2 — genuinely better |
+
+The favorites result is the one that matters: idea 1 introduced *new*
+large flips on tracks that were previously stable (Scenpha - Tribal
+Essence: a 65 BPM swing that didn't exist in baseline; Drake - Which
+One: a new 25 BPM swing). Root cause of the regression, not just an
+observation: in a curated library, neighboring tracks usually sit in a
+*similar* tempo range, so the "stale" carryover from the previous track
+is usually a **correct warm start**, not a liability — it's only wrong
+at the minority of tracks that happen to sit at a harmonic-fold
+boundary relative to their neighbor. An *unconditional* reset throws
+away that usually-helpful warm start every single time and forces a
+cold ACF re-acquisition (gated by the higher `_V2_STARTUP_CONFIDENCE`
+bar, not the already-locked `_V2_MIN_UPDATE_CONFIDENCE` one) on every
+track, which is a worse bet on average across a normal library even
+though it's a better bet specifically on adversarial fold-boundary
+tracks. **Conclusion: "reset everything on every known track change"
+is ruled out as a design — it needs to be conditional, not
+unconditional.**
+
+**Idea 2, rounded out.** The conditional framing idea 1's failure
+points at turns out to decompose into two independent, separately
+valuable pieces — worth tracking as two sub-items rather than one:
+
+1. **Conditional re-acquisition on any known track change** (does
+   *not* need crossfade awareness — applies to media-01, dj-mixer-01,
+   and Spotify's change-counter alike). On a detected track change,
+   don't touch the incumbent lock at all yet; let the ACF keep
+   computing candidates as normal (already happens every cycle, so
+   this is free), and only *at the moment a fresh, reasonably-confident
+   candidate disagrees with the incumbent* (outside its harmonic-fold
+   family, not just noisy jitter) treat that as a **known-boundary
+   large-jump** — accept it immediately rather than making it wait out
+   the in-track `_V2_LARGE_JUMP_PERSISTENCE_CYCLES` (25 cycles, ~3.3 s)
+   gate, since that gate exists to protect against false alarms from
+   *ambiguous* in-track evidence, and a real track-change signal
+   removes exactly that ambiguity — we already know something happened,
+   the only open question is whether the new track's tempo actually
+   differs. When the fresh candidate agrees with the incumbent (the
+   common case per the favorites data above), nothing changes — the
+   warm start is preserved exactly where it was already correct. This
+   is the more surgical version of the same idea, keeps the good half
+   of idea 1 (fast, correct re-acquisition when the track genuinely
+   changed) and drops the half that regressed favorites (unconditional
+   disruption of the common case where it didn't need to change).
+2. **Suspend-through-overlap, mixer/media only** (does need crossfade
+   awareness — this is the piece that's actually about the fade, not
+   about the track-change moment). While a transition is reported
+   active, don't let anything — not even the conditional check above —
+   commit to a new lock; keep sampling candidates internally (so one
+   is ready the instant the transition ends) but treat the overlap
+   window's ACF output as untrusted, since the crossfade experiment
+   showed overlapping audio actively manufactures interference evidence
+   that's worse than either a clean track or silence. At transition-end,
+   run item 1's conditional check once, using the first clean
+   post-transition audio rather than anything from inside the overlap
+   window. The onset envelope ring (`_env_buf`, ~8 s) doesn't need
+   explicit clearing here the way the earlier experiment tried it: once
+   the transition ends and suspension lifts, clean single-track audio
+   refills the rolling window within its own ~8 s regardless, and
+   nothing was allowed to commit off the contaminated portion in the
+   meantime.
+
+Same bus-plumbing dependency as before for item 2 (dj-mixer-01/
+media-01 don't yet publish transition state on `vj_api`) — item 1 has
+no such dependency and could land first, independently, once its own
+conditional-jump-acceptance logic is validated the same rigorous way
+(matched baseline, real libraries, not just toughies) that ruled out
+the unconditional version above.
+
 ---
 
 ## Part 2 — Accelerated local-track replay (the priority item)
