@@ -655,6 +655,20 @@ class Analyzer:
             self._flux_delta[self._mid_slice] * self._flux_weights[self._mid_slice]
         ))
 
+        # Raw-path bass LEVEL (2026-08-18, drop-score redesign audit F1):
+        # must be read HERE, before the per-frame max-normalization below
+        # turns the spectrum into a shape fraction — the exact reason flux
+        # reads the raw spectrum (comment above). log1p for perceptual
+        # scaling/headroom, profile bass weight for genre comparability,
+        # silence-gated like flux. See AudioData.bass_level_raw.
+        if energy > 1e-5:
+            data.bass_level_raw = float(np.log1p(
+                self._safe_mean(spectrum, self._bass_slice)
+                * self._profile.bass_weight
+            ))
+        else:
+            data.bass_level_raw = 0.0
+
         # Vocal-presence heuristics -- must read the raw (pre-normalization)
         # spectrum, same as flux above, since the in-place normalize below
         # rescales per-frame and would erase the harmonic ripple shape.

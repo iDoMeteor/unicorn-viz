@@ -557,6 +557,13 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.99** — New detector-facing `AudioData.bass_level_raw`
+  channel: log1p of the profile-weighted RAW bass-band mean, read
+  before the per-frame max-normalization (the same lesson flux learned
+  — normalization erases magnitude). Feeds auto-vj-01's new drop
+  trigger/sustain split (audit F1); effects keep reading bass/bass_n
+  unchanged.
+
 - **1.0.0-beta.98** — Fixed a runaway onset-strength bug in
   `unicornviz/audio/analyzer.py`: `Analyzer._onset_threshold()`'s MAD
   floor was `+ 1e-6` (a literal-division-by-zero guard, not a reasoned

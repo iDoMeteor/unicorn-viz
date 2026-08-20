@@ -7220,6 +7220,58 @@ independently validated on its own merits already). `_DIRECTOR_VERSION`
 own `Director version` had been stale at `rc.8` since the tweaker/mood
 work landed at `rc.9`).
 
+## Drop Trigger/Sustain Split — the Drop-Score Redesign Lands (2026-08-18)
+
+Owner green-lit the 2026-08-11 redesign plan's § 4 with the music-theory
+audit's corrections folded in (F1/F2/F3/F4/F9; F8 explicitly excluded —
+"super touchy, deal with in isolation"). Detector `1.0.0-rc.35`,
+director `1.0.0-rc.11`, auto-vj `1.0.0-rc.97`, core `1.0.0-beta.99`,
+weights doc v62. Rollout: default ON, `drop_signal_engine = 'legacy'`
+as the one-line restore (owner decision).
+
+**What.** `drop_score` was one number doing two jobs (boundary
+detection and section classification — separate tasks in the
+literature). Split: `impact_novelty` (trigger — bass transient ×
+broadband residual activity × was-bass-suppressed × slope influence,
+multiplicative coincidence) and `drop_sustain` (state —
+`bass_level_norm × (0.3 + 0.7·busyness)`, a product so zero bass forces
+zero: the "no bass, no drop" invariant becomes structural, ending the
+margin bookkeeping the rc.7 weight swap needed). Both derive from a new
+raw-path level channel (`AudioData.bass_level_raw`, read BEFORE the
+per-frame max-normalization that turns band levels into shape
+fractions — audit F1's root cause) via a two-timescale primitive: fast
+EMA (τ 0.3 s) against a rolling p20 reference over a 90 s ring,
+range-normalized by (p80−p20). The percentile form was chosen OVER the
+plan's asymmetric-alpha z-score, whose stated direction was
+ambiguous-to-inverted for the sustain job (audit F4) — a percentile
+reference cannot renormalize during a held drop by construction.
+
+**Director consumption.** Entry: BUILD normal = trigger OR established
+sustain; fastlane = strong trigger; BREAKDOWN→DROP direct = trigger
+only; timeout = relaxed sustain floor. Fizzle: relative to this drop's
+own sustain peak (×0.9) with an absolute floor, reading `drop_sustain`
+only, below-target held a full bar — the legacy composite renormalizes
+~24 % on a held, unchanging drop and is beat-rate spiky between kicks,
+so a relative check against it exits healthy drops (audit F2's exact
+predicted misfire). CLIMAX/IMPACT deliberately stay on the legacy
+`drop_score` ladder in v0 (their thresholds are tuned on that scale;
+migrating them is a separate, data-first decision). `band_blend`
+weights reverted `0.7/0.2/0.1 → 0.45/0.30/0.25` in both engines
+(§ 4c, decided in the plan).
+
+**Empirical grounding.** `_V2_MIDTREB_FLUX_NORM_C = 180` = pooled
+fast-EMA median over 11 real library tracks / 72.6k accelerated-replay
+ticks (the audit's "median maps to 0.5" discipline);
+`drop_trigger_threshold` defaults sit at ≈ p99 of the pooled
+impact_novelty distribution (triggers are rare events); sustain entry/
+floor bracketed by the measured breakdown (~0.18) vs groove (~0.50)
+readings. First director-in-the-loop check via `session_replay.py`
+(6 real tracks): 39 mode transitions, 11 drop fires, IMPACT ×3,
+CLIMAX reached, all four fizzle/entry counters engaging — vs the
+legacy path's 21/12 with no IMPACT/CLIMAX on the same tracks/seed.
+Numbers logged per-row (signals + 4 engagement counters in the
+sequence corpus) so live sessions accumulate tuning data from day one.
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

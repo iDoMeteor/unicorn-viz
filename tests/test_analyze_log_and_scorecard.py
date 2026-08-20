@@ -142,7 +142,7 @@ def test_main_flags_missed_drop_window(tmp_path: Path, capsys: pytest.CaptureFix
 
     _ANALYZE.main(['prog', str(path)])
     out = capsys.readouterr().out
-    assert 'Potential missed drop windows (BUILD score>=0.75, no DROP within 1.5s): 1' in out
+    assert 'Potential missed drop windows (BUILD drop_score>=0.75, no DROP within 1.5s): 1' in out
 
 
 def test_main_does_not_flag_a_drop_that_followed_promptly(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
@@ -154,7 +154,7 @@ def test_main_does_not_flag_a_drop_that_followed_promptly(tmp_path: Path, capsys
 
     _ANALYZE.main(['prog', str(path)])
     out = capsys.readouterr().out
-    assert 'Potential missed drop windows (BUILD score>=0.75, no DROP within 1.5s): 0' in out
+    assert 'Potential missed drop windows (BUILD drop_score>=0.75, no DROP within 1.5s): 0' in out
 
 
 # ===========================================================================

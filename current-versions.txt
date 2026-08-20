@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.98       BETA          MISMATCH (readme=1.0.0-beta.94)
+  core (unicornviz)             1.0.0-beta.99       BETA          MISMATCH (readme=1.0.0-beta.94)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.186.0             alpha ▲       module
@@ -15,7 +15,7 @@
   immersive-01                  0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.96         RC            MISMATCH (readme=1.0.0-rc.90)
+  auto-vj-01                    1.0.0-rc.97         RC            MISMATCH (readme=1.0.0-rc.90)
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────

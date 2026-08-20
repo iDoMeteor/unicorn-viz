@@ -85,6 +85,7 @@ class AudioData:
                  "bass_det", "mid_det", "treble_det",
                  "bass_n", "mid_n", "treble_n",
                  "beat", "bpm", "bass_flux", "mid_flux",
+                 "bass_level_raw",
                  "bands", "spectral_flux",
                  "vocal_hnr", "vocal_fmr")
 
@@ -126,6 +127,20 @@ class AudioData:
         self.bpm: float = 120.0
         self.bass_flux: float = 0.0
         self.mid_flux: float = 0.0
+        # 2026-08-18 (drop-score redesign, audit F1): raw-path bass LEVEL.
+        # bass/bass_det/bass_n are all derived from the spectrum AFTER it
+        # is divided by its own per-frame maximum, which turns them into
+        # spectral-shape fractions — absolute level information is gone
+        # before any gain curve touches them (the same lesson flux learned:
+        # see the analyzer's "raw spectrum, BEFORE per-frame normalization"
+        # comment). This field is log1p of the profile-weighted raw bass-band
+        # mean, no per-frame normalization and no _shape() curve, so a held
+        # drop reads loud for its whole duration and a breakdown genuinely
+        # reads quiet. Unbounded (log-magnitude units, not 0..1); consumers
+        # normalize against their own slow reference (see BeatTracker's
+        # drop-sustain primitive in drop-ins/auto-vj-01/beat_grid.py).
+        # Effects should keep reading bass/bass_n; this is detector-facing.
+        self.bass_level_raw: float = 0.0
         # 64 log-spaced perceptual bands (30 Hz – 16 kHz, raw, no visual gain).
         # Computed once per frame in the Analyzer; shared by effects and auto-VJ.
         self.bands: np.ndarray = np.zeros(64, dtype=np.float32)
@@ -190,6 +205,7 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
     target.bpm = source.bpm
     target.bass_flux = source.bass_flux
     target.mid_flux = source.mid_flux
+    target.bass_level_raw = source.bass_level_raw
     target.spectral_flux = source.spectral_flux
     target.vocal_hnr = source.vocal_hnr
     target.vocal_fmr = source.vocal_fmr

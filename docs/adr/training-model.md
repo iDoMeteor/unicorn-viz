@@ -129,6 +129,21 @@ display fields from the original payload after JSON extraction, keyed by song
 
 ---
 
+**2026-08-18 — drop trigger/sustain split reaches the pipeline** (auto-vj
+rc.97 / detector rc.35 / director rc.11; training-kit 0.31.0). Drop entry
+and fizzle now read `impact_novelty`/`drop_sustain` instead of the
+`drop_score` composite (default; `drop_signal_engine = 'legacy'` reverts).
+Pipeline changes, all same-commit with the code per the standing sync
+rules: the four new per-mood director tunables added to
+`_DIRECTOR_CONSTANT_DEFAULTS` and nine new detector constants to
+`_DETECTOR_CONSTANT_DEFAULTS` (live readers pick real values up by name);
+the LLM prompt's band_blend text corrected (it stated the now-reverted
+`0.7/0.2/0.1` weights) and taught which signals gate drops now; the
+auto-generated scorecard gains a "Drop Trigger/Sustain Split" section
+(entry-path counters, fizzle-path counters, per-session signal medians);
+`analyze_autovj_log.py` reports the split signals and bases its
+missed-drop heuristic on `impact_novelty` when present.
+
 ## Packaging Workflow
 
 **Decision: immutable timestamped buckets, auto-incremented letters**

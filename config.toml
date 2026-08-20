@@ -146,6 +146,17 @@ bpm_lock_dwell_bars = 16.0            # minimum lock dwell window (bars); in-ban
 # persistence_spread_pct = 0.035       # relative component of the large-jump persistence spread limit: max(6.0, pct * window median)
 # candidate_spread_pct = 0.03          # relative component of the short candidate-window spread limit: max(4.0, pct * median)
 # cold_start_guard_cycles = 25         # ACF cycles after cold start during which downbeat_regularity is excluded from the confidence blend
+# -- drop trigger/sustain split (2026-08-18, detector rc.35 / director rc.11 / auto-vj rc.97) --
+# Default ON: drop entry + fizzle read the new impact_novelty/drop_sustain
+# signals (docs/adr/vj-system.md "Drop Trigger/Sustain Split"). Uncomment to
+# restore the legacy composite-drop_score path one-line:
+# drop_signal_engine = "legacy"
+# Per-mood thresholds live in _PROFILE_PRESETS (weights-and-thresholds.md has
+# the table); override any of them here like other profile keys:
+# drop_trigger_threshold = 0.60        # trigger entry bar (~p99 of real-audio readings)
+# drop_trigger_fastlane = 0.75         # strong-trigger shorter-hold bar (default threshold x1.25)
+# drop_sustain_entry = 0.58            # established-sustain entry bar (covers joining mid-drop)
+# drop_sustain_fizzle_floor = 0.35     # absolute fizzle floor under the peak-relative (x0.9) check
 postfx_cruise_slots = [1,2,3,4,5,6]
 log_decisions = true
 live_training_enabled = true
