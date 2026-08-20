@@ -680,6 +680,7 @@ def test_main_exits_before_touching_anything_when_essentia_missing(tmp_path: Pat
     corpus_dir = tmp_path / 'corpus'
     logs_dir = tmp_path / 'logs'
     sets_root = tmp_path / 'sets'
+    training_root = tmp_path / 'training'
     _write_corpus_pair(corpus_dir, with_track_path=True)
 
     monkeypatch.setattr(_MOD, '_detect_llm_provider', lambda: ('openai', 'fake-key'))
@@ -687,7 +688,7 @@ def test_main_exits_before_touching_anything_when_essentia_missing(tmp_path: Pat
     monkeypatch.setattr('sys.argv', [
         'package_training_set.py', '--no-prompt', '--playlist-name', 'p',
         '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
-        '--sets-root', str(sets_root),
+        '--sets-root', str(sets_root), '--training-root', str(training_root),
     ])
 
     rc = _MOD.main()
@@ -704,6 +705,7 @@ def test_main_skips_essentia_gate_with_skip_llm_scoring(tmp_path: Path, monkeypa
     corpus_dir = tmp_path / 'corpus'
     logs_dir = tmp_path / 'logs'
     sets_root = tmp_path / 'sets'
+    training_root = tmp_path / 'training'
     _write_corpus_pair(corpus_dir, with_track_path=True)
 
     monkeypatch.setattr(_MOD, '_essentia_required_but_missing',
@@ -711,7 +713,7 @@ def test_main_skips_essentia_gate_with_skip_llm_scoring(tmp_path: Path, monkeypa
     monkeypatch.setattr('sys.argv', [
         'package_training_set.py', '--no-prompt', '--playlist-name', 'p', '--skip-llm-scoring',
         '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
-        '--sets-root', str(sets_root),
+        '--sets-root', str(sets_root), '--training-root', str(training_root),
     ])
 
     rc = _MOD.main()
@@ -728,6 +730,7 @@ def test_main_skips_essentia_gate_without_api_key(tmp_path: Path, monkeypatch) -
     corpus_dir = tmp_path / 'corpus'
     logs_dir = tmp_path / 'logs'
     sets_root = tmp_path / 'sets'
+    training_root = tmp_path / 'training'
     _write_corpus_pair(corpus_dir, with_track_path=True)
 
     monkeypatch.setattr(_MOD, '_detect_llm_provider', lambda: (None, None))
@@ -736,7 +739,7 @@ def test_main_skips_essentia_gate_without_api_key(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr('sys.argv', [
         'package_training_set.py', '--no-prompt', '--playlist-name', 'p',
         '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
-        '--sets-root', str(sets_root),
+        '--sets-root', str(sets_root), '--training-root', str(training_root),
     ])
 
     rc = _MOD.main()
@@ -1867,6 +1870,18 @@ def test_parse_args_sets_root_override(monkeypatch, tmp_path: Path) -> None:
         'package_training_set.py', '--sets-root', str(tmp_path / 'accelerated'),
     ])
     assert _parse_args().sets_root == tmp_path / 'accelerated'
+
+
+def test_parse_args_training_root_default_none(monkeypatch) -> None:
+    monkeypatch.setattr('sys.argv', ['package_training_set.py'])
+    assert _parse_args().training_root is None
+
+
+def test_parse_args_training_root_override(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--training-root', str(tmp_path / 'training'),
+    ])
+    assert _parse_args().training_root == tmp_path / 'training'
 
 
 # ---- _append_session_log sets_root disambiguation (2026-08-19) --------
