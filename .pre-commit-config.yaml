@@ -22,6 +22,9 @@ repos:
         language: system
         files: \.(py|toml|txt|yaml)$
         pass_filenames: true
+        # Commit stage only -- at push time pytest-full covers everything, and
+        # running the scoped pass again there is pure duplicate work.
+        stages: [pre-commit]
       - id: glsl-validate
         name: glsl-validate
         entry: .venv/bin/python tools/validate_glsl.py
