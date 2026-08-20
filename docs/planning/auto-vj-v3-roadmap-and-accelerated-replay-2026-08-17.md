@@ -132,6 +132,75 @@ training sessions observable in ways they currently aren't," and both
 are small/mechanical relative to Threads 1/3/4) — sequencing between
 them is the owner's call, not decided here.
 
+**Thread 7 — track-boundary state carryover; a source-aware crossfade
+suspend/reset (2026-08-20, new).** Found via the accelerated replay
+harness (Thread 2), on a deliberately adversarial 11-track "toughies"
+playlist built from tracks already known to be hard: `BeatTracker`
+never resets on a track change — its only reset path is 15 s of
+silence (`_silence_reset_s`), and neither the replay harness's default
+2 s gap nor a real crossfade ever reaches that. So the entire gate
+stack (locked `_bpm`, candidate history, dwell anchor, cold-start
+guard, and the recommender's genre-evidence push, fed by a 16 s
+*time*-windowed sample buffer that isn't track-boundary-aware) treats
+the *previous* track's state as the incumbent the new track has to
+out-persist. Confirmed reproducible: re-shuffling the same 11-track
+playlist across 5 seeds flipped several tracks (Claviger, Kaboom Las
+Vegas, Habits Stay High) between a correct lock and a confident wrong
+4:3-family fold depending purely on which track played immediately
+before, at 0.00 BPM variance when the seed (and thus track order) was
+held identical.
+
+Two ideas, split by cost and correctness:
+
+- **Reset BPM + genre-evidence on a *known* track change** (any source
+  that reports a real track-id/`change_counter` — media-01,
+  dj-mixer-01, Spotify's web-api change counter; web streams have no
+  such signal and structurally never trigger it, no special-casing
+  needed). Cheap, self-contained, single call site
+  (`auto_vj.py`'s existing `change_counter` branch). Already prototyped
+  as an uncommitted experiment (`_reset_tempo_lock()` +
+  `_reco_samples.clear()` + `set_genre_tempo_evidence(0,0,0)` at the
+  change-counter branch); results on the adversarial toughies set were
+  genuinely mixed (fixed Habits Stay High and Blackout Riddim in some
+  conditions, made Claviger and No Pretend *more* consistently wrong in
+  others) — expected, since toughies is stress-tested precisely at
+  fold boundaries where a stale-but-lucky carryover can be
+  accidentally helpful. Needs re-validation on normal (non-adversarial)
+  playlists before it's trusted as a general improvement, not just a
+  toughies-neutral one.
+- **For mixer/media sources specifically: detect an active
+  crossfade/transition and suspend detector commitment through it,
+  firing the reset only at transition-end** (this is the real fix, not
+  the quick one). A follow-up experiment mixed real overlapping audio
+  at track boundaries (a genuine equal-power crossfade, not silence)
+  and found it measurably *worse* than the silence-gap baseline for
+  several tracks (Claviger went from ~50/50 right/wrong to wrong in
+  5/5 runs) — feeding the analyzer two overlapping, different-tempo
+  rhythms simultaneously doesn't just leave stale state around, it
+  actively manufactures new spurious onset/beat-interference evidence
+  that can seed a *more* convincing wrong lock than either silence or a
+  clean cut would. A reset fired at the moment `change_counter` flips
+  (which can land mid-crossfade) doesn't fix this; the detector needs
+  to stop trying to commit to anything while two tracks are audible at
+  once, and only re-engage once the transition is actually over. Real
+  cross-drop-in work, not a quick patch: dj-mixer-01
+  (`mixer_engine.py`/`deck.py`) and media-01 (`media_controller.py`)
+  both clearly track crossfade/transition progress internally already,
+  but neither currently publishes it on the shared `vj_api` bus (the
+  closest existing thing, `publish_session`/`get_session`, is night-
+  phase timing, not per-track transition state) — would need a new bus
+  method, both drop-ins wired to call it, and a new detector "suspend"
+  mode distinct from reset (keep sampling, commit nothing) that only
+  lifts on the transition-end signal. Scope with the mixer/media owners
+  before starting; not something to guess at solo.
+
+Owner: "well... all but web streams, we pretty much know when we're
+track changing, right? so we could trigger a reset of bpm & genre when
+we know about that. and for mixer/media player source.. we even know
+about the cross fade.. for those sources could we detect when there
+are two tracks being faded/mixed...lock the detector and fire the
+reset at transition end?"
+
 ---
 
 ## Part 2 — Accelerated local-track replay (the priority item)
