@@ -29,6 +29,7 @@ This is the canonical map for project documentation.
 
 - Planning: [docs/planning](planning)
 - **Auto VJ v3 roadmap + accelerated local-track replay plan (2026-08-17; Part 2 Phases A+B landed 2026-08-18 — see its § 2.5):** [docs/planning/auto-vj-v3-roadmap-and-accelerated-replay-2026-08-17.md](planning/auto-vj-v3-roadmap-and-accelerated-replay-2026-08-17.md)
+- **Auto VJ genre intelligence + BPM/genre candidate matching plan (2026-08-20, planning only):** [docs/planning/auto-vj-genre-intelligence-candidate-matching-2026-08-20.md](planning/auto-vj-genre-intelligence-candidate-matching-2026-08-20.md)
 - **Auto VJ round-three planning — v1/v2/v3 consolidation, rolling windows, genre-fit-weighted candidate scoring (2026-08-14, draft, open threads pending consensus):** [docs/planning/auto-vj-round-three-planning-2026-08-14.md](planning/auto-vj-round-three-planning-2026-08-14.md)
 - **Auto VJ drop-score redesign — trigger/sustain split (2026-08-11, draft, pending external audio review before implementation):** [docs/planning/auto-vj-drop-score-redesign-plan-2026-08-11.md](planning/auto-vj-drop-score-redesign-plan-2026-08-11.md)
 - **Auto VJ coherence-window & detector-confidence plan (2026-08-10, two experiments shipped, judgment deferred to overnight session data):** [docs/planning/auto-vj-coherence-window-plan-2026-08-10.md](planning/auto-vj-coherence-window-plan-2026-08-10.md)
