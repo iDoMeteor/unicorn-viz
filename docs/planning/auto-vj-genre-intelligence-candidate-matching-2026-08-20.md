@@ -235,9 +235,17 @@ distinct external evidence and stay so.
   weights rebalanced best-guess for the first runs (shape 2.2,
   onset/kick 1.5, zcr 0.9, centroid held 0.5 pending its formula bug,
   vocals 0.4/0.5) — recommender rc.18, weights doc v63, full rationale
-  in docs/adr/vj-system.md. Still Stage 1: recalibrate μ/σ against the
-  side-by-side Essentia comparison (§ 4) and fix-or-retire centroid on
-  evidence, iterating the best-guess weights toward measured accuracy.
+  in docs/adr/vj-system.md. **Centroid resolved same day (rc.19):
+  RETIRED on evidence** — 57 BPM-family-labeled real tracks, five
+  brightness formulations, none separate genre families (within-family
+  spread 2-4× between-family separation, orderings genre-nonsensical);
+  the 2026-08-10 formula-mismatch bug closes as unfixable-by-
+  recalibration; `spectral_shape_fit` carries the spectral evidence.
+  The BPM-family labeling methodology used for that measurement (mixer
+  BPM → tempo family, no genre tags needed) is reusable for the
+  remaining μ/σ recalibrations. Still Stage 1: recalibrate the
+  surviving terms' μ/σ against the side-by-side Essentia comparison
+  (§ 4), iterating the best-guess weights toward measured accuracy.
 - **Stage 2 — the matcher.** Build § 5 behind a flag, replay-validated:
   Acc1 uplift on the baseline, zero regression, endorsement counters.
 - **Stage 3 — rollout.** Owner-reviewed live sessions; retire the

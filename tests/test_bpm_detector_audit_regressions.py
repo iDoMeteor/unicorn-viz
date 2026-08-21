@@ -536,6 +536,75 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     assert stub._recommended_profile_key == 'deep_house'
 
 
+def test_bpm_prefilter_excludes_out_of_range_when_locked(monkeypatch) -> None:
+    """2026-08-20 (recommender rc.20): while confidently locked, candidates
+    whose bpm_hint range (± margin) doesn't contain the locked tempo are
+    excluded BEFORE scoring — the 2026-08-13 ADR / the matcher's HIGH half."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {k: profiles_mod.PROFILES[k] for k in ('house', 'drum_and_bass')}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2650.0, zcr=0.08, onset_count=2.0)
+    stub._bpm_lock_active = True
+    stub._reco_bpm_prefilter_excluded_count = 0
+    stub._reco_bpm_prefilter_fallback_count = 0
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'house'
+    assert stub._reco_bpm_prefilter_excluded_count == 1
+    event, kw = stub._engine.marks[0]
+    assert kw['bpm_prefilter_excluded'] == ['drum_and_bass']
+    assert 'drum_and_bass' not in kw['term_values_by_candidate']
+
+
+def test_bpm_prefilter_falls_back_when_all_candidates_excluded(monkeypatch) -> None:
+    """A fold-error lock must not silence the recommender: if every
+    candidate fails the range test, score all, count the fallback."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {k: profiles_mod.PROFILES[k] for k in ('drum_and_bass', 'hardstyle')}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2000.0, zcr=0.08, onset_count=2.0)
+    stub._bpm_lock_active = True
+    stub._reco_bpm_prefilter_excluded_count = 0
+    stub._reco_bpm_prefilter_fallback_count = 0
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key in restricted
+    assert stub._reco_bpm_prefilter_fallback_count == 1
+    assert stub._reco_bpm_prefilter_excluded_count == 0
+    event, kw = stub._engine.marks[0]
+    assert kw['bpm_prefilter_excluded'] == []
+
+
+def test_bpm_prefilter_inactive_when_unlocked(monkeypatch) -> None:
+    """Unlocked/low-confidence cycles are unfiltered — the matcher's LOW
+    half (joint candidate selection) owns that regime, not this gate."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {k: profiles_mod.PROFILES[k] for k in ('house', 'drum_and_bass')}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2650.0, zcr=0.08, onset_count=2.0)
+    # no _bpm_lock_active on the stub -> getattr default False -> no filter
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    event, kw = stub._engine.marks[0]
+    assert 'drum_and_bass' in kw['term_values_by_candidate']
+    assert kw['bpm_prefilter_excluded'] == []
+
+
 def test_default_weights_are_genre_pure() -> None:
     """2026-08-20 (recommender rc.18): the default composite is a
     tempo-blind genre score — both detector-BPM-consuming terms carry
@@ -545,8 +614,12 @@ def test_default_weights_are_genre_pure() -> None:
     w = _AUTO_VJ._DEFAULT_RECO_WEIGHTS
     assert w['tempo_fit'] == 0.0
     assert w['top_cand_fit'] == 0.0
+    # centroid_fit joined the zeroed set 2026-08-20 (rc.19): retired on
+    # measured evidence (no scalar brightness feature separates genre
+    # families on real audio) -- see docs/adr/vj-system.md.
+    assert w['centroid_fit'] == 0.0
     for name in ('spectral_shape_fit', 'onset_fit', 'kick_regularity_fit',
-                 'zcr_fit', 'centroid_fit', 'vocal_hnr_fit', 'vocal_fmr_fit'):
+                 'zcr_fit', 'vocal_hnr_fit', 'vocal_fmr_fit'):
         assert w[name] > 0.0, name
 
 
@@ -579,6 +652,12 @@ def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
         bpm=float(base.bpm_prior_mu), centroid=off_target_centroid,
         zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
     )
+    # 2026-08-20 (rc.19): centroid_fit is retired (weight 0.0) in the
+    # defaults; the per-profile-sigma MECHANISM this test guards is still
+    # computed (telemetry, revivable on future evidence), so restore an
+    # explicit weight for the mechanism to show through.
+    stub._reco_weights = dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS)
+    stub._reco_weights['centroid_fit'] = 0.5
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
@@ -690,6 +769,17 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     stub._app._audio_manager._profile_key = 'deep_house'
     stub._profile_auto_reco_score_margin = 0.08
     stub._profile_auto_reco_confirm_wins = 1
+    # 2026-08-20 (rc.18/rc.19 genre-pure changes): this fixture's "small,
+    # real, non-trivial margin (~0.157)" was calibrated empirically
+    # against the rc.17-era weight set; the trust-scaling MECHANISM under
+    # test is weight-agnostic, so pin those weights rather than
+    # re-deriving the fixture from scratch.
+    stub._reco_weights = dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS)
+    stub._reco_weights.update({'tempo_fit': 2.2, 'top_cand_fit': 0.4,
+                               'centroid_fit': 0.5, 'zcr_fit': 0.6,
+                               'onset_fit': 1.0, 'spectral_shape_fit': 1.4,
+                               'kick_regularity_fit': 1.0,
+                               'vocal_hnr_fit': 0.3, 'vocal_fmr_fit': 0.4})
     for s in stub._reco_samples:
         s['conf'] = conf
         s['dconf'] = dconf

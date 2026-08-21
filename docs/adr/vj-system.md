@@ -7313,6 +7313,73 @@ tune toward *our own* interpretation of correctness where they disagree
 (same pattern as the existing essentia_bpm/essentia_key columns), rather
 than treating it as gospel.
 
+## BPM Hard Pre-Filter Lands Early (2026-08-20, same day as the retirement)
+
+The 2026-08-13 "BPM as a Hard Recommender Pre-Filter" ADR (above,
+owner-approved, deferred to RC2) is now live — pulled forward the same
+day centroid_fit's retirement exposed what it exists to contain: with
+the accidental low-mu penalty gone and mu/sigma recalibration not yet
+done, a pure-house replay's recommender scattered across 11 profiles
+and the decider APPLIED drum_and_bass (463 rows) and dubstep (176).
+Implementation per the original design: eligibility gate before
+scoring (never a score term — the genre composite stays tempo-blind),
+`bpm_hint` range ± 15% against the Schmidt-locked tempo, unfiltered
+when unlocked (the future matcher's LOW half), full-exclusion falls
+back to unfiltered with a `fallback` counter so a fold-error lock
+can't silence the recommender. Recommender `rc.19 → rc.20`, weights
+doc → v65. Counters + per-eval excluded-list telemetry from day one.
+Known accepted leak: dubstep's round-three-widened 70-160 hint band
+keeps it eligible at nearly any tempo — that is v3 Thread 5's
+bimodal-representation problem, not this gate's. Post-fix replay
+(same 6 house tracks, same seed): recommendations re-concentrated to
+the house family and zero wrong-family profiles were applied.
+
+## centroid_fit Retired — the Formula-Mismatch Bug Closes as Unfixable (2026-08-20)
+
+Owner: "fix the centroid bug please." The sanctioned fix path (recorded
+at the live formula's comment since 2026-08-11: recalibrate
+`spectral_centroid_mu` against real measured data, then retry the
+log-band basis) was executed — and disproven by its own first
+measurement, so the resolution is retirement, per the genre-intelligence
+plan's "fix-or-retire on evidence" rule. Owner confirmed retire over
+recalibrate. Recommender `rc.18 → rc.19`, weights doc → v64, auto-vj →
+rc.99.
+
+**The measurement.** 57 real library tracks, tempo-family-labeled from
+mixer-store BPM (the designated ground truth; families slow/midlow/
+house/peak/fast by hint-range boundaries), 60 s each through the real
+Analyzer. Five brightness formulations:
+
+- Log-band centroid (`PERC_BAND_CENTERS_HZ · bands`): family medians
+  200-445 Hz vs profile μs of 950-2650 — the 2026-08-11 ambient
+  incident's mechanism confirmed quantitatively — and the family
+  ordering INVERTED (fast=200 darkest, slow=445 brightest).
+- Live linear-FFT centroid: medians 2983-3872 Hz, ~900 Hz total family
+  span vs within-family p25-p75 up to ~1900 Hz; slow above peak, house
+  highest. Also: every family median sits above nearly every profile μ,
+  so the term has acted as a mastering-brightness penalty, not a genre
+  signal, its entire life.
+- Log2-frequency centroid, ≥4 kHz energy fraction, rolloff-85: same
+  picture in every case (within-family spread 2-4× between-family
+  separation, genre-nonsensical orderings).
+
+**The conclusion.** Scalar brightness of a mastered full mix carries no
+tempo-family genre signal in this library — it tracks production and
+mastering. The genuine spectral-genre evidence lives in the full
+distribution, which `spectral_shape_fit`'s 64-band cosine already
+scores at full resolution: this is the `band_fit` redundancy argument
+(2026-08-14) again, now with measurements instead of reasoning.
+
+**Mechanics.** Weight `0.5 → 0.0`; the term stays computed and
+corpus-logged (telemetry), profiles keep their `spectral_centroid_mu`/
+`sigma` fields, and the live linear-FFT measurement (with its
+sample-rate-aware Hz axis) is unchanged — so nothing downstream breaks
+and the decision is one weight-line to revisit if Essentia-labeled
+sub-family data (genre-intelligence plan Stage 0) later reveals a
+signal the family granularity hid. `PERC_BAND_CENTERS_HZ` remains for
+its other legitimate uses. The eight-move weight walk this term caused
+(0.8→1.5→1.3→1.0→0.8→0.5→0.3→0.7→0.5) is over.
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |

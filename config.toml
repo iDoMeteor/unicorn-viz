@@ -157,6 +157,12 @@ bpm_lock_dwell_bars = 16.0            # minimum lock dwell window (bars); in-ban
 # drop_trigger_fastlane = 0.75         # strong-trigger shorter-hold bar (default threshold x1.25)
 # drop_sustain_entry = 0.58            # established-sustain entry bar (covers joining mid-drop)
 # drop_sustain_fizzle_floor = 0.35     # absolute fizzle floor under the peak-relative (x0.9) check
+# -- recommender BPM hard pre-filter (2026-08-20, recommender rc.20) --
+# While confidently locked, genre candidates whose bpm_hint range (± margin)
+# doesn't contain the locked tempo are excluded before scoring (the 2026-08-13
+# ADR; also the HIGH half of the genre-intelligence candidate matcher).
+# profile_reco_bpm_prefilter_enabled = true
+# profile_reco_bpm_prefilter_margin = 0.15
 postfx_cruise_slots = [1,2,3,4,5,6]
 log_decisions = true
 live_training_enabled = true
