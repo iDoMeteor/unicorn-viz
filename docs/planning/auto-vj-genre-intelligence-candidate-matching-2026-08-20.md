@@ -1,10 +1,12 @@
 # Auto VJ: Genre Intelligence + BPM/Genre Candidate Matching — Plan (2026-08-20)
 
 Owner: unicorn-viz
-Status: planning — design conversation captured, nothing built. Follows
-the owner's proposal ("this would not be a genre 'weight' in the bpm
-detector as we used to have, it would be like a whole new algorithm that
-isn't really weight based but more candidate matching").
+Status: Stage 1 STARTED (2026-08-20 — the genre-pure composite shipped:
+recommender rc.18, tempo_fit/top_cand_fit zeroed, weights rebalanced
+best-guess; see § 6). Matcher (Stage 2) not built. Captures the owner's
+proposal ("this would not be a genre 'weight' in the bpm detector as we
+used to have, it would be like a whole new algorithm that isn't really
+weight based but more candidate matching").
 Last updated: 2026-08-20
 
 ---
@@ -149,6 +151,14 @@ labeled tracks in replay instead of per-session vibes.
   ships pretrained TensorFlow classifier models (Discogs-EffNet /
   MTG-Jamendo families) — heavier than the descriptor algorithms, but
   offline-only, so the no-heavy-deps runtime constraint is untouched.
+  **Role clarified (owner, 2026-08-20):** Essentia is a library+models,
+  not a harvestable dataset — so it is a *reference signal, not gospel*:
+  log its per-track genre call side-by-side with ours (the same pattern
+  `essentia_bpm`/`essentia_key` already follow in the training rows),
+  review the disagreements, and tune toward **our own interpretation of
+  correctness** case by case. Where we consistently agree, the label is
+  settled for free; where we disagree, a human (the owner) arbitrates —
+  that arbitration IS the ground truth this plan accumulates.
   **License note:** Essentia is AGPL-3.0 — fine for offline dev-side
   label generation (nothing links into the shipped runtime), consistent
   with how the 2026-08-13 tempo audit scoped madmom/TempoCNN
@@ -216,12 +226,18 @@ distinct external evidence and stay so.
   {rap/rnb/chill ~70-95}, mid {house family ~110-130}, fast {trance/
   psytrance/hard ~135-155}, double {dnb ~165-180}, bimodal {dubstep} —
   needs owner eyes).
-- **Stage 1 — the isolated genre scorer.** Fork `_profile_score()`'s
-  tempo-blind terms into a standalone scorer (no tempo_fit /
-  top_cand_fit); recalibrate every μ/σ against the labeled set (this is
-  where centroid's formula-mismatch finally gets fixed or the term gets
-  retired *on evidence*); report standalone accuracy at family
-  granularity. No runtime behavior changes yet.
+- **Stage 1 — the genre-pure scorer, in place (STARTED 2026-08-20).**
+  Owner call: do NOT fork/redo `_profile_score()` — it is purpose-built
+  and keeps its machinery (softmax margins, detector_trust gating,
+  decider, telemetry, promoted-weights path). Instead the existing
+  composite went genre-pure surgically: `tempo_fit` and `top_cand_fit`
+  zeroed (kept as telemetry — the matcher needs their data), remaining
+  weights rebalanced best-guess for the first runs (shape 2.2,
+  onset/kick 1.5, zcr 0.9, centroid held 0.5 pending its formula bug,
+  vocals 0.4/0.5) — recommender rc.18, weights doc v63, full rationale
+  in docs/adr/vj-system.md. Still Stage 1: recalibrate μ/σ against the
+  side-by-side Essentia comparison (§ 4) and fix-or-retire centroid on
+  evidence, iterating the best-guess weights toward measured accuracy.
 - **Stage 2 — the matcher.** Build § 5 behind a flag, replay-validated:
   Acc1 uplift on the baseline, zero regression, endorsement counters.
 - **Stage 3 — rollout.** Owner-reviewed live sessions; retire the

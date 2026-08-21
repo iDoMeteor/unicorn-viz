@@ -516,12 +516,38 @@ def test_recommender_prefers_deep_house_over_psytrance_at_120_bpm(monkeypatch) -
     monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
 
     stub = _make_full_reco_stub(bpm=120.0, centroid=2350.0, zcr=0.085, onset_count=1.4)
+    # 2026-08-20 re-scope (recommender rc.18, genre-pure composite): the
+    # DEFAULT weights now zero tempo_fit/top_cand_fit by owner direction
+    # (genre-intelligence plan Stage 1), so this fixture's premise —
+    # tempo_fit's penalty deciding the winner — no longer holds under
+    # defaults. The MECHANISM this audit regression protects (per-profile
+    # sigma, unclamped floor, a 25-BPM miss actually costing enough to
+    # outvote timbre) is unchanged and still needs guarding for the
+    # future candidate matcher, so the tempo weights are restored
+    # explicitly for this test via the stub's own _reco_weights.
+    stub._reco_weights = dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS)
+    stub._reco_weights['tempo_fit'] = 2.2
+    stub._reco_weights['top_cand_fit'] = 0.4
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     assert stub._recommended_profile_key == 'deep_house'
+
+
+def test_default_weights_are_genre_pure() -> None:
+    """2026-08-20 (recommender rc.18): the default composite is a
+    tempo-blind genre score — both detector-BPM-consuming terms carry
+    zero weight (owner: "remove both"), while remaining terms stay
+    positive so the score still discriminates. Re-weighting tempo back
+    in must be a deliberate act (the candidate matcher supersedes it)."""
+    w = _AUTO_VJ._DEFAULT_RECO_WEIGHTS
+    assert w['tempo_fit'] == 0.0
+    assert w['top_cand_fit'] == 0.0
+    for name in ('spectral_shape_fit', 'onset_fit', 'kick_regularity_fit',
+                 'zcr_fit', 'centroid_fit', 'vocal_hnr_fit', 'vocal_fmr_fit'):
+        assert w[name] > 0.0, name
 
 
 def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:

@@ -7272,6 +7272,47 @@ legacy path's 21/12 with no IMPACT/CLIMAX on the same tracks/seed.
 Numbers logged per-row (signals + 4 engagement counters in the
 sequence corpus) so live sessions accumulate tuning data from day one.
 
+## Recommender Goes Genre-Pure — tempo_fit / top_cand_fit Zeroed (2026-08-20)
+
+Stage 1 of the genre-intelligence / candidate-matching plan
+(`docs/planning/auto-vj-genre-intelligence-candidate-matching-2026-08-20.md`),
+owner-directed: "remove tempo fit entirely and then rebalance the weights
+to the best of our ability via best guess for the first runs and once we
+get it reasonably tuned we'll work on the interoperability." Asked
+whether `top_cand_fit` (the other detector-BPM-consuming term) goes too:
+"remove both."
+
+Recommender `1.0.0-rc.17 → 1.0.0-rc.18` (the bump rule's retiring-a-term
+case: the composite's meaning changed from genre+tempo-agreement to a
+tempo-blind, rhythm-aware genre score). Weights doc → v63; auto-vj →
+rc.98. Mechanics: both terms **zeroed, not deleted** — still computed and
+corpus-logged per candidate (`term_values_by_candidate`), because the
+future BPM/genre matcher needs exactly that tempo-vs-genre comparison
+data, and because keeping the term list stable preserves the promoted-
+weights file format and every downstream telemetry consumer.
+
+Rebalance (best-guess, first-runs, ~7.5 total weight vs 7.9 before):
+`spectral_shape_fit 1.4 → 2.2` (new lead — most repeatedly validated
+pure-timbre term, no open bugs), `onset_fit 1.0 → 1.5` and
+`kick_regularity_fit 1.0 → 1.5` (rhythm-character terms the owner's
+isolation rule explicitly keeps), `zcr_fit 0.6 → 0.9`, `centroid_fit`
+**held at 0.5** (formula-mismatch bug still open — deliberately not
+amplified), vocals `0.3/0.4 → 0.4/0.5` (bigger share of vocal-genre
+separation absent tempo; still lightest, targets unvalidated).
+
+**Interim risk, accepted with eyes open:** until the matcher lands the
+recommender has no tempo grounding at all — the chillstep-at-130 failure
+class (the reason the BPM-prefilter ADR above exists) is possible again.
+Containment: detector_trust confirmation gating and decider margins are
+unchanged, `mismatch_pct`/switch-rate telemetry will show degradation
+within a session, and the one-way-flow rule means a wrong genre pick
+cannot touch the detector's tempo. Ground-truth approach also decided
+this session: Essentia is a library/models, not a harvestable dataset —
+so its analysis gets logged side-by-side with ours per session and we
+tune toward *our own* interpretation of correctness where they disagree
+(same pattern as the existing essentia_bpm/essentia_key columns), rather
+than treating it as gospel.
+
 ## Superseded Decisions
 
 | Date | Decision | Reason for reverting |
