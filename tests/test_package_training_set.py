@@ -775,6 +775,32 @@ def test_build_recommender_payload_vocal_summary_absent_with_no_rows() -> None:
     assert 'vocal' not in payload.get('spectral_summary', {})
 
 
+# ---- _build_recommender_payload: matcher/prefilter engagement (2026-08-31) --
+# hint_integration's real scoring basis post-genre-pure-rebalance -- see the
+# prompt section's own comment for why raw hint_alignment_pct isn't it.
+
+
+def test_build_recommender_payload_matcher_engagement_counters() -> None:
+    rows = [
+        {**_make_seq_row(track_id='a'), 'genre_matcher_endorse_count': 5,
+         'reco_bpm_prefilter_excluded_count': 12, 'reco_bpm_prefilter_fallback_count': 0},
+        {**_make_seq_row(track_id='a'), 'genre_matcher_endorse_count': 9,
+         'reco_bpm_prefilter_excluded_count': 20, 'reco_bpm_prefilter_fallback_count': 1},
+    ]
+    payload = _build_recommender_payload(rows, duration_min=10.0, set_id='set-a', bucket_id='a')
+    assert payload['stats']['genre_matcher_endorse_count'] == 9
+    assert payload['stats']['reco_bpm_prefilter_excluded_count'] == 20
+    assert payload['stats']['reco_bpm_prefilter_fallback_count'] == 1
+
+
+def test_build_recommender_payload_matcher_engagement_counters_default_zero() -> None:
+    rows = [_make_seq_row(track_id='a')]  # no matcher fields at all
+    payload = _build_recommender_payload(rows, duration_min=10.0, set_id='set-a', bucket_id='a')
+    assert payload['stats']['genre_matcher_endorse_count'] == 0
+    assert payload['stats']['reco_bpm_prefilter_excluded_count'] == 0
+    assert payload['stats']['reco_bpm_prefilter_fallback_count'] == 0
+
+
 # ---- _build_director_payload / _extract_director_events ---------------------
 # Mixer song-structure hint capture (2026-08-10) -- see docs/adr/vj-system.md.
 
