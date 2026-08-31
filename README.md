@@ -557,6 +557,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.100** — dubstep `zcr_mu` `0.095 → 0.093`
+  (unicornviz/audio/profiles.py): owner-approved LLM tuning
+  recommendation, applied by the training session as part of the
+  auto-vj rc.101 batch (see that drop-in's changelog).
+
 - **1.0.0-beta.99** — New detector-facing `AudioData.bass_level_raw`
   channel: log1p of the profile-weighted RAW bass-band mean, read
   before the per-frame max-normalization (the same lesson flux learned

@@ -1,8 +1,8 @@
 # Auto VJ Music-Theory & Algorithms Audit (2026-08-11)
 
 Owner: unicorn-viz
-Status: complete + status addendum 2026-08-18 (see end) — findings F1-F4/F6/F8/F9 open pending the drop-score redesign; M2/M3 closed by the accelerated-replay infrastructure
-Last updated: 2026-08-18
+Status: complete + status addenda (2026-08-18, F8 update 2026-08-31) — F1-F4/F9 closed by the trigger/sustain split, F8 fixed in isolation; F5/F6 remain open (v3 Thread 4 / next _schedule_drop batch)
+Last updated: 2026-08-31
 
 Scope: `drop-ins/auto-vj-01/` (detector `beat_grid.py`, director + recommender
 `auto_vj.py`), the shared analyzer path they consume
@@ -748,7 +748,7 @@ Finding-by-finding:
 | F5 (no downbeat estimation) | **open, now scheduled** | v3 roadmap Thread 4 (bass-accent voting as the cheap causal candidate); B4 is its offline twin. |
 | F6 (vacuous drop re-validation gate) | **open** | `_schedule_drop` unchanged since audit. |
 | F7 (per-frame smoothing constants) | **partially fixed** | Energy-slope history is now time-bounded (4 s, age-pruned) rather than frame-counted (round three). Other EMAs remain per-frame. The replay cadence experiment (above) empirically confirmed this class of dt-sensitivity. |
-| F8 (kick band is sub-bass) | **open** | `bands[0:6]` (~31–99 Hz) unchanged; the replay harness deliberately mirrors it as-is. |
+| F8 (kick band is sub-bass) | **fixed 2026-08-31** | Owner's isolated session: `bands[0:6]`→`[0:12]` (30–97 Hz) at the live site, `exp_kick`, and the harness mirror together; gates kept (measured pass rates unchanged). See docs/adr/vj-system.md "F8 Fixed". |
 | F9 (sustain shape) | **open** | Plan draft unchanged. |
 | M1 (ground truth) | **partially addressed** | Population-scale validation now exists; the store-is-also-ACF caveat stands. |
 | M2 (metrics) | **done** | Acc1/Acc2 + fold classification live in `bpm_agreement_report.py`, `bpm_eval.py`, and training scorecard flow. |

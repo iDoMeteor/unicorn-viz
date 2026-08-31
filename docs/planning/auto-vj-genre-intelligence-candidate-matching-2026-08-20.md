@@ -8,11 +8,12 @@ matcher rc.21; see § 6). Stage 0 EXECUTED 2026-08-31
 right, label the baseline+toughies, vocals earn") — labels manifest in
 training-kit `tools/baselines/genre_labels-2026-08-31.json` via
 `tools/label_genres.py`. Remaining: the owner's arbitration pass over
-the disagreement rows, then Stage 1's μ/σ recalibration (NOTE:
-kick-related targets wait for the owner's isolated F8 session —
-recalibrating kick_regularity's targets while its input samples the
-wrong band (bands[0:6] ≈ sub-bass) would bake in a compensating
-distortion; flagged by the training session 2026-08-31). Stage 3 live
+the disagreement rows, then Stage 1's μ/σ recalibration (the F8
+gate cleared 2026-08-31: the kick window is fixed — bands[0:6]→[0:12],
+director rc.12 / recommender rc.22 — so kick-target recalibration is
+UNBLOCKED once the owner's label arbitration lands; the exp_kick
+spread-compression noted in the F8 ADR entry is exactly what that
+recalibration should resolve). Stage 3 live
 validation ongoing. Captures the owner's
 proposal ("this would not be a genre 'weight' in the bpm detector as we
 used to have, it would be like a whole new algorithm that isn't really

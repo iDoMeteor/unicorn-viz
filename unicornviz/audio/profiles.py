@@ -793,7 +793,10 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_hint_max=160.0,
         spectral_centroid_mu=950.0,
         spectral_centroid_sigma=250.0,
-        zcr_mu=0.095,
+        # 2026-08-31: 0.095 -> 0.093. LLM tuning recommendation from the
+        # training-house-01/002 matcher-validation session ("observed ZCR
+        # slightly lower than expected"), owner-approved.
+        zcr_mu=0.093,
         zcr_sigma=0.020,
         onset_density_mu=1.8,
         onset_density_sigma=1.5,

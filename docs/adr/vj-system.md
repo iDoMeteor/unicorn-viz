@@ -7313,6 +7313,54 @@ tune toward *our own* interpretation of correctness where they disagree
 (same pattern as the existing essentia_bpm/essentia_key columns), rather
 than treating it as gospel.
 
+## F8 Fixed: the Kick Band Was Sub-Bass, Off by a Factor of Two (2026-08-31)
+
+The audit's F8, deliberately quarantined by the owner ("super touchy,
+deal with that in isolation") until today's dedicated session. Director
+`rc.11 → rc.12`, recommender `rc.21 → rc.22`, weights doc → v67,
+auto-vj → rc.101.
+
+**The bug.** Every kick-regularity consumer — the director's
+kick-confirmed build, kick-dropout early breakdown, IMPACT/CLIMAX
+dropout override, the detector's tactus-eagerness and kick-evidence
+gates (fed via ``update(kick_regularity=)``), and the recommender's
+`kick_regularity_fit` — was driven by `bands[0:6].mean()`, whose
+comment claimed "~31–99 Hz." On the 64 log-spaced 30 Hz→16 kHz axis,
+band edge 6 = 30×(16000/30)^(6/64) ≈ **54 Hz**: the signal measured
+30–54 Hz sub-bass/rumble regularity, not 50–100 Hz kick fundamentals —
+working by proxy on sub-heavy material, under-reading on anything whose
+kick lives higher. `exp_kick` read `expected_bands[0:6]` with the
+identical offset.
+
+**The fix.** `bands[0:12]` (edge 12 ≈ 97 Hz) at the live sampling site,
+`exp_kick` (`range(12)`), and the replay-harness mirror, all together
+per the audit's own instruction. The audit's stronger alternative
+(sampling raw-path `bass_flux` at onsets) stays open as a future
+upgrade, noted at the sampling site.
+
+**Why no thresholds moved.** Measured before committing (16 real
+library tracks, live-faithful accelerated replay, both windows computed
+side by side): per-track median kick_regularity p50 `0.737 → 0.795`,
+p25 `0.645 → 0.704`; the ≥0.60 kick-confirmed gate passes the same
+0.81 of tracks under both windows, and <0.30 dropout medians go
+`0.06 → 0.00`. The tuned 0.60/0.30 gates keep their meaning; the shift
+is a modest, uniform brightening, not a recalibration event.
+
+**Known, accepted consequence.** `exp_kick`'s genre spread compresses
+(pre → post: rap_rnb `0.455 → 0.676`, hyphy `0.263 → 0.523`, chillstep
+`0.325 → 0.571`, dubstep `0.938 → 0.838`) because 808/sub-bass content
+occupies the honest kick window too — `kick_regularity_fit` now
+separates four-on-the-floor genres less sharply than the wrong band
+accidentally did. The underlying conflation ("energy in the kick band"
+≠ "expects REGULAR kicks") is flagged for the Stage 1 label-driven
+recalibration, which this fix un-blocks: the training session's
+2026-08-31 warning — don't recalibrate kick targets against a
+wrong-band input — is now satisfied.
+
+**Validation:** 2 random-seed accelerated replay runs each over
+favorites, training-house-01, and toughies, executed by the training
+session against rc.101 (owner-directed split of labor).
+
 ## The Candidate Matcher's LOW Half Lands — Genre Evidence Becomes Candidate Endorsement (2026-08-20)
 
 Recommender `rc.20 → rc.21`, weights doc → v66, auto-vj → rc.100.
