@@ -1,9 +1,11 @@
 # Auto VJ: Genre Intelligence + BPM/Genre Candidate Matching — Plan (2026-08-20)
 
 Owner: unicorn-viz
-Status: Stage 1 STARTED (2026-08-20 — the genre-pure composite shipped:
-recommender rc.18, tempo_fit/top_cand_fit zeroed, weights rebalanced
-best-guess; see § 6). Matcher (Stage 2) not built. Captures the owner's
+Status: Stages 1+2 LANDED (2026-08-20 — genre-pure composite rc.18,
+centroid retired on evidence rc.19, HIGH-half prefilter rc.20, LOW-half
+matcher rc.21; see § 6). Remaining open work: Stage 0 ground truth
+(owner-gated: Essentia model pick + license check) and the onset/zcr
+μ/σ recalibration it unblocks; Stage 3 live validation ongoing. Captures the owner's
 proposal ("this would not be a genre 'weight' in the bpm detector as we
 used to have, it would be like a whole new algorithm that isn't really
 weight based but more candidate matching").
@@ -246,8 +248,22 @@ distinct external evidence and stay so.
   remaining μ/σ recalibrations. Still Stage 1: recalibrate the
   surviving terms' μ/σ against the side-by-side Essentia comparison
   (§ 4), iterating the best-guess weights toward measured accuracy.
-- **Stage 2 — the matcher.** Build § 5 behind a flag, replay-validated:
-  Acc1 uplift on the baseline, zero regression, endorsement counters.
+- **Stage 2 — the matcher (LANDED 2026-08-20, recommender rc.21).**
+  Both § 5 regimes live: HIGH = the rc.20 prefilter; LOW = joint
+  (detector top-2 × genre top-3) selection endorsing a detector-
+  proposed candidate BPM through the genre-evidence channel (tight
+  sigma, margin weight, shared range margin) — superseding the
+  round-three prior push (rollback: `genre_matcher_enabled = false`).
+  No new regime machinery: the detector's low-confidence gate and the
+  Schmidt lock are the hysteresis, as designed. Endorsement counter +
+  per-eval pair telemetry from day one.
+  **Stage 1 measurement findings (2026-08-20, recorded, no action):**
+  real onset-density is ~flat across tempo families (~4.0-4.6/s
+  medians; offline reading overstates live, which is refractory-
+  shaped) and real zcr sits 2-4× below the authored μs with the family
+  ordering inverted (fast/trance-family darkest). Post-centroid rule
+  applied: no further retirements or μ changes without owner + labels
+  — onset/zcr recalibration is blocked on Stage 0.
 - **Stage 3 — rollout.** Owner-reviewed live sessions; retire the
   genre-evidence boost once the matcher demonstrably covers it; then
   this becomes the recommender's spine and the HMM thread (v3 Thread 1)

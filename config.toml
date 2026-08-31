@@ -163,6 +163,12 @@ bpm_lock_dwell_bars = 16.0            # minimum lock dwell window (bars); in-ban
 # ADR; also the HIGH half of the genre-intelligence candidate matcher).
 # profile_reco_bpm_prefilter_enabled = true
 # profile_reco_bpm_prefilter_margin = 0.15
+# -- BPM/genre candidate matcher, LOW half (2026-08-20, recommender rc.21) --
+# When the detector's ACF confidence is low, the winning (ACF candidate x
+# genre) pair endorses that candidate's BPM via the genre-evidence channel
+# (supersedes the round-three genre-prior push; set false to restore it).
+# genre_matcher_enabled = true
+# genre_matcher_endorse_sigma = 0.06   # log2 sigma of the endorsement (tight: it backs one specific ACF hypothesis)
 postfx_cruise_slots = [1,2,3,4,5,6]
 log_decisions = true
 live_training_enabled = true

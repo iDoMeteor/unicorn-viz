@@ -7313,6 +7313,48 @@ tune toward *our own* interpretation of correctness where they disagree
 (same pattern as the existing essentia_bpm/essentia_key columns), rather
 than treating it as gospel.
 
+## The Candidate Matcher's LOW Half Lands — Genre Evidence Becomes Candidate Endorsement (2026-08-20)
+
+Recommender `rc.20 → rc.21`, weights doc → v66, auto-vj → rc.100.
+Completes the genre-intelligence plan's two-regime integration (§ 5):
+the HIGH half (BPM prefilter, rc.20) constrains genre by confident
+tempo; this LOW half lets genre disambiguate tempo *among the
+detector's own hypotheses* when the ACF is unsure.
+
+**Mechanism.** Each recommender eval: take the detector's top-2 raw ACF
+candidates (bpm, normalized comb score) and the top-3 genre candidates
+by tempo-independent composite (softmax probabilities; § 6.5's
+exclusions unchanged — onset/kick stay out of *evidence* even though
+they stay in the genre score). Score every pair `det_score ×
+genre_prob × range_fit` (range_fit: 1.0 inside the genre's hint band ±
+the shared prefilter margin, linear decay beyond). The winning pair
+pushes its **detector-candidate BPM** through the existing
+`set_genre_tempo_evidence` channel — tight sigma (0.06 log2, config
+`genre_matcher_endorse_sigma`) because it endorses one specific ACF
+hypothesis, not a genre's whole range — with a margin-style weight.
+The detector's low-confidence consumption gate (round three's, with
+its own hysteresis) remains the LOW-regime arbiter, and the
+`_V2_GENRE_EVIDENCE_MAX_BOOST` bound still caps influence.
+
+**What it replaces.** The round-three genre-evidence push sent the
+winning genre's *prior μ/σ* — weight-shaped, and capable of pulling
+toward a tempo the ACF never proposed. The matcher can only ever
+endorse an ACF-proposed candidate: one-way flow is now structural at
+the evidence level too. Legacy push kept verbatim behind
+`genre_matcher_enabled = false` as the rollback switch.
+
+**Stage 1 measurement findings, recorded same batch (no action
+taken):** live-formula measurements per BPM tempo-family over the
+library found real onset-density ≈ flat (~4.0-4.6 onsets/s medians
+across every family; also refractory-shaped live, so offline readings
+without the BPM feedback overstate it) and real zcr both ~2-4× below
+the authored μs and family-order-inverted (trance-family darkest at
+~0.014 vs μ 0.08-0.09). After the centroid lesson (retiring a
+miscalibrated term destabilized the composite), NO further weight or
+μ changes were made — onset/zcr recalibration is explicitly blocked on
+Stage 0 Essentia labels, and the matcher + prefilter bound the harm of
+the miscalibration in the meantime.
+
 ## BPM Hard Pre-Filter Lands Early (2026-08-20, same day as the retirement)
 
 The 2026-08-13 "BPM as a Hard Recommender Pre-Filter" ADR (above,
