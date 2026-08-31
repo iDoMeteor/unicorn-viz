@@ -61,6 +61,32 @@ still-missing downbeat/bar-phase anchor (bass-accent voting is the
 cheap causal candidate). Both are design work that should be specified
 in bars/seconds, not frames, per the audit's dt-independence finding.
 
+**Thread 4 addendum (2026-08-20, owner-directed): the remaining
+drop-score plan items land here too.** The drop-score redesign's core
+shipped (trigger/sustain split, rc.97); what its plan left open is
+bundled into this thread because every piece either needs or benefits
+from the bar-phase anchor this thread builds:
+
+- **`structural_cues()` causal port as a drop-confirmation signal**
+  (redesign § 4a/§ 4d): the mixer's phrase-step energy-jump detector,
+  shrunk to ~1 leading bar vs 8 trailing — a "sure, ~1 bar late"
+  second opinion that composes with `impact_novelty`'s instantaneous
+  trigger and naturally gates the fizzle floor. Blocked on bar phase
+  by definition (its windows are bars); audit F5/B4 are the same gap.
+- **Per-mood buildup/slope influence window** (redesign § 4a deferred
+  item): `slope_window_s` per mood profile via the existing
+  `_PROFILE_PRESETS` pattern — trivial once specified in bars.
+- **Onset-density acceleration** (audit F3's queued build cue): onsets
+  per bar rising across consecutive bars — the snare-roll speedup, the
+  single most characteristic buildup cue in the production
+  literature; needs "per bar", i.e. the anchor.
+- **F6, the vacuous drop re-validation gate** (audit): still open,
+  independent of the anchor — a small fix that should ride whichever
+  batch touches `_schedule_drop()` next.
+- **The T7 envelope pulse-placement jitter** (tempo audit addendum)
+  stays v3-adjacent detector work, NOT this thread — listed here only
+  so nobody mistakes its absence for resolution.
+
 **Thread 5 — the maturation items parked for later phases.** The rc2
 in-app models/config menu (§ 4.3); controlled genre re-priming once
 recommender work resumes (§ 3.2b); dubstep's genuinely bimodal tempo
