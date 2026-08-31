@@ -3,9 +3,17 @@
 Owner: unicorn-viz
 Status: Stages 1+2 LANDED (2026-08-20 — genre-pure composite rc.18,
 centroid retired on evidence rc.19, HIGH-half prefilter rc.20, LOW-half
-matcher rc.21; see § 6). Remaining open work: Stage 0 ground truth
-(owner-gated: Essentia model pick + license check) and the onset/zcr
-μ/σ recalibration it unblocks; Stage 3 live validation ongoing. Captures the owner's
+matcher rc.21; see § 6). Stage 0 EXECUTED 2026-08-31
+(owner: "yes to Discogs-EffNet, NC license fine, partition looks
+right, label the baseline+toughies, vocals earn") — labels manifest in
+training-kit `tools/baselines/genre_labels-2026-08-31.json` via
+`tools/label_genres.py`. Remaining: the owner's arbitration pass over
+the disagreement rows, then Stage 1's μ/σ recalibration (NOTE:
+kick-related targets wait for the owner's isolated F8 session —
+recalibrating kick_regularity's targets while its input samples the
+wrong band (bands[0:6] ≈ sub-bass) would bake in a compensating
+distortion; flagged by the training session 2026-08-31). Stage 3 live
+validation ongoing. Captures the owner's
 proposal ("this would not be a genre 'weight' in the bpm detector as we
 used to have, it would be like a whole new algorithm that isn't really
 weight based but more candidate matching").
@@ -222,12 +230,20 @@ distinct external evidence and stay so.
 
 ## 6. Staged plan
 
-- **Stage 0 — ground truth.** Pick the Essentia genre model (license
-  check first), label the 439-baseline tracks + the fold-problem set,
-  commit the manifest. Decide the tempo-family partition (draft: slow
-  {rap/rnb/chill ~70-95}, mid {house family ~110-130}, fast {trance/
-  psytrance/hard ~135-155}, double {dnb ~165-180}, bimodal {dubstep} —
-  needs owner eyes).
+- **Stage 0 — ground truth (EXECUTED 2026-08-31).** Owner approved
+  all four decisions in one go: Discogs-EffNet (`genre_discogs400`
+  taxonomy via the music-style bs64 model), CC BY-NC-SA accepted for
+  offline dev-side use, the tempo-family partition as drafted, scope =
+  baseline + toughies, and the vocal terms EARN their keep (validated,
+  not presumptively retired). `tools/label_genres.py` (training-kit)
+  runs the model (essentia-tensorflow in a separate ≤3.12 venv — it
+  conflicts with the main venv's plain essentia), maps the 400 Discogs
+  styles → tempo families/profiles, flags DJ-edit caveat rows (source
+  genre ≠ edit tempo), and writes the manifest with per-row
+  family-agreement verdicts — the differ/unknown rows are the owner's
+  arbitration queue, and those rulings are the accumulated ground
+  truth. Model binaries are gitignored; the tool prints the download
+  commands.
 - **Stage 1 — the genre-pure scorer, in place (STARTED 2026-08-20).**
   Owner call: do NOT fork/redo `_profile_score()` — it is purpose-built
   and keeps its machinery (softmax margins, detector_trust gating,
