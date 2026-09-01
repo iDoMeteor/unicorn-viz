@@ -291,7 +291,7 @@ class AudioManager:
                 continue  # timeout — check stop flag and loop
             if self._analysis_stop.is_set():
                 break
-            block, new_seq = self._capture.get_block_if_new(last_seq)
+            block, side_block, new_seq = self._capture.get_block_pair_if_new(last_seq)
             if block is None:
                 continue
             last_seq = new_seq
@@ -301,7 +301,7 @@ class AudioManager:
             # device from silently going stale. See Analyzer.set_sample_rate.
             self._analyzer.set_sample_rate(self._capture.sample_rate)
             # Heavy work: numpy FFT releases the GIL → render thread runs freely.
-            self._analyzer.process(block, out=self._back_buf)
+            self._analyzer.process(block, out=self._back_buf, side=side_block)
             onsets = self._analyzer.drain_onsets()
             audio_t = self._analyzer.last_audio_time
             # Input level of the block that produced this snapshot.  Read here,

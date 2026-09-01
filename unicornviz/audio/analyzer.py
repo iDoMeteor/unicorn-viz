@@ -46,6 +46,23 @@ _SMOOTHING = 0.75          # exponential smoothing coefficient
 # docs/adr/vj-system.md.
 _ASSUMED_SAMPLE_RATE = 48000
 
+# Mid/side vocal-presence feature (2026-09-01). Replaces the failed
+# hnr/fmr heuristics' MEASUREMENT role (those never separated
+# instrumentals from acapellas — instrumentals read HIGHER; audit in
+# the 2026-08-31 experiment ledger). Physics: lead vocals are
+# center-panned mono, so the MID fraction of vocal-band energy — and
+# its syllable-rate (2-8 Hz) modulation — tracks mix-vocal presence.
+# Validated offline: held-out AUC ~0.75 on vocal-mix vs instrumental
+# with correct population ordering (instrumentals < mixes <
+# acapellas). An honest ~0.75-class instrument: usable as a soft
+# population-level signal, not a per-track oracle. Requires stereo
+# capture (side channel from AudioCapture); reports invalid on mono.
+_VOCAL_MS_BAND_HZ = (200.0, 4000.0)
+_VOCAL_MS_RING = 2048            # ~22 s of envelope at 93.75 blocks/s
+_VOCAL_MS_RECOMPUTE_FRAMES = 188  # ~2 s cadence, matches fmr pattern
+_VOCAL_MS_MOD_BAND_HZ = (2.0, 8.0)    # syllable-rate modulation
+_VOCAL_MS_MOD_TOTAL_HZ = (0.5, 20.0)
+
 # 2026-08-11: detector-facing _shape() gains -- see AudioData.bass_det's own
 # field comment (unicornviz/effects/base.py) for why these exist as a
 # separate channel from bass/mid/treble's effects-facing gains below.
@@ -215,6 +232,14 @@ class Analyzer:
         self._vocal_env_filled: bool = False
         self._vocal_fmr_cached: float = 0.0
         self._vocal_fmr_frame_count: int = 0
+        # Mid/side vocal-presence state (see _VOCAL_MS_* constants).
+        self._vocal_ms_ring: deque[float] = deque(maxlen=_VOCAL_MS_RING)
+        self._vocal_ms_frame_count: int = 0
+        self._vocal_mid_ratio_cached: float = 0.0
+        self._vocal_syl_cached: float = 0.0
+        self._vocal_ms_valid: bool = False
+        self._vocal_ms_frate: float = float(_ASSUMED_SAMPLE_RATE) / 512.0
+        self._side_spectrum_work = np.zeros(self._bands, dtype=np.float32)
 
         # P3 — adaptive refractory (set by BeatTracker via set_expected_bpm)
         self._refractory_s: float | None = None
@@ -588,6 +613,7 @@ class Analyzer:
         pcm: np.ndarray | None,
         t: float | None = None,
         out: AudioData | None = None,
+        side: np.ndarray | None = None,
     ) -> AudioData:
         """Process one block of PCM audio and return an AudioData snapshot.
 
@@ -678,6 +704,40 @@ class Analyzer:
         else:
             data.vocal_hnr = 0.0
             vocal_energy = 0.0
+        # --- Mid/side vocal presence (2026-09-01; see _VOCAL_MS_*) ---
+        # The mono input IS the mid channel (capture downmix = (L+R)/2),
+        # so mid-band energy comes free from the existing spectrum; only
+        # the side block costs one extra rfft.
+        if side is not None and len(side) >= n and energy > 1e-5:
+            np.multiply(side[:n], window, out=self._windowed_buf[:n])
+            side_fft = np.fft.rfft(self._windowed_buf[:n], n=self._bands * 2)
+            np.abs(side_fft[: self._bands], out=self._side_spectrum_work)
+            bin_hz = self._sample_rate / max(1, self._n_fft)
+            b0 = max(1, int(_VOCAL_MS_BAND_HZ[0] / bin_hz))
+            b1 = min(self._bands, int(_VOCAL_MS_BAND_HZ[1] / bin_hz))
+            mid_band = float(np.sum(spectrum[b0:b1]))
+            side_band = float(np.sum(self._side_spectrum_work[b0:b1]))
+            self._vocal_ms_ring.append(mid_band / (mid_band + side_band + 1e-9))
+            self._vocal_ms_frate = self._sample_rate / max(1, len(pcm))
+            self._vocal_ms_frame_count += 1
+            if (self._vocal_ms_frame_count >= _VOCAL_MS_RECOMPUTE_FRAMES
+                    and len(self._vocal_ms_ring) >= _VOCAL_MS_RING // 4):
+                self._vocal_ms_frame_count = 0
+                env = np.asarray(self._vocal_ms_ring, dtype=np.float32)
+                self._vocal_mid_ratio_cached = float(env.mean())
+                env = env - env.mean()
+                mod = np.abs(np.fft.rfft(env * np.hanning(len(env))))
+                mf = np.fft.rfftfreq(len(env), 1.0 / self._vocal_ms_frate)
+                lo, hi = _VOCAL_MS_MOD_BAND_HZ
+                tl, th = _VOCAL_MS_MOD_TOTAL_HZ
+                total = float(mod[(mf >= tl) & (mf < th)].sum()) + 1e-9
+                self._vocal_syl_cached = float(
+                    mod[(mf >= lo) & (mf < hi)].sum()) / total
+                self._vocal_ms_valid = True
+        data.vocal_mid_ratio = self._vocal_mid_ratio_cached
+        data.vocal_syl = self._vocal_syl_cached
+        data.vocal_ms_valid = self._vocal_ms_valid
+
         vocal_dt = len(pcm) / self._sample_rate
         self._push_vocal_envelope(vocal_dt, vocal_energy)
         self._vocal_fmr_frame_count += 1

@@ -87,7 +87,8 @@ class AudioData:
                  "beat", "bpm", "bass_flux", "mid_flux",
                  "bass_level_raw",
                  "bands", "spectral_flux",
-                 "vocal_hnr", "vocal_fmr")
+                 "vocal_hnr", "vocal_fmr",
+                 "vocal_mid_ratio", "vocal_syl", "vocal_ms_valid")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -144,6 +145,14 @@ class AudioData:
         # 64 log-spaced perceptual bands (30 Hz – 16 kHz, raw, no visual gain).
         # Computed once per frame in the Analyzer; shared by effects and auto-VJ.
         self.bands: np.ndarray = np.zeros(64, dtype=np.float32)
+        # Mid/side vocal presence (2026-09-01, analyzer._VOCAL_MS_*):
+        # vocal_mid_ratio = mean mid-fraction of vocal-band energy;
+        # vocal_syl = syllable-rate (2-8 Hz) modulation share of that
+        # envelope; vocal_ms_valid = False on mono input (values are
+        # then stale/zero, NOT measurements). ~0.75-AUC instrument.
+        self.vocal_mid_ratio: float = 0.0
+        self.vocal_syl: float = 0.0
+        self.vocal_ms_valid: bool = False
         # Overall gated spectral flux scalar from the Analyzer (same value used
         # for onset detection, exposed here for recommender / corpus logging).
         self.spectral_flux: float = 0.0
@@ -209,6 +218,9 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
     target.spectral_flux = source.spectral_flux
     target.vocal_hnr = source.vocal_hnr
     target.vocal_fmr = source.vocal_fmr
+    target.vocal_mid_ratio = source.vocal_mid_ratio
+    target.vocal_syl = source.vocal_syl
+    target.vocal_ms_valid = source.vocal_ms_valid
     target.waveform[:] = source.waveform
     target.bands[:] = source.bands
 

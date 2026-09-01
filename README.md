@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.101**
+**Version 1.0.0-beta.102**
 
 ## Contact Me!
 
@@ -556,6 +556,18 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 **Happy demoscene visualizing!** 🦄✨
 
 ## Changelog
+
+- **1.0.0-beta.102** — Mid/side vocal-presence feature: AudioCapture
+  now preserves the stereo side channel alongside the mono downmix,
+  and the analyzer computes vocal_mid_ratio (mid-fraction of
+  vocal-band energy — lead vocals are center-panned mono) plus
+  vocal_syl (its syllable-rate 2-8 Hz modulation), cached on the fmr
+  recompute pattern, invalid-flagged on mono input. Replaces the
+  measurement role of the failed hnr/fmr heuristics (2026-08-31 audit:
+  instrumentals read HIGHER hnr than acapellas). Validated offline at
+  held-out AUC ~0.75 on vocal-mix-vs-instrumental with correct
+  population ordering; recommender weight wiring deliberately NOT
+  included — gated on the field check per the experiment ledger.
 
 - **1.0.0-beta.101** — Detector-internals HUD toggles: the Auto VJ
   status bar's "BPM: nnn (conf)" readout, the active profile's

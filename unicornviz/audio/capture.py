@@ -363,6 +363,9 @@ class AudioCapture:
         self._buf: deque[np.ndarray] = deque(
             maxlen=int(_SAMPLE_RATE * buffer_seconds / self._blocksize) + 1
         )
+        self._side_buf: deque[np.ndarray | None] = deque(
+            maxlen=int(_SAMPLE_RATE * buffer_seconds / self._blocksize) + 1
+        )
         self._lock = threading.Lock()
         self._stream: "sd.InputStream | None" = None
         # Blocking-read capture thread and its stop signal.
@@ -545,6 +548,7 @@ class AudioCapture:
         )
         with self._lock:
             self._buf = deque(maxlen=new_maxlen)
+            self._side_buf = deque(maxlen=new_maxlen)
         # Open in blocking-read mode (no callback= argument).  PortAudio
         # buffers internally; the reader thread drains it on its own schedule
         # so a GIL hold on the render thread can never cause an xrun.
@@ -565,6 +569,7 @@ class AudioCapture:
         # Clear any overflow frames from the buffer during the initial stream setup
         with self._lock:
             self._buf.clear()
+            self._side_buf.clear()
         self._new_block_event.clear()  # discard stale wake-up from previous stream session
         log.debug('Audio: stream opened, buffer cleared, warmup period %.1fs', _WARMUP_DURATION)
         # Start the blocking-read daemon thread
@@ -752,6 +757,24 @@ class AudioCapture:
                 return None, last_seq
             return self._buf[-1].copy(), current_seq
 
+    def get_block_pair_if_new(
+        self, last_seq: int
+    ) -> tuple[np.ndarray | None, np.ndarray | None, int]:
+        """Like ``get_block_if_new`` but also returns the side channel.
+
+        The side block is ``None`` when the input is mono (single-channel
+        device) — consumers must treat mid/side-derived features as
+        invalid in that case rather than as measured zeros.
+        """
+        with self._lock:
+            current_seq = self._block_seq
+            if current_seq == last_seq or not self._buf:
+                return None, None, last_seq
+            side = self._side_buf[-1] if self._side_buf else None
+            return (self._buf[-1].copy(),
+                    None if side is None else side.copy(),
+                    current_seq)
+
     def signal_new_block(self) -> None:
         """Force-set the new-block event to unblock a waiting analysis thread.
 
@@ -872,8 +895,15 @@ class AudioCapture:
             if data.ndim > 1 and data.shape[1] > 1:
                 np.mean(data[:n], axis=1, out=scratch[:n])
                 mono = scratch[:n]
+                # Side channel (L-R)/2 for the mid/side vocal-presence
+                # feature (2026-09-01): the mono mean above IS the mid
+                # channel, so keeping the side preserves the stereo
+                # information the analyzer's vocal feature needs. None
+                # when the input is true mono (feature reports invalid).
+                side = ((data[:n, 0] - data[:n, 1]) * 0.5).astype(np.float32)
             else:
                 mono = data[:n, 0] if data.ndim > 1 else data[:n]
+                side = None
             rms = float(np.sqrt(np.mean(mono * mono)))
             if rms < self._fallback_rms_threshold:
                 self._silent_blocks += 1
@@ -881,6 +911,7 @@ class AudioCapture:
                 self._silent_blocks = 0
             with self._lock:
                 self._buf.append(mono.copy())
+                self._side_buf.append(None if side is None else side.copy())
                 self._block_seq += 1
             self._new_block_event.set()  # wake analysis thread
             if is_first_block:
