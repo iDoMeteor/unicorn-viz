@@ -749,6 +749,42 @@ def test_main_skips_essentia_gate_without_api_key(tmp_path: Path, monkeypatch) -
     assert len(moved) == 1
 
 
+# ---- main() logs-dir sweep excludes cross-session-shared paths (2026-09-01) ---
+# Caught live: --logs-dir defaults to the whole repo logs/ tree, and the
+# session-log sweep used to move (not copy) every file under it
+# unconditionally -- including logs/replay/EXPERIMENT-2026-08-31.md, a
+# concurrent session's gitignored working ledger with nothing to do with
+# this packaging run, deleting it from its real location.
+
+def test_main_logs_sweep_excludes_replay_subdir(tmp_path: Path, monkeypatch) -> None:
+    corpus_dir = tmp_path / 'corpus'
+    logs_dir = tmp_path / 'logs'
+    sets_root = tmp_path / 'sets'
+    training_root = tmp_path / 'training'
+    _write_corpus_pair(corpus_dir, with_track_path=False)
+
+    (logs_dir / 'replay').mkdir(parents=True)
+    ledger = logs_dir / 'replay' / 'EXPERIMENT-2026-08-31.md'
+    ledger.write_text('shared ledger content', encoding='utf-8')
+    own_log = logs_dir / 'unicornviz_20260819_100000.log'
+    own_log.write_text('session log content', encoding='utf-8')
+
+    monkeypatch.setattr('sys.argv', [
+        'package_training_set.py', '--no-prompt', '--playlist-name', 'p', '--skip-llm-scoring',
+        '--corpus-dir', str(corpus_dir), '--logs-dir', str(logs_dir),
+        '--sets-root', str(sets_root), '--training-root', str(training_root),
+    ])
+
+    rc = _MOD.main()
+
+    assert rc == 0
+    assert ledger.exists()                                  # untouched, not moved
+    assert ledger.read_text(encoding='utf-8') == 'shared ledger content'
+    assert not own_log.exists()                              # this session's own log still moved
+    moved_own_log = list(sets_root.glob('p/*/unicornviz_20260819_100000.log'))
+    assert len(moved_own_log) == 1
+
+
 # ---- _build_recommender_payload ---------------------------------------------
 
 
