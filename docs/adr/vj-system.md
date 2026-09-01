@@ -7767,3 +7767,29 @@ counter `_matcher_range_margin_bind_count` per the new-tunables rule;
 the planned matcher-side probes (e.g. 0.15 matcher / 0.10 prefilter, the
 recover-toughies-keep-curveballs configuration) ship separately with
 their own evidence.
+
+## Decider Switch-Backoff (2026-09-01, recommender rc.25)
+
+The applied-profile decider gains memory of switch frequency: each
+apply escalates a backoff level (cap `profile_auto_reco_switch_backoff_
+max` = 4) that multiplies BOTH decider cooldowns (normal 20 s and
+fast-override 6 s) by `profile_auto_reco_switch_backoff_mult` = 2.0
+per level, decaying one level per quiet `..._decay_s` = 90 s.
+
+Why: the Love-Spirit-class 2:3 flicker (82-91% wrong-profile row
+share) survived margins, confirmation streaks, cooldowns and the trust
+floor because the decider was memoryless past its base cooldown —
+alternating evidence simply re-earned the same checks; the 6 s
+fast-override path allowed a dozen flips per track. The 2026-08-31/09-01
+experiments proved the evidence channels can't fix this (boost-cap
+changes never moved flicker; the matcher-margin probe BROKE Love
+Spirit's correct lock while rescuing Blackout Riddim — evidence dials
+help exactly where evidence is right). Stability had to come from the
+decider layer.
+
+Deliberately stability-only: the backoff cannot know which side of an
+alternation is right (Stage-1 recalibration's job). mult = 1.0 is the
+exact off-switch, used for A/B probes via session_replay --override.
+Engagement per the new-tunables rule: `decider_backoff_gated_count` +
+`decider_backoff_level` in corpus rows and apply-event marks. Validation
+A/B (mult 1.0 vs 2.0, flicker lists) queued with the training team.

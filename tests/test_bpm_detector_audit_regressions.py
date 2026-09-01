@@ -207,6 +207,15 @@ def _make_recommender_stub(**overrides) -> SimpleNamespace:
         _profile_auto_reco_last_apply_t=-1e9,
         _audio_profile_candidate_key=None,
         _audio_profile_candidate_since_t=-1e9,
+        # Switch-backoff (rc.25): mult=1.0 is the designed off-switch, so
+        # these cooldown-semantics tests keep their original meaning; the
+        # backoff's own behavior is covered by test_decider_backoff.py.
+        _profile_auto_reco_switch_backoff_mult=1.0,
+        _profile_auto_reco_switch_backoff_decay_s=90.0,
+        _profile_auto_reco_switch_backoff_max=4,
+        _decider_backoff_level=0,
+        _decider_backoff_gated_count=0,
+        _mood_prime_expected_key='',
     )
     for k, v in overrides.items():
         setattr(stub, k, v)
