@@ -43,6 +43,11 @@ fps = 30
 flash_messages = false
 hud_auto_hide = false
 #hud_timeout_s = 60.0
+# Detector-internals HUD readouts (2026-09-01): default OFF for end users --
+# the show reads smoother without the internals narrated. Owner keeps them on.
+hud_show_detector_bpm = true    # "BPM: nnn (conf)" in the Auto VJ status bar
+hud_show_profile_score = true   # score number next to BPM PROF in the debug HUD
+hud_show_reco_profile = true    # REC PROF line in the debug HUD
 
 [hotkeys]
 # F6 randomizes effect speed within this range (when effect exposes `speed`)

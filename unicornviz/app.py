@@ -4477,6 +4477,12 @@ void main() {
             modal_gate=self.control_room_flash_gate_active,
             tooltips_enabled=bool(self.cfg.get('tooltips', 'enabled', default=True)),
             tooltip_delay_s=float(self.cfg.get('tooltips', 'delay_s', default=0.55)),
+            hud_show_detector_bpm=bool(
+                self.cfg.get('overlays', 'hud_show_detector_bpm', default=False)),
+            hud_show_profile_score=bool(
+                self.cfg.get('overlays', 'hud_show_profile_score', default=False)),
+            hud_show_reco_profile=bool(
+                self.cfg.get('overlays', 'hud_show_reco_profile', default=False)),
         )
         self._overlays = overlays
         if mixer_profile:

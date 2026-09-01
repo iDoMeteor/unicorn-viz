@@ -97,6 +97,11 @@ def _make_stub(extra: dict[str, str] | None = None) -> Overlays:
     # Waveform attributes (normally set in __init__).
     ov._live_waveform = None
     ov._now_playing_beat_decay = 0.0
+    # Detector-internals HUD toggles (normally set in __init__); True here
+    # to preserve the full historical render these tests assert against.
+    ov._hud_show_detector_bpm = True
+    ov._hud_show_profile_score = True
+    ov._hud_show_reco_profile = True
     ov._draw_text = MagicMock()  # type: ignore[method-assign]
     ov._draw_rect = MagicMock()  # type: ignore[method-assign]
     return ov

@@ -573,6 +573,9 @@ class Overlays:
         modal_gate: Callable[[], bool] | None = None,
         tooltips_enabled: bool = True,
         tooltip_delay_s: float = 0.55,
+        hud_show_detector_bpm: bool = False,
+        hud_show_profile_score: bool = False,
+        hud_show_reco_profile: bool = False,
     ) -> None:
         self._ctx = ctx
         self._width = width
@@ -586,6 +589,14 @@ class Overlays:
         self._tooltip_surface = ''
         self._flash_enabled = flash_messages
         self._show_recording_indicator = show_recording_indicator
+        # 2026-09-01 owner decision: detector internals default to hidden for
+        # end users (the detected BPM readout in the Auto VJ status bar, the
+        # active profile's recommender score, and the REC PROF line) — the
+        # show is smoother when the wobble isn't narrated. Operators opt back
+        # in via [overlays] hud_show_* keys in config.toml.
+        self._hud_show_detector_bpm = bool(hud_show_detector_bpm)
+        self._hud_show_profile_score = bool(hud_show_profile_score)
+        self._hud_show_reco_profile = bool(hud_show_reco_profile)
         self._hud_auto_hide = bool(hud_auto_hide)
         self._hud_timeout_s = max(0.0, float(hud_timeout_s))
         self._flash_router = flash_router
@@ -1419,8 +1430,11 @@ void main() {
             f"RES         {self._hud_state.get('resolution', '-')}",
             f"PLAYLIST    {self._hud_state.get('playlist', '-')}",
             f"AUDIO SRC   {self._hud_state.get('audio_source', '-')}",
-            f"BPM PROF    {self._hud_state.get('audio_profile', 'house')} {self._hud_state.get('audio_profile_score', '')}".rstrip(),
-            f"REC PROF    {self._hud_state.get('audio_profile_reco', '-')}",
+            f"BPM PROF    {self._hud_state.get('audio_profile', 'house')}"
+            + (f" {self._hud_state.get('audio_profile_score', '')}".rstrip()
+               if self._hud_show_profile_score else ''),
+            *([f"REC PROF    {self._hud_state.get('audio_profile_reco', '-')}"]
+              if self._hud_show_reco_profile else []),
             '',
             '[ TWEAKABLES ]',
             *tweak_lines,
@@ -1839,7 +1853,10 @@ void main() {
         action_in = str(self._hud_state.get('auto_vj_action_in', '--'))
 
         line1 = f'{auto_vj_label} | MOOD: {mood:<8} | SCENE: {scene:<10} | GENRE: {genre:<18}'
-        line2 = f'BPM: {bpm:>3} ({bpm_conf}) | ACTION IN: {action_in:<4}'
+        if self._hud_show_detector_bpm:
+            line2 = f'BPM: {bpm:>3} ({bpm_conf}) | ACTION IN: {action_in:<4}'
+        else:
+            line2 = f'ACTION IN: {action_in:<4}'
         char_w = float(self._glyph_w) * self._font_scale_norm * 1.9
         line1_w = len(line1) * char_w
         line2_w = len(line2) * char_w

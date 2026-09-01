@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.100**
+**Version 1.0.0-beta.101**
 
 ## Contact Me!
 
@@ -556,6 +556,14 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 **Happy demoscene visualizing!** 🦄✨
 
 ## Changelog
+
+- **1.0.0-beta.101** — Detector-internals HUD toggles: the Auto VJ
+  status bar's "BPM: nnn (conf)" readout, the active profile's
+  recommender score, and the REC PROF line now default to hidden for
+  end users ([overlays] hud_show_detector_bpm / hud_show_profile_score
+  / hud_show_reco_profile opt back in; the owner's config enables all
+  three). Owner decision 2026-09-01: the show reads smoother without
+  the internals narrated.
 
 - **1.0.0-beta.100** — dubstep `zcr_mu` `0.095 → 0.093`
   (unicornviz/audio/profiles.py): owner-approved LLM tuning
