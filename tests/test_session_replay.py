@@ -49,10 +49,34 @@ def two_track_session(tmp_path_factory) -> dict:
 
     out_dir = tmp / 'out'
     summary = session_replay.run_session(
-        files, max_duration_s=15.0, gap_s=1.0, out_dir=out_dir, seed=11,
+        files, max_duration_s=15.0, gap_s=1.0,
+        # This fixture is about audio-time stamping / the hint bus / the
+        # startup-guard clock, not about the crossfade feature itself
+        # (covered separately below) -- pin the pre-2026-09-01 gap-based
+        # behavior so its numeric expectations (32 s total, etc.) hold.
+        crossfade_s=0.0,
+        out_dir=out_dir, seed=11,
         # Short grace so this 32 s session can prove the startup guard
         # actually EXPIRES on the audio clock (the 2026-08-18 CRUISE-lock
         # bug left it stamped on the wall clock, never expiring).
+        extra_cfg={'startup_grace_s': 5.0})
+    return {'summary': summary, 'out_dir': out_dir, 'files': files}
+
+
+@pytest.fixture(scope='module')
+def two_track_crossfade_session(tmp_path_factory) -> dict:
+    """Same 2×15 s clips, crossfade left at its default (on, 10 s)."""
+    tmp = tmp_path_factory.mktemp('session_replay_xfade')
+    files = []
+    for bpm, stem in ((124.0, 'clip_a'), (128.0, 'clip_b')):
+        pcm, _truth = _GEN.generate_clip(bpm, duration_s=15.0, seed=3)
+        path = tmp / f'{stem}.wav'
+        wavfile.write(str(path), _GEN.SR, (pcm * 32767).astype(np.int16))
+        files.append(path)
+
+    out_dir = tmp / 'out'
+    summary = session_replay.run_session(
+        files, max_duration_s=15.0, gap_s=1.0, out_dir=out_dir, seed=11,
         extra_cfg={'startup_grace_s': 5.0})
     return {'summary': summary, 'out_dir': out_dir, 'files': files}
 
@@ -97,6 +121,60 @@ def test_track_path_hint_bus_reaches_the_corpus(two_track_session) -> None:
             seq_files[0].read_text(encoding='utf-8').splitlines()]
     seen = {Path(r['track_path']).name for r in rows if r.get('track_path')}
     assert seen == {'clip_a.wav', 'clip_b.wav'}
+
+
+def test_equal_power_fade_curve() -> None:
+    fade_out, fade_in = session_replay._equal_power_fade(100)
+    assert fade_out[0] == pytest.approx(1.0)
+    assert fade_in[0] == pytest.approx(0.0)
+    assert fade_out[-1] == pytest.approx(0.0, abs=1e-3)
+    assert fade_in[-1] == pytest.approx(1.0, abs=1e-3)
+    # Equal power: combined power stays ~constant across the blend,
+    # unlike a linear crossfade which dips at the midpoint.
+    power = fade_out ** 2 + fade_in ** 2
+    assert power == pytest.approx(np.ones_like(power), abs=1e-6)
+
+
+def test_crossfade_is_on_by_default_and_shortens_the_timeline(
+        two_track_session, two_track_crossfade_session) -> None:
+    """2026-09-01: crossfade defaults on (10 s) per owner request -- a
+    blended session's audio-clock timeline is shorter than the old
+    gap-based one by roughly the overlap length, since the two tracks'
+    audio now overlaps instead of playing back to back plus a gap."""
+    plain = two_track_session['summary']
+    xfade = two_track_crossfade_session['summary']
+    assert plain['crossfade_s'] == 0.0
+    assert xfade['crossfade_s'] == session_replay._CROSSFADE_S
+
+    def _last_capture_time(out_dir: Path) -> float:
+        seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+        rows = [json.loads(line) for line in
+                seq_files[0].read_text(encoding='utf-8').splitlines()]
+        return max(r['capture_time'] for r in rows if 'capture_time' in r)
+
+    plain_end = _last_capture_time(two_track_session['out_dir'])
+    xfade_end = _last_capture_time(two_track_crossfade_session['out_dir'])
+    # 32 s (2x15s + 2x1s gap) vs. ~20 s (2x15s - 10s overlap, no gap).
+    assert xfade_end < plain_end - 5.0
+
+
+def test_crossfade_switches_now_playing_at_blend_start(
+        two_track_crossfade_session) -> None:
+    """Both tracks must still reach the corpus (the hint bus survives a
+    blended handoff), and clip_b's rows must start well before clip_a's
+    15 s nominal length has fully finished -- proof the switch happens
+    at the start of the blend, not after clip_a's tail has faded out."""
+    out_dir = two_track_crossfade_session['out_dir']
+    seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+    rows = [json.loads(line) for line in
+            seq_files[0].read_text(encoding='utf-8').splitlines()]
+    by_track: dict[str, list[float]] = {}
+    for r in rows:
+        tp = r.get('track_path')
+        if tp and 'capture_time' in r:
+            by_track.setdefault(Path(tp).name, []).append(r['capture_time'])
+    assert set(by_track) == {'clip_a.wav', 'clip_b.wav'}
+    assert min(by_track['clip_b.wav']) < 15.0
 
 
 def test_resolve_media_playlist(tmp_path: Path) -> None:
