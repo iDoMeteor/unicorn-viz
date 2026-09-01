@@ -7650,3 +7650,51 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
   signal exists yet to validate against (see
   `docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md`,
   proposed but not yet implemented).
+
+## 2026-08-31 Accelerated Tuning Experiment — Consensus Landing (2026-09-01)
+
+Owner-directed multi-hour experiment: strategist session + training
+session, ~44 accelerated replay runs (20-25x) across 4 playlists with
+full LLM+Essentia scoring, one-variable-at-a-time with fixed seeds
+{3, 11}, hard-metric veto, per-track corpus diffs on every anomaly.
+Full evidence trail in the (deliberately gitignored) experiment ledger
+`logs/replay/EXPERIMENT-2026-08-31.md`; landed in auto-vj-01 `rc.102`
+(detector `rc.36`, recommender `rc.23`, weights doc v68).
+
+**Changed:**
+- `_V2_DWELL_BARS` 16 → 32 (detector rc.36). Deciding curveballs pair:
+  churn −32% (s11, largest churn win of the experiment), Acc1 +8 (s3),
+  coverage +3.1-3.5pt; house churn −9%/inert. The earlier in-experiment
+  rejection of 32 was proven margin-confounded (bit-identical toughies
+  corpora across dwell/sigma/pure-margin runs).
+- `profile_reco_bpm_prefilter_margin` default 0.15 → 0.10 (recommender
+  rc.23). 4/4 clean sweep house+curveballs (Acc1 +8/+7, Acc2 +7/+8,
+  genre-acc +5/+5). Documented tradeoff: toughies churn +22/+32%,
+  coverage ~−5pt — the shared floor math evicts edge-rider genres
+  (trance floor at 0.10 = 120.6 sits exactly on real house locks).
+  Accepted per the owner's ruling below; the margin SPLIT (prefilter vs
+  matcher) is the planned recovery.
+
+**Validated, no change:** `_BPM_LOCK_RELEASE_CONFIDENCE` 0.2 (0.225 and
+0.25 rejected monotonically; house churn +39/+45% at 0.225);
+`_V2_GENRE_EVIDENCE_MAX_BOOST` 0.1 (bracketed 0.0/0.2/0.5/1.0 — the
+2026-08-17 owner park is empirically optimal pre-recalibration; dose
+sweep established the evidence-amplifier law: gain amplifies evidence
+QUALITY — rescues hidden fold errors when right, house s3 Acc1 +10 at
+1.0; captures/harasses when wrong); `genre_matcher_endorse_sigma` 0.06
+(0.04 behaviorally inert); margin 0.08 rejected (curveballs s11).
+
+**Owner rulings recorded:** (1) toughies is diagnostic-only, NOT a veto
+set — optimize for average-track material ("we can totally allow
+anomalies in the toughest tracks"); (2) dwell 8 was "most likely way
+too low" — confirmed; (3) config overrides for dwell/ACF-interpolation
+removed permanently in the same landing.
+
+**Process lesson (cost us a double verdict-reversal):** isolate every
+candidate on EVERY veto-set playlist before accepting — Iteration 2's
+quartet omitted toughies and four subsequent iterations inherited the
+confound until a confirmation pair exposed it via trajectory-hash
+bit-identity.
+
+Follow-up roadmap:
+`docs/planning/recommender-director-excellence-plan-2026-08-31.md`.
