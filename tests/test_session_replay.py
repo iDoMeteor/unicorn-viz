@@ -94,6 +94,11 @@ def test_session_summary_shape(two_track_session) -> None:
     # a WARMUP pill after 32 s of audio means the guard deadline is on
     # the wall-clock timebase again (the CRUISE-lock bug).
     assert 'WARMUP' not in summary['final_status']
+    # Read directly off the live controller (see run_session()'s comment
+    # by this key) since auto_vj.py doesn't yet write this counter into
+    # the corpus row dict the way its sibling engagement counters do.
+    assert isinstance(summary['matcher_range_margin_bind_count'], int)
+    assert summary['matcher_range_margin_bind_count'] >= 0
 
 
 def test_sequence_corpus_rows_are_audio_time_stamped(two_track_session) -> None:
@@ -353,6 +358,70 @@ def test_main_llm_scoring_flag_passed_through(tmp_path: Path, monkeypatch) -> No
     ])
     assert rc == 0
     assert called['llm_scoring'] is True
+
+
+def test_parse_override_types() -> None:
+    assert session_replay._parse_override('genre_matcher_range_margin=0.15') == (
+        'genre_matcher_range_margin', 0.15)
+    assert session_replay._parse_override('drop_trigger_fastlane=1') == (
+        'drop_trigger_fastlane', 1)
+    assert session_replay._parse_override('log_decisions=true') == (
+        'log_decisions', True)
+    assert session_replay._parse_override('log_decisions=False') == (
+        'log_decisions', False)
+    assert session_replay._parse_override('audio_profile=house') == (
+        'audio_profile', 'house')
+    with pytest.raises(SystemExit):
+        session_replay._parse_override('no-equals-sign')
+
+
+def test_main_override_flag_reaches_run_session(tmp_path: Path, monkeypatch) -> None:
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=2.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    captured = {}
+    real_run_session = session_replay.run_session
+
+    def _spy_run_session(*a, **kw):
+        captured['extra_cfg'] = kw.get('extra_cfg')
+        return real_run_session(*a, **kw)
+
+    monkeypatch.setattr(session_replay, 'run_session', _spy_run_session)
+    monkeypatch.setattr(session_replay, '_run_packager', lambda *a, **k: 0)
+
+    rc = session_replay.main([
+        '--tracks', str(audio), '--out-dir', str(tmp_path / 'out'),
+        '--max-duration', '2',
+        '--override', 'genre_matcher_range_margin=0.15',
+        '--override', 'log_decisions=true',
+    ])
+    assert rc == 0
+    assert captured['extra_cfg'] == {
+        'genre_matcher_range_margin': 0.15, 'log_decisions': True}
+
+
+def test_main_no_override_passes_none(tmp_path: Path, monkeypatch) -> None:
+    audio = tmp_path / 'clip.wav'
+    pcm, _ = _GEN.generate_clip(124.0, duration_s=2.0, seed=1)
+    wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    captured = {}
+    real_run_session = session_replay.run_session
+
+    def _spy_run_session(*a, **kw):
+        captured['extra_cfg'] = kw.get('extra_cfg')
+        return real_run_session(*a, **kw)
+
+    monkeypatch.setattr(session_replay, 'run_session', _spy_run_session)
+    monkeypatch.setattr(session_replay, '_run_packager', lambda *a, **k: 0)
+
+    rc = session_replay.main([
+        '--tracks', str(audio), '--out-dir', str(tmp_path / 'out'),
+        '--max-duration', '2',
+    ])
+    assert rc == 0
+    assert captured['extra_cfg'] is None
 
 
 def test_director_activity_summarized(two_track_session) -> None:
