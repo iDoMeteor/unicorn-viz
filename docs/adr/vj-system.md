@@ -7746,3 +7746,24 @@ bit-identity.
 
 Follow-up roadmap:
 `docs/planning/recommender-director-excellence-plan-2026-08-31.md`.
+
+## The Prefilter/Matcher Margin Split (2026-09-01)
+
+`_matcher_range_fit` no longer shares `profile_reco_bpm_prefilter_margin`
+with the HIGH-regime prefilter; the matcher LOW half reads its own
+`genre_matcher_range_margin` (auto-vj rc.103, recommender rc.24, weights
+doc v69). Default 0.10 equals the prefilter's, so the split landed
+behavior-preserving; probes may now move the matcher side independently.
+
+Why: the 2026-08-31 accelerated tuning experiment's #1 structural
+recommendation. The shared knob's two-regime coupling was measured
+directly: margin 0.15 -> 0.10 bought curveballs Acc1 +8/+7 through the
+prefilter while costing toughies churn +22/+32% and coverage ~-5pt
+through the matcher floor math (a genre floor of floor_bpm x (1 -
+margin) at 0.10 puts the trance floor at 120.6 -- exactly on real house
+locks -- evicting the correct profile for edge-riders). One constant
+could not express "tighter eligibility, looser endorsement." Engagement
+counter `_matcher_range_margin_bind_count` per the new-tunables rule;
+the planned matcher-side probes (e.g. 0.15 matcher / 0.10 prefilter, the
+recover-toughies-keep-curveballs configuration) ship separately with
+their own evidence.
