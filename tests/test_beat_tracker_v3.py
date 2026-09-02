@@ -191,6 +191,45 @@ def test_prior_mode_and_gain_cfg_plumbing() -> None:
     assert np.allclose(b._v3_posterior, b._v3_posterior[0])  # uniform start
 
 
+def test_apply_mode_defaults_to_tick_and_comb_sources_stay_per_cycle() -> None:
+    """Phase 3 (2026-09-03): the template-family likelihood is applied on
+    every update() tick by design (`v3_obs_apply='tick'`, the behaviour
+    bake 3 validated; once-per-cycle measured 3-8x worse lock churn in
+    bake 4). The comb/score sources always apply once per cycle."""
+    t = BeatTrackerV3({})
+    assert t._v3_obs_apply == 'tick'
+    grid = np.asarray(t._acf_bpms, dtype=np.float32)
+    T = t._v3_build_templates(grid.astype(np.float64))
+    comb = (T[int(np.argmin(np.abs(t._v3_bpms - 128.0)))] + 0.01).astype(np.float32)
+    t._last_acf_observation = (grid, comb, 3)
+    assert t._v3_observation_likelihood() is not None
+    assert t._v3_observation_likelihood() is not None   # tick mode: re-applied on the same cycle
+    c = BeatTrackerV3({'v3_obs_source': 'comb'})          # comb: per cycle regardless of mode
+    c._last_acf_observation = (grid, comb, 3)
+    assert c._v3_observation_likelihood() is not None
+    assert c._v3_observation_likelihood() is None
+
+
+def test_cycle_mode_applies_once_per_acf_cycle_on_every_source() -> None:
+    """`v3_obs_apply='cycle'`: feeding the same cycle twice must yield a
+    likelihood once and None the second time, for every observation
+    source, and the seen-cycle marker must advance."""
+    for source in ('comb', 'template', 'score', 'hybrid'):
+        t = BeatTrackerV3({'v3_obs_source': source, 'v3_tmpl_subbeat': 0.0, 'v3_obs_apply': 'cycle'})
+        grid = np.asarray(t._acf_bpms, dtype=np.float32)
+        T = t._v3_build_templates(grid.astype(np.float64))
+        i = int(np.argmin(np.abs(t._v3_bpms - 128.0)))
+        comb = (T[i] + 0.01).astype(np.float32)
+        t._last_acf_score = comb
+        t._last_acf_observation = (grid, comb, 7)
+        assert t._v3_observation_likelihood() is not None, source
+        assert t._v3_seen_cycle == 7, source
+        assert t._v3_observation_likelihood() is None, source   # same cycle: no re-application
+        t._last_acf_observation = (grid, comb, 8)
+        assert t._v3_observation_likelihood() is not None, source
+        assert t._v3_seen_cycle == 8, source
+
+
 def test_v2_observation_retention_is_read_only() -> None:
     """The only v2 touch is retaining the observation; bake 2's leverage
     check proved v2 corpora bit-identical (49,977 rows). Pin the shape."""

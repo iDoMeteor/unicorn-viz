@@ -7927,3 +7927,61 @@ phase-1 alias mode this phase addresses.
 (length, first, last BPM) rather than assumed to be a prefix of
 `self._acf_bpms` — true in production by construction, but an observation on
 another grid silently mis-matched (found writing the phase-2 tests).
+
+## v3 Proper, Phase 3 — the Apply Mode Made Explicit (2026-09-03, detector rc.39)
+
+**What phase 3 found.** A probe showed that in rc.108 the template
+observation branch sat above the once-per-ACF-cycle check in
+`_v3_observation_likelihood`, so on the template path the likelihood *and*
+the HMM transition step ran on every 60 Hz `update()` tick with the latest
+ACF observation held — about eight applications per 7.4 Hz cycle. The
+phase-1 comb path deduped correctly (bakes 1–2 unaffected). Bake 3's numbers
+stand as measured; its mechanism was not the per-cycle sizing law but
+held-observation filtering at frame rate: per cycle, evidence ~8× sharper,
+prior bias ~8× stronger, drift ×√8, escape mass ×8.
+
+**What the once-per-cycle alternative does (bake 4).** With the observation
+applied once per cycle and the floor re-tuned (0.5 / 0.3), exact accuracy
+holds (floor 0.5: ≥ v2 on 6/7 lists, dnb 50.0%, trap +23.9, ambient −5.5)
+but lock churn rises on every list (house 1.67/min vs v2 0.35 and bake-3's
+0.37; 3–8× bake 3 throughout). Offline tick-jitter halved while panel
+lock-flips tripled: lane stability (what the escape-time law governs) and
+confidence stability (what the Schmidt trigger consumes) are different
+quantities, and a once-per-cycle tempered observation leaves the posterior
+broad enough that the ±4% band mass hovers around the 0.45/0.2 thresholds.
+
+**Reproduction attempts (rounds 3–4).** Explicit power 8 / prior gain 8
+(10/17 on the 22 hardest tracks vs 13/19 for the tick path), the
+single-factor cells (gain 8 alone collapses everything to the prior's
+120.4; power 8 alone folds up: Swan Dive 201, Chris Brown 210), and the full
+×8 including drift and escape mass (11/17, tail 12 vs 14) all fell short:
+interleaving transition and observation at a varying tick count is not a
+constant-factor re-sizing.
+
+**Decision.** Keep the validated behaviour and make it explicit:
+`_V3_OBS_APPLY = 'tick'` (default; no behaviour change from rc.108, so bake
+3 remains its validation — verified by an exact offline match of the
+explicit mode against the rc.108 run on all 22 sweep tracks) with `'cycle'`
+kept for future work. The comb/score sources always apply once per cycle.
+Lane hysteresis on the reported tempo (margin 0.20/0.35: locked in wrong
+early lanes, no churn reduction) and a soft comb-magnitude factor on the
+template match (undid the fast-lane rescues) were tried and removed.
+`_v3_fold_suspect_mass` (posterior mass on the fold-related lanes of the
+MAP state) stays as telemetry. Regression tests pin the tick default, the
+per-cycle comb path, and once-per-cycle behaviour in `'cycle'` mode on every
+source.
+
+**Residue after the v3 program (post-v3 work, not a dial).** Slow ambient
+(74–90 BPM) folds up an octave under the template — a track with a steady
+half-beat pulse matches 2T's template as well as T's own, and the
+perceptual prior around 120 is symmetric in log space, so 82 vs 164 is a
+coin flip for it; swung hip-hop edits land on the 4/3 lane (dotted-eighth
+structure). Both need a musical decider the HMM lacks and v2 has as policy
+(tactus descent, onset-density guard). The candidate is an onset-density
+observation channel: v2's density guard expressed as evidence with a
+likelihood, not as a gate.
+
+**Real-audio check for the whole program.** The owner's first live v3
+session (favorites, 42 min, phase-1 defaults, v2 shadow —
+`assets/training/sets/favorites/004`): v3 10/11 exact vs v2-shadow 9/11,
+lock coverage 99.7%, LLM detector score 4.4/5.
