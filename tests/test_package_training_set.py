@@ -990,6 +990,52 @@ def test_run_llm_scoring_overrides_a_hallucinated_scored_at(tmp_path: Path) -> N
     assert det_data['scored_at'] == result['scored_at']
 
 
+def test_run_llm_scoring_call_failure_writes_marker_and_loud_banner(
+        tmp_path: Path, caplog, capsys) -> None:
+    """2026-09-02: a real OpenAI quota exhaustion failed 11 of 14 buckets'
+    LLM step in one batch with only a WARNING-level log line to show for
+    it -- easy to miss in a long unattended run's scrollback, and nothing
+    on disk afterward revealed which buckets were affected. Two checks:
+    a marker file survives in the bucket for post-hoc inspection, and the
+    console output is loud enough (not just logging.warning) to catch live."""
+    rows = [_make_seq_row()]
+    quota_exc = Exception("Error code: 429 - {'error': {'code': 'insufficient_quota'}}")
+    with patch.dict('os.environ', {'OPENAI_API_KEY': 'sk-fake'}, clear=False), \
+         patch.object(_MOD, '_call_llm', side_effect=quota_exc), \
+         caplog.at_level('WARNING'):
+        result = _run_llm_scoring(tmp_path, rows, 'set-a', 'a')
+
+    assert result is None
+    assert not (tmp_path / 'session_score.json').exists()
+
+    marker = tmp_path / 'LLM_SCORING_FAILED.txt'
+    assert marker.exists()
+    marker_text = marker.read_text(encoding='utf-8')
+    assert 'insufficient_quota' in marker_text
+    assert 'openai' in marker_text
+
+    out = capsys.readouterr().out
+    assert 'LLM SCORING FAILED' in out
+    assert 'BILLING/QUOTA ERROR' in out
+    assert 'set-a/a' in out
+
+
+def test_run_llm_scoring_non_quota_failure_marker_omits_billing_callout(tmp_path: Path) -> None:
+    """A generic failure (e.g. a network timeout) still gets the marker and
+    banner, but must not be mislabeled as a billing issue -- that would send
+    someone to check credits for a problem credits can't fix."""
+    rows = [_make_seq_row()]
+    with patch.dict('os.environ', {'OPENAI_API_KEY': 'sk-fake'}, clear=False), \
+         patch.object(_MOD, '_call_llm', side_effect=TimeoutError('connection timed out')):
+        result = _run_llm_scoring(tmp_path, rows, 'set-a', 'a')
+
+    assert result is None
+    marker = (tmp_path / 'LLM_SCORING_FAILED.txt').read_text(encoding='utf-8')
+    assert 'connection timed out' in marker
+    assert 'quota' not in marker.lower()
+    assert 'insufficient' not in marker.lower()
+
+
 def test_run_llm_scoring_skips_gracefully_with_no_api_key(tmp_path: Path, caplog) -> None:
     rows = [_make_seq_row()]
     with patch.dict('os.environ', {'OPENAI_API_KEY': '', 'ANTHROPIC_API_KEY': ''}, clear=False), \
