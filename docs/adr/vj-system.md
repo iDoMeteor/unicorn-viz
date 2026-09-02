@@ -7793,3 +7793,72 @@ exact off-switch, used for A/B probes via session_replay --override.
 Engagement per the new-tunables rule: `decider_backoff_gated_count` +
 `decider_backoff_level` in corpus rows and apply-event marks. Validation
 A/B (mult 1.0 vs 2.0, flicker lists) queued with the training team.
+
+## v3 Proper, Phase 1 — the HMM Engine Lands (2026-09-02, detector rc.37)
+
+**Decision.** `BeatTrackerV3(BeatTracker)` ships in `beat_grid.py`
+(`ENGINE_VERSION '3.0.0'`) and `beat_tracker_engine = "v3"` now loads it —
+the 2026-08-14 alias-to-v2 is retired. v2 is the protected baseline and runs
+untouched as v3's observation extractor: `super().update()` computes the raw
+comb-filter score, retained read-only as `_last_acf_observation` (and the
+post-prior `_last_acf_score`); v3 forward-filters a posterior over a
+log-spaced tempo lattice (55–210 BPM, step 0.01 log2, 194 states) and
+overrides `bpm`/`confidence` with the posterior's MAP state and the mass
+within ±4% of it. Bake 2's leverage check proved the v2 touch behavior-
+identical: 7/7 lists, 49,977 rows bit-identical to the pre-change v2 cells.
+
+**Transition model (the "one matrix").** Gaussian drift in log-tempo
+(`_V3_DRIFT_SIGMA_LOG2` 0.006) + SYMMETRIC fold-jump mass at 2:1, 3:2, 4:3
+up AND down (`_V3_FOLD_PROB_OCTAVE` 1e-6, `_V3_FOLD_PROB_TRIPLET` 5e-7) +
+uniform novelty leak (`_V3_NOVELTY_LEAK` 1e-8). Observation: comb score
+resampled onto the lattice, floored at `_V3_OBS_FLOOR` 0.7, raised to
+`_V3_OBS_POWER` 1.0, times a bounded profile-prior bias (never a veto).
+`_V3_FOLD_OBS_WEIGHT` 0.0 (an additive fold-aware boost tried in bake 1 —
+it amplified the 4/3 alias; off). Engagement counters
+`v3_cycle_applied_count` / `v3_fold_jump_count` in corpus rows and the
+packager payload.
+
+**Why these values — the cycle-rate law.** Bake 1 shipped floor 0.02 /
+power 2 / fold mass 2e-3 and failed the panel (toughies −18, curveballs −15,
+churn 5–10×): the posterior hopped lanes every few seconds at confidence
+~1.0. Probe: the ACF observation cycles at ~7.4 Hz (664 cycles / 90 s), not
+~1 Hz, so every constant sized "per second" was ~7× too loose. A lane
+survives N cycles of contrary evidence iff L**N · m < 1 (L = per-cycle
+likelihood ratio ≈ 1/floor at power 1; m = fold escape mass). v2's dwell
+(32 cycles ≈ 4.3 s) needs L < ~1.2 at m = 2e-3, or m ≈ 1e-6 at floor 0.7.
+Four offline sweep rounds (17 configs, 19 panel-mover tracks) tracked this
+law exactly; the diffusion hypothesis (shrink drift) was falsified in round
+3; feeding v2's post-prior score instead of the raw comb (round 4) changed
+nothing. Defaults = offline config "I" (steadiest).
+
+**Bake 2 (full 7-list panel, v3 vs bit-stable v2 cells).** With these
+defaults v3 matches-or-beats v2 Acc1 on 5/7 lists (house 93.3 = 93.3;
+toughies 72.7 vs 45.5; curveballs 84.6 = 84.6; trap 23.8 vs 19.0; dnb 6.2 =
+6.2) at LOWER churn on 5/7 (house 0.018 vs 0.353/min, toughies 0.116 vs
+0.536, curveballs 0.13 vs 0.76) and coverage 97–99.8%. It loses ambient
+(22.2 vs 33.3) and trance (75.0 vs 83.3). The looser config "G" (floor 0.5,
+m 1e-5) proves the fast-lane thesis — dnb 25.0 vs 6.2, three tracks read at
+173/174/148 where v2 folds to ~118 — at 2–8× churn.
+
+**What phase 1 established, and what it did not.** The transition half of
+"one matrix replaces seven gates" holds: the integration gates (persistence,
+dwell, jump-confidence) are replaced and churn is now a derived quantity.
+The disambiguation half does not: the raw comb has harmonic-alias peaks
+(the 4/3 lane = 4th comb harmonic on exactly 3 beats; 5/4; 3-beat) that v2
+suppresses with its tactus-descent + raw-dominance POLICY (not its prior —
+round 4). Every v3 configuration lands ambient's Swan Dive / Tarvona /
+4 Astral at 120–130 and Junes Daughter at ~149 identically. That is the
+observation-model problem and it is phase 2's scope; the roadmap's
+original phase-2 items (lock-state-aware evidence gating, fold-suspect
+alarm, raised boost cap) move to phase 3.
+
+**Owner ruling (2026-09-03):** phase 1 accepted as tested-and-tuned;
+v3 stays the ACTIVE engine in the owner's config (shadow v2, v1 shadow
+retired); "must improve everywhere" judged at the end of the whole
+program, not per phase.
+
+**Process findings logged.** (1) A peer seat's "zero shadow disagreements"
+compared zero rows — replay corpora carry no shadow column; every null claim
+now states its compared-row count. (2) The offline sweep set (panel movers)
+is biased hard; the panel is the judgment. (3) Determinism let bake 2 reuse
+bake 1's v2 cells as controls.

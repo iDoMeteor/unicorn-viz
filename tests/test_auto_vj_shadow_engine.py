@@ -30,26 +30,28 @@ _build_live_training_row = _AUTO_VJ_MODULE._build_live_training_row
 # ---- _load_beat_grid_cls('v3') ------------------------------------------
 
 
-def test_load_beat_grid_cls_v3_is_a_deprecated_alias_for_v2() -> None:
-    """2026-08-14, round three: BeatTrackerV3 retired -- its one override
-    folded directly into BeatTracker once real session data showed zero
-    live behavioral difference. 'v3' now resolves to the same class as
-    'v2', kept only so existing configs don't break. See
-    docs/adr/vj-system.md."""
+def test_load_beat_grid_cls_v3_is_the_hmm_engine() -> None:
+    """2026-09-02 (v3 phase 1): 'v3' is a real engine again -- the HMM
+    tempo engine BeatTrackerV3, no longer the 2026-08-14 alias for v2.
+    The owner's config keeps beat_tracker_engine = "v3" and must load
+    the HMM class, not v2. See docs/adr/vj-system.md."""
     cls = _load_beat_grid_cls('v3')
-    assert cls.__name__ == 'BeatTracker'
-    assert cls.ENGINE_VERSION == '2.0.0'
+    assert cls.__name__ == 'BeatTrackerV3'
+    assert cls.ENGINE_VERSION == '3.0.0'
 
 
-def test_load_beat_grid_cls_v2_and_v3_resolve_to_equivalent_classes() -> None:
-    """Each call re-execs beat_grid.py as a fresh module (see
-    _load_beat_grid_cls's own implementation), so this can't assert
-    identity across two separate calls -- checks the two resolve to the
-    same class by name/version instead."""
+def test_load_beat_grid_cls_v2_stays_the_protected_baseline() -> None:
+    """v2 is the protected baseline the HMM engine is built AGAINST, not
+    into: 'v2' still resolves to BeatTracker at ENGINE_VERSION 2.0.0 and
+    the v3 class is a subclass of it (v2 runs as v3's observation
+    extractor). Each call re-execs beat_grid.py as a fresh module, so the
+    subclass check goes through the v3 class's own MRO by name."""
     v2_cls = _load_beat_grid_cls('v2')
     v3_cls = _load_beat_grid_cls('v3')
-    assert v2_cls.__name__ == v3_cls.__name__ == 'BeatTracker'
-    assert v2_cls.ENGINE_VERSION == v3_cls.ENGINE_VERSION == '2.0.0'
+    assert v2_cls.__name__ == 'BeatTracker'
+    assert v2_cls.ENGINE_VERSION == '2.0.0'
+    assert [b.__name__ for b in v3_cls.__mro__[:2]] == ['BeatTrackerV3', 'BeatTracker']
+    assert v3_cls.ENGINE_VERSION != v2_cls.ENGINE_VERSION
 
 
 # ---- _detector_snapshot() shadow fields ----------------------------------
