@@ -135,9 +135,9 @@ enabled = true
 
 [auto_vj]
 enabled = true
-beat_tracker_engine = "v3"   # genre never writes back to an established tempo (see docs/adr/vj-system.md)
-beat_tracker_shadow_engine = "v2"   # re-enabled 2026-08-14: mid-investigation on a real v3/v2 regression (see docs/adr/vj-system.md); turn off again once phase_tol/blend settle
-beat_tracker_shadow2_engine = "legacy"   # 2026-08-14, round three: v1 running alongside the v2 shadow above for a three-way v1/v2/v3 comparison (see docs/adr/vj-system.md); <0.3ms/frame, cheap to leave on for a few sessions
+beat_tracker_engine = "v3"   # 2026-09-02: v3 proper (HMM engine, phase 1) -- no longer an alias for v2 (see docs/adr/vj-system.md)
+beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shadow so the corpus carries a v3/v2 exact diff every session
+# beat_tracker_shadow2_engine = "legacy"   # v1 shadow retired 2026-09-02 (owner: no more v1 shadow; its ratcheted confidence made its lock metrics meaningless)
 # -- round-three close-out options (2026-08-17, detector rc.33 / auto-vj rc.90) --
 # All default ON (or to the values shown) in code; uncomment to override.
 # bpm_lock_dwell_bars = 32.0           # minimum lock dwell window (bars); 0 disables. 2026-08-31: override removed permanently (owner) -- the CODE default (beat_grid._V2_DWELL_BARS) rules; 2026-09-01: that default is 32 (experiment-accepted, owner consensus)
@@ -238,6 +238,43 @@ camera_energy = 2.0
 # via the current Unicorn Viz GL context, and supports Ctrl+N/P/R preset
 # switching while the effect is active.
 # ---------------------------------------------------------------------------
+# effects-rollercoast pack (drop-ins/effects-rollercoast)
+# Shared dials on every ride: speed, zoom, reactivity, glitter.
+[effects.FirstDrop]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+drop_force = 1.0        # how violent the plunge kicks the camera
+
+[effects.Corkscrew]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+roll_force = 1.0        # how hard the inversions bite
+
+[effects.NightCoaster]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+neon_gain = 1.0         # how hot the park's emitters run
+
+[effects.MineTrain]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+torch_gain = 1.0        # how hot the wall torches burn
+
+[effects.CoasterCam]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+cam_offset = 1.0        # how far the chase camera stands off the track
+
 [effects.ProjectMEffect]
 speed = 1.0
 preset_duration = 20.0

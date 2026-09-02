@@ -67,8 +67,9 @@
   effects-flying                0.2.1               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
+  effects-rollercoast           0.1.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
-  42 components total  ·  6 RC  1 beta  35 alpha  0 unversioned
+  43 components total  ·  6 RC  1 beta  36 alpha  0 unversioned
 
