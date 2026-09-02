@@ -8,14 +8,14 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.188.0             alpha ▲       module
-  media-01                      0.25.0              alpha ▲       module
+  media-01                      0.26.0              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       module
   projectm-01                   0.12.4              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.109        RC            module
+  auto-vj-01                    1.0.0-rc.110        RC            module
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────

@@ -230,6 +230,62 @@ def test_cycle_mode_applies_once_per_acf_cycle_on_every_source() -> None:
         assert t._v3_seen_cycle == 8, source
 
 
+def test_density_channel_is_off_by_default_and_penalises_only_fast_lanes() -> None:
+    """Phase 4: the onset-density channel (v2's density guard as evidence)
+    is inert at weight 0; when on, lattice tempos at or below FAST_RATIO x
+    the onset rate are untouched (1.0) and faster ones fall off
+    monotonically to the floor -- slower lanes are never penalised."""
+    off = BeatTrackerV3({})
+    off._last_acf_density_bpm = 90.0
+    assert off._v3_density_likelihood() is None
+    t = BeatTrackerV3({'v3_density_weight': 1.0, 'v3_density_floor': 0.5})
+    assert t._v3_density_likelihood() is None          # no measurement yet
+    t._last_acf_density_bpm = 90.0
+    d = t._v3_density_likelihood()
+    assert d is not None and d.shape == t._v3_posterior.shape
+    lo = t._v3_bpms <= 90.0 * t._v3_density_fast
+    assert np.all(d[lo] == 1.0)
+    hi = np.where(~lo)[0]
+    assert np.all(np.diff(d[hi]) <= 1e-12)             # monotone fall-off with tempo
+    assert float(d.min()) >= 0.5                         # floored
+    i180 = int(np.argmin(np.abs(t._v3_bpms - 180.0)))
+    assert d[i180] < 1.0
+
+
+def test_prime_tempo_seeds_posterior_and_holds_the_prior_centre() -> None:
+    """Phase 4: an external prime (mixer analysis / tag / tap) must seed the
+    posterior at the primed tempo and re-centre the per-cycle prior bias
+    on it for the hold window, then fall back to the profile prior."""
+    t = BeatTrackerV3({'v3_prime_hold_s': 30.0})
+    t._last_t = 10.0
+    t.prime_tempo(82.0)
+    assert abs(t._v3_bpms[int(np.argmax(t._v3_posterior))] - 82.0) / 82.0 < 0.02
+    mu, sigma = t._v3_prior_centre()
+    assert mu == 82.0 and sigma == t._v3_prime_sigma
+    assert t._v3_prime_count == 1
+    t._last_t = 35.0
+    t.prime_tempo(82.0)                                # re-prime refreshes the hold
+    t._last_t = 41.0                                   # 31 s after the first, 6 s after the second
+    assert t._v3_prior_centre()[0] == 82.0
+    t._last_t = 70.0                                   # past the refreshed hold
+    mu2, sigma2 = t._v3_prior_centre()
+    assert mu2 != 82.0 and sigma2 >= 0.35              # back to the profile prior
+    early = BeatTrackerV3({'v3_prime_hold_s': 20.0})   # primed before the clock runs
+    early.prime_tempo(82.0)
+    assert early._v3_prime_until_t < 0.0
+    early._last_t = 5.0
+    assert early._v3_prior_centre()[0] == 82.0         # hold starts at the first update
+    early._last_t = 26.0
+    assert early._v3_prior_centre()[0] != 82.0
+    h = BeatTrackerV3({'v3_prime_hold_s': 0.0})       # 0 = until the next prime
+    h._last_t = 0.0
+    h.prime_tempo(164.0)
+    h._last_t = 1e6
+    assert h._v3_prior_centre()[0] == 164.0
+    off = BeatTrackerV3({})
+    assert off._v3_prior_centre()[0] != 82.0           # never primed: profile prior
+
+
 def test_v2_observation_retention_is_read_only() -> None:
     """The only v2 touch is retaining the observation; bake 2's leverage
     check proved v2 corpora bit-identical (49,977 rows). Pin the shape."""

@@ -7985,3 +7985,64 @@ likelihood, not as a gate.
 session (favorites, 42 min, phase-1 defaults, v2 shadow —
 `assets/training/sets/favorites/004`): v3 10/11 exact vs v2-shadow 9/11,
 lock coverage 99.7%, LLM detector score 4.4/5.
+
+## v3 Proper, Phase 4 — the Octave Residue Is Not an Audio Problem (2026-09-03, detector rc.40)
+
+**Scope.** After phase 3, six panel tracks still landed off-lane: slow ambient
+(Harmonic Dust 82 → 164, Kream 74 → 150, Twaang 80 → 131, Tarvona 90 → 123)
+and swung hip-hop edits on the 4/3 lane (Ashanti 114 → 152, Chris Brown 104 →
+139). The owner asked for the fix.
+
+**Three observation signals, three pre-registered leverage checks, three
+negatives.** (1) Raw onset rate (v2's `density_bpm`): sits *at the alias lane*
+on every failing track — hats and subdivisions are onsets — so the 164 lane
+reads a normal 1.1 onsets per beat while the 82 lane reads 2.3; v2's own 1.3×
+guard fires on 1 of 22 tracks. (2) Bass-weighted onset count via
+`OnsetEvent.band_weight`: near zero on everything including four-on-the-floor
+house (Guetta 6/min at 132 BPM) — `band_weight` is a bass *fraction*, not a
+kick detector. (3) An autocorrelation comb over the continuous bass-flux
+envelope, template-matched on the lattice: points at the alias or worse on all
+six (Swan Dive 100 → 201, Chris Brown 104 → 208) — the bass itself pulses at
+the faster rate. `kick_regularity` was also examined and is circular (it
+samples kick energy at the tracker's own beats). The perceptual prior centre
+was swept as the last audio-side lever (mu 110/100/90): it never rescues
+ambient cleanly (Harmonic Dust 164 → 114 → 100 → 95) while folding DnB, Guetta
+and Flagrant down at once — the v2 dilemma reproduced inside v3.
+
+**Root cause.** These tags record a notated half-time feel; the sounding pulse
+in every band is the faster lane. No signal extracted from the audio settles
+that, and in bake 3 the recommender had applied, on every failing track, a
+profile whose BPM range *contained the alias* (Harmonic Dust under dubstep
+140–160, Tarvona under drum & bass, Chris Brown under peak_time) — the
+recommender follows the detector, so the profile prior re-centres onto the lane
+the detector already chose: the roadmap's chicken-and-egg loop, measured.
+
+**Decision.** The octave is settled from *outside the audio*: `prime_tempo()`,
+the existing one-way ground-truth channel (mixer analysis, tap tempo), is now
+honoured by the HMM — a prime seeds the posterior at the primed tempo and holds
+the per-cycle prior centre there (`_V3_PRIME_SIGMA` 0.20, `_V3_PRIME_HOLD_S`
+20 s after the *last* prime; every re-prime refreshes; hold starts lazily at the
+first update if primed before the clock runs). media-01 0.26.0 publishes the
+playing track's authored BPM tag on the vj_api BPM bus (source `media`, read
+once per track, republished every frame), and auto-vj's existing P0-B lookup
+primes from it every recommender eval while the hint is fresh. Result: a tagged
+local file is held at its tag for its duration; an untagged next track lets the
+correction lapse `HOLD_S` later; streams stay evidence-only. Offline (22 hardest
+tracks): tag prime held = **22/22 exact at 1.2 flips/min** (v2 1.1); a single
+un-refreshed prime lapses on schedule (traced: 82 BPM at confidence 0.8–0.9 for
+the hold, back to 171 within 5 s of expiry); a deliberately wrong (doubled)
+prime costs only its own track. This matches the owner's stated semantics for
+tempo correction (per-song, not a timer, not permanent) — see the audio-profile
+correction memory.
+
+**Onset-density channel.** Implemented as a soft likelihood on lattice tempos
+faster than `FAST_RATIO ×` the onset rate (`_V3_DENSITY_*`), tested, and left
+**inert at weight 0** as a documented negative: it cannot bite where the onset
+rate equals the alias rate. A real bass-band onset *picker* would be the next
+signal to try if the octave is ever to be settled from audio; the bass-envelope
+comb result suggests it would not help on this material either.
+
+**Bookkeeping.** Detector `rc.40`, auto-vj `rc.110`, weights doc v75, media-01
+0.26.0, training-kit +0.0.1 (packager constants and the `v3_prime_count` /
+`v3_density_engaged_count` counters). Tests pin the prime seed/hold/refresh/
+lazy-start, the inert density channel's shape, and media-01's publish logic.
