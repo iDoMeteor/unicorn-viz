@@ -23,20 +23,20 @@ CORE_NAMES = {
     'Audio Centroid', 'Audio Sine', 'Audio Chromogram', 'Audio Bass Machine',
 }
 PACK_NAMES = {
-    'psychedelic-01': {'Plasma', 'Kaleidoscope', 'Psychedelic'},
-    'games-01': {'Breakout', 'Neon Pac', 'Galaga', 'Joust', 'Tetris',
+    'effects-psychedelic': {'Plasma', 'Kaleidoscope', 'Psychedelic'},
+    'effects-games': {'Breakout', 'Neon Pac', 'Galaga', 'Joust', 'Tetris',
                  'Missile Command', 'Donkey Kong', 'Q*bert'},
-    'particles-01': {'Starfield', 'Fireworks', 'Particle Storm'},
-    'retro-01': {'Copper Bars', 'ANSI Viewer', 'Fractal Zoom', 'Escher', 'Dali', 'Van Gogh'},
-    'feature-01': {'Hexy Stars', 'Rainbow Trance', 'Metaballs'},
-    'vector-01': {'3D Cube', 'Vector', 'Disco Ball', 'Laser Tunnel'},
-    'cosmic-01': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion',
+    'effects-particles': {'Starfield', 'Fireworks', 'Particle Storm'},
+    'effects-retro': {'Copper Bars', 'ANSI Viewer', 'Fractal Zoom', 'Escher', 'Dali', 'Van Gogh'},
+    'effects-feature': {'Hexy Stars', 'Rainbow Trance', 'Metaballs'},
+    'effects-vector': {'3D Cube', 'Vector', 'Disco Ball', 'Laser Tunnel'},
+    'effects-cosmic': {'Cosmos', 'Black Hole Cathedral', 'Wavey Gravy', 'Alien Invasion',
                   'Sun Ship 3000'},
-    'tech-01': {'Tron Grid', 'Cyber War', 'Hacker Terminal', 'Hacker Terminal 2.0',
+    'effects-tech': {'Tron Grid', 'Cyber War', 'Hacker Terminal', 'Hacker Terminal 2.0',
                 'Threat Matrix', 'Reactor Breach'},
-    'immersive-01': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
-    'holiday-01': {'America 250'},
-    'flying-01': {'Warp Drive', 'Cloud Surfer', 'Canyon Run', 'Wingsuit Dive',
+    'effects-immersive': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
+    'effects-holiday': {'America 250'},
+    'effects-flying': {'Warp Drive', 'Cloud Surfer', 'Canyon Run', 'Wingsuit Dive',
                   'Nebula Drift', 'Asteroid Run', 'Portal Flight'},
 }
 ISOLATED_NAMES = {
@@ -57,10 +57,10 @@ EXPECTED_TOTAL = 64
 # 'media'. Two standalones keep their own descriptors as the category:
 # projectm -> 'projectm', unicorn-tears -> 'psychedelic'.
 EXPECTED_CATEGORY = {
-    'psychedelic-01': 'psychedelic', 'games-01': 'games', 'particles-01': 'particles',
-    'retro-01': 'retro', 'feature-01': 'feature', 'vector-01': 'vector',
-    'cosmic-01': 'cosmic', 'tech-01': 'tech', 'immersive-01': 'immersive',
-    'holiday-01': 'holiday', 'flying-01': 'flying',
+    'effects-psychedelic': 'psychedelic', 'effects-games': 'games', 'effects-particles': 'particles',
+    'effects-retro': 'retro', 'effects-feature': 'feature', 'effects-vector': 'vector',
+    'effects-cosmic': 'cosmic', 'effects-tech': 'tech', 'effects-immersive': 'immersive',
+    'effects-holiday': 'holiday', 'effects-flying': 'flying',
     'images-01': 'media', 'videos-01': 'media',
     'video-clips-01': 'media', 'textures-01': 'media', 'sims-01': 'media',
     'projectm-01': 'projectm', 'unicorn-tears-01': 'psychedelic',

@@ -49,9 +49,9 @@ class _Overlay:
         self.effects_browser_visible = False
         self.effects_browser = CatalogBrowser()
         self.effects_browser.set_entries([
-            _entry('Plasma', 'psychedelic', ['classic'], 'psychedelic-01'),
-            _entry('Kaleidoscope', 'psychedelic', ['classic'], 'psychedelic-01'),
-            _entry('Tron Grid', 'tech', ['neon'], 'tech-01'),
+            _entry('Plasma', 'psychedelic', ['classic'], 'effects-psychedelic'),
+            _entry('Kaleidoscope', 'psychedelic', ['classic'], 'effects-psychedelic'),
+            _entry('Tron Grid', 'tech', ['neon'], 'effects-tech'),
         ])
         self.messages: list[str] = []
 

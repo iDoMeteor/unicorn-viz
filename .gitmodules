@@ -75,34 +75,34 @@
 	path = drop-ins/midi-controllers-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-midi-controllers-01.git
 [submodule "drop-ins/psychedelic-01"]
-	path = drop-ins/psychedelic-01
+	path = drop-ins/effects-psychedelic
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-psychedelic-01.git
 [submodule "drop-ins/games-01"]
-	path = drop-ins/games-01
+	path = drop-ins/effects-games
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-games-01.git
 [submodule "drop-ins/particles-01"]
-	path = drop-ins/particles-01
+	path = drop-ins/effects-particles
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-particles-01.git
 [submodule "drop-ins/retro-01"]
-	path = drop-ins/retro-01
+	path = drop-ins/effects-retro
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-retro-01.git
 [submodule "drop-ins/feature-01"]
-	path = drop-ins/feature-01
+	path = drop-ins/effects-feature
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-feature-01.git
 [submodule "drop-ins/vector-01"]
-	path = drop-ins/vector-01
+	path = drop-ins/effects-vector
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-vector-01.git
 [submodule "drop-ins/cosmic-01"]
-	path = drop-ins/cosmic-01
+	path = drop-ins/effects-cosmic
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-cosmic-01.git
 [submodule "drop-ins/holiday-01"]
-	path = drop-ins/holiday-01
+	path = drop-ins/effects-holiday
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-holiday-01.git
 [submodule "drop-ins/tech-01"]
-	path = drop-ins/tech-01
+	path = drop-ins/effects-tech
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-tech-01.git
 [submodule "drop-ins/immersive-01"]
-	path = drop-ins/immersive-01
+	path = drop-ins/effects-immersive
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-immersive-01.git
 [submodule "drop-ins/cta-01"]
 	path = drop-ins/cta-01
@@ -114,7 +114,7 @@
 	path = drop-ins/dj-mixer-01
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-dj-mixer-01.git
 [submodule "drop-ins/flying-01"]
-	path = drop-ins/flying-01
+	path = drop-ins/effects-flying
 	url = git@github.com:iDoMeteor/unicorn-viz-dropin-flying-01.git
 [submodule "drop-ins/video-out-01"]
 	path = drop-ins/video-out-01

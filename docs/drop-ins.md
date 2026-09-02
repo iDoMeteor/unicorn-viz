@@ -31,36 +31,36 @@ Complex drop-ins should also include:
 | chat-01 | Yes | Yes | Live chat overlay subsystem (Ably Realtime; opt-in) |
 | control-room-01 | Yes | Yes | Operator/control subsystem |
 | color-grade-01 | Yes | Yes | Global colour-grade / LUT post subsystem |
-| cosmic-01 | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion, Sun Ship 3000 |
+| effects-cosmic | Yes | Not required | Effect pack: Cosmos, Black Hole Cathedral, Wavey Gravy, Alien Invasion, Sun Ship 3000 |
 | cta-01 | Yes | Not required | Call-to-action overlay subsystem (extracted CTA editor/slots) |
 | dj-mixer-01 | Yes | Yes | Two-deck DJ mixer window + Pioneer DDJ-REV1 input |
-| feature-01 | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
-| flying-01 | Yes | Not required | Effect pack: Warp Drive, Cloud Surfer, Canyon Run, Wingsuit Dive, Nebula Drift, Asteroid Run, Portal Flight |
-| games-01 | Yes | Not required | Effect pack: Breakout, Neon Pac, Galaga, Joust, Tetris, Missile Command, Donkey Kong, Q*bert |
+| effects-feature | Yes | Not required | Effect pack: Hexy Stars, Rainbow Trance, Metaballs |
+| effects-flying | Yes | Not required | Effect pack: Warp Drive, Cloud Surfer, Canyon Run, Wingsuit Dive, Nebula Drift, Asteroid Run, Portal Flight |
+| effects-games | Yes | Not required | Effect pack: Breakout, Neon Pac, Galaga, Joust, Tetris, Missile Command, Donkey Kong, Q*bert |
 | midi-controllers-01 | Yes | Yes | Controller presets + APC mini mk2 LED feedback subsystem |
 | grand-finale-01 | Yes | Not required | Focused sequence drop-in |
-| holiday-01 | Yes | Not required | Effect pack: America 250 (seasonal/event) |
+| effects-holiday | Yes | Not required | Effect pack: America 250 (seasonal/event) |
 | images-01 | Yes | Not required | Media effect drop-in |
-| immersive-01 | Yes | Not required | Effect pack: Tunnel, Wormhole, Cathedral of Bass |
+| effects-immersive | Yes | Not required | Effect pack: Tunnel, Wormhole, Cathedral of Bass |
 | lyrics-01 | Yes | Yes | Synced lyrics overlay subsystem (LRCLIB) |
 | media-01 | Yes | Yes | Local audio-file playback subsystem (python-vlc/mpv/ffplay) |
 | multi-head-01 | Yes | Yes | Display subsystem |
 | osc-bridge-01 | Yes | Yes | OSC control-surface subsystem |
-| particles-01 | Yes | Not required | Effect pack: Starfield, Fireworks, Particle Storm |
+| effects-particles | Yes | Not required | Effect pack: Starfield, Fireworks, Particle Storm |
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
-| psychedelic-01 | Yes | Not required | Effect pack: Plasma, Kaleidoscope, Psychedelic |
-| retro-01 | Yes | Not required | Effect pack: Copper Bars, ANSI Viewer, Fractal Zoom, Escher, Dali, Van Gogh |
+| effects-psychedelic | Yes | Not required | Effect pack: Plasma, Kaleidoscope, Psychedelic |
+| effects-retro | Yes | Not required | Effect pack: Copper Bars, ANSI Viewer, Fractal Zoom, Escher, Dali, Van Gogh |
 | sims-01 | Yes | Not required | Media/effect drop-in |
 | spotify-01 | Yes | Yes | Spotify metadata subsystem |
 | streaming-01 | Yes | Yes | Streaming subsystem |
-| tech-01 | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0, Threat Matrix |
+| effects-tech | Yes | Not required | Effect pack: Tron Grid, Cyber War, Hacker Terminal, Hacker Terminal 2.0, Threat Matrix |
 | textures-01 | Yes | Not required | Media effect drop-in |
 | training-kit-01 | Yes | Yes | Auto VJ training tools: corpus packaging, scoring, daemon |
 | unicorn-tears-01 | Yes | Not required | Effect drop-in |
 | video-out-01 | Yes | Not required | Video output interop: v4l2loopback virtual camera (PipeWire/NDI planned) |
 | video-postfx-01 | Yes | Yes | Chroma-keyed video overlay stack post subsystem |
-| vector-01 | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
+| effects-vector | Yes | Not required | Effect pack: 3D Cube, Vector, Disco Ball |
 | video-clips-01 | Yes | Not required | Video Clips: audio-reactive clip montage (directory-group selection) |
 | videos-01 | Yes | Not required | Video Player: whole videos with audio (ffpyplayer); manual-only |
 | webcam-01 | Yes | Not required | Focused subsystem with limited surface; planning doc added |

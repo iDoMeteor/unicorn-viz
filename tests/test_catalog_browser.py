@@ -29,9 +29,9 @@ def _entry(name, category, tags=(), pack=''):
 def browser():
     b = CatalogBrowser()
     b.set_entries([
-        _entry('Plasma', 'psychedelic', ['classic'], 'psychedelic-01'),
-        _entry('Kaleidoscope', 'psychedelic', ['classic'], 'psychedelic-01'),
-        _entry('Tron Grid', 'tech', ['neon', 'grid'], 'tech-01'),
+        _entry('Plasma', 'psychedelic', ['classic'], 'effects-psychedelic'),
+        _entry('Kaleidoscope', 'psychedelic', ['classic'], 'effects-psychedelic'),
+        _entry('Tron Grid', 'tech', ['neon', 'grid'], 'effects-tech'),
         _entry('Audio Spectrum', 'analyzer', ['visualizer'], 'core'),
     ])
     return b
@@ -60,7 +60,7 @@ def test_text_search_matches_name_and_tags(browser):
 
 
 def test_search_matches_pack(browser):
-    browser.set_search_query('tech-01')
+    browser.set_search_query('effects-tech')
     assert [e['display_name'] for e in browser.filtered()] == ['Tron Grid']
 
 

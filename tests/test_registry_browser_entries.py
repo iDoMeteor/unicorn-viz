@@ -38,9 +38,9 @@ def test_core_analyzers_are_core_pack():
 
 def test_pack_effects_report_their_dropin_dir():
     by = {e.name: e for e in browser_entries()}
-    assert by['Tron Grid'].pack == 'tech-01'
-    assert by['Cathedral of Bass'].pack == 'immersive-01'
-    assert by['Plasma'].pack == 'psychedelic-01'
+    assert by['Tron Grid'].pack == 'effects-tech'
+    assert by['Cathedral of Bass'].pack == 'effects-immersive'
+    assert by['Plasma'].pack == 'effects-psychedelic'
 
 
 def test_sorted_like_get_effects():

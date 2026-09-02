@@ -9,10 +9,10 @@
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.188.0             alpha ▲       module
   media-01                      0.25.0              alpha ▲       module
-  games-01                      0.13.2              alpha ▲       module
+  effects-games                 0.13.2              alpha ▲       module
   projectm-01                   0.12.4              alpha ▲       module
-  cosmic-01                     0.11.1              alpha ▲       module
-  immersive-01                  0.10.1              alpha ▲       module
+  effects-cosmic                0.11.1              alpha ▲       module
+  effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.106        RC            module
@@ -20,39 +20,29 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   control-room-01               0.9.1               alpha ▲       module
+  effects-retro                 0.9.1               alpha ▲       module
+  effects-tech                  0.10.0              alpha ▲       module
+  effects-vector                0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
-
-  ── alpha ▲ ───────────────────────────────────────────────────────────────
-  retro-01                      0.9.1               alpha ▲       module
-
-  ── RC ────────────────────────────────────────────────────────────────────
   spotify-01                    1.0.0-rc.3          RC            module
-
-  ── alpha ▲ ───────────────────────────────────────────────────────────────
-  tech-01                       0.10.0              alpha ▲       module
-
-  ── RC ────────────────────────────────────────────────────────────────────
   unicorn-tears-01              1.0.0-rc.1          RC            module
-
-  ── alpha ▲ ───────────────────────────────────────────────────────────────
-  vector-01                     0.10.0              alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
   banner-01                     0.8.1               alpha         module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  feature-01                    0.9.0               alpha ▲       module
+  effects-feature               0.9.0               alpha ▲       module
+  effects-particles             0.9.0               alpha ▲       module
+  effects-psychedelic           0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
   images-01                     0.8.1               alpha         module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   midi-controllers-01           0.9.0               alpha ▲       module
-  particles-01                  0.9.0               alpha ▲       module
-  psychedelic-01                0.9.0               alpha ▲       module
   textures-01                   0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
@@ -66,7 +56,7 @@
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   chat-01                       0.5.1               alpha ▼       module
-  holiday-01                    0.5.1               alpha ▼       module
+  effects-holiday               0.5.1               alpha ▼       module
   streaming-01                  0.5.2               alpha ▼       module
   video-clips-01                0.5.0               alpha ▼       module
 
@@ -74,7 +64,7 @@
   video-out-01                  0.4.1               early alpha   module
   audio-out-01                  0.4.0               early alpha   module
   webcam-01                     1.4.0               early alpha   module
-  flying-01                     0.2.1               early alpha   module
+  effects-flying                0.2.1               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
