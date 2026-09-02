@@ -91,6 +91,10 @@ def test_defaults_sit_in_the_escape_time_regime() -> None:
     assert t._v3_obs_power <= 1.0
     assert t._v3_fold_octave <= 1e-5
     assert t._v3_fold_obs_weight == 0.0
+    # Phase 2 (bake 3, Cell C): template observation, no half-beat spikes.
+    assert t._v3_obs_source == 'template'
+    assert t._v3_tmpl_subbeat == 0.0
+    assert t._v3_prior_mode == 'percycle' and t._v3_prior_gain == 1.0
 
 
 def test_cfg_keys_reach_the_tracker() -> None:
@@ -110,7 +114,11 @@ def test_posterior_override_and_probability_confidence() -> None:
     """Feed a synthetic observation with a clear peak at 128 BPM; the
     posterior must move bpm there and report a confidence in [0, 1], and
     the engagement counter must tick."""
-    t = BeatTrackerV3({})
+    # This test exercises the filter mechanics (transition, normalisation,
+    # override, confidence), not the observation model -- so it pins the raw
+    # comb source, where a lone peak IS a tempo. Under the phase-2 template
+    # source a lone peak with no sub-harmonics is rightly not read as one.
+    t = BeatTrackerV3({'v3_obs_source': 'comb'})
     acf_bpms = np.linspace(60.0, 200.0, 71)
     comb = np.exp(-0.5 * ((acf_bpms - 128.0) / 1.5) ** 2).astype(np.float32)
     t._last_acf_observation = (acf_bpms, comb, 1)
@@ -132,6 +140,55 @@ def test_posterior_override_and_probability_confidence() -> None:
     assert conf > 0.5
     assert t._v3_seen_cycle == 39
     assert t._v3_cycle_applied_count == before  # counter ticks only inside update()
+
+
+def test_template_observation_self_match_and_alias_rejection() -> None:
+    """Phase 2: the template for tempo s is the comb profile an ideal beat
+    train at s would produce (mirroring v2's comb: 100 Hz lags, 1/h
+    harmonic weights). A comb observed at 125 must match 125 best and
+    must NOT match the 4/3 alias (166.7) -- the phase-1 failure mode."""
+    t = BeatTrackerV3({'v3_obs_source': 'template', 'v3_tmpl_subbeat': 0.0})
+    grid = np.linspace(60.0, 200.0, 71)
+    T = t._v3_build_templates(grid)
+    assert T.shape == (len(t._v3_bpms), 71)
+    assert np.allclose(np.linalg.norm(T, axis=1), 1.0)
+    i125 = int(np.argmin(np.abs(t._v3_bpms - 125.0)))
+    match = T @ T[i125]
+    assert abs(t._v3_bpms[int(np.argmax(match))] - 125.0) / 125.0 < 0.02
+    i166 = int(np.argmin(np.abs(t._v3_bpms - 166.7)))
+    assert match[i166] < 0.5 * match[i125]
+
+
+def test_template_source_produces_a_likelihood_over_the_lattice() -> None:
+    t = BeatTrackerV3({'v3_obs_source': 'template', 'v3_tmpl_subbeat': 0.0})
+    # The likelihood path builds its templates on the tracker's OWN ACF grid
+    # (in production the retained observation is a prefix of that same
+    # array), so the observation must live on that grid too. A realistic
+    # comb carries the sub-harmonic structure a beat train always produces;
+    # a lone Gaussian peak does not. Use 128's own profile.
+    grid = np.asarray(t._acf_bpms, dtype=np.float32)
+    T = t._v3_build_templates(grid.astype(np.float64))
+    i128 = int(np.argmin(np.abs(t._v3_bpms - 128.0)))
+    rng = np.random.default_rng(7)
+    comb = (T[i128] + 0.02 * rng.random(len(grid))).astype(np.float32)
+    t._last_acf_observation = (grid, comb, 1)
+    like = t._v3_observation_likelihood()
+    assert like is not None and like.shape == t._v3_posterior.shape
+    assert float(like.min()) > 0.0
+    assert abs(t._v3_bpms[int(np.argmax(like))] - 128.0) / 128.0 < 0.04
+
+
+def test_prior_mode_and_gain_cfg_plumbing() -> None:
+    """The compounding-prior finding (2026-09-03): 'percycle' multiplies a
+    bounded bias every cycle (phase 1); 'init' seeds the posterior once;
+    the gain exponent scales the per-cycle bias. All three must reach the
+    instance via cfg (the override path the panel bakes use)."""
+    a = BeatTrackerV3({'v3_prior_mode': 'init'})
+    assert a._v3_prior_mode == 'init'
+    assert abs(a._v3_bpms[int(np.argmax(a._v3_posterior))] - 120.0) / 120.0 < 0.02
+    b = BeatTrackerV3({'v3_prior_gain': 0.25})
+    assert b._v3_prior_mode == 'percycle' and b._v3_prior_gain == 0.25
+    assert np.allclose(b._v3_posterior, b._v3_posterior[0])  # uniform start
 
 
 def test_v2_observation_retention_is_read_only() -> None:

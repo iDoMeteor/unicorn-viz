@@ -7862,3 +7862,68 @@ compared zero rows — replay corpora carry no shadow column; every null claim
 now states its compared-row count. (2) The offline sweep set (panel movers)
 is biased hard; the panel is the judgment. (3) Determinism let bake 2 reuse
 bake 1's v2 cells as controls.
+
+## v3 Proper, Phase 2 — the Template Observation Model (2026-09-03, detector rc.38)
+
+**Decision.** `BeatTrackerV3`'s observation likelihood becomes a **template
+match** (`_V3_OBS_SOURCE = 'template'`): for each lattice tempo *s* the comb
+profile an ideal beat train at *s* would produce over the ACF grid is
+precomputed once (mirroring v2's comb exactly: 100 Hz lags, `lag = 6000/bpm`,
+`_V2_COMB_HARMONICS` = 4 harmonics at 1/h weight; Gaussian spikes at k·P_s
+with decay 0.9^k, 12 beats, sigma 1.5 lag samples, **no half-beat spikes**);
+the per-cycle likelihood is the cosine between the observed comb and each
+template, normalised to its max, floored at `_V3_OBS_FLOOR` 0.7, times the
+bounded per-cycle prior bias. One matvec per cycle. Transition model
+unchanged from phase 1.
+
+**Why.** Phase 1's config-invariant failures were harmonic aliases in the raw
+comb (the 4/3 lane = 4th comb harmonic on exactly 3 beats; 5/4; 3-beat) that
+v2 suppresses by policy (tactus descent + raw-dominance), not by its prior
+(round 4 of the phase-1 sweep). Reading each comb bin at face value cannot
+tell an alias from a tempo; matching the *whole profile* can, because the true
+tempo's template explains its own aliases while an alias's template predicts
+peaks (its own sub-harmonics) the observation lacks.
+
+**Evidence (bake 3, 7-list panel vs bit-stable v2 cells, Cell C).** Acc1
+matches-or-beats v2 on **all 7 lists**: house 93.3 = 93.3; trap 33.3 vs
+19.0; toughies 63.6 vs 45.5; **dnb 56.2 vs 6.2** (eight fast-lane rescues at
+164–174 BPM where v2 folds to ~115); ambient 33.3 = 33.3; trance 83.3 =
+83.3; curveballs 84.6 = 84.6. Coverage 98–99.8%. Churn below v2 on
+toughies/curveballs/trap, above on dnb (0.90 vs 0.41/min), ambient (0.91 vs
+0.70) and trance (1.75 vs 0.48). Fold-forgiving accuracy drops on four lists
+because ~6 tracks land off-lane (Ashanti / Chris Brown Nylze edits at 4/3 of
+their tags, Urus 141, Tarvona 139, Swan Dive 120.4; Junes Daughter 147 is a
+probable tag error, Essentia 146). That residue plus the churn on three lists
+is phase 3's scope. Cell D (prior gain 0.25, floor 0.85) won bigger on trap
+(+28.6) and curveballs (+7.7, Blackout Riddim rescued to 194) but lost
+ambient (−5.5) at 2–3 flips/min everywhere and was rejected.
+
+**Findings that shaped the model (four offline sweep rounds, 20 configs).**
+(1) Half-beat spikes in the template are harmful: 2T's template then matches
+a track with hats as well as T's own (fold-ups). (2) **Per-cycle prior
+compounding**: the bounded prior bias multiplied in every cycle at 7.4 Hz is
+prior**N; under a floored observation it out-ranges the evidence and pulled
+7/18 ambient tracks to mu = 120.4 regardless of tag (found from the training
+seat's per-track table; trance unaffected). Fix exists as `_V3_PRIOR_MODE =
+'init'` / `_V3_PRIOR_GAIN`, but with the template observation the bias is
+what holds the 2T lane down (gain 0.25 → Tarvona 182), and removing it is
+catastrophic for the comb source (house folding to 63) — so `'percycle'` at
+gain 1.0 stays and the octave decision is phase 3's problem, not a dial.
+(3) Raising the floor to 0.85 to cut churn hands the set to the prior (13/22
+tracks at 120.4) — the churn lever and the prior are coupled through the
+same per-cycle multiplication. (4) Shape × magnitude ("hybrid") re-sharpens
+the observation and loses. (5) Every shape/transition variant of the
+winning structure (fold mass 1e-7, power 0.5, sigma 2.5, decay 0.75, 6
+beats) was worse: it is a local optimum.
+
+**Real-audio check.** The owner's first live v3 session (favorites, 42 min,
+phase-1 defaults, v2 shadow — `assets/training/sets/favorites/004`): v3
+10/11 exact vs v2-shadow 9/11, lock coverage 99.7%, 10 lock events in 41
+min, LLM detector 4.4/5. v3 rescued DJ Jackpine (124.6 vs v2 135.7); missed
+Careless Whisper off-lane (113.9; tag 81 / mixer 130.8 / v2 126) — the
+phase-1 alias mode this phase addresses.
+
+**Robustness fix.** Templates are cached keyed on the observation's own grid
+(length, first, last BPM) rather than assumed to be a prefix of
+`self._acf_bpms` — true in production by construction, but an observation on
+another grid silently mis-matched (found writing the phase-2 tests).
