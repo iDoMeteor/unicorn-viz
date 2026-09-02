@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.102**
+**Version 1.0.0-beta.103**
 
 ## Contact Me!
 
@@ -556,6 +556,14 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 **Happy demoscene visualizing!** 🦄✨
 
 ## Changelog
+
+- **1.0.0-beta.103** — Spectral contrast in the analyzer: EMA-smoothed
+  mean log peak/valley gap over 6 octave bands ("peakiness" —
+  harmonic-rich vs dense/noisy, a dimension centroid/zcr/bands never
+  measured; owner-directed, MFCC and danceability deliberately skipped
+  to keep the 64-band fingerprint distinctly ours). Exposed on
+  AudioData; the recommender term ships DORMANT until the library
+  bake-off fits real per-genre values.
 
 - **1.0.0-beta.102** — Mid/side vocal-presence feature: AudioCapture
   now preserves the stereo side channel alongside the mono downmix,

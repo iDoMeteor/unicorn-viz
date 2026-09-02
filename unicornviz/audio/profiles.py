@@ -156,6 +156,14 @@ class AudioProfile:
     # None on a profile = not calibrated, skip scoring on that dimension.
     vocal_hnr_mu: float | None = None
     vocal_fmr_mu: float | None = None
+    # spectral_contrast_mu/sigma (2026-09-01): mean log peak/valley gap
+    # over 6 octave bands (analyzer._CONTRAST_*) — "peakiness"
+    # (harmonic-rich vs dense/noisy). DELIBERATELY unset on every
+    # profile at launch: the term is dormant (weight 0.0) until the
+    # library bake-off fits real per-genre values. Do NOT hand-author
+    # these — the 2026-08-31 instrument audit is the standing reason.
+    spectral_contrast_mu: float | None = None
+    spectral_contrast_sigma: float = 0.15
 
     # 64-element normalized (0.0–1.0) spectral fingerprint: expected relative
     # magnitude per log-spaced band (30 Hz – 16 kHz, matching audio_spectrum.py).

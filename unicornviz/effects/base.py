@@ -88,7 +88,8 @@ class AudioData:
                  "bass_level_raw",
                  "bands", "spectral_flux",
                  "vocal_hnr", "vocal_fmr",
-                 "vocal_mid_ratio", "vocal_syl", "vocal_ms_valid")
+                 "vocal_mid_ratio", "vocal_syl", "vocal_ms_valid",
+                 "spectral_contrast")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -153,6 +154,9 @@ class AudioData:
         self.vocal_mid_ratio: float = 0.0
         self.vocal_syl: float = 0.0
         self.vocal_ms_valid: bool = False
+        # Spectral contrast (2026-09-01): EMA-smoothed mean log peak/valley
+        # gap over 6 octave bands — "peakiness" (harmonic-rich vs dense).
+        self.spectral_contrast: float = 0.0
         # Overall gated spectral flux scalar from the Analyzer (same value used
         # for onset detection, exposed here for recommender / corpus logging).
         self.spectral_flux: float = 0.0
@@ -221,6 +225,7 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
     target.vocal_mid_ratio = source.vocal_mid_ratio
     target.vocal_syl = source.vocal_syl
     target.vocal_ms_valid = source.vocal_ms_valid
+    target.spectral_contrast = source.spectral_contrast
     target.waveform[:] = source.waveform
     target.bands[:] = source.bands
 

@@ -63,6 +63,17 @@ _VOCAL_MS_RECOMPUTE_FRAMES = 188  # ~2 s cadence, matches fmr pattern
 _VOCAL_MS_MOD_BAND_HZ = (2.0, 8.0)    # syllable-rate modulation
 _VOCAL_MS_MOD_TOTAL_HZ = (0.5, 20.0)
 
+# Spectral contrast (2026-09-01, owner-directed): per octave-ish band,
+# the log gap between spectral PEAKS and the VALLEYS between them.
+# Harmonic-rich material (clean leads, vocals) has tall peaks over
+# quiet valleys -> high contrast; dense/noisy material (growls,
+# distortion walls) fills the valleys -> low. Measures peakiness —
+# something centroid/zcr/bands (where energy sits) never captured.
+# DORMANT downstream by design: the recommender term ships at weight
+# 0.0 with every profile mu unset until the library bake-off fits it.
+_CONTRAST_BAND_EDGES_HZ = (200.0, 400.0, 800.0, 1600.0, 3200.0, 6400.0, 12800.0)
+_CONTRAST_QUANTILE = 0.2               # top/bottom share defining peak/valley
+
 # 2026-08-11: detector-facing _shape() gains -- see AudioData.bass_det's own
 # field comment (unicornviz/effects/base.py) for why these exist as a
 # separate channel from bass/mid/treble's effects-facing gains below.
@@ -240,6 +251,8 @@ class Analyzer:
         self._vocal_ms_valid: bool = False
         self._vocal_ms_frate: float = float(_ASSUMED_SAMPLE_RATE) / 512.0
         self._side_spectrum_work = np.zeros(self._bands, dtype=np.float32)
+        # Spectral-contrast state: EMA-smoothed scalar (mean over bands).
+        self._spectral_contrast_ema: float = 0.0
 
         # P3 — adaptive refractory (set by BeatTracker via set_expected_bpm)
         self._refractory_s: float | None = None
@@ -704,6 +717,27 @@ class Analyzer:
         else:
             data.vocal_hnr = 0.0
             vocal_energy = 0.0
+        # --- Spectral contrast (2026-09-01; see _CONTRAST_* constants) ---
+        if energy > 1e-5:
+            bin_hz = self._sample_rate / max(1, self._n_fft)
+            contrasts = []
+            edges = _CONTRAST_BAND_EDGES_HZ
+            for lo_hz, hi_hz in zip(edges, edges[1:]):
+                b0 = max(1, int(lo_hz / bin_hz))
+                b1 = min(self._bands, int(hi_hz / bin_hz))
+                if b1 - b0 < 4:
+                    continue
+                seg = spectrum[b0:b1]
+                k = max(1, int(len(seg) * _CONTRAST_QUANTILE))
+                part = np.partition(seg, (k - 1, len(seg) - k))
+                valley = float(part[:k].mean()) + 1e-9
+                peak = float(part[len(seg) - k:].mean()) + 1e-9
+                contrasts.append(np.log10(peak / valley))
+            if contrasts:
+                val = float(np.mean(contrasts))
+                self._spectral_contrast_ema += 0.1 * (val - self._spectral_contrast_ema)
+        data.spectral_contrast = self._spectral_contrast_ema
+
         # --- Mid/side vocal presence (2026-09-01; see _VOCAL_MS_*) ---
         # The mono input IS the mid channel (capture downmix = (L+R)/2),
         # so mid-band energy comes free from the existing spectrum; only
