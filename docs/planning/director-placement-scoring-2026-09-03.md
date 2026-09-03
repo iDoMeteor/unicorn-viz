@@ -228,3 +228,53 @@ scored on lift over chance; the prediction is written before the data.
 
 Not experiments: raising the activity rating's thresholds (it will be
 replaced by the placement rating once E1–E4 have data).
+
+## Experiment log
+
+### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
+
+Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
+— when a pending drop is within that many bars of the next `phrase_snap_unit`
+(8) boundary, `_schedule_drop()` chains downbeat callbacks to the boundary
+instead of firing at the next bar. Impacts fire from inside `_fire_drop()`
+and inherit it. Counter `drop_phrase_snap_count` (rows + payload).
+
+Offline cells (seed 1, vs the same-order final-batch buckets):
+
+| List | metric | baseline | snap 2 | snap 4 |
+| --- | --- | --- | --- | --- |
+| house-01 | drop phrase / chance | 43 / 37 | 46 / 37 | **86** / 38 |
+| house-01 | impact phrase | 50 | 50 | **100** |
+| dnb-01 | drop phrase / chance | 29 / 39 | 33 / 37 | **67** / 37 |
+| dnb-01 | impact phrase | 36 | 31 | **78** |
+| hip-hop-01 | drop phrase / chance | 41 / 31 | 72 / 31 | **84** / 32 |
+| hip-hop-01 | impact phrase | 60 | 88 | **100** |
+
+Drop counts (37/37, 51/54, 32/32), energy and bass lift, build/breakdown
+consistency and lock churn unchanged within noise on all three. Snap 2
+engages too rarely (6 of 37 drops). Snap 4 = defer at most half a phrase
+(≤ 8 s at 125 BPM). Panel bake (19 lists × 2 seeds, snap 4) pre-registered:
+drop phrase alignment ≥ 65% on every list, energy/bass lift within ±8 pt of
+the family baseline, counts within ±10%, churn unchanged, placement rating up
+on ≥ 15 of 19 lists.
+
+### E4 — half-time genres under-fire drops: revised (2026-09-03)
+
+The threshold is not the blocker. On tracks that never fire, `drop_score`
+exceeds every mood trigger threshold for 43–47% of rows and downbeat
+confidence clears its minimum; `drop_trigger_fired_count` never advances, so
+no drop was ever *scheduled*. The gate that never clears is the split
+**trigger** signal: `_trigger_raw = grid.impact_novelty`, compared against
+`drop_trigger_threshold` (0.55–0.66 by mood). On never-fire tracks
+`impact_novelty` p95 is 0.27–0.41 (firing tracks: 0.36–0.50). Half-time
+material has softer, sparser transients, so an absolute novelty threshold is
+genre-blind in the wrong way. Lowering it globally would add false fires on
+house (their novelty p95 is higher).
+
+Revised E4: a **per-track adaptive trigger** — `trigger_rel = impact_novelty /
+max(floor, rolling_p90(impact_novelty, 60 s))`, gated by
+`drop_trigger_rel_threshold` (0 = off; ~0.85 to test), alongside the absolute
+gate (either passes). Prediction: never-fire tracks on ambient / downtempo /
+hip-hop / trap / dubstep fall from 2–6 per list to ≤ 1, house drop counts
+within ±15%, energy/bass lift unchanged or better (fires now land on each
+track's *own* peaks). To be applied after the E1 bake lifts the freeze.
