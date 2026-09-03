@@ -63,12 +63,12 @@
   audio-out-01                  0.4.0               early alpha   module
   webcam-01                     1.4.0               early alpha   module
   effects-flying                0.2.1               early alpha   module
-  effects-rollercoast           0.3.0               early alpha   MISMATCH (readme=0.2.0)
+  effects-rollercoast           0.3.0               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
   43 components total  ·  6 RC  1 beta  36 alpha  0 unversioned
-  ⚠  4 version mismatch(es): core (unicornviz), effects-cosmic, effects-games, effects-rollercoast
+  ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
 
