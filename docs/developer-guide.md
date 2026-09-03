@@ -172,10 +172,10 @@ thread-safe via `threading.RLock`.
 
 ```python
 # Read (dotted path, with safe default)
-value = vj_api.get_runtime_state('banner.scroll_speed', default=80.0)
+value = vj_api.get_runtime_state('banner.font_px', default=28)
 
 # Write (persists immediately)
-vj_api.set_runtime_state('banner.scroll_speed', 95.0)
+vj_api.set_runtime_state('banner.font_px', 32)
 ```
 
 **Namespace conventions**
@@ -183,7 +183,7 @@ vj_api.set_runtime_state('banner.scroll_speed', 95.0)
 | Namespace prefix | Owner |
 |-----------------|-------|
 | `audio.*` | core `AudioCapture` — selected and viable audio source keys |
-| `banner.*` | drop-in `banner-01` — text, speed, alpha, font, flags |
+| `banner.*` | drop-in `banner-01` — text, max line length, alpha, font, flags |
 | `webcam.*` | drop-in `webcam-01` — camera selection, per-camera settings |
 | `multihead.*` | drop-in `control-room-01` — monitor editor exclude list |
 

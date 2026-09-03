@@ -225,6 +225,20 @@ scored on lift over chance; the prediction is written before the data.
 - **E5 — replay-clock bias fix** in session_replay (the +1.2% both engines
   show in replays, absent live) before any recommender-side conclusion is
   drawn from replay profile mixes.
+- **E6 — mode-transition quantization (added 2026-09-03, after the final
+  baseline).** Apply E1's mechanism to build / breakdown / climax entry:
+  defer the transition to the next downbeat, and to the 8-bar phrase
+  boundary when within `mode_phrase_snap_bars` (default 2) of it; never
+  earlier. Paired with E3's persistence raise in the same bake, as two
+  cfg tunables so each can be zeroed independently. Measured on the final
+  baseline (rc.15): build on-beat 30% / phrase 39% vs 37 chance, breakdown
+  33% / 40%, climax 30% / 12% vs 41 chance. Prediction: all three modes
+  on-beat ≥ 95%, on-phrase ≥ 65% (drops reached ~75% under E1), climax
+  anti-alignment gone; trend-following (build 40 vs 23 chance, breakdown
+  38 vs 21) unchanged or better because a later, boundary-aligned
+  transition sees one more bar of evidence; mode counts within −25%
+  (E3's cost), drop/impact metrics and lock churn unchanged. Executed by
+  the training seat as director rc.16.
 
 Not experiments: raising the activity rating's thresholds (it will be
 replaced by the placement rating once E1–E4 have data).

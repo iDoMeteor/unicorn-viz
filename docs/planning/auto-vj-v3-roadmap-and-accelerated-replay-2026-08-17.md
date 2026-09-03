@@ -3,12 +3,143 @@
 Owner: unicorn-viz
 Status: Part 2 LANDED (Phases A + B + C part 1, 2026-08-18 — see
   § 2.5; C part 2, mixer/media sources, remains a mixer-team
-  dependency); Part 1 Threads 1/3/4/5/6 remain future work. Originally planning-only,
-  consolidating the v3-scoped threads scattered through
-  `auto-vj-round-three-planning-2026-08-14.md` (§ 7.4/§ 7.6/§ 8.3/
+  dependency). **Thread 1 LANDED** (BeatTrackerV3, detector rc.40,
+  2026-09-02/03 — see Part 0). Threads 3/4/5/6 remain future work; Part 0
+  supersedes the sequencing below it with the post-bench program.
+  Originally planning-only, consolidating the v3-scoped threads scattered
+  through `auto-vj-round-three-planning-2026-08-14.md` (§ 7.4/§ 7.6/§ 8.3/
   § 9.1) into one place, plus the owner's priority item: **running
   tests with local tracks at an accelerated rate of time** (§ 9.1).
-Last updated: 2026-08-18
+Last updated: 2026-09-03
+
+---
+
+## Part 0 — Where v3 stands and what comes next (2026-09-03)
+
+This section is the live plan. Parts 1 and 2 below are the history that
+got here and are kept as written.
+
+### 0.1 What landed
+
+- **Thread 1, the HMM detector, shipped as `BeatTrackerV3`** (detector
+  `1.0.0-rc.40`, `beat_tracker_engine = "v3"` active by default). Log-
+  spaced lattice 55–210 BPM, symmetric fold-jump transition, template
+  observation (cosine against an ideal beat-train comb profile), per-tick
+  apply, external prime honoured. Four phases of tuning, every one
+  pre-registered and scored on the 22-hardest set plus the 19-list panel;
+  full trail in `docs/adr/vj-system.md` ("v3 phases 1–4") and memory.
+- **Director placement instrument** (training-kit `0.41.x`,
+  `tools/director_placement.py`, packager "## Director Placement" section
+  and placement rating): per-event landing metrics against a random on-beat
+  chance baseline, so "is he landing each scene" is a number, not an
+  impression. Spec and findings:
+  `docs/planning/director-placement-scoring-2026-09-03.md`.
+- **Director E1 + E4** (director `1.0.0-rc.15`): drops/impacts
+  phrase-quantized (on-beat 100%, on a phrase boundary ~75%), plus a
+  rescue-only relative drop trigger scoped to tracks that never fired.
+  Final 19×2 baseline holds every guard (half-time genres 12/12, house
+  family 7/8 inside +15% drop count).
+- **OSS beat-tracker bench** (bench seat, `tools/beat-tracker-bench/`,
+  311 tracks / 306 unique, reference ladder owner > tag > Essentia):
+
+  | model | Acc1 | Acc2 | lane hops/min | licence |
+  | --- | --- | --- | --- | --- |
+  | madmom (RNN + online DBN) | 76.1% | 96.1% | 0.8 | BSD code, CC BY-NC-SA weights (not shippable) |
+  | BTrack (comb + complex spectral difference) | 76.1% | 96.4% | 0.0 | GPL (reimplement, do not vendor) |
+  | v3 (ours) | 66.0% | 88.9% | ~1 | — |
+  | Essentia (51-track only, offline re-run) | 58.8% | 94.1% | — | AGPL |
+
+  BeatNet deferred (>3× realtime). Full tables and the shippability
+  matrix live in `tools/beat-tracker-bench/results/SUMMARY.md`.
+
+### 0.2 What the evidence says
+
+1. **The ceiling is the observation, not the tracker.** Two tracker
+   classes with no learned model in common (madmom's DBN, BTrack's comb)
+   land on the same 76% exact ceiling; our HMM is the same class as the
+   DBN. BTrack reaches it with a hand-designed, phase-aware onset function
+   and zero training, so the cheaper first lever is a **better onset
+   function**, not a trained activation. The v3 gap is concentrated on the
+   4/3 lane on clean house-family lists (nine 100–126 BPM tracks read at
+   133–169) plus six near-misses 4–7% high from item 2.
+2. **The onset envelope clock is wrong by ~+1.3% (E5).** Onset ticks lose
+   their tail and `_pulse_envelope` deducts a zero-clamped step, so the
+   100 Hz envelope is written at ~96 Hz and every tempo (v2 and v3) reads
+   high. A timing-correct redesign exists
+   (`docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch`,
+   bias +1.27% → −0.23%) but the comb/prior/gate stack is **co-adapted to
+   the old jitter**: with the true clock v3 drops 13 → 10 exact on the 22
+   hardest and v2 folds house to half tempo, and the v2 synthetic fixtures
+   (perfectly periodic clicks) pass partly because of the bug. Parked as a
+   strict xfail (`tests/test_envelope_advance_rate.py`); it lands only
+   with a re-tune.
+3. **Director modes other than drops are not quantized.** Builds,
+   breakdowns and climax are on-beat only ~30%, on a phrase boundary no
+   better than chance (39 vs 37), and climax is anti-aligned (12% vs 41%
+   chance). They track the following energy trend ~40% of the time vs
+   ~22% chance, so the *decision* is better than chance and the *timing*
+   is not.
+4. **BTrack's one weak genre is probably configuration.** dnb-01 31% Acc1
+   / 100% Acc2 is a half-time fold on ≥160 BPM material; upstream BTrack
+   hard-codes an 80–160 BPM search range. Bench seat is checking.
+
+### 0.3 The program, in order
+
+**Program A — director mode quantization (E6 + E3), first.** Apply the
+E1 mechanism to `_enter_build` / `_enter_breakdown` / `_enter_climax`:
+defer the transition to the next downbeat and, when within
+`mode_phrase_snap_bars` of one, to the phrase boundary; then raise the
+`sustained_rise` / `sustained_fall` persistence (E3) so a mode is declared
+only once the trend has held. Cfg tunables, live-read, counters in the
+corpus rows, four offline cells, one 19×2 panel bake against the final
+baseline, land as director rc.16 with tests, ADR, weights doc and packager
+defaults. One day. Goes first because it is a day with a high chance of a
+clean win, and because Program B re-baselines everything anyway: B moves
+the beat grid by a quarter of a percent, not a lane, so A does not need
+re-running afterwards.
+
+**Program B — the detector observation program, as one re-tune.** Three
+pieces that all change what the comb/prior/gate stack sees, so they are
+re-tuned **once**, together, not three times:
+
+1. the true envelope clock (the E5 patch, applied as-is);
+2. a **complex-domain onset function** (Bello et al. complex spectral
+   difference: phase-predicted vs observed spectrum, which BTrack uses)
+   feeding the same 100 Hz envelope, alongside or replacing the current
+   spectral-flux/band-weight onset; prototyped first as a standalone
+   numpy channel validated inside the bench harness before it touches
+   `beat_grid.py`;
+3. the re-tune: phase-1-style tempering sweeps for v3 and the raw-
+   dominance/tactus constants for v2 under the new observation on the
+   22-track set, v2 synthetic fixtures re-derived with the jitter their
+   own docstring already documents, then the 19-list panel.
+
+Gate: exact/fold on the 22-hardest and the panel must beat the final
+baseline, and the comparison is made against madmom and BTrack as the
+**unbiased references** (both read the same files with zero bias).
+Success looks like the 4/3-lane house misses closing and the +1.3%
+bias at zero. Lands as detector rc.41 (`_DETECTOR_VERSION`), with
+`ANALYSIS`-style provenance so any panel scored under the old clock is
+identifiable. Two to three days of seat time.
+
+**Program C — a learned activation channel of our own, after B.** madmom's
+architecture is BSD; the 10k-tag library plus owner arbitration labels is
+a training set. Only worth building once B has shown how much the
+hand-designed onset recovers, because C's payoff is whatever is left of
+the gap after B. Not scheduled.
+
+**Still open, unchanged priority:** E2 (bass delta gate on drops), Thread
+7 item 1 (conditional re-acquisition on known track change), Thread 4's
+bar-phase anchor, Thread 6's perf log, Thread 3's harmonic-family fold
+(largely subsumed by v3's lattice; re-evaluate after B).
+
+### 0.4 Operating rules this program runs under
+
+Pre-registration before every batch; leverage checks on every null
+(compared-row counts stated); tree freeze during batches (BATCH START /
+END); path-only staging; three replays in parallel, madmom capped
+(taskset 0–7, nice 10, BLAS 8); no LLM scoring. Seats execute; the
+strategist pre-registers, reads, and lands.
 
 ---
 

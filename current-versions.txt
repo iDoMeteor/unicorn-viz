@@ -30,10 +30,8 @@
   spotify-01                    1.0.0-rc.3          RC            module
   unicorn-tears-01              1.0.0-rc.1          RC            module
 
-  ── alpha ─────────────────────────────────────────────────────────────────
-  banner-01                     0.8.1               alpha         module
-
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  banner-01                     0.9.0               alpha ▲       module
   effects-feature               0.9.0               alpha ▲       module
   effects-particles             0.9.0               alpha ▲       module
   effects-psychedelic           0.9.0               alpha ▲       module
@@ -65,9 +63,9 @@
   audio-out-01                  0.4.0               early alpha   module
   webcam-01                     1.4.0               early alpha   module
   effects-flying                0.2.1               early alpha   module
+  effects-rollercoast           0.3.0               early alpha   MISMATCH (readme=0.2.0)
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
-  effects-rollercoast           0.1.0               early alpha   MISMATCH (readme=0.2.0)
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
