@@ -285,10 +285,78 @@ one with more phrase gain if two qualify; phrase snap stays a knob either
 way. If neither qualifies, land downbeat-only and record the phrase half
 as a measured cost.
 
+**Owner variant (2026-09-03, pre-registered as E8, tested after the
+ablation picks the consensus E6 default).** Owner: "build detect on a
+downbeat from within a breakdown phrase, drop detect on downbeat of
+either, and climax only on phrase within drop (no build required)". Read
+as a per-mode quantization table plus allowed source modes:
+
+| transition | snap unit | allowed from |
+| --- | --- | --- |
+| → build | downbeat | breakdown (the decision is taken inside a breakdown phrase) |
+| → drop | downbeat (E1's phrase chain already fires on a downbeat; whether the 4-bar phrase snap stays on top is the owner's call, default: keep E1 as landed) | build or breakdown |
+| → climax | 8-bar phrase boundary | drop, no prior build required |
+
+Implementation rule: express as cfg (`mode_snap_unit_<mode>` ∈ downbeat /
+phrase, `mode_allowed_from_<mode>`), so the consensus E6 default and the
+owner variant are two config sets on the same code path and the same
+instrument scores both. Same panel, same landing rule, plus a per-mode
+transition-source breakdown so "climax without build" is countable.
+
+**Live A/B (owner-run).** The owner runs a couple of short live sessions
+per arm; the packager's placement section scores them with the same
+chance baselines. Live arms are the same cfg keys, so an A/B is two
+`config.toml` values, not a build. Live counts will be small (n under 15
+per mode per session reads as noisy) — treat the live pair as a sanity
+check on the replay panel, not as the decider.
+
 **Analysis asks from existing panel data (no new runs):** cancellation
 split by step (downbeat vs phrase chain) and mean deferral length in
 beats per mode; climax time-since-drop distribution in bars on the rc.15
-baseline (input to E7).
+baseline (input to E7). *Answered:* fired events were deferred ~1.1 bars
+on average and only ~20% were phrase-chained (so the phrase half cannot
+carry most of the count cost — the downbeat-only prediction above may
+miss; score it as written). Climax fires a median 3.1 bars after the drop,
+70% in bars 2–4: structural, confirmed.
+
+### E8 — owner variant: per-mode snap unit + allowed source (2026-09-03)
+
+Owner: "build detect on a downbeat from within a breakdown phrase, drop
+detect on downbeat of either, and climax only on phrase within drop (no
+build required)"; later: "we can probably drop from cruise but only on
+very high conf." Read as a per-mode quantization table plus allowed
+source modes:
+
+| transition | snap unit | allowed from |
+| --- | --- | --- |
+| → build | downbeat | breakdown (decided inside a breakdown phrase) |
+| → drop | downbeat (E1's phrase chain already fires on a downbeat; E1 stays as landed) | build or breakdown freely; **cruise only above a high drop-confidence floor** (new key) |
+| → climax | 8-bar phrase boundary | drop, no prior build required |
+
+**Config model (training seat design, approved):** `mode_snap_unit_<mode>`
+∈ off / downbeat / phrase; `mode_phrase_within_bars_<mode>` (chain to the
+boundary only when within N bars; default = full phrase = always chain; 2
+reproduces the E6 candidate, 1 the 1-bar cell); `mode_allowed_from_<mode>`
+(list, today's real source paths as defaults, so the consensus E6 default
+is "no restriction"); blocked transitions counted, not silent; corpus rows
+carry `from_mode` and `snap_unit_applied`; drops gain a cruise-only
+confidence floor key. The old `mode_snap_downbeat` /
+`mode_phrase_snap_bars` derive the new keys one way and are otherwise
+retired. Consensus E6 and E8 are two config sets on one code path; the
+same instrument scores both, plus a transition-source breakdown so
+"climax without build" is countable.
+
+**Sequence (owner, 2026-09-03):**
+1. Ablation reads → consensus E6 default lands as rc.16 (landing rule
+   above).
+2. Owner A/Bs the present scenario live (a couple of short sessions per
+   arm; packaged with the placement section; small n, sanity check only).
+3. Strategist + training seat **tune E8 first** on a few medium-to-high-
+   energy lists (house, tech-house, big-room, techno, trance; dnb as the
+   fast control) — snap units, the cruise confidence floor, the build-
+   from-breakdown restriction's count cost — before it meets the winner.
+4. `[winner] vs E8` on the full 19×2 panel, same report format, same
+   landing rule; owner's live sessions reported next to it.
 
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
