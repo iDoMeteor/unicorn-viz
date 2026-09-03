@@ -111,6 +111,20 @@ _PHRASE_DEFAULTS = dict(
     _mode_last_snap_bars=0,
     _mode_persist_bars_rise=0.0,
     _mode_persist_bars_fall=0.0,
+    # E8 (2026-09-03): 'off' here (not 'phrase', the shipped default)
+    # so these pre-existing tests keep exercising immediate mode-transition
+    # entry; allowed-from sets match production's own defaults (today's
+    # real source paths) since these tests exercise those same paths.
+    _mode_snap_unit_build='off',
+    _mode_snap_unit_breakdown='off',
+    _mode_snap_unit_climax='off',
+    _mode_phrase_within_bars_build=0.0,
+    _mode_phrase_within_bars_breakdown=0.0,
+    _mode_phrase_within_bars_climax=0.0,
+    _mode_allowed_from_build={'CRUISE', 'BREAKDOWN'},
+    _mode_allowed_from_breakdown={'CRUISE', 'BUILD', 'DROP'},
+    _mode_allowed_from_climax={'DROP'},
+    _mode_blocked_by_source_count=0,
 )
 
 

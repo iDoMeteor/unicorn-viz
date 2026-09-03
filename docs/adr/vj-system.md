@@ -8196,3 +8196,152 @@ final baseline), re-derive the v2 fixtures with the jitter their own docstring
 recommends, and validate against madmom (bias 0.00%) as the unbiased reference.
 Owner's rule applies: tests get fixed when the fix improves the system, and the
 clock fix alone does not yet.
+
+## Director Placement E6 — Mode-Transition Quantization (2026-09-03, director rc.16)
+
+**Decision.** Apply E1's `_schedule_drop()` deferral pattern to
+`_enter_build()` / `_enter_breakdown()` / `_enter_climax()`, generalized
+under E8 into a per-mode model rather than the two original global knobs:
+`mode_snap_unit_<build|breakdown|climax>` (`off`/`downbeat`/`phrase`) and
+`mode_phrase_within_bars_<mode>` (bars). `off` fires immediately (pre-E6
+behaviour); `downbeat` always defers to the next downbeat; `phrase` defers
+to the next downbeat AND chains further to the 8-bar phrase boundary
+(`phrase_snap_unit`, shared with E1) when within `phrase_within_bars` of
+it, never earlier than the original decision. The old globals
+(`mode_snap_downbeat`, `mode_phrase_snap_bars`) stay as pure, one-direction
+aliases — when the new per-mode keys aren't set explicitly, they're
+derived from the old globals, so nothing that already worked needs to
+change. **Shipped default: `phrase` / 2 bars on all three modes**,
+reproducing the panel-tested 2-bar candidate exactly.
+
+A deferred entry is re-validated against the SAME live trend that
+justified scheduling it (not values captured at schedule time) — if the
+trend has reversed by the time the deferred boundary arrives, the entry is
+cancelled and counted (`mode_snap_cancelled_count`) rather than fired
+stale. Build and breakdown both have two real source paths (CRUISE's own
+sustained detection, and BUILD/BREAKDOWN's direct recovery/slam paths into
+each other); climax's single source is DROP. E8 also adds
+`mode_allowed_from_<mode>` (a per-mode set of allowed source-mode names,
+checked in the `_enter_*()` wrappers before scheduling; a blocked
+transition increments `mode_blocked_by_source_count` and is not a silent
+no-op) and per-row `from_mode`/`snap_unit_applied` telemetry, so future
+config-only experiments (e.g. the owner's variant, build only from
+breakdown) live on the same code path as the shipped default rather than
+a second implementation.
+
+**A real implementation bug found before landing, not a tuning question.**
+The first working version hardcoded build's revalidation to `self._mode !=
+_CRUISE`; a house-01 offline cell showed 70% of scheduled builds
+cancelling. Debug trace showed every cancellation reading `mode=BREAKDOWN`
+at fire time — legitimate builds scheduled from BREAKDOWN's own recovery
+path (`slope > build_energy_threshold * 0.75 and energy >= recover_
+energy`), a second source path for `_enter_build()` mirroring breakdown's
+own CRUISE/BUILD duality, that the hardcoded check rejected outright
+regardless of the live trend. Parameterizing on the captured `from_mode`
+(already how breakdown's own check worked) dropped cancellation to 18.7%
+on the same cell. A second refinement replaced a strict re-check against
+the SAME soft "give-up" thresholds the continuous CRUISE tick loop uses
+(designed to tolerate brief per-tick dips and restart) with the OPPOSITE
+mode's own entry bar as the cancellation threshold — a single-shot
+fire-time check against a soft, continuously-re-accumulating threshold
+cancels on ordinary signal wobble, not genuine reversal; asking "has this
+actually become a breakdown/build candidate" is the more meaningful
+question.
+
+**Why.** The placement instrument's final-baseline read: builds/
+breakdowns/climax on-beat only ~30% of the time, on an 8-bar phrase
+boundary no better than chance (build 30%/39% vs 37 chance, breakdown
+33%/40% vs 37, climax anti-aligned 30%/12% vs 41), while the trend-
+following they DO carry (build 40% vs 23 chance, breakdown 38% vs 21)
+shows the *decision* is already better than chance — only the *timing* is
+not.
+
+**Panel (19 lists × 2 seeds, shipped defaults, vs the final baseline,
+`tools/baselines/director_placement_e6_panel-2026-09-03.md`).** On-beat
+holds decisively: 100% on build/breakdown/climax on every list, zero
+exceptions. On-phrase improves but misses the ≥ 65% target on every mode
+(build 39.4 → 48.2, breakdown 38.3 → 46.4, climax 12.2 → 22.3, chance
+~38–39 throughout). Climax stays anti-aligned (22.3% vs 39.2% chance,
+narrowed from −25.2 pt to −16.9 pt, n = 103 — the smallest population of
+any mode). Trend-following splits: breakdown flat (37.6 → 37.5, within
+noise), build measurably worse (40.0 → 37.2). Drop/impact metrics and lock
+churn (1700/1700, identical) hold; both E4 guards hold (half-time 12/12,
+house-family drop count 8/8 inside ±15%, energy inside ±5). **Mode counts
+miss the −25% ceiling badly: build −26.9%, breakdown −32.6%, climax
+−59.4%** — three to four times the budget the spec attributed to E3,
+with E3 shipped off. Worst mode: climax (worst on every axis). Worst list
+by count cost: dubstep-01 (−45.5%). One cell regressed in rating:
+downtempo-01 seed 1 (4 → 3).
+
+**Ablation (`mode_phrase_snap_bars` ∈ {0, 1}, vs the same baseline,
+`tools/baselines/director_placement_e6_ablation-2026-09-03.md`).**
+Pre-registered to test whether the count/trend cost belongs to the phrase
+half or to the deferral mechanism itself. Finding: `=1` is mathematically
+identical to `=0` on every outcome metric — the phrase chain only
+activates when `to_boundary == 1`, which resolves in exactly one downbeat
+either way, so it can never produce a longer wait than downbeat-only.
+Downbeat-only (`=0`) itself still costs build −23.5%, breakdown −28.0%,
+climax −58.3%, cancellation 19.1%, build trend 37.0 (vs the ≥ 40
+predicted) — nearly the full cost of the 2-bar candidate, for none of its
+phrase-alignment gain. The downtempo-01-seed-1 regression reproduces on
+all three cells (0/1/2-bar), slightly worse at 0-bar/1-bar (placement
+0.227) than 2-bar (0.233) — further evidence the cost is intrinsic to
+"defer one downbeat, cancel on reversal," not to the phrase chain.
+
+**Landing rule, applied, and NOT followed on its literal fallback.** The
+pre-registered rule: ship whichever cell keeps on-beat 100% with build
+trend ≥ baseline and counts inside −25%, preferring more phrase gain if
+two qualify; if neither qualifies, land downbeat-only. **Neither cell
+qualifies** (both fail build trend ≥ 40.0; both fail counts on breakdown
+and climax). The rule's literal fallback is downbeat-only — but the
+ablation shows that would ship the strictly worse candidate on the actual
+data: downbeat-only pays essentially the same cost as 2-bar everywhere
+except phrase alignment, where 2-bar is +10 pt better on build and
+breakdown. The premise behind the fallback branch (that downbeat-only is
+meaningfully cheaper) is what the ablation falsified. **Decision: ship the
+2-bar candidate, and record the count/trend cost as intrinsic to the
+deferral-and-cancellation mechanism itself, not to the phrase half.** That
+intrinsic cost is what the owner's live A/B (rc.15 behaviour vs the rc.16
+default) is for. Climax's −59% count cost and persistent anti-alignment is
+E7/E8 territory, not a reason to hold E6 back — see the climax-time-since-
+drop finding below.
+
+**Climax time-since-drop, on the rc.15 baseline (n = 253, input to E7).**
+Median 3.11 bars, mean 4.24 (right-skewed; 70% of events fall in bars
+2–4, tail to 20). Climax's escalation gate (`impact_hold_s`, a roughly
+fixed real-time duration after DROP, not a bar count) lands it a fairly
+tight, predictable number of bars after the drop that fired it — since
+drops are phrase-boundary-aligned (E1), and climax fires ~2–4 bars later
+(not near 0 or 8), it lands mid-phrase *by construction*, not because
+snapping failed. This is a structural property of the escalation gate, not
+a tuning miss; a future fix (E7) needs a different mechanism (e.g. climax
+as "drop + N phrases"), not a smaller `phrase_within_bars`.
+
+## Director Placement E3 — Persistence Raise: Explored, Shipped Off (2026-09-03)
+
+**Decision.** `mode_persist_bars_rise` / `mode_persist_bars_fall` (both
+default `0`, off): an additional bars-of-monotone-slope floor checked
+before `_enter_build()`/`_enter_breakdown()`'s CRUISE-sourced sustained
+paths are even called (on top of, not instead of, the existing
+`build_sustain_s`/`breakdown_sustain_s` time gate) — bars are tempo-relative
+where seconds are not. Implemented and available as a tunable; not shipped
+on by default.
+
+**Why explored.** The final baseline's own trend-following, while
+above chance, still misses more than half the time (build 40% vs 23 chance,
+breakdown 38% vs 21) — the original E3 bullet asked whether raising the
+persistence requirement until 4-bar consistency clears 55% on house family
+would close more of that gap, at some count cost.
+
+**Why shipped off.** Every candidate tested on the house-01 offline cell (1,
+2, 4 bars, `mode_snap_unit` off so E3 could be measured in isolation)
+exceeded the pre-registered −25% mode-count-cost ceiling: 1 bar already cost
+−35% (build) / −28% (breakdown); 2 bars cost −72% / −65%; 4 bars zeroed both
+modes out entirely on this list. Trend-following did improve at the smaller
+values (breakdown 47 → 64% at 1 bar, → 77% at 2 bars, vs ~25–29% chance),
+so the mechanism works as intended — no tested value kept the cost inside
+the predicted budget. Per the standing instruction to report a missed
+prediction rather than tune toward it, E3 lands as a working, tested,
+off-by-default knob rather than a shipped default; a future pass could
+explore sub-1-bar (fractional) values or a persistence measure less coupled
+to the existing time-sustain gate.

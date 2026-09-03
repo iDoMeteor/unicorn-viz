@@ -16,7 +16,7 @@
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.113        RC            module
+  auto-vj-01                    1.0.0-rc.114        RC            MISMATCH (readme=1.0.0-rc.113)
   candy-frame-01                1.1.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -75,5 +75,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
+  ⚠  4 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic, effects-games
 
