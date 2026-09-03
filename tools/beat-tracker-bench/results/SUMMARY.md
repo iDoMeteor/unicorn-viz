@@ -15,6 +15,22 @@ Essentia's rebuild-cadence floor) turned into a misleadingly fast,
 uninformative number rather than a real detection latency — see each
 model's section for what that artifact looked like before the fix.
 
+**Where this project's own tracker now sits (prototype, not shipped):**
+Program B (`results/onset_prototype.md`) tested writing v3's envelope
+densely instead of through sparse peak-picked pulses, stock v3 constants
+otherwise unchanged — full 311-track results:
+
+| Row | Acc1 | Acc2 |
+|---|---|---|
+| v3 + dense envelope, stock onset function (prototype, stock constants) | 75.8% (232/306) | 95.8% (293/306) |
+| v3 + dense envelope, complex-domain onset function (prototype, stock constants) | 76.5% (234/306) | 96.7% (296/306) |
+
+Both **ties-or-beats madmom (76.1%/96.1%) and BTrack (76.1%/96.4%)** on
+this same 306-track corpus — see `onset_prototype.md` for the full
+methodology, the control-row isolation of write-path vs. onset-function
+effects, and why "prototype" matters here: no `_V2_*`/`_V3_*` constant
+was retuned to get these numbers.
+
 ## Madmom (`DBNBeatTrackingProcessor(online=True)`) — the headline result
 
 Two runs, same reference ladder and metric set, consistent result on both:
