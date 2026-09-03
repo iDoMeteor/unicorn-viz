@@ -319,6 +319,28 @@ carry most of the count cost — the downbeat-only prediction above may
 miss; score it as written). Climax fires a median 3.1 bars after the drop,
 70% in bars 2–4: structural, confirmed.
 
+**Ablation result (2026-09-03 evening; report
+`drop-ins/training-kit-01/tools/baselines/director_placement_e6_ablation-2026-09-03.md`).**
+The 1-bar cell is byte-identical to the 0-bar cell on every count
+(chaining to a boundary that is already the next downbeat is a no-op on
+timing; values below 2 mean downbeat-only, documented on the key).
+Downbeat-only carries essentially the whole cost — build trend 37.0 (base
+40.0), counts −23.5/−28.0/−58.3, cancellations 19.1% — while the 2-bar
+candidate adds +10 pt build phrase alignment (48 vs 38, chance 38) for
+3–4 pt more count loss and the same trend. Predictions: 2/6 held (on-beat
+100%, phrase back to chance), 4/6 missed (trend recovery, ~10%
+cancellations, counts within −15%, "1-bar sits between"). Guards clean on
+both cells; trance is the worst trend list on both (−6.6 / −10.6);
+downtempo seed 1 regresses 4→3 on every cell. **The landing rule's
+premise ("the phrase half is the cost") was falsified and its fallback
+branch was not followed:** neither cell meets the rule, and shipping
+downbeat-only would ship the strictly worse candidate on the measured
+numbers. **Decision: rc.16 ships the 2-bar candidate** (per-mode keys,
+downbeat snap on all three modes, 2-bar phrase window, E3 off), and the
+intrinsic cost of "defer one downbeat, cancel on reversal" — fewer, later
+transitions — is the question the owner's live A/B answers. Climax's
+−59% is E7/E8 territory.
+
 ### E8 — owner variant: per-mode snap unit + allowed source (2026-09-03)
 
 Owner: "build detect on a downbeat from within a breakdown phrase, drop
