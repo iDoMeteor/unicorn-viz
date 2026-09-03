@@ -476,6 +476,111 @@ the rc.16 control cell and the rc.15 final baseline** — the costs stack
 rc.15 works out to roughly −56% vs rc.15, not −40%), and the owner will
 want the cumulative number, not just the E8-over-rc.16 delta.
 
+### E8 — offline cells, round 2 pre-registration (2026-09-03)
+
+Round 1 result (`director_placement_e8_offline-2026-09-03.md`): all four
+predictions missed, three on magnitude (build −79.1% vs a predicted −40%,
+climax −100% vs a predicted −20-40%, cruise-drop share 25.5% vs a predicted
+5-15% with worse-not-better energy-lift), one unscoreable (climax phrase
+alignment — no surviving events to measure). The −100% climax result was
+verified as a real mechanism, not an artifact, via exact `mode_snap_count =
+fired + cancelled` counter arithmetic on two sampled buckets.
+
+Round 2 tests two structural responses to round 1's findings, same six
+lists (house, tech-house, big-room, techno, trance, drum-and-bass), seed 1,
+**reusing round 1's `control` buckets rather than rerunning them** (rc.16
+defaults, `beat_tracker_engine=v3` only — unchanged code path, no reason to
+regenerate). Cruise→drop stays off in every round-2 cell (parked, not
+abandoned — see the note below).
+
+**New mechanism (this session, both cells depend on it): `mode_phrase_unit_
+<mode>`.** Distinct from `mode_phrase_within_bars_<mode>` (the wait CAP
+within the existing phrase grid) — this is the phrase GRID size itself in
+bars, defaulting to the shared `phrase_snap_unit` (8) when unset, a no-op
+for any mode that doesn't set it. `_schedule_mode_transition()` now takes
+an explicit `phrase_unit` argument (previously always read the global);
+`None` falls back to the old global-only behavior, so build/breakdown are
+unaffected by this change. Implemented and unit-tested
+(`tests/test_director_mode_snap.py`, 12 new tests covering the resolver,
+the explicit-unit-overrides-global case, and the confidence-floor gate
+below); live-smoke-tested on `training - rnb 01` seed 1 before this
+pre-registration (climax-4 config: 5/5 build fires from BREAKDOWN as
+expected, mode-snap counters present and consistent; build-floor config in
+isolation: 15 build fires from both CRUISE and BREAKDOWN, 805 CRUISE
+attempts blocked by the confidence floor in that one short session,
+confirming the floor is doing real work, not a rubber stamp).
+
+**New mechanism: `mode_source_min_confidence_build`.** A confidence floor
+on CRUISE's own build source specifically (checked in `_enter_build()`
+after the `mode_allowed_from_build` gate, only when `from_mode == CRUISE`);
+BREAKDOWN's recovery path is never checked against it — it has no
+`downbeat_confidence`-shaped signal behind it in the same sense (it fires
+off energy/slope, not the beat grid). 0 = off (default, todays's
+behaviour). New counter `_build_blocked_by_confidence_count`, in the
+corpus snapshot as `build_blocked_by_confidence_count`.
+
+Both new keys added to `_DIRECTOR_CONSTANT_DEFAULTS` in
+`package_training_set.py` in the same commit as the code (per the doc-sync
+obligation), confirmed reaching the LLM payload correctly via
+`_load_live_director_constants()`. While in there: found and fixed a
+pre-existing gap — `drop_cruise_min_confidence` (landed at rc.16, round 1
+of E8) was never added to that dict at all, the exact "new constant
+invisible to the live reader" failure mode the packager's own module
+docstring warns about. Added retroactively in this commit.
+
+**Cells (3, same six lists, seed 1, 3-parallel, control reused from round
+1):**
+
+- **climax-4**: rc.16 plus `mode_snap_unit_climax=phrase`,
+  `mode_phrase_within_bars_climax=4`, `mode_phrase_unit_climax=4` (a true
+  4-bar half-phrase grid for climax only, not merely a 4-bar cap on the
+  existing 8-bar grid — `mode_phrase_within_bars_climax=4` on an unchanged
+  8-bar grid would already catch `to_boundary` half the time, which is NOT
+  what this cell tests). Build/breakdown untouched (rc.16 defaults).
+- **build-floor**: rc.16 plus `mode_source_min_confidence_build=0.71`
+  (same p90 downbeat-confidence floor as `drop_cruise_min_confidence` in
+  round 1, same justification — see round 1's pre-registration for the
+  distribution). `mode_allowed_from_build` untouched (unrestricted — CRUISE
+  stays allowed, just confidence-gated instead of blocked outright).
+  Climax as rc.16.
+- **both**: climax-4 + build-floor together.
+
+Cruise→drop stays OFF (`drop_cruise_min_confidence=0.0`) in every round-2
+cell. Round 1's report on this axis reads back to the owner as: "as
+specified, 25% share at 15% lift vs 27% overall; a lift-selecting gate
+(`impact_novelty >= per-track p75`, the same per-track relative gate E4
+already uses for drop rescue) is a possible round-3 cell if the owner wants
+to pursue it" — parked pending that decision, not implemented this round.
+
+**Predictions (peer's, recorded verbatim before the run):**
+
+1. **climax-4**: climax count recovers to at least half of rc.16 control's
+   (cancellations fall because the hold is ≤3 bars instead of up to 7).
+   Climax phrase alignment, measured at BOTH the 4-bar unit and the 8-bar
+   unit (report both), goes above chance at 4 and stays about chance at 8.
+   Build/breakdown untouched (both should read identically to the reused
+   control cell, modulo whatever a different code path's `phrase_unit`
+   default-fallback introduces — expected: none, since neither mode sets
+   `mode_phrase_unit_build/breakdown`).
+2. **build-floor**: build count lands between rc.16 control and round-1's
+   `core` cell — i.e. a cost of −15% to −40% vs rc.16 control, not round
+   1's −79%. Build trend-following no worse than rc.16 control (the floor
+   should remove low-confidence CRUISE builds, which are the ones most
+   likely to be noise rather than real signal).
+3. **both**: additive — combines climax-4's climax-count recovery with
+   build-floor's smaller build-count cost, with no cross-interaction
+   assumed (build and climax are gated by different source/confidence axes
+   with no shared state between them).
+
+**Report format:** same as round 1 — per-list/per-mode table, pooled
+table, held/missed verdicts against the three predictions above, from_mode
+source-breakdown table, counts reported relative to both the rc.16 control
+cell and the rc.15 final baseline (costs stack, per the owner's standing
+request). Climax phrase alignment reported at both the 4-bar and 8-bar
+grid per prediction 1's explicit ask. Skip the LLM training-payload step
+for this round (offline exploration only, per peer instruction). BATCH
+START/END framing, 3-parallel, same as round 1.
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
