@@ -8123,3 +8123,37 @@ family novelty is higher and would gain false fires.
 counts within +15% and energy lift within ±5 of the E1 bake; half-time lists
 never-fire ≤ 2. If a guard breaks, the default flips off in a follow-up and the
 mechanism stays owner-selectable.
+
+## E5 — The +1.3% Replay Tempo Bias: Diagnosed, Fix Parked (2026-09-03)
+
+**Finding.** On real music in replay both v2 and v3 read tempo ~+1.3% high
+(median p50/tag on exact tracks 1.0127; Essentia and madmom on the same files
+1.0000). A synthetic 125 BPM click reads true (v2 −0.10%, v3 +0.39%), decode
+length matches ffmpeg to the sample, and a fine ACF of the 60 Hz bass-flux
+stream reads the tags within +0.2% — so the bias is inside the tracker's
+100 Hz onset envelope. Measured write rate on real tracks: 95.7–96.3
+samples/s against the nominal 100. Two mechanisms in `beat_grid.py`: (1) on
+ticks that carry onsets, `update()` advances the envelope only to the last
+onset's timestamp and then moves `_last_t` to `now`, losing the tail of the
+tick; (2) `_pulse_envelope()` deducts a step from `_env_t_acc` clamped at zero,
+so an onset arriving before a full step has accumulated steals the remainder.
+Clicks land on block boundaries and show neither. Consequence: every replay
+tempo sits ~1.3% high (inside the ±4% exact band, so accuracy numbers stand),
+six near-misses 4–7% high in the 311-track bench become exact once fixed, and
+house tracks at 127+ cross the dubstep prefilter edge in replays (the
+profile-mix artifact). Live sessions show a smaller, engine-dependent bias
+(v2 shadow +0.8%, v3 −0.3%).
+
+**Why the fix is parked.** Three attempts changed the envelope's timing/pulse
+semantics that a dozen v2 synthetic tests pin: an unconditional advance to
+`now` double-counted the pre-onset span (v2 tests read 3% low); a dedicated
+envelope clock exposed the pulse deduction (90 Hz); merging the pulse into the
+next advance write made the comb read half tempo. Per the regression
+discipline (tests not written by the agent, red after core changes) the tree
+was reverted to rc.40-era `beat_grid.py` and the diagnosis kept as a strict
+`xfail` in `tests/test_envelope_advance_rate.py`. The fix needs a deliberate
+redesign of the envelope clock and pulse placement with the v2 test
+expectations re-derived, validated by the synthetic click (must stay true),
+the 22-track bias (must go to ~0), and the madmom bench as the unbiased
+reference. Detector version unchanged; every batch to date carries the same
+bias and remains comparable.
