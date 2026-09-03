@@ -1,0 +1,149 @@
+[
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/30Hz - Eyes Wide Shut (Original Mix).mp3",
+  "ref_bpm": 87.0,
+  "stock_wrong_bpm": 176.24,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 86.96,
+   "true_score": 0.0673,
+   "wrong_bin_bpm": 176.47,
+   "wrong_score": 0.2231,
+   "true_over_wrong_ratio": 0.302
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 86.96,
+   "true_score": 1.4783,
+   "wrong_bin_bpm": 176.47,
+   "wrong_score": 0.8486,
+   "true_over_wrong_ratio": 1.742
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Hplus - What If (Original Mix).mp3",
+  "ref_bpm": 169.0,
+  "stock_wrong_bpm": 138.27,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 166.67,
+   "true_score": 0.0449,
+   "wrong_bin_bpm": 139.53,
+   "wrong_score": 0.0,
+   "true_over_wrong_ratio": 44865913.689
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 166.67,
+   "true_score": 0.2106,
+   "wrong_bin_bpm": 139.53,
+   "wrong_score": 0.1508,
+   "true_over_wrong_ratio": 1.397
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Roderic H - Miss You (Original Mix).mp3",
+  "ref_bpm": 174.0,
+  "stock_wrong_bpm": 140.2,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 176.47,
+   "true_score": 0.5483,
+   "wrong_bin_bpm": 139.53,
+   "wrong_score": 0.0333,
+   "true_over_wrong_ratio": 16.45
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 176.47,
+   "true_score": 1.0527,
+   "wrong_bin_bpm": 139.53,
+   "wrong_score": 0.3871,
+   "true_over_wrong_ratio": 2.719
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Rodney Kamal Jackson - Turista (Original Mix).mp3",
+  "ref_bpm": 100.0,
+  "stock_wrong_bpm": 136.37,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 100.0,
+   "true_score": 0.0336,
+   "wrong_bin_bpm": 136.36,
+   "wrong_score": 0.1363,
+   "true_over_wrong_ratio": 0.247
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 100.0,
+   "true_score": 1.0991,
+   "wrong_bin_bpm": 136.36,
+   "wrong_score": 0.5547,
+   "true_over_wrong_ratio": 1.981
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Route 94 ft Jess Glynne - My Love (Catchfraze Remix).mp3",
+  "ref_bpm": 173.0,
+  "stock_wrong_bpm": 118.72,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 171.43,
+   "true_score": 0.0613,
+   "wrong_bin_bpm": 117.65,
+   "wrong_score": 0.152,
+   "true_over_wrong_ratio": 0.403
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 171.43,
+   "true_score": 0.3238,
+   "wrong_bin_bpm": 117.65,
+   "wrong_score": 0.2925,
+   "true_over_wrong_ratio": 1.107
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Sn - Witch Turning To Myth (Original Mix).mp3",
+  "ref_bpm": 170.0,
+  "stock_wrong_bpm": 149.23,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 171.43,
+   "true_score": 0.0741,
+   "wrong_bin_bpm": 150.0,
+   "wrong_score": 0.0114,
+   "true_over_wrong_ratio": 6.497
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 171.43,
+   "true_score": 0.6745,
+   "wrong_bin_bpm": 150.0,
+   "wrong_score": 0.0061,
+   "true_over_wrong_ratio": 110.455
+  }
+ },
+ {
+  "path": "/home/jj/Music/crates/drum-and-bass/Unsolicited Thoughts - The Day Phil Collins Stopped Caring (Original Mix).mp3",
+  "ref_bpm": 148.0,
+  "stock_wrong_bpm": 133.56,
+  "stock": {
+   "cycle": 899,
+   "true_bin_bpm": 146.34,
+   "true_score": 0.0,
+   "wrong_bin_bpm": 133.33,
+   "wrong_score": 0.0029,
+   "true_over_wrong_ratio": 0.0
+  },
+  "odf": {
+   "cycle": 899,
+   "true_bin_bpm": 146.34,
+   "true_score": 0.3238,
+   "wrong_bin_bpm": 133.33,
+   "wrong_score": 0.0511,
+   "true_over_wrong_ratio": 6.336
+  }
+ }
+]

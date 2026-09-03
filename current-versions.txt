@@ -65,9 +65,9 @@
   ── early alpha ───────────────────────────────────────────────────────────
   video-out-01                  0.4.1               early alpha   module
   audio-out-01                  0.4.0               early alpha   module
+  effects-rollercoast           0.4.0               early alpha   module
   webcam-01                     1.4.0               early alpha   module
   effects-flying                0.2.1               early alpha   module
-  effects-rollercoast           0.3.0               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
