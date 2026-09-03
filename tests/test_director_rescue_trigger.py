@@ -44,6 +44,14 @@ def test_last_drop_bar_is_set_on_fire_and_reset_on_track_change() -> None:
     assert "self._last_drop_bar = -10_000" in _SRC[idx: idx + 200]
 
 
+def test_rescue_is_scoped_to_never_fired_tracks_by_default() -> None:
+    """Director rc.15: the shipped default scopes the rescue to tracks that
+    have not fired a drop on the current track (the 64-bar re-arm alone
+    breached the house-family drop-count guard on the re-baseline)."""
+    assert "_cfg.get('drop_trigger_rel_first_only', 1)" in _SRC
+    assert "if rel_ok and getattr(self, '_drop_trigger_rel_first_only', False) and int(self._last_drop_bar) >= 0:" in _SRC
+
+
 def test_relative_trigger_uses_rolling_p90_with_floor() -> None:
     assert "trigger_rel = trigger / max(0.15, p90)" in _SRC
     assert "p90 = vals[int(0.9 * (len(vals) - 1))]" in _SRC

@@ -8157,3 +8157,18 @@ expectations re-derived, validated by the synthetic click (must stay true),
 the 22-track bias (must go to ~0), and the madmom bench as the unbiased
 reference. Detector version unchanged; every batch to date carries the same
 bias and remains comparable.
+
+### E4 addendum — scoped to never-fired tracks (2026-09-03, director rc.15)
+
+The post-landing re-baseline (19 lists × 2 seeds, training-kit bb666c8)
+passed the half-time guard (never-fire ≤ 2 on 12/12 cells) but breached the
+house-family drop-count guard on 4/8 lists (big room +27%, dance +20%, deep
+house +18%, prog house +21%; energy lift within ±5 on 8/8): the 64-bar re-arm
+rescued *any* track with a long gap between drops, and those lists have
+legitimate ones. Placement rating slipped half a point on six lists as the
+rescued drops carry lower lift over chance. Per the pre-registered rule the
+default was to be flipped off; a tighter scope was tried first (pre-registered,
+4 cells, seed 1): `drop_trigger_rel_first_only` — the relative gate applies only
+to a track that has never fired a drop on the current track. Result: big room
++6% and prog house +11% over the E1 bake (inside the guard), ambient never-fire
+2/14 and trap 0/21 kept, energy/bass lift unchanged. Landed on by default.
