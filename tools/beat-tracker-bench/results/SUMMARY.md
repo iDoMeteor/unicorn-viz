@@ -223,19 +223,6 @@ every 0.5s) scales badly with clip length. Per the original scoping
 call: "needs >3x realtime, not a live candidate" regardless of accuracy —
 not picked back up unless there's a specific reason to.
 
-## BTrack — blocked
-
-Core C++ library builds cleanly (confirmed after the owner cleared the
-`libsamplerate-devel` system dependency). The official Python bindings
-module has one further, unrelated, trivial compile bug (`std::copy_n`
-used without `#include <algorithm>`, a GCC-version portability issue) —
-not yet patched. Deeper problem, independent of that bug: the official
-bindings only expose batch functions; the underlying C++ class's real
-streaming API (`processAudioFrame`/`getCurrentTempoEstimate`) was never
-bound to Python at all. Getting a streaming adapter would mean writing
-custom pybind11 bindings — separate, not-yet-approved scope. Not
-benchmarked.
-
 ## Shippability
 
 See `shippability_matrix.md` for the full per-model license/
