@@ -581,6 +581,65 @@ grid per prediction 1's explicit ask. Skip the LLM training-payload step
 for this round (offline exploration only, per peer instruction). BATCH
 START/END framing, 3-parallel, same as round 1.
 
+### E8 — offline cells, round 3 pre-registration (2026-09-03)
+
+Round 2 result (`director_placement_e8_round2-2026-09-03.md`): climax-4
+(a true 4-bar climax phrase grid) recovered climax count to 77.8% of rc.16
+control with build/breakdown untouched — carried forward as the climax
+candidate, no further tuning needed there. build-floor at 0.71 missed its
+predicted 15-40% cost badly (actual −67.8%, close to round 1's outright
+block); the peer's own read: 0.71 was carried over unchanged from round
+1's cruise-drop floor, never re-derived for the build-source distribution
+it actually gates.
+
+Round 3 tests exactly that: **re-derive the confidence floor from the
+population it gates, rather than reusing 0.71.** Reconstructed from round
+1's own control buckets (same six lists, seed 1, reused unmodified — no
+rerun) by filtering `sequence-replay-*.jsonl` heartbeat rows to `vj_mode ==
+'CRUISE'` and `energy_slope > build_energy_threshold` (the exact gate
+`_enter_build()`'s CRUISE branch itself checks before calling
+`_enter_build()`, per-row threshold looked up by that row's own
+`vj_profile` — 0.13 for normie/raver/tweaker, 0.22 for chill; the six
+control buckets mix all three: normie 4451, raver 14991, chill 1998
+CRUISE-mode heartbeats). This is "CRUISE build-evidence ticks": the
+population of ticks where the sustained-rise slope condition already
+holds and downbeat_confidence is the only remaining gate to add.
+
+**Population: 3854 ticks pooled across the six lists** (per-list: house
+626, tech-house 659, big-room 573, techno 579, trance 627, dnb 790).
+`downbeat_confidence` distribution: p25 0.408, **median (p50) 0.528**,
+p75 0.624, p90 0.704, mean 0.516. Round 1's 0.71 sits almost exactly at
+this population's own p90 — confirming why it blocked as heavily as it
+did (round 2's 25,363 pooled blocked-tick count on a per-tick-repeated
+check, not a one-shot population count, so not directly comparable to the
+3854 figure above, but the same population underneath).
+
+**`mode_source_min_confidence_build = 0.53`** (median, rounded to 2
+decimals) for round 3's single cell.
+
+**Cell (1, six lists, seed 1, control reused from round 1, no rerun):**
+
+- **build-floor-median**: rc.16 plus `mode_source_min_confidence_build=
+  0.53`. Climax and `mode_allowed_from_build` untouched (rc.16 defaults —
+  climax-4 is NOT combined in this cell; round 2 already showed combining
+  costs more than either alone, and this round isolates the re-derived
+  floor's own cost cleanly before any combination is considered again).
+
+**Prediction (peer's, recorded verbatim):** build count cost lands between
+0.71's −67.8% and no-floor's 0% — specifically **20-40% vs rc.16 control**.
+Build trend lands between rc.16 control's 36.0% and 0.71's 40.6%.
+Breakdown/climax untouched. **Decision rule, pre-registered:** if the cost
+lands inside 20-40%, build-floor-median joins climax-4 as a panel
+candidate; if it costs more than 40%, build-floor is dropped as a
+mechanism entirely and round 1's outright block
+(`mode_allowed_from_build=BREAKDOWN`) is recorded as the owner variant's
+measured build-cost, not a softer confidence-gated version of it.
+
+**Report format:** same as rounds 1-2 — mode counts vs rc.16 control and
+rc.15 baseline, pooled metrics table, from_mode source breakdown, the
+prediction scored as written including the pass/fail decision rule's own
+outcome. Code stays uncommitted through this round. BATCH START/END.
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
