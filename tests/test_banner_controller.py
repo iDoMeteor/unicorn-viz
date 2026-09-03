@@ -173,7 +173,10 @@ def test_lowering_max_line_chars_reflows_existing_text(ctx) -> None:
 
 # ------------------------------------------------------------------ reset
 
-def test_ctrl_r_reset_rebuilds_default_text_at_current_cap(ctx) -> None:
+def test_ctrl_r_reset_also_resets_max_line_chars_to_the_default(ctx) -> None:
+    """A lowered max_line_chars (accidental or deliberate) must have a way
+    back to the documented default (100) without counting Right presses --
+    Ctrl+R resets both, not just the text."""
     import sdl2
 
     b = _banner(ctx, {'max_line_chars': 30})
@@ -181,9 +184,25 @@ def test_ctrl_r_reset_rebuilds_default_text_at_current_cap(ctx) -> None:
         b._show_config = True
         b._text = 'whatever was typed'
         result = b.handle_key(sdl2.SDLK_r, sdl2.KMOD_CTRL)
-        assert result == 'Banner text reset'
+        assert result == 'Banner text + max line reset'
+        assert b._max_line_chars == 100
         lines = b._text.split('\n')
-        assert all(len(ln) <= 30 for ln in lines)
+        assert all(len(ln) <= 100 for ln in lines)
+    finally:
+        b.shutdown()
+
+
+def test_ctrl_r_reset_while_editing_also_resets_max_line_chars(ctx) -> None:
+    import sdl2
+
+    b = _banner(ctx, {'max_line_chars': 30})
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        b._text = 'whatever was typed'
+        result = b.handle_key(sdl2.SDLK_r, sdl2.KMOD_CTRL)
+        assert result == 'Banner text + max line reset'
+        assert b._max_line_chars == 100
     finally:
         b.shutdown()
 

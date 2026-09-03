@@ -12,15 +12,11 @@
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
+  banner-01                     0.10.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.113        RC            module
-
-  ── alpha ▲ ───────────────────────────────────────────────────────────────
-  banner-01                     0.10.0              alpha ▲       module
-
-  ── RC ────────────────────────────────────────────────────────────────────
   candy-frame-01                1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
