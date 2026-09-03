@@ -170,6 +170,109 @@ END); path-only staging; three replays in parallel, madmom capped
 (taskset 0–7, nice 10, BLAS 8); no LLM scoring. Seats execute; the
 strategist pre-registers, reads, and lands.
 
+### 0.5 Program B step 3 — pre-registration, batch 1 (2026-09-03)
+
+Program B step 3 is the re-tune (roadmap 0.3, revised): apply the E5 clock
+patch, add a dense-envelope write path, re-derive the co-adapted v2 test
+fixtures, then re-tune under the true clock and validate on the 22-hardest
+set and the 19-list panel. Per 0.4's rule, this lands in checkpointed
+batches, not one commit — **batch 1 below is implementation +
+mechanism-verification only, no re-tune, no panel.**
+
+**What batch 1 implements, in `beat_grid.py` (both `BeatTracker` and
+`BeatTrackerV3`, since both read the same envelope ring):**
+
+1. **The E5 clock patch, applied as-is**
+   (`docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch`,
+   verified it still applies cleanly against current `beat_grid.py`).
+   Absolute-index envelope clock; every advance and pulse funnels through
+   the shared `_advance_env_to_index()` primitive.
+2. **A new `_V2_ENV_SOURCE` config tunable, `'pulses'` (default, current
+   shipped behavior exactly) / `'dense_flux'`.** In `'dense_flux'` mode,
+   `update()` always advances to `now` via `_advance_envelope()` regardless
+   of the `onsets` argument — `_pulse_envelope()` (the discrete peak-picked
+   path) is never called for envelope-writing purposes, matching the
+   bench's `v3_odf_tracker.py` exactly (onset events, if still passed by
+   the caller, remain available to `_absorb_onset()`'s phase-locking —
+   only the envelope WRITE path changes, not phase absorption). The value
+   written into each newly-advanced slot (in place of `'pulses'` mode's
+   `0.0` zero-fill) is `audio.spectral_flux` — this project's own existing
+   per-block value, already computed every tick, read *before*
+   `unicornviz/audio/analyzer.py`'s own peak-picking/adaptive-threshold
+   step — passed through a causal running-median/MAD normalizer (ported
+   from the bench's `causal_norm.py`: trailing 8 s window matching
+   `_V2_ENV_WINDOW_S`, MAD floored at 10% of the window's own mean
+   absolute value rather than a bare epsilon, verified live in the bench
+   as the fix for a real multi-million-z-score overflow) and log-
+   compressed the same way `_pulse_envelope()` already compresses a real
+   onset strength above 1.0. This exactly reproduces the bench's
+   `stock-odf` row's mechanism (not the complex-domain `odf` row — that
+   function tied/edged `stock-odf` by a small margin but is explicitly
+   "not the load-bearing change" per the bench's own headline finding, and
+   implementing a new onset-detection algorithm in shipped code is a much
+   bigger lift for the smaller of the two effects; parked, not ruled out,
+   for a possible later round once `dense_flux` alone is validated).
+   Default stays `'pulses'` — no live behavior changes from this landing
+   alone.
+3. **Fix `tests/test_envelope_advance_rate.py`'s two-test xfail.**
+   Re-read: both tests assert only the envelope's write RATE (≈100 Hz),
+   never its written VALUES — so E5 alone should fix both, independent of
+   `_V2_ENV_SOURCE` (confirmed by reading the test file directly, not
+   assumed). Predicted: `xfail(strict=True)` becomes an unexpected pass
+   (`XPASS`) the moment E5 lands, caught immediately by `strict=True`
+   turning that into a hard failure — the marker gets removed in the same
+   commit as the patch, not left to fail loudly on the next unrelated run.
+4. **Re-derive the co-adapted v2 fixtures.** `tests/test_beat_tracker_v2.py`
+   already has a `jitter_s` parameter on its shared `_run_steady_click_
+   track()` helper (many tests already pass `jitter_s=0.01`); 35 of 46
+   call sites still use the zero-jitter default — these are the tests the
+   ADR's E5 addendum names as passing partly because of the old clock's
+   timing noise acting as an accidental regularizer. Batch 1 adds
+   `jitter_s=0.01` (matching the already-established convention) to every
+   zero-jitter call site and re-runs the full file under the E5-patched
+   clock (`_V2_ENV_SOURCE='pulses'`, matching the ADR's own parked finding
+   that pulses-only regresses). **Any assertion that changes value gets
+   reported here, not silently updated** — per the standing regression-test
+   discipline, a test whose expected outcome changes needs a stated reason
+   (jitter changed the input, not a guess at what should now pass) before
+   its literal is touched.
+
+**Batch 1 checkpoint run — 22-hardest-track set, comb/prior/gate stack
+completely UNCHANGED (no `_V2_*`/`_V3_*` constant retuned, matching every
+row in the bench):** three configurations — `stock` (today's shipped
+`beat_tracker_engine` default, `_V2_ENV_SOURCE='pulses'`, no E5 patch — a
+sanity check that this reproduces the already-known 13/22 exact baseline
+on real production code, not just the bench's scratch harness), `e5-pulses`
+(E5 patch, `_V2_ENV_SOURCE='pulses'`), `e5-dense` (E5 patch,
+`_V2_ENV_SOURCE='dense_flux'`).
+
+**Predictions:**
+
+1. `stock` reproduces 13/22 exact (the already-recorded ADR baseline) —
+   a sanity check on the harness, not a real prediction.
+2. `e5-pulses` regresses, in the same direction and a comparable
+   magnitude to the already-parked ADR finding (13→10 on the same set,
+   v2 folding house to half tempo) — this is expected to reproduce a
+   known result, not a new finding.
+3. `e5-dense` recovers toward or above `stock`'s count. **Direction only,
+   not magnitude** — the bench's own stock-odf numbers (70.6% Acc1 vs
+   stock 60.8%, 15/22 on the hard set) come from a scratch `BeatTracker`
+   subclass driven by the bench's own accelerated-replay harness, not this
+   project's real `BeatTrackerV3` + `AutoVJController` integration on the
+   real 22-track set — mechanism and direction transfer, the exact number
+   does not, and is not guessed here.
+
+**If `e5-dense` does not recover past `e5-pulses`** (i.e. the dense write
+path shows no benefit on this project's own real tracker, contradicting
+the bench's headline finding), batch 2's re-tune sweep does not proceed
+until that discrepancy is understood — reported as a leverage-check
+failure, not smoothed over.
+
+**Explicitly deferred to a later, separately pre-registered batch:** any
+`_V2_*`/`_V3_*` constant retune, the 19-list panel, and the complex-domain
+onset function. Batch 1 is mechanism verification on a fixed, unchanged
+decision stack only.
+
 ---
 
 ## Part 1 — The v3 roadmap, summarized
