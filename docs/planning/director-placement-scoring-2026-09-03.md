@@ -245,6 +245,51 @@ replaced by the placement rating once E1–E4 have data).
 
 ## Experiment log
 
+### E6 — mode-transition quantization (2026-09-03): panel read, NOT landed yet
+
+Panel 19×2 (shipped candidate: downbeat snap on, phrase snap within 2 bars,
+E3 off), full report
+`drop-ins/training-kit-01/tools/baselines/director_placement_e6_panel-2026-09-03.md`.
+Held: on-beat 30% → 100% on build/breakdown/climax, every list; drop/impact
+metrics stable; lock churn identical; both E4 guards. Missed: on-phrase
+48/46/22% (target ≥ 65); climax still below chance (22 vs 39); build
+trend-following 40.0 → 37.2; mode counts −27/−33/−59% with E3 off (ceiling
+was −25). Placement rating 3.58 → 3.84 (11 up, 26 flat, 1 down:
+downtempo seed 1). E3 at 1/2/4 bars blew its own budget in every offline
+cell; stays off, kept as a knob.
+
+**Reading.** The timing win the owner asked for is the downbeat half and
+it is total. The three misses share one axis, and all three are what a
+deferral of up to 2 bars past the decision would produce: a build declared
+later has less of its rise left to follow (trend down), some decisions
+reverse before the boundary (20.7% cancelled), and every cycle takes longer
+so fewer fit (counts down, compounding into climax). Whether fewer, later,
+on-beat transitions are *worse* is not settled by counts alone — the
+baseline's one-build-every-27-s cadence was frantic — but a −10 pt trend
+loss on trance and a −59% climax count are not free. Climax's anti-
+alignment is structural, not a snapping problem: it escalates from a
+phrase-aligned drop after a fixed hold, so it lands mid-phrase by
+construction; snapping it to a boundary means holding it up to a phrase.
+That wants a different mechanism (climax as "drop + N phrases"), logged as
+an E7 candidate, not more E6.
+
+**Pre-registered ablation before landing (two cells, same 19×2 panel):**
+`mode_phrase_snap_bars = 0` (downbeat only) and `= 1`. Predictions, written
+before the data: downbeat-only keeps on-beat 100%, phrase alignment returns
+to ~chance (39–40), build trend recovers to ≥ 40, cancellations fall to
+~10% and mode counts land within −15% of baseline; the 1-bar cell sits
+between, keeping ≥ 60% of the 2-bar phrase gain at ≤ half its count/trend
+cost. Landing rule: ship as rc.16 default whichever cell keeps on-beat
+100% with build trend ≥ baseline and counts inside −25%, preferring the
+one with more phrase gain if two qualify; phrase snap stays a knob either
+way. If neither qualifies, land downbeat-only and record the phrase half
+as a measured cost.
+
+**Analysis asks from existing panel data (no new runs):** cancellation
+split by step (downbeat vs phrase chain) and mean deferral length in
+beats per mode; climax time-since-drop distribution in bars on the rc.15
+baseline (input to E7).
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
