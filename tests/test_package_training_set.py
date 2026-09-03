@@ -1607,7 +1607,11 @@ def test_load_live_detector_constants_matches_live_beat_grid_and_auto_vj() -> No
     live = _load_live_detector_constants()
     assert live is not None
     for name in _DETECTOR_CONSTANT_DEFAULTS:
-        if name.startswith('_BPM_LOCK'):
+        if name == 'env_source':
+            # A per-instance cfg default, not a bare module attribute --
+            # see _load_live_detector_constants()'s own special case.
+            assert live[name] == bg_mod.BeatTracker({})._env_source
+        elif name.startswith('_BPM_LOCK'):
             assert live[name] == getattr(av_mod.AutoVJController, name)
         else:
             assert live[name] == getattr(bg_mod, name)

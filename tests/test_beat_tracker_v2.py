@@ -28,7 +28,6 @@ _MOD = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MOD)
 BeatTracker = _MOD.BeatTracker
 
-
 class _FakeOnset:
     """Mirrors Analyzer.OnsetEvent's public shape (t, strength)."""
 

@@ -8437,3 +8437,37 @@ being invalidated by a mid-panel detector change. `drop_cruise_min_
 confidence` stays parked (worse-than-population energy-lift, no clear path
 forward proposed). No default changes with this landing; every constant
 above ships at its rc.16-reproducing no-op value.
+
+### E5 addendum 2 — the clock gated behind a new write-path knob, not applied unconditionally (2026-09-03, Program B step 3 batch 1)
+
+The redesign from the first addendum landed in code this batch, but NOT
+as an unconditional replacement of the old clock: a new `env_source`
+config (`'pulses'` default / `'dense_flux'`) selects between two complete,
+separately-implemented method pairs (`_advance_envelope_legacy`/
+`_pulse_envelope_legacy` vs `_advance_envelope_e5`/`_pulse_envelope_e5`),
+verified bit-identical to shipped rc.40 in `'pulses'` mode on real
+production tracks (per-tick BPM series equality, not just p50) —
+mirroring the addendum's own finding that the fixed clock ALONE, with
+sparse peak-picked pulses still driving it, is a net regression (13 → 10
+exact on the 22-hardest set) until the decision stack is re-tuned.
+
+`'dense_flux'` bundles the E5 clock together with a dense, continuously-
+written onset-strength envelope (`audio.spectral_flux`, causally
+normalized, log-compressed — reproducing the onset-prototype bench's
+`stock-odf` row exactly, see Program B step 2's own entries above) rather
+than shipping the clock fix in isolation. Batch 1's 22-hardest-track
+checkpoint (decision stack completely untouched) found this combination
+does not merely avoid the addendum's regression — it reverses it: 15/22
+exact (vs 13/22 stock), 22/22 Acc2 (vs 20/22), churn ~4x lower, and the
+two house tracks the addendum names by name (Bon Jovi, Tim Cosmos) both
+stay exact under `dense_flux` on v2 where they fold to half tempo under
+the old clock with sparse pulses. Full report:
+`tools/baselines/program_b_step3_batch1-2026-09-03.md` (training-kit-01).
+
+Detector version stays `rc.40` for this landing — nothing shipped
+changes, `'pulses'` is the default and is bit-identical to it. `'dense_
+flux'` becomes the default only after batch 2's retune (comb/prior/gate
+stack re-tempered against the new observation, v2's synthetic click
+fixtures re-derived with jitter, then the 19-list panel against madmom/
+BTrack), at which point this lands as detector rc.41 with its own ADR
+entry closing E5 properly.

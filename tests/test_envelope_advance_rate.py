@@ -8,6 +8,34 @@ the nominal 100 Hz on real music, i.e. tempo read ~+1.3% high in v2 and v3
 alike (madmom on the same files: 0.00%). Synthetic clicks whose onsets land
 exactly on tick boundaries never showed it -- so this test puts every onset
 strictly INSIDE a tick.
+
+Fixed by `docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch`
+(landed 2026-09-03, Program B step 3 batch 1): an absolute-index envelope
+clock where `_advance_envelope_e5()` (the zero-fill path) and
+`_pulse_envelope_e5()` (the onset-pulse path) both funnel through one shared
+primitive, `_advance_env_to_index()`, so a slot gets written exactly once
+regardless of which path reaches it first. This test's own write-counting
+technique needed to move with that redesign: the original `_Counting`
+subclass hooked only `_advance_envelope()`, which was a correct proxy for
+total writes under the OLD design (pulses wrote through a separate,
+uncounted path with its own bug) but became a systematic UNDER-count under
+the NEW one -- an onset tick now writes its own slot directly via
+`_pulse_envelope_e5()`'s call into `_advance_env_to_index()`, bypassing
+`_advance_envelope()` entirely, so the old hook's delta was short by
+roughly one slot per onset (observed ~80 Hz at 15 onsets/s, not the ~96 Hz
+the pre-E5 bug produced -- a different, new number, not the same bug
+persisting). Hooking `_advance_env_to_index()` directly -- the actual
+single source of truth for "a slot was written", mirroring how the
+onset-prototype bench's own `v3_odf_tracker.py` overrides this exact
+primitive for its own instrumentation -- reads 99.97 Hz.
+
+Gated behind `_V2_ENV_SOURCE='dense_flux'` (2026-09-03, same landing,
+peer instruction after batch 1): the shipped default stays `'pulses'`,
+bit-identical to rc.40 including this exact bias -- see
+`test_envelope_rate_stays_biased_under_default_pulses_source` below and
+`_advance_envelope_legacy`'s own docstring. These two tests construct the
+tracker with `env_source='dense_flux'` explicitly to exercise the fixed
+clock; they say nothing about the shipped default.
 """
 
 from __future__ import annotations
@@ -26,14 +54,14 @@ _SPEC.loader.exec_module(_BG)
 
 
 class _Counting(_BG.BeatTracker):
-    def __init__(self) -> None:
-        super().__init__({})
+    def __init__(self, env_source: str = 'dense_flux') -> None:
+        super().__init__({'env_source': env_source})
         self.writes = 0
 
-    def _advance_envelope(self, target_t: float) -> None:
-        before = int(self._env_write_idx)
-        super()._advance_envelope(target_t)
-        self.writes += (int(self._env_write_idx) - before) % max(1, int(self._env_len))
+    def _advance_env_to_index(self, want: int) -> None:
+        before = int(self._env_next_idx)
+        super()._advance_env_to_index(want)
+        self.writes += int(self._env_next_idx) - before
 
 
 def _silent_audio() -> SimpleNamespace:
@@ -55,36 +83,56 @@ def _run(tracker: _Counting, seconds: float, onset_every_ticks: int) -> float:
     return t
 
 
-import pytest
-
-
-@pytest.mark.xfail(strict=True, reason=(
-    '2026-09-03 E5, KNOWN and unfixed: with onsets strictly inside ticks the '
-    'envelope is written at ~96 Hz, not 100 (real-music tempo reads ~+1.3% high '
-    'in v2 and v3; madmom 0.00%). Two mechanisms: (1) update() advances the '
-    'envelope only to the last onset timestamp on onset ticks and then moves '
-    '_last_t to now, losing the tail; (2) _pulse_envelope() deducts a step from '
-    '_env_t_acc clamped at zero, so an onset arriving before a full step has '
-    'accumulated steals the remainder. Three fix attempts on 2026-09-03 changed '
-    'pulse/timing semantics that a dozen v2 tests pin (double-counting, then '
-    'half-tempo reads) and were reverted; the fix needs a deliberate redesign '
-    'of the envelope clock + pulse placement with the v2 test expectations '
-    're-derived. See docs/adr/vj-system.md and the session ledger. '
-    'UPDATE (2026-09-03 morning): the redesign exists and is timing-correct '
-    '(docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch; '
-    '22-track bias +1.27% -> -0.23%), but the comb/prior/gate stack is '
-    'co-adapted to the old timing jitter: with the true clock v3 drops 13 -> 10 '
-    'exact on the 22 hardest tracks and v2 folds house to half tempo. It lands '
-    'only together with a re-tune of that stack, panel-gated.'))
-def test_envelope_rate_is_100hz_with_onsets_inside_ticks() -> None:
-    tk = _Counting()
+def test_envelope_rate_is_100hz_with_onsets_inside_ticks_dense_flux() -> None:
+    tk = _Counting(env_source='dense_flux')
     span = _run(tk, 30.0, onset_every_ticks=4)   # 15 onsets/s, all mid-tick
     rate = tk.writes / span
     assert abs(rate - _BG._V2_ENV_RATE) < 1.0, rate   # was ~96 Hz before the fix
 
 
-def test_envelope_rate_is_100hz_without_onsets() -> None:
-    tk = _Counting()
+def test_envelope_rate_is_100hz_without_onsets_dense_flux() -> None:
+    tk = _Counting(env_source='dense_flux')
     span = _run(tk, 30.0, onset_every_ticks=0)
     rate = tk.writes / span
     assert abs(rate - _BG._V2_ENV_RATE) < 1.0, rate
+
+
+def test_envelope_rate_stays_biased_under_default_pulses_source() -> None:
+    """The shipped default (`env_source` unset, i.e. `'pulses'`) must NOT
+    pick up the E5 fix -- bit-identical to rc.40 including its own known
+    +1.3% bias, until `'dense_flux'` becomes the default in a later batch.
+    `_Counting` here can't hook `_advance_env_to_index()` (the legacy path
+    never calls it) -- hooks `_advance_envelope`/`_pulse_envelope`
+    directly instead, the old (correct, for this path) counting technique."""
+
+    class _CountingLegacy(_BG.BeatTracker):
+        """Hooks BOTH `_advance_envelope`/`_pulse_envelope` -- the legacy
+        path has no single shared write primitive the way the E5 path's
+        `_advance_env_to_index()` does; `_pulse_envelope_legacy` advances
+        `_env_write_idx` on its own, uncounted if only `_advance_envelope`
+        is hooked (the same class of undercount `test_envelope_advance_
+        rate.py`'s own history already found once, on the E5 side)."""
+
+        def __init__(self) -> None:
+            super().__init__({})  # env_source defaults to 'pulses'
+            self.writes = 0
+
+        def _advance_envelope(self, target_t: float) -> None:
+            before = int(self._env_write_idx)
+            super()._advance_envelope(target_t)
+            self.writes += (int(self._env_write_idx) - before) % max(1, int(self._env_len))
+
+        def _pulse_envelope(self, strength: float, t: float = 0.0) -> None:
+            before = int(self._env_write_idx)
+            super()._pulse_envelope(strength, t)
+            self.writes += (int(self._env_write_idx) - before) % max(1, int(self._env_len))
+
+    tk = _CountingLegacy()
+    assert tk._env_source == 'pulses'
+    span = _run(tk, 30.0, onset_every_ticks=4)
+    rate = tk.writes / span
+    # Biased low, same direction and rough scale as the ADR's own real-music
+    # reading (95.7-96.3 Hz) -- not asserting that exact figure, since this
+    # is a synthetic 15 onsets/s stream, not real music; the point under
+    # test is that the shipped default is NOT the fixed ~100 Hz clock.
+    assert 90.0 < rate < 99.0, rate
