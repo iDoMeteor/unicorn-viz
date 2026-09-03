@@ -8172,3 +8172,27 @@ default was to be flipped off; a tighter scope was tried first (pre-registered,
 to a track that has never fired a drop on the current track. Result: big room
 +6% and prog house +11% over the E1 bake (inside the guard), ambient never-fire
 2/14 and trap 0/21 kept, energy/bass lift unchanged. Landed on by default.
+
+### E5 addendum — the redesign exists; the stack is co-adapted to the bug (2026-09-03 morning)
+
+An absolute-index envelope clock (zero-fill to the slot covering the target
+time; pulses merged by max into the slot covering their timestamp, nearest
+slot; legacy timestamp-less callers fall back to the newest slot; always
+advanced to `now`) writes exactly 100 Hz and removes the bias: 22-track
+p50/tag median +1.27% → −0.23%, three real tracks within 0.3% of tag. It is
+saved as `docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch`
+and **not applied**, because the corrected timing makes lane decisions worse
+without a re-tune: v3 drops from 13 to 10 exact on the 22 hardest tracks
+(Healing, Ashanti, Hplus, Swan Dive, Harmonic Dust move to alias lanes) and
+v2 folds house to half tempo (Bon Jovi and Tim Cosmos at 62.5). Precise
+pulse placement sharpens the comb's harmonic structure, and the old envelope's
+timing noise was an accidental regularizer that the comb weights, prior and
+gates were tuned against. The v2 synthetic fixtures' perfectly periodic clicks
+(a documented degenerate case) were passing partly because of that noise.
+
+**Landing path ("v3.1"):** apply the patch, re-tune the comb/prior/gate stack
+under the true clock (offline 22-track set, then the 19-list panel against the
+final baseline), re-derive the v2 fixtures with the jitter their own docstring
+recommends, and validate against madmom (bias 0.00%) as the unbiased reference.
+Owner's rule applies: tests get fixed when the fix improves the system, and the
+clock fix alone does not yet.

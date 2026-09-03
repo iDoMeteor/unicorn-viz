@@ -1,0 +1,112 @@
+diff --git a/beat_grid.py b/beat_grid.py
+index ef785a5..0a7e4ab 100644
+--- a/beat_grid.py
++++ b/beat_grid.py
+@@ -1595,8 +1595,15 @@ class BeatTracker:
+         self._env_buf: np.ndarray = np.zeros(env_len, dtype=np.float32)
+         self._env_len: int = env_len
+         self._env_write_idx: int = 0
+-        self._env_t_acc: float = 0.0
++        self._env_t_acc: float = 0.0            # legacy accumulator, unused after E5 (kept for shadow/telemetry readers)
+         self._env_filled: bool = False
++        # E5 (2026-09-03, detector rc.41): the envelope is indexed by ABSOLUTE
++        # sample index floor((t - t0) * _V2_ENV_RATE). No accumulator, so two
++        # advances in one tick cannot double count and a pulse cannot steal a
++        # step -- both were measured (95.7-96.3 samples/s against the nominal
++        # 100 on real music => tempo ~+1.3% high in v2 and v3; madmom 0.00%).
++        self._env_t0: float | None = None       # time of envelope sample 0
++        self._env_next_idx: int = 0              # absolute index of the next slot to write
+         self._last_t: float = -1e9
+         self._phase_last_t: float = -1e9
+ 
+@@ -2219,9 +2226,8 @@ class BeatTracker:
+                 self._pulse_envelope(ev_strength, ev_t)
+                 # P5: try to absorb onset into phase oscillator
+                 self._absorb_onset(ev_t, ev_strength, ev_band_weight)
+-        else:
+-            # No onset events; just advance envelope to current time
+-            self._advance_envelope(now)
++        # E5: always advance to now (onset ticks used to stop at the last onset).
++        self._advance_envelope(now)
+ 
+         # Reset tempo lock after sustained silence/paused source so the next
+         # song starts from a clean state instead of inheriting stale BPM.
+@@ -2426,22 +2432,31 @@ class BeatTracker:
+     # ------------------------------------------------------------------ #
+ 
+     def _advance_envelope(self, target_t: float) -> None:
+-        """Advance the envelope write pointer to target_t using zero-fill."""
++        """Zero-fill the envelope up to (not including) the slot that covers target_t.
++
++        E5: absolute-index clock. Slot k covers [t0 + k/rate, t0 + (k+1)/rate).
++        Idempotent for the same target and monotone in time; multiple calls per
++        tick (per onset, then to ``now``) write each slot exactly once.
++        """
+         if self._last_t < 0:
+             self._last_t = target_t
++        if self._env_t0 is None:
++            self._env_t0 = float(target_t)
++            self._env_next_idx = 0
+             return
+-        elapsed = max(0.0, target_t - self._last_t)
+-        if elapsed <= 0.0:
+-            return
+-        self._env_t_acc += elapsed
+-        step = 1.0 / _V2_ENV_RATE
+-        while self._env_t_acc >= step:
+-            self._env_t_acc -= step
+-            # No onset: fill with 0
++        # +1e-6: (k/rate)*rate can land a hair under k in floating point and
++        # would otherwise leave slot k-1 unwritten -- with pulses then dropped
++        # on alternate slots (half-tempo reads in the synthetic tests).
++        want = int((float(target_t) - self._env_t0) * _V2_ENV_RATE + 1e-6)
++        self._advance_env_to_index(want)
++
++    def _advance_env_to_index(self, want: int) -> None:
++        while self._env_next_idx < want:
+             self._env_buf[self._env_write_idx] = 0.0
+             self._env_write_idx = (self._env_write_idx + 1) % self._env_len
+             if self._env_write_idx == 0:
+                 self._env_filled = True
++            self._env_next_idx += 1
+ 
+     def _pulse_envelope(self, strength: float, t: float = 0.0) -> None:
+         """Write an onset pulse at the current write position and advance.
+@@ -2469,15 +2484,28 @@ class BeatTracker:
+         s = float(strength)
+         if s > 1.0:
+             s = 1.0 + float(np.log1p(s - 1.0))
+-        self._env_buf[self._env_write_idx] = max(
+-            self._env_buf[self._env_write_idx], s
+-        )
+-        # Advance past this sample so zero-fill can't clobber it
+-        self._env_write_idx = (self._env_write_idx + 1) % self._env_len
+-        if self._env_write_idx == 0:
+-            self._env_filled = True
+-        # Deduct the consumed slot from the accumulator to keep time in sync
+-        self._env_t_acc = max(0.0, self._env_t_acc - 1.0 / _V2_ENV_RATE)
++        # E5: write the pulse into the slot that covers its timestamp. The slot
++        # is written (zero-filled) first if the clock has not reached it yet, so
++        # the pulse lands at the right time and later zero-fill never clobbers
++        # it; a pulse into an already-written slot merges by max().
++        if self._env_t0 is None:
++            self._advance_envelope(float(t))
++        # Nearest slot, not floor: onset timestamps that sit on a slot boundary
++        # (beat periods that are integer multiples of 10 ms) otherwise alternate
++        # between neighbouring slots in floating point, smearing the ACF peak.
++        slot = int(round((float(t) - self._env_t0) * _V2_ENV_RATE))
++        # Callers that pass no timestamp (t == 0.0, the documented legacy form)
++        # or a stale one (more than half a second behind the clock) get the old
++        # behaviour: the pulse lands in the newest slot. Real onsets arrive
++        # within the current tick and land in the slot covering their time.
++        if float(t) <= 0.0 or slot < self._env_next_idx - int(0.5 * _V2_ENV_RATE):
++            slot = max(0, self._env_next_idx - 1)
++        if slot >= self._env_next_idx:
++            self._advance_env_to_index(slot + 1)   # writes through `slot`, index-exact
++        back = self._env_next_idx - 1 - slot                                  # 0 = the newest slot
++        if 0 <= back < self._env_len:
++            idx = (self._env_write_idx - 1 - back) % self._env_len
++            self._env_buf[idx] = max(self._env_buf[idx], s)
+ 
+         self._onset_strength_history.append((float(t), float(strength), s))
+         while (self._onset_strength_history

@@ -69,7 +69,13 @@ import pytest
     'pulse/timing semantics that a dozen v2 tests pin (double-counting, then '
     'half-tempo reads) and were reverted; the fix needs a deliberate redesign '
     'of the envelope clock + pulse placement with the v2 test expectations '
-    're-derived. See docs/adr/vj-system.md and the session ledger.'))
+    're-derived. See docs/adr/vj-system.md and the session ledger. '
+    'UPDATE (2026-09-03 morning): the redesign exists and is timing-correct '
+    '(docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch; '
+    '22-track bias +1.27% -> -0.23%), but the comb/prior/gate stack is '
+    'co-adapted to the old timing jitter: with the true clock v3 drops 13 -> 10 '
+    'exact on the 22 hardest tracks and v2 folds house to half tempo. It lands '
+    'only together with a re-tune of that stack, panel-gated.'))
 def test_envelope_rate_is_100hz_with_onsets_inside_ticks() -> None:
     tk = _Counting()
     span = _run(tk, 30.0, onset_every_ticks=4)   # 15 onsets/s, all mid-tick
