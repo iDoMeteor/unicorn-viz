@@ -162,6 +162,32 @@ the gap after B. Not scheduled.
 bar-phase anchor, Thread 6's perf log, Thread 3's harmonic-family fold
 (largely subsumed by v3's lattice; re-evaluate after B).
 
+### 0.3a Status, end of 2026-09-03
+
+- **Program A done.** Director rc.16 landed (2-bar phrase-window
+  candidate; panel: on-beat 30 → 100% on every mode; costs: build trend
+  40.0 → 37.2, counts −27/−33/−59%, all intrinsic to "defer one downbeat,
+  cancel on reversal" per the ablation). rc.17 landed the owner-variant
+  mechanisms (E8) as tunables with rc.16 defaults. E8 rounds 1–3
+  (six medium-to-high-energy lists): the as-specified variant fails
+  (builds −79%, climax −100%, cruise drops under-lift); tuned pieces that
+  qualify for the panel: **climax on a 4-bar half-phrase grid**
+  (`mode_phrase_unit_climax = 4`) and **cruise→build gated at the
+  median confidence** (`mode_source_min_confidence_build = 0.53`).
+  Standing rules learned: any build-count cut costs breakdown and climax
+  downstream (compounding cycles); stacked director mechanisms are
+  sub-additive, every combination gets its own cell. The "rc.16 vs owner
+  variant" 19×2 panel runs **once, after rc.41 lands**.
+- **Program B step 2 done (bench seat).** 306 tracks, fed-path
+  verified: stock v3 65.4 / 91.2, dense flux 75.8 / 95.8 (churn 8.37 →
+  2.03, lane hops 0.52 → 0.31), dense complex-domain 76.5 / 96.7. Both
+  dense rows tie or beat madmom (76.1 / 96.1) and BTrack (76.1 / 96.4);
+  all ten named 4/3-lane house tracks resolve; dnb 19 → 50%; dubstep
+  flat on every row. Spec: `tools/beat-tracker-bench/results/onset_prototype.md`.
+- **Program B step 3 in flight (training seat)** — § 0.5 below. Then
+  the owner's acceptance session (§ 0.3, "Validation session") and the
+  whole-library shuffle run.
+
 ### 0.4 Operating rules this program runs under
 
 Pre-registration before every batch; leverage checks on every null
