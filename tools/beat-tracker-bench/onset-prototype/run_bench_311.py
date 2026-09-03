@@ -40,8 +40,19 @@ SCRATCH = rb.SCRATCH
 REFERENCE_CSV = SCRATCH / 'bench_reference_19lists.csv'
 
 
-def decode_mono_ffmpeg(path: str, sample_rate: int, max_seconds: float | None) -> np.ndarray | None:
-    """Decode any audio file to float32 mono PCM via ffmpeg. None on failure."""
+def decode_mono_ffmpeg(
+    path: str, sample_rate: int, max_seconds: float | None,
+) -> tuple[np.ndarray | None, str | None]:
+    """Decode any audio file to float32 mono PCM via ffmpeg.
+
+    Returns ``(pcm, None)`` on success or ``(None, reason)`` on failure,
+    where ``reason`` names what actually happened (timeout, exit code +
+    stderr, or empty stdout) rather than collapsing every failure mode
+    into a bare ``None`` -- the 2026-09-03 incident (83/311 tracks
+    skipped in one run, 0 in the runs before and after it, cause never
+    identified because nothing here captured *why*) is why this returns
+    a reason now instead of just a value.
+    """
     cmd = ['ffmpeg', '-v', 'error', '-i', path]
     if max_seconds is not None:
         cmd += ['-t', str(max_seconds)]
@@ -49,10 +60,13 @@ def decode_mono_ffmpeg(path: str, sample_rate: int, max_seconds: float | None) -
     try:
         proc = subprocess.run(cmd, capture_output=True, timeout=120)
     except subprocess.TimeoutExpired:
-        return None
-    if proc.returncode != 0 or not proc.stdout:
-        return None
-    return np.frombuffer(proc.stdout, dtype=np.float32).copy()
+        return None, 'timeout_120s'
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode('utf-8', errors='replace')[:300] if proc.stderr else ''
+        return None, f'exit_{proc.returncode}: {stderr}'
+    if not proc.stdout:
+        return None, 'empty_stdout'
+    return np.frombuffer(proc.stdout, dtype=np.float32).copy(), None
 
 
 def reference_bpm(row: dict) -> tuple[float, str] | None:
@@ -77,31 +91,29 @@ def main() -> int:
 
     row_names = [r.strip() for r in args.rows.split(',')]
     all_results: dict[str, dict[str, dict]] = {name: {} for name in row_names}
-    skipped: list[str] = []
+    skipped: list[dict] = []
     t_start = time.time()
 
     for i, row in enumerate(rows):
         path = row['track_path']
         ref = reference_bpm(row)
-        pcm = decode_mono_ffmpeg(path, rb.SAMPLE_RATE, args.max_seconds)
+        pcm, decode_reason = decode_mono_ffmpeg(path, rb.SAMPLE_RATE, args.max_seconds)
         if pcm is None or pcm.size < rb.BLOCK or ref is None:
-            skipped.append(path)
-            print(f'[{i + 1}/{len(rows)}] SKIP {Path(path).name[:50]} '
-                  f'(decode_failed={pcm is None} no_ref={ref is None})', flush=True)
+            reason = decode_reason or ('too_short' if pcm is not None else None) or 'no_reference'
+            skipped.append({'path': path, 'reason': reason})
+            print(f'[{i + 1}/{len(rows)}] SKIP {Path(path).name[:50]} reason={reason}', flush=True)
             continue
         refbpm, rung = ref
         dur = len(pcm) / rb.SAMPLE_RATE
 
         for name in row_names:
             tracker = rb.build_tracker(name)
-            if name == 'odf':
-                ticks = rb.stream_odf_driven(pcm, tracker)
-            else:
-                ticks = rb.stream_onset_driven(pcm, tracker)
+            ticks, fed_by = rb.stream_for_row(name, pcm, tracker)
             result = rb.score_track(ticks, refbpm, dur)
             result['list'] = row['list']
             result['reference_rung'] = rung
             result['path'] = path
+            result['fed_by'] = fed_by
             all_results[name][path] = result
             print(
                 f'[{i + 1}/{len(rows)}] {name:5} {row["list"]:16} {Path(path).name[:38]:38} '
@@ -109,6 +121,22 @@ def main() -> int:
                 f'acc1 {result["acc1"]!s:5} acc2 {result["acc2"]!s:5}',
                 flush=True,
             )
+
+    for name, results in all_results.items():
+        rb.assert_fed_by(name, results)
+
+    decode_failures = [s for s in skipped if s['reason'] != 'no_reference']
+    if decode_failures:
+        sample = decode_failures[:5]
+        raise AssertionError(
+            f'{len(decode_failures)}/{len(rows)} tracks failed to decode -- '
+            f'refusing to write a partial-coverage table (the 2026-09-03 '
+            f'incident this guards against: 83/311 decode failures went '
+            f'unnoticed until the aggregate numbers looked wrong). '
+            f'Sample reasons: {sample}. '
+            f'(no_reference skips, if any, are excluded from this check -- '
+            f'those are expected data-coverage gaps, not decode health.)'
+        )
 
     out_path = Path(args.out)
     json.dump({'results': all_results, 'skipped': skipped}, open(out_path, 'w'), indent=1)

@@ -331,12 +331,46 @@ def build_tracker(row: str):
     raise ValueError(f'unknown row {row!r}')
 
 
-def stream_for_row(row: str, pcm: np.ndarray, tracker) -> list[tuple[float, float, float]]:
+def stream_for_row(row: str, pcm: np.ndarray, tracker) -> tuple[list[tuple[float, float, float]], str]:
+    """Dispatch ``row`` to its stream function and report which path fed it.
+
+    The 2026-09-03 stock-odf/311 incident: a second driver (run_bench_311.py)
+    had its own inline copy of this dispatch that fell through to
+    ``stream_onset_driven`` for every row except 'odf' -- silently feeding a
+    direct-write-only tracker class through the discrete-event path instead.
+    ``fed_by`` exists so every caller can assert what actually happened
+    rather than trust that whichever dispatch logic it wrote matches this
+    one -- see ``assert_fed_by`` below, and never re-implement this
+    if/elif chain anywhere else; always call this function.
+    """
     if row == 'odf':
-        return stream_odf_driven(pcm, tracker)
+        return stream_odf_driven(pcm, tracker), 'direct_ring'
     if row == 'stock-odf':
-        return stream_stock_odf_driven(pcm, tracker)
-    return stream_onset_driven(pcm, tracker)
+        return stream_stock_odf_driven(pcm, tracker), 'direct_ring'
+    return stream_onset_driven(pcm, tracker), 'discrete_events'
+
+
+_EXPECTED_FED_BY = {
+    'stock': 'discrete_events',
+    'e5': 'discrete_events',
+    'odf': 'direct_ring',
+    'stock-odf': 'direct_ring',
+}
+
+
+def assert_fed_by(row: str, results: dict[str, dict]) -> None:
+    """Raise if any track's recorded ``fed_by`` doesn't match ``row``'s
+    expected stream path -- call this on every row before writing a
+    results JSON, so a dispatch bug fails loudly instead of producing a
+    silently-wrong table (see stream_for_row's own docstring)."""
+    expected = _EXPECTED_FED_BY[row]
+    bad = {p: r['fed_by'] for p, r in results.items() if r.get('fed_by') != expected}
+    if bad:
+        sample = dict(list(bad.items())[:3])
+        raise AssertionError(
+            f'row {row!r}: expected fed_by={expected!r} on every track, '
+            f'got mismatches on {len(bad)}/{len(results)} tracks (sample: {sample})'
+        )
 
 
 def run_row(row: str, manifest: list[dict], baseline: dict[str, dict], limit: int | None) -> dict:
@@ -351,11 +385,12 @@ def run_row(row: str, manifest: list[dict], baseline: dict[str, dict], limit: in
         ref_bpm = float(base['reference_bpm'])
         pcm = np.load(m['npy']).astype(np.float32)
         tracker = build_tracker(row)
-        ticks = stream_for_row(row, pcm, tracker)
+        ticks, fed_by = stream_for_row(row, pcm, tracker)
         dur = len(pcm) / SAMPLE_RATE
         row_result = score_track(ticks, ref_bpm, dur)
         row_result['note'] = base['note']
         row_result['path'] = path
+        row_result['fed_by'] = fed_by
         results[path] = row_result
         print(
             f'{row:10} {Path(path).name[:44]:44} ref {ref_bpm:6.1f} '
@@ -382,6 +417,7 @@ def main() -> int:
     for row in args.rows.split(','):
         row = row.strip()
         all_results[row] = run_row(row, manifest, baseline, args.limit)
+        assert_fed_by(row, all_results[row])
 
     out_path = Path(args.out)
     json.dump(all_results, open(out_path, 'w'), indent=1)
