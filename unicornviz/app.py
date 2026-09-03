@@ -4982,7 +4982,14 @@ void main() {
                             self._config_editor_adjust(1.0)
                         continue
                     self._update_ctrl_state(event.key.keysym.sym, True)
-                    if not event.key.repeat:
+                    # Repeats are dropped for ordinary hotkeys (holding "N"
+                    # must not fire "next effect" 30 times), but let through
+                    # while some drop-in has an active text editor focused
+                    # (SDL_StartTextInput'd) -- holding Backspace/Delete/an
+                    # arrow key in a text field is expected to repeat, same
+                    # as regular character typing already does via
+                    # SDL_TEXTINPUT (a separate event type, not gated here).
+                    if not event.key.repeat or self._text_input_handlers:
                         try:
                             hotkeys.handle(event.key.keysym.sym, event.key.keysym.mod)
                         except Exception:

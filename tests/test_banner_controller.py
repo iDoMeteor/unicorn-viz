@@ -296,3 +296,273 @@ def test_scroll_speed_attribute_no_longer_exists(ctx) -> None:
         assert not hasattr(b, '_offset_px')
     finally:
         b.shutdown()
+
+
+# ------------------------------------------------------------ line navigation
+
+def test_home_end_operate_on_the_current_line_not_the_whole_document(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'first\nsecond line\nthird'
+        b._cursor = len('first\nsecond ')   # inside the middle line
+        b._tf_move_home()
+        assert b._cursor == len('first\n')
+        b._tf_move_end()
+        assert b._cursor == len('first\nsecond line')
+    finally:
+        b.shutdown()
+
+
+def test_ctrl_home_end_jump_to_the_whole_document(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'first\nsecond line\nthird'
+        b._cursor = len('first\nsecond ')
+        b._tf_move_doc_home()
+        assert b._cursor == 0
+        b._tf_move_doc_end()
+        assert b._cursor == len(b._text)
+    finally:
+        b.shutdown()
+
+
+def test_up_down_preserve_column_and_clamp_to_shorter_lines(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'a long first line\nshort\nanother long third line'
+        b._cursor = len('a long fir')   # column 10 on line 0
+        b._tf_move_down()
+        # 'short' is only 5 chars -- clamped to its end. No "sticky column"
+        # memory: the next move's column comes from *this* (clamped)
+        # position, not the original 10, same as a plain textarea without
+        # IDE-style column tracking.
+        assert b._cursor == len('a long first line\nshort')
+        b._tf_move_down()
+        assert b._cursor == len('a long first line\nshort\nanoth')   # column 5 again, from the clamp above
+        b._tf_move_up()
+        assert b._cursor == len('a long first line\nshort')
+    finally:
+        b.shutdown()
+
+
+def test_move_up_at_first_line_goes_to_document_start(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'only one line here'
+        b._cursor = 5
+        b._tf_move_up()
+        assert b._cursor == 0
+    finally:
+        b.shutdown()
+
+
+def test_move_down_at_last_line_goes_to_document_end(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'first\nlast line'
+        b._cursor = len('first\nla')
+        b._tf_move_down()
+        assert b._cursor == len(b._text)
+    finally:
+        b.shutdown()
+
+
+def test_shift_home_selects_back_to_the_line_start(ctx) -> None:
+    import sdl2
+
+    b = _banner(ctx)
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        b._text = 'first\nsecond line\nthird'
+        b._cursor = len('first\nsecond ')
+        b._sel_start = None
+        b.handle_key(sdl2.SDLK_HOME, sdl2.KMOD_SHIFT)
+        assert b._tf_sel_range() == (len('first\n'), len('first\nsecond '))
+    finally:
+        b.shutdown()
+
+
+def test_shift_end_selects_the_whole_line_from_its_start(ctx) -> None:
+    import sdl2
+
+    b = _banner(ctx)
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        b._text = 'first\nsecond line\nthird'
+        # Plain (non-shift) Home first, matching real usage: reposition to
+        # the line start, *then* Shift+End to select the whole line.
+        b._cursor = len('first\nsecond ')
+        b._tf_move_home()
+        b.handle_key(sdl2.SDLK_END, sdl2.KMOD_SHIFT)
+        assert b._tf_sel_range() == (len('first\n'), len('first\nsecond line'))
+    finally:
+        b.shutdown()
+
+
+# ----------------------------------------------------------------- selection
+
+def test_select_all_then_delete_clears_everything(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'delete all of this'
+        b._tf_select_all()
+        assert b._tf_sel_range() == (0, len('delete all of this'))
+        b._tf_delete_before()   # Backspace with a selection deletes the selection
+        assert b._text == ''
+        assert b._cursor == 0
+    finally:
+        b.shutdown()
+
+
+def test_ctrl_shift_arrow_selects_a_whole_word(ctx) -> None:
+    import sdl2
+
+    b = _banner(ctx)
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        b._text = 'select this word'
+        b._cursor = len('select ')
+        b.handle_key(sdl2.SDLK_RIGHT, sdl2.KMOD_CTRL | sdl2.KMOD_SHIFT)
+        # Word-right lands at the start of the *next* word (consuming the
+        # trailing space), matching the existing Ctrl+Right word-jump.
+        assert b._tf_sel_range() == (len('select '), len('select this '))
+    finally:
+        b.shutdown()
+
+
+def test_selected_text_helper(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        b._text = 'hello world'
+        b._sel_start = 0
+        b._cursor = 5
+        assert b._tf_selected_text() == 'hello'
+        b._sel_start = None
+        assert b._tf_selected_text() == ''
+    finally:
+        b.shutdown()
+
+
+# --------------------------------------------------------------- cap feedback
+
+def test_cap_rejection_sets_a_decaying_flash(ctx) -> None:
+    b = _banner(ctx, {'max_line_chars': 20})
+    try:
+        assert b._cap_flash_t == 0.0
+        b._text = 'a' * 20
+        b._cursor = 20
+        b._tf_insert('overflow')
+        assert b._cap_flash_t > 0.0
+
+        b.update(1.0, _audio())   # longer than the flash duration
+        assert b._cap_flash_t == 0.0
+    finally:
+        b.shutdown()
+
+
+def test_cap_flash_not_set_when_insert_fits(ctx) -> None:
+    b = _banner(ctx, {'max_line_chars': 20, 'text': ''})
+    try:
+        b._text = ''
+        b._cursor = 0
+        b._tf_insert('short')
+        assert b._cap_flash_t == 0.0
+    finally:
+        b.shutdown()
+
+
+# ---------------------------------------------------------------- clipboard
+
+def test_ctrl_c_x_v_route_through_clipboard_helpers(ctx, monkeypatch) -> None:
+    import sdl2
+
+    b = _banner(ctx)
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        clipboard = {'value': ''}
+        monkeypatch.setattr(b, '_clipboard_set', lambda text: clipboard.__setitem__('value', text))
+        monkeypatch.setattr(b, '_clipboard_get', lambda: clipboard['value'])
+
+        b._text = 'copy this text'
+        b._sel_start = 0
+        b._cursor = len('copy')
+        b.handle_key(sdl2.SDLK_c, sdl2.KMOD_CTRL)
+        assert clipboard['value'] == 'copy'
+        assert b._text == 'copy this text'   # copy doesn't remove anything
+
+        b._sel_start = len('copy this text') - len('text')
+        b._cursor = len('copy this text')
+        b.handle_key(sdl2.SDLK_x, sdl2.KMOD_CTRL)
+        assert clipboard['value'] == 'text'
+        assert b._text == 'copy this '   # cut removes the selection
+
+        b._cursor = 0
+        b.handle_key(sdl2.SDLK_v, sdl2.KMOD_CTRL)
+        assert b._text == 'textcopy this '
+    finally:
+        b.shutdown()
+
+
+def test_paste_respects_the_per_line_cap(ctx, monkeypatch) -> None:
+    import sdl2
+
+    b = _banner(ctx, {'max_line_chars': 20, 'text': ''})
+    try:
+        b._show_config = True
+        b._edit_mode = True
+        b._text = ''
+        b._cursor = 0
+        monkeypatch.setattr(b, '_clipboard_get', lambda: 'x' * 40)
+        b.handle_key(sdl2.SDLK_v, sdl2.KMOD_CTRL)
+        assert b._text == 'x' * 20
+    finally:
+        b.shutdown()
+
+
+# ---------------------------------------------------------- row fit helpers
+
+def test_fit_end_and_fit_start_stay_within_the_pixel_budget(ctx) -> None:
+    from PIL import Image, ImageDraw
+
+    b = _banner(ctx)
+    try:
+        img = Image.new('RGBA', (8, 8))
+        draw = ImageDraw.Draw(img)
+        text = 'the quick brown fox jumps over the lazy dog'
+        row_w = draw.textlength(text[:15], font=b._font)
+
+        end = b._fit_end(draw, b._font, text, 0, row_w)
+        assert draw.textlength(text[0:end], font=b._font) <= row_w
+        assert end < len(text)   # didn't fit the whole string
+
+        start = b._fit_start(draw, b._font, text, len(text), row_w)
+        assert draw.textlength(text[start:len(text)], font=b._font) <= row_w
+        assert start > 0
+    finally:
+        b.shutdown()
+
+
+def test_row_window_keeps_the_cursor_visible(ctx) -> None:
+    from PIL import Image, ImageDraw
+
+    b = _banner(ctx)
+    try:
+        img = Image.new('RGBA', (8, 8))
+        draw = ImageDraw.Draw(img)
+        text = 'x' * 150
+        row_w = draw.textlength('x' * 20, font=b._font)   # room for ~20 chars
+
+        # Cursor far past what fits from the start -- window must scroll.
+        start, end = b._row_window(draw, b._font, text, row_w, 100)
+        assert start <= 100 <= end
+        assert draw.textlength(text[start:end], font=b._font) <= row_w
+
+        # Cursor near the start -- no scroll needed.
+        start0, end0 = b._row_window(draw, b._font, text, row_w, 2)
+        assert start0 == 0
+    finally:
+        b.shutdown()
