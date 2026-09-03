@@ -17,7 +17,7 @@
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.113        RC            module
-  candy-frame-01                1.0.0-rc.1          RC            module
+  candy-frame-01                1.1.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   control-room-01               0.9.1               alpha ▲       module
@@ -64,11 +64,16 @@
   effects-rollercoast           0.4.0               early alpha   module
   webcam-01                     1.4.0               early alpha   module
   effects-flying                0.2.1               early alpha   module
+
+  ── UNVERSIONED ───────────────────────────────────────────────────────────
+  effects-ukiyo-e               not set             UNVERSIONED   missing
+
+  ── early alpha ───────────────────────────────────────────────────────────
   lyrics-01                     0.3.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
-  43 components total  ·  6 RC  1 beta  36 alpha  0 unversioned
+  44 components total  ·  6 RC  1 beta  36 alpha  1 unversioned
   ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
 
