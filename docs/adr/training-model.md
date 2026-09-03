@@ -2,7 +2,7 @@
 
 Owner: unicorn-viz maintainers
 Status: Active
-Last updated: 2026-08-14
+Last updated: 2026-09-03
 
 This document records architectural decisions for the Auto VJ training pipeline:
 corpus design, scoring, packager logic, headless session infrastructure, and
@@ -546,6 +546,91 @@ category specifically.
 `test_build_combined_prompt_includes_bpm_value_accept_reject_gate_category`,
 plus the full existing suite green. `training-kit-01` version
 `0.16.0 → 0.16.1`.
+
+---
+
+## Director Placement Scoring (2026-09-03)
+
+**Decision: replace the saturated "Director Activity" rating's implicit
+quality signal with a new, separate "Director Placement" metric that scores
+*where* director events land against the audio, not how many fired.**
+
+Owner request, relayed via the auto-vj strategist seat: "is he landing each
+scene correctly every single time" — full spec in
+`docs/planning/director-placement-scoring-2026-09-03.md`. Event *counts*
+(mode transitions, drop fires, impact fires) were already tracked under
+`## Director Activity` / `Director quality: n/5`, but that rating only ever
+measured activity volume — a director that fires constantly and a director
+that fires exactly on every meaningful cue score identically. Placement
+closes that gap: for each event, it compares a pre/post window around the
+event (`bar_s = 240/bpm`) against a chance baseline (5 random on-beat
+samples per event, same track, ≥8 bars in, fixed seed) and reports
+**lift-over-chance**, not raw hit rate — a metric can look good in isolation
+and still be no better than chance.
+
+New module `drop-ins/training-kit-01/tools/director_placement.py` (pure
+numpy/stdlib, no auto_vj.py import — kept independent per this project's
+drop-in independence rules) implements this against a hand-built prototype
+that is the spec's own normative reference for window/on-beat/phrase/
+chance-baseline definitions; scores are only comparable over time if those
+definitions never drift. It's scoring on `sequence-replay-*.jsonl` /
+`sequence-corpus-*.jsonl` rows the packager already writes — no new corpus
+field, no `ANALYSIS_VERSION`-style bump needed on the training-kit-01 side.
+
+**Two real bugs found and fixed before this shipped** (both via direct
+real-data inspection on `training-house-01/027`, not just synthetic tests):
+`bars_since_phase_entry` is unconditionally `0` on the `mode_transition` row
+itself (the new phase has just begun), so any metric needing the outgoing
+phase's dwell time must look up the last heartbeat row strictly before the
+transition's `capture_time` and read *that* row's `vj_mode` /
+`bars_since_phase_entry` instead. This bug produced a vacuous 100%/0%/0%
+`dwell_sanity` split on real data before the fix (genuinely varied
+84.8/10.4/4.8 after). The same bug secondarily contaminated
+`phrase_boundary_director_notion`, which originally pooled
+`drops + impacts + transitions` — since transitions always trivially read
+"at a boundary," their 239/280-row share of the pool inflated the metric
+toward ~100%; fixed by restricting that specific metric to `drops + impacts`
+only.
+
+**Packager integration** (`package_training_set.py`): a new
+`## Director Placement` scorecard section (counts, rate vs. chance, lift,
+placement rating) plus `director_placement.json` written into the bucket;
+the `## Ratings` section's old `Director quality: n/5` line is now
+`Director activity: n/5` (the count-based rating it always was) with a new
+adjacent `Director placement: n/5` line; the LLM payload's
+`stats['director_placement']` carries the full metrics dict plus
+`placement_score`/`placement_rating`, and the PART 3 director prompt now
+instructs the LLM to cite those figures as primary evidence for placement
+questions rather than recompute them from raw fields.
+
+**Batch validation:** run over all 67 buckets named in the spec's
+deliverable 4 (bake-1 v2 baselines, bake-3 Cell C v3, bake-4 E/F v3, the 38
+final-batch buckets, live favorites/004) — zero scoring errors. Independent
+leverage check: re-pooling this tool's own per-bucket output by genre family
+reproduced the strategist's own prototype pass's real-rate numbers exactly
+on all 49 family × metric values (chance-baseline percentages differ by 0-3
+points, expected sampling variance between two independent RNG call orders
+sampling the same null). Full report:
+`drop-ins/training-kit-01/tools/baselines/director_placement_batch-2026-09-03.md`.
+Finding worth flagging: placement does **not** track the v2→v3 tempo-
+accuracy verdict — some lists read lower under v3 than v2's baseline. This
+is placement correctly measuring a different axis (landing scenes) than the
+detector's tempo work, not a regression signal on v3.
+
+**Explicit scope boundary, per the owner's own instruction relayed through
+the strategist seat:** this commit is the instrument only. "Do not touch the
+director itself — this is the instrument; tuning follows the table." No
+`auto_vj.py` change, no `_DIRECTOR_VERSION` bump, no
+`_VJ_WEIGHTS_DOC_VERSION` bump — nothing here changes director *behavior*,
+only how an existing corpus is *scored* after the fact. Five tuning
+experiments (E1-E5) are pre-registered in the spec for a later phase once
+this lands.
+
+**Verified:** 8 new tests in `tests/test_director_placement.py`, including a
+dedicated regression test for the `bars_since_phase_entry` bug
+(`test_dwell_sanity_reads_the_outgoing_phase_not_the_incoming_one`); full
+existing suite green (164 → 172 passed, no regressions).
+`training-kit-01` version `0.40.1 → 0.41.0`.
 
 ---
 

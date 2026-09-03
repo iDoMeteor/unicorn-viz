@@ -1,8 +1,9 @@
 # Director Placement Scoring — "is he landing each scene?"
 
 Owner: Auto VJ strategist seat
-Status: active (spec; implementation by the training seat)
-Last updated: 2026-09-03 (batch findings added)
+Status: instrument + tests landed (deliverables 1-5 complete, training-kit-01
+0.41.0); tuning phase (E1-E5) not started
+Last updated: 2026-09-03 (deliverables 1-5 landed by the training seat)
 
 ## Why
 
