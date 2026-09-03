@@ -71,6 +71,7 @@ This is the canonical map for project documentation.
 - Mixer-only mode plan — boot profile + hosted single-window console (2026-07-18, lives with the mixer team): [drop-ins/dj-mixer-01/docs/mixer-only-mode-plan.md](../drop-ins/dj-mixer-01/docs/mixer-only-mode-plan.md)
 - Second-window Linux mitigation strategies (2026-07-09, closed — SDL2 texture-framebuffer + moderngl/Wayland root-cause audit, explicit-GL fix implemented and owner-confirmed): [docs/planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md](planning/control-room-mixer-second-window-mitigation-strategies-2026-07-09.md)
 - Tooltip system plan — control room / mixer / overlays full-surface audit + shared architecture (2026-07-13): [docs/planning/tooltip-system-plan-2026-07-13.md](planning/tooltip-system-plan-2026-07-13.md)
+- Director placement scoring — per-call "did the scene land" metrics with chance baselines, built into packaging (2026-09-03): [docs/planning/director-placement-scoring-2026-09-03.md](planning/director-placement-scoring-2026-09-03.md)
 - Active audit tracker: [docs/audits](audits)
   - **BPM / tempo detection audit — internal analysis + external state of the art (2026-08-13):** [docs/audits/2026-08-13-bpm-tempo-detection-audit.md](audits/2026-08-13-bpm-tempo-detection-audit.md)
   - **Auto VJ music-theory & algorithms audit — drop-score redesign review (2026-08-11):** [docs/audits/2026-08-11-auto-vj-music-theory-audit.md](audits/2026-08-11-auto-vj-music-theory-audit.md)
