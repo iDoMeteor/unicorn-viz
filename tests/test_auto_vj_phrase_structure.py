@@ -98,6 +98,19 @@ _PHRASE_DEFAULTS = dict(
     _phrase_external_match_mult=1.5,
     _phrase_external_mismatch_mult=0.5,
     _phrase_external_arm_mult=1.5,
+    # E6/E3 (2026-09-03): off by default here so these pre-existing tests
+    # keep exercising immediate mode-transition entry, matching the
+    # documented "0/False = off, restores pre-E6 behaviour" contract.
+    # test_director_mode_snap.py covers the deferred/cancelled paths.
+    _mode_snap_pending=False,
+    _mode_snap_downbeat=False,
+    _mode_phrase_snap_bars=0.0,
+    _mode_snap_count=0,
+    _mode_phrase_snap_count=0,
+    _mode_snap_cancelled_count=0,
+    _mode_last_snap_bars=0,
+    _mode_persist_bars_rise=0.0,
+    _mode_persist_bars_fall=0.0,
 )
 
 
