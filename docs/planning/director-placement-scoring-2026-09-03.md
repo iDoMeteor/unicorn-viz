@@ -380,6 +380,102 @@ same instrument scores both, plus a transition-source breakdown so
 4. `[winner] vs E8` on the full 19×2 panel, same report format, same
    landing rule; owner's live sessions reported next to it.
 
+### E8 — offline cells, pre-registration (2026-09-03)
+
+**Mechanism.** `mode_allowed_from_build = ['BREAKDOWN']` (drop the CRUISE
+source; breakdown recovery is the only remaining path). `mode_snap_unit_
+climax = 'phrase'` with `mode_phrase_within_bars_climax = 8` (the full
+`phrase_snap_unit`, i.e. always chain to the boundary regardless of
+distance — `to_boundary` is always in [0, 7], so `snap=8` unconditionally
+satisfies `0 < to_boundary <= snap`). Cell 2 additionally enables
+`drop_cruise_min_confidence = 0.71`, a new CRUISE → DROP path (off by
+default, `_schedule_drop()` called from inside the CRUISE branch, gated on
+the same score/trigger evidence BUILD/BREAKDOWN's normal entry uses plus
+this confidence floor, `has_lock`, **and a major-tier proxy** — a
+cruise-sourced drop has no build evidence behind it (owner), so it must
+clear both a confidence axis and a strength axis, not just one. The tier
+proxy reuses `_climax_entry_score` (`drop_threshold + 0.08`) rather than
+calling `_infer_peak_tier()` itself: that function's cycle-count/
+phase-dwell logic is designed around a prior BUILD/BREAKDOWN phase and
+would read CRUISE's own (usually long) dwell time instead, trivially
+passing almost always — a raw score bar against an existing "elevated
+tier" constant is the meaningful check here. Blocks are counted per axis
+(`drop_cruise_blocked_confidence_count` / `drop_cruise_blocked_tier_count`,
+not mutually exclusive) so a report can tell which axis is actually
+binding. Confirmed via reading every `_schedule_drop()` call site that no
+CRUISE→DROP path exists in rc.16 shipped code; this is new. All three
+cells run `beat_tracker_engine=v3`, otherwise rc.16 defaults, one seed (1),
+on house, tech-house, big-room, techno, trance, dnb.
+
+**`drop_cruise_min_confidence` proposal: 0.71.** The rc.15 baseline's
+`downbeat_confidence` distribution across 345,938 corpus rows: p50 0.531,
+p75 0.630, **p90 0.711**, p95 0.762, p99 0.869. The `drop_fire` event
+population specifically reads almost identically (p90 0.709), so drops
+aren't already biased toward higher-confidence ticks. 0.71 sits well above
+every mood profile's existing `drop_min_downbeat_confidence` (0.28–0.34) —
+roughly 2–2.5x the bar every other drop path clears today, matching "very
+high confidence."
+
+**Predictions, per mode per cell, written before the run:**
+
+1. **Build count cost of the breakdown-only restriction.** Counted from
+   the rc.16 panel's `from_mode`, reconstructed via the preceding-
+   heartbeat's `vj_mode` (the panel predates the `from_mode` corpus field
+   added in this same landing): of 3699 real build entries across all 19
+   lists × 2 seeds, **59.7% came from BREAKDOWN, 40.3% from CRUISE**.
+   Contrary to "cruise→build is the common path today" — BREAKDOWN is
+   already the majority source. Prediction: build count drops **~40%**
+   (losing the CRUISE-sourced share), not near-total loss. Confirmed
+   directionally in a pre-registration smoke test on rnb-01 seed 1
+   (7 tracks): 5/5 build entries fired, all from BREAKDOWN, 971
+   CRUISE-sourced build attempts blocked in that one short session.
+2. **Climax phrase alignment.** Currently 22.3% vs ~39% chance (below
+   chance) on the rc.16 panel, with only 8.7% of fired climax events even
+   phrase-chained under `snap=2`. With `snap=8` (unconditional), every
+   surviving climax entry chains to the boundary by construction.
+   Prediction: **phrase alignment jumps to ~95–100%**, mirroring E1's own
+   unconditional-chain drops.
+3. **Climax count.** Already the most-cancelled, lowest-count mode under
+   rc.16 (−59.4% vs the rc.15 baseline, n=103 pooled). An 8-bar
+   unconditional wait is up to 4x longer than the 2-bar window that
+   already only phrase-chained 8.7% of the time. Prediction: **count drops
+   further**, plausibly another 20–40% relative to the already-reduced
+   rc.16 climax count on these six lists — direction and relative-largest-
+   cost confident, exact magnitude not.
+4. **Cruise-drop count and energy-lift rate (cell 2 only).** Smoke test on
+   rnb-01 seed 1 (re-run with the tier gate added): of 9 total drop_fire
+   events, 2 were CRUISE-sourced (new `drop_source` field, captured at
+   `_fire_drop()`'s own entry before `self._mode` is reassigned), 6
+   breakdown, 1 build; 170 blocked on the confidence axis, 83 on the tier
+   axis (not mutually exclusive) — both gates are doing real, distinguishable
+   work, not one dominating the other. Prediction: cruise-drops are a
+   **small but non-zero share** of total drops (order 5–15% on a full-list
+   session, likely toward the low end now with two gates instead of one);
+   energy-lift rate on the cruise subset **no worse than** the overall
+   `drop_fire.energy_lift` rate — the gates select for detector certainty
+   and score strength, not for any particular point in the energy
+   trajectory, so no directional claim beyond "not worse."
+
+**New corpus fields, verified via a live smoke test before this
+pre-registration:** `from_mode` (already landed in rc.16, confirmed
+correct on build/breakdown/climax rows); `drop_source` (new, this cell) on
+every `drop_fire` row; `mode_blocked_by_source_count`,
+`drop_cruise_blocked_confidence_count`, `drop_cruise_blocked_tier_count`,
+`drop_cruise_fired_count` (new counters, all nonzero and mutually
+consistent on the smoke test).
+
+**Report format:** same as the rc.16 panel/ablation — per-list, per-mode
+table with compared-row (n) counts and chance baselines, pooled table
+across the six lists, held/missed verdicts against the four predictions
+above, plus a dedicated **from_mode source-breakdown table** (build/
+breakdown/climax × source mode, all three cells side by side) so the
+count-cost story is traceable to exactly which source is gained or lost,
+not just a net delta. Build and climax counts reported **relative to both
+the rc.16 control cell and the rc.15 final baseline** — the costs stack
+(E8's own predicted −40% build on top of rc.16's already-measured −27% vs
+rc.15 works out to roughly −56% vs rc.15, not −40%), and the owner will
+want the cumulative number, not just the E8-over-rc.16 delta.
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
