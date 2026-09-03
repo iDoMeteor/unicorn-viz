@@ -8087,3 +8087,39 @@ sometimes changes *which* trigger fires (a relocated or added event swings a
 bar the phrase turns, not necessarily where the energy jumps. That is E2's
 question (a bass delta gate at the boundary), still open. The half-time genres'
 missing drops are E4 (adaptive trigger), next.
+
+## Director Placement E4 — Rescue Trigger for Half-Time Material (2026-09-03, director rc.14)
+
+**Diagnosis.** The placement batch showed 2–6 tracks per half-time list
+(ambient, downtempo, hip-hop, trap, dubstep) with no drop fire at all. It was
+not the threshold: on those tracks `drop_score` sat above every mood trigger
+threshold for 43–47% of rows and downbeat confidence cleared its minimum, yet
+`drop_trigger_fired_count` never advanced — no drop was ever *scheduled*. The
+gate that never clears is the split trigger signal, `grid.impact_novelty`,
+against the absolute mood threshold (0.55–0.66): on half-time material its
+95th percentile is 0.27–0.41 (firing tracks: 0.36–0.50). Softer, sparser
+transients; an absolute novelty threshold is genre-blind in the wrong way.
+
+**Decision.** A rescue-only relative trigger: `trigger_rel = impact_novelty /
+max(0.15, rolling p90 over 60 s)`; when ≥ `drop_trigger_rel_threshold` (0.85)
+it opens the trigger gate alongside the absolute one, but only after
+`drop_trigger_rel_min_bars` (64) bars without a drop on the current track
+(`_last_drop_bar`, reset per track). Global cfg tunables read in
+`_apply_profile_settings()`; engagement `drop_trigger_rel_fired_count` counts
+drops scheduled through the relative path.
+
+**Evidence (4 half-time lists, seed 1, vs the E1-bake buckets, same order).**
+Round 1 (no re-arm, 0.85/0.75): never-fire 6/4/4/4 → 2/2/1/1 but drop counts
++100–150% and the extra fires landed on weaker peaks (hip-hop energy lift 25 →
+20, trap 32 → 25) — rejected. 32-bar re-arm: counts +30–82%, lift within ±5,
+transitions −35% — better, still loose. **64-bar re-arm (landed):** never-fire
+2/1/1/0, drops +30/+34/+24/+43%, energy/bass lift within ±5 of E1 (hip-hop
+bass −10), phrase alignment unchanged (87/72/66/85), lock churn identical,
+transitions −16 to −34% (rescued tracks now spend time in DROP, by
+construction). Lowering the absolute threshold instead was not tried: house-
+family novelty is higher and would gain false fires.
+
+**Guards on the post-landing re-baseline (pre-registered).** House-family drop
+counts within +15% and energy lift within ±5 of the E1 bake; half-time lists
+never-fire ≤ 2. If a guard breaks, the default flips off in a follow-up and the
+mechanism stays owner-selectable.
