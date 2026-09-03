@@ -2,7 +2,7 @@
 
 Owner: Auto VJ strategist seat
 Status: active (spec; implementation by the training seat)
-Last updated: 2026-09-03
+Last updated: 2026-09-03 (batch findings added)
 
 ## Why
 
@@ -130,3 +130,100 @@ bias artifact) changes the drop thresholds that gate fires.
 The scratchpad script `director_placement_proto.py` (copied into the
 training seat's hand-off) implements the table above; its window, on-beat,
 phrase and chance-baseline definitions are normative.
+
+## Batch findings — the head start (2026-09-03, prototype semantics, seed 7)
+
+Every 2026-09-02/03 bucket scored: the 38 final-batch runs (18 genre lists ×
+2 seeds + favorites × 2), the 7 bake-1 v2 baseline cells, and the live
+favorites/004 session. Pooled per genre family, rate / chance (lift):
+
+| Family | drop energy lift | drop bass lift | drop phrase | build → rises | breakdown → falls | impact phrase | impact energy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| house family (8 lists) | 15/9 (+6) | 21/10 (+11) | 37/39 (−2) | 39/23 (+16) | 37/20 (+17) | 35/38 (−3) | 8/10 (−3) |
+| trance / techno | 19/11 (+8) | 16/8 (+8) | 36/36 (0) | 46/24 (+22) | 40/19 (+20) | 39/41 (−2) | 15/11 (+4) |
+| dnb / dubstep | 20/10 (+10) | 26/12 (+14) | 28/39 (−10) | 40/23 (+17) | 38/23 (+15) | 40/37 (+3) | 17/14 (+3) |
+| hip-hop / trap / rnb | 38/12 (+26) | 42/17 (+25) | 41/36 (+4) | 34/22 (+12) | 31/22 (+9) | 35/42 (−7) | 43/15 (+29) |
+| ambient / downtempo | 13/11 (+2) | 24/10 (+14) | 38/43 (−5) | 37/18 (+20) | 33/17 (+16) | 29/41 (−12) | 6/11 (−5) |
+| curveballs | 17/11 (+5) | 21/13 (+8) | 38/37 (+1) | 42/24 (+17) | 34/21 (+12) | 40/32 (+8) | 12/9 (+3) |
+| favorites (replay) | 21/12 (+9) | 27/12 (+15) | 39/41 (−1) | 44/26 (+18) | 41/24 (+18) | 38/40 (−2) | 14/10 (+5) |
+| favorites LIVE | 22/14 (+8) | 14/9 (+4) | 24/43 (−18) | 56/24 (+32) | 43/20 (+22) | 29/39 (−9) | 0/7 (−7) |
+| v2 baselines (7 lists) | 24/9 (+15) | 26/10 (+16) | 37/37 (0) | 42/23 (+19) | 36/22 (+15) | 38/46 (−8) | 12/9 (+3) |
+
+Per-list table, all 53 buckets: ledger `logs/replay/EXPERIMENT-2026-08-31.md`
+("DIRECTOR PLACEMENT — FULL BATCH ANALYSIS") and
+`director_batch_analysis.json` in the strategist scratchpad.
+
+### What the batch says
+
+1. **Phrase alignment is the universal gap, and it is structural.** Drop
+   fires sit at or *below* chance on phrase boundaries in every family
+   (house −2, dnb/dubstep −10, live favorites −18); impact fires too (−3 to
+   −12), and impacts are supposed to be *the* phrase-boundary event.
+   `_fire_drop()` gates on `drop_score` (threshold / confirm) and
+   `downbeat_confidence` only — there is no bar or phrase quantization
+   anywhere in the drop or impact path; the `_phrase_bias()` machinery only
+   touches mode transitions. So the director places fires on the *beat*
+   (100% on-beat everywhere) but never on the *bar of the phrase*.
+2. **Drop fires barely land on energy.** House-family drops beat chance by
+   +6 (energy) / +11 (bass); v2's baseline cells did better (+15 / +16), and
+   on house-01 specifically v2 landed 27% vs v3 5–10%. The one family where
+   drops genuinely land is hip-hop / trap / rnb (+26 / +25) — music with
+   real drops. Minor-tier drops land slightly *more* often than major-tier
+   (22% vs 16%), so the tier label is not tracking musical impact. By active
+   profile at fire: drum_and_bass 27%, ambient/trance 35% (few events),
+   dubstep 19% (n = 732 — the profile most often active under v3 in
+   replays), deep_house 14%. The house regression under v3 is consistent
+   with the replay profile-mix shift (dubstep on 36–44% of house rows via
+   the +1.2% replay-clock bias) putting dubstep's drop thresholds on house
+   material; the live favorites session (no clock bias) shows +8, not a
+   regression.
+3. **Build / breakdown calls are the director's best skill, at ~40%.**
+   Build transitions are followed by a rising 4-bar window 34–46% of the
+   time against ~23% chance (+12 to +22); breakdowns by a falling window
+   31–41% vs ~20% (+9 to +20). Live favorites builds hit 56% (+32), the best
+   number in the set. Real signal, but more than half of all builds and
+   breakdowns are followed by the opposite or by nothing.
+4. **Impacts land nowhere in particular.** Phrase alignment at or below
+   chance, energy lift at chance except hip-hop/trap (+29). Counts are small
+   (1–19 per bucket).
+5. **The half-time genres under-fire drops entirely.** Tracks with no drop
+   fire at all: ambient 5–6 of 14, downtempo 2–6 of 14, hip-hop 4 of 18,
+   trap 3–6 of 21, dubstep 2–4 of 14, vs 0–2 on house-family lists. Same
+   genres as the detector's notational residue: the drop score under those
+   profiles rarely clears its threshold.
+6. **Seeds agree on the shape, not the digits.** Single-list rates move
+   ±10 between seeds at 30–50 events; pool by family or by ≥ 4 buckets
+   before reading a difference as real.
+7. Track-boundary suspects are 1–8% everywhere — crossfades are not
+   contaminating the picture.
+
+### Pre-registered first experiments for the tuning phase
+
+Each is one mechanism, one bake against the same 19 lists (both seeds),
+scored on lift over chance; the prediction is written before the data.
+
+- **E1 — phrase-quantized fires.** When a drop or impact fire is due, defer
+  it up to N beats to the next bar boundary, and up to one bar to the next
+  8-bar phrase boundary when `bars_since_track_start % 8 ≥ 6` (fire at the
+  boundary, never earlier). Prediction: drop/impact phrase alignment from
+  ~37 to ≥ 70% with energy lift unchanged or better (energy transitions in
+  EDM sit on phrase boundaries); lock-churn and counts unchanged.
+- **E2 — delta gate on drops.** Require the 1-bar bass window *after* the
+  candidate fire to exceed the 2-bar window before by ≥ 10% before the fire
+  is committed (one-bar look-ahead is affordable at replay; live, fire on
+  the first beat that confirms). Prediction: drop energy/bass lift rate ×2
+  on house family, drop count −30%, minor-tier drops mostly gone.
+- **E3 — build/breakdown persistence.** Raise the `sustained_rise` /
+  `sustained_fall` requirement (bars of monotone slope) until the 4-bar
+  consistency clears 55% on house family; measure the count cost.
+  Prediction: consistency +15 at −25% transitions.
+- **E4 — per-profile drop threshold for the half-time profiles** (ambient,
+  downtempo, hip-hop, trap, dubstep): lower `drop_trigger_threshold` until
+  tracks-with-no-drop falls below 10% without the energy-lift rate falling
+  below its family's current value.
+- **E5 — replay-clock bias fix** in session_replay (the +1.2% both engines
+  show in replays, absent live) before any recommender-side conclusion is
+  drawn from replay profile mixes.
+
+Not experiments: raising the activity rating's thresholds (it will be
+replaced by the placement rating once E1–E4 have data).
