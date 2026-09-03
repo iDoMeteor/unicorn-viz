@@ -8046,3 +8046,44 @@ comb result suggests it would not help on this material either.
 0.26.0, training-kit +0.0.1 (packager constants and the `v3_prime_count` /
 `v3_density_engaged_count` counters). Tests pin the prime seed/hold/refresh/
 lazy-start, the inert density channel's shape, and media-01's publish logic.
+
+## Director Placement E1 — Phrase-Quantized Fires (2026-09-03, director rc.13)
+
+**Decision.** `drop_phrase_snap_bars = 4` (with `phrase_snap_unit = 8`): when a
+pending drop is within four bars of the next 8-bar phrase boundary,
+`_schedule_drop()` chains downbeat callbacks to the boundary instead of firing
+at the next bar. Impacts fire from inside `_fire_drop()` and inherit it. Read
+from the global `[auto_vj]` cfg (not per mood profile) so replays can
+override it whatever mood is active — `_profile_value()` honours user
+overrides only when the mood is `user`. Engagement counter
+`drop_phrase_snap_count`; per-row telemetry `drop_last_snap_bars` (scheduling-
+time distance to the boundary, added because the panel drill could only see
+the fire bar).
+
+**Why.** The placement instrument (`docs/planning/director-placement-
+scoring-2026-09-03.md`) showed drop and impact fires on-beat 100% of the time
+but at or below chance on 8-bar phrase boundaries in every genre family; the
+drop path already waited for the next *downbeat* and had no notion of the
+*phrase*. Mode transitions carry a phrase bias; fires did not.
+
+**Evidence.** Offline (3 lists, seed 1, same-order baselines): phrase
+alignment 43 → 86 / 29 → 67 / 41 → 84 at snap 4 with counts, energy/bass lift,
+build/breakdown consistency and lock churn unchanged; snap 2 engaged too
+rarely. Panel (19 lists × 2 seeds, snap 4, training seat's instrument vs the
+same-seed baselines, report `drop-ins/training-kit-01/tools/baselines/
+director_placement_e1_batch-2026-09-03.md`): drop fires on a phrase boundary
+36% → 75% (chance ~38), impacts 34% → 79%, pooled per-list alignment ≥ 65% on
+19/19 (lowest tech-house 65.1), drop counts within 10% on 19/19 (worst
+downtempo −9.1%), lock events identical on 19/19, placement rating up on
+19/19 and down on none. Four unpooled cells fall under 65% (rnb s2, tech-
+house s1, dubstep s1, deep-house s2): their misses cluster 2–3 bars from a
+boundary, the uniform-null expectation for drops the snap-4 cap excludes
+(5–7 bars out). Nine cells breach the ±8 pt energy/bass-lift band, six on the
+two smallest lists and two in the positive direction; per-track, the deferral
+sometimes changes *which* trigger fires (a relocated or added event swings a
+10-event list by double digits) — event-position noise, not a systematic cost.
+
+**What it does not do.** Energy lift is unchanged: the drops now land on the
+bar the phrase turns, not necessarily where the energy jumps. That is E2's
+question (a bass delta gate at the boundary), still open. The half-time genres'
+missing drops are E4 (adaptive trigger), next.
