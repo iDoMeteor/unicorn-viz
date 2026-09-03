@@ -4,14 +4,14 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.103      BETA          module
+  core (unicornviz)             1.0.0-beta.104      BETA          MISMATCH (readme=1.0.0-beta.103)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.188.0             alpha ▲       module
   media-01                      0.26.0              alpha ▲       module
-  effects-games                 0.13.2              alpha ▲       module
+  effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.13.3)
   projectm-01                   0.12.4              alpha ▲       module
-  effects-cosmic                0.11.1              alpha ▲       module
+  effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
@@ -72,5 +72,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   43 components total  ·  6 RC  1 beta  36 alpha  0 unversioned
-  ⚠  1 version mismatch(es): effects-rollercoast
+  ⚠  4 version mismatch(es): core (unicornviz), effects-cosmic, effects-games, effects-rollercoast
 

@@ -93,10 +93,17 @@ vec3 backdrop(vec2 uv, float A, float t) {
     vec3 col = palette(v * 0.06 + iHue + 0.55 + t * 0.01);
     col *= col;
     col *= 0.04 + 0.03 * (v * 0.5 + 0.5);
-    float sh = hash21(floor(uv * vec2(A, 1.0) * 110.0));
+    // Stars: a soft round point placed inside its cell. Filling the whole
+    // cell instead -- a bare threshold on the cell hash -- is what renders
+    // as a field of hard little squares.
+    vec2 scell = p * 110.0;
+    vec2 sg = floor(scell);
+    float sh = hash21(sg);
     if (sh > 0.975) {
+        vec2 sd = fract(scell) - vec2(hash21(sg + 5.3), hash21(sg + 9.1));
         float tw = 0.5 + 0.5 * sin(t * (2.0 + sh * 6.0) + sh * 40.0);
-        col += vec3(0.6, 0.7, 0.9) * tw * (0.25 + iTreble * 0.35);
+        col += vec3(0.6, 0.7, 0.9) * exp(-dot(sd, sd) * 26.0) * tw
+             * (0.25 + iTreble * 0.35 + 0.05);
     }
     return col;
 }
@@ -163,8 +170,16 @@ void main() {
     col += palette(iHue + ang / TAU + t * 0.05) * 0.02 * iMid * smoothstep(0.30, 0.05, rad);
 
     col += palette(iHue + 0.5) * iBeat * 0.10;
-    float sp = hash21(floor(p * iResolution.y * 0.5) + floor(t * 20.0));
-    col += vec3(0.9, 0.85, 1.0) * step(0.996, sp) * (0.25 + iTreble * 0.6);
+    // Sparkle: a round mote placed inside its cell. A bare threshold fills
+    // the whole cell instead, which is what reads as hard little squares.
+    vec2 spc = p * iResolution.y * 0.25;
+    vec2 spg = floor(spc) + floor(t * 20.0);
+    float sp = hash21(spg);
+    if (sp > 0.987) {
+        vec2 spd = fract(spc) - vec2(hash21(spg + 2.7), hash21(spg + 6.1));
+        col += vec3(0.9, 0.85, 1.0) * exp(-dot(spd, spd) * 30.0)
+             * (0.25 + iTreble * 0.6);
+    }
 
     float vig = smoothstep(1.4, 0.15, length(uv - 0.5));
     col *= vig;
