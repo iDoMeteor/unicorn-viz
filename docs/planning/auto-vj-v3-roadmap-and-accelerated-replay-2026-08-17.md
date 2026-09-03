@@ -122,6 +122,35 @@ bias at zero. Lands as detector rc.41 (`_DETECTOR_VERSION`), with
 `ANALYSIS`-style provenance so any panel scored under the old clock is
 identifiable. Two to three days of seat time.
 
+**Program B, revised after the 51-track control (2026-09-03, same day).**
+The bench seat's four-row prototype changed the attribution: our own
+spectral flux, written **densely** (the analyzer's raw per-block
+`spectral_flux`, zero-order-held across every 100 Hz tick) straight into
+the envelope ring at a clean clock, lands on the complex-domain row
+(Acc1 70.6 vs stock 60.8, Acc2 100, 22-hardest 15/22, smoothed churn
+1.92 vs 8.50, lane hops 0.40 vs 0.75) — while the true clock alone, still
+pulsing peak-picked events, got *worse* (10/22). So the mechanism is
+**a dense onset-strength envelope replacing sparse peak-picked pulses**,
+whichever ODF produces it; the complex-domain function is a measured
+option, not load-bearing. Churn fell 3.5× with lane hops unchanged: fewer
+within-lane wobbles, which is what the director sees. dnb rose 5 → 9/16
+(unpredicted) with three per-track regressions inside it — first
+re-tune targets. Piece 2 above therefore becomes "route the analyzer's
+flux densely into the ring"; pieces 1 and 3 stand. Gate unchanged: house
+family and the panel, against madmom/BTrack. 311-track three-row table
+pending (`tools/beat-tracker-bench/results/onset_prototype.md`).
+
+**Validation session (owner, 2026-09-03) — once A and B have both landed
+and the seats are confident.** Training seat commits everything, then
+runs **one random-seed, cross-faded session against one set each of the
+~1 h genre lists** (no big lists), plus favorites and toughies, four in
+parallel, and packages each. Deliverable: a full, thorough report per
+list and overall composite scores (detector lock/accuracy/churn, director
+placement per mode with chance baselines, profile mix, E4/E6 guards),
+compared against the final rc.15 baseline and the bench references. This
+is the acceptance run for the whole series; nothing else is scheduled
+between B landing and it.
+
 **Program C — a learned activation channel of our own, after B.** madmom's
 architecture is BSD; the 10k-tag library plus owner arbitration labels is
 a training set. Only worth building once B has shown how much the
