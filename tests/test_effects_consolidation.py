@@ -39,7 +39,8 @@ PACK_NAMES = {
     'effects-flying': {'Warp Drive', 'Cloud Surfer', 'Canyon Run', 'Wingsuit Dive',
                   'Nebula Drift', 'Asteroid Run', 'Portal Flight'},
     'effects-rollercoast': {'First Drop', 'Corkscrew', 'Night Coaster',
-                            'Mine Train', 'Coaster Cam'},
+                            'Mine Train', 'Coaster Cam', 'Demon Drop',
+                            'Log Flume'},
 }
 ISOLATED_NAMES = {
     'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Clips',
@@ -51,7 +52,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 69
+EXPECTED_TOTAL = 71
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:

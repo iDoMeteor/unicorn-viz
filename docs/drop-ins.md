@@ -50,7 +50,7 @@ Complex drop-ins should also include:
 | postfx-01 | Yes | Yes | Post-processing subsystem |
 | projectm-01 | Yes | Yes | External engine integration |
 | effects-psychedelic | Yes | Not required | Effect pack: Plasma, Kaleidoscope, Psychedelic |
-| effects-rollercoast | Yes | Not required | Effect pack: First Drop, Corkscrew, Night Coaster, Mine Train, Coaster Cam |
+| effects-rollercoast | Yes | Not required | Effect pack: First Drop, Corkscrew, Night Coaster, Mine Train, Coaster Cam, Demon Drop, Log Flume |
 | effects-retro | Yes | Not required | Effect pack: Copper Bars, ANSI Viewer, Fractal Zoom, Escher, Dali, Van Gogh |
 | sims-01 | Yes | Not required | Media/effect drop-in |
 | spotify-01 | Yes | Yes | Spotify metadata subsystem |
