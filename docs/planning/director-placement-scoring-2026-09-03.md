@@ -352,7 +352,7 @@ source modes:
 | transition | snap unit | allowed from |
 | --- | --- | --- |
 | → build | downbeat | breakdown (decided inside a breakdown phrase) |
-| → drop | downbeat (E1's phrase chain already fires on a downbeat; E1 stays as landed) | build or breakdown freely; **cruise only above a high drop-confidence floor** (new key) |
+| → drop | downbeat (E1's phrase chain already fires on a downbeat; E1 stays as landed) | build or breakdown freely; **cruise only above a high drop-confidence floor** — note rc.16 has *no* cruise→drop path at all (cruise only ever enters build/breakdown), so the owner's rule adds a new path, built and pre-registered in the E8 phase with the floor defaulting to disabled |
 | → climax | 8-bar phrase boundary | drop, no prior build required |
 
 **Config model (training seat design, approved):** `mode_snap_unit_<mode>`
