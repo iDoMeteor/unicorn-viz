@@ -67,11 +67,31 @@ class VJApi:
 
     VERSION = VJ_API_VERSION
 
+    # The API the running app installed. Effects are constructed with only a
+    # GL context, a size and their config -- they have no handle to the App --
+    # so anything effect-side that wants runtime context (song structure,
+    # tempo) has no way to ask for it. This class attribute is that way in,
+    # read through :meth:`current`. It is ``None`` whenever no app is running,
+    # which is the normal case under tests and offscreen renders, so every
+    # caller must treat the API as optional.
+    _current: 'VJApi | None' = None
+
     def __init__(self, app: App) -> None:
         self._app = app
+        VJApi._current = self
         self._key_handlers: dict[str, Callable[[int, int], 'str | None | bool']] = {}
         self._midi_action_registry: dict[str, list[tuple[str, str]]] = {}
         self._midi_action_handlers: dict[str, Callable[[], None]] = {}
+
+    @classmethod
+    def current(cls) -> 'VJApi | None':
+        """Return the running app's API, or ``None`` when there is no app.
+
+        For code that cannot be handed one -- effects, above all. Callers must
+        degrade gracefully rather than requiring it: there is no app under the
+        test suite, offscreen renders or any standalone tool.
+        """
+        return cls._current
 
     @property
     def ctx(self) -> moderngl.Context | None:
