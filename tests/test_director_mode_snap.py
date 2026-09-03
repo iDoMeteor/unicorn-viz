@@ -398,6 +398,11 @@ def _bare_gated(*, mode: str, allowed_from_build=None, allowed_from_breakdown=No
     c._mode_phrase_within_bars_build = 0.0
     c._mode_phrase_within_bars_breakdown = 0.0
     c._mode_phrase_within_bars_climax = 0.0
+    c._mode_phrase_unit_build = 8
+    c._mode_phrase_unit_breakdown = 8
+    c._mode_phrase_unit_climax = 8
+    c._mode_source_min_confidence_build = 0.0
+    c._build_blocked_by_confidence_count = 0
     c.scheduled = 0
     c._schedule_mode_transition = lambda *a, **kw: setattr(c, 'scheduled', c.scheduled + 1)  # type: ignore[method-assign]
     return c
@@ -435,3 +440,105 @@ def test_climax_default_only_allows_drop() -> None:
     c2._enter_climax()
     assert c2.scheduled == 1
     assert c2._mode_blocked_by_source_count == 0
+
+
+# ---------------------------------------------------------------------------
+# E8 round 2: mode_phrase_unit_<mode> (grid size, distinct from the wait cap)
+# ---------------------------------------------------------------------------
+
+def test_resolve_phrase_unit_defaults_to_global_phrase_snap_unit() -> None:
+    c = object.__new__(AutoVJController)
+    assert c._resolve_mode_phrase_unit({}, 'climax') == 8
+    assert c._resolve_mode_phrase_unit({'phrase_snap_unit': 16}, 'build') == 16
+
+
+def test_resolve_phrase_unit_explicit_key_wins() -> None:
+    c = object.__new__(AutoVJController)
+    cfg = {'mode_phrase_unit_climax': 4, 'phrase_snap_unit': 8}
+    assert c._resolve_mode_phrase_unit(cfg, 'climax') == 4
+    assert c._resolve_mode_phrase_unit(cfg, 'build') == 8  # unaffected, no key for build
+
+
+def test_schedule_mode_transition_uses_explicit_phrase_unit_not_global() -> None:
+    """c._phrase_snap_unit is set to 8 (the global), but the explicit
+    phrase_unit=4 argument must win: bars_since_track_start=5 -> to_boundary
+    is 3 bars on a 4-bar grid (5 % 4 == 1) vs 3 bars on an 8-bar grid too
+    (5 % 8 == 5) by coincidence for THIS value, so assert on mode_snap_count/
+    applied instead of relying on to_boundary alone to prove which grid was
+    used -- the real distinguishing check is in the paired 'falls back'
+    test below, which uses a value where the two grids diverge."""
+    c = _bare(bars_since_track_start=5, snap_unit='phrase', phrase_within_bars=4.0, unit=8)
+    c._schedule_mode_transition(c._do_enter, c._evidence, 'sustained_rise',
+                                 c._snap_unit, c._phrase_within_bars, 4)
+    assert c._mode_snap_count == 1
+    assert c._mode_phrase_snap_count == 1
+    assert c.entered == 0
+    assert _downbeats_until(lambda: c.entered, c._grid) == 3
+    assert c.applied_log == ['phrase']
+
+
+def test_schedule_mode_transition_phrase_unit_overrides_global_grid_boundary() -> None:
+    """bars_since_track_start=4: on the global 8-bar grid, to_boundary == 4
+    (0 < 4 <= phrase_within_bars=4 -> phrase chain); on a 4-bar grid,
+    to_boundary == 0 (already on the boundary -> phrase_snap is False by
+    definition, applied == 'downbeat', fires next downbeat). This is the
+    case that actually distinguishes which grid was used."""
+    c = _bare(bars_since_track_start=4, snap_unit='phrase', phrase_within_bars=4.0, unit=8)
+    c._schedule_mode_transition(c._do_enter, c._evidence, 'sustained_rise',
+                                 c._snap_unit, c._phrase_within_bars, 4)
+    assert c._mode_phrase_snap_count == 0
+    assert c.applied_log == []
+    assert _downbeats_until(lambda: c.entered, c._grid) == 1
+    assert c.applied_log == ['downbeat']
+
+
+def test_schedule_mode_transition_phrase_unit_none_falls_back_to_global() -> None:
+    c = _bare(bars_since_track_start=5, snap_unit='phrase', phrase_within_bars=4.0, unit=4)
+    _schedule(c)  # no phrase_unit arg -> falls back to c._phrase_snap_unit == 4
+    assert _downbeats_until(lambda: c.entered, c._grid) == 3
+    assert c.applied_log == ['phrase']
+
+
+# ---------------------------------------------------------------------------
+# E8 round 2: mode_source_min_confidence_build (CRUISE-only confidence floor)
+# ---------------------------------------------------------------------------
+
+def test_build_blocked_by_confidence_floor_when_cruise_below_floor() -> None:
+    c = _bare_gated(mode=_CRUISE)
+    c._mode_source_min_confidence_build = 0.71
+    c._grid = _Grid()
+    c._grid.downbeat_confidence = 0.50
+    c._enter_build()
+    assert c.scheduled == 0
+    assert c._build_blocked_by_confidence_count == 1
+
+
+def test_build_allowed_by_confidence_floor_when_cruise_at_or_above_floor() -> None:
+    c = _bare_gated(mode=_CRUISE)
+    c._mode_source_min_confidence_build = 0.71
+    c._grid = _Grid()
+    c._grid.downbeat_confidence = 0.71
+    c._enter_build()
+    assert c.scheduled == 1
+    assert c._build_blocked_by_confidence_count == 0
+
+
+def test_build_confidence_floor_does_not_apply_to_breakdown_source() -> None:
+    """The floor is CRUISE-only -- BREAKDOWN's recovery path is unaffected
+    even when the floor is set and the grid confidence is low."""
+    c = _bare_gated(mode=_BREAKDOWN)
+    c._mode_source_min_confidence_build = 0.71
+    c._grid = _Grid()
+    c._grid.downbeat_confidence = 0.10
+    c._enter_build()
+    assert c.scheduled == 1
+    assert c._build_blocked_by_confidence_count == 0
+
+
+def test_build_confidence_floor_off_by_default_ignores_low_confidence() -> None:
+    c = _bare_gated(mode=_CRUISE)  # _mode_source_min_confidence_build defaults to 0.0 in _bare_gated
+    c._grid = _Grid()
+    c._grid.downbeat_confidence = 0.01
+    c._enter_build()
+    assert c.scheduled == 1
+    assert c._build_blocked_by_confidence_count == 0

@@ -8345,3 +8345,95 @@ prediction rather than tune toward it, E3 lands as a working, tested,
 off-by-default knob rather than a shipped default; a future pass could
 explore sub-1-bar (fractional) values or a persistence measure less coupled
 to the existing time-sustain gate.
+
+## Director Placement E8 rounds 1-3 — Owner Variant, Landed as Knobs Only (2026-09-03, director rc.17)
+
+**Decision.** Three rounds of offline-cell exploration into an "owner
+variant" of the director (restricting build's allowed source mode, a
+CRUISE→DROP path, and a shorter climax phrase cadence) land as config
+tunables now, all defaulting to reproduce rc.16 shipped behaviour exactly
+(`drop_cruise_min_confidence=0.0`, `mode_phrase_unit_<mode>=phrase_snap_unit`,
+`mode_source_min_confidence_build=0.0`, `mode_allowed_from_<mode>`
+unrestricted). Landed ahead of Program B step 3's detector work
+specifically to avoid three rounds of tested, uncommitted director code
+sitting in the tree while the detector changes underneath it — a patch-
+level bump (rc.16 → rc.17) since no live default changes.
+
+**Round 1** (`director_placement_e8_offline-2026-09-03.md`, 18 cells, 6
+lists × 1 seed: `control`/`core`/`core_c2`). `mode_allowed_from_build=
+[BREAKDOWN]` (drop CRUISE as a build source): predicted ~−40% build-count
+cost (from CRUISE's 40.3% share of builds on the earlier 19×2 panel), actual
+−79.1% vs rc.16 control — the CRUISE-source gate worked exactly as
+specified, but the surviving BREAKDOWN-sourced share *also* collapsed
+(277→104, −62.5%) even though it was never blocked, the first sighting of
+what rounds 2-3 confirm is a general compounding-cycle effect (below).
+`mode_snap_unit_climax=phrase` with `mode_phrase_within_bars_climax=8`
+(an unconditional wait within the *existing* 8-bar grid): predicted a
+further −20-40% climax-count cost, actual **−100% in all 12 core/core_c2
+cells** — verified as a real mechanism, not an artifact, via exact
+`mode_snap_count = fired + cancelled` counter arithmetic on two sampled
+buckets (e.g. house-01 core: fires=30, cancelled=5, snap_count=35). Every
+scheduled climax entry under the unconditional 8-bar wait got cancelled at
+fire-time re-evaluation before this round's fix (round 2). The new
+CRUISE→DROP path (`drop_cruise_min_confidence=0.71`, this project's own p90
+`downbeat_confidence`) took a 25.5% share of drops (predicted 5-15%) with
+*worse* energy-lift than the overall population (15.0% vs 27.4%, predicted
+comparable-or-better) — parked, not carried forward.
+
+**Round 2** (`director_placement_e8_round2-2026-09-03.md`, 18 cells, same
+six lists, reusing round 1's control buckets). Introduced `mode_phrase_
+unit_<mode>`, a genuine per-mode phrase-**grid** size (bars between
+boundaries) distinct from `mode_phrase_within_bars_<mode>` (the wait cap
+within that grid) — round 1's "unconditional 8-bar wait" was still gated
+by the shared 8-bar grid every other mode uses; this lets one mode chain to
+a *shorter* grid instead. `climax-4` (`mode_phrase_unit_climax=4` +
+`mode_phrase_within_bars_climax=4`, an unconditional 4-bar half-phrase
+chain): recovered climax count to **77.8% of rc.16 control** (14/18, vs
+round 1's total elimination) with build/breakdown completely untouched
+(+0.0%/−0.5%) — the strongest climax candidate across all three rounds.
+Phrase alignment on its own 4-bar grid is 100.0% (vs a 75.7% chance floor,
+since a 4-bar boundary occurs twice as often by construction) while the
+*same* fired events read anti-aligned on the standard 8-bar reading (21.4%
+vs 40.0% chance) — expected: a half-phrase snap lands mid-phrase on the
+full-phrase reading by definition, not a contradiction. `build-floor`
+(`mode_source_min_confidence_build=0.71`, a confidence floor on CRUISE's
+build source specifically instead of round 1's outright block): predicted
+a softer −15 to −40% cost, actual **−67.8%**, nearly as expensive as the
+outright block — 0.71 turned out to sit almost exactly at the p90 of the
+population it gates (confirmed in round 3, below), so the "soft" gate
+wasn't actually soft at that threshold. Trend-following did improve as
+predicted (build_trend 40.6% vs control's 36.0%). `both` (climax-4 +
+build-floor together): climax count **4** — *below* either mechanism run
+alone (14, 6) — confirms **sub-additivity**: stacked director mechanisms do
+not compose linearly and each combination needs its own offline cell,
+never an assumed sum.
+
+**Round 3** (`director_placement_e8_round3-2026-09-03.md`, 6 cells, one
+mechanism: `build-floor-median`). Re-derived the confidence floor from the
+actual population it gates instead of reusing round 2's borrowed value:
+filtered round 1's control-bucket heartbeats to `vj_mode==CRUISE` and
+`energy_slope > build_energy_threshold` (`_enter_build()`'s own CRUISE-
+branch gate, per-row threshold by that row's `vj_profile` — 0.13 normie/
+raver/tweaker, 0.22 chill), 3854 qualifying ticks pooled across six lists:
+`downbeat_confidence` p25 0.408, **median 0.528**, p75 0.624, p90 0.704 —
+confirming 0.71 sat almost exactly at this population's own p90, which is
+why it cost as much as it did. At the median (`0.53`): build cost **−25.6%**
+vs rc.16 control, squarely inside the predicted 20-40% band; build trend
+37.8%, between rc.16's 36.0% and 0.71's 40.6% as predicted. Breakdown
+(−18.7%) and climax (−27.8%) moved anyway even though neither mechanism's
+own gate was touched — the third round running the **compounding-cycle
+effect** appears (any build-count change costs breakdown/climax downstream
+regardless of which mechanism did the cutting), now treated as a standing
+property of the state machine rather than a per-mechanism side effect.
+Qualifies as a panel candidate (`build-floor-median`) per the pre-
+registered decision rule.
+
+**What's next.** `climax-4` and `build-floor-median` (0.53) both carry to a
+pending full 19×2 panel (cells: rc.16 control, climax-4 alone,
+build-floor-median alone, climax-4 + build-floor-median together, per the
+sub-additivity finding above) — deferred until Program B step 3's detector
+work lands, so the panel runs once on the shipped detector rather than
+being invalidated by a mid-panel detector change. `drop_cruise_min_
+confidence` stays parked (worse-than-population energy-lift, no clear path
+forward proposed). No default changes with this landing; every constant
+above ships at its rc.16-reproducing no-op value.

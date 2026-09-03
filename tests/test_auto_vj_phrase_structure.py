@@ -125,6 +125,13 @@ _PHRASE_DEFAULTS = dict(
     _mode_allowed_from_breakdown={'CRUISE', 'BUILD', 'DROP'},
     _mode_allowed_from_climax={'DROP'},
     _mode_blocked_by_source_count=0,
+    # E8 round 2 (2026-09-03): phrase GRID size per mode (8 = the shared
+    # default, a no-op) and the CRUISE-build confidence floor (0.0 = off).
+    _mode_phrase_unit_build=8,
+    _mode_phrase_unit_breakdown=8,
+    _mode_phrase_unit_climax=8,
+    _mode_source_min_confidence_build=0.0,
+    _build_blocked_by_confidence_count=0,
 )
 
 
