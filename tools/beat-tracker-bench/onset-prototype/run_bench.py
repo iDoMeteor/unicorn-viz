@@ -1,22 +1,32 @@
 """Driver + scorer for the onset-prototype bench (auto-vj-v3 roadmap Part 0,
-Program B): three `BeatTrackerV3` rows on the same 51-track bench set,
-holding everything fixed except which onset/envelope-clock combination
-feeds the tracker.
+Program B): four `BeatTrackerV3` rows on the same 51-track bench set,
+holding everything fixed except which onset/envelope-clock/write-path
+combination feeds the tracker.
 
-  Row 1 (stock)  — `beat_grid_stock.py`'s unmodified `BeatTrackerV3`, driven
-                    by this project's own production onset detector
-                    (`unicornviz/audio/analyzer.py`'s `Analyzer`) exactly as
-                    production drives it.
-  Row 2 (e5)     — `beat_grid_e5.py`'s E5-patched `BeatTrackerV3` (the true
-                    envelope clock), same production onset detector.
-  Row 3 (odf)    — the same E5-patched `BeatTrackerV3`, subclassed by
-                    `v3_odf_tracker.build_odf_tracker_class()` to bypass the
-                    onset-event path and write the envelope ring directly
-                    from `complex_onset.ComplexOnsetDetector`'s 100 Hz ODF
-                    stream instead.
+  Row 1 (stock)     — `beat_grid_stock.py`'s unmodified `BeatTrackerV3`,
+                       driven by this project's own production onset
+                       detector (`unicornviz/audio/analyzer.py`'s
+                       `Analyzer`) exactly as production drives it.
+  Row 2 (e5)        — `beat_grid_e5.py`'s E5-patched `BeatTrackerV3` (the
+                       true envelope clock), same production onset detector.
+  Row 3 (odf)       — the same E5-patched `BeatTrackerV3`, subclassed by
+                       `v3_odf_tracker.build_odf_tracker_class()` to bypass
+                       the onset-event path and write the envelope ring
+                       directly from `complex_onset.ComplexOnsetDetector`'s
+                       100 Hz ODF stream instead.
+  Row 4 (stock-odf) — a control: the SAME direct-write path as row 3, but
+                       fed by this project's own spectral-flux onset value
+                       (`stock_flux_odf.StockFluxOnsetSource`) instead of
+                       the complex-domain one. Isolates whether row 3's
+                       gain over row 1 comes from the onset function or
+                       from bypassing the discrete pulse-placement path —
+                       see `stock_flux_odf.py`'s module docstring.
 
 No `_V2_*`/`_V3_*` tunable is touched in any row — this measures what the
 observation swap alone buys, per the roadmap doc's Program B item 2.
+Both direct-write rows (3 and 4) run on the E5-patched tracker class — row
+4 exists to separate the onset-function effect from the write-path
+effect, not to reintroduce the stock envelope clock as a variable.
 
 Reads (read-only) the same pre-decoded `bench_pcm/*.npy` +
 `bench_53_baseline.csv` this bench's other tools already use (owned by the
@@ -31,7 +41,7 @@ Run (plain repo Python; no adapter venv needed — only numpy + this
 project's own `unicornviz` package):
 
     python3 tools/beat-tracker-bench/onset-prototype/run_bench.py \\
-        [--limit N] [--rows stock,e5,odf]
+        [--limit N] [--rows stock,e5,odf,stock-odf]
 """
 from __future__ import annotations
 
@@ -67,6 +77,8 @@ SAMPLE_RATE = 48000  # this bench's standard rate -- see complex_onset.py's
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 
 from unicornviz.audio.analyzer import Analyzer  # noqa: E402
 
@@ -84,6 +96,7 @@ bv2 = _load('_onset_proto_bridge_v2', BENCH_ROOT / 'bridge_v2.py')
 bg_stock = _load('_onset_proto_bg_stock', HERE / 'beat_grid_stock.py')
 bg_e5 = _load('_onset_proto_bg_e5', HERE / 'beat_grid_e5.py')
 complex_onset = _load('_onset_proto_complex_onset', HERE / 'complex_onset.py')
+stock_flux_odf = _load('_onset_proto_stock_flux_odf', HERE / 'stock_flux_odf.py')
 odf_tracker_mod = _load('_onset_proto_odf_tracker', HERE / 'v3_odf_tracker.py')
 
 ODF_TRACKER_CLS = odf_tracker_mod.build_odf_tracker_class(bg_e5.BeatTrackerV3)
@@ -184,30 +197,24 @@ def stream_onset_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, fl
     return ticks
 
 
-def stream_odf_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, float]]:
-    """Row 3: envelope ring written directly from the complex-domain ODF.
+def _stream_direct_write(
+    pcm: np.ndarray, tracker, odf_ticks: list[tuple[float, float]],
+) -> list[tuple[float, float, float]]:
+    """Shared second half of rows 3/4: drive `tracker` from a precomputed
+    `(t, odf_z)` stream via the direct-write path.
 
     Analyzer still runs normally (bands/energy features `update()` needs,
-    and its own onset detector for `kick_regularity` sampling only —
-    held identical to rows 1/2 so the only thing that changes is what
-    feeds the envelope ring). `ComplexOnsetDetector` runs over the same
-    PCM to build the whole track's `(t, odf_z)` stream up front — a
-    driver-loop convenience; the detector itself is still strictly causal
-    per its own docstring. `tracker.update()` is always called with
-    ``onsets=None`` so the base class's onset-event path never fires; see
-    `v3_odf_tracker.py`'s module docstring for how the bypass works.
+    and its own onset detector for `kick_regularity` sampling only — held
+    identical to rows 1/2 so the only thing that changes between rows is
+    which stream produced `odf_ticks`). `tracker.update()` is always
+    called with ``onsets=None`` so the base class's onset-event path
+    never fires; see `v3_odf_tracker.py`'s module docstring for how the
+    bypass works.
     """
     analyzer = Analyzer()
     analyzer.set_sample_rate(SAMPLE_RATE)
     kick_energies, kick_regularity = _kick_regularity_state()
 
-    detector = complex_onset.ComplexOnsetDetector()
-    detector.warm_up(SAMPLE_RATE)
-    odf_ticks: list[tuple[float, float]] = []
-    n_blocks = len(pcm) // BLOCK
-    for i in range(n_blocks):
-        block = pcm[i * BLOCK:(i + 1) * BLOCK]
-        odf_ticks.extend(detector.feed(block, i * BLOCK / SAMPLE_RATE))
     if odf_ticks:
         times = np.fromiter((t for t, _ in odf_ticks), dtype=np.float64, count=len(odf_ticks))
         values = np.fromiter((v for _, v in odf_ticks), dtype=np.float64, count=len(odf_ticks))
@@ -219,6 +226,7 @@ def stream_odf_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, floa
     ticks: list[tuple[float, float, float]] = []
     tick_dt = 1.0 / FPS
     next_tick = tick_dt
+    n_blocks = len(pcm) // BLOCK
     for i in range(n_blocks):
         block = pcm[i * BLOCK:(i + 1) * BLOCK]
         t0 = i * BLOCK / SAMPLE_RATE
@@ -237,6 +245,52 @@ def stream_odf_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, floa
             ticks.append((next_tick, float(tracker.bpm), float(tracker.confidence)))
             next_tick += tick_dt
     return ticks
+
+
+def stream_odf_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, float]]:
+    """Row 3: envelope ring written directly from the complex-domain ODF.
+
+    `ComplexOnsetDetector` runs over the whole track to build its
+    `(t, odf_z)` stream up front — a driver-loop convenience; the detector
+    itself is still strictly causal per its own docstring. See
+    `_stream_direct_write()` for the shared driving loop.
+    """
+    detector = complex_onset.ComplexOnsetDetector()
+    detector.warm_up(SAMPLE_RATE)
+    odf_ticks: list[tuple[float, float]] = []
+    n_blocks = len(pcm) // BLOCK
+    for i in range(n_blocks):
+        block = pcm[i * BLOCK:(i + 1) * BLOCK]
+        odf_ticks.extend(detector.feed(block, i * BLOCK / SAMPLE_RATE))
+    return _stream_direct_write(pcm, tracker, odf_ticks)
+
+
+def stream_stock_odf_driven(pcm: np.ndarray, tracker) -> list[tuple[float, float, float]]:
+    """Row 4 (control): envelope ring written directly from this project's
+    OWN spectral-flux onset value (not the complex-domain one), through
+    the exact same direct-write path row 3 uses. See `stock_flux_odf.py`'s
+    module docstring for why this control exists.
+
+    Runs its own throwaway `Analyzer` instance to extract `spectral_flux`
+    per block (a second full pass over the PCM, separate from the "real"
+    Analyzer `_stream_direct_write()` drives) — mirrors row 3's own two-
+    pass shape (one pass to build the ODF stream, one to drive the
+    tracker), so both rows have the same structure and only the ODF
+    source differs.
+    """
+    flux_analyzer = Analyzer()
+    flux_analyzer.set_sample_rate(SAMPLE_RATE)
+    flux_source = stock_flux_odf.StockFluxOnsetSource()
+    flux_source.warm_up(SAMPLE_RATE)
+    odf_ticks: list[tuple[float, float]] = []
+    n_blocks = len(pcm) // BLOCK
+    for i in range(n_blocks):
+        block = pcm[i * BLOCK:(i + 1) * BLOCK]
+        t0 = i * BLOCK / SAMPLE_RATE
+        audio = flux_analyzer.process(block, t=t0)
+        t1 = t0 + BLOCK / SAMPLE_RATE
+        odf_ticks.extend(flux_source.feed_flux(audio.spectral_flux, t0, t1))
+    return _stream_direct_write(pcm, tracker, odf_ticks)
 
 
 def score_track(ticks: list[tuple[float, float, float]], ref_bpm: float, dur: float) -> dict:
@@ -272,9 +326,17 @@ def build_tracker(row: str):
         return bg_stock.BeatTrackerV3({})
     if row == 'e5':
         return bg_e5.BeatTrackerV3({})
-    if row == 'odf':
+    if row in ('odf', 'stock-odf'):
         return ODF_TRACKER_CLS({})
     raise ValueError(f'unknown row {row!r}')
+
+
+def stream_for_row(row: str, pcm: np.ndarray, tracker) -> list[tuple[float, float, float]]:
+    if row == 'odf':
+        return stream_odf_driven(pcm, tracker)
+    if row == 'stock-odf':
+        return stream_stock_odf_driven(pcm, tracker)
+    return stream_onset_driven(pcm, tracker)
 
 
 def run_row(row: str, manifest: list[dict], baseline: dict[str, dict], limit: int | None) -> dict:
@@ -289,17 +351,14 @@ def run_row(row: str, manifest: list[dict], baseline: dict[str, dict], limit: in
         ref_bpm = float(base['reference_bpm'])
         pcm = np.load(m['npy']).astype(np.float32)
         tracker = build_tracker(row)
-        if row == 'odf':
-            ticks = stream_odf_driven(pcm, tracker)
-        else:
-            ticks = stream_onset_driven(pcm, tracker)
+        ticks = stream_for_row(row, pcm, tracker)
         dur = len(pcm) / SAMPLE_RATE
         row_result = score_track(ticks, ref_bpm, dur)
         row_result['note'] = base['note']
         row_result['path'] = path
         results[path] = row_result
         print(
-            f'{row:5} {Path(path).name[:44]:44} ref {ref_bpm:6.1f} '
+            f'{row:10} {Path(path).name[:44]:44} ref {ref_bpm:6.1f} '
             f'p50 {row_result["p50"]:7.2f} acc1 {row_result["acc1"]!s:5} '
             f'acc2 {row_result["acc2"]!s:5} fold {row_result["fold"]:8} '
             f'lanehops/min {row_result["lane_hops_per_min"]:5.1f}',
@@ -312,7 +371,7 @@ def run_row(row: str, manifest: list[dict], baseline: dict[str, dict], limit: in
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--limit', type=int, default=None)
-    ap.add_argument('--rows', default='stock,e5,odf')
+    ap.add_argument('--rows', default='stock,e5,odf,stock-odf')
     ap.add_argument('--out', default=str(HERE / 'results_51track.json'))
     args = ap.parse_args()
 

@@ -43,24 +43,15 @@ hop); this is a benchmarking prototype, not a hot-path implementation.
 from __future__ import annotations
 
 import logging
-from collections import deque
 
 import numpy as np
+
+from causal_norm import CausalMedianMadNormalizer
 
 logger = logging.getLogger(__name__)
 
 _FFT_SIZE = 1024
 _ODF_RATE_HZ = 100.0
-# Causal running-median/MAD normalization window for turning the raw
-# (unbounded, track-dependent-scale) ODF value into a continuous z-score-
-# like quantity comparable to this project's own onset "strength"
-# (analyzer.py's OnsetEvent.strength -- always >= 1.0 at a detected onset,
-# derived the same way: (value - median) / MAD over a trailing window).
-# 8 s matches beat_grid.py's own ACF envelope window (_V2_ENV_WINDOW_S) so
-# the normalization horizon is the same order of magnitude as what the
-# tracker's own comb filter looks back over.
-_NORM_WINDOW_S = 8.0
-_NORM_MIN_HISTORY = 8  # ticks before the running median/MAD is trusted
 
 
 def _princarg(phase: np.ndarray) -> np.ndarray:
@@ -104,9 +95,8 @@ class ComplexOnsetDetector:
         self._phase_prev2 = np.zeros(n_bins, dtype=np.float64)
         self._frames_seen = 0
 
-        # Causal running-median/MAD normalization state.
-        self._raw_history: deque[float] = deque()
-        self._raw_window_n = 0
+        # Causal running-median/MAD normalization state (see causal_norm.py).
+        self._normalizer = CausalMedianMadNormalizer(rate_hz=_ODF_RATE_HZ)
 
     def warm_up(self, sample_rate: int) -> None:
         """Reset per-stream state and derive the 100 Hz hop for `sample_rate`.
@@ -115,7 +105,6 @@ class ComplexOnsetDetector:
         """
         self._sample_rate = int(sample_rate)
         self._hop = max(1, int(round(self._sample_rate / _ODF_RATE_HZ)))
-        self._raw_window_n = max(1, int(round(_NORM_WINDOW_S * _ODF_RATE_HZ)))
         self._pcm = np.zeros(0, dtype=np.float64)
         self._pcm_offset = 0
         self._next_frame_index = 0
@@ -124,7 +113,7 @@ class ComplexOnsetDetector:
         self._phase_prev[:] = 0.0
         self._phase_prev2[:] = 0.0
         self._frames_seen = 0
-        self._raw_history.clear()
+        self._normalizer.reset()
 
     def feed(
         self, block: np.ndarray, block_start_s: float = 0.0,  # noqa: ARG002
@@ -164,7 +153,7 @@ class ComplexOnsetDetector:
                 window = self._pcm[local_start:local_end]
             raw = self._process_frame(window)
             t = frame_end / self._sample_rate
-            ticks.append((t, self._normalize(raw)))
+            ticks.append((t, self._normalizer.normalize(raw)))
             self._next_frame_index += 1
 
         # Keep only the trailing history a future frame could still need.
