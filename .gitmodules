@@ -125,3 +125,6 @@
 [submodule "drop-ins/effects-rollercoast"]
 	path = drop-ins/effects-rollercoast
 	url = git@github.com:iDoMeteor/effects-rollercoast.git
+[submodule "drop-ins/effects-ukiyo-e"]
+	path = drop-ins/effects-ukiyo-e
+	url = git@github.com:iDoMeteor/effects-ukiyo-e.git

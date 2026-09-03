@@ -51,6 +51,7 @@ Complex drop-ins should also include:
 | projectm-01 | Yes | Yes | External engine integration |
 | effects-psychedelic | Yes | Not required | Effect pack: Plasma, Kaleidoscope, Psychedelic |
 | effects-rollercoast | Yes | Not required | Effect pack: First Drop, Corkscrew, Night Coaster, Mine Train, Coaster Cam, Log Flume |
+| effects-ukiyo-e | Yes | Not required | Effect pack: Floating World (neon/steampunk ukiyo-e, layered woodblock plates) |
 | effects-retro | Yes | Not required | Effect pack: Copper Bars, ANSI Viewer, Fractal Zoom, Escher, Dali, Van Gogh |
 | sims-01 | Yes | Not required | Media/effect drop-in |
 | spotify-01 | Yes | Yes | Spotify metadata subsystem |

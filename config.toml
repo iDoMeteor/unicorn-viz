@@ -282,6 +282,16 @@ reactivity = 1.3
 glitter = 1.0
 splash_gain = 1.0       # how much water the splashdown throws
 
+# ---------------------------------------------------------------------------
+# effects-ukiyo-e pack (drop-ins/effects-ukiyo-e)
+[effects.FloatingWorld]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+neon_gain = 1.0         # how hot the neon runs
+layer_churn = 1.0       # how readily the director re-cuts plates; 0 freezes it
+
 [effects.ProjectMEffect]
 speed = 1.0
 preset_duration = 20.0

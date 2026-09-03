@@ -40,6 +40,7 @@ PACK_NAMES = {
                   'Nebula Drift', 'Asteroid Run', 'Portal Flight'},
     'effects-rollercoast': {'First Drop', 'Corkscrew', 'Night Coaster',
                             'Mine Train', 'Coaster Cam', 'Log Flume'},
+    'effects-ukiyo-e': {'Floating World'},
 }
 ISOLATED_NAMES = {
     'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Clips',
@@ -51,7 +52,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 70
+EXPECTED_TOTAL = 71
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
@@ -63,7 +64,7 @@ EXPECTED_CATEGORY = {
     'effects-retro': 'retro', 'effects-feature': 'feature', 'effects-vector': 'vector',
     'effects-cosmic': 'cosmic', 'effects-tech': 'tech', 'effects-immersive': 'immersive',
     'effects-holiday': 'holiday', 'effects-flying': 'flying',
-    'effects-rollercoast': 'rollercoast',
+    'effects-rollercoast': 'rollercoast', 'effects-ukiyo-e': 'ukiyo-e',
     'images-01': 'media', 'videos-01': 'media',
     'video-clips-01': 'media', 'textures-01': 'media', 'sims-01': 'media',
     'projectm-01': 'projectm', 'unicorn-tears-01': 'psychedelic',
