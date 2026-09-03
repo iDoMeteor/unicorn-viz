@@ -32,6 +32,7 @@
   unicorn-tears-01              1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  beat-flash-01                 0.9.0               alpha ▲       module
   effects-feature               0.9.0               alpha ▲       module
   effects-particles             0.9.0               alpha ▲       module
   effects-psychedelic           0.9.0               alpha ▲       module
@@ -44,7 +45,6 @@
   textures-01                   0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
-  beat-flash-01                 0.8.0               alpha         module
   color-grade-01                0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
   sims-01                       0.7.1               alpha         module
