@@ -3329,13 +3329,28 @@ void main() {
                 value = getattr(av, attr, None)
                 return str(value) if value not in (None, '') else '-'
 
+            # [auto_vj] hud_production_mode also gates these rows -- this tab
+            # is a second surface (besides the main H-toggled HUD's bottom
+            # Auto VJ pane) where the same "detector internals" (BPM +
+            # confidence, recommender score/rec) were visible unconditionally,
+            # missed by the first production-mode pass. Deliberately keyed on
+            # production_mode alone, not the individual [overlays]
+            # hud_show_detector_bpm/hud_show_profile_score/hud_show_reco_profile
+            # flags -- those govern the always-on-screen HUD; this tab is an
+            # on-demand operator diagnostic view and stays fully populated by
+            # default (see test_auto_vj_info_rows), same as before this change.
+            production_mode = bool(
+                self.cfg.get('auto_vj', 'hud_production_mode', default=False)
+            )
             rows.append(info('Mood', lab('hud_mood_label')))
             rows.append(info('Scene', lab('hud_scene_label')))
-            rows.append(info('BPM', lab('hud_bpm_label')))
-            rows.append(info('BPM confidence', lab('hud_bpm_confidence_label')))
+            if not production_mode:
+                rows.append(info('BPM', lab('hud_bpm_label')))
+                rows.append(info('BPM confidence', lab('hud_bpm_confidence_label')))
             rows.append(info('Action in', lab('hud_action_in_label')))
-            rows.append(info('Profile score', lab('current_profile_score_hud')))
-            rows.append(info('Profile rec', lab('profile_recommendation_hud')))
+            if not production_mode:
+                rows.append(info('Profile score', lab('current_profile_score_hud')))
+                rows.append(info('Profile rec', lab('profile_recommendation_hud')))
         return rows
 
     # -- Hotkeys tab (rebind global actions) ----------------------------------
