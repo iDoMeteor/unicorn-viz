@@ -80,6 +80,7 @@ Complex drop-ins should also include:
   - [Integration](../drop-ins/auto-vj-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/auto-vj-01/docs/troubleshooting.md)
   - [Weights & Thresholds Reference](../drop-ins/auto-vj-01/docs/weights-and-thresholds.md)
+  - [Director Timing Reference](../drop-ins/auto-vj-01/docs/director-timing.md)
   - [Director scene-detection audit (2026-08-09)](../docs/audits/2026-08-09-director-scene-detection-audit.md)
   - [Training Pack Protocol](planning/auto-vj-training-pack-protocol.md)
 - banner-01
@@ -99,6 +100,7 @@ Complex drop-ins should also include:
   - [Troubleshooting](../drop-ins/color-grade-01/docs/troubleshooting.md)
 - control-room-01
   - [Planning](planning/drop-in-planning.md)
+  - [Deck-Sim Plan](../drop-ins/control-room-01/docs/deck-sim-plan.md)
   - [Operations](../drop-ins/control-room-01/docs/operations.md)
   - [Configuration](../drop-ins/control-room-01/docs/configuration.md)
   - [Integration](../drop-ins/control-room-01/docs/integration.md)
