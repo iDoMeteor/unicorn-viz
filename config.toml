@@ -1,5 +1,6 @@
 [logging]
 level = "info"
+perf_frames = true
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
@@ -136,7 +137,7 @@ enabled = true
 [auto_vj]
 enabled = true
 beat_tracker_engine = "v3"   # 2026-09-02: v3 proper (HMM engine, phase 1) -- no longer an alias for v2 (see docs/adr/vj-system.md)
-beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shadow so the corpus carries a v3/v2 exact diff every session
+#beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shadow so the corpus carries a v3/v2 exact diff every session
 # beat_tracker_shadow2_engine = "legacy"   # v1 shadow retired 2026-09-02 (owner: no more v1 shadow; its ratcheted confidence made its lock metrics meaningless)
 # -- round-three close-out options (2026-08-17, detector rc.33 / auto-vj rc.90) --
 # All default ON (or to the values shown) in code; uncomment to override.
@@ -157,10 +158,10 @@ beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shado
 # drop_signal_engine = "legacy"
 # Per-mood thresholds live in _PROFILE_PRESETS (weights-and-thresholds.md has
 # the table); override any of them here like other profile keys:
-# drop_trigger_threshold = 0.60        # trigger entry bar (~p99 of real-audio readings)
-# drop_trigger_fastlane = 0.75         # strong-trigger shorter-hold bar (default threshold x1.25)
-# drop_sustain_entry = 0.58            # established-sustain entry bar (covers joining mid-drop)
-# drop_sustain_fizzle_floor = 0.35     # absolute fizzle floor under the peak-relative (x0.9) check
+drop_trigger_threshold = 0.55        # trigger entry bar (~p99 of real-audio readings)
+drop_trigger_fastlane = 0.75         # strong-trigger shorter-hold bar (default threshold x1.25)
+drop_sustain_entry = 0.65            # established-sustain entry bar (covers joining mid-drop)
+drop_sustain_fizzle_floor = 0.35     # absolute fizzle floor under the peak-relative (x0.9) check
 # -- recommender BPM hard pre-filter (2026-08-20, recommender rc.20) --
 # While confidently locked, genre candidates whose bpm_hint range (± margin)
 # doesn't contain the locked tempo are excluded before scoring (the 2026-08-13
@@ -174,19 +175,28 @@ beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shado
 # genre_matcher_enabled = true
 # genre_matcher_endorse_sigma = 0.06   # log2 sigma of the endorsement (tight: it backs one specific ACF hypothesis)
 postfx_cruise_slots = [1,2,3,4,5,6]
-log_decisions = true
+log_decisions = false
 live_training_enabled = false
 sequence_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
 sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
-# auto_exit_after_finale = false
+# auto_exit_after_finale = true
 # Smooths only the HUD "BPM: nnn" readout (code default: on); every other
 # consumer (gates, director timing, recommender scoring, training-corpus
 # logging) always reads the fast raw value. Off here for now -- soaking
 # with the raw, unsmoothed number visible while validating this week's
 # detector changes. See docs/adr/vj-system.md.
-#published_bpm_smoothing_enabled = false
+published_bpm_smoothing_enabled = true
 published_bpm_smoothing_s = 4.0
+
+# Arm B, rc.16 default
+mode_snap_unit_build = "bar"
+mode_snap_unit_breakdown = "phrase"
+mode_snap_unit_climax = "bar"
+mode_phrase_within_bars_build = 1
+mode_phrase_within_bars_breakdown = 2
+mode_phrase_within_bars_climax = 2
+
 
 [control_room]
 enabled = false
@@ -223,10 +233,6 @@ preload_videos = true        # true = open/prime clips at startup
 mix_time       = 5.0        # seconds per clip
 scale_when_framed = true
 
-[effects.Fireworks]
-#scale_when_framed = false
-#candy_frame_disallow = true
-
 [effects.SimShowcase]
 mix_time = 4.0
 camera_energy = 2.0
@@ -238,60 +244,6 @@ camera_energy = 2.0
 # via the current Unicorn Viz GL context, and supports Ctrl+N/P/R preset
 # switching while the effect is active.
 # ---------------------------------------------------------------------------
-# effects-rollercoast pack (drop-ins/effects-rollercoast)
-# Shared dials on every ride: speed, zoom, reactivity, glitter.
-[effects.FirstDrop]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-drop_force = 1.0        # how violent the plunge kicks the camera
-
-[effects.Corkscrew]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-roll_force = 1.0        # how hard the inversions bite
-
-[effects.NightCoaster]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-neon_gain = 1.0         # how hot the park's emitters run
-
-[effects.MineTrain]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-torch_gain = 1.0        # how hot the wall torches burn
-
-[effects.CoasterCam]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-cam_offset = 1.0        # how far the chase camera stands off the track
-
-[effects.LogFlume]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-splash_gain = 1.0       # how much water the splashdown throws
-
-# ---------------------------------------------------------------------------
-# effects-ukiyo-e pack (drop-ins/effects-ukiyo-e)
-[effects.FloatingWorld]
-speed = 1.0
-zoom = 1.0
-reactivity = 1.3
-glitter = 1.0
-neon_gain = 1.0         # how hot the neon runs
-layer_churn = 1.0       # how readily the director re-cuts plates; 0 freezes it
-
 [effects.ProjectMEffect]
 speed = 1.0
 preset_duration = 20.0
@@ -499,13 +451,3 @@ fps_cap = 30              # 0 = every rendered frame
 # [video_out.pipewire]
 # enabled = true
 # name = "Unicorn Viz"
-
-# ---------------------------------------------------------------------------
-# Per-frame performance instrumentation
-# ---------------------------------------------------------------------------
-# Logs a per-stage breakdown (events/audio/effects/draw/swap/subsys_*) for
-# slow frames plus a periodic sample.  Off by default; --log-level DEBUG also
-# turns it on.  Analyse with:  grep "Perf frame" logs/<newest>.log
-#
-# [logging]
-# perf_frames = true

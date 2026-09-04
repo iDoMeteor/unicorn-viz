@@ -8,7 +8,7 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.189.0             alpha ▲       module
-  media-01                      0.26.0              alpha ▲       module
+  media-01                      0.27.0              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
@@ -68,8 +68,8 @@
   audio-out-01                  0.4.0               early alpha   module
   effects-rollercoast           0.4.0               early alpha   module
   effects-flying                0.2.1               early alpha   module
+  effects-ukiyo-e               0.3.0               early alpha   module
   lyrics-01                     0.3.0               early alpha   module
-  effects-ukiyo-e               0.2.0               early alpha   module
   osc-bridge-01                 0.2.0               early alpha   module
   video-postfx-01               0.1.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
