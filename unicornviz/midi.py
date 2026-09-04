@@ -328,6 +328,25 @@ class MidiManager:
         """Return the name of the currently applied preset ('' when none)."""
         return self._preset
 
+    def preset_device(self) -> str:
+        """Return the active preset's ``meta.device`` token ('' when unset).
+
+        ``ControllerProfile.to_preset()`` (midi-controllers-01) includes
+        ``meta``/``colors`` alongside ``cc_map``/``note_map`` in the payload
+        passed to :meth:`register_preset`, so this survives in
+        ``BUILTIN_PRESETS`` even though this class only reads the map keys
+        itself. Plain readback, no drop-in coupling — used by
+        ``VJApi.midi_preset_device()`` to resolve a deck-sim layout for
+        whichever controller is currently connected.
+        """
+        p = BUILTIN_PRESETS.get(self._preset)
+        if not isinstance(p, dict):
+            return ''
+        meta = p.get('meta')
+        if not isinstance(meta, dict):
+            return ''
+        return str(meta.get('device', '') or '')
+
     def set_note_binding(self, note: int, action: str) -> None:
         """Bind *note* to *action*, overriding any preset mapping."""
         self._note_map[int(note)] = str(action)

@@ -416,6 +416,74 @@ def test_setting_profile_colors_forces_a_full_repaint(monkeypatch) -> None:
     assert leds._sent == {}, 'stale sent-cache would suppress the repaint'
 
 
+def test_all_action_colors_matches_per_action_resolution(monkeypatch) -> None:
+    leds_mod, leds = _leds_instance(monkeypatch)
+    leds.set_profile_colors({'next': (7, 8)})
+    leds.set_action_idle('prev', 99)
+
+    colors = leds.all_action_colors()
+
+    # Every built-in action is covered, resolved the same way action_colors/
+    # get_action_idle already resolve it individually -- this is a batch of
+    # the same logic, not a second implementation of it.
+    for action in leds_mod._ACTION_COLORS:
+        assert colors[action] == (leds.get_action_idle(action), leds.action_colors(action)[1])
+    assert colors['next'] == (7, 8)          # profile override applied
+    assert colors['prev'][0] == 99           # MIDI Learn idle override applied
+
+
+def test_all_action_colors_includes_profile_and_override_only_actions(monkeypatch) -> None:
+    """An action bound only by a profile/override (not in the built-in table)
+    must still show up -- it's the whole reason this isn't just
+    dict(_ACTION_COLORS)."""
+    leds_mod, leds = _leds_instance(monkeypatch)
+    assert 'a_drop_in_action' not in leds_mod._ACTION_COLORS
+    leds.set_profile_colors({'a_drop_in_action': (11, 12)})
+
+    colors = leds.all_action_colors()
+
+    assert colors['a_drop_in_action'] == (11, 12)
+
+
+# ---------------------------------------------------------------------------
+# Deck-sim layout (P1 of drop-ins/control-room-01/docs/deck-sim-plan.md)
+# ---------------------------------------------------------------------------
+
+def test_deck_sim_layout_matches_the_note_layout_helpers(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    layout = leds_mod.build_deck_sim_layout()
+
+    assert layout.device == 'apc mini mk2'
+    assert layout.grid_rows == 8 and layout.grid_cols == 8
+    for row in range(8):
+        for col in range(8):
+            assert layout.grid_note(row, col) == leds_mod._row_note(row, col)
+    assert layout.scene_notes == tuple(leds_mod._scene_note(i) for i in range(8))
+    assert layout.track_notes == tuple(leds_mod._track_note(i) for i in range(8))
+
+
+def test_deck_sim_layout_faders_cover_cc_48_through_56(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    layout = leds_mod.build_deck_sim_layout()
+
+    ccs = [f.cc for f in layout.faders]
+    assert ccs == list(range(48, 57))            # 48-55 track, 56 master
+    assert [f.label for f in layout.faders[:8]] == [str(i) for i in range(1, 9)]
+    master = layout.faders[-1]
+    assert master.is_master is True
+    assert master.label == 'MASTER'
+    assert sum(1 for f in layout.faders if f.is_master) == 1
+
+
+def test_deck_sim_layout_device_token_matches_the_stock_preset(monkeypatch) -> None:
+    """This is the token active_deck_sim_layout() resolves against -- it must
+    exactly match what the stock preset stamps into meta.device, or the
+    deck-sim view would silently never resolve a layout at all."""
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    layout = leds_mod.build_deck_sim_layout()
+    assert layout.device == _presets_mod._APC_PRESET['meta']['device']
+
+
 # ---------------------------------------------------------------------------
 # Bundled alt-01 zone profile
 # ---------------------------------------------------------------------------

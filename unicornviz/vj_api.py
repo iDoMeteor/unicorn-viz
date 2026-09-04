@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
+from unicornviz.deck_sim import DeckSimLayout
 from unicornviz.effects.registry import get_effects
 
 if TYPE_CHECKING:
@@ -82,6 +83,10 @@ class VJApi:
         self._key_handlers: dict[str, Callable[[int, int], 'str | None | bool']] = {}
         self._midi_action_registry: dict[str, list[tuple[str, str]]] = {}
         self._midi_action_handlers: dict[str, Callable[[], None]] = {}
+        # Deck-sim (Control Room controller-mirror view) surface — see
+        # unicornviz/deck_sim.py and drop-ins/control-room-01/docs/deck-sim-plan.md.
+        self._deck_sim_layouts: dict[str, DeckSimLayout] = {}
+        self._midi_action_colors_provider: 'Callable[[], dict[str, tuple[int, int]]] | None' = None
 
     @classmethod
     def current(cls) -> 'VJApi | None':
@@ -1380,6 +1385,27 @@ class VJApi:
             return ''
         return str(getattr(m, 'preset', '') or '')
 
+    def midi_preset_device(self) -> str:
+        """Return the active MIDI preset's device-model token ('' when unknown).
+
+        A ``ControllerProfile``'s ``meta.device`` rides along in the payload
+        ``register_preset()`` stores (``ControllerProfile.to_preset()``
+        includes it alongside ``note_map``/``cc_map``), so this is a plain
+        readback — see ``MidiManager.preset_device()``. Used by
+        :meth:`active_deck_sim_layout` to resolve which registered layout
+        matches the connected surface.
+        """
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return ''
+        fn = getattr(m, 'preset_device', None)
+        if not callable(fn):
+            return ''
+        try:
+            return str(fn() or '')
+        except Exception:
+            return ''
+
     def midi_apply_preset(self, name: str) -> bool:
         """Switch the live MIDI maps to a registered preset/profile.
 
@@ -1441,6 +1467,69 @@ class VJApi:
             rm_fn = getattr(m, 'remove_named_listener', None)
             if callable(rm_fn):
                 rm_fn(str(name))
+
+    # -- Deck-sim (Control Room controller-mirror view) -----------------------
+    # See unicornviz/deck_sim.py and
+    # drop-ins/control-room-01/docs/deck-sim-plan.md for the full design.
+    # Registration lives here (core) exactly like register_midi_actions/
+    # register_now_playing above; the drop-in that owns a device's physical
+    # geometry (midi-controllers-01 for the APC mini mk2 today) registers a
+    # descriptor once at startup, and any consumer (Control Room) resolves
+    # the active one generically -- neither side imports the other.
+
+    def register_deck_sim_layout(self, layout: DeckSimLayout) -> None:
+        """Register a controller model's physical layout for the deck-sim view.
+
+        Call once per device model, typically at drop-in startup. Replaces
+        any previously registered layout for the same device token
+        (``layout.device``).
+        """
+        self._deck_sim_layouts[str(layout.device)] = layout
+
+    def deck_sim_layouts(self) -> 'dict[str, DeckSimLayout]':
+        """Return every registered deck-sim layout, keyed by device token."""
+        return dict(self._deck_sim_layouts)
+
+    def active_deck_sim_layout(self) -> 'DeckSimLayout | None':
+        """Return the layout for the currently active MIDI device, or None.
+
+        None when MIDI is unavailable, no preset is active, the active
+        preset is unscoped (no ``meta.device`` recorded), or no layout has
+        been registered for that device token yet -- any of these means
+        "nothing to mirror", not an error; callers should hide the deck-sim
+        toggle entirely in that case (see the plan doc's availability §6).
+        """
+        device = self.midi_preset_device()
+        if not device:
+            return None
+        return self._deck_sim_layouts.get(device)
+
+    def register_midi_action_colors(
+        self, provider: 'Callable[[], dict[str, tuple[int, int]]]',
+    ) -> None:
+        """Register a callable returning the live ``{action: (idle, active)}`` palette.
+
+        Called by the LED-feedback-owning drop-in (midi-controllers-01) so a
+        consumer (a deck-sim mirror view) can read true pad colors without
+        importing or reaching into that drop-in's private state. The
+        provider is called fresh on every :meth:`midi_action_colors` call
+        rather than snapshotted here, since the palette changes live
+        (profile switch, MIDI Learn idle-color overrides).
+        """
+        self._midi_action_colors_provider = provider
+
+    def midi_action_colors(self) -> 'dict[str, tuple[int, int]]':
+        """Return the current ``{action: (idle, active)}`` color palette.
+
+        Empty when no provider is registered (LED feedback unavailable/not
+        loaded) or the provider raises.
+        """
+        if self._midi_action_colors_provider is None:
+            return {}
+        try:
+            return dict(self._midi_action_colors_provider())
+        except Exception:
+            return {}
 
     def midi_add_input_device(self, device_hint: str) -> bool:
         """Open an additional raw-only MIDI input device (e.g. a second controller).

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.107**
+**Version 1.0.0-beta.108**
 
 ## Contact Me!
 
@@ -557,6 +557,20 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.108** — Control Room deck-sim, P1 (core surface only — no
+  visible behavior change yet; see
+  `drop-ins/control-room-01/docs/deck-sim-plan.md`). New
+  `unicornviz/deck_sim.py` (`DeckSimLayout`/`FaderSpec`, pure physical-
+  geometry descriptors for a controller-mirror view), a matching `vj_api`
+  registry (`register_deck_sim_layout()`/`deck_sim_layouts()`/
+  `active_deck_sim_layout()`), a live color-palette pass-through
+  (`register_midi_action_colors()`/`midi_action_colors()`), and
+  `vj_api.midi_preset_device()` (reads the active preset's `meta.device`
+  back out of core's `BUILTIN_PRESETS`, confirmed to survive there —
+  `MidiManager.register_preset()`'s own type hint only documents
+  `note_map`/`cc_map`, but the fuller payload rides along unenforced).
+  Pointer: midi-controllers-01 0.9.1 registers the APC mini mk2's actual
+  layout + color provider into this registry at startup.
 - **1.0.0-beta.107** — Effects-browser favorites (`F` key): mark up to 16
   effects, auto-assigned to the lowest free slot and persisted — data-layer
   groundwork for a future 1:1 mapping onto a 16-pad MIDI grid (an Akai APC
