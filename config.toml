@@ -241,6 +241,79 @@ camera_energy = 2.0
 # via the current Unicorn Viz GL context, and supports Ctrl+N/P/R preset
 # switching while the effect is active.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# effects-rollercoast pack (drop-ins/effects-rollercoast)
+# Shared dials on every ride: speed, zoom, reactivity, glitter.
+# random_zoom_min bounds the app's zoom randomiser, which otherwise rolls
+# uniform(0.30, 1.80). zoom is a field-of-view divisor, not a dolly, and below
+# about 0.8 a first-person ride's rails project out to the frame corners and
+# the shot reads as standing behind the track instead of riding it.
+[effects.FirstDrop]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+drop_force = 1.0        # how violent the plunge kicks the camera
+random_zoom_min = 0.85
+
+[effects.Corkscrew]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+roll_force = 1.0        # how hard the inversions bite
+random_zoom_min = 0.85
+
+[effects.NightCoaster]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+neon_gain = 1.0         # how hot the park's emitters run
+random_zoom_min = 0.85
+
+[effects.MineTrain]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+torch_gain = 1.0        # how hot the wall torches burn
+random_zoom_min = 0.85
+
+[effects.CoasterCam]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+cam_offset = 1.0        # how far the chase camera stands off the track
+random_zoom_min = 0.50  # watches from outside, so it takes a wider view fine
+
+[effects.LogFlume]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+splash_gain = 1.0       # how much water the splashdown throws
+random_zoom_min = 0.85
+
+# ---------------------------------------------------------------------------
+# effects-ukiyo-e pack (drop-ins/effects-ukiyo-e)
+[effects.FloatingWorld]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+neon_gain = 1.0         # how hot the neon runs
+layer_churn = 1.0       # how readily the director re-cuts plates; 0 freezes it
+
+[effects.OndenWatermill]
+speed = 1.0
+zoom = 1.0
+reactivity = 1.3
+glitter = 1.0
+neon_gain = 1.0         # how hot the neon runs
+flow_gain = 1.0         # how hard the chute runs onto the wheel
+
 [effects.ProjectMEffect]
 speed = 1.0
 preset_duration = 20.0
