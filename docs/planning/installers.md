@@ -12,6 +12,9 @@
 > channel against today's code. §16 is the authoritative, solo-friendly,
 > free-tooling phased roadmap that supersedes the original §14 milestone
 > sketch. §17 is the money ledger (what is free vs. what costs).
+> **§18 is the same-day execution plan** — dependency-ordered blocks, the owner
+> action batch, and an honest end-of-day scoreboard. §0.1 is the distribution
+> model refresh (R2 + `manifest.json`, tags kept, GitHub Releases retired).
 
 ---
 
@@ -42,6 +45,30 @@
   (Homebrew convention: the GitHub repo must be named `homebrew-<tap>`, and
   users type `brew tap djunicorntears/unicornviz`). See §11.
 - **Mobile (Android/iOS):** **not** in v1 scope.
+
+### 0.1 Distribution Model Refresh (2026-06-30 — proposed; confirm as O1 in §18)
+
+- **Decouple the build host from the distribution host.** They are independent
+  choices; never tie one to the other.
+- **Distribute via self-hosted object storage + `manifest.json`, not GitHub
+  Releases.** Recommended host: **Cloudflare R2** (S3-compatible API, **zero
+  egress fees**). Plain S3 is *not* recommended: every artifact is ~200 MB
+  (bundled runtime) and S3 egress (~$0.09/GB) scales with popularity — exactly
+  when a bill is least welcome. Fallback that is also free: GitHub Releases as
+  the byte store behind a `get.unicornviz.io` redirect.
+- **`manifest.json` is the single source of truth** for "latest version + where
+  its artifacts live." `install.sh` reads it from a stable URL instead of the
+  GitHub REST API. This deletes the GitHub-API dependency **and removes the need
+  for a published GitHub Release to validate the release path** — a local or
+  staging bucket is enough (§18 Block A).
+- **Keep `git tag vX.Y.Z` for provenance** even though GitHub *Releases* are no
+  longer the channel. Stamp tag + commit SHA into every artifact. The canonical
+  repo **may now stay private** (public was only required for free CI minutes).
+- **Build host: local for Linux** (fpm + all three packaging foundations work on
+  the owner's Fedora box). **GitHub's free `macos-14` / `windows-2022` runners
+  remain the only zero-cost way to build those two platforms** absent owner
+  hardware. **Keep the nightly smoke CI as the QA safety net** regardless of
+  where distribution goes — local builds are not clean-room.
 
 ## 0.5 Gold-Star Bar & Honest Scorecard (2026-06-21)
 
@@ -94,6 +121,19 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
    CLI are unbuilt. Not required for core-installer gold stars, but required
    before the "official drop-in pack" UX and before drop-ins can be promised to
    install cleanly on any channel. Sequenced last (§16 Phase 7).
+
+4. **Asset resolution is a launcher contract, not a packaging detail.**
+   `APP_ROOT` is the package's parent directory. Any launcher that runs the
+   package out of a bundled runtime's site-packages **must export
+   `UNICORNVIZ_APP_ROOT=<prefix that contains assets/>`** (landed 2026-06-30 for
+   the one-liner and native packages). Windows (`.cmd`/`.ps1`, Inno `[Run]`) and
+   macOS (launcher stub or `Info.plist` `LSEnvironment`) must do the same, or
+   they will silently re-introduce the bug that a normal `pip install` exposed.
+5. **`--help` is not a real smoke test.** It cannot detect the asset bug above.
+   Every install smoke (nightly containers, package installs, release-path
+   validation) must also assert asset resolution. Cheap enabler, planned in §18
+   Block C: a headless `unicorn-viz --self-test` that prints `APP_ROOT`, verifies
+   `assets/` + fonts, imports the heavy deps, and exits non-zero on failure.
 
 ## 1. Current Implementation Snapshot
 
@@ -199,6 +239,12 @@ uploaded to the matching GitHub Release on the **canonical repo**.
 ---
 
 ## 2. Versioning & Release Source of Truth
+
+> **Changed 2026-06-30 (see §0.1 and §18):** tag-push → GitHub Release is no
+> longer the distribution path. Tags stay for provenance; artifacts plus a
+> `manifest.json` are published to self-hosted object storage (R2 recommended).
+> The contract below is kept as the *build* reference; its "upload to GitHub
+> Release" steps are superseded.
 
 - Single version string lives in `pyproject.toml` (`[project].version`).
 - Tagging: annotated tags on `djunicorntears/unicorn-viz` named `vX.Y.Z`.
@@ -810,6 +856,11 @@ Store distribution. Deferred to v1.2.
 ---
 
 ## 9. CI Architecture
+
+> **Changed 2026-06-30 (see §0.1 and §18):** the publish target moves from
+> GitHub Releases to R2 (`aws s3 sync --endpoint-url …`). `installer-smoke.yml`
+> (nightly, real clean-container installs) is live and stays. The macOS and
+> Windows build jobs remain the free way to build those two platforms.
 
 ```
 .github/workflows/
@@ -1503,3 +1554,186 @@ unsigned escape hatch on Windows/macOS. The first dollar worth spending, once
 there is revenue, is the **Apple $99/yr** (best trust-per-dollar — it removes the
 scariest first-run wall), then a **Windows OV cert**. A domain is optional polish.
 No payment is on the critical path to "five gold stars."
+
+---
+
+## 18. Bring It Home — Same-Day Execution Plan (2026-06-30)
+
+**Goal:** take every channel to its *realistic* ceiling in one working day on
+the owner's Fedora box, in dependency order, each block ending in a verified,
+committed state. Honest constraint up front: **Windows and macOS can only be
+*built* here, not *tested*** — and a macOS `.dmg` cannot be built without a
+Mac at all. This plan says so rather than pretending otherwise.
+
+### 18.1 Tooling check (this box, 2026-06-30)
+
+- **Have:** `gpg`, `aws` (S3-compatible → works against R2 with
+  `--endpoint-url`), `flatpak`, `fpm`, and all three packaging foundations
+  (`fetch_runtime.sh`, `stage_payload.sh`, `build_native.sh`).
+- **Missing, cheap (`dnf install`):** `podman` (real package-install smoke in
+  clean containers), `flatpak-builder`.
+- **Missing, not today:** `snapcraft` (needs LXD/multipass), `wine` (would let
+  Inno Setup compile on Linux — skip), a Mac.
+
+### 18.2 Owner actions — batch these first (≈20 minutes total)
+
+| # | Action | Unblocks | Effort |
+|---|--------|----------|--------|
+| **O1** | Confirm the distribution model in §0.1: **R2** (recommended) vs S3 vs GitHub-Releases-as-bytes | Block A | 1 min |
+| **O2** | Create the R2 bucket + API token (access key, secret, account endpoint) — or any S3-compatible bucket | Block A *publish*; until then a local staging dir stands in | 10 min |
+| **O3** | Generate the release GPG key, e.g. `gpg --quick-gen-key "Unicorn Viz Release <release@unicornviz.io>" ed25519 sign 2y`; export the public key to `docs/release-key.asc`; put the fingerprint in `SECURITY.md` | Block B (★5 trust on every Linux channel) | 5 min |
+| **O4** | Config cleanup (other team) → distribution-ready `config.toml` | Block C **conffile only** — everything else proceeds | external |
+| **O5** | Claim `io.unicornviz.UnicornViz` on Flathub and `unicorn-viz` on the Snap Store | Blocks D/F ★5 *publish* only | 5 min |
+| **O6** | Mac + Windows access (hardware, VM, or accept the free CI runners) | Blocks E/G *testing* | — |
+
+**The RC test release is no longer required.** Once Block A lands,
+`manifest.json` + a staging bucket validates the release path end-to-end.
+
+### 18.3 Blocks — dependency-ordered (✔ = verification gate before commit)
+
+**Block A — Distribution foundation (≈2 h). Proves the release path *without* the RC.**
+
+- **A1** `manifest.json` schema (§18.4): channels → version, per-artifact
+  `url`/`sha256`/`size`, `tag`, `commit`, `published`.
+- **A2** `tools/packaging/release.sh` — one command that builds the one-liner
+  source tarball (from `stage_payload.sh`), the `.rpm`, and the `.deb` (fpm
+  builds deb on Fedora too); writes `SHA256SUMS` + `manifest.json`; stamps tag +
+  SHA; signs (Block B); then `aws s3 sync --endpoint-url <R2>` — or
+  `--dest <dir>` for a local staging tree. Idempotent, with `--dry-run`.
+- **A3** `install.sh` / `lib.sh`: replace `resolve_latest_version` (GitHub REST
+  API) with a fetch of `manifest.json` from `UV_MANIFEST_URL` (default
+  `https://get.unicornviz.io/manifest.json`; overridable, so tests can point at a
+  local `http://localhost` staging tree). Download artifact URLs from the
+  manifest, keep checksum verification, drop the GitHub source-archive fallback.
+- ✔ `release.sh --dest /tmp/stage` → `python -m http.server` on it →
+  `UV_MANIFEST_URL=http://localhost:8000/manifest.json ./install.sh --no-deps
+  --prefix /tmp/x` → `unicorn-viz --self-test` passes. **That is the release
+  path, proven today.**
+
+**Block B — Trust, ★5 for Linux (≈45 min; needs O3).**
+
+- **B1** `release.sh` signs `SHA256SUMS` → `SHA256SUMS.asc`, `rpm --addsign`,
+  and `dpkg-sig --sign builder`. `install.sh` verifies the `.asc` when `gpg` and
+  the public key are present; otherwise soft-fails with a loud WARN (§10).
+- ✔ `gpg --verify` on the staged `SHA256SUMS.asc`; `rpm -K` and
+  `dpkg-sig --verify` clean.
+
+**Block C — Native ★4 (≈1.5 h).**
+
+- **C1** `unicorn-viz --self-test` in `__main__.py`: headless; prints
+  `APP_ROOT`; verifies `assets/` and fonts; imports the heavy deps; exit code
+  reflects the result. Small, and it turns every smoke test into a real one.
+  Add it to the nightly and to the Block A/B gates.
+- **C2** Real package-install smoke with `podman`: `ubuntu:24.04` →
+  `apt install ./*.deb`; `fedora:41` → `dnf install ./*.rpm`; both →
+  `unicorn-viz --self-test`. Wire the same into `installer-smoke.yml` (the
+  containers are already there).
+- **C3** deb dependency names are validated by C2 — that is the distro matrix's
+  real job now that the runtime is downloaded per-arch.
+- ⛔ The `config.toml` conffile stays deferred (O4).
+- ✔ Both containers install and self-test clean.
+
+**Block D — Flatpak ★4 (≈2 h).**
+
+- **D1** `dnf install flatpak-builder`; `flatpak-pip-generator` →
+  `python3-requirements.json` (offline sources); native build deps as
+  `modules:`; `finish-args` tightened per §5.1 (pipewire socket, xdg dirs, drop
+  `home` and `network`); `metainfo.xml` + `.desktop` + icons; runtime `24.08`.
+  The launcher sets `UNICORNVIZ_APP_ROOT` (cross-cutting rule 4).
+- ✔ `flatpak-builder --user --install` → `flatpak run io.unicornviz.UnicornViz
+  --self-test`.
+- ★5 = the Flathub PR (needs O5). File it today; review takes days, not hours.
+
+**Block E — Windows: built here, tested there (≈2 h to build).**
+
+- **E1** `fetch_runtime.sh --os windows --arch x86_64` already downloads the
+  Windows interpreter on Linux. Build `UnicornViz-Portable-X.Y.Z.zip` entirely
+  here: staged payload + `runtime\python` + `unicorn-viz.cmd` / `.ps1` launchers
+  that `set UNICORNVIZ_APP_ROOT` and run `python.exe -m unicornviz`. → ★2–★3,
+  **unverified**.
+- **E2** Rewrite `UnicornViz.iss` to consume the staged payload (kill the
+  `RepoRoot\*` blanket copy and the post-install pip), take the version from
+  `/DAppVersion`, add Start-menu / PATH / uninstaller, and have `[Run]` set the
+  env. It can be *written* today; **compiling needs Inno Setup — a Windows box
+  or the free `windows-2022` CI job.**
+- ✔ `unzip -l` shows no `.git`, `.venv`, or drop-ins; launcher text correct.
+  **Real verification = a Windows machine or the CI job (O6).**
+
+**Block F — Snap: not today.** Needs `snapcraft` + LXD. Upgrade the manifest to
+`core24` / strict on paper (≈30 min); build and test next session.
+
+**Block G — macOS: not today.** No Mac means no `.dmg` and no test. Do the
+≈30-minute prep so a Mac session is turnkey: `briefcase` config,
+`entitlements.plist`, `Info.plist` usage strings plus
+`LSEnvironment: UNICORNVIZ_APP_ROOT`, an `.icns` generation script, a Homebrew
+cask template. The free `macos-14` runner (O6) is the zero-cost path.
+
+**Block H — Docs + tag (≈45 min).**
+
+- README install section (one-liner, R2 download links, Flathub badge
+  placeholder); `docs/user-guide.md`; `docs/configuration.md` per-install
+  config paths. `git tag v0.1.0-rc.1` for provenance — **not** a GitHub Release.
+
+### 18.4 `manifest.json` schema (Block A1)
+
+```json
+{
+  "schema": 1,
+  "name": "unicorn-viz",
+  "generated": "2026-06-30T12:00:00Z",
+  "channels": {
+    "stable":     { "version": "0.1.0" },
+    "prerelease": { "version": "0.1.0-rc.1" }
+  },
+  "releases": {
+    "0.1.0-rc.1": {
+      "tag": "v0.1.0-rc.1",
+      "commit": "459623b",
+      "published": "2026-06-30T12:00:00Z",
+      "notes_url": "https://unicornviz.io/releases/0.1.0-rc.1",
+      "artifacts": {
+        "source":           { "url": "…/unicorn-viz-0.1.0-rc.1.tar.gz",         "sha256": "…", "size": 0 },
+        "rpm-x86_64":       { "url": "…/unicorn-viz-0.1.0-rc.1-1.x86_64.rpm",   "sha256": "…", "size": 0 },
+        "deb-amd64":        { "url": "…/unicorn-viz_0.1.0-rc.1_amd64.deb",      "sha256": "…", "size": 0 },
+        "win-portable-x64": { "url": "…/UnicornViz-Portable-0.1.0-rc.1.zip",    "sha256": "…", "size": 0 }
+      },
+      "signatures": {
+        "sha256sums":     "…/SHA256SUMS",
+        "sha256sums_asc": "…/SHA256SUMS.asc"
+      }
+    }
+  }
+}
+```
+
+`install.sh` needs only `channels.<channel>.version` →
+`releases.<version>.artifacts.source`. Everything else serves the website and a
+future in-app updater.
+
+### 18.5 Honest end-of-day scoreboard (assuming O1–O3 land in the morning)
+
+| Channel | Start of day | End of day | Remaining gate to ★5 |
+|---|---|---|---|
+| Linux one-liner | ★★★★ (clone path) | **★★★★★** — release path proven via manifest + GPG | `get.unicornviz.io` DNS (cosmetic) |
+| Native `.deb` / `.rpm` | ★★★ | **★★★★**, signed (★5 minus the conffile) | O4 conffile |
+| Flatpak | ★ | **★★★★** | Flathub review (O5) |
+| Windows | ★ | **★★–★★★**, built but unverified | Windows box or CI job (O6) |
+| Snap | ★ | ★ (manifest upgraded on paper) | next session |
+| macOS | ☆ | ☆ (turnkey prep done) | a Mac (O6) |
+
+Three Linux channels at ★4–★5 in one day is the realistic "home." Windows and
+macOS gold is gated on hardware or the free CI runners — a decision gate, not
+an engineering one.
+
+### 18.6 Risks specific to a same-day push
+
+- **Artifact size (~200 MB each)** from bundling the runtime everywhere. Free on
+  R2; a real bill on S3. Later option: a "slim" one-liner tarball that fetches
+  the runtime at install time (it already can) instead of shipping it inside.
+- **Local builds are not clean-room.** The `stage_payload.sh` allowlist and the
+  `podman` install smoke (C2) mitigate this — do not skip C2.
+- **An untested Windows zip shipped as if verified.** Label it "preview" on the
+  site until O6 clears it.
+- **fpm-built `.deb` on Fedora** builds fine, but the dependency *names* are only
+  validated by the Ubuntu container smoke. Do not publish the deb before C2
+  passes.
