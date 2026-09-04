@@ -4,7 +4,8 @@ Dev-only benchmarking, `tools/beat-tracker-bench/`. Reference ladder and
 scoring convention (Acc1 = within ±4% of reference; Acc2 = ±4% of a
 fold-related tempo — 2×, ½×, 3/2×, 2/3×, 4/3×, 3/4×) per unicorn-viz-0e's
 methodology. Full per-track tables linked inline; this file is the
-narrative.
+narrative — see `detector-scorecard.md` for the one-page grading table
+against every model in this comparison, kept current as new runs land.
 
 **`time_to_move_2pct_s`** replaces the earlier `first_lock_s` metric
 throughout this doc: seconds from a tracker's first nonzero tempo
