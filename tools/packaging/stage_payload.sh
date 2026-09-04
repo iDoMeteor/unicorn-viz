@@ -91,18 +91,48 @@ log "Members: ${INCLUDE[*]}"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 
-# Copy the allowlisted members, dropping bytecode caches and the licensed,
-# non-redistributable sims asset packs (everything under assets/sims/ — gitignored
-# locally and absent from a clean tarball, but excluded here too in case staging
-# runs against a working tree that has them). The placement README is restored
-# below so the directory's purpose is still documented, without any pack content.
-tar -C "$SOURCE_DIR" \
-  --exclude='__pycache__' \
-  --exclude='*.py[cod]' \
-  --exclude='.DS_Store' \
-  --exclude='assets/sims/*' \
-  -cf - "${INCLUDE[@]}" \
-  | tar -C "$DEST" -xf -
+# Copy the allowlisted members.
+#
+# Preferred path — the source is a git checkout: stage TRACKED files only
+# (git ls-files). Anything gitignored — the licensed assets/sims/ packs, the
+# multi-gigabyte assets/training/ session data (recordings, corpora, keystroke
+# logs), caches — can then never ship, by construction rather than by an
+# ever-growing exclude list. Tracked-but-modified files ship with their local
+# edits (this is a local release flow); untracked new files do not, so a warning
+# is printed when any exist under the included members.
+#
+# Fallback path — no git (e.g. a tag tarball extracted in CI): tar the members
+# with explicit excludes for the same ignored trees.
+if git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  log "Source is a git checkout: staging tracked files only"
+  untracked="$(git -C "$SOURCE_DIR" ls-files --others --exclude-standard -- "${INCLUDE[@]}" | wc -l)"
+  if [[ "$untracked" -gt 0 ]]; then
+    log "WARNING: ${untracked} untracked file(s) under the payload members will NOT ship (git add them first)"
+  fi
+  ( cd "$SOURCE_DIR" && git ls-files -z -- "${INCLUDE[@]}" ) \
+    | tar -C "$SOURCE_DIR" \
+        --exclude='__pycache__' \
+        --exclude='*.py[cod]' \
+        --exclude='.DS_Store' \
+        --null -T - -cf - \
+    | tar -C "$DEST" -xf -
+else
+  log "Source is not a git checkout: staging members with explicit excludes"
+  tar -C "$SOURCE_DIR" \
+    --exclude='__pycache__' \
+    --exclude='*.py[cod]' \
+    --exclude='.DS_Store' \
+    --exclude='assets/sims/*' \
+    --exclude='assets/training/*' \
+    -cf - "${INCLUDE[@]}" \
+    | tar -C "$DEST" -xf -
+fi
+
+# Every required member must have made it across (a required file that exists
+# on disk but is untracked would otherwise be silently dropped by the git path).
+for item in "${REQUIRED[@]}"; do
+  [[ -e "${DEST}/${item}" ]] || die "Required payload member did not stage: ${item} (untracked?)"
+done
 
 if [[ -f "${SOURCE_DIR}/assets/sims/README.md" ]]; then
   mkdir -p "${DEST}/assets/sims"
@@ -112,6 +142,11 @@ fi
 # Defence in depth: assert no licensed sims pack subdirectory survived.
 if find "${DEST}/assets/sims" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | read -r _; then
   die "Licensed sims asset packs leaked into payload under assets/sims/"
+fi
+# ...and that no training session data survived (recordings, corpora, keystroke
+# logs live under assets/training/ and are gitignored; only its .gitignore ships).
+if find "${DEST}/assets/training" -mindepth 1 ! -name .gitignore 2>/dev/null | read -r _; then
+  die "Training session data leaked into payload under assets/training/"
 fi
 
 # Guard against regressions: assert nothing that must never ship leaked in.

@@ -2,7 +2,7 @@
 
 **Owner:** Solo maintainer (one-person studio)
 **Status:** Active — driving toward five gold-star installers
-**Last updated:** 2026-06-30
+**Last updated:** 2026-09-04
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -99,7 +99,7 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 
 | Channel | Today | Gap to next star |
 |---|---|---|
-| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Remaining:** validate the **release path** (tag → tarball → checksum) against a real release; icon size ladder. **★5:** GPG-sign `SHA256SUMS` + `install.sh.asc`, wire `get.unicornviz.io`. |
+| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Done 2026-09-04:** release path proven via `manifest.json` (channel → tarball → sha256 verified → `--self-test`). **Remaining for ★5:** GPG-sign `SHA256SUMS` (owner key, O3), wire `get.unicornviz.io`; icon size ladder is cosmetic. |
 | **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★ (climbing) | **Done 2026-06-30:** reworked to stage via `stage_payload.sh` (**drop-ins now stripped**), bundle a relocatable `fetch_runtime.sh` interpreter with shebangs rewritten to `/opt` (verified: 0 staging-path leaks), install only core deps into it, ship `unicornviz/`+`assets/` as siblings so `APP_ROOT` resolves and **assets are found** (fixed a real bug — see progress log), `postinst`/`postrm` cache refresh, MIT + C-lib-only deps. A real `.rpm` builds + inspects clean. **Remaining for ★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **the `config.toml` conffile is intentionally deferred** pending distribution cleanup of config. **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
 | **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
@@ -1275,6 +1275,38 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-04 — Block A landed: the release path is proven, no GitHub Release needed.**
+  - `tools/packaging/manifest.py` + `tools/packaging/release.sh`: one command
+    builds the curated source tarball (plus rpm/deb on request), writes
+    `SHA256SUMS`, merges `manifest.json` (channel → version; per-artifact
+    url/sha256/size; incremental runs compose one release), optionally GPG-signs
+    `SHA256SUMS`, and optionally publishes with `aws s3 sync` (R2 via
+    `--endpoint-url`). Pre-release versions are packaged as `1.0.0~beta.110`
+    for rpm/deb (`~` sorts before the final release in both).
+  - `install.sh`: resolves releases from `manifest.json` (`UV_MANIFEST_URL` /
+    `--manifest-url`), verifies the manifest's sha256, and no longer touches the
+    GitHub API or falls back to a source archive. The bundled runtime is
+    provisioned *first* and doubles as the JSON reader, so even reading the
+    manifest needs no system Python.
+  - `unicorn-viz --self-test` (Block C1): headless install check — `APP_ROOT`,
+    bundled assets, core dependency imports; exit code reflects the result. The
+    nightly real-install smoke now asserts with it, as the launchers run it.
+  - **Gate passed:** `release.sh --formats source` → local HTTP server →
+    `install.sh` from the manifest → checksum verified → `--self-test` OK from a
+    neutral cwd; the negative control (no `UNICORNVIZ_APP_ROOT`) fails as it must.
+  - Two more real bugs found and fixed on the way. (1) `stage_payload.sh` swept
+    **`assets/training/` — ~64 GB of gitignored session data, including
+    recordings and keystroke logs** — into the payload. It now stages **tracked
+    files only** (`git ls-files`) when the source is a checkout, adds a
+    training-data leak guard, and keeps explicit excludes on the tarball fallback
+    path. (2) Native packages hard-required `ffmpeg`, which stock Fedora cannot
+    satisfy without RPM Fusion, so `dnf install ./*.rpm` would have failed on a
+    clean system; it is now a *Recommends* (deb `--deb-recommends`, rpm
+    `Recommends:` tag), matching the app's optional use of it.
+  - Build hygiene: the packaging tools use disk-backed temp space (`$TMPDIR`,
+    else `/var/tmp`) — `/tmp` is tmpfs on the build box and overflowed mid-build.
+  - Tests: `tests/test_self_test.py`, `tests/test_release_manifest.py`; full
+    suite 2267 passed.
 - **2026-06-30 — Phase 2 native packaging reworked + a real asset bug fixed.**
   - **Asset-resolution bug (found & fixed).** `unicornviz.paths.APP_ROOT` is
     `Path(__file__).resolve().parents[1]` — the parent of the package dir. A normal
@@ -1593,6 +1625,8 @@ Mac at all. This plan says so rather than pretending otherwise.
 
 **Block A — Distribution foundation (≈2 h). Proves the release path *without* the RC.**
 
+✅ **Done (2026-09-04) — gate passed.** See the progress log entry.
+
 - **A1** `manifest.json` schema (§18.4): channels → version, per-artifact
   `url`/`sha256`/`size`, `tag`, `commit`, `published`.
 - **A2** `tools/packaging/release.sh` — one command that builds the one-liner
@@ -1620,7 +1654,7 @@ Mac at all. This plan says so rather than pretending otherwise.
 
 **Block C — Native ★4 (≈1.5 h).**
 
-- **C1** `unicorn-viz --self-test` in `__main__.py`: headless; prints
+- **C1** ✅ **Done (2026-09-04).** `unicorn-viz --self-test` in `__main__.py`: headless; prints
   `APP_ROOT`; verifies `assets/` and fonts; imports the heavy deps; exit code
   reflects the result. Small, and it turns every smoke test into a real one.
   Add it to the nightly and to the Block A/B gates.

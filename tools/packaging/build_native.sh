@@ -94,7 +94,7 @@ FETCH_SCRIPT="${SCRIPT_DIR}/fetch_runtime.sh"
 [[ -f "$FETCH_SCRIPT" ]] || die "fetch_runtime.sh not found next to this script"
 
 KEEP_STAGING="$NO_PACKAGE"
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$(mktemp -d -p "${TMPDIR:-/var/tmp}")"
 cleanup() { [[ "$KEEP_STAGING" -eq 1 ]] || rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
@@ -225,6 +225,10 @@ COMMON_ARGS=(
   --package "$OUTPUT_DIR"
 )
 
+# ffmpeg is a weak dependency (Recommends), not a hard Requires: the app runs
+# without it (recording is disabled), and stock Fedora cannot satisfy a hard
+# "ffmpeg" Requires without RPM Fusion — a hard dep would make `dnf install`
+# of the package fail on a clean system. The one-liner treats it the same way.
 # fpm requires all flags before the positional input dirs, so the staged trees
 # (usr/ and the INSTALL_ROOT top-level dir) come last on every invocation.
 if [[ "$FORMAT" == "deb" ]]; then
@@ -234,7 +238,7 @@ if [[ "$FORMAT" == "deb" ]]; then
     --depends libffi8 \
     --depends libpipewire-0.3-0 \
     --depends libasound2 \
-    --depends ffmpeg \
+    --deb-recommends ffmpeg \
     usr "$INSTALL_TOP"
 else
   fpm "${COMMON_ARGS[@]}" \
@@ -243,7 +247,7 @@ else
     --depends libffi \
     --depends pipewire \
     --depends alsa-lib \
-    --depends ffmpeg \
+    --rpm-tag 'Recommends: ffmpeg' \
     usr "$INSTALL_TOP"
 fi
 

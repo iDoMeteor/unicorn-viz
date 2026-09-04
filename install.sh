@@ -33,11 +33,15 @@ trap 'uv_err_trap "$LINENO" "$BASH_COMMAND"' ERR
 PREFIX="${UV_DEFAULT_PREFIX}"
 PYTHON_BIN="python3"
 CHANNEL="${UV_DEFAULT_CHANNEL}"
+MANIFEST_URL="${UV_MANIFEST_URL:-${UV_DEFAULT_MANIFEST_URL}}"
 VERSION=""
 NO_DEPS=0
 NO_DESKTOP=0
 UNINSTALL=0
 SYSTEM_PYTHON=0
+SRC_URL=""
+SRC_SHA256=""
+SRC_DIR=""
 
 cleanup() {
   if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR}" ]]; then
@@ -50,149 +54,100 @@ cleanup() {
 trap cleanup EXIT
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Unicorn Viz Linux installer
 
 Usage:
   ./install.sh [options]
 
-By default a self-contained Python runtime is bundled into <prefix>/runtime so
-the install never depends on the system interpreter. Use --system-python to opt
-out and build the venv from a system Python instead.
+Releases are resolved from a manifest.json (the single source of truth for the
+latest version and its artifacts). By default a self-contained Python runtime is
+bundled into <prefix>/runtime so the install never depends on the system
+interpreter. Use --system-python to opt out.
 
 Options:
   --prefix <dir>            Install prefix (default: ~/.local/share/unicorn-viz)
+  --manifest-url <url>      Release manifest to read
+                            (default: https://get.unicornviz.io/manifest.json;
+                            env UV_MANIFEST_URL overrides)
+  --version <vX.Y.Z|X.Y.Z>  Install a specific version from the manifest
+  --channel <stable|prerelease>
+                            Channel to follow when --version is not given
   --system-python           Use a system Python instead of the bundled runtime
   --python <bin>            System Python to use with --system-python (default: python3)
-  --version <vX.Y.Z|X.Y.Z>  Install specific version tag
-  --channel <stable|prerelease>
-                            Release channel when --version is not given
   --no-deps                 Skip system dependency installation
   --no-desktop              Skip desktop/menu integration
   --uninstall               Remove install artifacts
   --dry-run                 Print actions without executing
   -h, --help                Show this help text
-EOF
+USAGE
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --prefix)
-        PREFIX="$2"
-        shift 2
-        ;;
-      --python)
-        PYTHON_BIN="$2"
-        shift 2
-        ;;
-      --system-python)
-        SYSTEM_PYTHON=1
-        shift
-        ;;
-      --version)
-        VERSION="$2"
-        shift 2
-        ;;
-      --channel)
-        CHANNEL="$2"
-        shift 2
-        ;;
-      --no-deps)
-        NO_DEPS=1
-        shift
-        ;;
-      --no-desktop)
-        NO_DESKTOP=1
-        shift
-        ;;
-      --uninstall)
-        UNINSTALL=1
-        shift
-        ;;
-      --dry-run)
-        UV_DRY_RUN=1
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      *)
-        uv_die "Unknown argument: $1"
-        ;;
+      --prefix) PREFIX="$2"; shift 2 ;;
+      --manifest-url) MANIFEST_URL="$2"; shift 2 ;;
+      --python) PYTHON_BIN="$2"; shift 2 ;;
+      --system-python) SYSTEM_PYTHON=1; shift ;;
+      --version) VERSION="$2"; shift 2 ;;
+      --channel) CHANNEL="$2"; shift 2 ;;
+      --no-deps) NO_DEPS=1; shift ;;
+      --no-desktop) NO_DESKTOP=1; shift ;;
+      --uninstall) UNINSTALL=1; shift ;;
+      --dry-run) UV_DRY_RUN=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) uv_die "Unknown argument: $1" ;;
     esac
   done
 }
 
-resolve_latest_version() {
-  local api_base="https://api.github.com/repos/${UV_REPO_OWNER}/${UV_REPO_NAME}/releases"
-  local body
+# Resolve VERSION (via the channel when not pinned) and the source artifact's
+# URL + checksum from the manifest.
+resolve_release() {
+  local manifest="${TMP_DIR}/manifest.json"
 
-  if [[ "$CHANNEL" == "stable" ]]; then
-    body="$(uv_fetch_text "${api_base}/latest")"
-  elif [[ "$CHANNEL" == "prerelease" ]]; then
-    body="$(uv_fetch_text "${api_base}")"
-    body="$(echo "$body" | awk 'BEGIN{RS="\{";FS="\n"} /"prerelease": true/{print "{"$0; exit}')"
-  else
-    uv_die "Invalid channel: ${CHANNEL}. Expected stable or prerelease."
-  fi
-
-  VERSION="$(echo "$body" | sed -n 's/.*"tag_name": "\([^"]*\)".*/\1/p' | head -n 1)"
-  VERSION="${VERSION#v}"
+  uv_log "Reading release manifest: ${MANIFEST_URL}"
+  uv_fetch_to_file "$MANIFEST_URL" "$manifest" \
+    || uv_die "Could not download the release manifest from ${MANIFEST_URL}"
 
   if [[ -z "$VERSION" ]]; then
-    uv_die "Could not resolve release version from GitHub API."
+    case "$CHANNEL" in
+      stable|prerelease) ;;
+      *) uv_die "Invalid channel: ${CHANNEL}. Expected stable or prerelease." ;;
+    esac
+    VERSION="$(uv_manifest_query "$manifest" channels "$CHANNEL" version)" \
+      || uv_die "The manifest has no '${CHANNEL}' channel."
   fi
+  VERSION="${VERSION#v}"
+
+  SRC_URL="$(uv_manifest_query "$manifest" releases "$VERSION" artifacts source url)" \
+    || uv_die "The manifest has no source artifact for version ${VERSION}."
+  SRC_SHA256="$(uv_manifest_query "$manifest" releases "$VERSION" artifacts source sha256)" \
+    || SRC_SHA256=""
 }
 
 download_release_source() {
-  local version="$1"
-  local tar_name="unicorn-viz-${version}.tar.gz"
-  local release_base="https://github.com/${UV_REPO_OWNER}/${UV_REPO_NAME}/releases/download/v${version}"
-  local release_tar_url="${release_base}/${tar_name}"
-  local fallback_tar_url="https://github.com/${UV_REPO_OWNER}/${UV_REPO_NAME}/archive/refs/tags/v${version}.tar.gz"
-  local sums_url="${release_base}/SHA256SUMS"
+  local tar_name="unicorn-viz-${VERSION}.tar.gz"
   local tar_path="${TMP_DIR}/${tar_name}"
-  local sums_path="${TMP_DIR}/SHA256SUMS"
-  local sums_line=""
-  local used_release_asset=0
+  local actual
 
-  uv_log "Downloading Unicorn Viz v${version}"
-  if uv_fetch_to_file "$release_tar_url" "$tar_path"; then
-    used_release_asset=1
-  else
-    uv_warn "Release tarball asset not found; falling back to GitHub source archive."
-    uv_fetch_to_file "$fallback_tar_url" "$tar_path"
-  fi
+  uv_log "Downloading Unicorn Viz ${VERSION}"
+  uv_fetch_to_file "$SRC_URL" "$tar_path" || uv_die "Download failed: ${SRC_URL}"
 
-  if [[ "$used_release_asset" -eq 1 ]]; then
-    if [[ "$UV_DRY_RUN" -eq 1 ]]; then
-      uv_log "dry-run: checksum verification for ${tar_name}"
-    elif uv_fetch_to_file "$sums_url" "$sums_path"; then
-      if command -v sha256sum >/dev/null 2>&1; then
-        sums_line="$(grep " ${tar_name}$" "$sums_path" || true)"
-        if [[ -n "$sums_line" ]]; then
-          uv_log "Verifying source tarball checksum"
-          (
-            cd "$TMP_DIR"
-            echo "$sums_line" | sha256sum -c -
-          )
-        else
-          uv_warn "SHA256SUMS does not include ${tar_name}; skipping verification."
-        fi
-      else
-        uv_warn "sha256sum not found; skipping checksum verification."
-      fi
-    else
-      uv_warn "SHA256SUMS asset not found for v${version}; skipping verification."
+  if [[ -n "$SRC_SHA256" ]]; then
+    actual="$(uv_sha256_file "$tar_path")"
+    if [[ "$actual" != "$SRC_SHA256" ]]; then
+      uv_die "Checksum mismatch for ${tar_name}: expected ${SRC_SHA256}, got ${actual}"
     fi
+    uv_log "Checksum verified"
+  else
+    uv_warn "The manifest carries no sha256 for ${tar_name}; skipping verification."
   fi
 
   uv_run tar -xzf "$tar_path" -C "$TMP_DIR"
-
-  SRC_DIR="${TMP_DIR}/${UV_REPO_NAME}-${version}"
-  if [[ "$UV_DRY_RUN" -eq 0 && ! -f "${SRC_DIR}/requirements.txt" ]]; then
+  SRC_DIR="${TMP_DIR}/unicorn-viz-${VERSION}"
+  if [[ ! -f "${SRC_DIR}/requirements.txt" ]]; then
     uv_die "Downloaded source tree is missing requirements.txt"
   fi
 }
@@ -204,16 +159,12 @@ run_install() {
     return
   fi
 
-  if [[ "$SYSTEM_PYTHON" -eq 1 ]]; then
-    export UV_SYSTEM_PYTHON="$PYTHON_BIN"
-  fi
-
   if [[ "${UV_DRY_RUN:-0}" -eq 1 ]]; then
     local dry_version="${VERSION:-latest ${CHANNEL}}"
     local runtime_note="bundled Python runtime"
     [[ "$SYSTEM_PYTHON" -eq 1 ]] && runtime_note="system Python ${PYTHON_BIN}"
-    uv_log "dry-run: would install ${dry_version} into ${PREFIX}"
-    uv_log "dry-run: would install system dependencies, download release assets, provision the ${runtime_note}, create the venv, and install desktop integration"
+    uv_log "dry-run: would install ${dry_version} (manifest: ${MANIFEST_URL}) into ${PREFIX}"
+    uv_log "dry-run: would install system dependencies, provision the ${runtime_note}, resolve and download the release from the manifest, verify its checksum, create the venv, and install desktop integration"
     return
   fi
 
@@ -225,18 +176,27 @@ run_install() {
   fi
 
   TMP_DIR="$(mktemp -d)"
-  if [[ -z "$VERSION" ]]; then
-    resolve_latest_version
-  fi
-
-  VERSION="${VERSION#v}"
-  download_release_source "$VERSION"
-
   uv_log "Installing into ${PREFIX}"
   uv_run mkdir -p "$PREFIX"
-  uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
 
-  uv_install_runtime_and_app "$PREFIX" "$SRC_DIR"
+  # Runtime first: besides running the app, it is the interpreter that reads
+  # the manifest, so the installer never needs a system Python.
+  local python_path
+  if [[ "$SYSTEM_PYTHON" -eq 1 ]]; then
+    uv_log "Using system Python: ${PYTHON_BIN} (bundled runtime skipped)"
+    uv_require_cmd "$PYTHON_BIN"
+    python_path="$(command -v "$PYTHON_BIN")"
+  else
+    uv_log "Provisioning bundled Python runtime"
+    python_path="$(uv_provision_runtime "${PREFIX}/runtime")"
+  fi
+  export UV_JSON_PYTHON="$python_path"
+
+  resolve_release
+  download_release_source
+
+  uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
+  uv_create_venv_and_install "$python_path" "${PREFIX}/venv" "$SRC_DIR"
 
   if [[ "$NO_DESKTOP" -eq 0 ]]; then
     uv_log "Installing desktop/menu entry"
@@ -245,7 +205,7 @@ run_install() {
     uv_log "Skipping desktop/menu entry"
   fi
 
-  uv_log "Install complete"
+  uv_log "Install complete: Unicorn Viz ${VERSION}"
   uv_log "Run command: ${HOME}/.local/bin/unicorn-viz"
 }
 

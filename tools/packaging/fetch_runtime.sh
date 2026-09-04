@@ -129,7 +129,7 @@ sha256_of() {
 }
 
 # --- Download, verify, extract ----------------------------------------------
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$(mktemp -d -p "${TMPDIR:-/var/tmp}")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 TAR_PATH="${TMP_DIR}/${ASSET}"

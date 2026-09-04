@@ -12,6 +12,8 @@ UV_REPO_NAME="unicorn-viz"
 UV_DEFAULT_PREFIX="${HOME}/.local/share/unicorn-viz"
 # shellcheck disable=SC2034
 UV_DEFAULT_CHANNEL="stable"
+# shellcheck disable=SC2034
+UV_DEFAULT_MANIFEST_URL="https://get.unicornviz.io/manifest.json"
 UV_DISTRO_FAMILY=""
 UV_DISTRO_ID=""
 UV_DISTRO_LIKE=""
@@ -337,4 +339,52 @@ uv_uninstall_installation() {
   fi
 
   uv_log "Uninstall complete."
+}
+
+# Interpreter used to read manifest.json. The bundled runtime is provisioned
+# before the manifest is consulted, so installers export UV_JSON_PYTHON to it;
+# --system-python installs point it at the system interpreter instead.
+uv_json_python() {
+  if [[ -n "${UV_JSON_PYTHON:-}" ]]; then
+    echo "$UV_JSON_PYTHON"
+  elif command -v python3 >/dev/null 2>&1; then
+    command -v python3
+  else
+    uv_die "No Python interpreter available to read the release manifest."
+  fi
+}
+
+# Print one leaf value from a manifest. Path components are separate arguments
+# (versions contain dots), e.g.:
+#   uv_manifest_query "$m" channels stable version
+#   uv_manifest_query "$m" releases "$VERSION" artifacts source url
+# Exits non-zero (quietly) when the path is missing.
+uv_manifest_query() {
+  local manifest="$1"
+  shift
+  local py
+  py="$(uv_json_python)"
+  "$py" - "$manifest" "$@" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as handle:
+    node = json.load(handle)
+try:
+    for part in sys.argv[2:]:
+        node = node[part]
+except (KeyError, TypeError):
+    sys.exit(1)
+if isinstance(node, (dict, list)):
+    sys.exit(1)
+print(node)
+PY
+}
+
+uv_sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    uv_die "Neither sha256sum nor shasum is available to verify downloads."
+  fi
 }

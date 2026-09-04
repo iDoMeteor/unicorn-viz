@@ -99,6 +99,7 @@ jobs:
           chmod +x tools/install_linux.sh
           ./tools/install_linux.sh
 
-      - name: Assert app entrypoint works headlessly
+      - name: Assert install is healthy (assets resolve, core deps import)
         run: |
-          ./.venv/bin/unicorn-viz --help
+          # Same env the shipped launchers set; --help cannot catch a bad APP_ROOT.
+          UNICORNVIZ_APP_ROOT="$PWD" ./.venv/bin/unicorn-viz --self-test

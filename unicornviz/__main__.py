@@ -59,6 +59,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument('--config', default=str(APP_ROOT / 'config.toml'), help='Path to TOML config file.')
+    parser.add_argument('--self-test', action='store_true', help='Headless install check: verify APP_ROOT, bundled assets, and core dependencies, then exit (0 = OK). Opens no window or audio device.')
 
     display = parser.add_argument_group('display')
     display.add_argument('--width', type=int, help='Window width in pixels.')
@@ -386,10 +387,66 @@ def _install_exception_logging() -> None:
     sys.excepthook = _log_uncaught_exception
 
 
+_SELF_TEST_MODULES: tuple[tuple[str, str], ...] = (
+    ('moderngl', 'OpenGL'),
+    ('sdl2', 'SDL2 window/input'),
+    ('numpy', 'numerics'),
+    ('scipy', 'signal processing'),
+    ('sounddevice', 'audio capture'),
+    ('rtmidi', 'MIDI'),
+    ('PIL', 'images'),
+    ('psutil', 'system monitor'),
+    ('cv2', 'camera / OpenCV'),
+    ('soundfile', 'audio files'),
+)
+_SELF_TEST_ASSETS: tuple[str, ...] = (
+    'assets/fonts/font8x16.bin',
+    'assets/fonts/ui-font.ttf',
+    'assets/icons/unicorn-viz.png',
+    'assets/ansi',
+)
+
+
+def _self_test() -> int:
+    """Headless install check used by installers and CI smoke tests.
+
+    Verifies what ``--help`` cannot: that ``APP_ROOT`` points at a tree that
+    actually contains the runtime assets, and that the core native dependencies
+    import inside this interpreter.  Opens no window and no audio device.
+    Returns the process exit code (0 = everything passed).
+    """
+    import importlib
+
+    from unicornviz import __version__, paths
+
+    failures = 0
+    root = paths.APP_ROOT
+    source = 'UNICORNVIZ_APP_ROOT' if os.environ.get('UNICORNVIZ_APP_ROOT') else 'package location'
+    print(f'unicorn-viz {__version__} self-test')
+    print(f'  interpreter: {sys.executable}')
+    print(f'  APP_ROOT:    {root}  (from {source})')
+    for rel in _SELF_TEST_ASSETS:
+        present = (root / rel).exists()
+        failures += not present
+        print(f'  [{"ok" if present else "MISSING"}] {rel}')
+    for module, role in _SELF_TEST_MODULES:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:  # any import failure is a broken install
+            failures += 1
+            print(f'  [FAIL] import {module} ({role}): {exc}')
+        else:
+            print(f'  [ok]   import {module} ({role})')
+    print('self-test: OK' if failures == 0 else f'self-test: FAILED ({failures} problem(s))')
+    return 0 if failures == 0 else 1
+
+
 def main() -> None:
     """Create and run the main application."""
     parser = _build_parser()
     args = parser.parse_args()
+    if args.self_test:
+        raise SystemExit(_self_test())
     cfg = Config(args.config, overrides=_build_overrides(args))
     register_dropin_config_validators()
     try:
