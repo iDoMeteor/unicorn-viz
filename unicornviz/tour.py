@@ -114,7 +114,7 @@ CORE_TOUR_SLIDES: tuple[TourSlide, ...] = (
         'Switching effects',
         'Move through effects with {key:Next effect} and '
         '{key:Prev effect}, or jump anywhere with the effects browser '
-        '({key:Effects browser (search/filter/preview/pin all effects)}). '
+        '({key:Effects browser (search/filter/preview/pin/favorite all effects)}). '
         'Auto-advance ({key:Auto-advance on/off}) rotates the playlist on '
         'a timer; pause any time with {key:Pause / resume}.',
     ),

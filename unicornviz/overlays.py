@@ -446,7 +446,7 @@ class Overlays:
                 ('KP 0', 'BPM tapper (readout top right while tapping)'),
                 ('m', 'System monitor modal'),
                 ('Alt+M', 'MIDI device selector'),
-                ('B', 'Effects browser (search/filter/preview/pin all effects)'),
+                ('B', 'Effects browser (search/filter/preview/pin/favorite all effects)'),
                 ('c', 'Configuration editor (tabbed settings + profiles)'),
                 ('Ctrl+Shift+P', 'Show presets (save/load setup: enabled effects, mode, reactivity)'),
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
@@ -4035,6 +4035,9 @@ void main() {
             if isinstance(hotkey_slot, int) and 0 <= hotkey_slot < 40:
                 all_key_labels = self.NUM_KEYS + self.SHIFT_KEYS + self.CTRL_KEYS + self.ALT_KEYS
                 suffix += f'  [key {all_key_labels[hotkey_slot]}]'
+            favorite_slot = entry.get('favorite_slot')
+            if isinstance(favorite_slot, int) and 0 <= favorite_slot < 16:
+                suffix += f'  [FAV {favorite_slot + 1}]'
             if not enabled:
                 suffix += '  [off]'
             label = f'{prefix} {name[:38]}{suffix}'
@@ -4098,7 +4101,7 @@ void main() {
 
         self._draw_text(
             'Left/Right: pane   Up/Down: browse   Enter/Click: go   Space: on/off   '
-            'P: pin/unpin   /: search   Esc: close',
+            'P: pin/unpin   F: favorite   /: search   Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )
         self._draw_text(

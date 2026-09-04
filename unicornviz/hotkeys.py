@@ -1231,6 +1231,11 @@ class HotkeyHandler:
                 if msg:
                     o.flash_message(msg, 1.2)
                 return
+            if sym == sdl2.SDLK_f and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI | sdl2.KMOD_SHIFT)):
+                msg = a.effects_browser_toggle_favorite()
+                if msg:
+                    o.flash_message(msg, 1.6)
+                return
             if (_slot := numeric_slot_index(sym, mod)) is not None:
                 # Reuse the same chord that would jump to this slot outside
                 # the browser to pin/unpin the selected effect to it.

@@ -16,7 +16,7 @@
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.117        RC            MISMATCH (readme=1.0.0-rc.113)
+  auto-vj-01                    1.0.0-rc.119        RC            MISMATCH (readme=1.0.0-rc.113)
   candy-frame-01                1.1.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────

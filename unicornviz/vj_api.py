@@ -587,6 +587,52 @@ class VJApi:
         except Exception:                      # pragma: no cover - defensive
             return True
 
+    # -- Effects-browser favorites --------------------------------------------
+    # Marked in the effects browser (F key), capped at App.MAX_FAVORITE_EFFECTS
+    # (16) and auto-assigned to the lowest free slot -- built for a future
+    # 1:1 mapping onto a 16-pad MIDI grid (e.g. an Akai APC mini's clip-launch
+    # pads). A pad controller reads/writes favorites entirely through this
+    # surface, never through App._favorite_effects directly (see CLAUDE.md
+    # "Public Runtime Surface Rules").
+
+    def favorite_effects(self) -> dict[int, str]:
+        """Return the current favorite slots ({slot: effect name}, 0-15)."""
+        try:
+            return dict(self._app.favorite_effects())
+        except Exception:                      # pragma: no cover - defensive
+            return {}
+
+    def favorite_slot_for(self, name: str) -> 'int | None':
+        """Return the slot index *name* is favorited into, or None."""
+        try:
+            return self._app.favorite_slot_for(str(name))
+        except Exception:                      # pragma: no cover - defensive
+            return None
+
+    def is_favorite(self, name: str) -> bool:
+        """Return whether *name* currently holds a favorite slot."""
+        return self.favorite_slot_for(name) is not None
+
+    def toggle_favorite(self, name: str) -> tuple[bool, str]:
+        """Toggle *name*'s favorite status. Returns (is_favorite_now, msg)."""
+        try:
+            return self._app.toggle_favorite(str(name))
+        except Exception:                      # pragma: no cover - defensive
+            return False, 'Favorites unavailable'
+
+    def goto_favorite_slot(self, slot: int) -> bool:
+        """Navigate to whichever effect currently occupies *slot* (0-15).
+
+        Convenience for a MIDI pad handler: resolves the slot to an effect
+        name and calls ``goto_effect()``. Returns False if the slot is
+        empty or out of range.
+        """
+        favorites = self.favorite_effects()
+        name = favorites.get(int(slot))
+        if not name:
+            return False
+        return self.goto_effect(name)
+
     def projectm_active(self) -> bool:
         """Return True when ProjectMEffect is the currently displayed effect."""
         try:

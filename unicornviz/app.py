@@ -179,6 +179,52 @@ def _smart_trim_label(text: str, limit: int = 56) -> str:
     return f'{text[:head]}...{text[-tail:]}'
 
 
+def _projectm_preset_label(current_label: str, limit: int = 44) -> str:
+    """Format a ProjectM preset's raw filename stem into a compact HUD label.
+
+    Preset filenames come straight from disk, usually already shaped like
+    "<artist> - <effect...>" by the pack's own naming convention (e.g.
+    "TonyMilkdrop - Nuclear [Flexi - help out + alien complex] --- Isosceles
+    edit1"). The plain ``f"{effect.NAME} - {current_label}"`` this replaces
+    put a redundant "ProjectM Presets -" ahead of that — identical on every
+    single preset, so it never helped identify *which* preset is playing —
+    and left the same generic 56-char cap the rest of the HUD uses, too
+    loose for the effect banner pane at its actual draw scale.
+
+    Swaps that prefix for a short "pM:" tag and reuses _smart_trim_label's
+    existing head+tail trim (rather than a head-only cut) at a tighter cap:
+    the head keeps the artist and the start of the effect name, the tail
+    keeps whatever sits at the very end — exactly where these packs put
+    their edit/version marker ("edit1" vs "edit2") distinguishing an
+    otherwise-identical preset name from its siblings.
+    """
+    raw = str(current_label or '').strip()
+    if not raw:
+        return 'pM:'
+    return _smart_trim_label(f'pM: {raw}', limit)
+
+
+def _resolve_hud_detector_visibility(cfg: Config) -> tuple[bool, bool, bool]:
+    """Resolve the three "detector internals" HUD visibility flags.
+
+    Returns ``(hud_show_detector_bpm, hud_show_profile_score,
+    hud_show_reco_profile)`` for the Overlays constructor. Each individually
+    defaults to the operator's ``[overlays] hud_show_*`` setting (all
+    default ``False`` — see the 2026-09-01 owner decision at their call
+    site), but ``[auto_vj] hud_production_mode = true`` forces all three
+    ``False`` for a live show regardless of the individual settings,
+    *without* changing them — turning production mode back off restores
+    whatever those three keys say.
+    """
+    if bool(cfg.get('auto_vj', 'hud_production_mode', default=False)):
+        return False, False, False
+    return (
+        bool(cfg.get('overlays', 'hud_show_detector_bpm', default=False)),
+        bool(cfg.get('overlays', 'hud_show_profile_score', default=False)),
+        bool(cfg.get('overlays', 'hud_show_reco_profile', default=False)),
+    )
+
+
 def _context_menu_label_from_help(desc: str) -> str:
     """Turn a drop-in help description into a concise context-menu label.
 
@@ -430,6 +476,10 @@ def _load_control_room_controller_class() -> type:
 
 
 class App:
+    # Effects-browser favorites are capped for a future 1:1 mapping onto a
+    # 16-pad MIDI grid (e.g. an Akai APC mini's clip-launch pads).
+    MAX_FAVORITE_EFFECTS = 16
+
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
         self._running = False
@@ -707,6 +757,15 @@ class App:
         self._hotkey_pins: dict[int, str] = {
             int(k): str(v)
             for k, v in (self._runtime_state.get('effects.hotkey_pins', {}) or {}).items()
+        }
+        # Effects-browser favorites: {slot_index (0-15): effect name} (persisted).
+        # Capped at MAX_FAVORITE_EFFECTS for a future 1:1 mapping onto a 16-pad
+        # MIDI grid (e.g. an Akai APC mini's clip-launch pads) — see
+        # favorite_effects()/toggle_favorite() below and VJApi's passthroughs.
+        self._favorite_effects: dict[int, str] = {
+            int(k): str(v)
+            for k, v in (self._runtime_state.get('effects.favorites', {}) or {}).items()
+            if 0 <= int(k) < self.MAX_FAVORITE_EFFECTS
         }
         # Rebound global-action hotkeys: {action_name: (sym, mod)} (persisted).
         # See HotkeyHandler / _ACTION_BINDINGS in hotkeys.py for the default
@@ -4465,6 +4524,10 @@ void main() {
         self._playlist_index = playlist.index
         self._playlist_size = len(playlist.effects)
 
+        # See _resolve_hud_detector_visibility(): [auto_vj] hud_production_mode
+        # is a one-flag override for a live show, layered on top of the
+        # individual [overlays] hud_show_* settings without changing them.
+        _hud_bpm, _hud_score, _hud_reco = _resolve_hud_detector_visibility(self.cfg)
         overlays = Overlays(
             self._ctx,
             self._width,
@@ -4477,12 +4540,9 @@ void main() {
             modal_gate=self.control_room_flash_gate_active,
             tooltips_enabled=bool(self.cfg.get('tooltips', 'enabled', default=True)),
             tooltip_delay_s=float(self.cfg.get('tooltips', 'delay_s', default=0.55)),
-            hud_show_detector_bpm=bool(
-                self.cfg.get('overlays', 'hud_show_detector_bpm', default=False)),
-            hud_show_profile_score=bool(
-                self.cfg.get('overlays', 'hud_show_profile_score', default=False)),
-            hud_show_reco_profile=bool(
-                self.cfg.get('overlays', 'hud_show_reco_profile', default=False)),
+            hud_show_detector_bpm=_hud_bpm,
+            hud_show_profile_score=_hud_score,
+            hud_show_reco_profile=_hud_reco,
         )
         self._overlays = overlays
         if mixer_profile:
@@ -5459,7 +5519,10 @@ void main() {
 
             # Keep persistent name overlay in sync with the active effect.
             # Duck-typed: an effect exposing `current_title` (ANSI art viewer)
-            # shows that; all other effects show NAME.
+            # shows that; `current_label` (ProjectM) gets the compact
+            # "pM: artist - effect" treatment (see _projectm_preset_label —
+            # raw preset filenames are too long/inconsistent for the fixed-
+            # width effect banner otherwise); all other effects show NAME.
             if self._current_effect is not None:
                 _art_title = getattr(self._current_effect, 'current_title', None)
                 if _art_title is not None:
@@ -5467,7 +5530,7 @@ void main() {
                 else:
                     current_label = getattr(self._current_effect, 'current_label', '')
                     if isinstance(current_label, str) and current_label:
-                        overlays._name_text = _smart_trim_label(f"{self._current_effect.NAME} - {current_label}")
+                        overlays._name_text = _projectm_preset_label(current_label)
                     else:
                         overlays._name_text = self._current_effect.NAME
 
@@ -8053,6 +8116,73 @@ void main() {
         if self._playlist is not None and self._overlays is not None:
             self._overlays.set_effect_shortcuts(self._playlist.shortcut_effects)
 
+    # -- Effects-browser favorites (persisted, capped for MIDI pad mapping) --
+    # Independent of the numeric-hotkey pins above: favorites don't jump to
+    # anything by themselves today, they only mark up to MAX_FAVORITE_EFFECTS
+    # effects for a future 1:1 mapping onto a 16-pad MIDI grid. Slot
+    # assignment is automatic (lowest free slot) — the operator marks
+    # "favorite", not "pad 7", so a pad controller can bind by slot index
+    # without the operator ever having to think about slot numbers.
+
+    def favorite_effects(self) -> dict[int, str]:
+        """Return the current favorite slots ({slot: effect name})."""
+        return dict(self._favorite_effects)
+
+    def favorite_slot_for(self, name: str) -> int | None:
+        """Return the slot index an effect is favorited into, or None."""
+        name = str(name)
+        for slot, favored in self._favorite_effects.items():
+            if favored == name:
+                return slot
+        return None
+
+    def is_favorite(self, name: str) -> bool:
+        """Return whether an effect currently holds a favorite slot."""
+        return self.favorite_slot_for(name) is not None
+
+    def set_favorite_slot(self, slot: int, name: 'str | None') -> None:
+        """Assign an effect to a specific favorite slot, or clear it
+        (name=None). An effect may only occupy one slot at a time; assigning
+        it to a new slot drops any previous slot it held. Silently ignores
+        an out-of-range slot rather than raising, since a MIDI pad index is
+        untrusted input from hardware/config."""
+        slot = int(slot)
+        if not (0 <= slot < self.MAX_FAVORITE_EFFECTS):
+            return
+        if name:
+            clean = str(name)
+            self._favorite_effects = {
+                k: v for k, v in self._favorite_effects.items() if v != clean
+            }
+            self._favorite_effects[slot] = clean
+        else:
+            self._favorite_effects.pop(slot, None)
+        self._persist_favorite_effects()
+
+    def toggle_favorite(self, name: str) -> tuple[bool, str]:
+        """Toggle an effect's favorite status. Returns (is_favorite_now, msg).
+
+        Turning a favorite on auto-assigns the lowest free slot; the pool is
+        hard-capped at MAX_FAVORITE_EFFECTS, so a 17th favorite is refused
+        with an explanatory message rather than evicting an existing one.
+        """
+        name = str(name)
+        slot = self.favorite_slot_for(name)
+        if slot is not None:
+            self.set_favorite_slot(slot, None)
+            return False, f'{name}: removed from favorites'
+        for candidate in range(self.MAX_FAVORITE_EFFECTS):
+            if candidate not in self._favorite_effects:
+                self.set_favorite_slot(candidate, name)
+                return True, f'{name}: favorited (slot {candidate + 1})'
+        return False, f'Favorites full ({self.MAX_FAVORITE_EFFECTS} max)'
+
+    def _persist_favorite_effects(self) -> None:
+        self._runtime_state.set(
+            'effects.favorites', {str(k): v for k, v in self._favorite_effects.items()}
+        )
+        self._runtime_state.save()
+
     # -- Global-action hotkey rebinding (persisted) ---------------------------
     # The "enabler" for a future in-app hotkey editor: named global actions
     # (next/prev/fullscreen/help/... - see hotkeys._ACTION_BINDINGS) can be
@@ -8209,6 +8339,7 @@ void main() {
                 'cls': e.cls,
                 'enabled': self.effect_enabled(e.name),
                 'hotkey_slot': self.hotkey_pin_slot_for(e.name),
+                'favorite_slot': self.favorite_slot_for(e.name),
             }
             for e in browser_entries()
         ]
@@ -8319,6 +8450,17 @@ void main() {
             e['hotkey_slot'] = self.hotkey_pin_slot_for(str(e.get('display_name', '')))
         digit = (slot % 10) + 1 if slot % 10 != 9 else 0
         return f'{name}: pinned to key {digit}' if now_pinned else f'{name}: unpinned'
+
+    def effects_browser_toggle_favorite(self) -> str | None:
+        """Toggle the selected browser entry's favorite status (auto-assigned
+        slot, capped at MAX_FAVORITE_EFFECTS — see toggle_favorite())."""
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        name = str(entry.get('display_name', ''))
+        _is_favorite, msg = self.toggle_favorite(name)
+        entry['favorite_slot'] = self.favorite_slot_for(name)  # live model update
+        return msg
 
     def tick_effects_browser_preview(self) -> None:
         """Debounced thumbnail rebuild: after ~250 ms idle on a new selection,

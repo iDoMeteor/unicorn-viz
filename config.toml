@@ -136,7 +136,9 @@ enabled = true
 
 [auto_vj]
 enabled = true
+# hud_production_mode = false   # true: one-flag override for a live show -- forces the [overlays] hud_show_detector_bpm/hud_show_profile_score/hud_show_reco_profile readouts off regardless of their own settings above, without changing them (flip this back off to see detector internals again).
 beat_tracker_engine = "v3"   # 2026-09-02: v3 proper (HMM engine, phase 1) -- no longer an alias for v2 (see docs/adr/vj-system.md)
+env_source = "dense_complex"   # 2026-09-04: complex-domain onset function + dense envelope write -- current best on the scorecard (detector-scorecard.md), owner: ship the current-best tuned state, not a conservative default. Code default stays 'pulses' (bit-identical rc.40); this line is what actually runs. See docs/adr/vj-system.md.
 #beat_tracker_shadow_engine = "v2"   # v2 = protected baseline, runs as the shadow so the corpus carries a v3/v2 exact diff every session
 # beat_tracker_shadow2_engine = "legacy"   # v1 shadow retired 2026-09-02 (owner: no more v1 shadow; its ratcheted confidence made its lock metrics meaningless)
 # -- round-three close-out options (2026-08-17, detector rc.33 / auto-vj rc.90) --

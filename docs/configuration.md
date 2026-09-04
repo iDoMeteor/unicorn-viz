@@ -307,6 +307,16 @@ pactl list short sinks     # the ".monitor" of any of these records its output
 | Key              | Type   | Default | Description                                              |
 |------------------|--------|---------|----------------------------------------------------------|
 | `flash_messages` | bool   | `true`  | Show transient effect/status popups for scene changes, pause/resume, reactivity, etc. |
+| `hud_show_detector_bpm`   | bool | `false` | Show the detected "BPM: nnn (conf)" readout in the Auto VJ status bar (`H` HUD). |
+| `hud_show_profile_score`  | bool | `false` | Show the recommender score number next to `BPM PROF` in the `H` HUD. |
+| `hud_show_reco_profile`   | bool | `false` | Show the `REC PROF` (recommended-profile) line in the `H` HUD. |
+
+The three `hud_show_*` keys are "detector internals" readouts, default off
+(2026-09-01) so the show reads smoother without the recommender's internal
+wobble narrated; opt back in per-key as above. `[auto_vj] hud_production_mode
+= true` forces all three off for a live session regardless of these
+settings, without changing them — flip it back to `false` (or comment it
+out) to see whatever the three keys above are individually set to again.
 
 ---
 
