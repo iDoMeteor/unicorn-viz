@@ -249,3 +249,43 @@ def test_registering_a_new_provider_replaces_the_old_one() -> None:
     api.register_midi_action_colors(lambda: {'a': (1, 2)})
     api.register_midi_action_colors(lambda: {'b': (3, 4)})
     assert api.midi_action_colors() == {'b': (3, 4)}
+
+
+# --------------------------------------------------------------------------- #
+# VJApi: live active-actions set provider
+# --------------------------------------------------------------------------- #
+
+def test_midi_active_actions_empty_without_a_provider() -> None:
+    api = VJApi(_StubApp())
+    assert api.midi_active_actions() == set()
+
+
+def test_midi_active_actions_calls_the_registered_provider_fresh() -> None:
+    api = VJApi(_StubApp())
+    calls = []
+
+    def provider():
+        calls.append(1)
+        return {'pause', 'fullscreen'}
+
+    api.register_midi_active_actions(provider)
+    assert api.midi_active_actions() == {'pause', 'fullscreen'}
+    assert api.midi_active_actions() == {'pause', 'fullscreen'}
+    assert len(calls) == 2
+
+
+def test_midi_active_actions_swallows_a_raising_provider() -> None:
+    api = VJApi(_StubApp())
+
+    def broken_provider():
+        raise RuntimeError('boom')
+
+    api.register_midi_active_actions(broken_provider)
+    assert api.midi_active_actions() == set()
+
+
+def test_midi_active_actions_replaces_the_old_provider() -> None:
+    api = VJApi(_StubApp())
+    api.register_midi_active_actions(lambda: {'a'})
+    api.register_midi_active_actions(lambda: {'b'})
+    assert api.midi_active_actions() == {'b'}

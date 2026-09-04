@@ -87,6 +87,7 @@ class VJApi:
         # unicornviz/deck_sim.py and drop-ins/control-room-01/docs/deck-sim-plan.md.
         self._deck_sim_layouts: dict[str, DeckSimLayout] = {}
         self._midi_action_colors_provider: 'Callable[[], dict[str, tuple[int, int]]] | None' = None
+        self._midi_active_actions_provider: 'Callable[[], set[str]] | None' = None
 
     @classmethod
     def current(cls) -> 'VJApi | None':
@@ -1530,6 +1531,31 @@ class VJApi:
             return dict(self._midi_action_colors_provider())
         except Exception:
             return {}
+
+    def register_midi_active_actions(self, provider: 'Callable[[], set[str]]') -> None:
+        """Register a callable returning the live set of "active" actions.
+
+        Companion to :meth:`register_midi_action_colors`: that gives the
+        static ``(idle, active)`` color pair per action; this says which
+        actions are *currently* in their active state (pause while paused,
+        the current display mode, the current postfx slot, ...) so a
+        consumer can pick the right one of the pair without reimplementing
+        that per-action resolution itself. Same live-provider shape and
+        rationale as the color registration right above.
+        """
+        self._midi_active_actions_provider = provider
+
+    def midi_active_actions(self) -> 'set[str]':
+        """Return the current set of "active" action names.
+
+        Empty when no provider is registered or it raises.
+        """
+        if self._midi_active_actions_provider is None:
+            return set()
+        try:
+            return set(self._midi_active_actions_provider())
+        except Exception:
+            return set()
 
     def midi_add_input_device(self, device_hint: str) -> bool:
         """Open an additional raw-only MIDI input device (e.g. a second controller).

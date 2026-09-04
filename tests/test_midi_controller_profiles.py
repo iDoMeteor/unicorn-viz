@@ -348,8 +348,34 @@ def _leds_module():
     return _load_dropin_module('_uv_apc_leds', 'apc_leds.py')
 
 
+def _vj_state(**overrides):
+    from unicornviz.vj_api import VJState
+
+    base = dict(
+        effect_name='Plasma', playlist_mode='sequential', playlist_index=0,
+        playlist_size=1, auto_advance=True, paused=False, fullscreen=False,
+        is_transitioning=False, advance_interval=20.0, advance_time_remaining=20.0,
+        reactivity=1.0, speed=None, zoom=None, audio_source='default',
+        invert=False, is_postfx_active=False, postfx_slot=0,
+        is_dancing_active=False, is_nova_active=False, is_burst_active=False,
+        recording_active=False, streaming_active=False, streaming_provider='',
+        display_mode='single', display_index=0, user_busy=False,
+        manual_grace_remaining_s=0.0, status_pill='',
+        session_elapsed_s=0.0, session_remaining_s=0.0,
+    )
+    # Deliberately not a real display mode ('single' et al. all map to an
+    # active action via _DISPLAY_MODE_TO_ACTION) -- keeps the baseline state
+    # free of active actions unless a test explicitly sets one.
+    base['display_mode'] = ''
+    base.update(overrides)
+    return VJState(**base)
+
+
 class _FakeVJ:
     """Minimal VJApi stand-in for LED construction (no hardware touched)."""
+
+    def __init__(self, state=None) -> None:
+        self._state_obj = state if state is not None else _vj_state()
 
     def midi_inject_event(self, _raw):
         pass
@@ -359,6 +385,9 @@ class _FakeVJ:
 
     def midi_send_output(self, _hint, _msg):
         return True
+
+    def state(self):
+        return self._state_obj
 
 
 def _leds_instance(monkeypatch):
@@ -443,6 +472,78 @@ def test_all_action_colors_includes_profile_and_override_only_actions(monkeypatc
     colors = leds.all_action_colors()
 
     assert colors['a_drop_in_action'] == (11, 12)
+
+
+# ---------------------------------------------------------------------------
+# active_actions() -- the extracted _compute_active_actions() live read
+# ---------------------------------------------------------------------------
+
+def test_active_actions_empty_by_default(monkeypatch) -> None:
+    leds_mod, leds = _leds_instance(monkeypatch)
+    assert leds.active_actions() == set()
+
+
+def test_active_actions_reflects_paused_and_fullscreen(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    leds = leds_mod.APCLedFeedback(_FakeVJ(_vj_state(paused=True, fullscreen=True)))
+    assert leds.active_actions() == {'pause', 'fullscreen'}
+
+
+def test_active_actions_reflects_postfx_slot(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    leds = leds_mod.APCLedFeedback(
+        _FakeVJ(_vj_state(is_postfx_active=True, postfx_slot=3)),
+    )
+    assert leds.active_actions() == {'postfx_3'}
+
+
+def test_active_actions_ignores_postfx_slot_zero_even_if_flagged_active(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    leds = leds_mod.APCLedFeedback(
+        _FakeVJ(_vj_state(is_postfx_active=True, postfx_slot=0)),
+    )
+    assert leds.active_actions() == set()
+
+
+def test_active_actions_reflects_display_mode(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    leds = leds_mod.APCLedFeedback(_FakeVJ(_vj_state(display_mode='mirror_all')))
+    assert leds.active_actions() == {'display_mirror_all'}
+
+
+def test_active_actions_unknown_display_mode_adds_nothing(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    leds = leds_mod.APCLedFeedback(_FakeVJ(_vj_state(display_mode='some_future_mode')))
+    assert leds.active_actions() == set()
+
+
+def test_active_actions_matches_what_refresh_from_app_state_actually_paints(monkeypatch) -> None:
+    """The whole point of extracting this: active_actions() must never drift
+    from what the real pads show. Verified directly against set_pad calls,
+    not just by re-reading the same source."""
+    leds_mod, _leds = _leds_instance(monkeypatch)
+    state = _vj_state(paused=True, is_postfx_active=True, postfx_slot=2, display_mode='span_all')
+    vj = _FakeVJ(state)
+    vj.midi_note_map = lambda: {0: 'pause', 1: 'postfx_2', 2: 'display_span_all', 3: 'next'}
+    leds = leds_mod.APCLedFeedback(vj)
+
+    leds._refresh_from_app_state()
+
+    active_set = leds.active_actions()
+    for note, action in vj.midi_note_map().items():
+        expected_color = leds.action_colors(action)[1 if action in active_set else 0]
+        assert leds._pending[note] == expected_color, action
+
+
+def test_active_actions_swallows_a_state_read_failure(monkeypatch) -> None:
+    leds_mod, _leds = _leds_instance(monkeypatch)
+
+    class _BrokenVJ(_FakeVJ):
+        def state(self):
+            raise RuntimeError('boom')
+
+    leds = leds_mod.APCLedFeedback(_BrokenVJ())
+    assert leds.active_actions() == set()
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.108**
+**Version 1.0.0-beta.110**
 
 ## Contact Me!
 
@@ -557,6 +557,20 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.110** — Control Room deck-sim, P2+P3 ("full send" —
+  see `drop-ins/control-room-01/docs/deck-sim-plan.md`, now shipped
+  end to end). New `vj_api.register_midi_active_actions()`/
+  `midi_active_actions()`, the companion to beta.108's
+  `midi_action_colors()`: a live "which actions are currently active"
+  set so a consumer picks the right color of the idle/active pair
+  without re-deriving pause/fullscreen/postfx/display-mode state
+  itself. Backs midi-controllers-01 0.9.2's `APCLedFeedback.
+  active_actions()` (extracted from the same logic the real LEDs
+  already used) and control-room-01 0.10.0's deck-sim view, which is
+  now the full two-way controller mirror: a header toggle, pad
+  click-to-fire and fader drag through the existing
+  `midi_inject_event()`/`tweakable_set` paths, and real-input
+  mirroring via a raw MIDI listener.
 - **1.0.0-beta.108** — Control Room deck-sim, P1 (core surface only — no
   visible behavior change yet; see
   `drop-ins/control-room-01/docs/deck-sim-plan.md`). New
