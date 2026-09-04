@@ -149,7 +149,7 @@ def _matcher_stub(*, zcr: float, top_candidates: list[tuple[float, float]],
         _reco_weights={**_AV._DEFAULT_RECO_WEIGHTS,
                        'vocal_hnr_fit': 0.0, 'vocal_fmr_fit': 0.0},
         _has_bpm_lock=lambda *a, **kw: False,
-        _spotify_telemetry_snapshot=lambda: {},
+        _now_playing_telemetry_snapshot=lambda: {},
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
         _sequence_corpus_writer=None,
         _record_sequence_keyframe=lambda *a, **kw: None,
@@ -214,9 +214,17 @@ def test_matcher_flips_fold_when_genre_flips(monkeypatch) -> None:
     now applying to real unequal per-profile sigmas instead of both being
     pinned to the same 0.03, moved the crossover back down (swept
     0.06-0.15: 0.06-0.08 favors drum_and_bass, 0.09+ favors rap_rnb).
-    0.07 sits in the middle of the stable drum_and_bass band."""
+    0.07 sits in the middle of the stable drum_and_bass band.
+
+    2026-09-04, tuning session (recommender rc.33): zcr updated again
+    (0.07 -> 0.15) after zcr_sigma was recomputed from raw per-cycle
+    stdev instead of per-track-median MAD (both profiles' sigma widened
+    roughly 1.5-2x -- see zcr_sigma's own field comment in profiles.py
+    for the full fit-vs-live mismatch this fixed). Swept 0.04-0.25: the
+    crossover moved to between 0.08 and 0.10. 0.15 sits in the middle of
+    the new stable drum_and_bass band (0.10-0.20)."""
     _restrict(monkeypatch, ('rap_rnb', 'drum_and_bass'))
-    stub, push = _matcher_stub(zcr=0.07, top_candidates=list(_FOLD_CANDS))
+    stub, push = _matcher_stub(zcr=0.15, top_candidates=list(_FOLD_CANDS))
 
     _AV.AutoVJController._update_profile_recommendation(stub, _AUDIO, SimpleNamespace(), {})
 

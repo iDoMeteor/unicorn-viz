@@ -488,7 +488,7 @@ def _make_full_reco_stub(*, bpm: float, centroid: float, zcr: float, onset_count
         _kick_energies=deque(maxlen=16),
         _reco_weights=dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS),
         _has_bpm_lock=lambda *a, **kw: True,
-        _spotify_telemetry_snapshot=lambda: {},
+        _now_playing_telemetry_snapshot=lambda: {},
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
         _sequence_corpus_writer=None,
         _record_sequence_keyframe=lambda *a, **kw: None,
@@ -594,24 +594,39 @@ def test_bpm_prefilter_falls_back_when_all_candidates_excluded(monkeypatch) -> N
     assert kw['bpm_prefilter_excluded'] == []
 
 
-def test_bpm_prefilter_inactive_when_unlocked(monkeypatch) -> None:
-    """Unlocked/low-confidence cycles are unfiltered — the matcher's LOW
-    half (joint candidate selection) owns that regime, not this gate."""
+def test_bpm_prefilter_also_active_when_unlocked(monkeypatch) -> None:
+    """2026-09-04 (recommender rc.36): the prefilter no longer requires
+    bpm_lock_active. The original rc.20 design ran "unfiltered when
+    unlocked" on the theory the matcher's LOW half (joint candidate
+    selection) would cover that regime instead -- but the matcher only
+    feeds tempo evidence back to the DETECTOR's own low-confidence gate,
+    it never constrains which genre gets RECOMMENDED. So unlocked cycles
+    ran fully BPM-unconstrained this whole time. Owner: "the chosen genre
+    MUST be within the bpm range plus its little wiggle room... we need
+    to institute that immediately," once the detector's own reliability
+    improved enough (this same session's fold-up fix + decisive-rival
+    fast path) to trust it pre-lock too. Same scenario as
+    test_bpm_prefilter_excludes_out_of_range_when_locked above, but
+    without setting _bpm_lock_active at all -- must now exclude anyway."""
     import unicornviz.audio.profiles as profiles_mod
     restricted = {k: profiles_mod.PROFILES[k] for k in ('house', 'drum_and_bass')}
     monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
     monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
 
     stub = _make_full_reco_stub(bpm=124.0, centroid=2650.0, zcr=0.08, onset_count=2.0)
-    # no _bpm_lock_active on the stub -> getattr default False -> no filter
+    # no _bpm_lock_active on the stub -> getattr default False -> filter still applies
+    stub._reco_bpm_prefilter_excluded_count = 0
+    stub._reco_bpm_prefilter_fallback_count = 0
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
+    assert stub._recommended_profile_key == 'house'
+    assert stub._reco_bpm_prefilter_excluded_count == 1
     event, kw = stub._engine.marks[0]
-    assert 'drum_and_bass' in kw['term_values_by_candidate']
-    assert kw['bpm_prefilter_excluded'] == []
+    assert 'drum_and_bass' not in kw['term_values_by_candidate']
+    assert kw['bpm_prefilter_excluded'] == ['drum_and_bass']
 
 
 def test_default_weights_are_genre_pure() -> None:
@@ -862,6 +877,28 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     swept at 0.05 resolution) rather than a value that only barely works,
     since this knob has now needed retuning five times.
 
+    onset_count knob alone stopped being enough (2026-09-04, tuning
+    session, recommender rc.33): `zcr_sigma`/`onset_density_sigma` were
+    recomputed from raw per-cycle stdev instead of per-track-median MAD
+    (see both fields' own comments in profiles.py for the fit-vs-live
+    mismatch this fixed) -- `onset_density_sigma` widened roughly 3-6x
+    for both `house` and `deep_house`, which weakened `onset_fit`'s
+    discriminating power enough that no `onset_count` value (swept
+    -1 to 30) restored `house` as the winner at the EXACT bpm midpoint
+    any more -- `deep_house` won outright at every point, `score_margin`
+    pinned at `0.0` (a genuine near-tie among 3+ candidates, not just a
+    close call). Added a second knob: `bpm` is no longer the exact 50/50
+    midpoint -- it's biased 35% of the way from `house`'s own
+    `bpm_prior_mu` toward `deep_house`'s (`bpm_frac=0.35` below), still a
+    realistic "ambiguous, between the two" reading, not cherry-picked to
+    favor `house`. Swept `bpm_frac` x `onset_count` together (both knobs,
+    not just one) and confirmed 1.9-2.1 x 0.34-0.36 all agree on
+    low=unconfirmed/high=confirmed; the exact midpoint (`bpm_frac=0.50`)
+    reliably favors `deep_house` at every `onset_count`, which is now the
+    correct reading of the mid-point contest (not a bug to chase) -- see
+    docs/adr/vj-system.md "zcr_sigma / onset_density_sigma: Fit-vs-Live
+    Scale Mismatch" for the underlying finding.
+
     This fixture's own incidental margin is conspicuously fragile to
     profiles.py's tempo/sigma/centroid/zcr values by construction (it's
     DELIBERATELY built from the live mid-point between two real profiles'
@@ -871,7 +908,8 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     import unicornviz.audio.profiles as profiles_mod
     h = profiles_mod.PROFILES['house']
     dh = profiles_mod.PROFILES['deep_house']
-    mid_bpm = (h.bpm_prior_mu + dh.bpm_prior_mu) / 2
+    bpm_frac = 0.35  # 0.50 would be the exact midpoint -- see docstring
+    mid_bpm = h.bpm_prior_mu + bpm_frac * (dh.bpm_prior_mu - h.bpm_prior_mu)
     mid_centroid = (h.spectral_centroid_mu + dh.spectral_centroid_mu) / 2
     mid_zcr = (h.zcr_mu + dh.zcr_mu) / 2
     stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=2.00)

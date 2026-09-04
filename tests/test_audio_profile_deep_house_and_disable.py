@@ -13,7 +13,11 @@
   'generic'; see docs/adr/vj-system.md), then revived and renamed to
   'Dance' 2026-08-10 (owner call: a deliberately house-identical profile
   minus vocal presence, so the old "too similar to neighbors" disable
-  reason no longer applies -- see docs/adr/vj-system.md).
+  reason no longer applies -- see docs/adr/vj-system.md), then disabled
+  again 2026-09-04 (its vocal-presence-discriminator control-pair job is
+  done; unlike every other profile in the roster it has no distinct
+  acoustic identity by design, a genuine generic rather than a genre
+  pending real data -- see docs/adr/vj-system.md).
 - 'rap' and 'r&b' merged into 'rap_rnb' 2026-08-06 (owner call: genuine
   siblings, 0.9856 cosine similarity, 3 BPM apart -- not a false
   catch-all pairing like fire_dj/electronic).
@@ -65,8 +69,8 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     enabled = enabled_profiles()
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
-    assert 'electronic' in enabled   # revived as 'Dance' 2026-08-10
-    assert 'hyphy' in enabled   # re-enabled 2026-09-04, see docs/adr/vj-system.md
+    assert 'electronic' not in enabled   # disabled again 2026-09-04, see docs/adr/vj-system.md
+    assert 'hyphy' not in enabled   # re-enabled then disabled again same day 2026-09-04, see docs/adr/vj-system.md
     assert 'tech_house' not in enabled   # disabled 2026-08-11, see docs/adr/vj-system.md
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
@@ -104,9 +108,13 @@ def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     'hard_techno', 'hardstyle', 'synthwave' added 2026-09-04 (recommender
     rc.29, evidence audit -- disabled for having zero training-list corpus
     of any kind, every scoring field still hand-authored/guessed; see each
-    profile's own field comment and docs/adr/vj-system.md)."""
+    profile's own field comment and docs/adr/vj-system.md); 'electronic'
+    added 2026-09-04, later the same night (disabled again -- its
+    vocal-presence-discriminator control-pair job is done, and unlike the
+    others it has no distinct acoustic identity by design, a genuine
+    generic rather than a genre pending real data)."""
     _disabled = {'hyphy', 'tech_house', 'techno', 'psytrance', 'hard_techno',
-                 'hardstyle', 'synthwave'}
+                 'hardstyle', 'synthwave', 'electronic'}
     for key, profile in PROFILES.items():
         if key in _disabled:
             continue
@@ -116,13 +124,19 @@ def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
 def test_electronic_key_now_resolves_to_the_revived_dance_profile() -> None:
     """Dict key kept as 'electronic' for backward compatibility with any
     existing config/corpus data that references it by key -- only the
-    display name and enabled state changed."""
+    display name and enabled state changed.
+
+    2026-09-04: disabled again -- its vocal-presence-discriminator
+    control-pair job is done (see docs/adr/vj-system.md). Direct lookup
+    still resolves it, same disable-not-delete pattern as tech_house/
+    techno/synthwave -- only discovery (list_profiles/enabled_profiles)
+    excludes it now."""
     assert 'electronic' in PROFILES
     p = PROFILES['electronic']
-    assert p.enabled is True
+    assert p.enabled is False
     assert p.name == 'Dance'
-    assert 'electronic' in list_profiles()
-    assert 'electronic' in enabled_profiles()
+    assert 'electronic' not in list_profiles()
+    assert 'electronic' not in enabled_profiles()
 
 
 def test_dance_matches_house_on_everything_except_vocal_presence() -> None:
@@ -276,19 +290,32 @@ def test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01() -> None:
     2026-09-04: RE-ENABLED. training-trap-hip-hop-01 supplies exactly the
     real material the disable reason was waiting on. Owner: "trap should
     def be on its own" -- split out of the rap_rnb pool (which now covers
-    only hip-hop + rnb) into this profile. bpm_prior_mu/sigma/hint fully
-    recalibrated from trap-hip-hop-01's own real detected-bpm distribution
-    (median 141.2 BPM) -- the old 100-118 hand-guess was never validated
-    and turned out far off. See docs/adr/vj-system.md "Spectral-Shape
-    Ribbon Redesign"."""
+    only hip-hop + rnb) into this profile.
+
+    2026-09-04, same day, REVERTED: the bpm_prior_mu/sigma/hint recalibration
+    that rode along in the same commit as the split (mu 109.0->142.2, hint
+    100-118->127-155, from pooled raw *detected*-BPM on trap-hip-hop-01) was
+    never approved -- owner only approved the split itself, not that tempo
+    change, and pooled detector output is exactly the fold-contamination risk
+    this profile's own field comment already flagged. Restored to the
+    owner's own hand-tuned pre-split values (100-118 BPM, mu 109.0). See
+    docs/adr/vj-system.md "Spectral-Shape Ribbon Redesign" for the split
+    itself and the newer entry documenting this revert.
+
+    2026-09-04, same day, DISABLED AGAIN: owner, direct ("disable hyphy"),
+    mid smoke-test-playlist build -- the library has zero tracks ID3-tagged
+    Hyphy, so this profile currently has no content of its own distinct
+    from a straight trap-hip-hop-01 read. Disable-not-delete: direct lookup
+    and every field below (still real, still fit from training-trap-hip-
+    hop-01) is unaffected -- only discovery excludes it now."""
     hyphy = get_profile('hyphy')
-    assert hyphy.enabled is True
+    assert hyphy.enabled is False
     assert hyphy.name == 'Hyphy / Trap'
-    assert 'hyphy' in enabled_profiles()
+    assert 'hyphy' not in enabled_profiles()
     assert 'hyphy' in PROFILES
-    assert hyphy.bpm_hint_min == 127.0
-    assert hyphy.bpm_hint_max == 155.0
-    assert 130.0 < hyphy.bpm_prior_mu < 150.0
+    assert hyphy.bpm_hint_min == 100.0
+    assert hyphy.bpm_hint_max == 118.0
+    assert 100.0 < hyphy.bpm_prior_mu < 120.0
     assert hyphy.expected_bands_sigma is not None
     assert len(hyphy.expected_bands_sigma) == 64
 

@@ -27,7 +27,7 @@ def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
         treble_n=0.60,
         bpm=123.0,
     )
-    spotify = {
+    now_playing = {
         'track_id': 'spotify:track:test123',
         'title': 'Moonwalk',
         'artist': 'DJ Test',
@@ -51,7 +51,7 @@ def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
     )
     grid = SimpleNamespace(bpm=125.0, confidence=0.81)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['analysis_status'] == 'ok'
     assert row['analysis_source'] == 'web-player+live-audio'
@@ -121,12 +121,12 @@ def test_build_live_training_row_passes_through_non_spotify_source() -> None:
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
         bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
     )
-    spotify: dict = {}
+    now_playing: dict = {}
     state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
     audio_manager = None
     grid = SimpleNamespace(bpm=125.0, confidence=0.81)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['audio_source'] == 'Line In'
 
@@ -139,12 +139,12 @@ def test_build_live_training_row_genre_defaults_empty_when_source_omits_it() -> 
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
         bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
     )
-    spotify = {'track_id': 'spotify:track:test123', 'title': 'Moonwalk'}
+    now_playing = {'track_id': 'spotify:track:test123', 'title': 'Moonwalk'}
     state = SimpleNamespace(audio_source='Spotify Monitor', playlist_mode='auto')
     audio_manager = None
     grid = SimpleNamespace(bpm=125.0, confidence=0.81)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['track_genre'] == ''
 
@@ -157,12 +157,12 @@ def test_build_live_training_row_decodes_camelot_key_from_now_playing() -> None:
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
         bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0,
     )
-    spotify = {'track_id': 'dj_mixer:test', 'title': 'Moonwalk', 'key': '8A'}
+    now_playing = {'track_id': 'dj_mixer:test', 'title': 'Moonwalk', 'key': '8A'}
     state = SimpleNamespace(audio_source='dj_mixer', playlist_mode='auto')
     audio_manager = None
     grid = SimpleNamespace(bpm=125.0, confidence=0.81)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['key'] == 'A minor'
     assert row['key_camelot'] == '8A'
@@ -270,8 +270,8 @@ def test_live_corpus_writer_persists_latest_row(tmp_path: Path) -> None:
     assert rows[0]['track_artist'] == 'DJ Test'
 
 
-def test_spotify_snapshot_prefers_active_now_playing_hub() -> None:
-    """_spotify_snapshot() must read the aggregated now-playing hub first, so
+def test_now_playing_snapshot_prefers_active_now_playing_hub() -> None:
+    """_now_playing_snapshot() must read the aggregated now-playing hub first, so
     a dj-mixer or media session trains the same as a Spotify one."""
     class FakeVjApi:
         def active_now_playing(self):
@@ -281,11 +281,11 @@ def test_spotify_snapshot_prefers_active_now_playing_hub() -> None:
             raise AssertionError('must not fall back when the hub has an active source')
 
     stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApi()))
-    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    snap = _AUTO_VJ_MODULE.AutoVJController._now_playing_snapshot(stub)
     assert snap == {'title': 'Test Track', 'source': 'dj_mixer'}
 
 
-def test_spotify_snapshot_falls_back_to_spotify_subsystem_when_hub_empty() -> None:
+def test_now_playing_snapshot_falls_back_to_spotify_subsystem_when_hub_empty() -> None:
     class FakeSpotifySubsystem:
         def snapshot(self):
             return {'title': 'Fallback', 'source': 'spotify'}
@@ -299,11 +299,11 @@ def test_spotify_snapshot_falls_back_to_spotify_subsystem_when_hub_empty() -> No
             return FakeSpotifySubsystem()
 
     stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApi()))
-    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    snap = _AUTO_VJ_MODULE.AutoVJController._now_playing_snapshot(stub)
     assert snap == {'title': 'Fallback', 'source': 'spotify'}
 
 
-def test_spotify_snapshot_falls_back_on_older_core_without_hub_accessor() -> None:
+def test_now_playing_snapshot_falls_back_on_older_core_without_hub_accessor() -> None:
     """Degrades gracefully when vj_api has no active_now_playing() (older core)."""
     class FakeSpotifySubsystem:
         def snapshot(self):
@@ -314,7 +314,7 @@ def test_spotify_snapshot_falls_back_on_older_core_without_hub_accessor() -> Non
             return FakeSpotifySubsystem()
 
     stub = SimpleNamespace(_app=SimpleNamespace(vj_api=FakeVjApiNoHub()))
-    snap = _AUTO_VJ_MODULE.AutoVJController._spotify_snapshot(stub)
+    snap = _AUTO_VJ_MODULE.AutoVJController._now_playing_snapshot(stub)
     assert snap == {'title': 'Old Core'}
 
 
@@ -390,10 +390,10 @@ def test_record_sequence_heartbeat_stamps_versions_on_first_row_only() -> None:
         bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
     )
     state = SimpleNamespace(audio_source='Line In', playlist_mode='auto', effect_name='')
-    spotify = {'available': True, 'is_playing': True}
+    now_playing = {'available': True, 'is_playing': True}
 
-    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
-    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, now_playing)
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, now_playing)
 
     rows = stub._sequence_corpus_writer.rows
     assert len(rows) == 2
@@ -407,24 +407,24 @@ def test_record_sequence_heartbeat_stamps_versions_on_first_row_only() -> None:
 
 
 def test_record_sequence_heartbeat_captures_without_now_playing_availability() -> None:
-    """2026-08-16: no longer requires spotify.available/is_playing -- that
+    """2026-08-16: no longer requires now_playing.available/is_playing -- that
     dict reflects whichever now-playing source is active and is
     unreliable when the real audio isn't coming from that source at all
     (e.g. a web stream playing while an unused Spotify window sits open,
     paused). Caught live: two full sessions (41 and 121 real minutes)
     never captured a single heartbeat row because is_playing read False
     the entire time despite genuine ongoing playback. Owner: "it's
-    stupid that data collection was wired up only to support spotify..
-    we don't really even train on spotify, just verify." """
+    stupid that data collection was wired up only to support now_playing..
+    we don't really even train on now_playing, just verify." """
     stub = _make_sequence_heartbeat_stub()
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
         bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
     )
     state = SimpleNamespace(audio_source='Line In', playlist_mode='auto', effect_name='')
-    spotify = {'available': False, 'is_playing': False}
+    now_playing = {'available': False, 'is_playing': False}
 
-    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, spotify)
+    _AUTO_VJ_MODULE.AutoVJController._record_sequence_heartbeat(stub, state, audio, now_playing)
 
     assert len(stub._sequence_corpus_writer.rows) == 1
 
@@ -432,7 +432,7 @@ def test_record_sequence_heartbeat_captures_without_now_playing_availability() -
 def test_record_sequence_heartbeat_handles_a_missing_spotify_snapshot() -> None:
     """_spotify_snapshot() can return None (no now-playing hub, no
     fallback subsystem) -- must not crash now that the early `not
-    spotify` guard is gone."""
+    now_playing` guard is gone."""
     stub = _make_sequence_heartbeat_stub()
     audio = SimpleNamespace(
         waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
@@ -453,7 +453,7 @@ def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> N
         treble=0.10,
         bpm=126.0,
     )
-    spotify = {
+    now_playing = {
         'track_id': 'spotify:track:test123',
         'title': 'Moonwalk',
         'artist': 'DJ Test',
@@ -472,7 +472,7 @@ def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> N
     )
     grid = SimpleNamespace(bpm=126.0, confidence=0.70)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['analysis_status'] == 'ok'
     assert row['bpm'] == 126.0
@@ -508,7 +508,7 @@ def _make_record_live_training_row_stub(*, writer=None, bpm: float = 125.0):
 
 
 def test_record_live_training_row_writes_without_now_playing_availability() -> None:
-    """2026-08-15: no longer requires spotify.available/is_playing -- a
+    """2026-08-15: no longer requires now_playing.available/is_playing -- a
     session where the now-playing source never resolves a track identity
     (this bug's real trigger case) must still capture live-corpus rows as
     long as the detector has a real BPM."""
@@ -518,9 +518,9 @@ def test_record_live_training_row_writes_without_now_playing_availability() -> N
         bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
     )
     state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
-    spotify = {'available': False, 'is_playing': False}  # no identity ever resolved
+    now_playing = {'available': False, 'is_playing': False}  # no identity ever resolved
 
-    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, spotify)
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, now_playing)
 
     assert len(stub._live_corpus_writer.calls) == 1
 
@@ -540,7 +540,7 @@ def test_record_live_training_row_skips_when_no_real_bpm() -> None:
 
 
 def test_record_live_training_row_change_counter_zero_force_flushes() -> None:
-    """2026-08-15: `spotify.get('change_counter', -1) or -1` collapsed a
+    """2026-08-15: `now_playing.get('change_counter', -1) or -1` collapsed a
     legitimate change_counter of 0 into -1 (falsy-0 triggers `or`), which
     then failed the `change_counter >= 0` check and could never
     force-flush. change_counter=0, differing from the fresh session's
@@ -551,9 +551,9 @@ def test_record_live_training_row_change_counter_zero_force_flushes() -> None:
         bass_n=0.2, mid_n=0.4, treble_n=0.6, bpm=125.0,
     )
     state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
-    spotify = {'change_counter': 0}
+    now_playing = {'change_counter': 0}
 
-    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, spotify)
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(stub, state, audio, now_playing)
 
     assert len(stub._live_corpus_writer.calls) == 1
     _row, force_flush = stub._live_corpus_writer.calls[0]
@@ -601,7 +601,7 @@ def test_build_live_training_row_captures_every_audiodata_field_except_fft_wavef
         spectral_flux=7.89,
         vocal_hnr=0.71, vocal_fmr=0.62,
     )
-    spotify = {
+    now_playing = {
         'track_id': 'spotify:track:test123', 'title': 'Moonwalk',
         'status': 'playing', 'is_playing': True,
         'duration_s': 180.0, 'position_s': 90.0, 'progress': 0.5,
@@ -614,7 +614,7 @@ def test_build_live_training_row_captures_every_audiodata_field_except_fft_wavef
     )
     grid = SimpleNamespace(bpm=126.0, confidence=0.70)
 
-    row = _build_live_training_row(audio, spotify, state, audio_manager, grid)
+    row = _build_live_training_row(audio, now_playing, state, audio_manager, grid)
 
     assert row['bass'] == pytest.approx(0.11)
     assert row['mid'] == pytest.approx(0.22)

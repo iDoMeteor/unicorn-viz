@@ -139,7 +139,7 @@ def _bare_controller(*, section_hint: dict | None = None, **overrides) -> AutoVJ
     inst = object.__new__(AutoVJController)
     for k, v in _PHRASE_DEFAULTS.items():
         setattr(inst, k, v)
-    inst._spotify_snapshot = lambda: None
+    inst._now_playing_snapshot = lambda: None
     inst._climax_song_progress_min_duration_s = 75.0
     inst._app = SimpleNamespace(vj_api=_FakeVjApi(section_hint=section_hint))
     for k, v in overrides.items():
@@ -612,9 +612,9 @@ def _bare_drop_controller(**overrides) -> AutoVJController:
     inst = object.__new__(AutoVJController)
     for k, v in defaults.items():
         setattr(inst, k, v)
-    inst._spotify_snapshot = lambda: None
+    inst._now_playing_snapshot = lambda: None
     inst._audio_profile_snapshot = lambda: {}
-    inst._spotify_telemetry_snapshot = lambda: {}
+    inst._now_playing_telemetry_snapshot = lambda: {}
     inst._detector_snapshot = lambda: {}
     return inst
 
@@ -667,7 +667,7 @@ def test_fire_drop_corpus_keyframe_includes_pending_score_and_dconf() -> None:
         _drop_cycle_count=0, _bars_since_phase_entry=12,
         _drop_pending_score=0.73, _drop_pending_dconf=0.62,
     )
-    inst._spotify_snapshot = lambda: {'available': True, 'is_playing': True}
+    inst._now_playing_snapshot = lambda: {'available': True, 'is_playing': True}
     inst._last_audio = SimpleNamespace(bass=0.5, mid=0.5, treble=0.5)
     inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
 

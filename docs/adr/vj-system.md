@@ -9355,3 +9355,1096 @@ a given input value.
 **Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.31 → 1.0.0-rc.32`;
 `_VJ_WEIGHTS_DOC_VERSION` `88 → 89`. Full test suite green (2181 passed,
 1 skipped) after landing.
+
+## zcr_sigma / onset_density_sigma: Fit-vs-Live Scale Mismatch (2026-09-04, tuning session, recommender rc.33)
+
+**Context.** Owner: "ok, now it's tuning time" -- a baseline tuning round
+of six fresh `session_replay.py` accelerated-replay sessions, one real
+training list per genre (ambient/house/peak-time/tech-house/deep-house/
+drum-and-bass), each with its own random seed, crossfade + shuffle on,
+`log_decisions=true` for full corpus capture. This was the first real
+validation of the whole night's evidence-based recommender work against
+fresh, unbiased data -- and it surfaced a genuine, severe defect the
+earlier fixes hadn't caught.
+
+**The finding.** `genre_report.py` against the six fresh buckets showed
+`peak_time` (the `big-room-01` list's own correct profile) scoring dead
+last -- rank 11 of 11 enabled candidates -- on the full weighted
+composite against its OWN list, and never once recommended correctly
+across a full ~1h session (`correct_reco_pct = 0.0%`). `drum_and_bass`
+(6.6% correct) and `deep_house` (8.6% correct) weren't much better.
+`house` (19.3%) and `ambient` (38.6%, the best of the six) were
+mediocre-to-okay. Every list's *actual* top recommendation was some
+other, unrelated profile -- `hyphy` won `house` and `big-room-01`
+outright; `ambient` won `deep-house-01`; `house` won `drum-and-bass-01`.
+
+**First hypothesis, tested and disproved.** `spectral_shape_fit` looked
+like the obvious suspect (`ambient` topped it on every single list
+regardless of genre, the same "one profile sweeps everything via the
+ribbon fit" pattern already seen three times this session with
+`dubstep`/`house`/`techno`). Tested directly against the real corpus data
+-- rescoring every candidate's weighted composite with `spectral_shape_
+fit`'s weight halved, then zeroed, using the actual `term_values_by_
+candidate` already logged in the six fresh buckets (no new sessions
+needed for this check). Result: **`peak_time` stayed dead last (11/11)
+at every weight, including zero.** Halving/zeroing also visibly hurt
+`ambient`'s already-best performance without fixing anything else.
+Correctly abandoned as the driver -- this is the same "verify before
+applying" discipline as the rest of the night, and it caught a plausible
+but wrong fix before it landed.
+
+**Root cause, found by checking what the term actually compares.**
+`zcr_fit`/`onset_fit` compare against `mean_zcr`/`onset_density` --
+values the recommender computes **fresh each evaluation cycle** (a
+rolling window of live samples, see `_update_profile_recommendation()`).
+But both fields' sigmas (`zcr_sigma` from rc.32, `onset_density_sigma`
+from the original evidence pass) were fit using the session's own
+established per-track-then-robust-stat methodology: collapse to one
+MEDIAN value per TRACK first, then take MAD across those per-track
+points. That's the right approach for `mu` (stops one noisy track
+skewing the genre estimate) but it strips out exactly the cycle-to-cycle
+variation the live scorer actually sees every time it runs -- leaving
+sigma calibrated for a much smoother signal than what it's compared
+against. Measured directly: `peak_time`'s fresh session showed live
+`onset_density` reading with a standard deviation of `0.77` against a
+stored sigma of `0.19` -- 4x tighter than reality, meaning almost any
+real reading looked like a multi-sigma outlier and paid a severe
+Gaussian penalty regardless of whether the genre match was actually
+correct.
+
+**Confirmed roster-wide**, not just on `peak_time`: pooled raw
+per-cycle `mean_zcr`/`onset_density` values across all packaged buckets
+in `assets/training/accelerated/` for the 12 real-corpus profiles
+(5460-34254 rows each -- a large, solid sample):
+
+| Profile | zcr raw stdev | rc.32 zcr_sigma | onset_density raw stdev | old onset_density_sigma |
+| --- | --- | --- | --- | --- |
+| house | 0.0287 | 0.0168 | 0.7521 | 0.4596 |
+| deep_house | 0.0213 | 0.0193 | 0.9913 | 0.4225 |
+| tech_house *(disabled)* | 0.0225 | 0.0116 | 0.7619 | 0.5486 |
+| peak_time | 0.0343 | 0.0148 | 0.7200 | 0.1927 |
+| techno *(disabled)* | 0.0265 | 0.0159 | 0.8668 | 0.9266 |
+| trance | 0.0271 | 0.0202 | 1.0831 | 0.3855 |
+| drum_and_bass | 0.0325 | 0.0164 | 0.8742 | 0.3262 |
+| dubstep | 0.0220 | 0.0217 | 0.6293 | 0.1779 |
+| rap_rnb | 0.0248 | 0.0200 | 0.6532 | 0.3706 |
+| hyphy | 0.0251 | 0.0209 | 0.6244 | 0.2669 |
+| ambient | 0.0184 | 0.0152 | 0.6706 | 0.4151 |
+| chillstep | 0.0189 | 0.0188 | 0.5917 | 0.4151 |
+
+`zcr`'s gap is real but moderate (raw stdev ~1.5-2x the per-track
+value) -- consistent with `zcr` being a fairly stable, slowly-varying
+texture measure. `onset_density`'s gap is severe (raw stdev 3-6x the
+per-track value for every profile except `techno`, whose per-track
+spread happened to already be unusually wide) -- consistent with onset
+density being a genuinely bursty, moment-to-moment signal that a
+per-track median smooths away almost entirely.
+
+**Fix.** `zcr_sigma` and `onset_density_sigma` recomputed directly from
+the pooled raw per-cycle values above (not re-collapsed to per-track
+points). `mu` values for both fields are UNCHANGED -- the per-track
+median center was correct all along; only the width was wrong. See
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` § "zcr_sigma /
+onset_density_sigma: Fit-vs-Live Scale Mismatch" for the corrected
+per-profile table (not duplicated here) and the post-fix composite-rank
+comparison against the same six fresh sessions.
+
+**Regression fallout, understood not blindly re-pinned.** Same two
+`test_genre_matcher.py` fixtures re-swept a third time (real sigma moved
+substantially -- `zcr` literal `0.07 → 0.15`). The trust-margin fixture
+(`_make_trust_test_stub`) needed more than its usual `onset_count` retune
+this time: with `onset_density_sigma` widened 3-6x, no `onset_count`
+value (swept `-1` to `30`) could restore `house` as the winner at the
+exact bpm midpoint between `house`/`deep_house` any more -- `deep_house`
+won outright everywhere, `score_margin` pinned at `0.0` (a genuine
+near-tie among 3+ candidates). Added a second knob: `bpm` is now biased
+35% of the way from `house`'s own `bpm_prior_mu` toward `deep_house`'s
+(still a realistic "ambiguous, between the two" reading, not
+cherry-picked), swept together with `onset_count` this time rather than
+one knob alone, landed on a confirmed-stable `bpm_frac=0.35,
+onset_count=2.00` pocket. The exact 50/50 midpoint reliably favoring
+`deep_house` now is the CORRECT reading of that contest post-fix, not a
+bug to chase back to `house`.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.32 → 1.0.0-rc.33`;
+`_VJ_WEIGHTS_DOC_VERSION` `89 → 90`. Full test suite green (2183 passed,
+1 skipped) after landing. Validation round (fresh seeds, same six lists)
+queued next to confirm the fix actually moves `correct_reco_pct`/
+composite rank in the right direction before the owner's final,
+no-further-tuning favorites validation pass.
+
+**Owner update after the validation round's mixed result:** "i am not
+satisfied with that lol... you need to go further, our first class
+citizens are losing badly!" — the rc.33 fix genuinely helped
+`drum_and_bass`/`peak_time`/`ambient` but left `house`/`deep_house`
+roughly flat, and `hyphy` still dominated every list including
+`favorites`. The disproved-hypothesis writeup above (zeroing
+`spectral_shape_fit`'s weight didn't fix `peak_time`) was correct as far
+as it went — the ribbon term wasn't the *sole* cause of `peak_time`
+scoring dead last — but continuing to dig found it WAS a real, separate,
+still-unfixed bug of the exact same class. See the next entry.
+
+## spectral_shape_fit: Per-Track vs. Live 16s-Window Aggregation Mismatch (2026-09-04, tuning session continued, recommender rc.34)
+
+**Root cause.** `spectral_shape_fit` compares the profile's `expected_bands`/
+`expected_bands_sigma` against `band_mean_vec` — a live rolling-window
+mean over `self._profile_auto_reco_window_s` (default **16.0 seconds**).
+But the ribbon redesign (rc.28) fit both statistics by averaging each
+TRACK's bands to one point first (3-8 minutes of audio collapsed to a
+single vector), then taking median/MAD ACROSS those per-track points.
+Averaging over a whole track smooths away exactly the section-to-section
+variation (intro/build/drop/breakdown) a 16-second window still shows in
+full — the same class of fit-vs-live aggregation mismatch as the
+`zcr_sigma`/`onset_density_sigma` fix immediately above, one level up
+the pipeline. This is what the earlier "disproved hypothesis" entry
+caught a symptom of without finding the actual mechanism: zeroing the
+term's weight couldn't fix `peak_time` because the DATA feeding the term
+was fit at the wrong time-scale, not because the term itself was
+irrelevant.
+
+**Verified before touching anything live**, using the real corpus
+already on disk (`assets/training/accelerated/`): rebuilt ~16-second
+non-overlapping window chunks per track (matching the live window
+exactly), refit `mu`/`sigma` from those chunks, then rescored each
+profile's own held-out windows against every candidate's OLD vs NEW
+fit:
+
+| Profile | OLD own-list rank (of 12) | NEW own-list rank (of 12) |
+| --- | --- | --- |
+| `house` | 7 | **1** |
+| `deep_house` | 10 | 3 |
+| `peak_time` | 12 (dead last) | 4 |
+| `drum_and_bass` | 6 | 3 |
+| `tech_house` *(disabled)* | 8 | **1** |
+| `ambient` | 1 | 1 *(unchanged — already correct, not regressed)* |
+
+**Fix.** Both `expected_bands` (mu) and `expected_bands_sigma` (sigma)
+recomputed together — unlike the `zcr`/`onset_density` fix, which only
+needed sigma corrected, here the aggregation UNIT itself changed
+(per-track → per-16s-window), so both statistics needed refitting from
+the same set of windows for internal consistency. Method: group each
+profile's own training-list heartbeat rows by track, accumulate
+non-overlapping ~16s chunks in track-order, mean the 64-band vector
+within each chunk, then robust median (→ `mu`) / MAD-derived sigma
+(→ `sigma`, floored at `0.01`) pooled across ALL chunks from ALL tracks
+(not one point per track — many chunks per track now, since a chunk is
+~16s not a whole track). `electronic` mirrors `house`'s new values, same
+control-pair design as every other ribbon field. Applied to the same 12
+real-corpus profiles (+ `electronic`) as every other evidence-based fix
+this session.
+
+**Regression check.** Full test suite green (2183 passed, 1 skipped)
+with **zero fixture retuning needed** — unlike the `zcr`/`onset_density`
+fix, no test hardcodes a literal against these specific 64-element
+arrays or reads them live into a fixture the way `_make_trust_test_stub`
+does for `bpm_prior_mu`/`zcr_mu`.
+
+**Live validation queued.** Three fresh single-list `session_replay.py`
+runs (`house`/`peak_time`/`drum_and_bass`, new seeds, crossfade+shuffle)
+launched immediately after landing to confirm the offline recomputation
+predicts real session behavior, per the same "verify before declaring
+victory" discipline as every other fix tonight.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.33 → 1.0.0-rc.34`;
+`_VJ_WEIGHTS_DOC_VERSION` `90 → 91`.
+
+## Why house/peak-time/drum-and-bass Still Read as "Competitive" — Tempo Is Completely Off (2026-09-04, tuning session continued)
+
+**Owner, after the ribbon fix's validated wins:** house/peak-time/
+drum-and-bass being "competitive" with each other is itself suspicious
+given how acoustically different they are — a huge BPM gap (drum & bass
+sits at ~166-174 vs. house-family's ~122-130) and a stark density
+contrast ("DNB is like bass & kicks and that's it... house has a TON of
+other stuff going on"). Asked what the mechanism might be.
+
+**Finding 1: tempo is entirely excluded from genre scoring, by design.**
+`tempo_fit`/`top_cand_fit` have both been weight `0.0` since the
+2026-08-20 "genre-pure composite" decision — BPM plays zero role in
+which profile the recommender picks right now.
+
+**Finding 2: turning it back on doesn't help — it hurts, measured
+directly against real data.** Rescored the real corpus with `tempo_fit`
+swept `0.1`/`0.25`/`0.5`/`0.75`/`2.2` (the old pre-genre-pure weight): no
+value is a clean win. `peak_time` climbs cleanly and monotonically
+(21.8% → 37.7% correct) because its real tempo band is narrow and
+accurately detected — but that gain comes directly out of `house`, which
+loses its own-list win starting at just `0.25` (house/peak-time's real
+BPMs sit only ~3.5 BPM apart, the already-documented house-family
+cluster). `drum_and_bass` gets monotonically WORSE at every value tested,
+including the smallest (`0.1`) — its BPM *input* is wrong, so any weight
+on it is weight on a wrong number; the wrongness doesn't improve with a
+smaller weight, only its influence does.
+
+**Finding 3: the detector isn't reading drum & bass's real tempo.**
+Detected `bpm` across all three DNB sessions run tonight (different
+seeds): median 115.1–115.6, every time — `174 / 115.6 ≈ 1.5`, a
+consistent **3:2 tactus fold**, not noise. Traced it to a genuine,
+well-isolated mechanism: `_estimate_tempo_acf()`'s "tactus descent loop"
+(the v2/base `BeatTracker`'s tempo-candidate selection) only ever tests
+DOWNWARD fold factors (`0.5, 2/3, 0.75`) — no upward equivalent. Watched
+it happen live in the raw corpus: first track of a fresh DNB session,
+correct profile/prior already active, `176.47` scoring clearly highest
+in the raw ACF (`0.181` vs. `0.135`) — and the tracker still folded down
+to the second-place `88.24`. Once folded, nothing climbs back up, even
+when the correct tempo keeps re-scoring competitively in later cycles
+(directly observed: `166.67` scoring highest of three listed candidates
+on a row where the locked `bpm` still read ~84).
+
+**Finding 4, the correction that mattered: v3 (the actually-live engine,
+`beat_tracker_engine="v3"`) does NOT simply inherit v2's bug the way it
+first looked.** `BeatTrackerV3.update()` calls `super().update()` — but
+the raw comb-filter observation is snapshotted BEFORE v2's decision
+layer (genre evidence, prior-weighting, the biased tactus descent) ever
+runs: "The comb score IS the observation; everything after this line is
+v2's decision layer, which v3 replaces wholesale" (the code's own
+comment). So v3 builds its own HMM posterior from unbiased raw evidence,
+not from v2's folded pick — the wrong-fold behavior in the LIVE `bpm`
+field is v3's OWN posterior decision, not an inherited v2 bug. Owner: "i
+can't believe i let the v2 wrap slide by! i should have anticipated that
+based on the way the last v3 was done" — the more careful trace showed
+the anticipated coupling isn't actually there at the code level; v3 has
+its own, independent problem in the same neighborhood.
+
+**Two real gaps found in v3's own decision path, both real design gaps
+rather than a copy of v2's bug:**
+
+1. v3 already has machinery built specifically to fix octave-fold
+   asymmetry — but it's DEAD in production. `_V3_FOLD_OBS_WEIGHT` (the
+   weight on a symmetric up/down comb-evidence boost) defaults to `0.0`,
+   AND the code implementing it lives in the `'comb'`/`'score'`
+   observation-source branch of `_v3_observation_likelihood()`, while the
+   live config uses `_V3_OBS_SOURCE='template'` — a different branch
+   entirely, with no fold-symmetric treatment of any kind. The
+   `'hybrid'` mode (magnitude-weighted template matching, the template
+   system's own attempt at resolving this) was tried and found worse
+   overall ("tested worse, kept for experiments" — pre-existing code
+   comment), so it isn't a safe drop-in fix either. **Not touched
+   tonight** — redesigning the live template path's fold-handling is a
+   bigger, more careful task than "a few sims," correctly identified as
+   out of scope for tonight.
+2. v3's own transition matrix already treats 1.5x/4:3 (triplet) fold
+   jumps SYMMETRICALLY (`_V3_FOLD_PROB_TRIPLET`, "symmetric: up AND down
+   get identical mass" — the code's own comment, matching v2's bug
+   directly in its own docstring: "the asymmetric fold-DOWN-only descent
+   was v2's measured dnb failure"). v3 also already computes
+   `_v3_fold_suspect_mass` every cycle — how much posterior mass sits on
+   a fold-related lane of its own top pick — but as PURE TELEMETRY,
+   never acted on and never logged to the corpus.
+
+## v3 Genre-Evidence Consultation + Fold-Suspect Gate (2026-09-04, tuning session, detector rc.42)
+
+**Owner's fix, sent for implementation:** "shouldn't v3 be consulting
+the genre data when confidence is low? maybe we could extend that for
+'fold ratio is feeling suspect'?"
+
+**What was found before touching anything.** The genre-evidence channel
+(`set_genre_tempo_evidence()`, the recommender's tempo-independent
+evidence pushed every cycle, gated on `acf_confidence < 0.5`) lives
+*entirely* inside `_estimate_tempo_acf()` — v2's decision layer, which
+v3 discards wholesale per Finding 4 above. Confirmed by grep: v3 never
+reads `_genre_evidence_mu`/`_genre_evidence_sigma`/`_genre_evidence_weight`
+anywhere in its own posterior update. Since v3 became the live engine,
+this entire channel has been dead weight in production — the recommender
+keeps pushing real evidence every cycle and it goes nowhere.
+
+**Fix.** New method `_v3_apply_genre_evidence()`, wired into both
+branches of `_v3_observation_likelihood()` (so it applies regardless of
+`_V3_OBS_SOURCE`, including the live `'template'` default). Same
+multiplicative-Gaussian-boost math as v2's own gate, applied over
+`self._v3_log_bpms`. Gated on EITHER of two conditions (extending, not
+replacing, v2's existing one):
+
+- `self._acf_confidence < self._genre_evidence_gate_confidence` (v2's
+  original condition — reused because v2's confidence is still computed
+  by the shared pipeline v3 calls via `super().update()`), OR
+- `self._v3_fold_suspect_mass > _V3_FOLD_SUSPECT_GATE_MASS` (new — the
+  owner's extension). `fold_suspect_mass` measures something raw
+  confidence doesn't: how much posterior mass sits specifically on a
+  fold-ALTERNATIVE of the current pick, not just how peaked the posterior
+  is overall. That's exactly DNB's failure mode — the MAP pick can look
+  locally confident while a real, substantial fold-alternative sits
+  right next to it in tempo-ratio space.
+
+`_V3_FOLD_SUSPECT_GATE_MASS = 0.2` — a first-pass value, not yet fit
+from real data, because `fold_suspect_mass` had ZERO corpus logging
+before this same commit (it was pure telemetry, never written to a row).
+Wired into `_detector_snapshot()` (`v3_fold_suspect_mass`, plus
+`genre_evidence_applied_count` for direct before/after comparison) so
+real sessions from tonight onward can calibrate this properly, the same
+"every scrap of data captured" discipline as the rest of the night.
+
+**Regression check.** Full test suite green (2183 passed, 1 skipped)
+before landing. Live validation (a fresh drum-and-bass session, new seed)
+launched immediately after to check: does `genre_evidence_applied_count`
+actually engage, does `v3_fold_suspect_mass` read in a sane range, and —
+the real test — does detected `bpm` move toward the true 166-174 band.
+
+**Explicitly deferred, not attempted tonight (owner: "let's not get to
+extreme unless we sniff out a lead"):** redesigning the live
+`'template'`/`'hybrid'` observation path's fold-handling (Finding 4's gap
+#1 above) — the acknowledged octave-ambiguity weak spot in the shipped
+default. A real, separate, bigger investigation.
+
+**Bookkeeping.** `_DETECTOR_VERSION` `1.0.0-rc.41 → 1.0.0-rc.42`;
+`_VJ_WEIGHTS_DOC_VERSION` `91 → 92`. New tunable
+`_V3_FOLD_SUSPECT_GATE_MASS` added to `_DETECTOR_CONSTANT_DEFAULTS`
+(`drop-ins/training-kit-01/tools/package_training_set.py`) same-commit
+per the standing sync rule.
+
+**Live validation came back inconclusive, reported honestly rather than
+declared a win:** `genre_evidence_applied_count` did climb (confirming
+the wiring genuinely engages), but detected `bpm` on a fresh drum & bass
+session barely moved (median 116.3 vs. 115.1–115.6 before). Two real
+problems found, not one: (1) `current_profile_key` was `house` more
+often than `drum_and_bass` across the session (145 vs. 94 rows) — genre
+evidence is pushed based on whichever profile is *currently* active, so
+for a large fraction of the session the "genre evidence" reaching the
+detector was centered on `house`'s tempo (~122), actively reinforcing
+the fold instead of correcting it — the exact circular dependency
+(wrong BPM → recommender won't confidently pick `drum_and_bass` → wrong
+genre evidence gets pushed → BPM stays wrong) flagged as a hypothesis
+earlier the same session, now confirmed live. (2) `v3_fold_suspect_mass`
+read exactly `0.0` on all 421 rows of that session — never once
+nonzero — meaning the owner's specific fold-suspect-gate idea never
+actually fired; all the measured engagement came through the
+pre-existing `acf_confidence` condition alone. Root cause of (2) not
+found — genuine HMM-internals debugging, correctly identified as past
+the "sniff out a lead, don't get extreme" line the owner drew, and left
+open rather than guessed at.
+
+## Duplicate, Not Share: BeatTrackerV3 Stops Inheriting From BeatTracker (2026-09-04, tuning session, detector rc.43)
+
+**Owner's call, after the inconclusive validation above:** "let's take
+the 'duplicate v2 code' route, because that is the *proper* solution and
+drifting apart from v2 *should* occur because otherwise mod'ing what's
+under the v2 hood would mean that v2 is a never-ending version that
+can't ever just be flipped back 'stable working v2'! do that now and fix
+the super thing and make sure it's allowed to fold up if it's getting
+real evidence that it should from somewhere."
+
+**The reasoning, made explicit for whoever reads this later:** a
+shared-component extraction (the OTHER option on the table, from the
+earlier "what will it take to separate v2 from v3" discussion) ties any
+future v3-specific tuning to v2's own behavior — exactly what v2's
+"byte-identical protected baseline" rule exists to prevent. Duplication
+costs real, ongoing maintenance (two copies of ~3,000 lines of onset/
+envelope/phase/comb-filter machinery that will keep drifting further
+apart as each gets its own independent tuning) — but that drift is the
+explicit, correct trade: v2 stays a permanent, unchanging reference
+point that can always be "flipped back to," and v3 is genuinely free to
+diverge, rather than v2 quietly becoming version-locked to whatever v3
+currently needs.
+
+**What landed.** New class `_BeatTrackerV3Base` (`beat_grid.py`, ~3,045
+lines) — a full duplicate of `BeatTracker` (v2)'s class body, byte-for-
+byte identical at the moment of duplication (confirmed: only the class
+definition line itself needed renaming; the handful of other literal
+`BeatTracker` occurrences in that text are all comments/docstrings, no
+functional self-references, no other class inherits from it, nothing
+constructs it recursively). `BeatTrackerV3` now subclasses
+`_BeatTrackerV3Base` instead of `BeatTracker` directly — "fix the super
+thing": `super().update()` inside `BeatTrackerV3.update()` now calls the
+DUPLICATE's pipeline, so v2 (`BeatTracker`) is never touched or executed
+by a v3 session at all anymore, and is free to stay genuinely
+byte-identical regardless of what happens to v3's copy from here.
+Module-level constants (`_V2_*`, `_TACTUS_*`, etc.) stay shared between
+the two classes for now — deliberately not preemptively duplicated
+alongside the class bodies, since most represent genuinely shared
+physical/DSP constants rather than v2-specific decision logic; a
+constant gets its own v3-private copy the moment a real need to diverge
+shows up (the tactus fold-up fix below didn't need to touch any of
+them).
+
+**"make sure it's allowed to fold up":** within `_BeatTrackerV3Base`
+ONLY (v2's own copy of the same method, unchanged, still descent-only),
+`_estimate_tempo_acf()`'s tactus descent loop gains a symmetric ascent
+loop, added strictly AFTER the existing descent loop so descent keeps
+first priority (no behavior change for any genre whose real tempo sits
+at or below the raw ACF pick — only adds a path for genres whose real
+tempo sits above it, drum & bass being the motivating case). Reuses
+`_tactus_fold_accepted()` completely unchanged — the identical score
+and region-consistency bar a descent candidate must already clear — so
+this cannot manufacture evidence that wasn't there; it only removes a
+direction the loop was previously structurally forbidden from
+considering at all. Ascent factors `(2.0, 1.5, 4/3)`, same priority
+ordering as the descent factors they mirror, bounded by `self._bpm_max`
+(200.0) instead of `self._bpm_min`.
+
+**File organization, explicitly deferred:** owner, mid-implementation,
+correctly flagged that duplicating another ~3,000 lines into an already
+~4,800-line file compounds an existing monolithic-file problem — but
+also explicitly said the actual file-split ("abstracting these systems
+into their own files") is its own, larger, already-anticipated piece of
+work ("the whole project's grand v2 plan starts precisely with that
+issue"), not something to bundle into tonight's fix. `_BeatTrackerV3Base`
+therefore still lives in `beat_grid.py` for now — see
+`docs/planning/post-soak-reminders-2026-09-04.md` item 6 for the
+deferred split.
+
+**Regression check.** Three pre-existing tests asserted the OLD
+inheritance relationship directly and needed updating as a real,
+understood consequence of this change (not blind re-pinning):
+`tests/test_auto_vj_shadow_engine.py::test_load_beat_grid_cls_v2_stays_the_protected_baseline`
+(MRO assertion), `tests/test_beat_tracker_v3.py::test_v3_is_a_v2_subclass_with_its_own_engine_version`
+(renamed to `test_v3_no_longer_subclasses_v2_directly`, assertion
+inverted), `tests/test_drop_trigger_sustain_split.py::test_band_blend_weights_reverted_in_both_engines`
+(source-level occurrence count `2 → 3`, since the pinned band-blend line
+now appears in v1, v2, AND `_BeatTrackerV3Base`'s copy of v2). Full test
+suite green (2183 passed, 1 skipped) after landing. Live validation (a
+fresh drum & bass session plus a house regression check, run in
+parallel) queued next.
+
+**Bookkeeping.** `_DETECTOR_VERSION` `1.0.0-rc.42 → 1.0.0-rc.43`;
+`_VJ_WEIGHTS_DOC_VERSION` `92 → 93`.
+
+**Follow-up (same night): duplicated module constants cleaned up.**
+While investigating a separate owner question about v3's tempo lattice,
+found that the class-duplication script above had accidentally swept a
+124-line block of `_V3_*` module-level constants (the block that sits
+between v2's class and `class BeatTrackerV3`) into the region ahead of
+`_BeatTrackerV3Base` too — a byte-for-byte duplicate, confirmed via
+`diff`. Harmless in effect (Python re-executes the assignments; the
+second, correctly-positioned copy right before `class BeatTrackerV3`
+always won as the live binding), but genuine clutter, not a scoping
+break — confirmed via direct class introspection that `_BeatTrackerV3Base`
+still has all 91 expected non-dunder attributes either way. Removed the
+stray first copy. Module still parses; the three most relevant test
+files (89 tests) still pass.
+
+### hyphy's `bpm_prior_mu`/`sigma`/`hint` recalibration reverted — unapproved (2026-09-04, recommender rc.35)
+
+**What happened.** The "Vocal-Term Sigma + Evidence-Based Re-Fit
+(recommender rc.29)" landing (same day, earlier) fully recalibrated
+`hyphy`'s tempo fields from pooled raw *detected* BPM on
+`training-trap-hip-hop-01` (`bpm_prior_mu` `109.0 → 142.2`,
+`bpm_prior_sigma` `0.15 → 0.1334`, `bpm_hint_min`/`max`
+`100.0–118.0 → 127.0–155.0`) in the same commit (`6799bfc`) that split
+`hyphy`/`trap` back out of the pooled `rap_rnb` profile. That doc's own
+text flagged, at the time, that hyphy's field comment carries "the same
+'produced vs. perceived pulse' fold-risk pattern as dubstep" — and
+applied the change anyway ("small... which is why it was applied, not
+because the fold risk was ruled out"), while `dubstep` and `rap_rnb`
+were correctly held back in the exact same pass for the identical
+reason. Inconsistent, and wrong: pooling raw per-track detected BPM as
+if it were ground-truth produced tempo is precisely the kind of
+detector-fold-contamination risk this whole session repeatedly found to
+be unsafe for genres with known octave/tactus ambiguity — trap is
+exactly such a genre (commonly produced around a much faster tempo than
+its perceived half-time pulse, the same pattern documented for dubstep).
+
+**Owner correction.** "is hyphy/trap BPM range seriously set 127-155??!
+that's insane. i spent FOREVER tuning that table by hand and someone
+made unapproved changes.. consolidating those was approved by not that
+bpm range! the bpm range for those should be what hyphy was before."
+The hyphy/trap split itself (the profile-pooling change, "trap should
+def be on its own") was and remains approved — only the tempo-field
+recalibration riding along in the same commit was not, and should never
+have shipped without separate, explicit sign-off, per the standing rule
+that detector/recommender constant changes need owner review before
+landing (doubly so here, since the doc entry landing it had already
+flagged the exact risk that made `dubstep`/`rap_rnb` get held back).
+
+**Fix.** Reverted `unicornviz/audio/profiles.py`'s `hyphy` entry —
+`bpm_prior_mu`/`bpm_prior_sigma`/`bpm_hint_min`/`bpm_hint_max` and the
+`description` string — to the values from the pre-split 2026-08-10
+disable commit (`2eab76b`): `109.0`/`0.15`/`100.0`/`118.0`. Confirmed via
+`git show 2eab76b^:unicornviz/audio/profiles.py` these are the owner's
+own hand-tuned, hand-dialed values, not a placeholder guess.
+`tests/test_audio_profile_deep_house_and_disable.py::test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01`
+updated to assert the restored values (was asserting the now-reverted
+ones). All other rc.28/rc.29 hyphy changes from the same landing
+(`expected_bands`/`expected_bands_sigma` ribbon, `vocal_hnr`/`vocal_fmr`
+mu/sigma) are unaffected — those are real per-track fingerprint/vocal
+fits, not tempo, and were not part of what the owner flagged.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.34 → 1.0.0-rc.35`;
+`_VJ_WEIGHTS_DOC_VERSION` `93 → 94`.
+
+### v3 Fold-Up Fix, Take Two: the Observation Layer, Not the Discarded Decision Layer (2026-09-04, detector rc.44)
+
+**Take one, and why it didn't work.** The "Duplicate, Not Share" entry
+above added a symmetric tactus-ascent loop to `_BeatTrackerV3Base`'s own
+copy of `_estimate_tempo_acf()`, believing it would give v3 the same
+fold-up capability. Live validation (a fresh drum & bass session)
+disproved this: BPM output didn't move, and `v3_fold_suspect_mass` read
+exactly `0.0` throughout. Root cause, found by reading `BeatTrackerV3.
+update()` directly: `super().update()` computes the ascent-modified
+`self._bpm` via the inherited pipeline, but the very same method then
+**unconditionally overwrites** `self._bpm`/`self._confidence` with its
+own HMM posterior decision a few lines later, whenever `like is not
+None` (nearly always true). The entire inherited computation — ascent
+fix included — is computed and thrown away every cycle. Reported
+transparently as a real mistake, not downplayed.
+
+**Take two: fix the branch that's actually live.** `_v3_observation_
+likelihood()` has two families: `'template'`/`'hybrid'` (the LIVE
+default, `_V3_OBS_SOURCE='template'`, no config.toml override) and
+`'comb'`/`'score'` (not live). The existing fold-symmetric evidence-
+sharing boost (`_V3_FOLD_OBS_WEIGHT`, a symmetric up/down comb-evidence
+share at the octave) only ever lived in the `'comb'`/`'score'` branch —
+inert twice over: the weight itself shipped at `0.0`, AND even nonzero it
+would only affect a branch v3 doesn't use. Generalized the mechanism (now
+covers `1.5x`/`4:3` alongside `2.0x`, matching `_v3_build_transition()`'s
+own symmetric fold-jump mass) and added it to the `'template'` branch —
+the one that actually determines v3's answer — reusing the same
+`_V3_FOLD_OBS_WEIGHT`. Activated it for the first time: `0.0 → 0.35`,
+bake 1's own historically-tried value for this exact mechanism, a
+reasoned starting point rather than a fresh guess. The `'comb'`/`'score'`
+branch's version was kept in sync (same three ratios) on principle, even
+though it stays inert while `_V3_OBS_SOURCE='template'` is shipped.
+
+**Not yet independently validated** — this needs its own live session
+(drum & bass, fresh seed) before being trusted, since take one already
+demonstrated that "looks right" and "actually changes the output" are
+different claims here. `_DETECTOR_VERSION` `1.0.0-rc.43 → 1.0.0-rc.44`.
+Regression test `tests/test_beat_tracker_v3.py::test_defaults_sit_in_the_
+escape_time_regime` updated to assert the new `0.35` default (was
+pinning the old, inert `0.0`).
+
+### v3 Decisive-Rival Fast Path (2026-09-04, detector rc.44)
+
+**Trigger.** Owner: "our 'alt bpm conf is X% higher than current locked
+so switch immediately' gate doesn't seem to be working anymore...
+probably for at least a few days." Investigation found the same root
+cause as the take-one mistake above: every plausible candidate
+mechanism (the Schmidt trigger `_BPM_LOCK_CONFIDENCE`/`_BPM_LOCK_
+RELEASE_CONFIDENCE`, the large-jump `_V2_LARGE_JUMP_CONFIDENCE` gate)
+lives in `BeatTracker`'s decision layer, discarded every cycle by
+`BeatTrackerV3.update()`'s posterior overwrite — and `config.toml` has
+had `beat_tracker_engine = "v3"` since 2026-09-02, two days before this
+conversation, matching the owner's own "at least a few days" estimate
+almost exactly.
+
+**Owner correction, once the exact mechanism couldn't be pinned down by
+name:** "none of those are what i'm talking about... there was
+distinctly a 'if alt confidence is 20% higher than current switch
+immediately' gate somewhere (it may have been if current is 20% less
+than) but it was something like that and it was definitely part of v2
+once upon a time... either way, let's bring that in now as well, we
+don't need to go looking for it." Direction: stop searching for the
+exact historical implementation, build the behavior fresh. Asked what
+else should gate it: "it does respect the cool-down period but that's
+it" — deliberately no persistence window, no region-consistency check,
+just a cooldown.
+
+**Why it can't be a straight port.** v3's own MAP-tracking has no
+hold/lock concept to escape *from* in the first place — `self._bpm`
+already just *is* the MAP state every cycle, unconditionally (confirmed
+reading `BeatTrackerV3.update()` directly). v2's version was an escape
+hatch out of an otherwise-conservative multi-cycle persistence system;
+v3 has no such system to escape from, so the mechanism had to be
+rebuilt in v3's own terms rather than translated line-for-line.
+
+**Design.** After each cycle's normal Bayesian posterior update
+(`BeatTrackerV3.update()`, right after computing the MAP index/`bpm`/
+`confidence` as usual): find the single highest-mass lattice bin
+*outside* the MAP's own confidence band (posterior mass within
+`±_V3_CONF_BAND`, the same window `confidence` is already computed
+from), measure that rival's own confidence the same way, and if it
+exceeds the MAP's by `_V3_ALT_CONF_MARGIN` (`0.20` — the owner's own
+recalled number, `rival >= map * 1.20`) *and* the cooldown
+(`_V3_ALT_SWITCH_COOLDOWN_BARS`, `16` musical bars) has elapsed since the
+last snap, concentrate the posterior at the
+rival immediately (a Gaussian reseed at the rival's lattice index,
+`_v3_drift_sigma`-width, mirroring `prime_tempo()`'s own posterior-seed
+pattern) rather than let the transition matrix's slow drift/fold-mass
+diffusion get there over many cycles. No other gate, per the owner's
+own framing. New engagement counter `_v3_alt_switch_count`, corpus-
+logged as `v3_alt_switch_count` (0 on v1/v2, same convention as the
+other v3-only counters).
+
+Extracted into its own method, `_v3_apply_decisive_rival()`, rather than
+left inline in `update()` — a plain function of its arguments plus
+`self._v3_posterior`, so it can be driven directly in a test without the
+full audio/onset `update()` pipeline. New regression test
+`tests/test_beat_tracker_v3.py::test_decisive_rival_snaps_the_posterior_with_cooldown`
+covers all three behaviors: a genuinely dominant rival (wider, slightly
+lower-peaked, but more band-mass than the sharp current pick) triggers an
+immediate snap; a second decisive rival arriving in the same instant is
+blocked by the cooldown; the same rival fires once the cooldown has
+elapsed.
+
+**Cooldown is bar-based, not time-based.** First drafted as a flat
+`2.0` s. Owner: "cool down should be 16 bars maybe, or 6s to start....
+bars maybe better?" Bars won: a fixed seconds value covers wildly
+different bar counts across the lattice's own 55-210 BPM span (the
+whole point of v3's fast-lanes-first-class design), while a bar count is
+a consistent *musical* duration regardless of tempo — matching how
+every other dwell/hold window in this codebase (`_V2_DWELL_BARS`,
+`bpm_lock_dwell_bars`) is already bar-based. Counted from
+`self._beat_index` (real detected beat crossings, assumed 4/4) rather
+than `self._bars_since_lock` — that counter only increments while
+`_lock_anchor_bpm > 0.0`, a v2-decision-layer-only concept v3 never
+populates, so it would silently never advance under v3. Renamed
+`_V3_ALT_SWITCH_COOLDOWN_S` → `_V3_ALT_SWITCH_COOLDOWN_BARS`, value
+`2.0` → `16.0`; the test's cooldown-elapsed step now advances
+`t._beat_index` directly instead of `t._last_t`.
+
+**Both constants are first-pass values**, not fit from real session
+data — `_V3_ALT_CONF_MARGIN` is the owner's own recollected number
+directly; `_V3_ALT_SWITCH_COOLDOWN_BARS` is the owner's own suggested
+starting point. Revisit once `v3_alt_switch_count` engagement data
+exists across real sessions.
+
+**Bookkeeping.** `_DETECTOR_VERSION` `1.0.0-rc.43 → 1.0.0-rc.44` (shared
+with the fold-up take-two entry above, landed in the same commit), then
+`→ 1.0.0-rc.45` for the seconds-to-bars cooldown correction above (same
+session, before rc.44 was ever committed or validated live);
+`_VJ_WEIGHTS_DOC_VERSION` `94 → 95 → 96`.
+
+### BPM Hard Pre-Filter No Longer Requires a Lock (2026-09-04, recommender rc.36)
+
+**Trigger.** Owner: "the chosen genre MUST be within the bpm range
+(plus it's little wiggle room) right? right! that's supposed to be
+happening but maybe we were waiting till the detector work was dialed?
+it's dialed now, we need to institute that immediately."
+
+**What already existed, confirmed by reading the code, not assumed.**
+The 2026-08-20 BPM hard pre-filter (rc.20, see its own entry above) is a
+real eligibility gate: a candidate profile whose `bpm_hint_min/max ±
+profile_reco_bpm_prefilter_margin` (`0.10`) doesn't contain the current
+BPM is excluded before `_profile_score()` ever runs, with an
+all-excluded fallback so a fold-error lock can't silence the
+recommender entirely. This is exactly the "chosen genre MUST be within
+range" guarantee the owner described — but it only ever applied while
+`self._bpm_lock_active` (the Schmidt-trigger hysteresis state) was
+`True`. rc.20's own original design (2026-08-13 ADR, "BPM as a Hard
+Recommender Pre-Filter") explicitly chose to run "unfiltered when
+unlocked," on the stated plan that a not-yet-built genre/BPM candidate
+matcher would cover that regime instead once it existed.
+
+**The gap.** That matcher was built (rc.21, "the BPM/genre candidate
+MATCHER's LOW half") — but reading its own code shows it does something
+different from what the original plan implied: its `det_score ×
+genre_conf × range_fit` joint selection only decides what tempo
+evidence to push back through `set_genre_tempo_evidence()`, a channel
+the DETECTOR consults to help its own low-confidence estimate converge.
+It never touches which genre gets RECOMMENDED. So for the entire time
+between rc.20 and tonight, any cycle where the detector wasn't
+confidently locked ran genre recommendation on the FULL, completely
+BPM-unconstrained candidate set — the exact gap the owner suspected,
+confirmed rather than assumed.
+
+**Fix.** Dropped the `bpm_lock_active` condition from the pre-filter
+gate in `_update_profile_recommendation()` (`auto_vj.py`) — it now
+applies whenever `self._grid` reports any nonzero BPM, locked or not.
+Everything else (margin, all-excluded fallback, telemetry counters) is
+unchanged. The existing all-excluded fallback already protects against
+the main risk this removes protection from (a badly-wrong early-track
+reading locking out every genre) — it falls back to unfiltered scoring
+in that case, same as it always has under lock. What changes is a
+different, already-accepted risk (a plausible-but-wrong reading
+mis-excluding the true genre) now also applies pre-lock instead of only
+post-lock — a reasonable trade now that this session's own fold-up fix
+and decisive-rival fast path have made the detector meaningfully more
+trustworthy pre-lock too.
+
+**Regression test.** `tests/test_bpm_detector_audit_regressions.py`'s
+`test_bpm_prefilter_inactive_when_unlocked` (which pinned the OLD
+behavior) renamed and inverted to `test_bpm_prefilter_also_active_when_
+unlocked` — same scenario as `test_bpm_prefilter_excludes_out_of_
+range_when_locked`, but without setting `_bpm_lock_active` at all, now
+asserting the filter still excludes the out-of-range candidate.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.35 → 1.0.0-rc.36`;
+`_VJ_WEIGHTS_DOC_VERSION` `96 → 97`.
+
+### Director Timing Retune (2026-09-04, director rc.18)
+
+**Trigger.** Right after the new `director-timing.md` reference doc was
+built (a full inventory of every min/max dwell/cooldown/swap-count
+constant that gates how long the director holds a mode/scene/effect),
+owner reviewed the current values and supplied a full replacement set
+across all four mood profiles (chill/normie/raver/tweaker), plus a
+direct question: "build_min_hold_s ... is this being respected?"
+
+**Answer, confirmed by reading the code, not assumed.** Yes — genuinely
+wired, not dead. `self._build_min_hold_s` (read from `_profile_value()`)
+feeds `build_min_hold` (tempo-scaled via `_timing_scale_from_bpm()`,
+floored at `2.0`), which becomes `effective_build_min_hold` (further
+reduced by `1.0 - self._phrase_bias('RISE')`, floored at `1.0`), which
+directly gates the BUILD→DROP transition at two points:
+`elapsed_build >= max(1.4, effective_build_min_hold * 0.35)` (the
+fastlane path, a strong-trigger shortcut) and
+`elapsed_build >= effective_build_min_hold` (the normal path, also
+requiring real evidence and a downbeat-confidence floor). One honest
+caveat: the *raw* config value is not a literal floor in every path —
+phrase-bias can reduce it, and the fastlane path uses 35% of the
+already-reduced value — so the effective minimum in practice can run
+shorter than the configured number, especially during a strongly
+RISE-biased phrase position. Also worth knowing: the tempo-scaling
+floor (`max(2.0, ...)`) means `tweaker`'s new `build_min_hold_s=2.0`
+effectively becomes a hard `2.0` at faster-than-neutral tempo (`timing_
+scale` bottoms out at `0.60`, so `2.0 * 0.60 = 1.2` gets floored back up
+to `2.0`) — a small, likely inconsequential clamp, not a bug, just
+worth knowing the number isn't infinitely fine-grained at the fast end.
+
+**The retune.** Full owner-supplied replacement values across all 18
+constants in `director-timing.md`'s tables (mode/phrase dwell, drop
+cooldown, effect/postfx switch timing, scene/preset swap counts), every
+one of the four mood profiles. Values are NOT required to be monotonic
+chill→tweaker (several aren't — e.g. `impact_hold_s` 10/4/8/12 dips then
+rises, `climax_swap_min_s` 20/8/12/20 comes back up to tweaker) —
+applied verbatim as supplied, not smoothed or second-guessed. Full
+before/after table: `drop-ins/auto-vj-01/docs/director-timing.md`
+(updated in the same commit). 72 individual value edits across 18 keys
+× 4 profiles, applied via a small one-off script (line-targeted,
+verified against the exact expected old value at each line before
+writing) rather than by hand, given the volume — output diffed and
+spot-checked before and after. Full test suite green; no test pinned
+any of these preset values, so none needed updating.
+
+**Owner's own forward-looking note, logged not acted on:** "my honest
+read is for next version of director we change ALL these to
+beats/bars/phrases!" — i.e. redefine every constant in this family in
+musical units (matching how the detector's own dwell windows are
+already bar-based — see `_V2_DWELL_BARS`/`bpm_lock_dwell_bars` and the
+brand-new `_V3_ALT_SWITCH_COOLDOWN_BARS` a few entries above) instead of
+wall-clock seconds. Explicitly framed as a future version, not requested
+now — logged in `docs/planning/post-soak-reminders-2026-09-04.md` so it
+isn't lost, not implemented here.
+
+**Bookkeeping.** `_DIRECTOR_VERSION` `1.0.0-rc.17 → 1.0.0-rc.18`. This
+retune sits outside `_VJ_WEIGHTS_DOC_VERSION`'s own explicit trigger
+list (that counter's director bullet is scoped to `_phrase_bias()`/
+`_PHRASE_ROLE_BARS`/`phrase_*` keys specifically, not general mode/scene
+dwell timing) — the doc's `Director version` header line was still kept
+in sync with the code (enforced by
+`tests/test_drop_trigger_sustain_split.py::test_weights_doc_version_in_sync`),
+just without a numbered doc-version bump or Changelog entry there.
+
+### The New-Baseline Batch Silently Ran v2, Not v3 — session_replay.py Never Set beat_tracker_engine (2026-09-04)
+
+**How it was found.** After landing the hyphy revert, the v3 fold-up fix
+take two, the decisive-rival fast path, the BPM hard pre-filter change,
+and the full director timing retune, owner asked for a fresh 16-session
+baseline (one run per genre list + favorites + toughies, 4 parallel) and
+a full detect/select/mood/director analysis. Three analysis agents were
+dispatched against the packaged corpus. The detector agent's very first
+finding: `engine_version` read `'2.0.0'` in **every single row of every
+single session** — never `'3.0.0'`. Every "V3 HMM Engine Engagement"
+scorecard section read exactly `0`/`0.0000` across all 16 buckets:
+`v3_cycle_applied_count`, `v3_fold_jump_count`, `v3_alt_switch_count`,
+`v3_fold_suspect_mass` median/max, all zero.
+
+**Root cause.** `drop-ins/training-kit-01/tools/session_replay.py`'s
+`run_session()` builds its own `cfg` dict entirely from scratch (by
+design — its own docstring: "Never touches config.toml") and never set
+`beat_tracker_engine` anywhere in it. `AutoVJController.__init__` reads
+`self._cfg.get('beat_tracker_engine', 'v2')` — a hardcoded `'v2'`
+fallback that's been silently correct-by-accident for every replay
+session ever run through this tool, right up until `config.toml`'s own
+live default changed to `'v3'` on 2026-09-02. From that point on, the
+live app and the training/replay harness silently diverged: the live
+app ran v3, every accelerated-replay session (including all of this
+same session's own earlier validation runs, and tonight's whole 16-list
+batch) kept running v2. Confirmed directly, not inferred: grepped
+`session_replay.py` for `beat_tracker_engine`, found zero references
+before this fix.
+
+**Consequence.** The 16-session batch cannot support or refute any
+verdict on tonight's detector work — none of that code path executed.
+The drum_and_bass fold pattern the detector agent found (15/16 tracks
+locked to a tight 113-120 BPM cluster, centered almost exactly on
+`166.7 x 2/3 = 111.1`, the classic dotted/2:3 fold-down) is v2's
+long-documented, pre-existing behavior, not a fresh read on whether the
+fold-up fix or decisive-rival fast path help. Downstream, the
+recommender agent's finding that `drum_and_bass` is excluded from its
+own candidate pool 92.9% of the time by the (now-unconditional) BPM
+hard pre-filter is real, but its *severity* is entangled with running
+against v2's known fold behavior rather than v3 — the number this
+batch produced is not the number a genuine v3 baseline would produce,
+in either direction.
+
+**Fix.** Added `'beat_tracker_engine': 'v3'` to `run_session()`'s base
+`cfg` dict, matching `config.toml`'s own live default, so a replay
+session tests what the live app actually runs unless a caller
+deliberately opts into the v2 protected baseline via `--override
+beat_tracker_engine=v2`. Two new regression tests in
+`tests/test_session_replay.py`: `test_default_engine_matches_config_
+toml_live_default` (pins `engine_version == '3.0.0'` with no override)
+and `test_beat_tracker_engine_override_still_reaches_the_controller`
+(confirms the override path still reaches `'2.0.0'` on request — the
+fix must not make a deliberate v2 comparison run unreachable). Full
+suite green (2210 passed) after landing.
+
+**Not yet done:** the 16-session batch needs a full rerun with the fix
+applied before "the whole shebang" detect/select/mood/director analysis
+the owner asked for can be trusted for anything detector- or
+recommender-side. The director-side timing findings (BUILD/CLIMAX
+dwell, mode-cycle churn, `climax_extend_max_factor` dominating observed
+CLIMAX duration over `climax_hold_s` itself) are architecture-agnostic
+and stand regardless of which detector engine ran — director logic
+doesn't consult `engine_version` — but should still be sanity-rechecked
+against the rerun's own numbers rather than assumed unchanged.
+
+### fold_suspect_mass Measured the Wrong Array (2026-09-04, detector rc.46)
+
+**Trigger.** The corrected v3 baseline batch (above) confirmed the
+fold-up fix genuinely engaged this time, but also surfaced a deeper
+problem: `v3_fold_suspect_mass` read exactly `0.0000` median in every
+single one of 16 sessions, including drum_and_bass sessions confidently
+folded on 16/16 tracks for the entire session. The field exists
+specifically to catch "confidently locked, but on the wrong lane" — and
+was providing zero discriminating signal for exactly that case.
+
+**Root cause.** `fs` was computed by summing `self._v3_posterior` (the
+diffused posterior, AFTER this cycle's transition-matrix spread and
+multiply) inside fold-ratio-shifted windows around the MAP state. Once
+locked onto any lane — correct or a fold alias — the transition
+matrix's own near-zero fold-jump probabilities (`_V3_FOLD_PROB_OCTAVE`
+`1e-6`, `_V3_FOLD_PROB_TRIPLET` `5e-7`) mean almost all posterior mass
+concentrates at the current MAP regardless of whether the fresh
+acoustic evidence still supports a fold-related rival. The posterior
+"forgets" the rival even while the raw per-cycle evidence for it
+persists indefinitely — a structural property of the sticky Bayesian
+filter, not a numeric bug. Confirmed directly: a synthetic scenario with
+a real, persistent secondary comb peak at the true tempo, converged over
+400 cycles onto the wrong (folded) lane at 99.93% confidence, read
+`4.96e-6` — functionally zero — under the old computation.
+
+**First attempt, also wrong, caught before landing.** Recomputing
+against `like` (this cycle's raw, un-diffused observation likelihood)
+instead of the posterior is the right *direction* — but normalizing raw
+`like` directly produced a NEW problem: `like` is deliberately floored
+at `self._v3_obs_floor` (`0.70`) everywhere, part of the "memory dial"
+design that bounds how much any single cycle's evidence can move the
+posterior. That floor makes raw `like` nearly flat (0.70–1.0) regardless
+of real fold evidence — a synthetic clean, single-peak track with ZERO
+real fold ambiguity scored `0.291`, *higher* than a genuinely folding
+scenario's `0.278`. Caught by direct synthetic testing before landing,
+not assumed correct from the direction of the fix alone.
+
+**Fix.** Subtract the floor first (`np.clip(like - self._v3_obs_floor,
+0.0, None)`), normalize that excess-above-floor array, then sum the same
+fold-ratio-shifted windows. Verified monotonic on a synthetic sweep:
+clean track `0.0000`, weak (0.2×) secondary peak `0.0000`, moderate
+(0.6×) `0.0645`, near-tie (0.99×) `0.3272`. Extracted into its own
+method, `_v3_compute_fold_suspect_mass(like, idx, lb, half_band)` — a
+plain function of its arguments, directly unit-testable without the
+full `update()`/audio pipeline, matching this file's established
+pattern (`_v3_apply_decisive_rival`).
+
+**Live re-validation.** A real drum_and_bass session (the same list that
+motivated the fold-up fix originally, still folding 16/16 tracks per the
+corrected-baseline analysis) now reads: median `0.267`, mean `0.274`,
+82.5% of rows nonzero, p90 `0.562`, p99 `0.867`, max `1.0`. The median
+sits comfortably above `_V3_FOLD_SUSPECT_GATE_MASS` (`0.2`) for most of
+the session — meaning the genre-evidence consultation this metric gates
+(`_v3_apply_genre_evidence()`, see "v3 Genre-Evidence Consultation +
+Fold-Suspect Gate" above) now actually engages on real fold-suspicious
+material, closing a gap that's existed since that gate was introduced.
+`0.2` held up against real data on this first check; not re-tuned.
+
+**Note on coupling.** `like` already includes `_V3_FOLD_OBS_WEIGHT`'s
+own fold-symmetric evidence-sharing boost (see `_v3_observation_
+likelihood()`), so this metric and that boost are coupled by design —
+both express the same "fold-related lanes share evidence" philosophy,
+not an accidental interaction.
+
+**Regression test.**
+`tests/test_beat_tracker_v3.py::test_fold_suspect_mass_discriminates_real_fold_ambiguity`
+drives `_v3_compute_fold_suspect_mass()` directly across the same
+synthetic sweep (clean/weak/moderate/near-tie), asserting a clean track
+reads exactly `0.0`, the sequence is monotonic, and near-tie ambiguity
+clears `0.2`. Full suite green (2211 passed) after landing.
+
+**Bookkeeping.** `_DETECTOR_VERSION` `1.0.0-rc.45 → 1.0.0-rc.46`;
+`_VJ_WEIGHTS_DOC_VERSION` `97 → 98`.
+
+### Spotify Naming Removed from the Shared Now-Playing Channel (2026-09-04, director rc.19)
+
+**Trigger.** While investigating why harmony/key data never populated
+any training corpus, found `_decode_camelot_key(str(spotify.get('key')
+or ''))` in `auto_vj.py` — and traced it to a real, working channel:
+`dj_mixer_controller.py`'s `now_playing_snapshot()` already feeds a real
+Camelot key (from `key_detect.py`'s chromagram analysis, via
+`track_store`) through `vj_api.active_now_playing()` into this exact
+line. Reported this to the owner as a correction — the `spotify`-named
+plumbing here isn't dead, it's the real channel harmony data would flow
+through, just misleadingly named (confirmed via `_spotify_snapshot()`'s
+own docstring: "Prefers `vj_api.active_now_playing()` so mixer- and
+media-sourced sessions train the same as Spotify sessions"). Owner:
+"keep the stuff needed for the real spotify drop in playctl & webapi
+but i don't want anything named after it that is part of the vj system
+so fix all that please."
+
+**Scope, decided per call site, not a blanket removal.**
+
+- **Renamed** (genuinely source-agnostic, was just misleadingly named):
+  `_spotify_snapshot()` → `_now_playing_snapshot()`,
+  `_spotify_telemetry_snapshot()` → `_now_playing_telemetry_snapshot()`,
+  `_spotify_last_change_counter` → `_now_playing_last_change_counter`,
+  and the `spotify: dict` parameter/local-variable name → `now_playing`
+  at every one of its ~30 call sites across the file (and the matching
+  test fixtures in `tests/test_auto_vj_live_training.py`,
+  `tests/test_auto_vj_shadow_engine.py`, `tests/test_auto_vj_phrase_
+  structure.py`, and four other test files that stub these methods).
+- **Kept unchanged**: the internal `get_subsystem('spotify')` fallback
+  lookup inside `_now_playing_snapshot()` — a real subsystem key
+  reaching the actual Spotify controller, not VJ-system branding, and
+  exactly the "stuff needed for the real spotify drop in" the owner
+  said to preserve. `control-room-01`'s own `_spotify_snapshot()` /
+  `_draw_spotify_panel()` also left untouched — a dedicated Spotify
+  status panel, legitimately Spotify-specific UI in a different
+  drop-in, out of scope for "the vj system."
+- **Removed, not renamed** (genuinely Spotify-API-only, no cross-source
+  equivalent): `_is_spotify_audio_source()` and the "WEB PLAYER PAUSE"
+  HUD pill that depended on it (Spotify-web-player-specific UX with no
+  analog for dj-mixer/media sources); and `_handle_spotify_track_change()`'s
+  queue-depth/playlist-context/next-track lookahead mood-biasing (real
+  Spotify Web API queue data — dj-mixer-01/media-01 don't expose an
+  equivalent upcoming-track queue) — renamed to `_handle_track_change()`,
+  keeping only the energy-based mood-tag logic, which is genuinely
+  source-agnostic. Matches the owner's own earlier characterization,
+  found live in an existing code comment: "it's stupid that data
+  collection was wired up only to support spotify.. we don't really
+  even train on spotify, just verify."
+
+**Full test suite green (2211 passed)** after the rename + removal,
+including two renamed dedicated test functions
+(`test_now_playing_snapshot_prefers_active_now_playing_hub`,
+`test_now_playing_snapshot_falls_back_to_spotify_subsystem_when_hub_empty`,
+`test_now_playing_snapshot_falls_back_on_older_core_without_hub_accessor`)
+that still exercise the real dj-mixer-first-then-Spotify-fallback
+precedence this channel has always had.
+
+**Bookkeeping.** `_DIRECTOR_VERSION` `1.0.0-rc.18 → 1.0.0-rc.19`.
+
+### Real Harmony Data Wired Into Training Corpus for the First Time (2026-09-04)
+
+**Trigger.** Same investigation that found the Spotify-naming issue
+above: `now_playing.get('key')` traced to a real, working channel
+(`dj_mixer_controller.py`'s `now_playing_snapshot()`, fed by
+`key_detect.py`'s real chromagram + Krumhansl-Schmuckler key detector,
+via `track_store`) — but `session_replay.py`'s replay harness never
+emulated a now-playing source with a `key` field at all, so every
+training session ever run through this tool (not just tonight's) has
+had zero real key/harmony data. Owner, once this was understood:
+"let's start wiring it up! i'm stoked!"
+
+**Two separate gaps closed, not one.**
+
+1. **`_decode_camelot_key()` (`auto_vj.py`) was silently discarding
+   confidence.** Extended its signature to accept a `strength: float =
+   0.0` parameter and use it for `key_strength` instead of hardcoding
+   `0.0` on every call (previously true even on a successful decode —
+   confirmed by reading the function directly, not assumed from the
+   field name). The one call site now passes `now_playing.get
+   ('key_strength', 0.0)` through.
+2. **`session_replay.py` never populated a `key` (or `key_strength`) in
+   its emulated `now_playing` payload.** New `_load_key_detect()`
+   (dynamic-load, same optional/graceful-degradation pattern as
+   `_load_headless_stub()` — training-kit-01 stays runnable without a
+   dj-mixer-01 checkout) loads `key_detect.py` directly; new
+   `_estimate_key()` calls its `estimate_key(samples, samplerate)` once
+   per track on the already-decoded PCM (reshaped `(N,) -> (N, 1)` since
+   `key_detect.py` expects a `(N, channels)` array and averages across
+   channels — a `(N, 1)` reshape is a correct, cheap no-op mono
+   passthrough, not a workaround) at the same point `_announce()` builds
+   the rest of the `now_playing` dict, threading `key`/`key_strength`
+   through exactly like a real dj-mixer-01 or Spotify source would.
+
+**Verified live, not just by test.** A real two-track synthwave session
+(`DJ Tintin - Zeppeliner`, `Madi Di - Inside His Eyes`) produced real,
+distinct, plausible results end to end through the actual production
+decode path: `10A` / `B minor` / confidence `0.784`, and `3A` / `A#
+minor` / confidence `0.891`.
+
+**Regression tests** (`tests/test_session_replay.py`): `test_real_key_
+detection_reaches_the_corpus` stubs `_load_key_detect()` with a
+deterministic fake detector and asserts the exact key/scale/is_minor/
+key_strength values reach every heartbeat row; `test_key_detection_
+degrades_gracefully_when_dj_mixer_absent` confirms a missing detector
+(or, by the same code path, a detection failure on a given track) falls
+back to the pre-existing 'unknown' key schema rather than crashing.
+Full suite green (2213 passed).
+
+**Not yet done, explicitly out of scope for tonight:** nothing consumes
+this data for genre discrimination yet — that's the next step (the
+tech_house-vs-peak_time harmony hypothesis from the tempo-zone pairing
+discussion). Also not addressed: dj-mixer-01's own `track_store` still
+never persists `key_detect.py`'s confidence for *live* (non-replay)
+sessions — `key_strength` stays `0.0` for a real dj-mixer-01-sourced
+live session even after this fix, since that's a separate, deeper
+change to the live analyzer/track-store schema, not attempted here.
+
+**Bookkeeping.** `auto-vj-01` `__version__` `1.0.0-rc.122 → 1.0.0-rc.124`
+(rc.123 was already claimed by an earlier same-night `zcr_sigma` fix
+whose README changelog entry had never been matched by a `__version__`
+bump — reconciled in the same commit as this change); `training-kit-01`
+`__version__` `0.41.7 → 0.42.0`.
+
+### electronic ("Dance") Disabled Again — Control-Pair Job Done (2026-09-04, recommender rc.37)
+
+**Trigger.** While scoping smoke-test playlists across the enabled
+roster, owner: "is electronic disabled? i thought we had the generics
+disabled? we prolly should."
+
+**Why it's a real generic, not a genre pending data.** `electronic`
+("Dance") was disabled 2026-08-06 (cosine-similarity audit — its
+`expected_bands` were more similar to far-tempo profiles than its own
+tempo neighbors), then revived 2026-08-10 as a deliberate control pair:
+kept identical to `house` on every axis except `vocal_hnr`/`vocal_fmr`,
+specifically to validate that the vocal-presence discriminator actually
+separates candidates on vocals alone. That validation job is done — real
+`vocal_hnr_sigma`/`vocal_fmr_sigma` fields landed this same session
+(rc.27-29), real non-zero weights, and real accuracy data from tonight's
+corrected v3 baseline confirming the discriminator works (`rap_rnb`
+47-51% in-pool argmax-correct on vocal presence). Unlike `tech_house`/
+`techno`/`synthwave` (disabled pending real corpus data, each with a
+genuine distinct acoustic identity once fingerprinted) `electronic` has
+no distinct identity by design — its own description literally reads
+"otherwise identical to house." Disable-not-delete, same pattern as the
+other three: `get_profile('electronic')` still resolves it directly,
+only discovery (`list_profiles()`/`enabled_profiles()`) excludes it.
+
+**Test updates.** `tests/test_audio_profile_deep_house_and_disable.py`:
+`test_enabled_profiles_excludes_only_disabled_entries`,
+`test_default_enabled_true_for_profiles_that_dont_set_it`, and
+`test_electronic_key_now_resolves_to_the_revived_dance_profile` (the
+last one now asserts `enabled is False` and exclusion from discovery,
+inverted from its own name's history — left the name as-is since it
+still accurately describes what the key resolves to, just not as an
+enabled candidate). `test_dance_matches_house_on_everything_except_
+vocal_presence` needed no change — it only asserts field values, not
+`enabled`, and the disable-not-delete pattern leaves those unchanged.
+Full suite green (2213 passed).
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.36 → 1.0.0-rc.37`.
+
+### hyphy Disabled Again (2026-09-04, recommender rc.38)
+
+**Trigger.** Mid smoke-test-playlist build, owner, direct: "disable
+hyphy."
+
+**Context.** `hyphy` ("Hyphy / Trap") had been re-enabled earlier the
+same day, split out of `rap_rnb`'s pool once `training-trap-hip-hop-01`
+supplied real material to fit its vocal/spectral/tempo fields against
+(see "Spectral-Shape Ribbon Redesign" and the same-day BPM-recalibration
+revert above). Building the smoke-test playlists required picking real
+per-genre "easy win" tracks by scanning the library for ID3-tagged
+content, and turned up zero tracks anywhere tagged Hyphy — every field
+on this profile is fit entirely against trap-hip-hop-01's own corpus, so
+in practice the profile has no acoustic identity distinct from a
+straight trap read. That's the same shape of problem tech_house/techno/
+synthwave were disabled for (a real, fitted profile with no dedicated
+library content backing it), just discovered from the content side
+this time instead of a fingerprint-similarity audit.
+
+**What changed.** `unicornviz/audio/profiles.py`: `hyphy.enabled`
+`True → False`. No other field touched — the vocal_hnr/vocal_fmr/
+expected_bands/bpm_prior values fit from training-trap-hip-hop-01 stay
+as-is; they're the best available material if hyphy is revisited later.
+Disable-not-delete, same pattern as tech_house/techno/synthwave/
+electronic: `get_profile('hyphy')` still resolves it directly, only
+`list_profiles()`/`enabled_profiles()` exclude it.
+
+**Test updates.** `tests/test_audio_profile_deep_house_and_disable.py`:
+`test_enabled_profiles_excludes_only_disabled_entries` and
+`test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01` (now
+asserts `enabled is False` and exclusion from `enabled_profiles()`).
+Full suite green (2238 passed).
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.37 → 1.0.0-rc.38`;
+`_VJ_WEIGHTS_DOC_VERSION` `98 → 99`.

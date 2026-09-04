@@ -41,16 +41,26 @@ def test_load_beat_grid_cls_v3_is_the_hmm_engine() -> None:
 
 
 def test_load_beat_grid_cls_v2_stays_the_protected_baseline() -> None:
-    """v2 is the protected baseline the HMM engine is built AGAINST, not
-    into: 'v2' still resolves to BeatTracker at ENGINE_VERSION 2.0.0 and
-    the v3 class is a subclass of it (v2 runs as v3's observation
-    extractor). Each call re-execs beat_grid.py as a fresh module, so the
-    subclass check goes through the v3 class's own MRO by name."""
+    """v2 is the protected baseline: 'v2' still resolves to BeatTracker
+    at ENGINE_VERSION 2.0.0.
+
+    2026-09-04 (tuning session, owner: "let's take the 'duplicate v2
+    code' route... drifting apart from v2 *should* occur"): BeatTrackerV3
+    no longer subclasses BeatTracker at all -- it subclasses
+    _BeatTrackerV3Base, a full independent duplicate of v2's pipeline
+    (onset/envelope/phase/comb, the whole gate stack) introduced the same
+    commit so v3's own tuning (starting with the tactus fold-up fix,
+    which v2's own copy deliberately does NOT get) can diverge from v2
+    forever without ever touching v2's protected-baseline code. v2 does
+    NOT run as v3's observation extractor anymore -- _BeatTrackerV3Base's
+    own copy of that pipeline does. See docs/adr/vj-system.md "Duplicate,
+    Not Share: BeatTrackerV3 Stops Inheriting From BeatTracker"."""
     v2_cls = _load_beat_grid_cls('v2')
     v3_cls = _load_beat_grid_cls('v3')
     assert v2_cls.__name__ == 'BeatTracker'
     assert v2_cls.ENGINE_VERSION == '2.0.0'
-    assert [b.__name__ for b in v3_cls.__mro__[:2]] == ['BeatTrackerV3', 'BeatTracker']
+    assert [b.__name__ for b in v3_cls.__mro__[:2]] == ['BeatTrackerV3', '_BeatTrackerV3Base']
+    assert v2_cls.__name__ not in [b.__name__ for b in v3_cls.__mro__]
     assert v3_cls.ENGINE_VERSION != v2_cls.ENGINE_VERSION
 
 
@@ -562,15 +572,15 @@ def test_detector_snapshot_reports_bpm_lock_floors_when_grid_is_none() -> None:
 
 def _row_args(shadow_grid):
     audio = SimpleNamespace(bass=0.5, mid=0.3, treble=0.2, bands=None, waveform=[], spectral_flux=0.1)
-    spotify: dict = {}
+    now_playing: dict = {}
     state = SimpleNamespace(audio_source='spotify', playlist_mode='')
     grid = SimpleNamespace(bpm=124.0, confidence=0.6, ENGINE_VERSION='2.0.0')
-    return audio, spotify, state, None, grid, shadow_grid
+    return audio, now_playing, state, None, grid, shadow_grid
 
 
 def test_build_live_training_row_omits_shadow_fields_when_disabled() -> None:
-    audio, spotify, state, mgr, grid, shadow = _row_args(None)
-    row = _build_live_training_row(audio, spotify, state, mgr, grid, shadow_grid=shadow)
+    audio, now_playing, state, mgr, grid, shadow = _row_args(None)
+    row = _build_live_training_row(audio, now_playing, state, mgr, grid, shadow_grid=shadow)
     assert 'bpm_shadow' not in row
     assert 'confidence_shadow' not in row
     assert 'shadow_engine' not in row
@@ -579,8 +589,8 @@ def test_build_live_training_row_omits_shadow_fields_when_disabled() -> None:
 
 def test_build_live_training_row_includes_shadow_fields_when_enabled() -> None:
     shadow = SimpleNamespace(bpm=146.3, confidence=0.58, ENGINE_VERSION='3.0.0')
-    audio, spotify, state, mgr, grid, shadow = _row_args(shadow)
-    row = _build_live_training_row(audio, spotify, state, mgr, grid, shadow_grid=shadow)
+    audio, now_playing, state, mgr, grid, shadow = _row_args(shadow)
+    row = _build_live_training_row(audio, now_playing, state, mgr, grid, shadow_grid=shadow)
     assert row['bpm_shadow'] == 146.3
     assert row['confidence_shadow'] == 0.58
     assert row['shadow_engine'] == '3.0.0'
@@ -588,8 +598,8 @@ def test_build_live_training_row_includes_shadow_fields_when_enabled() -> None:
 
 
 def test_build_live_training_row_omits_shadow2_fields_when_disabled() -> None:
-    audio, spotify, state, mgr, grid, _shadow = _row_args(None)
-    row = _build_live_training_row(audio, spotify, state, mgr, grid)
+    audio, now_playing, state, mgr, grid, _shadow = _row_args(None)
+    row = _build_live_training_row(audio, now_playing, state, mgr, grid)
     assert 'bpm_shadow2' not in row
     assert 'confidence_shadow2' not in row
     assert 'shadow2_engine' not in row
@@ -598,10 +608,10 @@ def test_build_live_training_row_omits_shadow2_fields_when_disabled() -> None:
 def test_build_live_training_row_includes_both_shadow_slots_independently() -> None:
     """2026-08-14, round three: second, independent shadow slot -- for a
     real three-way v1/v2/v3 comparison."""
-    audio, spotify, state, mgr, grid, _shadow = _row_args(None)
+    audio, now_playing, state, mgr, grid, _shadow = _row_args(None)
     shadow = SimpleNamespace(bpm=146.3, confidence=0.58, ENGINE_VERSION='2.0.0')
     shadow2 = SimpleNamespace(bpm=73.2, confidence=0.71, ENGINE_VERSION='1.0.0')
-    row = _build_live_training_row(audio, spotify, state, mgr, grid, shadow_grid=shadow, shadow2_grid=shadow2)
+    row = _build_live_training_row(audio, now_playing, state, mgr, grid, shadow_grid=shadow, shadow2_grid=shadow2)
     assert row['bpm_shadow'] == 146.3
     assert row['shadow_engine'] == '2.0.0'
     assert row['bpm_shadow2'] == 73.2

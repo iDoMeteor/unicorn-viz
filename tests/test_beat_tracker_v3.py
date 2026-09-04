@@ -32,10 +32,19 @@ _BG = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BG)
 BeatTracker = _BG.BeatTracker
 BeatTrackerV3 = _BG.BeatTrackerV3
+_BeatTrackerV3Base = _BG._BeatTrackerV3Base
 
 
-def test_v3_is_a_v2_subclass_with_its_own_engine_version() -> None:
-    assert issubclass(BeatTrackerV3, BeatTracker)
+def test_v3_no_longer_subclasses_v2_directly() -> None:
+    """2026-09-04 (tuning session, owner: "let's take the 'duplicate v2
+    code' route"): BeatTrackerV3 subclasses _BeatTrackerV3Base -- a full
+    independent duplicate of BeatTracker's own pipeline -- not
+    BeatTracker itself anymore, so v3's own tuning (the tactus fold-up
+    fix included) can diverge from v2 forever without ever touching v2's
+    protected-baseline code. See docs/adr/vj-system.md "Duplicate, Not
+    Share: BeatTrackerV3 Stops Inheriting From BeatTracker"."""
+    assert issubclass(BeatTrackerV3, _BeatTrackerV3Base)
+    assert not issubclass(BeatTrackerV3, BeatTracker)
     assert BeatTrackerV3.ENGINE_VERSION == '3.0.0'
     assert BeatTracker.ENGINE_VERSION == '2.0.0'
 
@@ -90,7 +99,11 @@ def test_defaults_sit_in_the_escape_time_regime() -> None:
     assert t._v3_obs_floor >= 0.5
     assert t._v3_obs_power <= 1.0
     assert t._v3_fold_octave <= 1e-5
-    assert t._v3_fold_obs_weight == 0.0
+    # 2026-09-04 (detector rc.44, "v3 Fold-Up Fix, Take Two"): activated for
+    # the first time -- now read by the live 'template' branch of
+    # _v3_observation_likelihood() too, not just the inert 'comb'/'score'
+    # ones. 0.35 is bake 1's own historically-tried value for this mechanism.
+    assert t._v3_fold_obs_weight == 0.35
     # Phase 2 (bake 3, Cell C): template observation, no half-beat spikes.
     assert t._v3_obs_source == 'template'
     assert t._v3_tmpl_subbeat == 0.0
@@ -284,6 +297,126 @@ def test_prime_tempo_seeds_posterior_and_holds_the_prior_centre() -> None:
     assert h._v3_prior_centre()[0] == 164.0
     off = BeatTrackerV3({})
     assert off._v3_prior_centre()[0] != 82.0           # never primed: profile prior
+
+
+def test_fold_suspect_mass_discriminates_real_fold_ambiguity() -> None:
+    """2026-09-04 (detector rc.46): fold_suspect_mass was measured against
+    the sticky POSTERIOR, which forgets a fold rival once confidently
+    locked regardless of whether the raw evidence for it persists -- found
+    live via a 16-session batch reading 0.0000 median in every single
+    session, including drum_and_bass sessions confidently folded 16/16
+    tracks the whole way through. Recomputed against `like` (this cycle's
+    raw observation evidence) with the obs floor subtracted first (`like`
+    is deliberately floored near-flat, so raw normalized `like` scored a
+    CLEAN track higher than a genuinely folding one in early testing).
+    Pins the corrected, monotonic behavior via `_v3_compute_fold_suspect_
+    mass()` directly -- a plain function of its args, same "step the
+    filter by hand" style as the tests above."""
+    acf_bpms = np.linspace(60.0, 200.0, 141)
+
+    def converge(comb: np.ndarray) -> tuple[float, int, np.ndarray, float]:
+        tt = BeatTrackerV3({'v3_obs_source': 'comb'})
+        like = None
+        for cycle in range(1, 400):
+            tt._last_acf_observation = (acf_bpms, comb, cycle)
+            like = tt._v3_observation_likelihood()
+            post = tt._v3_transition.T @ tt._v3_posterior
+            post *= like
+            tt._v3_posterior = post / post.sum()
+        idx = int(np.argmax(tt._v3_posterior))
+        lb = tt._v3_log_bpms
+        half_band = math.log2(1.0 + _BG._V3_CONF_BAND)
+        return tt._v3_compute_fold_suspect_mass(like, idx, lb, half_band), idx, lb, half_band
+
+    true_bpm = 166.7
+    wrong_bpm = true_bpm / 1.5  # a real 2:3 fold-down, locked confidently
+
+    clean = np.exp(-0.5 * ((acf_bpms - 128.0) / 1.5) ** 2).astype(np.float32)
+    weak = (np.exp(-0.5 * ((acf_bpms - wrong_bpm) / 1.5) ** 2)
+            + 0.2 * np.exp(-0.5 * ((acf_bpms - true_bpm) / 1.5) ** 2)).astype(np.float32)
+    moderate = (np.exp(-0.5 * ((acf_bpms - wrong_bpm) / 1.5) ** 2)
+                + 0.6 * np.exp(-0.5 * ((acf_bpms - true_bpm) / 1.5) ** 2)).astype(np.float32)
+    near_tie = (np.exp(-0.5 * ((acf_bpms - wrong_bpm) / 1.5) ** 2)
+                + 0.99 * np.exp(-0.5 * ((acf_bpms - true_bpm) / 1.5) ** 2)).astype(np.float32)
+
+    fs_clean, _, _, _ = converge(clean)
+    fs_weak, _, _, _ = converge(weak)
+    fs_moderate, _, _, _ = converge(moderate)
+    fs_near_tie, _, _, _ = converge(near_tie)
+
+    # A genuinely clean, single-peak track must read exactly zero -- no
+    # real competing evidence anywhere, unlike the old posterior-based
+    # metric's floor-driven false positive.
+    assert fs_clean == 0.0
+    # Monotonic in the strength of the real competing evidence.
+    assert fs_clean <= fs_weak <= fs_moderate <= fs_near_tie
+    # A near-tie (genuine ambiguity) must read decisively higher than a
+    # clean track -- the whole point of the fix.
+    assert fs_near_tie > 0.2
+
+
+def test_decisive_rival_snaps_the_posterior_with_cooldown() -> None:
+    """New fast path (2026-09-04, detector rc.44): a genuinely dominant
+    rival elsewhere on the lattice snaps the posterior immediately, cooldown
+    permitting -- the owner's own recalled v2-era escape hatch ("if alt
+    confidence is 20% higher than current, switch immediately"), rebuilt in
+    v3's own posterior-mass terms since v2's version lived in the
+    now-discarded decision layer. Drives `_v3_apply_decisive_rival()`
+    directly (a plain function of its args + `_v3_posterior`), the same
+    "step the filter by hand" style already used above -- no need for the
+    full update()/audio pipeline to test this mechanism in isolation.
+
+    Cooldown is bar-based, not time-based (owner: "cool down should be 16
+    bars maybe... bars maybe better?" -- a bar count is a consistent
+    musical duration regardless of tempo, unlike a flat seconds value
+    across a 55-210 BPM lattice), counted from `self._beat_index` (real
+    detected beat crossings, assumed 4/4), so the test drives that
+    directly rather than the audio-time clock."""
+    t = BeatTrackerV3({'v3_alt_conf_margin': 0.20, 'v3_alt_switch_cooldown_bars': 16.0})
+    idx_a = int(np.argmin(np.abs(t._v3_bpms - 120.0)))
+    idx_b = int(np.argmin(np.abs(t._v3_bpms - 170.0)))
+    idx_c = int(np.argmin(np.abs(t._v3_bpms - 90.0)))
+    lb = t._v3_log_bpms
+    half_band = math.log2(1.0 + _BG._V3_CONF_BAND)
+
+    def _bimodal(idx_lo: int, idx_hi: int) -> np.ndarray:
+        # A sharp low-mass peak at idx_lo (the "current MAP") plus a wider,
+        # slightly-shorter-peaked rival at idx_hi whose BAND-INTEGRATED mass
+        # is still decisively larger -- realistic: a modestly lower but
+        # broader rival cluster can out-mass a sharp current pick even
+        # though it isn't the taller raw spike.
+        z_lo = (lb - lb[idx_lo]) / 0.02
+        z_hi = (lb - lb[idx_hi]) / 0.045
+        post = np.exp(-0.5 * z_lo * z_lo) + 0.9 * np.exp(-0.5 * z_hi * z_hi) + 1e-9
+        return post / post.sum()
+
+    # A dominant rival at B beats current pick A -> immediate snap.
+    t._v3_posterior = _bimodal(idx_a, idx_b)
+    band_a = np.abs(lb - lb[idx_a]) <= half_band
+    conf_a = float(t._v3_posterior[band_a].sum())
+    assert int(np.argmax(t._v3_posterior)) == idx_a   # A is still the naive MAP
+    new_bpm, new_conf = t._v3_apply_decisive_rival(t._v3_bpms[idx_a], conf_a, band_a, lb, half_band)
+    assert abs(new_bpm - t._v3_bpms[idx_b]) < 1e-6
+    assert new_conf > conf_a
+    assert t._v3_alt_switch_count == 1
+    assert abs(t._v3_bpms[int(np.argmax(t._v3_posterior))] - t._v3_bpms[idx_b]) < 1e-6
+
+    # A second decisive rival (C) arriving in the SAME instant is blocked by
+    # the cooldown -- no other requirement per the owner's own framing
+    # ("it does respect the cool-down period but that's it").
+    t._v3_posterior = _bimodal(idx_b, idx_c)
+    band_b = np.abs(lb - lb[idx_b]) <= half_band
+    conf_b = float(t._v3_posterior[band_b].sum())
+    blocked_bpm, blocked_conf = t._v3_apply_decisive_rival(t._v3_bpms[idx_b], conf_b, band_b, lb, half_band)
+    assert blocked_bpm == t._v3_bpms[idx_b] and blocked_conf == conf_b   # unchanged
+    assert t._v3_alt_switch_count == 1                                  # did not tick
+
+    # Past the cooldown window, the same decisive rival now DOES fire.
+    t._beat_index += int(4 * t._v3_alt_switch_cooldown_bars) + 1   # 4/4: bars -> beats
+    snapped_bpm, snapped_conf = t._v3_apply_decisive_rival(t._v3_bpms[idx_b], conf_b, band_b, lb, half_band)
+    assert abs(snapped_bpm - t._v3_bpms[idx_c]) < 1e-6
+    assert snapped_conf > conf_b
+    assert t._v3_alt_switch_count == 2
 
 
 def test_v2_observation_retention_is_read_only() -> None:

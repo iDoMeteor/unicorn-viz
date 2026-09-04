@@ -182,9 +182,20 @@ def test_signals_are_bounded_and_present() -> None:
 
 def test_band_blend_weights_reverted_in_both_engines() -> None:
     """Plan § 4c's decided item: 0.7/0.2/0.1 -> 0.45/0.30/0.25, both
-    engines. Source-level pin so a re-tilt is a deliberate act."""
+    engines. Source-level pin so a re-tilt is a deliberate act.
+
+    2026-09-04 (tuning session): count moved 2 -> 3. BeatTrackerV3 now
+    subclasses _BeatTrackerV3Base, a full independent duplicate of v2's
+    BeatTracker pipeline (this line included) rather than BeatTracker
+    itself -- see docs/adr/vj-system.md "Duplicate, Not Share:
+    BeatTrackerV3 Stops Inheriting From BeatTracker". The original 2
+    were v1's BeatTracker and v2's BeatTracker; the third is
+    _BeatTrackerV3Base's copy of v2's own line, byte-identical at the
+    moment of duplication and free to diverge from here -- if it ever
+    does, this count assertion is exactly the kind of "deliberate act"
+    pin the docstring above already calls for."""
     src = (_REPO / 'drop-ins' / 'auto-vj-01' / 'beat_grid.py').read_text(encoding='utf-8')
-    assert src.count('bass_n * 0.45 + mid_n * 0.30 + treble_n * 0.25') == 2
+    assert src.count('bass_n * 0.45 + mid_n * 0.30 + treble_n * 0.25') == 3
     assert 'bass_n * 0.7 + mid_n * 0.2 + treble_n * 0.1' not in src
 
 

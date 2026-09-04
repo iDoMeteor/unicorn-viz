@@ -1670,8 +1670,17 @@ def test_load_live_director_constants_matches_live_auto_vj_defaults() -> None:
     for name in _DIRECTOR_CONSTANT_DEFAULTS:
         if name.startswith('_'):
             assert live[name] == getattr(av_mod, name)
+        elif name in _MOD._DIRECTOR_PRESET_ONLY_KEYS:
+            # 2026-09-04 (director rc.18): six new dwell/swap-count keys are
+            # set outside _apply_profile_settings() entirely (in the extra
+            # re-application block set_profile() runs right after it) --
+            # confirm against the preset dict directly, same as the real
+            # reader does, not via getattr(inst, ...) which never gets set
+            # on a bare object.__new__() stub.
+            assert live[name] == inst._profile_defaults[name]
         else:
-            assert live[name] == getattr(inst, f'_{name}')
+            attr = _MOD._DIRECTOR_ATTR_ALIASES.get(name, name)
+            assert live[name] == getattr(inst, f'_{attr}')
 
 
 def test_load_live_director_constants_returns_none_when_auto_vj_absent(tmp_path: Path, monkeypatch) -> None:

@@ -214,6 +214,43 @@ class AudioProfile:
     #   closer per-track check. `psytrance`/`hard_techno`/`hardstyle`/
     #   `synthwave`/`electronic` untouched (disabled or no corpus of their
     #   own).
+    #
+    #   2026-09-04 (recommender rc.33, tuning session): the rc.32 zcr_sigma
+    #   values above (0.0116-0.0217) and the original onset_density_sigma
+    #   values (0.1779-0.9266) are BOTH SUPERSEDED here -- found live,
+    #   the same night, running six fresh accelerated-replay sessions for
+    #   a tuning pass: `zcr_fit`/`onset_fit` compare against `mean_zcr`/
+    #   `onset_density`, values the recommender computes freshly each
+    #   evaluation CYCLE (a rolling window of live samples -- see
+    #   `_update_profile_recommendation()`'s own sample accumulation),
+    #   NOT the per-track-smoothed value either sigma was fit from. Both
+    #   prior fits collapsed many cycles down to one MEDIAN per track
+    #   first (deliberately, to stop one noisy track dominating a genre's
+    #   estimate) -- correct for `mu`, but it strips out exactly the
+    #   cycle-to-cycle variation the live scorer actually sees, leaving
+    #   sigma far too tight for what it's compared against. Measured
+    #   directly on `peak_time`'s own fresh replay session: live
+    #   `onset_density` read stdev 0.77 against a stored sigma of 0.19 --
+    #   4x tighter than reality -- and `peak_time` scored dead last
+    #   (11/11) on the full weighted composite against its OWN list,
+    #   never once recommended correctly across a full ~1h session.
+    #   Zeroing `spectral_shape_fit`'s weight entirely (a live experiment,
+    #   not applied) did NOT fix this -- `peak_time` stayed 11/11 --
+    #   proving `onset_fit`'s over-tight sigma, not the ribbon fit, was
+    #   the actual driver. Confirmed the same order-of-magnitude gap holds
+    #   across all 12 real-corpus profiles for both fields (pooled raw
+    #   per-cycle `mean_zcr`/`onset_density` stdev, 5460-34254 rows each,
+    #   from `assets/training/accelerated/`): `zcr` cycle-to-cycle stdev
+    #   runs 0.0184-0.0343 (roughly 1.5-2x the rc.32 per-track values);
+    #   `onset_density` cycle-to-cycle stdev runs 0.59-1.08 (roughly
+    #   3-6x the original per-track values for every profile except
+    #   `techno`, whose per-track spread was already unusually wide).
+    #   `mu` values are UNCHANGED -- the per-track-median center was
+    #   never the problem, only the width. See docs/adr/vj-system.md
+    #   "zcr_sigma / onset_density_sigma: Fit-vs-Live Scale Mismatch" for
+    #   the full diagnostic (including the composite-rank table across
+    #   all six fresh sessions) and weights-and-thresholds.md for the
+    #   corrected per-profile table.
     spectral_centroid_mu: float | None = None
     spectral_centroid_sigma: float = 400.0
     zcr_mu: float | None = None
@@ -299,6 +336,41 @@ class AudioProfile:
     # hard_techno, hardstyle, synthwave) keeps the OLD cosine-similarity
     # path unchanged -- this redesign is additive/opt-in per profile, not a
     # wholesale behavior change for profiles with no ribbon data yet.
+    #
+    # 2026-09-04 (recommender rc.34, tuning session): the rc.28 per-TRACK
+    # aggregation above is SUPERSEDED here for the same reason
+    # zcr_sigma/onset_density_sigma got fixed earlier the same night --
+    # `spectral_shape_fit` compares against `band_mean_vec`, a live
+    # ~16-second ROLLING WINDOW mean (`profile_auto_reco_window_s`,
+    # default 16.0s), not a whole-track mean. Averaging over an entire
+    # track (3-8 minutes) smooths out section-to-section variation
+    # (intro/build/drop/breakdown) that a 16s window still shows in full
+    # -- so the rc.28 sigma was calibrated for a far smoother signal than
+    # what it's actually compared against, the exact class of bug already
+    # found and fixed for the two zcr/onset terms. Found live the same
+    # tuning session: `house` scored 7th of 12 candidates against its OWN
+    # list; `peak_time` scored DEAD LAST (12/12); `ambient` topped
+    # `spectral_shape_fit` on every single list regardless of genre (the
+    # fourth recurrence of "one profile sweeps the ribbon fit," after
+    # dubstep/house/techno earlier this project). Re-fit both `mu` and
+    # `sigma` together this time (unlike the zcr/onset fix, which only
+    # needed sigma corrected) -- because the aggregation UNIT changed
+    # (per-track -> per-16s-window), both statistics needed recomputing
+    # from the same windows for consistency, not just the spread. Method:
+    # for each profile's own training-list corpus, group heartbeat rows
+    # by track, accumulate non-overlapping ~16s chunks (matching the live
+    # window), take the per-band mean within each chunk, then robust
+    # median (-> mu) / MAD-derived sigma (-> sigma, floored at 0.01)
+    # across ALL those chunks (pooled across tracks, not one point per
+    # track). Verified against real corpus data before landing: `house`
+    # went from rank 7/12 to 1/12 on its own list, `peak_time` from
+    # 12/12 to 4/12, `tech_house` (disabled) from 8/12 to 1/12,
+    # `deep_house` from 10/12 to 3/12 -- `ambient` stayed 1/12 (the fix
+    # didn't regress the one profile that was already working). See
+    # docs/adr/vj-system.md "spectral_shape_fit: Per-Track vs. Live
+    # 16s-Window Aggregation Mismatch" for the full diagnostic.
+    # `electronic` mirrors `house`'s new values, same as every other
+    # ribbon field, per that profile's own control-pair design.
     expected_bands: list[float] | None = None
     # Per-band spread (same units/order as expected_bands), robust MAD-
     # derived, floored at 15% of that band's own median so a tiny real
@@ -416,9 +488,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0556,
-        zcr_sigma=0.0168,
+        zcr_sigma=0.0287,
         onset_density_mu=3.0,
-        onset_density_sigma=0.4596,
+        onset_density_sigma=0.7521,
         # 2026-09-04 (recommender rc.29, per-track median-of-medians re-fit,
         # n=15 tracks): supersedes the 2026-09-03 flat-per-row median below
         # -- mu shifted 0.4524->0.4347 / 0.3344->0.3315 and this profile now
@@ -452,28 +524,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # expected_bands" and weights-and-thresholds.md's profile-
         # fingerprint section for the full methodology and gate results.
         expected_bands=[
-            0.808, 0.808, 0.808, 0.808, 0.808, 0.808, 0.808, 0.808,
-            0.745, 0.672, 0.672, 0.672, 0.672, 0.527, 0.437, 0.437,
-            0.437, 0.410, 0.375, 0.357, 0.334, 0.314, 0.292, 0.253,
-            0.220, 0.213, 0.198, 0.176, 0.169, 0.147, 0.152, 0.145,
-            0.145, 0.122, 0.107, 0.108, 0.095, 0.093, 0.083, 0.086,
-            0.082, 0.070, 0.065, 0.072, 0.064, 0.053, 0.060, 0.054,
-            0.046, 0.050, 0.053, 0.049, 0.047, 0.044, 0.043, 0.037,
-            0.036, 0.035, 0.029, 0.022, 0.021, 0.013, 0.011, 0.006,
+            0.698, 0.698, 0.698, 0.719, 0.787, 0.780, 0.732, 0.703,
+            0.679, 0.598, 0.597, 0.597, 0.597, 0.465, 0.328, 0.333,
+            0.333, 0.296, 0.272, 0.266, 0.253, 0.220, 0.195, 0.178,
+            0.159, 0.119, 0.107, 0.099, 0.095, 0.088, 0.084, 0.090,
+            0.072, 0.071, 0.064, 0.055, 0.052, 0.046, 0.040, 0.039,
+            0.038, 0.034, 0.031, 0.028, 0.028, 0.027, 0.026, 0.025,
+            0.023, 0.025, 0.024, 0.022, 0.019, 0.019, 0.018, 0.017,
+            0.017, 0.015, 0.013, 0.012, 0.010, 0.007, 0.005, 0.003,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121,
-            0.112, 0.117, 0.117, 0.117, 0.117, 0.079, 0.075, 0.075,
-            0.075, 0.061, 0.090, 0.077, 0.064, 0.061, 0.053, 0.077,
-            0.090, 0.095, 0.060, 0.054, 0.056, 0.059, 0.070, 0.061,
-            0.034, 0.018, 0.027, 0.039, 0.030, 0.054, 0.039, 0.035,
-            0.049, 0.034, 0.043, 0.043, 0.042, 0.040, 0.042, 0.038,
-            0.029, 0.034, 0.034, 0.030, 0.029, 0.027, 0.025, 0.023,
-            0.031, 0.019, 0.022, 0.016, 0.015, 0.009, 0.008, 0.005,
+            0.434, 0.432, 0.414, 0.336, 0.272, 0.276, 0.333, 0.390,
+            0.268, 0.271, 0.278, 0.274, 0.291, 0.218, 0.203, 0.206,
+            0.216, 0.195, 0.193, 0.186, 0.184, 0.178, 0.159, 0.150,
+            0.133, 0.154, 0.142, 0.134, 0.126, 0.114, 0.108, 0.110,
+            0.093, 0.089, 0.082, 0.070, 0.065, 0.058, 0.053, 0.052,
+            0.050, 0.045, 0.042, 0.039, 0.038, 0.036, 0.035, 0.034,
+            0.031, 0.033, 0.032, 0.029, 0.026, 0.026, 0.025, 0.023,
+            0.023, 0.020, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-08-03: added alongside 'synthwave' -- 'house' and 'tech_house'
@@ -525,9 +597,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0372,
-        zcr_sigma=0.0193,
+        zcr_sigma=0.0213,
         onset_density_mu=3.0,
-        onset_density_sigma=0.4225,
+        onset_density_sigma=0.9913,
         # 2026-09-03 (recommender rc.27, vocal-term calibration, config B):
         # median vocal_hnr/vocal_fmr from training-deep-house-01's OWN
         # corpus only (both seeds, ~15.4k heartbeats) -- see expected_bands
@@ -563,28 +635,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # or house at scoring time on their own merits instead of being
         # baked into either fingerprint. See docs/adr/vj-system.md.
         expected_bands=[
-            0.720, 0.720, 0.720, 0.720, 0.720, 0.720, 0.720, 0.720,
-            0.709, 0.709, 0.709, 0.709, 0.709, 0.604, 0.506, 0.506,
-            0.506, 0.452, 0.440, 0.445, 0.439, 0.384, 0.319, 0.288,
-            0.321, 0.330, 0.299, 0.257, 0.234, 0.201, 0.177, 0.180,
-            0.158, 0.172, 0.143, 0.112, 0.096, 0.081, 0.071, 0.065,
-            0.057, 0.051, 0.066, 0.054, 0.051, 0.044, 0.044, 0.048,
-            0.045, 0.040, 0.034, 0.029, 0.029, 0.025, 0.023, 0.023,
-            0.021, 0.018, 0.015, 0.010, 0.008, 0.006, 0.004, 0.003,
+            0.650, 0.651, 0.658, 0.721, 0.726, 0.695, 0.682, 0.655,
+            0.678, 0.621, 0.622, 0.621, 0.629, 0.521, 0.388, 0.384,
+            0.381, 0.363, 0.314, 0.314, 0.273, 0.253, 0.219, 0.234,
+            0.239, 0.204, 0.198, 0.170, 0.147, 0.129, 0.115, 0.105,
+            0.092, 0.093, 0.079, 0.070, 0.063, 0.053, 0.048, 0.044,
+            0.040, 0.034, 0.031, 0.028, 0.026, 0.023, 0.022, 0.021,
+            0.019, 0.017, 0.016, 0.015, 0.014, 0.012, 0.011, 0.011,
+            0.009, 0.007, 0.007, 0.006, 0.005, 0.003, 0.002, 0.001,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.108, 0.108, 0.108, 0.108, 0.108, 0.108, 0.108, 0.108,
-            0.106, 0.106, 0.106, 0.106, 0.106, 0.091, 0.086, 0.086,
-            0.086, 0.112, 0.083, 0.082, 0.081, 0.112, 0.157, 0.116,
-            0.096, 0.050, 0.085, 0.098, 0.077, 0.070, 0.041, 0.056,
-            0.065, 0.064, 0.061, 0.050, 0.031, 0.032, 0.022, 0.022,
-            0.012, 0.008, 0.024, 0.026, 0.027, 0.026, 0.021, 0.011,
-            0.017, 0.018, 0.014, 0.013, 0.011, 0.015, 0.014, 0.014,
-            0.015, 0.013, 0.009, 0.007, 0.005, 0.004, 0.002, 0.002,
+            0.449, 0.435, 0.382, 0.290, 0.276, 0.280, 0.344, 0.389,
+            0.260, 0.269, 0.265, 0.267, 0.254, 0.211, 0.212, 0.221,
+            0.227, 0.223, 0.216, 0.205, 0.204, 0.191, 0.170, 0.174,
+            0.166, 0.246, 0.241, 0.215, 0.180, 0.155, 0.137, 0.132,
+            0.116, 0.117, 0.101, 0.088, 0.078, 0.067, 0.059, 0.055,
+            0.050, 0.044, 0.041, 0.037, 0.034, 0.030, 0.029, 0.027,
+            0.025, 0.023, 0.021, 0.020, 0.019, 0.016, 0.015, 0.014,
+            0.012, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "tech_house": AudioProfile(
@@ -643,9 +715,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=400.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0449,
-        zcr_sigma=0.0116,
+        zcr_sigma=0.0225,
         onset_density_mu=2.88,
-        onset_density_sigma=0.5486,
+        onset_density_sigma=0.7619,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
         # vocal_hnr/vocal_fmr from training-tech-house-01's own corpus.
         # Replaces the generic 0.35/0.25 default -- see house's own field
@@ -663,28 +735,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # though this profile is currently disabled=True. See
         # docs/adr/vj-system.md "Data-Derived expected_bands".
         expected_bands=[
-            0.786, 0.786, 0.786, 0.786, 0.786, 0.786, 0.786, 0.786,
-            0.715, 0.603, 0.603, 0.603, 0.603, 0.507, 0.404, 0.404,
-            0.404, 0.371, 0.360, 0.329, 0.277, 0.262, 0.253, 0.253,
-            0.244, 0.225, 0.224, 0.209, 0.191, 0.195, 0.184, 0.164,
-            0.152, 0.140, 0.105, 0.114, 0.101, 0.095, 0.084, 0.075,
-            0.073, 0.060, 0.061, 0.053, 0.053, 0.053, 0.046, 0.048,
-            0.046, 0.044, 0.035, 0.032, 0.029, 0.033, 0.029, 0.030,
-            0.028, 0.025, 0.021, 0.019, 0.015, 0.011, 0.008, 0.005,
+            0.686, 0.692, 0.722, 0.757, 0.764, 0.755, 0.723, 0.695,
+            0.643, 0.527, 0.524, 0.519, 0.518, 0.431, 0.323, 0.322,
+            0.325, 0.302, 0.289, 0.267, 0.237, 0.228, 0.205, 0.199,
+            0.174, 0.145, 0.124, 0.118, 0.116, 0.106, 0.102, 0.094,
+            0.084, 0.084, 0.073, 0.070, 0.065, 0.055, 0.053, 0.049,
+            0.045, 0.039, 0.038, 0.036, 0.031, 0.033, 0.028, 0.026,
+            0.025, 0.023, 0.020, 0.018, 0.016, 0.016, 0.014, 0.014,
+            0.013, 0.012, 0.011, 0.009, 0.007, 0.005, 0.004, 0.003,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.118, 0.118, 0.118, 0.118, 0.118, 0.118, 0.118, 0.118,
-            0.107, 0.090, 0.090, 0.090, 0.090, 0.076, 0.113, 0.113,
-            0.113, 0.086, 0.092, 0.092, 0.087, 0.077, 0.086, 0.059,
-            0.053, 0.063, 0.058, 0.054, 0.077, 0.083, 0.048, 0.064,
-            0.078, 0.072, 0.030, 0.049, 0.039, 0.025, 0.023, 0.015,
-            0.026, 0.025, 0.020, 0.023, 0.023, 0.016, 0.014, 0.018,
-            0.018, 0.012, 0.009, 0.008, 0.012, 0.013, 0.011, 0.014,
-            0.014, 0.014, 0.011, 0.008, 0.008, 0.005, 0.004, 0.003,
+            0.430, 0.392, 0.339, 0.283, 0.265, 0.281, 0.333, 0.388,
+            0.279, 0.256, 0.260, 0.268, 0.276, 0.228, 0.192, 0.188,
+            0.192, 0.181, 0.189, 0.167, 0.164, 0.154, 0.137, 0.139,
+            0.128, 0.172, 0.152, 0.144, 0.147, 0.133, 0.128, 0.118,
+            0.102, 0.095, 0.082, 0.081, 0.075, 0.066, 0.064, 0.056,
+            0.056, 0.050, 0.045, 0.044, 0.040, 0.039, 0.033, 0.033,
+            0.032, 0.030, 0.026, 0.023, 0.021, 0.021, 0.019, 0.019,
+            0.018, 0.016, 0.015, 0.013, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "peak_time": AudioProfile(
@@ -720,9 +792,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=400.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0502,
-        zcr_sigma=0.0148,
+        zcr_sigma=0.0343,
         onset_density_mu=2.75,
-        onset_density_sigma=0.1927,
+        onset_density_sigma=0.72,
         # 2026-09-03 (recommender rc.27, vocal-term calibration, config B):
         # median vocal_hnr/vocal_fmr from training-big-room-01's OWN corpus
         # ONLY (both seeds, ~14.9k heartbeats) -- see expected_bands below
@@ -748,28 +820,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # festival-energy description remains the reason it maps to
         # peak_time.
         expected_bands=[
-            0.810, 0.810, 0.810, 0.810, 0.810, 0.810, 0.810, 0.810,
-            0.749, 0.668, 0.668, 0.668, 0.668, 0.606, 0.484, 0.484,
-            0.484, 0.411, 0.342, 0.307, 0.262, 0.247, 0.240, 0.242,
-            0.242, 0.241, 0.227, 0.206, 0.179, 0.175, 0.171, 0.172,
-            0.143, 0.137, 0.141, 0.118, 0.106, 0.095, 0.107, 0.102,
-            0.084, 0.070, 0.073, 0.069, 0.069, 0.061, 0.054, 0.054,
-            0.052, 0.046, 0.045, 0.042, 0.038, 0.034, 0.030, 0.029,
-            0.026, 0.024, 0.024, 0.021, 0.018, 0.014, 0.010, 0.006,
+            0.611, 0.620, 0.633, 0.677, 0.690, 0.679, 0.659, 0.640,
+            0.613, 0.567, 0.570, 0.567, 0.570, 0.527, 0.373, 0.394,
+            0.398, 0.375, 0.293, 0.266, 0.224, 0.211, 0.188, 0.203,
+            0.201, 0.155, 0.156, 0.132, 0.127, 0.120, 0.098, 0.081,
+            0.076, 0.070, 0.058, 0.056, 0.052, 0.046, 0.043, 0.039,
+            0.035, 0.030, 0.026, 0.025, 0.023, 0.020, 0.017, 0.015,
+            0.012, 0.010, 0.010, 0.009, 0.010, 0.011, 0.011, 0.011,
+            0.009, 0.011, 0.009, 0.008, 0.007, 0.006, 0.005, 0.004,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121,
-            0.112, 0.100, 0.100, 0.100, 0.100, 0.091, 0.113, 0.113,
-            0.113, 0.062, 0.077, 0.053, 0.039, 0.059, 0.086, 0.043,
-            0.036, 0.039, 0.045, 0.047, 0.034, 0.034, 0.095, 0.051,
-            0.060, 0.088, 0.050, 0.040, 0.040, 0.067, 0.052, 0.029,
-            0.022, 0.037, 0.015, 0.021, 0.019, 0.011, 0.014, 0.018,
-            0.008, 0.007, 0.012, 0.018, 0.023, 0.017, 0.018, 0.020,
-            0.018, 0.014, 0.009, 0.007, 0.006, 0.005, 0.003, 0.005,
+            0.478, 0.444, 0.406, 0.344, 0.334, 0.320, 0.328, 0.379,
+            0.311, 0.268, 0.264, 0.274, 0.264, 0.203, 0.252, 0.252,
+            0.264, 0.234, 0.224, 0.203, 0.162, 0.139, 0.125, 0.141,
+            0.147, 0.195, 0.187, 0.160, 0.155, 0.143, 0.120, 0.105,
+            0.096, 0.090, 0.075, 0.070, 0.066, 0.059, 0.055, 0.049,
+            0.045, 0.040, 0.035, 0.034, 0.032, 0.027, 0.024, 0.020,
+            0.017, 0.015, 0.015, 0.013, 0.014, 0.015, 0.015, 0.015,
+            0.013, 0.015, 0.012, 0.012, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "trance": AudioProfile(
@@ -805,9 +877,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0627,
-        zcr_sigma=0.0202,
+        zcr_sigma=0.0271,
         onset_density_mu=3.32,
-        onset_density_sigma=0.3855,
+        onset_density_sigma=1.0831,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
         # vocal_hnr/vocal_fmr from training-trance-01's own corpus.
         # Replaces the generic 0.35/0.25 default -- see house's own field
@@ -827,28 +899,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # dubstep's own shipped fingerprint on that held-out session by
         # 0.141 (spectral_shape_fit only) -- see docs/adr/vj-system.md.
         expected_bands=[
-            0.798, 0.798, 0.798, 0.798, 0.798, 0.798, 0.798, 0.798,
-            0.770, 0.748, 0.748, 0.748, 0.748, 0.634, 0.488, 0.488,
-            0.488, 0.417, 0.368, 0.346, 0.327, 0.312, 0.298, 0.258,
-            0.242, 0.244, 0.227, 0.258, 0.215, 0.192, 0.204, 0.197,
-            0.178, 0.165, 0.162, 0.140, 0.148, 0.121, 0.114, 0.103,
-            0.107, 0.089, 0.079, 0.077, 0.067, 0.072, 0.063, 0.064,
-            0.061, 0.059, 0.054, 0.047, 0.044, 0.040, 0.035, 0.033,
-            0.036, 0.031, 0.028, 0.025, 0.019, 0.014, 0.010, 0.006,
+            0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851,
+            0.834, 0.777, 0.777, 0.777, 0.777, 0.618, 0.459, 0.459,
+            0.459, 0.403, 0.335, 0.319, 0.291, 0.268, 0.253, 0.224,
+            0.207, 0.203, 0.198, 0.184, 0.178, 0.163, 0.161, 0.151,
+            0.137, 0.128, 0.119, 0.103, 0.092, 0.092, 0.089, 0.081,
+            0.082, 0.073, 0.071, 0.065, 0.059, 0.057, 0.056, 0.051,
+            0.048, 0.049, 0.047, 0.036, 0.037, 0.031, 0.028, 0.025,
+            0.023, 0.021, 0.018, 0.016, 0.013, 0.010, 0.007, 0.005,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.120, 0.120, 0.120, 0.120, 0.120, 0.120, 0.120, 0.120,
-            0.116, 0.150, 0.150, 0.150, 0.150, 0.121, 0.122, 0.122,
-            0.122, 0.062, 0.070, 0.103, 0.070, 0.058, 0.070, 0.039,
-            0.046, 0.077, 0.066, 0.087, 0.072, 0.055, 0.060, 0.042,
-            0.043, 0.051, 0.037, 0.027, 0.034, 0.029, 0.038, 0.036,
-            0.041, 0.038, 0.024, 0.025, 0.021, 0.029, 0.023, 0.023,
-            0.016, 0.015, 0.019, 0.011, 0.010, 0.018, 0.020, 0.024,
-            0.017, 0.014, 0.012, 0.011, 0.012, 0.009, 0.006, 0.004,
+            0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170,
+            0.090, 0.180, 0.180, 0.180, 0.180, 0.162, 0.145, 0.145,
+            0.145, 0.129, 0.128, 0.137, 0.135, 0.131, 0.137, 0.130,
+            0.136, 0.135, 0.139, 0.129, 0.106, 0.099, 0.104, 0.092,
+            0.093, 0.095, 0.078, 0.071, 0.064, 0.061, 0.058, 0.054,
+            0.054, 0.050, 0.044, 0.048, 0.046, 0.045, 0.041, 0.037,
+            0.037, 0.037, 0.037, 0.029, 0.031, 0.028, 0.028, 0.026,
+            0.025, 0.021, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
         ],
     ),
     "psytrance": AudioProfile(
@@ -931,7 +1003,21 @@ PROFILES: Dict[str, AudioProfile] = {
         # vocal_hnr/vocal_fmr (below) -- this is the owner's control pair
         # for validating the vocal-presence discriminator actually works:
         # house has vocals, electronic doesn't, everything else matches.
-        enabled=True,
+        #
+        # DISABLED 2026-09-04 (owner, mid smoke-test-playlist build: "is
+        # electronic disabled? i thought we had the generics disabled? we
+        # prolly should"). It was revived 2026-08-10 specifically as a
+        # control pair to validate the vocal-presence discriminator --
+        # that job is done (real vocal_hnr/vocal_fmr terms landed, real
+        # non-zero weights, real accuracy data this same night confirming
+        # rap_rnb wins 47-51% in-pool on vocal presence). Unlike every
+        # other profile in the roster it has no distinct acoustic identity
+        # by design (a deliberate house-mirror, "otherwise identical to
+        # house" per its own description above) -- a genuine generic, not
+        # a genre pending real data like tech_house/techno/synthwave.
+        # Disable-not-delete, same pattern as those three -- direct lookup
+        # (get_profile('electronic')) still resolves it.
+        enabled=False,
         bass_min=20.0,
         bass_max=250.0,
         mid_min=250.0,
@@ -975,24 +1061,24 @@ PROFILES: Dict[str, AudioProfile] = {
         # which pins this exact invariant). See docs/adr/vj-system.md
         # "Spectral-Shape Ribbon Redesign".
         expected_bands=[
-            0.808, 0.808, 0.808, 0.808, 0.808, 0.808, 0.808, 0.808,
-            0.745, 0.672, 0.672, 0.672, 0.672, 0.527, 0.437, 0.437,
-            0.437, 0.410, 0.375, 0.357, 0.334, 0.314, 0.292, 0.253,
-            0.220, 0.213, 0.198, 0.176, 0.169, 0.147, 0.152, 0.145,
-            0.145, 0.122, 0.107, 0.108, 0.095, 0.093, 0.083, 0.086,
-            0.082, 0.070, 0.065, 0.072, 0.064, 0.053, 0.060, 0.054,
-            0.046, 0.050, 0.053, 0.049, 0.047, 0.044, 0.043, 0.037,
-            0.036, 0.035, 0.029, 0.022, 0.021, 0.013, 0.011, 0.006,
+            0.698, 0.698, 0.698, 0.719, 0.787, 0.780, 0.732, 0.703,
+            0.679, 0.598, 0.597, 0.597, 0.597, 0.465, 0.328, 0.333,
+            0.333, 0.296, 0.272, 0.266, 0.253, 0.220, 0.195, 0.178,
+            0.159, 0.119, 0.107, 0.099, 0.095, 0.088, 0.084, 0.090,
+            0.072, 0.071, 0.064, 0.055, 0.052, 0.046, 0.040, 0.039,
+            0.038, 0.034, 0.031, 0.028, 0.028, 0.027, 0.026, 0.025,
+            0.023, 0.025, 0.024, 0.022, 0.019, 0.019, 0.018, 0.017,
+            0.017, 0.015, 0.013, 0.012, 0.010, 0.007, 0.005, 0.003,
         ],
         expected_bands_sigma=[
-            0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121, 0.121,
-            0.112, 0.117, 0.117, 0.117, 0.117, 0.079, 0.075, 0.075,
-            0.075, 0.061, 0.090, 0.077, 0.064, 0.061, 0.053, 0.077,
-            0.090, 0.095, 0.060, 0.054, 0.056, 0.059, 0.070, 0.061,
-            0.034, 0.018, 0.027, 0.039, 0.030, 0.054, 0.039, 0.035,
-            0.049, 0.034, 0.043, 0.043, 0.042, 0.040, 0.042, 0.038,
-            0.029, 0.034, 0.034, 0.030, 0.029, 0.027, 0.025, 0.023,
-            0.031, 0.019, 0.022, 0.016, 0.015, 0.009, 0.008, 0.005,
+            0.434, 0.432, 0.414, 0.336, 0.272, 0.276, 0.333, 0.390,
+            0.268, 0.271, 0.278, 0.274, 0.291, 0.218, 0.203, 0.206,
+            0.216, 0.195, 0.193, 0.186, 0.184, 0.178, 0.159, 0.150,
+            0.133, 0.154, 0.142, 0.134, 0.126, 0.114, 0.108, 0.110,
+            0.093, 0.089, 0.082, 0.070, 0.065, 0.058, 0.053, 0.052,
+            0.050, 0.045, 0.042, 0.039, 0.038, 0.036, 0.035, 0.034,
+            0.031, 0.033, 0.032, 0.029, 0.026, 0.026, 0.025, 0.023,
+            0.023, 0.020, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-09-03 (recommender rc.27, owner-approved): added after techno-01
@@ -1073,9 +1159,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0406,
-        zcr_sigma=0.0159,
+        zcr_sigma=0.0265,
         onset_density_mu=3.065,
-        onset_density_sigma=0.9266,
+        onset_density_sigma=0.8668,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
         # vocal_hnr/vocal_fmr from training-techno-01's own corpus (both
         # seeds, ~15.6k heartbeats) -- same methodology as every other
@@ -1092,28 +1178,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # `bands` over training-techno-01's own corpus (both seeds, ~15.6k
         # heartbeats). See docs/adr/vj-system.md.
         expected_bands=[
-            0.858, 0.858, 0.858, 0.858, 0.858, 0.858, 0.858, 0.858,
-            0.786, 0.705, 0.705, 0.705, 0.705, 0.565, 0.437, 0.437,
-            0.437, 0.380, 0.324, 0.345, 0.288, 0.259, 0.229, 0.219,
-            0.195, 0.209, 0.202, 0.183, 0.181, 0.164, 0.145, 0.140,
-            0.148, 0.136, 0.118, 0.112, 0.111, 0.090, 0.084, 0.072,
-            0.075, 0.063, 0.065, 0.051, 0.050, 0.043, 0.044, 0.042,
-            0.033, 0.039, 0.036, 0.029, 0.031, 0.030, 0.028, 0.027,
-            0.021, 0.019, 0.017, 0.014, 0.011, 0.009, 0.007, 0.005,
+            0.912, 0.912, 0.912, 0.912, 0.912, 0.912, 0.912, 0.912,
+            0.825, 0.728, 0.728, 0.728, 0.728, 0.572, 0.418, 0.418,
+            0.418, 0.390, 0.329, 0.302, 0.275, 0.248, 0.220, 0.204,
+            0.176, 0.176, 0.166, 0.155, 0.156, 0.140, 0.131, 0.125,
+            0.126, 0.120, 0.096, 0.103, 0.096, 0.072, 0.074, 0.064,
+            0.062, 0.052, 0.052, 0.042, 0.041, 0.036, 0.034, 0.031,
+            0.027, 0.025, 0.024, 0.023, 0.023, 0.022, 0.024, 0.024,
+            0.020, 0.016, 0.015, 0.012, 0.010, 0.008, 0.006, 0.004,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.129, 0.129, 0.129, 0.129, 0.129, 0.129, 0.129, 0.129,
-            0.118, 0.106, 0.106, 0.106, 0.106, 0.085, 0.094, 0.094,
-            0.094, 0.103, 0.124, 0.116, 0.118, 0.100, 0.075, 0.067,
-            0.056, 0.062, 0.035, 0.038, 0.031, 0.035, 0.035, 0.054,
-            0.057, 0.055, 0.022, 0.038, 0.030, 0.034, 0.023, 0.032,
-            0.029, 0.025, 0.031, 0.017, 0.016, 0.020, 0.022, 0.023,
-            0.020, 0.026, 0.018, 0.015, 0.016, 0.015, 0.014, 0.012,
-            0.011, 0.009, 0.009, 0.007, 0.007, 0.005, 0.004, 0.003,
+            0.119, 0.119, 0.119, 0.119, 0.119, 0.119, 0.119, 0.119,
+            0.085, 0.131, 0.131, 0.131, 0.131, 0.120, 0.149, 0.149,
+            0.149, 0.136, 0.147, 0.153, 0.176, 0.158, 0.140, 0.119,
+            0.098, 0.091, 0.088, 0.090, 0.099, 0.097, 0.078, 0.077,
+            0.082, 0.075, 0.072, 0.065, 0.061, 0.048, 0.051, 0.045,
+            0.043, 0.039, 0.031, 0.029, 0.029, 0.028, 0.027, 0.026,
+            0.023, 0.021, 0.021, 0.020, 0.020, 0.020, 0.020, 0.021,
+            0.018, 0.016, 0.014, 0.011, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "hard_techno": AudioProfile(
@@ -1252,9 +1338,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0609,
-        zcr_sigma=0.0164,
+        zcr_sigma=0.0325,
         onset_density_mu=3.41,
-        onset_density_sigma=0.3262,
+        onset_density_sigma=0.8742,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
         # vocal_hnr/vocal_fmr from training-drum-and-bass-01's own corpus.
         # Replaces the generic 0.35/0.25 default -- see house's own field
@@ -1270,28 +1356,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # `bands` over training-drum-and-bass-01's own corpus (both seeds,
         # ~8.3k heartbeats). See docs/adr/vj-system.md.
         expected_bands=[
-            0.789, 0.789, 0.789, 0.789, 0.789, 0.789, 0.789, 0.789,
-            0.727, 0.696, 0.696, 0.696, 0.696, 0.577, 0.458, 0.458,
-            0.458, 0.439, 0.395, 0.386, 0.379, 0.347, 0.316, 0.280,
-            0.286, 0.260, 0.241, 0.240, 0.234, 0.208, 0.174, 0.183,
-            0.171, 0.165, 0.144, 0.178, 0.148, 0.117, 0.113, 0.102,
-            0.097, 0.094, 0.082, 0.083, 0.077, 0.073, 0.069, 0.065,
-            0.062, 0.060, 0.053, 0.050, 0.047, 0.047, 0.043, 0.041,
-            0.038, 0.037, 0.031, 0.026, 0.022, 0.015, 0.011, 0.007,
+            0.669, 0.689, 0.673, 0.689, 0.691, 0.674, 0.674, 0.686,
+            0.633, 0.607, 0.601, 0.599, 0.582, 0.487, 0.382, 0.377,
+            0.385, 0.384, 0.360, 0.338, 0.314, 0.280, 0.232, 0.215,
+            0.189, 0.155, 0.146, 0.129, 0.120, 0.113, 0.096, 0.080,
+            0.080, 0.075, 0.068, 0.068, 0.062, 0.052, 0.051, 0.050,
+            0.047, 0.040, 0.039, 0.038, 0.036, 0.035, 0.036, 0.037,
+            0.038, 0.039, 0.035, 0.033, 0.031, 0.030, 0.028, 0.026,
+            0.025, 0.023, 0.019, 0.017, 0.012, 0.008, 0.005, 0.003,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.118, 0.118, 0.118, 0.118, 0.118, 0.118, 0.118, 0.118,
-            0.109, 0.124, 0.124, 0.124, 0.124, 0.136, 0.121, 0.121,
-            0.121, 0.095, 0.103, 0.127, 0.151, 0.173, 0.157, 0.150,
-            0.155, 0.135, 0.117, 0.143, 0.137, 0.107, 0.096, 0.088,
-            0.097, 0.088, 0.093, 0.073, 0.052, 0.068, 0.049, 0.046,
-            0.045, 0.050, 0.041, 0.026, 0.026, 0.027, 0.021, 0.017,
-            0.015, 0.016, 0.015, 0.012, 0.012, 0.017, 0.017, 0.014,
-            0.013, 0.014, 0.010, 0.006, 0.006, 0.004, 0.004, 0.004,
+            0.369, 0.337, 0.352, 0.331, 0.325, 0.330, 0.339, 0.326,
+            0.306, 0.293, 0.301, 0.327, 0.338, 0.264, 0.201, 0.209,
+            0.224, 0.185, 0.187, 0.191, 0.192, 0.186, 0.167, 0.147,
+            0.132, 0.197, 0.186, 0.175, 0.155, 0.141, 0.122, 0.109,
+            0.108, 0.101, 0.091, 0.092, 0.086, 0.072, 0.070, 0.067,
+            0.063, 0.053, 0.052, 0.051, 0.048, 0.047, 0.047, 0.043,
+            0.041, 0.044, 0.036, 0.035, 0.032, 0.032, 0.031, 0.029,
+            0.028, 0.026, 0.024, 0.020, 0.015, 0.010, 0.010, 0.010,
         ],
     ),
     "dubstep": AudioProfile(
@@ -1363,9 +1449,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # training-house-01/002 matcher-validation session ("observed ZCR
         # slightly lower than expected"), owner-approved.
         zcr_mu=0.0581,
-        zcr_sigma=0.0217,
+        zcr_sigma=0.022,
         onset_density_mu=2.75,
-        onset_density_sigma=0.1779,
+        onset_density_sigma=0.6293,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
         # vocal_hnr/vocal_fmr from training-dubstep-01's own corpus.
         # Replaces the generic 0.35/0.25 default -- see house's own field
@@ -1390,28 +1476,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # close the small remaining gap. See docs/adr/vj-system.md
         # "Data-Derived expected_bands" for the full diagnosis.
         expected_bands=[
-            0.774, 0.774, 0.774, 0.774, 0.774, 0.774, 0.774, 0.774,
-            0.670, 0.584, 0.584, 0.584, 0.584, 0.495, 0.375, 0.375,
-            0.375, 0.350, 0.320, 0.295, 0.270, 0.255, 0.259, 0.262,
-            0.254, 0.259, 0.247, 0.237, 0.241, 0.211, 0.189, 0.211,
-            0.211, 0.167, 0.151, 0.148, 0.123, 0.107, 0.106, 0.103,
-            0.094, 0.074, 0.073, 0.067, 0.065, 0.064, 0.057, 0.061,
-            0.054, 0.051, 0.049, 0.042, 0.037, 0.035, 0.035, 0.033,
-            0.030, 0.029, 0.026, 0.022, 0.017, 0.012, 0.009, 0.006,
+            0.699, 0.699, 0.699, 0.699, 0.699, 0.699, 0.699, 0.699,
+            0.681, 0.584, 0.584, 0.584, 0.584, 0.501, 0.418, 0.418,
+            0.418, 0.387, 0.351, 0.331, 0.318, 0.324, 0.306, 0.299,
+            0.285, 0.280, 0.277, 0.267, 0.260, 0.245, 0.210, 0.217,
+            0.197, 0.176, 0.170, 0.157, 0.139, 0.122, 0.122, 0.110,
+            0.106, 0.087, 0.082, 0.075, 0.075, 0.077, 0.071, 0.066,
+            0.061, 0.059, 0.053, 0.046, 0.039, 0.035, 0.032, 0.029,
+            0.025, 0.022, 0.021, 0.017, 0.013, 0.010, 0.007, 0.006,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.198, 0.198, 0.198, 0.198, 0.198, 0.198, 0.198, 0.198,
-            0.101, 0.088, 0.088, 0.088, 0.088, 0.074, 0.125, 0.125,
-            0.125, 0.143, 0.145, 0.123, 0.097, 0.138, 0.139, 0.109,
-            0.085, 0.114, 0.095, 0.089, 0.103, 0.110, 0.149, 0.114,
-            0.091, 0.096, 0.095, 0.044, 0.041, 0.063, 0.054, 0.066,
-            0.039, 0.039, 0.034, 0.022, 0.030, 0.026, 0.027, 0.023,
-            0.028, 0.016, 0.014, 0.014, 0.012, 0.012, 0.013, 0.011,
-            0.011, 0.006, 0.005, 0.007, 0.008, 0.007, 0.007, 0.004,
+            0.364, 0.364, 0.364, 0.364, 0.364, 0.364, 0.364, 0.364,
+            0.230, 0.201, 0.201, 0.201, 0.201, 0.155, 0.184, 0.184,
+            0.184, 0.194, 0.207, 0.223, 0.246, 0.234, 0.220, 0.213,
+            0.200, 0.183, 0.165, 0.184, 0.184, 0.177, 0.174, 0.173,
+            0.162, 0.147, 0.124, 0.111, 0.100, 0.092, 0.095, 0.088,
+            0.081, 0.072, 0.060, 0.055, 0.053, 0.056, 0.045, 0.045,
+            0.042, 0.040, 0.037, 0.033, 0.027, 0.025, 0.023, 0.022,
+            0.017, 0.015, 0.016, 0.015, 0.012, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-08-06: 'rap' and 'r&b' merged into this single profile (owner
@@ -1478,9 +1564,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0563,
-        zcr_sigma=0.02,
+        zcr_sigma=0.0248,
         onset_density_mu=2.81,
-        onset_density_sigma=0.3706,
+        onset_density_sigma=0.6532,
         # 2026-09-04 (recommender rc.28): trap-hip-hop-01 split OUT of this
         # pool into its own re-enabled 'hyphy' profile -- owner: "trap
         # should def be on its own." hip-hop-01 + rnb-01 stay pooled
@@ -1518,28 +1604,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # Redesign" for the full methodology and the frame-vs-track
         # scoring bug caught and fixed before landing.
         expected_bands=[
-            0.731, 0.731, 0.731, 0.731, 0.731, 0.731, 0.731, 0.731,
-            0.629, 0.495, 0.495, 0.495, 0.495, 0.417, 0.315, 0.315,
-            0.315, 0.324, 0.322, 0.336, 0.325, 0.268, 0.259, 0.244,
-            0.237, 0.248, 0.304, 0.303, 0.300, 0.242, 0.214, 0.217,
-            0.180, 0.171, 0.148, 0.123, 0.119, 0.105, 0.094, 0.081,
-            0.079, 0.075, 0.071, 0.064, 0.060, 0.059, 0.048, 0.043,
-            0.044, 0.045, 0.035, 0.034, 0.036, 0.029, 0.031, 0.028,
-            0.027, 0.027, 0.022, 0.018, 0.014, 0.011, 0.007, 0.004,
+            0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763,
+            0.649, 0.494, 0.494, 0.494, 0.494, 0.406, 0.298, 0.298,
+            0.298, 0.300, 0.298, 0.295, 0.293, 0.274, 0.241, 0.234,
+            0.222, 0.240, 0.256, 0.260, 0.248, 0.234, 0.220, 0.206,
+            0.181, 0.161, 0.136, 0.114, 0.105, 0.096, 0.088, 0.083,
+            0.077, 0.074, 0.069, 0.064, 0.060, 0.057, 0.046, 0.042,
+            0.044, 0.041, 0.034, 0.034, 0.031, 0.029, 0.027, 0.026,
+            0.026, 0.023, 0.021, 0.018, 0.014, 0.010, 0.006, 0.004,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.155, 0.155, 0.155, 0.155, 0.155, 0.155, 0.155, 0.155,
-            0.110, 0.130, 0.130, 0.130, 0.130, 0.063, 0.065, 0.065,
-            0.065, 0.100, 0.127, 0.142, 0.122, 0.085, 0.109, 0.107,
-            0.111, 0.125, 0.115, 0.100, 0.089, 0.090, 0.090, 0.088,
-            0.058, 0.034, 0.047, 0.039, 0.042, 0.047, 0.050, 0.042,
-            0.038, 0.031, 0.030, 0.027, 0.029, 0.024, 0.028, 0.027,
-            0.024, 0.024, 0.024, 0.027, 0.022, 0.022, 0.017, 0.018,
-            0.016, 0.017, 0.014, 0.012, 0.009, 0.008, 0.005, 0.002,
+            0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245,
+            0.126, 0.126, 0.126, 0.126, 0.126, 0.132, 0.159, 0.159,
+            0.159, 0.150, 0.162, 0.160, 0.171, 0.158, 0.154, 0.148,
+            0.145, 0.145, 0.149, 0.146, 0.145, 0.120, 0.112, 0.098,
+            0.089, 0.077, 0.070, 0.060, 0.060, 0.057, 0.055, 0.051,
+            0.053, 0.047, 0.041, 0.039, 0.038, 0.037, 0.034, 0.031,
+            0.029, 0.030, 0.028, 0.027, 0.023, 0.021, 0.021, 0.020,
+            0.021, 0.018, 0.015, 0.013, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-08-10: relabeled "Hyphy" -> "Hyphy / Trap" (owner call, house-
@@ -1552,24 +1638,37 @@ PROFILES: Dict[str, AudioProfile] = {
     # hyphy going forward.
     "hyphy": AudioProfile(
         name="Hyphy / Trap",
-        # 2026-09-04: RE-ENABLED. Owner: "trap should def be on its own" --
-        # was disabled 2026-08-10 specifically for lack of real trap/hyphy
-        # material to validate against; training-trap-hip-hop-01 now
-        # supplies that. Evidence-based split from rap_rnb (which pooled
-        # hip-hop-01 + trap-hip-hop-01 + rnb-01 until tonight): a per-list
-        # confusion check (own tracks scored against each of the three
-        # lists' own ribbons, spectral_shape_fit only) showed trap-hip-
-        # hop-01 and rnb-01 each discriminate real distinctly from the
-        # other two, while hip-hop-01 and rnb-01 are the closest, least-
-        # separable pair of the three -- so trap splits out to its own
-        # profile (this one) and rap_rnb keeps hip-hop + rnb pooled (see
-        # rap_rnb's own field comment). Every field below except bpm_prior_
-        # mu/sigma/hint, expected_bands/_sigma, and vocal_hnr_mu/vocal_fmr_
-        # mu is unchanged from the pre-disable values -- not re-derived,
-        # since only the fingerprint/tempo/vocal axes had real data to
-        # recalibrate against.
-        enabled=True,
-        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 127-155 BPM",
+        # 2026-09-04: RE-ENABLED, then DISABLED AGAIN same day (owner,
+        # direct: "disable hyphy" -- mid smoke-test-playlist build, which
+        # had just surfaced that the library has zero tracks ID3-tagged
+        # Hyphy; every acoustic value below is fit entirely against
+        # training-trap-hip-hop-01, i.e. this profile currently has no
+        # content of its own distinct from a straight trap read). The
+        # earlier same-day re-enable rationale (trap/hyphy split from
+        # rap_rnb, confusion-matrix evidence) stands and is left below --
+        # this disable doesn't reverse that finding, it just reflects that
+        # there's no dedicated hyphy material to point the profile at.
+        # Dict key kept as 'hyphy' for backward compatibility;
+        # get_profile('hyphy') still resolves it directly.
+        #
+        # 2026-09-04: RE-ENABLED (same day, superseded above). Owner: "trap
+        # should def be on its own" -- was disabled 2026-08-10 specifically
+        # for lack of real trap/hyphy material to validate against;
+        # training-trap-hip-hop-01 now supplies that. Evidence-based split
+        # from rap_rnb (which pooled hip-hop-01 + trap-hip-hop-01 + rnb-01
+        # until tonight): a per-list confusion check (own tracks scored
+        # against each of the three lists' own ribbons, spectral_shape_fit
+        # only) showed trap-hip-hop-01 and rnb-01 each discriminate real
+        # distinctly from the other two, while hip-hop-01 and rnb-01 are
+        # the closest, least-separable pair of the three -- so trap splits
+        # out to its own profile (this one) and rap_rnb keeps hip-hop +
+        # rnb pooled (see rap_rnb's own field comment). Every field below
+        # except bpm_prior_mu/sigma/hint, expected_bands/_sigma, and
+        # vocal_hnr_mu/vocal_fmr_mu is unchanged from the pre-disable
+        # values -- not re-derived, since only the fingerprint/tempo/vocal
+        # axes had real data to recalibrate against.
+        enabled=False,
+        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 100-118 BPM",
         bass_min=20.0,
         bass_max=350.0,
         mid_min=350.0,
@@ -1587,33 +1686,29 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.5,
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.80,
-        # 2026-09-04: fully recalibrated from training-trap-hip-hop-01's
-        # own real detected-bpm distribution (median 141.2, p25/p75 127.2/
-        # 154.5) -- the old 100-118 hand-guess (never validated against
-        # real material) was far off; trap's PRODUCED tempo reads much
-        # higher, same "produced vs perceived pulse" pattern already
-        # documented for dubstep. Hint band = p25/p75 rounded; mu = the
-        # band's arithmetic midpoint; sigma via the sigma-matches-hint-band
-        # formula used throughout this file (log2(hint_max/hint_min)/2).
-        # 2026-09-04, later the same night (recommender rc.28, evidence-
-        # based sigma pass): re-checked with the per-track median/MAD
-        # methodology (21 tracks) -- mu 141.0 -> 142.2 (0.8% shift,
-        # trivial, well within noise) and sigma 0.1436 -> 0.1334 (real
-        # measured spread, close to the hint-band-derived placeholder it
-        # replaces). Small delta applied directly; NOT given the same
-        # full hold-back as dubstep/rap_rnb despite this profile's own
-        # comment above flagging the same "produced vs perceived pulse"
-        # risk pattern, because the per-track approach already landed
-        # close to the original value (unlike rap_rnb's 64% jump, which
-        # is the actual signature of real contamination) -- but flagging
-        # this explicitly rather than treating the closeness as proof of
-        # cleanliness: this profile has not been checked track-by-track
-        # for individual half-time-fold outliers the way dubstep's design
-        # already accounts for structurally.
-        bpm_prior_mu=142.2,
-        bpm_prior_sigma=0.1334,
-        bpm_hint_min=127.0,
-        bpm_hint_max=155.0,
+        # REVERTED 2026-09-04 (recommender rc.33): the 2026-09-04 rc.28/rc.29
+        # recalibration above (mu 109.0->142.2, hint 100-118->127-155) is
+        # reverted -- owner: "someone made unapproved changes.. consolidating
+        # those was approved by not that bpm range! the bpm range for those
+        # should be what hyphy was before." The hyphy/trap split-from-rap_rnb
+        # itself was approved ("trap should def be on its own"); this specific
+        # tempo change riding along in the same commit (6799bfc) was not, and
+        # never should have been applied blind: it pooled raw per-track
+        # *detected* BPM from training-trap-hip-hop-01 replay sessions as if
+        # it were ground-truth produced tempo -- exactly the fold-contamination
+        # risk this same field comment already flagged and that dubstep/
+        # rap_rnb were correctly HELD BACK for (see those profiles' own
+        # comments) -- but hyphy's own change was applied anyway. Restored to
+        # the owner's own hand-tuned, hand-dialed values from the pre-split
+        # 2026-08-10 disable commit (2eab76b): bpm_prior_mu=109.0,
+        # bpm_prior_sigma=0.15, bpm_hint_min/max=100.0/118.0. If a real,
+        # fold-aware (track-by-track, not pooled-detector-output) re-fit is
+        # wanted later, it needs the owner's explicit sign-off first, same as
+        # any other detector/recommender constant change.
+        bpm_prior_mu=109.0,
+        bpm_prior_sigma=0.15,
+        bpm_hint_min=100.0,
+        bpm_hint_max=118.0,
         spectral_centroid_mu=300.0,
         # 2026-08-10: 600.0 (wide tier) -> 400.0 (medium, the dataclass
         # default tier) -- wide was never re-justified for hyphy the way it
@@ -1622,9 +1717,9 @@ PROFILES: Dict[str, AudioProfile] = {
         # it act as a low-resistance catch-all on the centroid axis.
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0376,
-        zcr_sigma=0.0209,
+        zcr_sigma=0.0251,
         onset_density_mu=2.88,
-        onset_density_sigma=0.2669,
+        onset_density_sigma=0.6244,
         # 2026-09-04 (recommender rc.28, vocal-term + ribbon recalibration):
         # median vocal_hnr/vocal_fmr from training-trap-hip-hop-01's own
         # corpus (21 tracks) -- replaces the old unvalidated 0.55/0.5 guess.
@@ -1646,24 +1741,24 @@ PROFILES: Dict[str, AudioProfile] = {
         # uses cosine similarity for spectral_shape_fit at all). See
         # docs/adr/vj-system.md "Spectral-Shape Ribbon Redesign".
         expected_bands=[
-            0.774, 0.774, 0.774, 0.774, 0.774, 0.774, 0.774, 0.774,
-            0.679, 0.598, 0.598, 0.598, 0.598, 0.497, 0.413, 0.413,
-            0.413, 0.372, 0.303, 0.304, 0.278, 0.256, 0.245, 0.224,
-            0.215, 0.225, 0.236, 0.226, 0.194, 0.190, 0.176, 0.140,
-            0.123, 0.115, 0.098, 0.083, 0.074, 0.078, 0.062, 0.065,
-            0.053, 0.045, 0.045, 0.042, 0.050, 0.040, 0.029, 0.028,
-            0.031, 0.025, 0.024, 0.019, 0.020, 0.020, 0.022, 0.024,
-            0.021, 0.019, 0.012, 0.010, 0.009, 0.006, 0.003, 0.002,
+            0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826,
+            0.730, 0.614, 0.614, 0.614, 0.614, 0.501, 0.396, 0.396,
+            0.396, 0.340, 0.295, 0.276, 0.254, 0.242, 0.223, 0.218,
+            0.212, 0.219, 0.231, 0.227, 0.194, 0.170, 0.159, 0.133,
+            0.105, 0.100, 0.090, 0.078, 0.073, 0.066, 0.061, 0.057,
+            0.052, 0.043, 0.042, 0.040, 0.044, 0.040, 0.031, 0.028,
+            0.031, 0.027, 0.024, 0.021, 0.021, 0.021, 0.021, 0.022,
+            0.021, 0.018, 0.015, 0.012, 0.009, 0.006, 0.004, 0.002,
         ],
         expected_bands_sigma=[
-            0.175, 0.175, 0.175, 0.175, 0.175, 0.175, 0.175, 0.175,
-            0.111, 0.138, 0.138, 0.138, 0.138, 0.108, 0.142, 0.142,
-            0.142, 0.142, 0.130, 0.088, 0.113, 0.127, 0.152, 0.125,
-            0.117, 0.129, 0.117, 0.099, 0.090, 0.094, 0.072, 0.059,
-            0.045, 0.058, 0.040, 0.032, 0.024, 0.029, 0.016, 0.030,
-            0.025, 0.020, 0.018, 0.018, 0.017, 0.020, 0.018, 0.017,
-            0.017, 0.017, 0.012, 0.011, 0.008, 0.009, 0.010, 0.012,
-            0.015, 0.016, 0.006, 0.006, 0.007, 0.004, 0.002, 0.002,
+            0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208,
+            0.109, 0.157, 0.157, 0.157, 0.157, 0.162, 0.195, 0.195,
+            0.195, 0.167, 0.157, 0.136, 0.139, 0.147, 0.148, 0.155,
+            0.156, 0.159, 0.153, 0.135, 0.108, 0.096, 0.089, 0.077,
+            0.066, 0.074, 0.057, 0.044, 0.038, 0.036, 0.036, 0.041,
+            0.037, 0.033, 0.029, 0.032, 0.031, 0.032, 0.025, 0.021,
+            0.025, 0.022, 0.019, 0.017, 0.016, 0.016, 0.015, 0.016,
+            0.016, 0.014, 0.013, 0.011, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "ambient": AudioProfile(
@@ -1701,9 +1796,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0381,
-        zcr_sigma=0.0152,
+        zcr_sigma=0.0184,
         onset_density_mu=2.66,
-        onset_density_sigma=0.4151,
+        onset_density_sigma=0.6706,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): this
         # profile had no vocal_hnr_mu/vocal_fmr_mu at all (None on both --
         # see house's own field comment for why None is not a neutral
@@ -1728,28 +1823,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # fit only) -- narrower than the same-list seed1/seed2 test, but a
         # real win, not overfit to one session. See docs/adr/vj-system.md.
         expected_bands=[
-            0.520, 0.520, 0.520, 0.520, 0.520, 0.520, 0.520, 0.520,
-            0.572, 0.507, 0.507, 0.507, 0.507, 0.480, 0.443, 0.443,
-            0.443, 0.421, 0.436, 0.427, 0.435, 0.434, 0.419, 0.398,
-            0.384, 0.377, 0.373, 0.326, 0.315, 0.299, 0.252, 0.221,
-            0.226, 0.185, 0.151, 0.138, 0.119, 0.104, 0.087, 0.070,
-            0.077, 0.059, 0.065, 0.057, 0.048, 0.041, 0.035, 0.035,
-            0.027, 0.025, 0.024, 0.018, 0.019, 0.017, 0.015, 0.011,
-            0.009, 0.009, 0.008, 0.006, 0.005, 0.004, 0.003, 0.002,
+            0.620, 0.624, 0.623, 0.604, 0.612, 0.613, 0.612, 0.614,
+            0.637, 0.589, 0.595, 0.587, 0.586, 0.503, 0.427, 0.425,
+            0.425, 0.405, 0.381, 0.365, 0.350, 0.340, 0.318, 0.295,
+            0.292, 0.252, 0.227, 0.194, 0.185, 0.174, 0.154, 0.139,
+            0.117, 0.106, 0.091, 0.091, 0.074, 0.065, 0.054, 0.054,
+            0.043, 0.036, 0.037, 0.032, 0.028, 0.024, 0.025, 0.023,
+            0.022, 0.019, 0.016, 0.013, 0.012, 0.011, 0.009, 0.009,
+            0.008, 0.007, 0.006, 0.004, 0.004, 0.003, 0.002, 0.001,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245,
-            0.194, 0.140, 0.140, 0.140, 0.140, 0.156, 0.199, 0.199,
-            0.199, 0.159, 0.124, 0.109, 0.086, 0.098, 0.127, 0.133,
-            0.159, 0.165, 0.106, 0.117, 0.149, 0.148, 0.128, 0.129,
-            0.079, 0.098, 0.062, 0.042, 0.044, 0.046, 0.051, 0.042,
-            0.038, 0.027, 0.035, 0.026, 0.027, 0.024, 0.021, 0.027,
-            0.021, 0.013, 0.012, 0.010, 0.013, 0.009, 0.012, 0.009,
-            0.009, 0.008, 0.008, 0.007, 0.006, 0.004, 0.003, 0.002,
+            0.413, 0.403, 0.402, 0.407, 0.406, 0.405, 0.401, 0.403,
+            0.271, 0.304, 0.296, 0.309, 0.319, 0.254, 0.235, 0.235,
+            0.242, 0.222, 0.231, 0.219, 0.195, 0.197, 0.206, 0.207,
+            0.202, 0.231, 0.212, 0.175, 0.172, 0.155, 0.145, 0.118,
+            0.108, 0.107, 0.092, 0.090, 0.072, 0.067, 0.060, 0.057,
+            0.049, 0.041, 0.041, 0.036, 0.032, 0.028, 0.028, 0.026,
+            0.023, 0.021, 0.017, 0.016, 0.014, 0.013, 0.012, 0.011,
+            0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     "chillstep": AudioProfile(
@@ -1792,9 +1887,9 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=250.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0297,
-        zcr_sigma=0.0188,
+        zcr_sigma=0.0189,
         onset_density_mu=2.94,
-        onset_density_sigma=0.4151,
+        onset_density_sigma=0.5917,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): this
         # profile had no vocal_hnr_mu/vocal_fmr_mu at all (None on both --
         # see house's own field comment for why None is not a neutral
@@ -1826,28 +1921,28 @@ PROFILES: Dict[str, AudioProfile] = {
         # profile's own "Chillstep / Downtempo" name/description already).
         # See docs/adr/vj-system.md.
         expected_bands=[
-            0.757, 0.757, 0.757, 0.757, 0.757, 0.757, 0.757, 0.757,
-            0.692, 0.646, 0.646, 0.646, 0.646, 0.539, 0.434, 0.434,
-            0.434, 0.396, 0.385, 0.361, 0.344, 0.315, 0.273, 0.277,
-            0.276, 0.276, 0.255, 0.208, 0.187, 0.158, 0.164, 0.153,
-            0.144, 0.136, 0.096, 0.094, 0.080, 0.073, 0.061, 0.055,
-            0.050, 0.045, 0.043, 0.032, 0.030, 0.028, 0.024, 0.021,
-            0.021, 0.018, 0.016, 0.013, 0.014, 0.012, 0.011, 0.011,
-            0.011, 0.010, 0.007, 0.005, 0.004, 0.002, 0.002, 0.001,
+            0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842,
+            0.729, 0.635, 0.635, 0.635, 0.635, 0.537, 0.407, 0.407,
+            0.407, 0.363, 0.340, 0.333, 0.321, 0.309, 0.284, 0.280,
+            0.288, 0.280, 0.244, 0.219, 0.183, 0.161, 0.153, 0.140,
+            0.131, 0.127, 0.093, 0.087, 0.077, 0.071, 0.064, 0.053,
+            0.048, 0.039, 0.037, 0.030, 0.028, 0.025, 0.021, 0.021,
+            0.020, 0.016, 0.015, 0.013, 0.013, 0.011, 0.009, 0.009,
+            0.008, 0.007, 0.005, 0.005, 0.004, 0.003, 0.002, 0.001,
         ],
         # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
         # derived per-band spread across per-track means, floored at
         # 15% of that band's own median -- see expected_bands' own
         # field comment for the full methodology.
         expected_bands_sigma=[
-            0.147, 0.147, 0.147, 0.147, 0.147, 0.147, 0.147, 0.147,
-            0.104, 0.107, 0.107, 0.107, 0.107, 0.081, 0.091, 0.091,
-            0.091, 0.096, 0.131, 0.173, 0.211, 0.183, 0.150, 0.178,
-            0.194, 0.175, 0.169, 0.108, 0.095, 0.088, 0.083, 0.079,
-            0.030, 0.062, 0.048, 0.057, 0.036, 0.032, 0.051, 0.022,
-            0.022, 0.017, 0.020, 0.018, 0.015, 0.021, 0.014, 0.013,
-            0.014, 0.007, 0.010, 0.010, 0.009, 0.009, 0.011, 0.010,
-            0.011, 0.011, 0.008, 0.007, 0.005, 0.003, 0.003, 0.002,
+            0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202,
+            0.151, 0.164, 0.164, 0.164, 0.164, 0.156, 0.178, 0.178,
+            0.178, 0.152, 0.156, 0.186, 0.209, 0.191, 0.178, 0.175,
+            0.174, 0.175, 0.160, 0.152, 0.124, 0.106, 0.084, 0.073,
+            0.062, 0.067, 0.057, 0.052, 0.041, 0.034, 0.043, 0.025,
+            0.024, 0.023, 0.022, 0.019, 0.018, 0.019, 0.013, 0.013,
+            0.013, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
+            0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-08-03: first-pass profile, added after a ~5 hour livestream training

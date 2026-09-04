@@ -114,7 +114,7 @@ def _stub_with_bands(band_vec: np.ndarray, n_samples: int = 6) -> SimpleNamespac
         _kick_energies=deque(maxlen=16),
         _reco_weights=weights,
         _has_bpm_lock=lambda *a, **kw: True,
-        _spotify_telemetry_snapshot=lambda: {},
+        _now_playing_telemetry_snapshot=lambda: {},
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
         _sequence_corpus_writer=None,
         _record_sequence_keyframe=lambda *a, **kw: None,

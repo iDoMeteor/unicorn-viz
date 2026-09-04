@@ -103,7 +103,7 @@ def _make_stub(*, bpm: float = 124.0, centroid: float = 2000.0, zcr: float = 0.0
         _kick_energies=deque(maxlen=16),
         _reco_weights=dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS),
         _has_bpm_lock=lambda *a, **kw: True,
-        _spotify_telemetry_snapshot=lambda: {},
+        _now_playing_telemetry_snapshot=lambda: {},
         _maybe_apply_recommended_audio_profile=lambda **kw: None,
         _sequence_corpus_writer=object(),  # non-None: a real writer would be live
         _record_sequence_keyframe=sink,

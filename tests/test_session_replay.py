@@ -128,6 +128,113 @@ def test_track_path_hint_bus_reaches_the_corpus(two_track_session) -> None:
     assert seen == {'clip_a.wav', 'clip_b.wav'}
 
 
+def test_default_engine_matches_config_toml_live_default(two_track_session) -> None:
+    """2026-09-04: found live -- run_session()'s cfg dict never set
+    beat_tracker_engine at all, so AutoVJController's own hardcoded 'v2'
+    default silently won every replay session ever run through this tool,
+    regardless of config.toml's live default ('v3' since 2026-09-02). A
+    full 16-session "new baseline" batch ran entirely on v2 as a direct
+    result -- every v3 engagement counter read exactly 0 across all 16
+    sessions, and none of that same day's detector fixes were exercised
+    at all. Pins the fix: the replay harness's default must track the
+    live app's default, not silently diverge from it."""
+    out_dir = two_track_session['out_dir']
+    seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+    rows = [json.loads(line) for line in
+            seq_files[0].read_text(encoding='utf-8').splitlines()]
+    versions = {r['engine_version'] for r in rows if r.get('engine_version')}
+    assert versions == {'3.0.0'}, f'expected only the v3 engine, saw {versions}'
+
+
+def test_beat_tracker_engine_override_still_reaches_the_controller(tmp_path: Path) -> None:
+    """--override beat_tracker_engine=v2 (or any extra_cfg override) must
+    still win over the new default -- the fix above must not make v2
+    unreachable for a deliberate protected-baseline comparison run."""
+    files = []
+    for bpm, stem in ((124.0, 'clip_a'), (128.0, 'clip_b')):
+        pcm, _truth = _GEN.generate_clip(bpm, duration_s=15.0, seed=3)
+        path = tmp_path / f'{stem}.wav'
+        wavfile.write(str(path), _GEN.SR, (pcm * 32767).astype(np.int16))
+        files.append(path)
+
+    out_dir = tmp_path / 'out'
+    session_replay.run_session(
+        files, max_duration_s=15.0, gap_s=1.0, out_dir=out_dir, seed=11,
+        extra_cfg={'beat_tracker_engine': 'v2'})
+    seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+    assert seq_files
+    rows = [json.loads(line) for line in
+            seq_files[0].read_text(encoding='utf-8').splitlines()]
+    versions = {r['engine_version'] for r in rows if r.get('engine_version')}
+    assert versions == {'2.0.0'}, f'expected only the v2 engine, saw {versions}'
+
+
+def test_real_key_detection_reaches_the_corpus(tmp_path: Path, monkeypatch) -> None:
+    """2026-09-04: harmony/key data has never reached any training corpus
+    from any session this tool has ever run -- `now_playing` never carried
+    a `key` field, so auto_vj.py's `_decode_camelot_key()` always fell
+    through to the 'unknown' default. New `_load_key_detect()` +
+    `_estimate_key()` call dj-mixer-01's real chromagram key detector
+    (key_detect.py) once per track and thread the result through the same
+    `now_playing['key']`/`now_playing['key_strength']` fields the live app
+    would populate from a real dj-mixer-01/Spotify source. Stub the loaded
+    module (not the real detector -- deterministic, no dependence on
+    whether the synthetic click-track fixture has real tonal content) to
+    confirm the wiring itself, end to end into the corpus."""
+
+    class _StubKeyDetect:
+        @staticmethod
+        def estimate_key(samples, samplerate):
+            assert samples.ndim == 2 and samples.shape[1] == 1  # mono presented as (N, 1)
+            return ('8A', 'Am', 0.83)
+
+    monkeypatch.setattr(session_replay, '_load_key_detect', lambda: _StubKeyDetect())
+
+    files = []
+    for bpm, stem in ((124.0, 'clip_a'), (128.0, 'clip_b')):
+        pcm, _truth = _GEN.generate_clip(bpm, duration_s=15.0, seed=3)
+        path = tmp_path / f'{stem}.wav'
+        wavfile.write(str(path), _GEN.SR, (pcm * 32767).astype(np.int16))
+        files.append(path)
+
+    out_dir = tmp_path / 'out'
+    session_replay.run_session(
+        files, max_duration_s=15.0, gap_s=1.0, crossfade_s=0.0, out_dir=out_dir, seed=11)
+    seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+    assert seq_files
+    rows = [json.loads(line) for line in
+            seq_files[0].read_text(encoding='utf-8').splitlines()
+            if json.loads(line).get('capture_type') == 'heartbeat']
+    assert rows, 'no heartbeat rows captured'
+    for r in rows:
+        assert r['key_camelot'] == '8A'
+        assert r['key'] == 'A minor'
+        assert r['scale'] == 'minor'
+        assert r['is_minor'] == 1
+        assert r['key_strength'] == pytest.approx(0.83)
+
+
+def test_key_detection_degrades_gracefully_when_dj_mixer_absent(tmp_path: Path, monkeypatch) -> None:
+    """No dj-mixer-01 checkout (or detection failure on a given track) must
+    not crash the session -- falls back to the pre-existing 'unknown' key
+    schema, same as a live session with no now-playing key data at all."""
+    monkeypatch.setattr(session_replay, '_load_key_detect', lambda: None)
+
+    pcm, _truth = _GEN.generate_clip(124.0, duration_s=15.0, seed=3)
+    path = tmp_path / 'clip.wav'
+    wavfile.write(str(path), _GEN.SR, (pcm * 32767).astype(np.int16))
+
+    out_dir = tmp_path / 'out'
+    session_replay.run_session([path], max_duration_s=15.0, out_dir=out_dir, seed=11)
+    seq_files = sorted(out_dir.glob('sequence-replay-*.jsonl'))
+    assert seq_files
+    rows = [json.loads(line) for line in
+            seq_files[0].read_text(encoding='utf-8').splitlines()]
+    heartbeats = [r for r in rows if r.get('capture_type') == 'heartbeat']
+    assert heartbeats
+    assert all(r['key_camelot'] == '' and r['key_strength'] == 0.0 for r in heartbeats)
+
+
 def test_equal_power_fade_curve() -> None:
     fade_out, fade_in = session_replay._equal_power_fade(100)
     assert fade_out[0] == pytest.approx(1.0)
