@@ -172,10 +172,36 @@ class AudioProfile:
     #   vocal_hnr_mu/sigma: median per track (>=3 keyframe rows required),
     #   then robust median (-> mu) / MAD-derived sigma (-> sigma, floored
     #   at 0.03) across those per-track points, raw linear space for both
-    #   fields. `zcr_sigma` landed on the 0.03 floor for all 12 profiles --
-    #   the real MAD came in below it every time, so zcr_sigma currently
-    #   discriminates nothing between genres (zcr_mu still does, e.g.
-    #   chillstep 0.0297 vs trance 0.0627, a ~2x spread). Worth a flag:
+    #   fields.
+    #
+    #   2026-09-04 (recommender rc.32): the 0.03 floor above was WRONG for
+    #   this feature -- it was copy-pasted from vocal_hnr/vocal_fmr's own
+    #   floor without checking scale. Those live on [0,1]; zcr's entire
+    #   genre-to-genre range is only ~0.03-0.09 (a 0.06-wide span), so a
+    #   0.03 floor is over HALF that whole range -- it swallowed every
+    #   profile's real MAD-derived sigma (which came in at 0.0116-0.0217,
+    #   comfortably real, not noise) and flattened all 12 to the same
+    #   number. Floor dropped to 0.008 (below the smallest real value
+    #   measured across the roster, so it doesn't bind for any of them --
+    #   still there as a safety net against a hypothetical future profile
+    #   with a much tighter or thinner sample). zcr_sigma now carries its
+    #   own real per-profile value again (tech_house tightest at 0.0116,
+    #   dubstep widest at 0.0217).
+    #
+    #   Honest caveat, checked rather than assumed: even with real sigma,
+    #   most ADJACENT-ranked profiles by zcr_mu are still within about
+    #   1 sigma of each other (e.g. deep_house 0.0372 vs hyphy 0.0376, a
+    #   0.0004 gap against ~0.02 sigmas) -- zcr_fit's real discriminating
+    #   power lives mostly at the tails of the roster (chillstep/ambient/
+    #   deep_house/hyphy cluster low; trance/drum_and_bass/dubstep/house
+    #   cluster high), not between most individual genre pairs. Fixing the
+    #   floor makes the TERM correctly calibrated (a tight-clustering
+    #   profile like tech_house now scores confidently, a noisier one like
+    #   dubstep doesn't get false confidence) -- it does not turn zcr into
+    #   a strong pairwise discriminator, because the underlying acoustic
+    #   feature genuinely doesn't separate most of this roster that
+    #   cleanly. `zcr_mu` itself still spans ~2.1x roster-wide (chillstep
+    #   0.0297 to trance 0.0627). Worth a flag:
     #   ambient's onset_density_mu moved from a hand-guessed 0.4 to a
     #   measured 2.66 (~6.6x) and chillstep similarly (1.5 -> 2.94) --
     #   applied as real per-track evidence (no known contamination
@@ -390,7 +416,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0556,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0168,
         onset_density_mu=3.0,
         onset_density_sigma=0.4596,
         # 2026-09-04 (recommender rc.29, per-track median-of-medians re-fit,
@@ -499,7 +525,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0372,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0193,
         onset_density_mu=3.0,
         onset_density_sigma=0.4225,
         # 2026-09-03 (recommender rc.27, vocal-term calibration, config B):
@@ -617,7 +643,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=400.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0449,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0116,
         onset_density_mu=2.88,
         onset_density_sigma=0.5486,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -694,7 +720,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=400.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0502,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0148,
         onset_density_mu=2.75,
         onset_density_sigma=0.1927,
         # 2026-09-03 (recommender rc.27, vocal-term calibration, config B):
@@ -779,7 +805,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0627,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0202,
         onset_density_mu=3.32,
         onset_density_sigma=0.3855,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1047,7 +1073,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0406,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0159,
         onset_density_mu=3.065,
         onset_density_sigma=0.9266,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1226,7 +1252,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0609,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0164,
         onset_density_mu=3.41,
         onset_density_sigma=0.3262,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1337,7 +1363,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # training-house-01/002 matcher-validation session ("observed ZCR
         # slightly lower than expected"), owner-approved.
         zcr_mu=0.0581,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0217,
         onset_density_mu=2.75,
         onset_density_sigma=0.1779,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1452,7 +1478,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0563,
-        zcr_sigma=0.03,
+        zcr_sigma=0.02,
         onset_density_mu=2.81,
         onset_density_sigma=0.3706,
         # 2026-09-04 (recommender rc.28): trap-hip-hop-01 split OUT of this
@@ -1596,7 +1622,7 @@ PROFILES: Dict[str, AudioProfile] = {
         # it act as a low-resistance catch-all on the centroid axis.
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0376,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0209,
         onset_density_mu=2.88,
         onset_density_sigma=0.2669,
         # 2026-09-04 (recommender rc.28, vocal-term + ribbon recalibration):
@@ -1675,7 +1701,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0381,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0152,
         onset_density_mu=2.66,
         onset_density_sigma=0.4151,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): this
@@ -1766,7 +1792,7 @@ PROFILES: Dict[str, AudioProfile] = {
         spectral_centroid_mu=250.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0297,
-        zcr_sigma=0.03,
+        zcr_sigma=0.0188,
         onset_density_mu=2.94,
         onset_density_sigma=0.4151,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): this

@@ -192,7 +192,7 @@ mode_phrase_within_bars_build = 1
 mode_phrase_within_bars_breakdown = 2
 mode_phrase_within_bars_climax = 2
 
-hud_production_mode = true
+hud_production_mode = false
 
 
 [control_room]

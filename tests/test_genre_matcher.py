@@ -203,15 +203,20 @@ def test_matcher_flips_fold_when_genre_flips(monkeypatch) -> None:
     zcr_mu/zcr_sigma's evidence-based re-fit. The old 0.085 was an exact
     copy of drum_and_bass's own old hand-picked zcr_mu; after the re-fit,
     rap_rnb (0.0563) and drum_and_bass (0.0609) sit much closer together
-    (both zcr_sigma landed on the new 0.03 floor -- see zcr_sigma's own
-    field comment in profiles.py) than the old 0.054/0.085 pair did, so
-    sitting exactly at drum_and_bass's new mu no longer clears the margin
-    (started resolving to rap_rnb's 87.0 fold instead of drum_and_bass's
-    174.0 -- confirmed by sweeping zcr from 0.06-0.15: the crossover now
-    sits between 0.08 and 0.09). 0.10 gives a comfortable, stable margin
-    past that crossover rather than sitting right on it."""
+    than the old 0.054/0.085 pair did, so sitting exactly at drum_and_bass's
+    new mu no longer clears the margin.
+
+    2026-09-04, later the same night (recommender rc.32): zcr updated
+    again (0.10 -> 0.07) after zcr_sigma's floor-recalibration fix
+    (0.03 -> real per-profile values -- see zcr_sigma's own field comment
+    in profiles.py). drum_and_bass's real sigma (0.0164) is tighter than
+    rap_rnb's (0.0200); the log-normalizer's -log(sigma) tightness bonus,
+    now applying to real unequal per-profile sigmas instead of both being
+    pinned to the same 0.03, moved the crossover back down (swept
+    0.06-0.15: 0.06-0.08 favors drum_and_bass, 0.09+ favors rap_rnb).
+    0.07 sits in the middle of the stable drum_and_bass band."""
     _restrict(monkeypatch, ('rap_rnb', 'drum_and_bass'))
-    stub, push = _matcher_stub(zcr=0.10, top_candidates=list(_FOLD_CANDS))
+    stub, push = _matcher_stub(zcr=0.07, top_candidates=list(_FOLD_CANDS))
 
     _AV.AutoVJController._update_profile_recommendation(stub, _AUDIO, SimpleNamespace(), {})
 
@@ -237,9 +242,19 @@ def test_matcher_never_endorses_outside_detector_candidates(monkeypatch) -> None
 
 def test_legacy_prior_push_behind_the_rollback_flag(monkeypatch) -> None:
     """genre_matcher_enabled = false restores the round-three behavior:
-    the winning genre's PRIOR mu/sigma is pushed, not a candidate BPM."""
+    the winning genre's PRIOR mu/sigma is pushed, not a candidate BPM.
+
+    2026-09-04 (recommender rc.32): zcr updated (0.054 -> 0.04) after
+    zcr_sigma's floor-recalibration fix (0.03 -> real per-profile values,
+    see zcr_sigma's own field comment in profiles.py). rap_rnb's real
+    zcr_mu (0.0563) sits closer to the old 0.054 than drum_and_bass's
+    (0.0609), but drum_and_bass's real sigma (0.0164) is tighter than
+    rap_rnb's (0.0200) -- the log-normalizer's -log(sigma) bonus for that
+    tightness was enough to flip the winner at 0.054 (swept 0.03-0.058:
+    crossover sits between 0.045 and 0.05). 0.04 sits further inside
+    rap_rnb's own territory for a stable margin."""
     _restrict(monkeypatch, ('rap_rnb', 'drum_and_bass'))
-    stub, push = _matcher_stub(zcr=0.054, top_candidates=list(_FOLD_CANDS),
+    stub, push = _matcher_stub(zcr=0.04, top_candidates=list(_FOLD_CANDS),
                                matcher_enabled=False)
 
     _AV.AutoVJController._update_profile_recommendation(stub, _AUDIO, SimpleNamespace(), {})

@@ -9310,3 +9310,48 @@ landing instead of live).
 **Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.30 → 1.0.0-rc.31`;
 `_VJ_WEIGHTS_DOC_VERSION` `87 → 88`. Full test suite green (2181 passed,
 1 skipped) after landing.
+
+## zcr_sigma Floor Was Miscalibrated (2026-09-04, same night, recommender rc.32)
+
+**Owner, after rc.30 shipped with every `zcr_sigma` landing on the same
+`0.03` floor:** "let's fix the one last problem with that zcr... figure
+out how to make it useful... that seems like slim but *distinct*
+margins, no?"
+
+**Root cause.** The `0.03` floor was copy-pasted from `vocal_hnr_sigma`/
+`vocal_fmr_sigma`'s own floor (a reasonable value for a `[0,1]`-scale
+feature) without checking it against `zcr`'s own scale — `zcr`'s entire
+genre-to-genre range across this roster is only `~0.03–0.09`, so `0.03`
+is over half the whole span. It swallowed every profile's real
+MAD-derived sigma (`0.0116`–`0.0217`, all real signal, none of it sample
+noise) and flattened all 12 profiles to the same number.
+
+**Fix.** Floor dropped to `0.008` (below the smallest real value measured
+across the roster), so it doesn't bind for any of the 12 profiles right
+now — still there as a safety net for a future profile with a much
+thinner or noisier sample. Full table and methodology in
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` § "zcr_sigma Floor
+Was Miscalibrated".
+
+**The honest finding, checked rather than assumed.** Owner's framing
+("slim but distinct") was exactly right: even with real sigma restored,
+most ADJACENT-ranked profiles by `zcr_mu` sit within about 1 sigma of
+each other (real sigmas run `0.0116`–`0.0217`, 3–10x bigger than most
+adjacent gaps in the ranked list) — `zcr_fit`'s real discriminating power
+lives at the tails of the roster (`chillstep`/`deep_house`/`hyphy`/
+`ambient` cluster low; `trance`/`drum_and_bass`/`dubstep`/`house` cluster
+high), not between most individual pairs. Fixing the floor makes the term
+correctly CALIBRATED, not a suddenly-strong discriminator — that
+distinction was worth stating plainly rather than letting "make it
+useful" read as a bigger claim than the fix actually supports.
+
+**Regression fallout.** Two `test_genre_matcher.py` fixtures
+(`test_matcher_flips_fold_when_genre_flips`,
+`test_legacy_prior_push_behind_the_rollback_flag`) needed their hardcoded
+`zcr` inputs re-swept — real per-profile sigma changed which of
+`rap_rnb`/`drum_and_bass` the log-normalizer's tightness bonus favors at
+a given input value.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.31 → 1.0.0-rc.32`;
+`_VJ_WEIGHTS_DOC_VERSION` `88 → 89`. Full test suite green (2181 passed,
+1 skipped) after landing.
