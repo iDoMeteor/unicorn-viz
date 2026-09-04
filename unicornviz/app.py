@@ -1496,6 +1496,29 @@ class App:
             layouts = getattr(self._multihead, '_display_layouts', None)
         return list(layouts) if layouts else []
 
+    @staticmethod
+    def _as_int_rect(rect: object) -> tuple[int, int, int, int] | None:
+        """Coerce a drop-in-supplied (x, y, w, h) to ints, or None if malformed.
+
+        ``_width``/``_height`` are declared ints and every consumer treats them
+        as numbers -- ``VJApi.render_width`` does a bare ``int(self._app._width)``.
+        Display layouts, though, come from the multi-head drop-in, and core is
+        not allowed to assume a drop-in's shape (see CLAUDE.md, Drop-In
+        Independence).  A layout carrying ``None`` for w/h -- which is what a
+        display that vanished mid-session can produce -- used to be stored in
+        ``_width`` verbatim, and every ``int(_width)`` downstream then raised
+        ``TypeError: int() argument must be ... not 'NoneType'``.
+
+        Observed 2026-09-04 as "FireDJCelebration unavailable: int() argument
+        must be a string...", which was this, three call frames away.
+        """
+        try:
+            x, y, w, h = rect  # type: ignore[misc]
+            return (int(x), int(y), int(w), int(h))
+        except (TypeError, ValueError):
+            log.warning('Ignoring malformed display layout from multi-head: %r', rect)
+            return None
+
     def _primary_active_layout(self) -> tuple[int, int, int, int] | None:
         """Return the active layout treated as primary for audience rendering.
 
@@ -1522,14 +1545,14 @@ class App:
         if isinstance(active_indices, list) and len(active_indices) == len(layouts):
             for idx, rect in zip(active_indices, layouts, strict=False):
                 if int(idx) == primary_index:
-                    return rect
+                    return self._as_int_rect(rect)
 
         # Backward/compat fallback for controllers that expose only an ordered
         # active-layout list where display index maps directly by position.
         if 0 <= primary_index < len(layouts):
-            return layouts[primary_index]
+            return self._as_int_rect(layouts[primary_index])
 
-        return layouts[0]
+        return self._as_int_rect(layouts[0])
 
     def _multihead_mirror_layout(self, origin_x: int, origin_y: int) -> list[tuple[int, int, int, int]]:
         """Return per-display rects in window-local coords, with fallback."""
@@ -1554,7 +1577,10 @@ class App:
         return self._multihead.display_bounds(display_index, self._width, self._height)
 
     def _all_display_bounds(self) -> tuple[int, int, int, int]:
-        return self._multihead.all_display_bounds(self._width, self._height)
+        bounds = self._multihead.all_display_bounds(self._width, self._height)
+        # Same drop-in-trust rule as _primary_active_layout: this result is
+        # unpacked straight into _width/_height by the span and mirror paths.
+        return self._as_int_rect(bounds) or (0, 0, self._width, self._height)
 
     def _window_position_for_display(self, display_index: int) -> tuple[int, int]:
         return self._multihead.window_position_for_display(display_index, self._width, self._height)
