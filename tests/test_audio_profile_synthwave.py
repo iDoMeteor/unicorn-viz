@@ -12,9 +12,16 @@ from unicornviz.audio.profiles import PROFILES, get_profile, list_profiles
 
 
 def test_synthwave_is_registered() -> None:
+    """2026-09-04 (recommender rc.29, evidence audit): disabled -- zero
+    training-list corpus of any kind, every scoring field still hand-
+    authored/guessed (same standing rule as psytrance/hard_techno/
+    hardstyle, see docs/adr/vj-system.md). Still directly resolvable by
+    key/get_profile(), same disable-not-delete pattern as tech_house --
+    only excluded from list_profiles()/enabled_profiles() discovery."""
     assert 'synthwave' in PROFILES
-    assert 'synthwave' in list_profiles()
+    assert 'synthwave' not in list_profiles()
     assert get_profile('synthwave') is PROFILES['synthwave']
+    assert PROFILES['synthwave'].enabled is False
 
 
 def test_synthwave_tempo_prior_matches_classic_kavinsky_range() -> None:
@@ -37,18 +44,25 @@ def test_synthwave_spectral_fields_are_calibrated() -> None:
     assert p.spectral_centroid_mu is not None
     assert p.zcr_mu is not None
     assert p.onset_density_mu is not None
-    # Brightness sits below house (percussion-driven) by design -- not
-    # fabricated/arbitrary. 2026-08-09: the chillstep < synthwave half of
-    # this used to hold too, but broke when spectral_centroid_mu was
-    # recalibrated to match each profile's own expected_bands fingerprint
-    # (see the field's comment in profiles.py) -- chillstep's fingerprint
-    # now implies *brighter* (1700) than synthwave's own (also 1700, and
-    # chillstep was already ahead unrounded), contradicting chillstep's
-    # "atmospheric-only" framing here. Same data-quality question as the
-    # house/tech_house reversal in test_audio_profile_deep_house_and_
-    # disable.py -- deferred, not fixed here; see docs/adr/vj-system.md.
+    # 2026-08-09: brightness used to sit below house by design (not
+    # fabricated/arbitrary) -- see the field's comment in profiles.py.
+    #
+    # 2026-09-04 (recommender rc.29): flipped again, this time for real
+    # reasons rather than a data-quality question. house's (and the other
+    # 12 real-fingerprint profiles') spectral_centroid_mu was mechanically
+    # re-derived against the same-night ribbon-redesigned expected_bands
+    # (real per-track median fingerprints), which collapsed every
+    # recomputed value into a narrow 250-450 Hz band -- house is now 450.
+    # synthwave is one of the four still-disabled, no-training-corpus
+    # profiles (see its own field comment / enabled=False) and was
+    # correctly NOT touched by that recompute, so it kept its old
+    # hand-authored 1700. The ordering is now an artifact of which
+    # profiles have real per-track data, not a genre-brightness claim --
+    # see spectral_centroid_mu's own field comment in profiles.py for the
+    # full finding (centroid_fit stays weight-0.0/dormant throughout, so
+    # none of this has live-scoring effect).
     house = get_profile('house')
-    assert p.spectral_centroid_mu < house.spectral_centroid_mu
+    assert p.spectral_centroid_mu > house.spectral_centroid_mu
 
 
 def test_synthwave_vocal_fields_left_uncalibrated() -> None:

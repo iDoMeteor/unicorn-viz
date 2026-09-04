@@ -10,13 +10,6 @@ exclude_display_indices = [3,4]   # raw SDL display indices ignored only by span
 [ansi]
 ansi_dir_auto = "assets/ansi/acid"
 
-[effects.AudioSpectrum]
-scale_when_framed = true
-# candy_frame_disallow = true
-
-[effects.AudioSine]
-chaos_snap = 0.2
-
 [midi]
 device = "apc mini mk2 notes"  # port name substring; empty = MIDI disabled
 preset = "akai_apc_mini_mk2"   # built-in preset: akai_apc_mini_mk2 | akai_mpk_mini | novation_launchcontrol | generic | ""
@@ -41,7 +34,7 @@ fps = 30
 # fps_limit = 30   # 0 = follow display vsync; 24 | 30 | 60
 
 [overlays]
-flash_messages = false
+flash_messages = true
 hud_auto_hide = false
 #hud_timeout_s = 60.0
 # Detector-internals HUD readouts (2026-09-01): default OFF for end users --
@@ -80,11 +73,11 @@ endpoint = "rtmp://live-api-s.rumble.com/live"
 # audio_bitrate = "160k"
 
 [spotify]
-enabled = true
+enabled = false
 poll_interval_s = 1
 
 [spotify.web_api]
-enabled = true
+enabled = false
 client_id = "9c8acb4afb744638917beab3b89ab369"
 scopes = [
 	"user-read-playback-state",
@@ -127,7 +120,7 @@ enabled = true
 start_enabled = false       # passive grade on at boot; Ctrl+Shift+Alt+L toggles
 
 [video_postfx]
-enabled = true
+enabled = false
 # video_dir = ""             # override; default this drop-in's own videos/ folder
 # max_layers = 4             # simultaneous chroma-keyed video layers (1-16)
 # key_tolerance = 0.14       # RGB distance below which a pixel is keyed out (0-1)
@@ -198,6 +191,8 @@ mode_snap_unit_climax = "bar"
 mode_phrase_within_bars_build = 1
 mode_phrase_within_bars_breakdown = 2
 mode_phrase_within_bars_climax = 2
+
+hud_production_mode = true
 
 
 [control_room]
@@ -435,11 +430,11 @@ headphone_device = "DDJ-REV1: USB Audio"    # cue on the REV1's outputs 3-4 (the
 # and runs a writer thread, so unlike a plain effect toggle, "loaded" and
 # "actively running" are deliberately kept separate here.
 [video_out]
-enabled = true
+enabled = false
 start_enabled = false
 
 [video_out.v4l2]
-enabled = true
+enabled = false
 device = "/dev/video10"   # empty => first existing /dev/video1x node
 fps_cap = 30              # 0 = every rendered frame
 
@@ -451,5 +446,5 @@ fps_cap = 30              # 0 = every rendered frame
 # above is the dependable, no-plugin path.
 #
 # [video_out.pipewire]
-# enabled = true
+# enabled = false
 # name = "Unicorn Viz"

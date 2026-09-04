@@ -1,0 +1,6 @@
+# Compiled pybind11 extension module. This is a GPL-3.0 derivative binary
+# (links BTrack's compiled C++ core) tied to the exact Python/glibc build
+# that produced it -- reproducible from the documented steps in README.md,
+# not something to check into the repo.
+*.so
+__pycache__/

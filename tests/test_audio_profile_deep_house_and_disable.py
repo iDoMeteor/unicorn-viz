@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from unicornviz.audio.profiles import (
     PROFILES,
     enabled_profiles,
@@ -64,7 +66,7 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
     assert 'electronic' in enabled   # revived as 'Dance' 2026-08-10
-    assert 'hyphy' not in enabled   # disabled 2026-08-10, see docs/adr/vj-system.md
+    assert 'hyphy' in enabled   # re-enabled 2026-09-04, see docs/adr/vj-system.md
     assert 'tech_house' not in enabled   # disabled 2026-08-11, see docs/adr/vj-system.md
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
@@ -95,8 +97,16 @@ def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
     longer in this set; 'hyphy' replaced it 2026-08-10 (disabled pending
     real trap/hyphy library material -- see docs/adr/vj-system.md);
     'tech_house' added 2026-08-11 (disabled pending recalibrated library
-    material, same doc)."""
-    _disabled = {'hyphy', 'tech_house'}
+    material, same doc); 'techno' added 2026-09-03 (disabled on arrival --
+    enabling it as a live candidate re-broke house winning its own list,
+    the third recurrence of spectral_shape_fit's level-reward defect; see
+    docs/adr/vj-system.md "Vocal-Term Calibration"); 'psytrance',
+    'hard_techno', 'hardstyle', 'synthwave' added 2026-09-04 (recommender
+    rc.29, evidence audit -- disabled for having zero training-list corpus
+    of any kind, every scoring field still hand-authored/guessed; see each
+    profile's own field comment and docs/adr/vj-system.md)."""
+    _disabled = {'hyphy', 'tech_house', 'techno', 'psytrance', 'hard_techno',
+                 'hardstyle', 'synthwave'}
     for key, profile in PROFILES.items():
         if key in _disabled:
             continue
@@ -205,10 +215,28 @@ def test_deep_house_expected_bands_well_formed() -> None:
     assert all(0.0 <= v <= 1.0 for v in p.expected_bands)
 
 
-def test_deep_house_vocal_fields_left_uncalibrated() -> None:
+def test_deep_house_vocal_fields_now_calibrated() -> None:
+    """2026-09-03 (recommender rc.27, vocal-term calibration): deep_house's
+    vocal_hnr_mu/vocal_fmr_mu were previously None ("intentionally left
+    uncalibrated"), but None isn't neutral in _profile_score() -- it makes
+    vocal_hnr_fit/vocal_fmr_fit score exactly 0.0, a free pass no
+    calibrated profile gets, which was found to be the real driver behind
+    deep_house dominating unrelated lists. Now calibrated from measured
+    training-deep-house-01's own median (config B -- not pooled with
+    training-progressive-house-01, see profiles.py's own field comment),
+    same as every other profile with a matching training list -- see
+    docs/adr/vj-system.md.
+
+    2026-09-04 (recommender rc.29): superseded by a per-track median-of-
+    medians re-fit (0.5384->0.5672 / 0.3192->0.3244), which also added a
+    real fitted vocal_hnr_sigma/vocal_fmr_sigma in place of the flat
+    0.20/0.15 constant every profile previously shared -- see
+    vocal_hnr_sigma's own field comment in profiles.py."""
     p = get_profile('deep_house')
-    assert p.vocal_hnr_mu is None
-    assert p.vocal_fmr_mu is None
+    assert p.vocal_hnr_mu == pytest.approx(0.5672)
+    assert p.vocal_fmr_mu == pytest.approx(0.3244)
+    assert p.vocal_hnr_sigma == pytest.approx(0.0444)
+    assert p.vocal_fmr_sigma == pytest.approx(0.0300)
 
 
 # ---- hyphy/chillstep fingerprint regeneration (2026-08-06) -------------
@@ -222,47 +250,47 @@ def _cosine_sim(a, b) -> float:
     return dot / (na * nb)
 
 
-def test_hyphy_chillstep_similarity_improved_and_stays_bounded() -> None:
-    """Regression guard against silently reverting to the old,
-    near-indistinguishable arrays (0.9788 similarity) -- and against a
-    future edit accidentally making them *more* similar again. Doesn't
-    assert a specific 'good enough' number since cosine similarity across
-    this genre cluster has an honest structural ceiling (see
-    docs/adr/vj-system.md) -- just that today's regenerated pair is
-    measurably better than the pre-2026-08-06 baseline."""
+def test_hyphy_chillstep_no_longer_compared_by_cosine() -> None:
+    """2026-09-04 (recommender rc.28, ribbon redesign): both hyphy and
+    chillstep now carry expected_bands_sigma, so spectral_shape_fit scores
+    them via the per-band Gaussian ribbon fit, not cosine similarity on
+    expected_bands -- the pre-redesign "0.9788 near-indistinguishable
+    cosine similarity" regression guard this replaces no longer describes
+    what actually discriminates these two profiles. See
+    docs/adr/vj-system.md "Spectral-Shape Ribbon Redesign"."""
     hyphy = get_profile('hyphy')
     chillstep = get_profile('chillstep')
-    sim = _cosine_sim(hyphy.expected_bands, chillstep.expected_bands)
-    assert sim < 0.975  # was 0.9788 before the scoped regeneration
+    assert hyphy.expected_bands_sigma is not None
+    assert chillstep.expected_bands_sigma is not None
+    assert len(hyphy.expected_bands_sigma) == 64
+    assert len(chillstep.expected_bands_sigma) == 64
 
 
-def test_hyphy_disabled_and_tightened_pending_real_library_material() -> None:
-    """2026-08-10: a real 3-hour session found the recommender picking
-    hyphy for real hip-hop tracks (987x) that should land on rap_rnb, and
-    there are no known hyphy/trap tracks in the library to validate
-    against at all -- so every hyphy pick in that data was very likely a
-    false positive by construction. Disabled (still directly resolvable,
-    same disable-not-delete pattern already used for 'electronic'/
-    'generic' before generic's later full elimination) and tightened in
-    the same pass: bpm_prior_sigma 0.20 -> 0.15, spectral_centroid_sigma
-    600 (wide tier) -> 400 (medium, the dataclass default) -- 'wide' was
-    never re-justified for hyphy the way it was for house's genuinely
-    diverse library content. 2026-08-14: 0.15 -> 0.13, sigma-matches-
-    hint-band pass (see house's own field comment in profiles.py) --
-    consistent with, not a reversal of, the sharpening above. See
-    docs/adr/vj-system.md."""
+def test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01() -> None:
+    """2026-08-10: disabled -- a real 3-hour session found the recommender
+    picking hyphy for real hip-hop tracks (987x) that should land on
+    rap_rnb, and there were no known hyphy/trap tracks in the library to
+    validate against at all, so every hyphy pick in that data was very
+    likely a false positive by construction.
+
+    2026-09-04: RE-ENABLED. training-trap-hip-hop-01 supplies exactly the
+    real material the disable reason was waiting on. Owner: "trap should
+    def be on its own" -- split out of the rap_rnb pool (which now covers
+    only hip-hop + rnb) into this profile. bpm_prior_mu/sigma/hint fully
+    recalibrated from trap-hip-hop-01's own real detected-bpm distribution
+    (median 141.2 BPM) -- the old 100-118 hand-guess was never validated
+    and turned out far off. See docs/adr/vj-system.md "Spectral-Shape
+    Ribbon Redesign"."""
     hyphy = get_profile('hyphy')
-    assert hyphy.enabled is False
+    assert hyphy.enabled is True
     assert hyphy.name == 'Hyphy / Trap'
-    assert 'hyphy' not in enabled_profiles()
-    assert 'hyphy' in PROFILES   # still directly resolvable, not eliminated
-    assert hyphy.bpm_prior_sigma == 0.13
-    assert hyphy.spectral_centroid_sigma == 400.0
-    # Band itself untouched -- tightening is about discrimination sharpness
-    # within the band, not closing an overlap gap (100-118 was already
-    # adjacent to house's 118-126 and rap_rnb's 70-100, not overlapping).
-    assert hyphy.bpm_hint_min == 100.0
-    assert hyphy.bpm_hint_max == 118.0
+    assert 'hyphy' in enabled_profiles()
+    assert 'hyphy' in PROFILES
+    assert hyphy.bpm_hint_min == 127.0
+    assert hyphy.bpm_hint_max == 155.0
+    assert 130.0 < hyphy.bpm_prior_mu < 150.0
+    assert hyphy.expected_bands_sigma is not None
+    assert len(hyphy.expected_bands_sigma) == 64
 
 
 # ---- mu-in-hint drift canary (2026-08-10) -------------------------------

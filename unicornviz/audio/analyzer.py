@@ -99,6 +99,19 @@ _PERC_N_BANDS = 64
 _PERC_F_MIN = 30.0
 _PERC_F_MAX = 16_000.0
 
+# Low-band resolution fix (2026-09-04) -- see Analyzer.__init__'s own
+# comment on self._low_band_pcm for the full diagnosis. 8192 samples
+# (170.7ms at 48kHz) leaves only the bottom ~2 of 64 bands still sharing
+# an FFT bin, down from 19 at the short path's 1024-sample window --
+# chosen over doubling (4096, still 7 collapsed) and over widening the
+# SHARED short window that every effect's transient response depends on.
+_LOW_BAND_N_FFT = 8192
+# Number of low bands (0-indexed, exclusive upper bound) replaced by the
+# long-window analysis -- matches exactly how many bands collapse under
+# the SHORT path's own 1024-sample window at 48kHz (verified directly
+# against _recompute_band_edges()'s own construction, not eyeballed).
+_LOW_BAND_REPLACE_N = 25
+
 # 2026-08-11: public (not underscore-prefixed) geometric-mean center
 # frequency of each of the 64 bands above, Hz -- the same formula
 # tools/gen_spectral_fingerprints.py uses to derive AudioProfile's
@@ -157,6 +170,13 @@ _VOCAL_FMR_HZ = (3.0, 8.0)
 _VOCAL_FMR_RECOMPUTE_FRAMES = 8   # throttle the modulation FFT; ~130-190ms at typical block sizes
 
 
+def _princarg(phase: np.ndarray) -> np.ndarray:
+    """Wrap phase (radians) into (-pi, pi] -- used by the complex-domain
+    onset function's constant-phase-advance prediction (see
+    Analyzer._compute_complex_onset_flux)."""
+    return np.mod(phase + np.pi, 2.0 * np.pi) - np.pi
+
+
 @dataclass(frozen=True)
 class OnsetEvent:
     """A detected onset with audio-time timestamp and relative strength.
@@ -211,6 +231,16 @@ class Analyzer:
         self._prev_spectrum = np.zeros(fft_bands, dtype=np.float32)
         self._flux_delta = np.zeros(fft_bands, dtype=np.float32)
         self._prev_rms = 0.0
+        # Complex-domain onset function (2026-09-04, Program B step 3
+        # continuation) -- two-frame magnitude/phase history for the
+        # phase-and-energy prediction (Bello et al. 2004 section III):
+        # frame n needs frames n-1 and n-2 to predict its own complex
+        # spectrum. See _compute_complex_onset_flux()'s own docstring.
+        self._complex_onset_mag_prev = np.zeros(fft_bands, dtype=np.float64)
+        self._complex_onset_mag_prev2 = np.zeros(fft_bands, dtype=np.float64)
+        self._complex_onset_phase_prev = np.zeros(fft_bands, dtype=np.float64)
+        self._complex_onset_phase_prev2 = np.zeros(fft_bands, dtype=np.float64)
+        self._complex_onset_frames_seen = 0
         # Silence gate parameters. ``silence_rms_floor`` is the RMS level below
         # which the analyzer treats the input as silent (no spectrum, no
         # onsets). ``silence_rms_span`` is the additional RMS range over which
@@ -294,16 +324,43 @@ class Analyzer:
         self._spectrum_work: np.ndarray = np.zeros(fft_bands, dtype=np.float32)
         self._windowed_buf: np.ndarray = np.zeros(1024, dtype=np.float32)
 
-        # 64-band perceptual bucketing (shared with audio_spectrum.py consumers).
-        # Edges are bin indices into the 512-bin FFT output; precomputed once.
-        edges_hz = np.logspace(
-            np.log10(_PERC_F_MIN), np.log10(_PERC_F_MAX), _PERC_N_BANDS + 1,
-        )
-        bin_hz = self._sample_rate / max(1, fft_bands * 2)
-        self._perc_edges: np.ndarray = np.clip(
-            np.round(edges_hz / bin_hz).astype(int), 0, fft_bands - 1,
-        )
         self._perc_work: np.ndarray = np.zeros(_PERC_N_BANDS, dtype=np.float32)
+
+        # Low-band resolution fix (2026-09-04): the short FFT above (1024
+        # samples at 48kHz -- 46.875 Hz/bin) cannot resolve the bottom of
+        # the 64 log-spaced bands at all -- 19 of 64 collapse onto a
+        # shared FFT bin (bands 0-8 ALL read the exact same bin, every
+        # frame, for every track, regardless of genre), which is not
+        # measurement noise, it's zero information, replicated and fed
+        # into every downstream consumer (effects, spectral_shape_fit's
+        # fingerprint matching) as if it were real per-band texture. Found
+        # live diagnosing why every profile's data-derived expected_bands
+        # fingerprint looked nearly identical to every other one
+        # (>=0.94 cosine-similar across the whole roster) -- traced to
+        # this, not a feature-ceiling problem. Fixed WITHOUT touching the
+        # short FFT's own 21ms window (owner: effects were designed
+        # assuming these numbers are real; widening the shared window
+        # would slow every effect's transient response, worst at fast
+        # BPM genres where a beat subdivision is already short) -- see
+        # docs/adr/vj-system.md "Low-Band Resolution: Dual-Window Fix"
+        # for the full option comparison (widen vs. dual-window vs.
+        # constant-Q) and why this one was chosen.
+        #
+        # Second, dedicated, LOW-CADENCE-EQUIVALENT FFT (long window,
+        # same per-tick cost as the fast path since a 8192-pt real FFT is
+        # microseconds in numpy -- "slow" refers to the window's TIME
+        # SPAN, not how often it runs) computed from a persistent rolling
+        # PCM buffer, replacing only the low bands the short FFT cannot
+        # resolve. 8192 samples (170.7ms at 48kHz) leaves only 2 of 64
+        # bands still collapsed (the theoretical floor near 30 Hz itself),
+        # down from 19 -- verified directly against this file's own
+        # _perc_edges construction below before landing.
+        self._low_band_pcm: np.ndarray = np.zeros(_LOW_BAND_N_FFT, dtype=np.float32)
+        self._low_band_windowed: np.ndarray = np.zeros(_LOW_BAND_N_FFT, dtype=np.float32)
+        self._low_band_window: np.ndarray = np.hanning(_LOW_BAND_N_FFT).astype(np.float32)
+        self._low_band_warm_samples: int = 0  # counts toward a full buffer before first use
+
+        self._recompute_band_edges()
 
         self._setup_frequency_bands()
 
@@ -362,6 +419,7 @@ class Analyzer:
             return
         self._sample_rate = rate
         self._bin_hz = self._sample_rate / max(1, self._n_fft)
+        self._recompute_band_edges()
 
     def set_profile(self, profile: AudioProfile) -> None:
         """Switch to a new profile and recalculate frequency bands."""
@@ -613,6 +671,35 @@ class Analyzer:
             return 0.0
         return float(sub.mean())
 
+    def _recompute_band_edges(self) -> None:
+        """(Re)compute the 64-band perceptual bucketing edges for both the
+        short (fast-path) and long (low-band) FFTs, from the analyzer's
+        current ``_sample_rate``.
+
+        2026-09-04: previously this was computed ONCE at construction
+        time using whatever ``_sample_rate`` happened to be set then
+        (the module fallback, ``_ASSUMED_SAMPLE_RATE``) and never
+        recomputed -- ``set_sample_rate()`` updated ``_bin_hz`` but not
+        the edge tables that formula feeds, so a real device negotiating
+        a different rate (44.1kHz being the obvious case) silently left
+        every band's bin-index mapping computed for the wrong rate for
+        the rest of the session. Found live while making the low-band
+        edges below rate-aware -- fixed for both edge tables in the same
+        pass rather than leaving the short-path one newly inconsistent
+        with the long-path one.
+        """
+        edges_hz = np.logspace(
+            np.log10(_PERC_F_MIN), np.log10(_PERC_F_MAX), _PERC_N_BANDS + 1,
+        )
+        bin_hz = self._sample_rate / max(1, self._bands * 2)
+        self._perc_edges: np.ndarray = np.clip(
+            np.round(edges_hz / bin_hz).astype(int), 0, self._bands - 1,
+        )
+        low_bin_hz = self._sample_rate / max(1, _LOW_BAND_N_FFT)
+        self._low_band_edges: np.ndarray = np.clip(
+            np.round(edges_hz / low_bin_hz).astype(int), 0, _LOW_BAND_N_FFT // 2 - 1,
+        )
+
     def _window_for(self, n: int) -> np.ndarray:
         """Return a cached Hann window for the given block length."""
         window = self._window_cache.get(n)
@@ -620,6 +707,61 @@ class Analyzer:
             window = np.hanning(n).astype(np.float32)
             self._window_cache[n] = window
         return window
+
+    def _compute_complex_onset_flux(self, fft_raw: np.ndarray) -> float:
+        """Complex-domain onset detection function (Bello, Duxbury, Davies
+        & Sandler, "On the Use of Phase and Energy for Musical Onset
+        Detection in the Complex Domain," IEEE Signal Processing Letters,
+        vol. 11, no. 6, June 2004).
+
+        For each FFT bin, predicts this frame's complex value from the
+        previous two frames (predicted magnitude = previous frame's
+        magnitude; predicted phase = previous phase plus the previous
+        phase increment -- the constant-phase-advance assumption), then
+        takes the Euclidean distance between predicted and observed
+        complex spectra, summed across bins, as the raw ODF value. Purely
+        causal: uses only the current frame plus its two immediate
+        predecessors, no lookahead.
+
+        Ported from tools/beat-tracker-bench/onset-prototype/
+        complex_onset.py's ComplexOnsetDetector._process_frame() (built
+        for Program B's OSS beat-tracker comparison, see
+        docs/adr/vj-system.md and tools/beat-tracker-bench/results/
+        detector-scorecard.md) -- that module's own docstring documents
+        the clean-room provenance (reimplemented from the published
+        paper's own description; BTrack's GPL-3.0 source was not read).
+        Reuses ``fft_raw`` (already computed once per tick for the
+        magnitude spectrum / bands / flux) for its phase -- no extra FFT.
+
+        Returns the raw (un-normalized) ODF value; ``beat_grid.py``'s
+        ``env_source='dense_complex'`` path applies the same causal
+        median/MAD normalization already ported there for
+        ``spectral_flux``'s own ``'dense_flux'`` path, so this method
+        deliberately does not normalize.
+        """
+        spec = fft_raw[: self._bands]
+        mag = np.abs(spec).astype(np.float64)
+        phase = np.angle(spec).astype(np.float64)
+        self._complex_onset_frames_seen += 1
+
+        if self._complex_onset_frames_seen <= 2:
+            odf = 0.0
+        else:
+            mag_pred = self._complex_onset_mag_prev
+            phase_pred = _princarg(
+                2.0 * self._complex_onset_phase_prev - self._complex_onset_phase_prev2
+            )
+            d2 = (
+                mag ** 2 + mag_pred ** 2
+                - 2.0 * mag * mag_pred * np.cos(phase - phase_pred)
+            )
+            odf = float(np.sqrt(np.clip(d2, 0.0, None)).sum())
+
+        self._complex_onset_mag_prev2 = self._complex_onset_mag_prev
+        self._complex_onset_mag_prev = mag
+        self._complex_onset_phase_prev2 = self._complex_onset_phase_prev
+        self._complex_onset_phase_prev = phase
+        return odf
 
     def process(
         self,
@@ -685,6 +827,15 @@ class Analyzer:
         if energy <= 1e-5:
             flux = 0.0
         np.copyto(self._prev_spectrum, spectrum)   # save raw for next frame
+
+        # --- Complex-domain onset function (raw spectrum + phase) ---
+        # Reuses fft_raw's phase for free -- no extra FFT. Gated like flux
+        # (silence -> 0.0) but the two-frame history itself always advances,
+        # same reasoning as _prev_spectrum above: keeps the prediction warm
+        # so real audio resuming after a quiet patch doesn't need two more
+        # frames to "recover" before producing a real value again.
+        complex_onset_flux = self._compute_complex_onset_flux(fft_raw)
+        data.complex_onset_flux = complex_onset_flux if energy > 1e-5 else 0.0
 
         # Per-band raw sub-fluxes for downbeat detection
         data.bass_flux = float(np.sum(
@@ -793,12 +944,47 @@ class Analyzer:
         self._smoothed += spectrum * (1.0 - _SMOOTHING)
         data.fft[:] = self._smoothed
 
+        # Low-band resolution fix (2026-09-04): keep the long-window rolling
+        # buffer warm every tick, regardless of the energy gate below, so a
+        # brief quiet passage doesn't force a re-warm-up once real signal
+        # resumes -- see self._low_band_pcm's own __init__ comment.
+        if n >= _LOW_BAND_N_FFT:
+            self._low_band_pcm[:] = pcm[-_LOW_BAND_N_FFT:]
+        else:
+            self._low_band_pcm[:-n] = self._low_band_pcm[n:]
+            self._low_band_pcm[-n:] = pcm[:n]
+        self._low_band_warm_samples = min(_LOW_BAND_N_FFT, self._low_band_warm_samples + n)
+
         # 64-band perceptual spectrum (raw, no visual gain) — bucket smoothed
         # FFT bins into log-spaced bands and normalize to [0, 1].
         edges = self._perc_edges
         for i in range(_PERC_N_BANDS):
             lo, hi = int(edges[i]), int(edges[i + 1])
             self._perc_work[i] = self._smoothed[lo:hi + 1].mean() if hi > lo else self._smoothed[lo]
+
+        # Low-band resolution fix, continued: replace the bottom
+        # _LOW_BAND_REPLACE_N bands (the ones the short FFT above cannot
+        # resolve -- see _LOW_BAND_REPLACE_N's own comment) with values
+        # from the long-window FFT, once the rolling buffer has seen a
+        # full window's worth of real audio. Scale-corrected by the ratio
+        # of window sums so a sustained tone's magnitude is comparable
+        # between the two differently-sized Hann windows -- the short
+        # path applies no normalization of its own either, so this
+        # matches that existing convention rather than inventing a new
+        # one. Deliberately NOT reached during silence (matches every
+        # other energy-gated block in this method) -- a near-zero buffer
+        # would just replace real zeros with differently-scaled near-zero
+        # noise for no benefit.
+        if energy > 1e-5 and self._low_band_warm_samples >= _LOW_BAND_N_FFT:
+            np.multiply(self._low_band_pcm, self._low_band_window, out=self._low_band_windowed)
+            low_mag = np.abs(np.fft.rfft(self._low_band_windowed))
+            low_edges = self._low_band_edges
+            scale = float(window.sum()) / float(self._low_band_window.sum())
+            for i in range(_LOW_BAND_REPLACE_N):
+                lo, hi = int(low_edges[i]), int(low_edges[i + 1])
+                val = low_mag[lo:hi + 1].mean() if hi > lo else low_mag[lo]
+                self._perc_work[i] = val * scale
+
         peak_perc = self._perc_work.max()
         if peak_perc > 1e-6:
             np.multiply(self._perc_work, 1.0 / peak_perc, out=self._perc_work)
@@ -818,6 +1004,18 @@ class Analyzer:
             data.waveform[:wlen] = (wform / peak).astype(np.float32)
         else:
             data.waveform.fill(0.0)
+
+        # Zero-crossing rate (2026-09-03, recommender rc.27): fraction of
+        # adjacent-sample sign changes in the just-written waveform window
+        # -- same formula auto_vj.py's own recommender scoring already
+        # computed ad hoc from audio.waveform every tick; promoted to a
+        # proper Analyzer-computed field (see AudioData.zcr) so it is
+        # computed once and available to the training corpus.
+        if energy > 1e-5 and wlen > 1:
+            wv = data.waveform[:wlen]
+            data.zcr = float(np.mean(np.abs(np.diff(np.sign(wv))) > 0))
+        else:
+            data.zcr = 0.0
 
         # Band energy from normalised smoothed spectrum.
         bass_raw = self._safe_mean(self._smoothed, self._bass_slice)

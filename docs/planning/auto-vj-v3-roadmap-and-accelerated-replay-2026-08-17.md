@@ -299,6 +299,172 @@ failure, not smoothed over.
 onset function. Batch 1 is mechanism verification on a fixed, unchanged
 decision stack only.
 
+### 0.6 Program B step 3 — pre-registration, batch 2 (2026-09-03)
+
+Batch 1 landed `env_source` gated behind a config default that stays
+bit-identical to rc.40 (`tools/baselines/program_b_step3_batch1-2026-09-03.md`,
+main-repo `59f8456`). Batch 2 is the landing batch: explain the one open
+anomaly, run the full panel, retune only if a guard actually fails, clear
+every xfail this whole program has touched, then flip the default and
+close E5 as detector rc.41.
+
+**Part A — the never-lock anomaly, before anything else.** `Pradateek &
+Rhymster – Flagrant (Dirty).mp3` never produced a nonzero `bpm` under
+`e5-dense-v2` in batch 1's checkpoint (`p50=0.00`), where `stock-v2` on
+the same track got *some* estimate (103.22, itself a 2:3 fold). Plan:
+re-run this one track alone under `env_source='dense_flux'` with direct instrumentation on the causal normalizer (`_env_flux_history`,
+`_normalize_flux()`'s returned `z` per tick) and the resulting `_env_
+dense_value`/envelope-buffer contents, alongside the v2 tracker's own
+`confidence`/ACF-peak state over the session. Candidate hypotheses,
+tested in order, not assumed: (1) the causal normalizer's own 8-tick
+cold-start floor (`z=0.0` until history fills) combined with unusually
+low or unusually uniform `spectral_flux` on this specific track never
+produces a peaked-enough envelope for v2's ACF to lock onto at all; (2)
+a track-specific decode or block-timing artifact unrelated to
+`env_source` (check under `stock-v2` with the same instrumentation
+enabled, to see whether IT also shows degraded — just not zero — signal
+on this track); (3) a genuine bug in the dense-write path specific to
+this track's audio characteristics (silence, clipping, mono-vs-stereo,
+etc.). Reported with a stated root cause — not "investigated, unclear" —
+before batch 2's panel runs, since a never-lock is a qualitatively
+different failure than a wrong lock and the panel's own guards (below)
+aren't built to catch a *lock coverage* collapse the way they catch a
+*tempo accuracy* one.
+
+**Part B — the panel.** `env_source='dense_flux'`, decision stack
+unchanged (retune only if Part C triggers), 19 lists × 2 seeds:
+
+- **v3** (38 runs): compared against the existing rc.40 final baseline
+  (`tools/baselines/director_placement_final-baseline-2026-09-03.json`)
+  directly, and against madmom/BTrack's own per-list Acc1/Acc2 —
+  computed (not re-run) from `tools/beat-tracker-bench/results/
+  batch_311_madmom_table.csv`/`batch_311_btrack_table.csv`, joined to
+  list via `bench_reference_19lists.csv`'s own `list` column (306 tracks
+  matched, 0 unmatched, verified before writing this pre-registration):
+
+  | List | madmom Acc1 | BTrack Acc1 |
+  | --- | --- | --- |
+  | ambient-01 | 6/14 (42.9%) | 9/14 (64.3%) |
+  | big-room-01 | 7/11 (63.6%) | 7/11 (63.6%) |
+  | curveballs-01 | 8/8 (100%) | 8/8 (100%) |
+  | dance-01 | 14/16 (87.5%) | 15/16 (93.8%) |
+  | deep-house-01 | 11/11 (100%) | 11/11 (100%) |
+  | dnb-01 | 10/16 (62.5%) | 5/16 (31.3%) |
+  | downtempo-01 | 7/14 (50.0%) | 8/14 (57.1%) |
+  | dubstep-01 | 4/14 (28.6%) | 9/14 (64.3%) |
+  | favorites | 54/56 (96.4%) | 54/56 (96.4%) |
+  | future-house-01 | 14/16 (87.5%) | 14/16 (87.5%) |
+  | hip-hop-01 | 10/18 (55.6%) | 9/18 (50.0%) |
+  | house-01 | 14/15 (93.3%) | 14/15 (93.3%) |
+  | nu-disco-01 | 12/14 (85.7%) | 12/14 (85.7%) |
+  | prog-house-01 | 12/13 (92.3%) | 12/13 (92.3%) |
+  | rnb-01 | 4/7 (57.1%) | 3/7 (42.9%) |
+  | tech-house-01 | 16/17 (94.1%) | 16/17 (94.1%) |
+  | techno-01 | 11/14 (78.6%) | 12/14 (85.7%) |
+  | trance-01 | 11/11 (100%) | 9/11 (81.8%) |
+  | trap-hip-hop-01 | 8/21 (38.1%) | 6/21 (28.6%) |
+
+  Full JSON: `tools/baselines/madmom_btrack_per_list_reference-2026-09-03.json`
+  (training-kit-01).
+- **v2** (38 runs): same 19×2, `env_source='dense_flux'`. No fresh
+  `env_source='pulses'` v2 baseline is run — that is simply today's
+  shipped v2 behaviour, already the reference every existing v2 ADR
+  entry and test describes; this run's job is confirming the house-fold
+  avoidance found on the 22-hardest checkpoint (Bon Jovi, Tim Cosmos,
+  Tove Lo) generalizes across the full 19-list corpus, not re-establishing
+  a baseline that already exists.
+- 76 replay runs total, 3-parallel (established convention), BATCH
+  START/END, path-only staging, tree freeze for the duration.
+
+**Gate, as already specified:** house family no worse on any list, dnb no
+worse, churn lower everywhere, dubstep allowed flat (dubstep's own tempo
+read is expected to stay poor — a genuinely bimodal genre, not a detector
+defect, per batch 1's own onset-prototype-bench-consistent finding).
+
+**Part C — the 22-hardest retune sweep, ONLY if a Part B guard fails.**
+Not run on principle — the bench's own finding (Program B step 2) is that
+stock `_V2_*`/`_V3_*` constants already win under the dense write path
+with zero retuning (76.5/96.7 tying-or-beating madmom/BTrack on the full
+311-track set). If every Part B guard holds, Part C is skipped entirely
+and the panel's own numbers are what land. If any guard fails, the sweep
+is scoped narrowly to whichever constant family the specific failure
+implicates (e.g. a house-family regression → comb/template constants; a
+dnb regression → fold-probability/lattice constants) rather than a blind
+full-stack sweep, and gets its own pre-registration before running.
+
+**Part D — zero new xfails, the exit condition.** Every test this whole
+program has touched (`tests/test_envelope_advance_rate.py`'s three,
+the 9 that were briefly `xfail`'d in batch 1 and are green again under
+the `'pulses'` default) gets re-run explicitly constructed with
+`env_source='dense_flux'`. Per the owner's rule (tests move only when the
+improvement is demonstrated, and "xfail" is not "moved"): a test that
+passes as-is under `dense_flux` needs no change; a test whose synthetic
+click track needs jitter added (matching the already-adopted
+`jitter_s=0.01` convention) gets it, with the stated reason "co-adapted
+to the old clock's timing jitter, re-derived under the true one"; a test
+whose PINNED VALUE needs to change gets the new value with a stated
+reason tied to a real measurement (not a guess); a test that pins
+behaviour this landing deliberately retires gets rewritten to assert the
+new, intended behaviour, not deleted or silently skipped. Batch 2 is not
+done while any xfail marker from this program remains anywhere in the
+suite.
+
+**Part E — perf-frame cost (owner's question, no tuning).** Four short
+replays (~2-5 min each), one per `(engine, env_source)` combination —
+v2/pulses, v2/dense, v3/pulses, v3/dense — with `[logging] perf_frames =
+true` and `level = DEBUG` (the existing stage profiler,
+`unicornviz/app.py`'s `perf_frame_start`/`Perf frame:` log line, already
+reports a named `auto_vj=%.2fms` field). Sampling caveat, stated up
+front: the profiler logs every ~120th frame plus every frame ≥25ms, not
+every frame — mean/p95 are computed over that sampled population, not a
+full census; reported as such, not smoothed over. Parse the `auto_vj=`
+field from each run's DEBUG log, report mean and p95 per combination —
+four numbers total (or eight, mean+p95 × 4), nothing else. Peer's
+prediction, recorded verbatim: v3 adds under 0.5 ms per frame over v2 on
+this box; `dense_flux` adds nothing measurable over `pulses` on the same
+engine.
+
+**Part F — landing, once Parts A-E all close clean.** Flip the shipped
+default `env_source: 'pulses'` → `'dense_flux'` (the only place this
+changes: `beat_grid.py`'s `cfg.get('env_source', 'pulses')` default
+literal). `_DETECTOR_VERSION` → `rc.41`. Add `env_source` to
+`_detector_snapshot()`'s corpus-row payload (new field; no existing
+snapshot field currently records which write path produced a session's
+data, the exact gap `ANALYSIS_VERSION`-style provenance exists to close
+elsewhere in this project) so any bucket packaged from here on states
+which envelope path produced it. `docs/adr/vj-system.md` gets a closing
+"E5 — Resolved" entry superseding (not deleting) the original finding and
+both addenda, with the panel numbers, the never-lock root cause, and the
+perf-frame numbers. `weights-and-thresholds.md`'s `env_source` row and
+header update (doc version +1). README changelogs in both auto-vj-01
+(`__version__`) and training-kit-01 if the packager needs any further
+touch. Report to the peer before this final commit, per the same
+gating this whole program has used throughout.
+
+**Predictions (peer's, recorded verbatim before the run):**
+
+- **Part A** resolves to hypothesis 1 (normalizer cold-start on unusually
+  low/uniform flux); the fix, if any, is a normalizer floor adjustment,
+  not a write-path change.
+- **Part B, v3 dense vs the rc.40 baseline:** pooled exact up by at least
+  8 points; house family up on every list, with at least 5 points on
+  house-01/deep-house-01/tech-house-01/prog-house-01; dnb up; dubstep flat
+  within 3 points; smoothed churn lower on 19 of 19 lists; pooled exact
+  within 2 points of madmom/BTrack on the same tracks.
+- **Part B, v2 dense:** zero house-family tracks folding to half tempo
+  (any list, any seed); churn lower on every list.
+- **Part E:** v3's `auto_vj` stage mean stays under 0.5 ms above v2's on
+  this box; `dense_flux` stays within 0.1 ms of `pulses` for both engines.
+
+**Execution order, once the freeze lifts:** A first (single-track,
+cheap), then B (76 runs, 3-parallel, BATCH START/END) -- E fits in the
+gap before landing once B's guards are known to hold; D and F only after
+both sets of guards (Part B's gate, these predictions) have actually been
+read, not before. **Nothing in Parts A/B/E runs until the peer sends
+"replays clear"** -- a live owner A/B session is in progress and replay
+processes make it laggy; this pre-registration is written and approved,
+execution is paused on that signal alone.
+
 ---
 
 ## Part 1 — The v3 roadmap, summarized

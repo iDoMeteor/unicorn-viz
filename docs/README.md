@@ -28,6 +28,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **Post-soak reminders — Progressive Trance/Melodic Techno genre gap, 8192-sample low-band buffer ideas (2026-09-04, deferred to "next week"):** [docs/planning/post-soak-reminders-2026-09-04.md](planning/post-soak-reminders-2026-09-04.md)
 - **Recommender & director excellence plan — labels → recommender recalibration → detector v3 → director (2026-08-31, active; carries the 2026-08-31 tuning-experiment follow-ups and the ID3 library-calibration program):** [docs/planning/recommender-director-excellence-plan-2026-08-31.md](planning/recommender-director-excellence-plan-2026-08-31.md)
 - **Auto VJ v3 roadmap + accelerated local-track replay plan (2026-08-17; Part 2 landed 2026-08-18, Thread 1 / BeatTrackerV3 landed 2026-09-03 — its Part 0 is the live post-bench program: director mode quantization, then the detector observation re-tune):** [docs/planning/auto-vj-v3-roadmap-and-accelerated-replay-2026-08-17.md](planning/auto-vj-v3-roadmap-and-accelerated-replay-2026-08-17.md)
 - **Auto VJ genre intelligence + BPM/genre candidate matching plan (2026-08-20, planning only):** [docs/planning/auto-vj-genre-intelligence-candidate-matching-2026-08-20.md](planning/auto-vj-genre-intelligence-candidate-matching-2026-08-20.md)

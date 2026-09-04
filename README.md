@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.103**
+**Version 1.0.0-beta.105**
 
 ## Contact Me!
 
@@ -557,6 +557,41 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.106** — Two new `AudioData` fields, promoted from ad hoc
+  computations that were invisible to effects and the training corpus:
+  `zcr` (zero-crossing rate of the last 512-sample waveform window --
+  previously computed inline, from scratch, inside auto-vj-01's own
+  recommender-sample path; now computed once in `Analyzer.process()` like
+  `vocal_hnr`/`vocal_fmr`) and `complex_onset_flux` (Bello, Duxbury,
+  Davies & Sandler 2004 complex-domain onset detection function, raw
+  per-tick value, feeding auto-vj-01's `'dense_complex'` `env_source` --
+  see that submodule's own `1.0.0-rc.122` changelog entry for the
+  detector-side landing). Both fields flow through `copy_audio_data()` to
+  every consumer, including corpus rows. `zcr` in particular closed a
+  real gap: auto-vj-01's `zcr_fit`/`onset_fit` recommender terms had no
+  reconstructable-from-corpus input at all before this landed.
+- **1.0.0-beta.105** — Low-band resolution fix for the shared 64-band
+  perceptual spectrum (`AudioData.bands`, used by every effect and by
+  the recommender's spectral-shape fingerprint matching): the short FFT
+  (1024 samples, 46.875 Hz/bin at 48kHz) cannot resolve the bottom of
+  the 64 log-spaced bands at all — 19 of 64 were collapsing onto a
+  shared FFT bin, reading the exact same value every frame regardless of
+  genre. Fixed with a second, independent 8192-sample FFT (170.7ms
+  window) that replaces only the bottom 25 bands the short path can't
+  resolve — every effect's transient response and every other signal
+  (`bass`/`mid`/`treble`, flux, vocal features) is completely untouched,
+  measured ~677µs total `process()` cost (long FFT included) against a
+  ~10.7ms real-time budget at 512-sample/48kHz blocks. Also fixes an
+  adjacent bug found while building this: `set_sample_rate()` updated
+  `_bin_hz` but never recomputed the band-edge tables that formula
+  feeds, silently leaving the whole session's band-to-Hz mapping wrong
+  for any device not running at the 48000 Hz construction-time fallback.
+  Also (earlier the same night, folded into this bump): `AudioData.zcr`
+  and `complex_onset_flux` fields, corpus/detector-facing additions —
+  see `drop-ins/auto-vj-01/README.md`'s own changelog for the
+  detector/recommender-side landings these feed. See
+  `docs/adr/vj-system.md` "Low-Band Resolution: Dual-Window Fix" for the
+  full diagnosis, the three options considered, and why this one won.
 - **1.0.0-beta.103** — Spectral contrast in the analyzer: EMA-smoothed
   mean log peak/valley gap over 6 octave bands ("peakiness" —
   harmonic-rich vs dense/noisy, a dimension centroid/zcr/bands never

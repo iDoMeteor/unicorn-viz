@@ -97,6 +97,50 @@ def test_envelope_rate_is_100hz_without_onsets_dense_flux() -> None:
     assert abs(rate - _BG._V2_ENV_RATE) < 1.0, rate
 
 
+def test_envelope_rate_is_100hz_with_onsets_inside_ticks_dense_complex() -> None:
+    """2026-09-04: 'dense_complex' shares the exact same E5 write-through
+    mechanism as 'dense_flux' (only the raw source field differs, handled
+    in update(), not in the clock/write-primitive tested here) -- mirrors
+    the dense_flux test above verbatim, dense_complex substituted."""
+    tk = _Counting(env_source='dense_complex')
+    span = _run(tk, 30.0, onset_every_ticks=4)
+    rate = tk.writes / span
+    assert abs(rate - _BG._V2_ENV_RATE) < 1.0, rate
+
+
+def test_envelope_rate_is_100hz_without_onsets_dense_complex() -> None:
+    tk = _Counting(env_source='dense_complex')
+    span = _run(tk, 30.0, onset_every_ticks=0)
+    rate = tk.writes / span
+    assert abs(rate - _BG._V2_ENV_RATE) < 1.0, rate
+
+
+def test_dense_complex_reads_complex_onset_flux_not_spectral_flux() -> None:
+    """The one real behavioral difference between 'dense_flux' and
+    'dense_complex': which AudioData field feeds the dense write. Confirms
+    the field selection in update() (drop-ins/auto-vj-01/beat_grid.py)
+    actually reads audio.complex_onset_flux for 'dense_complex' -- a
+    silent typo here (e.g. always reading spectral_flux regardless of
+    env_source) would pass every other test in this file since both
+    fields are floats and the write mechanism itself is identical.
+    Checks the raw value landed in _env_flux_history directly (not the
+    normalized _env_dense_value) since the causal normalizer reads 0.0
+    with an empty warm-up history regardless of the raw input."""
+    tk = _BG.BeatTracker({'env_source': 'dense_complex'})
+    audio_a = SimpleNamespace(bass=0.0, mid=0.0, treble=0.0, bass_flux=0.0, mid_flux=0.0, treble_flux=0.0,
+                               spectral_flux=0.0, complex_onset_flux=5.0,
+                               waveform=None, fft=None, beat=False, bpm=0.0, energy=0.0)
+    tk.update(1.0 / 60.0, audio_a, onsets=[], t=1.0 / 60.0)
+    assert list(tk._env_flux_history) == [5.0], tk._env_flux_history
+
+    tk2 = _BG.BeatTracker({'env_source': 'dense_complex'})
+    audio_b = SimpleNamespace(bass=0.0, mid=0.0, treble=0.0, bass_flux=0.0, mid_flux=0.0, treble_flux=0.0,
+                               spectral_flux=5.0, complex_onset_flux=0.0,
+                               waveform=None, fft=None, beat=False, bpm=0.0, energy=0.0)
+    tk2.update(1.0 / 60.0, audio_b, onsets=[], t=1.0 / 60.0)
+    assert list(tk2._env_flux_history) == [0.0], tk2._env_flux_history
+
+
 def test_envelope_rate_stays_biased_under_default_pulses_source() -> None:
     """The shipped default (`env_source` unset, i.e. `'pulses'`) must NOT
     pick up the E5 fix -- bit-identical to rc.40 including its own known

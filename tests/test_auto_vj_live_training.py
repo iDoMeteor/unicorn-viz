@@ -87,6 +87,34 @@ def test_build_live_training_row_pairs_now_playing_and_live_audio() -> None:
     assert 'spotify_valence' not in row
 
 
+def test_build_live_training_row_captures_zcr_and_onset_density_1min() -> None:
+    """2026-09-03 (recommender rc.27): both fields close the audit gap
+    named in the dubstep/spectral_shape_fit diagnosis -- zcr_fit and
+    onset_fit (2.2 of the 7.1 total recommender weight) had no
+    reconstructable corpus input at all before this. zcr comes straight
+    off AudioData (a proper Analyzer field now, see AudioData.zcr's own
+    docstring); onset_density_1min is passed in by the caller since
+    AudioData has no onset-timing concept -- default 0.0 confirms the
+    keyword-only parameter actually reaches the row when the caller
+    supplies nothing, and the explicit value confirms it flows through
+    unmodified."""
+    audio = SimpleNamespace(
+        waveform=np.asarray([0.0, 0.5, -0.25, 0.25], dtype=np.float32),
+        bass_n=0.20, mid_n=0.40, treble_n=0.60, bpm=123.0, zcr=0.0731,
+    )
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+    grid = SimpleNamespace(bpm=125.0, confidence=0.81)
+
+    row_default = _build_live_training_row(audio, {}, state, None, grid)
+    assert row_default['zcr'] == pytest.approx(0.0731)
+    assert row_default['onset_density_1min'] == 0.0
+
+    row_explicit = _build_live_training_row(
+        audio, {}, state, None, grid, onset_density_1min=2.35,
+    )
+    assert row_explicit['onset_density_1min'] == pytest.approx(2.35)
+
+
 def test_build_live_training_row_passes_through_non_spotify_source() -> None:
     """A source label that doesn't mention Spotify is left untouched."""
     audio = SimpleNamespace(
@@ -331,6 +359,7 @@ def _make_sequence_heartbeat_stub(*, writer=None):
         _get_mixer_bpm=lambda: 0.0,
         _get_mixer_track_path=lambda: '',
         _get_section_hint=lambda: None,
+        _onset_density_1min=lambda: 0.0,
         # Class attributes on the real AutoVJController -- a plain
         # SimpleNamespace doesn't inherit them, so _detector_snapshot()
         # (which reads self._BPM_LOCK_CONFIDENCE/_RELEASE_CONFIDENCE)
@@ -474,6 +503,7 @@ def _make_record_live_training_row_stub(*, writer=None, bpm: float = 125.0):
         _get_mixer_bpm=lambda: 0.0,
         _get_mixer_track_path=lambda: '',
         _get_section_hint=lambda: None,
+        _onset_density_1min=lambda: 0.0,
     )
 
 

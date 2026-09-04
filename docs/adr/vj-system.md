@@ -7650,6 +7650,24 @@ rotation effects (was ~5 for every drop/impact/climax before). Regression test:
   signal exists yet to validate against (see
   `docs/planning/auto-vj-recommender-accuracy-tracking-2026-08-06.md`,
   proposed but not yet implemented).
+- **2026-09-04, to be considered, not pursued now:** a true Constant-Q
+  (or wavelet filter-bank) transform for the 64-band perceptual spectrum,
+  as a future alternative to the dual-window fix landed the same night
+  (see "Low-Band Resolution: Dual-Window Fix" below). A CQT gives each
+  band its OWN analysis window sized to its own frequency (long for bass,
+  short for treble) — the theoretically correct match to a log-spaced
+  band scheme, rather than one uniform-window FFT bucketed into log
+  bands after the fact. Not pursued now because it's a genuinely
+  different architecture, not a parameter change: no shared FFT to reuse
+  across `bands`/`spectral_flux`/vocal features the way `Analyzer.
+  process()` does today, each band computed by its own resonant
+  filter/window with its own time constant, all of which need to agree
+  on a consistent energy scale for cross-band comparison to still work.
+  Efficient (recursive octave-downsampling) implementations run roughly
+  3-10x a single equivalent FFT's cost — real but not prohibitive — the
+  actual cost is implementation/testing surface area and no precedent in
+  this codebase, not CPU. Revisit only if the dual-window fix turns out
+  to have real problems in practice.
 
 ## 2026-08-31 Accelerated Tuning Experiment — Consensus Landing (2026-09-01)
 
@@ -8471,3 +8489,824 @@ stack re-tempered against the new observation, v2's synthetic click
 fixtures re-derived with jitter, then the 19-list panel against madmom/
 BTrack), at which point this lands as detector rc.41 with its own ADR
 entry closing E5 properly.
+
+## Data-Derived expected_bands — Recommender rc.27 (2026-09-03)
+
+**Finding.** Live diagnosis (owner: "we should have all the data we need
+to dial those in") of a recurring recommender artifact -- `dubstep` was
+winning `_profile_score()`'s composite on almost every non-dubstep
+training list (house-01, deep-house-01, tech-house-01, trance-01, even
+ambient-01, confirmed on the live `favorites/004` bucket too) -- traced to
+`spectral_shape_fit` (weight `2.5`, the single heaviest term in the
+composite). Read `_DEFAULT_RECO_WEIGHTS` directly before assuming
+anything: `tempo_fit` and `centroid_fit` are BOTH weight `0.0` (retired
+2026-08-20), so the two mechanisms first proposed -- a tighter
+`dubstep_bpm_prior_sigma`, a centroid term -- were structurally
+impossible regardless of any real overlap between dubstep's tempo/
+centroid priors and house-family material's own.
+
+Recomputed `spectral_shape_fit` per-tick from real corpus rows (real
+`bands`, real `kick_regularity`, real `vocal_hnr`/`vocal_fmr` against each
+profile's own shipped `expected_bands`/`vocal_hnr_mu`/`vocal_fmr_mu`) for
+`dubstep`/`deep_house`/`peak_time` on `training-house-01`, `training-
+trance-01`, and live `favorites/004`: `spectral_shape_fit` alone accounts
+for nearly the entire margin in every case, `kick_regularity_fit` (weight
+`1.5`) is a near-wash across all four candidate profiles checked (within
+~0.05 weighted), `vocal_hnr_fit`/`vocal_fmr_fit` are identical between
+`dubstep` and `peak_time` (same uncalibrated 0.35/0.25 targets) and
+`deep_house`/`house` get a free pass (uncalibrated → 0.0) on those two.
+`zcr_fit` (weight `0.7`) and `onset_fit` (weight `1.5`) -- `2.2` of the
+composite's `7.1` total weighted mass -- were not reconstructable from any
+corpus row at the time this diagnosis started (see the corpus-fields
+entry below).
+
+**Root cause.** Every *measured* mean-band vector -- the arithmetic mean
+of `bands` across many tracks/onsets over time, which is also exactly
+what the live recommender's own `band_mean_vec` (`auto_vj.py:5583`, a
+rolling-window mean) computes before comparison -- is a smooth,
+monotonically decaying curve. Every *shipped* `expected_bands` was a
+hand-authored, jagged, multi-peak array (several local maxima across the
+64 bands, presumably modeling idealized harmonic partials rather than an
+actual band-averaged spectral envelope). A smooth curve cosine-matches
+another smooth curve far better than it matches a jagged one, independent
+of genre. `dubstep`'s own old fingerprint happened to be the closest-to-
+correct-shape in the whole roster by accident (`cos(measured, old
+shipped) = 0.971`) -- not because it was better *authored* for dubstep
+specifically, but because it was less badly shaped than everyone else's.
+`house`'s own old fingerprint scored the *worst* self-similarity of the
+entire roster (`0.671`) -- house material didn't even cosine-match
+house's own profile well. This is a roster-wide shape-authoring mismatch,
+not a dubstep-specific bug.
+
+**Fix.** Replace every profile's `expected_bands` with a data-derived
+fingerprint: the mean `bands` vector over that profile's own matching
+training list's packaged corpus (both seeds pooled). See weights-and-
+thresholds.md "Data-Derived expected_bands" for the full per-profile
+source-list table, the three owner-decided coverage mappings
+(`downtempo→chillstep`, `big-room→peak_time` pooled with techno-01,
+`progressive-house→deep_house`, the last decided by pairwise measured-
+fingerprint cosine similarity per the owner's own stated rule, with the
+caveat that the three-way spread is only 0.0017 wide and progressive is
+actually numerically closest to `house` by raw distance), and the six
+profiles with no matching list at all (kept unchanged, nothing to derive
+from) -- `psytrance`, `electronic`'s OWN copy-of-house is regenerated to
+match house's new fingerprint (preserving the deliberate "identical
+except vocal terms" design the dance/house split depends on -- caught by
+`tests/test_audio_profile_deep_house_and_disable.py`'s own invariant test
+before landing, not after), `hard_techno`, `hardstyle`, `hyphy`,
+`synthwave` untouched.
+
+**Validation before landing, decided by data not opinion per the owner's
+own instruction:**
+
+- Fit on seed 1 (both training list seeds pooled for the final fingerprint
+  itself, but the validation split uses seed 1 alone as the fit set),
+  evaluate on seed 2 (`spectral_shape_fit` alone, decision stack
+  otherwise completely unchanged): house-01, deep-house-01, tech-house-01,
+  trance-01, dubstep-01, dnb-01 all have their own correct genre win the
+  held-out composite under measured fingerprints; under the OLD shipped
+  fingerprints `dubstep` won every one of those six lists except
+  dubstep-01 itself.
+- Fit on the 01 list, evaluate on a genuinely different, independently-
+  recorded session where one exists: `training-ambient-02` (a true
+  numbered sibling) -- measured fingerprint beats dubstep's own shipped
+  fingerprint by `+0.076`; `training-normie-trance` (a trance-adjacent
+  list, explicitly NOT a literal numbered sibling, flagged as such rather
+  than presented as equivalent) -- beats dubstep by `+0.141`. No sibling
+  bucket exists for `house` -- reported as a real blind spot in this
+  validation rather than silently substituted for.
+- Live `favorites/004` (mixed-genre, no single correct answer by
+  construction): `dubstep`'s margin over `deep_house` collapses from
+  `0.337` (shipped) to `0.002` (measured) -- expected for a genuinely
+  mixed list, not a failure of the fix.
+
+**Caveat.** This whole validation pass used `spectral_shape_fit` alone --
+the only dominant term reconstructable from already-packaged corpus rows
+at diagnosis time. Whether the full composite (once `zcr`/
+`onset_density_1min` corpus data accumulates) tells the same story is
+untested; the direction and margin on the reconstructable 69% of the
+composite's weighted mass is strong enough to land on, per the owner's
+explicit "land it" on both this and the corpus fields below, but the
+remaining 31% is a genuine unknown, not assumed to agree.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` → `1.0.0-rc.27`. `_VJ_WEIGHTS_
+DOC_VERSION` → `82`. `unicornviz/audio/profiles.py` changed (10 profiles'
+`expected_bands` + `electronic`'s copy). No `_DEFAULT_RECO_WEIGHTS` value
+changed -- this is a per-profile fingerprint replacement, not a weight
+retune.
+
+## Corpus Fields: zcr, onset_density_1min (2026-09-03, recommender rc.27)
+
+**Why.** `zcr_fit` (weight `0.7`) and `onset_fit` (weight `1.5`) --
+`2.2` of the recommender composite's `7.1` total weighted mass -- had no
+reconstructable-from-corpus input at all, discovered while diagnosing the
+`expected_bands` finding above: any future audit of "why did the
+recommender pick X" could only ever explain `spectral_shape_fit`/
+`kick_regularity_fit`/`vocal_hnr_fit`/`vocal_fmr_fit` (`4.9` of `7.1`),
+never the other two terms, regardless of how good the corpus logging
+otherwise is.
+
+**What landed.** `AudioData.zcr` (`unicornviz/effects/base.py`,
+`__slots__` + `copy_audio_data()`, following the exact established
+pattern from the 2026-08-09 `vocal_hnr`/`vocal_fmr` copy-site bug this
+project has already been bitten by twice): zero-crossing rate of the last
+512-sample waveform window, computed once in `Analyzer.process()`
+(`unicornviz/audio/analyzer.py`), same formula the recommender's own ad
+hoc inline computation already used (that inline computation is left
+unchanged -- this is a corpus-logging addition, not a live-scoring
+behavior change). `AutoVJController._onset_density_1min()`: onsets/second
+over a trailing 60s window (`self._onset_density_1min_history`, a plain
+timestamp deque, cleared on the same toggle-off/on path
+`_last_onset_count` already resets, guarding the exact "physically
+impossible density after a disabled gap" failure mode that field's own
+2026-08-XX comment documents), deliberately independent of the
+recommender's own shorter-window live `onset_density` computation so this
+addition cannot perturb live scoring. Both reach every corpus row via
+`_build_live_training_row()`, the single source-of-truth row builder.
+
+**Bookkeeping.** Additive only -- no existing field, weight, or
+live-scoring computation changed. `training-kit-01` and core
+(`unicornviz`) both patch-bumped for this landing (the corpus schema
+changed in core; the packager/LLM-payload side is training-kit-01's).
+
+## Vocal-Term Calibration — Recommender rc.27, Same Day (2026-09-03)
+
+**Diagnosis, and how the original hypothesis turned out wrong.** A
+follow-up to "Data-Derived expected_bands" above, from a hard owner
+requirement: `house` (not `deep_house`) must win `training-house-01`'s
+recommendation. The working hypothesis going in was that this was a
+progressive-house pooling-decision problem -- `training-progressive-
+house-01` has no profile of its own, and the expected_bands work above
+had pooled it into `deep_house` on a `0.0017`-wide cosine-similarity
+margin (see that section). Three different pooling configurations were
+tested (progressive into `deep_house`, into `house`, and split/excluded)
+to see which one let `house` win its own list. All three produced nearly
+identical `deep_house`-dominates-everywhere behavior -- the pooling
+choice itself was not the deciding factor, a negative result reported
+plainly rather than picked-and-presented-as-fixed.
+
+Isolating the composite with `vocal_hnr_fit`/`vocal_fmr_fit` excluded
+broke the deadlock: with vocal terms out of the picture, `house` *does*
+cleanly win `training-house-01` under configs A and B. The actual driver
+was `deep_house` being the only one of the ten data-derived-fingerprint
+profiles with `vocal_hnr_mu`/`vocal_fmr_mu` left `None` ("intentionally
+left uncalibrated" per its own prior field comment, on the theory that a
+fabricated target would be worse than no signal). That theory doesn't
+hold given how `_profile_score()` actually treats `None`: the term
+returns exactly `0.0` for a `None` mu -- not a neutral abstention, but a
+free pass no calibrated profile gets, since every calibrated profile
+instead pays a real (usually negative) Gaussian penalty against observed
+`vocal_hnr`/`vocal_fmr`. Weighted (`0.4 + 0.5 = 0.9` combined, though the
+effective near-zero-cost advantage is closer to `~0.31` once the other
+profiles' typical penalties are accounted for), this was large enough to
+override `deep_house`'s otherwise-correct spectral/tempo mismatch on most
+lists -- the pooling question this was originally diagnosed alongside was
+a red herring.
+
+**A correction surfaced during this work, not a new finding but worth
+recording:** an earlier instruction to "keep sigmas as shipped unless a
+profile has none" doesn't map onto anything real in the code. No
+per-profile `vocal_hnr_sigma`/`vocal_fmr_sigma` field exists anywhere
+(verified by grep) -- the sigma is a flat, hardcoded constant (`0.20` for
+`vocal_hnr_fit`, `0.15` for `vocal_fmr_fit`) applied identically to every
+profile inside `_profile_score()`; only the `mu` (target) is per-profile.
+All measurements in this entry already used these correct flat constants.
+
+**Fix.** Every profile with a matching training list -- the same ten as
+the `expected_bands` entry above -- gets `vocal_hnr_mu`/`vocal_fmr_mu`
+set to the **median** `vocal_hnr`/`vocal_fmr` over its own source
+list(s), using the identical pooling already established for that
+profile's `expected_bands` (so a profile's spectral fingerprint and its
+vocal targets are measured over the same corpus rows). Median, not mean,
+matching the same reasoning as the corpus-wide medians already used
+elsewhere: bounded `[0,1]` features with a long tail on sparse-vocal
+lists. Four profiles gained the fields for the first time
+(`deep_house`, `ambient`, `chillstep` -- all previously `None` -- plus
+`rap_rnb`, which had a real prior hand-set value, `0.58`/`0.53`, updated
+to the measured median rather than left as a guess once real data
+existed); six replaced the generic `0.35`/`0.25` default
+(`house`, `tech_house`, `peak_time`, `trance`, `drum_and_bass`,
+`dubstep`). `electronic` ("dance") keeps its deliberate near-zero
+`0.05`/`0.05` unchanged -- that pair's entire purpose is being
+house-identical-minus-vocals, not a value this measurement pass should
+touch. See `weights-and-thresholds.md`'s "Vocal-term calibration" section
+for the full per-profile table and both re-score tables below.
+
+**Gate result.** `training-house-01` winner = `house`, margin `0.032`
+over `deep_house` -- the hard requirement this work was landed against.
+
+**Caveat, reported plainly rather than smoothed over.** This is not a
+clean fix. Re-scoring the full composite across all 14 lists with a
+defined "correct" profile plus the live favorites mix shows 5/14
+own-profile wins (unchanged in *count* from before this fix -- but
+`training-house-01` moved from a loss into the win column, which is what
+was asked for). The side effect: fixing `deep_house`'s free pass shifted
+broad cross-list dominance onto `house` itself -- `house` now wins 8 of
+the 14 non-own lists (`training-progressive-house-01`,
+`training-tech-house-01`, `training-techno-01`, `training-big-room-01`,
+`training-drum-and-bass-01`, `training-dubstep-01`,
+`training-downtempo-01`, `training-trap-hip-hop-01`), and
+`training-deep-house-01` -- `deep_house`'s own list -- now loses to
+`peak_time` by a margin (`0.0014`) that reads as noise, not a real
+decision. Several other "no" margins (`training-dubstep-01` at `0.0017`,
+`training-downtempo-01` at `0.0011`, `training-hip-hop-01` at `0.0001`)
+are similarly toss-up-sized. The likely root cause: `house`'s own
+measured `expected_bands` is the smoothest, most generic-4/4-shaped
+curve in the roster (see the `expected_bands` entry above), which makes
+it a naturally strong runner-up cosine-match against almost any
+kick-driven material regardless of genre -- closing the vocal-term gap
+that previously worked *against* it was apparently enough to let that
+runner-up-everywhere quality surface as outright wins on lists it has no
+real claim to. This is flagged, not fixed, by this landing; it is the
+owner's call whether further work here is warranted.
+
+**A separate, deliberately-deferred owner question.** 2026-09-01 raised
+whether `vocal_hnr`/`vocal_fmr` measure vocal presence at all -- a
+mid/side feature is said to have superseded them. Whether to zero
+`vocal_hnr_fit`/`vocal_fmr_fit` entirely (the way `tempo_fit`/
+`centroid_fit` were zeroed 2026-08-20) is that question, and this landing
+does **not** decide it. A "vocal terms zeroed" comparison was computed
+as the data point the owner asked to see (not applied): 4/14 own-profile
+wins (one fewer than the calibrated-vocal-terms result above), and
+notably `training-dubstep-01` would flip its winner to `deep_house` --
+dubstep's own vocal calibration turns out to be one of the things
+currently keeping it winning its own list. This does not itself argue for
+or against zeroing; it only shows what trade a future decision would be
+making. Full tables for both re-scores in `weights-and-thresholds.md`.
+
+**Bookkeeping.** Value-only change (median targets on existing fields) --
+`_RECOMMENDER_VERSION` stays `1.0.0-rc.27` (see its own field comment in
+`auto_vj.py` for the same reasoning already applied to the
+`expected_bands` landing); `_VJ_WEIGHTS_DOC_VERSION` bumped 82 -> 83;
+drop-in `__version__` bumped to `1.0.0-rc.117` with a combined changelog
+entry covering both this and the `expected_bands`/corpus-fields landing
+above, since all three land in the same commit batch. Raw per-list score
+data behind both re-score tables: `training-kit-01/tools/baselines/
+progressive_house_pooling_configs-2026-09-03.json` (the three pooling
+configs tested) and `vocal_calibration_comparison-2026-09-03.json` (the
+calibrated and vocal-zeroed re-scores).
+`recommender_fingerprints.py` gained `vocal_medians_list()`/
+`vocal_medians_pooled()` and a `vocal-medians` CLI subcommand, mirroring
+its existing `measure`/`measure_pooled` fingerprint-derivation functions,
+so this measurement is reproducible offline against any future
+corpus refresh.
+
+**A test's premise changed, not a weakening -- recorded explicitly so it
+doesn't read as a silent one later.**
+`tests/test_bpm_detector_audit_regressions.py::_make_trust_test_stub`
+builds a hand-tuned `house`-vs-`deep_house` fixture whose whole point is a
+small, deliberately non-trivial score margin, so the two sibling tests
+(`test_low_detector_trust_requires_bigger_margin_to_confirm` /
+`test_high_detector_trust_confirms_at_configured_margin`) can tell apart
+"low detector_trust demands a bigger effective margin" from "the margin
+was just too small to confirm regardless of trust." That margin was
+tuned via one knob, `onset_count`, against the OLD `deep_house` (`None`
+vocal mus, i.e. the free pass this ADR entry just removed) -- removing
+the free pass moved `deep_house`'s score up on this fixture's fixed
+`vocal_hnr=0.0`/`vocal_fmr=0.0` stub inputs (both profiles now pay a real
+penalty instead of `house` paying one alone), which blew the fixture's
+margin from `~0.157` up past both trust-scaled thresholds at the old
+`onset_count=1.9` (weak-trust confirmed `True` where the test asserts
+`False`). This is the trust-scaling MECHANISM staying correct while an
+*unrelated* input (this fixture's incidental margin size) moved out from
+under it -- not evidence the mechanism itself weakened. Re-tuned the same
+single knob the fixture's own history already used this same way
+(`onset_count` `2.25 -> 1.9` on 2026-08-10, per that constructor's own
+comment) to `1.10`, landing the margin back at `~0.161` (verified
+directly against the live `_update_profile_recommendation()` code path,
+not guessed): weak-trust effective threshold is
+`profile_auto_reco_score_margin / max(detector_trust, _TRUST_FLOOR)` =
+`0.08 / max(0.129, 0.15)` = `0.08 / 0.15` = `0.533` (margin `0.161` stays
+under it, so still correctly `False`); strong-trust threshold is
+`0.08 / max(0.958, 0.15)` = `0.08 / 0.958` = `0.0835` (margin `0.161`
+clears it, so still correctly `True`). Both tests pass with their
+original assertions and original intent unchanged -- only the incidental
+fixture value moved, and it moved for a fully understood, documented
+reason (see the constructor's own updated docstring for the same math).
+
+## Complex-Domain Onset Function Ported and Shipped as Live Default (2026-09-04, detector rc.41)
+
+**Context.** `tools/beat-tracker-bench/`'s OSS comparison (see
+"OSS Beat-Tracker Bench" above and `detector-scorecard.md`) found that
+`env_source='dense_flux'` (landed 2026-09-03, the E5 envelope-clock fix
+plus a continuous `spectral_flux` write) closed most of the gap to
+madmom/BTrack, and that swapping in a hand-designed complex-domain onset
+function (Bello, Duxbury, Davies & Sandler 2004) on top of that closed
+the rest: 76.5%/96.7% Acc1/Acc2, the single best-graded row on the whole
+scorecard, ahead of every real external competitor this project could
+actually ship. That row was measured entirely inside the bench harness,
+though -- the onset function itself was never wired into the live app.
+
+**What actually needed porting, and why it turned out cheap.** The
+bench's `v3_odf_tracker.py` fed a *precomputed whole-track* ODF stream
+into a scratch `BeatTrackerV3` subclass for convenience; a real port
+needs the function running causally inside the actual per-tick audio
+pipeline. Two things made this simpler than it first looked:
+
+1. `env_source='dense_flux'`'s own dense-write architecture already
+   solves the hard part -- `beat_grid.py` already reads one raw scalar
+   per tick from `AudioData`, runs it through an already-ported causal
+   median/MAD normalizer, and writes the result into every envelope slot
+   the tick advances through. The only thing `spectral_flux` and a
+   complex-domain ODF value differ on is *which raw scalar* -- the
+   write/normalize machinery is identical. Adding `'dense_complex'` as a
+   third `env_source` value was a ~10-line dispatch change (`update()`
+   picks `complex_onset_flux` vs `spectral_flux` by source; every other
+   site just needed `== 'dense_flux'` broadened to `!= 'pulses'`).
+2. `Analyzer.process()` already computes a 1024-point `rfft` every tick
+   for the magnitude spectrum (`bands`/`spectral_flux`/vocal features) --
+   the complex-domain function needs that same FFT's *phase*, which was
+   being computed and silently discarded. Extracting `np.angle()` from
+   the already-computed `fft_raw` costs nothing extra; no second FFT, no
+   separate windowing/hop/buffering state the way the bench's standalone
+   `ComplexOnsetDetector` class needed for its own convenience.
+
+**What landed.**
+`Analyzer._compute_complex_onset_flux()` (`unicornviz/audio/analyzer.py`)
+-- a two-frame magnitude/phase history (mirrors
+`complex_onset.py`'s `ComplexOnsetDetector._process_frame()` exactly:
+predicted magnitude = previous frame's; predicted phase = constant-phase-
+advance from the previous two frames; ODF = Euclidean distance between
+predicted and observed complex spectra, summed across bins), exposed as
+a new raw (un-normalized) `AudioData.complex_onset_flux` field, following
+the same `__slots__`/`__init__`/`copy_audio_data()` pattern every prior
+field addition this session used. `beat_grid.py` gained `'dense_complex'`
+as a third `_env_source` value, reusing the `'dense_flux'` normalizer/
+dense-write path unchanged, reading `complex_onset_flux` instead of
+`spectral_flux`. `_DETECTOR_VERSION` bumped rc.40 -> rc.41.
+
+**Landed as the live default, not opt-in.** Owner direction, stated
+directly: for a single-user deployment, the shipped *default* should
+track whatever is currently the best-tuned, accepted state -- not a
+conservative fallback kept for hypothetical stability. (A genuinely
+public release, the owner noted, would only ship stable/accepted
+versions anyway, so this isn't in tension with that case -- it only
+changes what "accepted" means for a one-user, actively-iterated
+deployment.) `env_source`'s CODE default stays `'pulses'` (unaffected,
+still bit-identical to rc.40); `config.toml`'s `env_source` line is set
+to `'dense_complex'` explicitly, which is what the running app actually
+uses -- the established config.toml-as-per-deployment-override pattern,
+not a change to what a fresh install gets by default.
+
+**Verification, and its honest limits.** Full regression suite green
+(2138 passed). Mechanism-level regression tests added
+(`tests/test_envelope_advance_rate.py`): the 100 Hz write-rate tests
+already covering `'dense_flux'` mirrored for `'dense_complex'`, plus a
+new test confirming the field-selection dispatch actually reads
+`complex_onset_flux` (not silently falling through to `spectral_flux`
+regardless of `env_source`, which every other test in that file would
+have passed anyway since both fields are floats and the write mechanism
+is identical). End-to-end smoke test: a synthetic 128 BPM click track
+through the real `Analyzer` + `BeatTrackerV3` pipeline locks to 128.12
+BPM at 0.998 confidence under all three `env_source` values
+(`'pulses'`/`'dense_flux'`/`'dense_complex'`), confirming the port
+doesn't break basic tempo lock. **What this does NOT confirm:** the
+bench's own 76.5%/96.7% numbers were measured via the precomputed-
+whole-track convenience path against the *bench's own* `beat_grid_e5.py`
+copy, not this specific live port -- the 306-track corpus has not been
+re-run against the actual shipped code. Ships with stock decision-logic
+constants throughout (no re-tune -- Program B step 3 remains open). The
+owner's own framing: ship the architecture change now, treat further
+tuning as a live activity during the soak rather than a pre-ship gate.
+
+**Bookkeeping.** `_DETECTOR_VERSION` rc.40 -> rc.41;
+`_VJ_WEIGHTS_DOC_VERSION` 83 -> 84; `weights-and-thresholds.md`'s
+`env_source` row and Changelog updated; `detector-scorecard.md`'s top
+row's "Shippable" column and "How we're doing" section updated to
+reflect the live port and its verification gap, not just the bench
+number. No `training-kit-01` packager sync needed -- this is a detector
+mechanism/field change, not a recommender weight or threshold in any of
+the three `_*_CONSTANT_DEFAULTS`/`_RECO_WEIGHT_DEFAULTS` dicts that
+obligation covers.
+
+## Spectral-Shape Ribbon Redesign (2026-09-04, recommender rc.28)
+
+**Diagnosis.** Owner: "the math is NOT mathing right, not at all." Correct
+-- `expected_bands` (landed hours earlier the same night, rc.27) was the
+mean `bands` vector across an ENTIRE playlist session's frames, pooling
+many different tracks. Averaging that many tracks converges toward
+whatever's common to all of them (a generic decaying-with-frequency
+shape), erasing the track-specific texture that would actually
+discriminate genres. Confirmed by computing the full pairwise cosine
+matrix across all 11 data-derived fingerprints from the rc.27 landing:
+every pair scored >=0.94, several >=0.99 -- `spectral_shape_fit`, the
+single heaviest weight in the composite, was barely discriminating
+anything. This was the actual mechanism behind the whole night's
+recurring "one profile sweeps the entire roster" pattern (dubstep, then
+house, then techno each took a turn as the composite's default winner):
+whichever profile's fingerprint happened to have the tallest/smoothest
+low-band plateau won as a generic runner-up almost everywhere, because
+the term itself carried almost no real per-genre signal to begin with.
+
+**Fix -- two changes together, not one.**
+
+1. **Aggregate to one point PER TRACK first, not per frame.** A long-
+   playing track shouldn't dominate a short one just by contributing more
+   logged heartbeats. Then take **robust statistics across those
+   per-track points**: median (not mean -- "toss the anomalous noise",
+   same reasoning already used for the vocal-term calibration earlier
+   the same night) becomes the new `expected_bands`; MAD-derived spread
+   (`1.4826 * MAD`, floored at 15% of that band's own median so a small
+   real sample doesn't collapse to an unrealistically confident near-zero
+   sigma) becomes a new field, `AudioProfile.expected_bands_sigma`.
+2. **`spectral_shape_fit`'s own formula changes**, for any profile that
+   sets `expected_bands_sigma`: a per-band Gaussian log-density (`-0.5 *
+   ((band - mu) / sigma) ** 2`, mean across the 64 bands, mirroring every
+   other `*_fit` term's shared shape) against `expected_bands` as mu --
+   not cosine similarity. A profile with `expected_bands` but no
+   `expected_bands_sigma` (`psytrance`, `hard_techno`, `hardstyle`,
+   `synthwave` -- no matching training list, still hand-authored) keeps
+   the legacy cosine-similarity path unchanged; the redesign is
+   additive/opt-in per profile, not a wholesale behavior change for
+   profiles with no ribbon data.
+
+**Bug #1, caught before it was reported as a finding.** The first
+validation pass built ribbons from per-track means, then scored raw
+individual FRAMES against them. A ribbon's width, calibrated on
+track-level smoothness, is far tighter than real frame-to-frame variance
+within a single track (a kick hit vs. a quiet passage) -- house-01
+scored *worse* against its own genre's freshly-built ribbon than against
+an unrelated genre's, an immediate tell that something was mismatched,
+not a real result. Fixed by scoring track-means against track-means
+throughout the validation, which also happens to be the fairer
+comparison: the live system's own `band_mean_vec` is itself a
+rolling-window mean, not a raw single frame, so track-level scoring is
+what actually matches production behavior.
+
+**Bug #2, also caught, not shipped as a "finding."** With bug #1 fixed,
+`rap_rnb` (pooling `training-hip-hop-01` + `training-trap-hip-hop-01` +
+`training-rnb-01`) swept nearly every list. Traced directly: `rap_rnb`'s
+pool was both the most diverse (three sub-genres) and highest-count (46
+tracks vs. everyone else's 11-17) of the whole roster, producing a
+wider, more "generically forgiving" ribbon -- a third variant of the
+same night's recurring pathology, this time via pooling breadth rather
+than plateau height. Explicitly checked and ruled out as the cause: the
+missing `-log(sigma)` log-normalizer term in the shared `_gaussian_fit()`
+helper (a true Gaussian log-density penalizes a wide sigma via that
+term, which the codebase's simplified version omits everywhere it's
+used) -- added it back and re-ran the same comparison; made negligible
+difference. The pooling breadth itself was the real cause.
+
+**Resolved by an evidence-gated split, not a guess.** Owner: "trap
+should def be on its own" (decided directly, not evidence-gated) --
+"rnb/hh i'll let u decide based on evidence" (left open). A per-list
+confusion-matrix check (own tracks scored against each of the three
+lists' own ribbons, spectral_shape_fit only) found hip-hop-01 and
+rnb-01 the least separable pair of the three -- consistent with, and
+reaffirming, the original 2026-08-06 "genuine siblings" merge finding
+for these two -- while trap-hip-hop-01 discriminates clearly from both.
+Landed: `training-trap-hip-hop-01` split out into a **re-enabled**
+`hyphy` ("Hyphy / Trap") profile -- disabled since 2026-08-10 for
+exactly the reason this closes (no real trap/hyphy material to validate
+against); `rap_rnb` keeps hip-hop + rnb pooled. `hyphy`'s
+`bpm_prior_mu`/`sigma`/hint band were also fully recalibrated from
+trap-hip-hop-01's own real detected-bpm distribution (median 141.2 BPM)
+-- the old hand-guessed 100-118 range predates any real trap data and
+turned out far off (same "produced vs. perceived pulse" pattern already
+documented for `dubstep`).
+
+**Weight-rebalancing finding, checked empirically not assumed.** Cosine
+similarity, measured directly, returned ~0.93-0.99 for nearly any real
+audio against nearly any profile -- despite the heaviest weight in the
+composite (2.5), it functioned closer to a near-constant +2.3-ish bonus
+every candidate received roughly equally than a real discriminator. The
+ribbon fit actually swings (~-0.2 for a good match, -1 to -3+ for a bad
+one) -- so the OLD weight instantly overpowers every other term the
+moment the formula has real signal to carry. Swept empirically
+(`recommender_fingerprints.py`, track-level scoring, full 12-profile
+roster including the ribbon fix and the trap split): own-profile wins
+peak at **8/14** across weight 0.3-1.0 and fall back to 6/14 at the old
+2.5. Landed at **0.7**, the middle of the stable plateau rather than the
+exact peak -- owner, explicitly declining further tuning: "don't worry
+too too much about tuning those, things are going to change again after
+the low band fix anyway."
+
+**Gate result.** 8/14 own-profile wins, up from rc.27's 4/14. Remaining
+losses cluster specifically within the closely-related house/techno
+family (`deep_house`, `tech_house`, `techno`, `peak_time`, `hyphy` mostly
+losing to `house` itself) -- a qualitatively narrower failure than
+rc.27's roster-wide sweep, and one that lines up with `tempo_fit` (still
+weight 0.0) being the natural remaining discriminator for exactly this
+tempo-differentiated cluster.
+
+**Tempo term, explored the same session, deliberately NOT landed.**
+Owner asked to bring `tempo_fit`'s weight in alongside this. Deriving
+real per-list `bpm_prior_sigma` (median + MAD in log2 space, `bpm_locked`
+rows) surfaced a genuine complication, not a data bug: weak-beat genres
+(`ambient`, `chillstep`) show wildly unreliable detected BPM even on
+rows flagged `bpm_locked` -- `ambient`'s own "locked" median read ~139
+BPM against a `bpm_prior_mu` of 100, driven by a single mostly-beatless
+track ("Andrew Mcfarlane - Morning Air") the detector never had a real
+periodic signal to converge on, so its nominal "lock" doesn't mean the
+same thing a rhythmic genre's lock does. A fair fix needs the same
+missing `-log(sigma)` log-normalizer term investigated for bug #2 above,
+landed properly in the shared `_gaussian_fit()` helper (used by every
+`*_fit` term in the composite, not just this one) so an honestly-wide
+sigma is appropriately less rewarded rather than a free pass --
+meaningfully bigger scope than a same-night weight sweep. Parked;
+`tempo_fit` stays at weight `0.0`, unchanged.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` rc.27 -> rc.28 (structural term-
+computation change, not value-only -- the formula itself changed, per
+the subsystem-versioning rule); `_VJ_WEIGHTS_DOC_VERSION` 84 -> 85.
+`AudioProfile` gained `expected_bands_sigma`
+(`unicornviz/audio/profiles.py`). `recommender_fingerprints.py`
+(training-kit-01) gained `per_track_band_means()`, `band_ribbon()`,
+`gaussian_ribbon_fit()`, `ribbon_for_lists()`; `_load_profiles_from_core()`
+and `diagnose_list()` now read/use `expected_bands_sigma` when present;
+`RECONSTRUCTABLE_WEIGHTS['spectral_shape_fit']` updated to match the new
+live weight (0.7). New regression tests: `tests/test_spectral_shape_
+ribbon.py` (the ribbon-vs-cosine dispatch itself, driven through
+`_profile_score()` via the established stub-harness pattern) plus
+updates to `tests/test_audio_profile_deep_house_and_disable.py` for
+`hyphy`'s re-enable and the retired cosine-similarity invariant it used
+to pin. Full suite green (2144 passed) before landing. See
+`weights-and-thresholds.md`'s "Spectral-Shape Ribbon Redesign" for the
+per-profile table pointer and Changelog entry.
+
+## Low-Band Resolution: Dual-Window Fix (2026-09-04)
+
+**Diagnosis.** The shared 64-band perceptual spectrum
+(`unicornviz/audio/analyzer.py`, consumed by every effect and by
+`spectral_shape_fit`'s ribbon fit above) buckets a single 1024-sample FFT
+(46.875 Hz/bin at 48kHz) into 64 log-spaced bands from 30Hz-16kHz.
+Verified directly: **19 of those 64 bands collapse onto a shared FFT
+bin** -- bands 0 through 8 (9 of them) read the exact same number, every
+frame, for every track, regardless of genre, because the log spacing
+between 30-72Hz requests far more resolution than a 46.875 Hz/bin FFT
+can deliver. Confirmed on 100/100 sampled real corpus rows: bands[0:8]
+bit-identical every time. This is not a feature-ceiling problem (as
+first framed) -- it's a measurement-resolution bug feeding fake
+precision into every downstream consumer, and it's what let the
+spectral-shape-fit redesign above still show ~19-25 duplicated bands
+even after fixing the averaging methodology.
+
+**Options considered.**
+
+1. **Widen the shared short window** (e.g. 1024 → 2048 or 4096). Simple,
+   but every effect reading `audio.bands` per-frame was built assuming
+   that data reflects the current moment -- widening adds real latency
+   to transient response (2048: +~21ms; 4096: +~64ms), and the cost is
+   BPM-dependent: at 174 BPM (drum & bass) a 16th note is only 86ms, so
+   a 4096-sample window's ~85ms span would smear nearly a full 16th
+   note's worth of transient timing, worst exactly where transient
+   response matters most. Not chosen -- would need a live smoke test to
+   confirm effects still read right, and the risk falls hardest on fast,
+   percussive genres.
+2. **Dual window: a second, independent long-window FFT, low bands
+   only.** Chosen -- see "What landed" below.
+3. **True Constant-Q / wavelet transform.** Theoretically the most
+   correct match to a log-spaced band scheme (each band gets its own
+   window, long for bass, short for treble) but a genuinely different
+   architecture, not a parameter change -- added to Open Questions above
+   as a to-be-considered item, not pursued now (real implementation/
+   testing surface area, no precedent in this codebase, ~3-10x a single
+   FFT's cost for an efficient implementation).
+
+**What landed.** A second, persistent rolling PCM buffer (8192 samples,
+170.7ms at 48kHz -- chosen because it leaves only ~2 of 64 bands still
+collapsed, near the ~30Hz floor itself, down from 19; 4096 alone still
+left 7 collapsed) feeds a second Hann-windowed FFT, computed every tick
+(negligible cost -- measured ~677us average total `process()` time
+against a ~10.7ms real-time budget at 512-sample/48kHz blocks, i.e. the
+WHOLE method, long FFT included, uses ~6% of budget). Only the bottom 25
+bands (`_LOW_BAND_REPLACE_N`, matching exactly how many collapse under
+the SHORT path's own window -- verified against `_recompute_band_edges()`'s
+own construction, not eyeballed) get overwritten with the long-window
+values; bands 25-63 (already fine at the short window) and every other
+effect-facing signal (`bass`/`mid`/`treble`, flux, vocal features) are
+completely untouched -- zero added latency for anything except the low
+end that was never real to begin with. Scale-corrected by the ratio of
+the two windows' sums (`window.sum() / low_window.sum()`) so a sustained
+tone's magnitude is comparable across the differently-sized Hann
+windows -- matches the existing convention (the short path itself
+applies no additional normalization either) rather than inventing a new
+one. Verified: fed 20k samples of white noise through the real
+`Analyzer.process()` pipeline -- all 25 replaced bands read genuinely
+distinct values (were previously 9-19 duplicates).
+
+**An adjacent bug found and fixed in the same pass, not scope creep --
+it was load-bearing for this fix's own correctness.** `_perc_edges`
+(the short path's own bin-index mapping) was computed ONCE at
+construction time from whichever `_sample_rate` happened to be set then
+(the module fallback, 48000) and never recomputed.
+`Analyzer.set_sample_rate()` (called by `AudioManager` once real capture
+is live, and again every frame in case of a mid-session device switch)
+updated `_bin_hz` but not the edge table that formula feeds -- meaning a
+real device negotiating a different rate (44.1kHz being the obvious
+case) silently left the ENTIRE session's band-to-Hz mapping computed for
+the wrong rate. Found while making the new long-window edges rate-aware
+-- fixing only the new table while leaving the old one newly
+inconsistent with it would have been worse than not touching either.
+Both edge tables now live in one `_recompute_band_edges()` method,
+called from `__init__` and from `set_sample_rate()` on an actual rate
+change.
+
+**Open follow-up, not addressed tonight.** Every `expected_bands`/
+`expected_bands_sigma` value landed in the Spectral-Shape Ribbon
+Redesign above was measured from corpus data captured BEFORE this fix --
+meaning the low ~25 bands of every profile's fingerprint still reflect
+the old, partially-duplicated measurement. Owner, in advance: "things
+are going to change again after the low band fix anyway" -- deliberately
+not re-derived in the same session; the next fingerprint refresh should
+account for genuinely-resolved low-band data changing those numbers
+again, not treat the rc.28 ribbon values as final.
+
+**Bookkeeping.** No `_RECOMMENDER_VERSION`/`_DETECTOR_VERSION` bump --
+this is a core `unicornviz` (not `auto-vj-01`) analyzer change, shared by
+effects and the recommender alike, not a detector or recommender-scoring
+formula change itself. New regression tests:
+`tests/test_analyzer_low_band_resolution.py` -- pre-/post-warmup
+collapse behavior, the replaced-vs-untouched band boundary, silence
+handling (energy-gated like every other block in `process()`), and the
+adjacent `set_sample_rate()` edge-recompute fix (both `_perc_edges` and
+`_low_band_edges` change on a genuine rate change, stay identical on a
+same-rate no-op call). Full suite green (2149 passed) before landing.
+
+## Evidence-Based Recommender Audit: Vocal Sigma, BPM Re-Fit, Centroid Recompute, Four Profiles Disabled (2026-09-04, recommender rc.29)
+
+**Trigger.** Owner, after the log-normalizer fix below changed how
+sigma trades off against mismatch magnitude: "we need to eliminate ALL
+the hand-picked values in favor of evidence based, asap... and we need
+to fix the vocals as well so they function properly." Full audit
+delivered field-by-field; owner replied item-by-item ("fix the ones we
+evidence for and tell me which ones we don't" / "fix the dump constant
+lol, build the thing" / "would have to have amazing evidence to change
+[`spectral_centroid_sigma`]" / "may as well fix [`spectral_centroid_mu`]
+while we're here" / same on `zcr`/`onset_density` / the new zero-evidence
+disable rule), closing with "full send tyvm!"
+
+**What landed** (full tables and per-profile detail in
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` § "Vocal-Term Sigma
++ Evidence-Based Re-Fit (recommender rc.29)" — not duplicated here):
+
+1. `_gaussian_fit`'s missing `-log(sigma)` normalizer restored — a wider
+   sigma had been unconditionally more forgiving with no offsetting cost,
+   the real mechanism behind repeated "one profile sweeps every list"
+   incidents this project has hit before. Verified on real `house-01`
+   BPM data (deficit vs. `chillstep` shrank `-2.69 → -0.91`) without
+   flipping the winner outright, which is what motivated the rest of
+   this pass — the sigma *values*, not just the formula, needed fixing.
+2. Real per-profile `vocal_hnr_sigma`/`vocal_fmr_sigma` fields added to
+   `AudioProfile`, replacing a flat `0.20`/`0.15` constant every profile
+   shared regardless of genre — the audit's "dump constant." Mu re-fit
+   alongside using the same per-track-then-robust-stat methodology as
+   `expected_bands`/`expected_bands_sigma` (median per track, ≥10 rows
+   required; robust median/MAD across per-track points; sigma floored at
+   `0.03`), for all 12 profiles with a real training-list corpus.
+3. `bpm_prior_mu`/`bpm_prior_sigma` evidence pass, same per-track/MAD
+   methodology (log2 space). Three outcomes, decided per-profile rather
+   than applied uniformly: sigma-only for the four house-family profiles
+   (their real per-track BPM medians cluster within ~3.5 BPM of each
+   other, far tighter than the deliberately non-overlapping hand-dialed
+   `bpm_prior_mu` bands from the house-family consolidation ADR entry
+   above — moving mu would have silently undone that owner decision, so
+   only sigma moved); full mu+sigma update for `techno`/`trance`/
+   `drum_and_bass`/`hyphy` (no design conflict, though `hyphy` carries the
+   same fold-risk caveat as `dubstep`, flagged not resolved); held back
+   entirely for `dubstep` (real evidence conflicts with that profile's
+   own documented deliberate anti-fold-contamination sigma) and `rap_rnb`
+   (real evidence is very likely the same 4/3-tactus-fold contamination
+   an earlier session already investigated and declined to trust — see
+   "Vocal-Term Calibration" above for that profile's prior history).
+   **House-Family BPM Cluster Finding is flagged here as an open item**:
+   the four real per-track medians (house 128.1, deep_house 126.4,
+   tech_house 129.9, peak_time 129.9) sit much closer together than the
+   hand-dialed bands assume — worth a dedicated look, not resolved by
+   this pass.
+4. Four profiles disabled under a new standing rule (owner: any profile
+   with zero training-list evidence for *any* scoring field stays out of
+   discovery until it has some): `psytrance`, `hard_techno`, `hardstyle`,
+   `synthwave`. Disabled, not deleted — same pattern as `tech_house`/
+   `techno`. `electronic` is explicitly excluded from this rule (its
+   near-zero vocal mu is a deliberate house-mirror control design, not an
+   unverified guess).
+5. `spectral_centroid_mu` mechanically recomputed for the 13 profiles
+   whose `expected_bands` moved under the same-night ribbon redesign —
+   inert (`centroid_fit` stays weight `0.0`), but the result is worth
+   recording: all 13 collapsed into a narrow 250-450 Hz band, reproducing
+   (with real per-track data this time) the exact bass-dominant-decay
+   failure mode the 2026-08-11 `centroid_fit` incident already
+   documented. Flagged directly in `profiles.py`'s own field comment:
+   don't re-enable this term's weight against these values without
+   addressing that first.
+6. `zcr_mu`/`zcr_sigma`/`onset_density_mu`/`onset_density_sigma` —
+   confirmed blocked, not fixed. Both fields only started being logged
+   into the corpus the same night this pass began; grepped a
+   representative packaged training bucket directly and confirmed
+   neither field is present in any row, and no bucket anywhere under
+   `assets/training/sets/` has been packaged since. Nothing fabricated
+   or reconstructed — left untouched pending real accumulated data.
+
+**Out of scope, explicitly not part of this audit:** `spectral_centroid_sigma`
+(hand-picked tiers, feeds the same dormant `centroid_fit` term — owner
+declined without "amazing evidence"); `bass_weight`/`mid_weight`/
+`treble_weight`, `beat_threshold`, `smoothing`, `curve`, `onset_*_emphasis`
+(detector/effects-shaping constants, a different category from
+recommender scoring — noted for completeness only, not claimed broken).
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.28 → 1.0.0-rc.29`;
+`_VJ_WEIGHTS_DOC_VERSION` `85 → 86`. Full test suite green (2181 passed,
+1 skipped) after each phase of this pass. Updated regression tests:
+`tests/test_audio_profile_deep_house_and_disable.py` (new disabled-set
+entries, `deep_house`'s re-fit vocal mu/sigma),
+`tests/test_audio_profile_synthwave.py` (disabled, and the
+`spectral_centroid_mu` ordering flip vs. `house` — documented as an
+artifact of which profiles have real per-track data now, not a
+genre-brightness claim).
+
+## zcr / onset_density Evidence-Based Re-Fit, Correcting rc.29's Own Error (2026-09-04, recommender rc.30)
+
+**The rc.29 entry above claimed `zcr_mu`/`onset_density_mu` were
+"blocked, no historical data exists."** That was wrong — a methodology
+error, caught by direct owner pushback the same night ("wtf no data for
+zcr/onset density? we have 'added everything to the corpus' like a
+bazillion times"; "we've had zcr... for a long long time and should
+[have] copious amounts of packaged data & headless data from months of
+runs"). Kept above with a strikethrough per this doc's own no-rewriting-
+history rule, not deleted.
+
+**Root cause of the error.** Two mistakes stacked. First, conflated two
+different, unrelated `zcr` mechanisms: a raw per-frame `AudioData.zcr`/
+`onset_density_1min` corpus-ROW field (added 2026-09-03, still
+uncommitted as of rc.29's landing) — which genuinely has never appeared
+in any packaged corpus row, that part of the original check was correct
+— versus `mean_zcr`/`onset_density`, live scoring inputs that have
+existed inline in `_update_profile_recommendation()` since 2026-06-21
+(commit `45b9ed6`, the original "add spectral features" recommender
+overhaul) and get logged onto every `profile_recommendation`-type
+keyframe row. The rc.29 check only looked for the first. Second, even
+allowing for that, it only grepped `assets/training/sets/` — the
+*packaged* corpus tree — and never looked in
+`assets/training/accelerated/<list>/**/`, a separate, much larger tree
+(509 files repo-wide contain `mean_zcr`) that the accelerated-replay
+pipeline reads from directly. Real, usable, per-track-attributable data
+was sitting there the whole time.
+
+**Fix.** Same per-track-then-robust-stat methodology as every other
+evidence-based field this session (median per track, ≥3 keyframe rows
+required; robust median → mu, MAD-derived sigma floored at `0.03` →
+sigma, raw linear space). Applied to the same 12 profiles with a real
+training-list corpus. Full table and the two flagged findings (`zcr_sigma`
+landing on the floor for all 12 profiles; `ambient`/`chillstep`'s
+`onset_density_mu` jumping ~6.6x/~2x from old hand-guesses) are in
+`drop-ins/auto-vj-01/docs/weights-and-thresholds.md` § "zcr /
+onset_density Evidence-Based Re-Fit — Correcting rc.29 (recommender
+rc.30)" — not duplicated here.
+
+**Regression fallout, understood not blindly re-pinned.**
+`test_matcher_flips_fold_when_genre_flips` (`tests/test_genre_matcher.py`)
+used a hardcoded `zcr=0.085` that exactly matched `drum_and_bass`'s OLD
+`zcr_mu` by construction; the re-fit pulled `rap_rnb`/`drum_and_bass`'s
+`zcr_mu` much closer together (0.031 spread → 0.0046) while both
+`zcr_sigma` values collapsed to the same `0.03` floor, so sitting exactly
+on the new mu no longer cleared the genre-match margin. Swept the input
+empirically, found the crossover between 0.08 and 0.09, moved the test's
+literal to `0.10` for a stable margin rather than the exact-mu boundary.
+The trust-margin fixture (`_make_trust_test_stub`,
+`tests/test_bpm_detector_audit_regressions.py`) needed its `onset_count`
+knob retuned a fifth time (`1.50 → 2.00`, its own docstring now carries
+all five retuning notes in order) — this time swept against both the
+low-trust and high-trust setups together, landing in the middle of the
+widest stable band found (1.9–2.1) rather than picking the first value
+that happened to pass.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.29 → 1.0.0-rc.30`;
+`_VJ_WEIGHTS_DOC_VERSION` `86 → 87`. Full test suite green (2181 passed,
+1 skipped) after landing.
+
+## `centroid_fit` Weight-Dict Entry Removed (2026-09-04, recommender rc.31)
+
+**Owner, same night, after asking "why is [centroid] useless" and being
+pointed at the 2026-08-20 retirement entry above (57 real labeled tracks,
+five brightness formulations measured, all agreeing scalar full-mix
+brightness tracks mastering/loudness rather than genre — the real
+spectral evidence lives in `spectral_shape_fit`'s full 64-band fit, its
+actual replacement): "let's remove centroid." Scoped, by owner choice
+among three options offered (full strip / stop-scoring-keep-telemetry /
+just the dead weight-dict entry), to the smallest: delete the explicit
+`'centroid_fit': 0.0` line from `_DEFAULT_RECO_WEIGHTS`
+(`drop-ins/auto-vj-01/auto_vj.py`). Term computation, `term_values_by_
+candidate` telemetry logging, and every profile's `spectral_centroid_mu`/
+`spectral_centroid_sigma` fields are all unchanged — this is a weight-
+dict cleanup, not a behavioral or data-model change.
+
+**Correctness fix required alongside it.** The composite-score sum
+(`composite = sum(w[name] * value for name, value in terms.items())`)
+indexed `w` (the live `_reco_weights` dict) directly by name — every
+computed term needs a matching weight-dict entry or this raises
+`KeyError`. Changed to `w.get(name, 0.0)` so a term with no configured
+weight contributes `0.0`, the same as an explicit zero would have.
+Without this, removing the dict entry would have crashed
+`_profile_score()` for every candidate, every cycle (silently, via the
+scoring loop's own `except Exception: continue` — the same failure shape
+several earlier bugs this session were caught by, here caught before
+landing instead of live).
+
+**Regression fallout.** `test_default_weights_are_genre_pure`
+(`tests/test_bpm_detector_audit_regressions.py`) asserted
+`w['centroid_fit'] == 0.0`; updated to `'centroid_fit' not in w`.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.30 → 1.0.0-rc.31`;
+`_VJ_WEIGHTS_DOC_VERSION` `87 → 88`. Full test suite green (2181 passed,
+1 skipped) after landing.

@@ -1,0 +1,5 @@
+# Isolated, dev-only requirements for the Essentia beat-tracker benchmarking
+# adapter. Install into tools/beat-tracker-bench/essentia/.venv only -- do
+# NOT add these to the project's main requirements.txt (see README.md).
+essentia==2.1b6.dev1389
+numpy==2.4.6

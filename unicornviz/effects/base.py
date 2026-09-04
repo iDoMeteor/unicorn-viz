@@ -89,7 +89,7 @@ class AudioData:
                  "bands", "spectral_flux",
                  "vocal_hnr", "vocal_fmr",
                  "vocal_mid_ratio", "vocal_syl", "vocal_ms_valid",
-                 "spectral_contrast")
+                 "spectral_contrast", "zcr", "complex_onset_flux")
 
     def __init__(self) -> None:
         self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
@@ -176,6 +176,29 @@ class AudioData:
         #   updated periodically (not every frame). High for sung/spoken
         #   delivery; low for a sustained pad or a one-shot hit.
         self.vocal_fmr: float = 0.0
+        # 2026-09-03 (recommender rc.27): zero-crossing rate of the last
+        # 512-sample waveform window (fraction of adjacent-sample sign
+        # changes) -- was computed ad hoc inline in auto_vj.py's own
+        # recommender-sample path (from audio.waveform, same formula) but
+        # never a proper Analyzer/AudioData field, so it was invisible to
+        # effects and never logged to the training corpus. Promoted here
+        # so it is computed once, in one place, like vocal_hnr/vocal_fmr.
+        self.zcr: float = 0.0
+        # 2026-09-04 (detector, Program B step 3 continuation): complex-
+        # domain onset detection function (Bello, Duxbury, Davies & Sandler
+        # 2004) -- raw, un-normalized per-tick value, mirroring
+        # spectral_flux's own "raw, normalized downstream" contract exactly
+        # (the causal median/MAD normalizer already ported into
+        # beat_grid.py for spectral_flux's 'dense_flux' env_source is
+        # reused unchanged for this field via a third 'dense_complex'
+        # option -- see Analyzer._compute_complex_onset_flux() and
+        # BeatTracker._env_source in drop-ins/auto-vj-01/beat_grid.py).
+        # Ported from tools/beat-tracker-bench/onset-prototype/
+        # complex_onset.py's ComplexOnsetDetector._process_frame() --
+        # reimplemented from the published paper's own description, no
+        # BTrack source read (see that module's own docstring for the
+        # clean-room provenance note, which applies equally here).
+        self.complex_onset_flux: float = 0.0
 
 
 def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0) -> None:
@@ -220,12 +243,14 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
     target.mid_flux = source.mid_flux
     target.bass_level_raw = source.bass_level_raw
     target.spectral_flux = source.spectral_flux
+    target.complex_onset_flux = source.complex_onset_flux
     target.vocal_hnr = source.vocal_hnr
     target.vocal_fmr = source.vocal_fmr
     target.vocal_mid_ratio = source.vocal_mid_ratio
     target.vocal_syl = source.vocal_syl
     target.vocal_ms_valid = source.vocal_ms_valid
     target.spectral_contrast = source.spectral_contrast
+    target.zcr = source.zcr
     target.waveform[:] = source.waveform
     target.bands[:] = source.bands
 
