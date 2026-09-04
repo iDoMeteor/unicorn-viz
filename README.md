@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.105**
+**Version 1.0.0-beta.107**
 
 ## Contact Me!
 
@@ -557,6 +557,20 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.107** — Effects-browser favorites (`F` key): mark up to 16
+  effects, auto-assigned to the lowest free slot and persisted — data-layer
+  groundwork for a future 1:1 mapping onto a 16-pad MIDI grid (an Akai APC
+  mini's clip-launch pads), exposed through `VJApi` for a future
+  midi-controllers-01 pad handler. ProjectM preset HUD labels are now
+  `pM: <name>`, trimmed at both ends instead of the front only, so two
+  presets differing only by a trailing "edit1"/"edit2" no longer read
+  identically and the label actually fits the effect banner pane. New
+  `[auto_vj] hud_production_mode`: one config flag for a live show that
+  hides every "detector internals" readout — the Auto VJ status bar's BPM
+  + confidence, the active profile's recommender score, the `REC PROF`
+  line, *and* the same fields in the Configuration Editor's "Auto VJ" info
+  tab (a second surface the first pass missed) — regardless of the
+  individual `[overlays] hud_show_*` settings, without changing them.
 - **1.0.0-beta.106** — Two new `AudioData` fields, promoted from ad hoc
   computations that were invisible to effects and the training corpus:
   `zcr` (zero-crossing rate of the last 512-sample waveform window --
