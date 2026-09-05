@@ -28,6 +28,7 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+from unicornviz.audio.pactl import run_pactl
 from unicornviz.config import Config
 from unicornviz.paths import resolve_path
 
@@ -65,6 +66,24 @@ _HW_ENCODERS: tuple[tuple[str, list[str], str, str], ...] = (
 
 #: Probe result, cached for the process.  ``False`` means "probed, none work".
 _hw_encoder_cache: tuple[str, list[str], str, str] | None | bool = None
+# Serializes the probe so a recording started while the startup prewarm is
+# still running waits for that result instead of launching a second ffmpeg.
+_hw_probe_lock = threading.Lock()
+
+
+def prewarm_hw_encoder_probe(ffmpeg_path: str) -> threading.Thread:
+    """Run the hardware-encoder probe on a daemon thread at startup.
+
+    The probe encodes one test frame per candidate with a 20 s ceiling
+    each; done lazily it landed on the main thread the moment the operator
+    hit record.  Started at boot it is finished long before that.
+    """
+    t = threading.Thread(
+        target=_probe_hw_encoder, args=(ffmpeg_path,),
+        name='uv-hw-encoder-probe', daemon=True,
+    )
+    t.start()
+    return t
 
 
 def _render_device() -> str:
@@ -85,7 +104,14 @@ def _probe_hw_encoder(ffmpeg_path: str) -> tuple[str, list[str], str, str] | Non
     global _hw_encoder_cache
     if _hw_encoder_cache is not None:
         return _hw_encoder_cache or None
+    with _hw_probe_lock:
+        if _hw_encoder_cache is not None:      # the prewarm finished while we waited
+            return _hw_encoder_cache or None
+        return _probe_hw_encoder_locked(ffmpeg_path)
 
+
+def _probe_hw_encoder_locked(ffmpeg_path: str) -> tuple[str, list[str], str, str] | None:
+    global _hw_encoder_cache
     device = _render_device()
     for codec, pre_input, filt, quality in _HW_ENCODERS:
         pre = [a.format(device=device) for a in pre_input]
@@ -257,19 +283,13 @@ class Recorder:
         return self._directory / f'{self._filename_prefix}_{ts}.{self._container}'
 
     def _pactl(self, *args: str) -> str | None:
-        """Run a pactl query and return stdout, or None when unavailable."""
-        try:
-            proc = subprocess.run(
-                ['pactl', *args],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-            )
-        except Exception as exc:
-            log.debug('pactl %s failed: %s', ' '.join(args), exc)
-            return None
-        return proc.stdout
+        """Cached pactl query (unicornviz.audio.pactl); None when unavailable.
+
+        Recording starts on the main thread; the three queries behind source
+        resolution are answered from the shared cache, refreshed in the
+        background every few seconds, instead of three fresh spawns.
+        """
+        return run_pactl(*args)
 
     def _pulse_sink_states(self) -> list[tuple[str, str]]:
         """Return ``(sink_name, state)`` for every sink, newest pactl format.

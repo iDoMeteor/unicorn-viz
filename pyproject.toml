@@ -98,3 +98,27 @@ ignore = ["E501", "E701", "E702"]
 # Test files: unused imports are sometimes needed for fixture side-effects.
 "tests/*.py" = ["F401"]
 
+
+[tool.pyright]
+# Read by Pylance too.  Keeps the language server off the trees that hold
+# no project source: the flatpak builder cache (4.7k vendored .py files),
+# the beat-tracker bench's vendored trackers under tools/ (15k), the
+# setuptools build dir, and the session data under assets/ + runtime/
+# (100+ GB).  Without this Pylance indexes ~20k files and complains.
+exclude = [
+    "**/.venv",
+    "**/.venv-runtime",
+    "**/__pycache__",
+    "**/node_modules",
+    "build",
+    "packaging/flatpak/.flatpak-builder",
+    "packaging/flatpak/build-dir",
+    "packaging/flatpak/repo",
+    "tools/beat-tracker-bench",
+    "assets",
+    "logs",
+    "runtime",
+    "recordings",
+]
+venvPath = "."
+venv = ".venv"

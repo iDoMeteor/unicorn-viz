@@ -32,6 +32,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from unicornviz.audio.pactl import run_pactl
+
 if TYPE_CHECKING:
     from unicornviz.runtime_state import RuntimeStateStore
 
@@ -123,16 +125,14 @@ def _pulse_sink_descriptions() -> set[str]:
     decides.  Returns an empty set when pactl is unavailable, in which case
     callers fall back to name hints.
     """
-    try:
-        proc = subprocess.run(
-            ['pactl', 'list', 'sinks'],
-            check=True, capture_output=True, text=True, timeout=5.0,
-        )
-    except Exception as exc:
-        log.debug('Audio: sink enumeration unavailable (%s)', exc)
+    # Cached + background-refreshed: the selector opens on the main thread
+    # and used to pay a subprocess spawn every time.
+    stdout = run_pactl('list', 'sinks')
+    if stdout is None:
+        log.debug('Audio: sink enumeration unavailable')
         return set()
     out: set[str] = set()
-    for line in proc.stdout.splitlines():
+    for line in stdout.splitlines():
         stripped = line.strip()
         if stripped.startswith('Description:'):
             desc = stripped.split(':', 1)[1].strip().lower()

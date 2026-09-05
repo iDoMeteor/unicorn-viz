@@ -34,7 +34,7 @@ from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
 from unicornviz.hotkeys import HotkeyHandler, parse_hotkey_chord
 from unicornviz.midi import MidiManager, MidiOut
-from unicornviz.recording import Recorder
+from unicornviz.recording import Recorder, prewarm_hw_encoder_probe
 from unicornviz._null_controllers import (
     _NullMultiHeadController,
     _NullPostFxController,
@@ -4887,6 +4887,11 @@ void main() {
                 log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
         self._apply_persisted_recording_settings()
+        # Hardware-encoder probe off the main thread, now, so the answer is
+        # cached by the time anyone presses record (it used to run then).
+        if (bool(self.cfg.get('recording', 'enabled', default=True))
+                and str(self.cfg.get('recording', 'codec', default='auto')).strip().lower() == 'auto'):
+            prewarm_hw_encoder_probe(str(self.cfg.get('recording', 'ffmpeg_path', default='ffmpeg')))
         # Video output interop (v4l2loopback / future PipeWire, NDI).
         # Guarded per the drop-in independence rules: absent drop-in, absent
         # config, or a constructor failure all degrade to None and the app

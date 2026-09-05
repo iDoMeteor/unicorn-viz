@@ -4,14 +4,14 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.115      BETA          module
+  core (unicornviz)             1.0.0-beta.116      BETA          MISMATCH (readme=1.0.0-beta.115)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.190.0             alpha ▲       module
+  dj-mixer-01                   0.190.1             alpha ▲       module
   media-01                      0.29.0              alpha ▲       module
   control-room-01               0.16.0              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
-  projectm-01                   0.12.4              alpha ▲       module
+  projectm-01                   0.12.5              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.11.0              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
@@ -34,7 +34,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.2          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
-  spotify-01                    1.0.0-rc.5          RC            module
+  spotify-01                    1.0.0-rc.6          RC            module
   unicorn-tears-01              1.0.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -65,13 +65,13 @@
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-rollercoast           0.4.1               early alpha   module
+  lyrics-01                     0.4.1               early alpha   module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   video-clips-01                0.5.0               alpha ▼       module
   video-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
-  lyrics-01                     0.4.0               early alpha   module
   effects-flying                0.3.0               early alpha   module
   effects-ukiyo-e               0.3.0               early alpha   module
   osc-bridge-01                 0.3.0               early alpha   module
@@ -79,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  2 version mismatch(es): effects-cosmic, effects-games
+  ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
 
