@@ -100,11 +100,11 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 | Channel | Today | Gap to next star |
 |---|---|---|
 | **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Done 2026-09-04:** release path proven via `manifest.json` (channel → tarball → sha256 verified → `--self-test`). **Remaining for ★5:** GPG-sign `SHA256SUMS` (owner key, O3), wire `get.unicornviz.io`; icon size ladder is cosmetic. |
-| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★ (climbing) | **Done 2026-06-30:** reworked to stage via `stage_payload.sh` (**drop-ins now stripped**), bundle a relocatable `fetch_runtime.sh` interpreter with shebangs rewritten to `/opt` (verified: 0 staging-path leaks), install only core deps into it, ship `unicornviz/`+`assets/` as siblings so `APP_ROOT` resolves and **assets are found** (fixed a real bug — see progress log), `postinst`/`postrm` cache refresh, MIT + C-lib-only deps. A real `.rpm` builds + inspects clean. **Remaining for ★4:** distro matrix + nightly `apt/dnf install ./pkg` smoke; **the `config.toml` conffile is intentionally deferred** pending distribution cleanup of config. **★5:** `dpkg-sig` / `rpm --addsign` with the release GPG key. |
-| **Windows `.exe`** (`packaging/windows/UnicornViz.iss`) | ★ | Replace the blanket `RepoRoot\*` copy + postinstall network pip (the exact anti-pattern §8 kills) with a curated payload + embedded Python 3.11 + bundled ffmpeg; real Start-menu/desktop/PATH; version from CI not hardcoded; portable `.zip`; **★4:** `windows-2022` CI build + silent-install smoke; **★5:** `signtool` gated on cert secret (ship unsigned + SmartScreen workaround until a cert is bought). |
+| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★★ | **Done 2026-09-04:** built by `release.sh` from the curated payload with a bundled relocatable runtime; **installed in clean Fedora 41 and Ubuntu 24.04 containers and passed `--self-test`**; PortAudio dependency and `ffmpeg` Recommends fixed; nightly `native-package-smoke` job. **★5 gates:** GPG signing (O3), `config.toml` conffile (O4). |
+| **Windows** (`tools/packaging/build_windows_portable.sh`, `packaging/windows/UnicornViz.iss`) | ★★ | **Done 2026-09-04:** portable zip built on Linux (cross-installed win_amd64 wheels + Windows runtime + `unicorn-viz.cmd` launcher), junk-free, **unverified on Windows**. **Next:** rework `UnicornViz.iss` to consume the staged payload (kill the blanket copy + post-install pip); verify on a Windows box or the `windows-2022` runner; `signtool` gated on a cert secret. |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
-| **Flatpak** (`packaging/flatpak/…yml`) | ★ | Won't pass Flathub today (network `pip install`, `--filesystem=home`, pulseaudio). Pin pip deps offline via `flatpak-pip-generator`, build native wheels in-sandbox, tighten `finish-args` (pipewire + xdg dirs, drop `home`/`network`), add `metainfo.xml` + desktop + icons; **★4:** `flatpak-builder` CI + `flatpak run … --help` smoke; **★5:** Flathub submission (free; needs app-id claim). |
-| **Snap** (`packaging/snap/snapcraft.yaml`) | ★ | `core24`, **strict** confinement + precise plugs (§5.2), `desktop-launch` wrapper + `meta/gui`; **★4:** `snapcore/action-build` CI + `snap install`/`--help` smoke; **★5:** Snap Store publish (free; needs name registration). |
+| **Flatpak** (`packaging/flatpak/`) | ★★ (build pending) | **Done 2026-09-04:** manifest rewritten for runtime 25.08, release-tarball source, PortAudio module, offline pip sources (13 modules, sha256-pinned), tightened `finish-args`, metainfo + desktop + icon ladder, launcher with `UNICORNVIZ_APP_ROOT`. **Next:** local `flatpak-builder` build + `--self-test` in the sandbox (★4), then the Flathub PR (O5). |
+| **Snap** (`packaging/snap/snapcraft.yaml`) | ★ (on paper) | **Done 2026-09-04:** manifest upgraded to core24 / strict / explicit plugs, `dump`-staged app + assets siblings, launcher with `UNICORNVIZ_APP_ROOT`, desktop + icon. **Next:** build + test with snapcraft/LXD (not on this box); Snap Store name (O5). |
 
 **Cross-cutting blockers that gate stars on multiple channels at once:**
 
@@ -1275,6 +1275,51 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-04 (afternoon) — Blocks C, E1, F, G; two more packaging bugs caught by
+  the clean-container smoke.**
+  - **Block C (native `.deb`/`.rpm`) — ★4 reached.** `release.sh --formats rpm,deb`
+    built `unicorn-viz-1.0.0~beta.111-1.x86_64.rpm` and
+    `unicorn-viz_1.0.0~beta.111-1_amd64.deb`; both installed in clean containers
+    (`registry.fedoraproject.org/fedora:41`, `public.ecr.aws/ubuntu/ubuntu:24.04` —
+    Docker Hub's CDN would not resolve from the build box) and passed
+    `unicorn-viz --self-test`. The smoke caught that the Linux `sounddevice` wheel
+    is pure Python and needs the system PortAudio — now `Requires: portaudio` /
+    `Depends: libportaudio2` — and confirmed the Ubuntu 24.04 dependency names
+    resolve. `ffmpeg` is a *Recommends*. `THIRD_PARTY_LICENSES.md` now ships on
+    every channel (it shipped on none). `installer-smoke.yml` gained a nightly
+    `native-package-smoke` job replicating this gate. Still ★4, not ★5: GPG
+    signing (O3) and the `config.toml` conffile (O4).
+  - **Block E1 (Windows portable) — built here, unverified there.**
+    `tools/packaging/build_windows_portable.sh` cross-installs the pinned
+    win_amd64 wheels into a Windows `python-build-standalone` runtime using pip's
+    `--platform/--python-version/--target` (no Windows host needed) and zips
+    `UnicornViz-Portable-<version>-win-x64.zip` (182 MB; 172 extension modules;
+    SDL2 and PortAudio DLLs arrive inside the wheels; no host bytecode; junk-free
+    top level). `unicorn-viz.cmd` exports `UNICORNVIZ_APP_ROOT`. **Needs a Windows
+    box or the `windows-2022` runner to verify** (`unicorn-viz.cmd --self-test`);
+    label it "preview" until then. E2 (`.iss` rework) is next.
+  - **Block D (Flatpak) — scaffold complete; local build in progress.** Manifest
+    rewritten for runtime **25.08** (what is installed here): consumes the release
+    tarball (never the repo tree — `type: dir path: ../..` would have swept the
+    64 GB training tree into the build), adds a PortAudio module (the runtime
+    ships none), pins offline pip sources via `flatpak-pip-generator` (13
+    modules, all sha256), tightens `finish-args` (no `home`, no network; pipewire
+    + pulse; `--device=all` for MIDI, to be narrowed), AppStream metainfo, desktop
+    file, a letterboxed icon ladder (auto-scaled placeholders — the owner
+    hand-makes final icons), and a launcher exporting `UNICORNVIZ_APP_ROOT`.
+  - **Block F (Snap) — on paper.** `snapcraft.yaml` upgraded to core24 / strict /
+    explicit plugs / gnome extension; app + assets `dump`-staged as siblings;
+    launcher with `UNICORNVIZ_APP_ROOT`; desktop + icon. Untested (no
+    snapcraft/LXD here).
+  - **Block G (macOS) — a planning correction, no files.** §11 assumed one
+    universal2 bundle, but numpy 2.x and scipy publish arm64 and x86_64 wheels
+    separately (no universal2), so a pip-assembled bundle must be **per-arch:
+    two DMGs (arm64, x86_64)**, or briefcase per-arch builds. Recorded so the
+    Mac session starts from the right premise.
+  - **Shared-tree lesson:** the core version was bumped mid-build by another
+    seat, so artifacts landed under `1.0.0-beta.111` while gates targeted `.110`.
+    `release.sh` now refuses a dirty payload tree unless `--allow-dirty` and
+    prints the version + commit it resolved; pin `--version` for gates.
 - **2026-09-04 — Block A landed: the release path is proven, no GitHub Release needed.**
   - `tools/packaging/manifest.py` + `tools/packaging/release.sh`: one command
     builds the curated source tarball (plus rpm/deb on request), writes
@@ -1771,3 +1816,8 @@ an engineering one.
 - **fpm-built `.deb` on Fedora** builds fine, but the dependency *names* are only
   validated by the Ubuntu container smoke. Do not publish the deb before C2
   passes.
+- **Version drift in the shared tree.** Another seat can bump `__version__`
+  mid-build; artifacts then land under a different version than the gate
+  expects, and the staged payload carries that seat's uncommitted edits. Pin
+  `--version` for gates; real releases only from a clean tree or a tag
+  (`release.sh` enforces this unless `--allow-dirty`).

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.unicornviz.UnicornViz</id>
+  <name>Unicorn Viz</name>
+  <summary>Audio-reactive demoscene visualizer with ANSI art and MIDI control</summary>
+  <developer id="io.unicornviz"><name>Unicorn Viz</name></developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Unicorn Viz is a fullscreen OpenGL visualizer for live music: audio-reactive
+      GPU effects, authentic CP437 ANSI art from the BBS art scene, an automatic VJ
+      that follows the beat, and hands-on control from MIDI controllers.
+    </p>
+    <p>It listens to whatever is playing on your system and needs no account.</p>
+  </description>
+  <launchable type="desktop-id">io.unicornviz.UnicornViz.desktop</launchable>
+  <url type="homepage">https://unicornviz.io</url>
+  <url type="bugtracker">https://github.com/djunicorntears/unicorn-viz/issues</url>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <!-- Flathub requires at least one screenshot with a public URL before
+       submission; add <screenshots> here when the website hosts them. -->
+  <releases>
+    <release version="1.0.0-beta.110" date="2026-09-04">
+      <description><p>Release candidate series.</p></description>
+    </release>
+  </releases>
+</component>

@@ -1,41 +1,84 @@
+# Snap manifest for Unicorn Viz (installer plan §5.2 / §18 Block F).
+#
+# STATUS: upgraded on paper 2026-09-04 (core24, strict confinement, launcher
+# with UNICORNVIZ_APP_ROOT, desktop integration). NOT yet built or tested —
+# snapcraft/LXD are not available on the build box; build + review next session:
+#   snapcraft --use-lxd && sudo snap install --dangerous ./unicorn-viz_*.snap
+#   unicorn-viz --self-test
+#
+# Like the Flatpak, this consumes the release tarball published by
+# tools/packaging/release.sh, never the repository tree.
 name: unicorn-viz
-base: core22
-version: '0.1.0'
+base: core24
+version: '1.0.0-beta.110'
 summary: Audio-reactive demoscene visualizer
 description: |
-  Unicorn Viz is a fullscreen OpenGL visualizer with audio-reactive effects,
-  ANSI art rendering, and MIDI controls.
-
-grade: devel
-confinement: devmode
+  Unicorn Viz is a fullscreen OpenGL visualizer for live music: audio-reactive
+  GPU effects, authentic CP437 ANSI art from the BBS art scene, an automatic VJ
+  that follows the beat, and hands-on control from MIDI controllers.
 license: MIT
+grade: devel          # -> stable once strict confinement passes review
+confinement: strict
+platforms:
+  amd64:
 
 apps:
   unicorn-viz:
     command: bin/unicorn-viz
+    extensions: [gnome]          # desktop-launch integration (GL, fonts, portals)
+    desktop: meta/gui/unicorn-viz.desktop
     plugs:
       - opengl
-      - x11
       - wayland
+      - x11
+      - audio-record            # capture via PipeWire/PulseAudio
       - audio-playback
-      - audio-record
+      - alsa                    # ALSA sequencer for MIDI controllers
+      - raw-usb                 # USB-MIDI devices
+      - home
+      - removable-media
+    environment:
+      LIBGL_DRI3_DISABLE: '1'    # see plan §5.3 (some Mesa/Wayland combos)
 
 parts:
-  unicorn-viz:
+  deps:
+    # Pinned Python dependencies into the part venv (/snap/code/258/bin/python3).
     plugin: python
-    source: ../..
-    requirements:
-      - requirements.txt
-
-  # Attribution: MIT/BSD/Apache dependencies require their notices to travel
-  # with any binary distribution.  Regenerate THIRD_PARTY_LICENSES.md with
-  # tools/gen_third_party_licenses.py when requirements.txt pins change.
-  licenses:
+    source: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
+    source-checksum: sha256/7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
+    python-requirements: [requirements.txt]
+    build-packages: [libasound2-dev, portaudio19-dev]
+    stage-packages:
+      - libsdl2-2.0-0
+      - libgl1
+      - libffi8
+      - libpipewire-0.3-0
+      - libasound2
+      - libportaudio2
+      - libsndfile1
+  app:
+    # The app as source + assets siblings, so APP_ROOT == $SNAP/share/unicorn-viz.
     plugin: dump
-    source: ../..
+    source: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
+    source-checksum: sha256/7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
     organize:
-      LICENSE: usr/share/doc/unicorn-viz/LICENSE
-      THIRD_PARTY_LICENSES.md: usr/share/doc/unicorn-viz/THIRD_PARTY_LICENSES.md
+      unicornviz: share/unicorn-viz/unicornviz
+      assets: share/unicorn-viz/assets
+      LICENSE: share/doc/unicorn-viz/LICENSE
+      THIRD_PARTY_LICENSES.md: share/doc/unicorn-viz/THIRD_PARTY_LICENSES.md
+      README.md: share/doc/unicorn-viz/README.md
     stage:
-      - usr/share/doc/unicorn-viz/LICENSE
-      - usr/share/doc/unicorn-viz/THIRD_PARTY_LICENSES.md
+      - share/unicorn-viz
+      - share/doc/unicorn-viz
+  launcher:
+    plugin: dump
+    source: .
+    source-type: local
+    organize:
+      bin/unicorn-viz: bin/unicorn-viz
+      gui/unicorn-viz.desktop: meta/gui/unicorn-viz.desktop
+      gui/unicorn-viz.png: meta/gui/unicorn-viz.png
+    stage:
+      - bin/unicorn-viz
+      - meta/gui/unicorn-viz.desktop
+      - meta/gui/unicorn-viz.png

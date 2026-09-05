@@ -32,6 +32,7 @@
 #   --source-dir <path>   Source tree root (default: repository root)
 #   --notes-url <url>     Release notes URL recorded in the manifest
 #   --dry-run             Print the plan without building or publishing
+#   --allow-dirty         Build even if payload members have uncommitted changes
 #   -h, --help            Show this help text
 #
 # Native package versions: rpm/deb forbid '-' in a version, so a pre-release like
@@ -54,6 +55,7 @@ ENDPOINT_URL=""
 SOURCE_DIR="${REPO_ROOT}"
 NOTES_URL=""
 DRY_RUN=0
+ALLOW_DIRTY=0
 
 log() { echo "[release] $*" >&2; }
 die() { echo "[release] ERROR: $*" >&2; exit 1; }
@@ -72,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
     --notes-url) NOTES_URL="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --allow-dirty) ALLOW_DIRTY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -95,6 +98,25 @@ fi
 
 COMMIT="$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 TAG="v${VERSION}"
+
+# A release must correspond to a commit: refuse a tree whose payload members
+# carry uncommitted edits (another seat's in-flight work, a mid-run version
+# bump) unless the caller opts in. Unrelated dirty files (config.toml, logs)
+# do not block.
+if git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  dirty="$(git -C "$SOURCE_DIR" status --porcelain --untracked-files=no -- \
+    unicornviz assets requirements.txt pyproject.toml README.md LICENSE \
+    THIRD_PARTY_LICENSES.md config.full.example.toml 2>/dev/null || true)"
+  if [[ -n "$dirty" ]]; then
+    if [[ "$ALLOW_DIRTY" -eq 1 ]]; then
+      log "WARNING: building from a dirty tree (--allow-dirty):"
+      while IFS= read -r line; do log "  $line"; done <<<"$dirty"
+    else
+      while IFS= read -r line; do log "  $line"; done <<<"$dirty"
+      die "payload members have uncommitted changes; commit them (a release is a commit) or pass --allow-dirty"
+    fi
+  fi
+fi
 PKG_VERSION="${VERSION//-/\~}"
 OUT="${DEST}/${VERSION}"
 

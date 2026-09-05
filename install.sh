@@ -196,6 +196,9 @@ run_install() {
   download_release_source
 
   uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
+  for doc in LICENSE THIRD_PARTY_LICENSES.md README.md; do
+    [[ -f "${SRC_DIR}/${doc}" ]] && uv_run cp "${SRC_DIR}/${doc}" "${PREFIX}/${doc}"
+  done
   uv_create_venv_and_install "$python_path" "${PREFIX}/venv" "$SRC_DIR"
 
   if [[ "$NO_DESKTOP" -eq 0 ]]; then

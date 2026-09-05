@@ -1,26 +1,74 @@
+# Flatpak manifest for Unicorn Viz (installer plan §5.1 / §18 Block D).
+#
+# The app module consumes the *release tarball* published by
+# tools/packaging/release.sh (the same artifact install.sh installs), never the
+# repository tree: the working tree carries gigabytes of gitignored training data
+# and licensed asset packs that must not enter a build. Python dependencies are
+# pinned offline via python3-requirements.json, generated from requirements.txt
+# (minus pysdl2-dll — the runtime's SDL2 is used) with flatpak-pip-generator:
+#
+#   flatpak-pip-generator --runtime org.freedesktop.Sdk//25.08 \
+#       --requirements-file requirements-flatpak.txt --output python3-requirements
+#
+# For a local build against a staged release, swap the archive 'url' + 'sha256'
+# for 'path: /path/to/unicorn-viz-<version>.tar.gz'.
 app-id: io.unicornviz.UnicornViz
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 command: unicorn-viz
 finish-args:
-  - --share=network
   - --socket=wayland
   - --socket=fallback-x11
-  - --socket=pulseaudio
   - --device=dri
-  - --filesystem=home
+  # Audio capture: PipeWire-Pulse socket plus native PipeWire access.
+  - --socket=pulseaudio
+  - --filesystem=xdg-run/pipewire-0
+  # MIDI controllers need the ALSA sequencer (/dev/snd). Tighten if a narrower
+  # portal-based path becomes available.
+  - --device=all
+  # User media for the image/video/texture drop-ins; own config dir.
+  - --filesystem=xdg-music:ro
+  - --filesystem=xdg-videos:ro
+  - --filesystem=xdg-pictures:ro
+  - --filesystem=xdg-config/unicorn-viz:create
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - '*.la'
 modules:
+  # PortAudio: the Linux sounddevice wheel is pure Python and dlopens
+  # libportaudio; the freedesktop runtime does not ship it. ALSA-only build
+  # (no JACK) — audio reaches PipeWire through its ALSA/Pulse compatibility.
+  - name: portaudio
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+      - --without-jack
+      - --without-oss
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /lib/*.la
+    sources:
+      - type: archive
+        url: https://github.com/PortAudio/portaudio/archive/refs/tags/v19.7.0.tar.gz
+        sha256: 5af29ba58bbdbb7bbcefaaecc77ec8fc413f0db6f4c4e286c40c3e1b83174fa0
+  - python3-requirements.json
   - name: unicorn-viz
     buildsystem: simple
     build-commands:
-      - python3 -m pip install --no-deps --prefix=/app .
-      # Attribution: MIT/BSD/Apache dependencies require their notices to
-      # travel with any binary distribution.  Regenerate THIRD_PARTY_LICENSES.md
-      # with tools/gen_third_party_licenses.py when pins change.
+      - mkdir -p /app/share/unicorn-viz
+      - cp -a unicornviz assets /app/share/unicorn-viz/
+      - install -Dm755 unicorn-viz /app/bin/unicorn-viz
+      - install -Dm644 io.unicornviz.UnicornViz.desktop /app/share/applications/io.unicornviz.UnicornViz.desktop
+      - install -Dm644 io.unicornviz.UnicornViz.metainfo.xml /app/share/metainfo/io.unicornviz.UnicornViz.metainfo.xml
+      - for s in 512 256 128 64 48 32; do install -Dm644 "icons/$s/io.unicornviz.UnicornViz.png" "/app/share/icons/hicolor/${s}x${s}/apps/io.unicornviz.UnicornViz.png"; done
       - install -Dm644 LICENSE /app/share/licenses/io.unicornviz.UnicornViz/LICENSE
-      - install -Dm644 THIRD_PARTY_LICENSES.md
-        /app/share/licenses/io.unicornviz.UnicornViz/THIRD_PARTY_LICENSES.md
+      - if [ -f THIRD_PARTY_LICENSES.md ]; then install -Dm644 THIRD_PARTY_LICENSES.md /app/share/licenses/io.unicornviz.UnicornViz/THIRD_PARTY_LICENSES.md; fi
     sources:
+      - type: archive
+        url: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
+        sha256: 7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
       - type: dir
-        path: ../..
+        path: data

@@ -70,6 +70,7 @@ OPTIONAL=(
   LICENSE
   LICENSE.txt
   LICENSE.md
+  THIRD_PARTY_LICENSES.md
 )
 
 for item in "${REQUIRED[@]}"; do

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Unicorn Viz
+GenericName=Audio-Reactive Visualizer
+Comment=Fullscreen OpenGL demoscene visualizer with audio and MIDI control
+Exec=unicorn-viz %U
+Icon=io.unicornviz.UnicornViz
+Terminal=false
+Categories=AudioVideo;Audio;Graphics;Player;
+Keywords=visualizer;demoscene;vj;audio;midi;ansi;
+StartupNotify=true
+StartupWMClass=unicorn-viz

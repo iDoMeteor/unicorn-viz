@@ -1,0 +1,8 @@
+#!/bin/sh
+# Flatpak launcher for Unicorn Viz. The app package and assets live as
+# siblings under /app/share/unicorn-viz so APP_ROOT resolves there (see
+# unicornviz/paths.py); the pip-installed dependencies live under /app.
+PYVER="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+export UNICORNVIZ_APP_ROOT=/app/share/unicorn-viz
+export PYTHONPATH="/app/share/unicorn-viz:/app/lib/python${PYVER}/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m unicornviz "$@"

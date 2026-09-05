@@ -25,3 +25,8 @@ assets/training/
 !assets/sims/README.md
 pM-to-check.txt
 notes2.txt
+# Flatpak local builds (packaging/flatpak): builder cache, build dir, local manifest variant
+packaging/flatpak/.flatpak-builder/
+packaging/flatpak/build-dir/
+packaging/flatpak/local-build.yml
+packaging/flatpak/repo/

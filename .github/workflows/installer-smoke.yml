@@ -103,3 +103,37 @@ jobs:
         run: |
           # Same env the shipped launchers set; --help cannot catch a bad APP_ROOT.
           UNICORNVIZ_APP_ROOT="$PWD" ./.venv/bin/unicorn-viz --self-test
+
+  native-package-smoke:
+    name: Build rpm+deb, install in clean containers, --self-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install fpm
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ruby ruby-dev build-essential rpm >/dev/null
+          sudo gem install --no-document fpm >/dev/null
+
+      - name: Build rpm + deb via release.sh (bundled runtime, curated payload)
+        run: |
+          chmod +x tools/packaging/*.sh
+          tools/packaging/release.sh --formats rpm,deb --dest /tmp/uv-stage --base-url http://localhost
+          ls -lh /tmp/uv-stage/*/
+
+      - name: Install the rpm in a clean Fedora container and self-test
+        run: |
+          OUT="$(ls -d /tmp/uv-stage/*/ | head -n1)"
+          docker run --rm -v "$OUT:/pkg:ro" registry.fedoraproject.org/fedora:41 bash -euo pipefail -c '
+            dnf -q install -y /pkg/*.rpm >/dev/null
+            unicorn-viz --self-test'
+
+      - name: Install the deb in a clean Ubuntu container and self-test
+        run: |
+          OUT="$(ls -d /tmp/uv-stage/*/ | head -n1)"
+          docker run --rm -v "$OUT:/pkg:ro" public.ecr.aws/ubuntu/ubuntu:24.04 bash -euo pipefail -c '
+            apt-get update -qq >/dev/null
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /pkg/*.deb >/dev/null
+            unicorn-viz --self-test'

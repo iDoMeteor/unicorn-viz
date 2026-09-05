@@ -135,6 +135,7 @@ cp -a "${PAYLOAD_DIR}/assets" "${APP_ROOT}/"
 # 5. Docs.
 cp "${PAYLOAD_DIR}/README.md" "${DOC_DIR}/README.md"
 [[ -f "${PAYLOAD_DIR}/LICENSE" ]] && cp "${PAYLOAD_DIR}/LICENSE" "${DOC_DIR}/LICENSE"
+[[ -f "${PAYLOAD_DIR}/THIRD_PARTY_LICENSES.md" ]] && cp "${PAYLOAD_DIR}/THIRD_PARTY_LICENSES.md" "${DOC_DIR}/THIRD_PARTY_LICENSES.md"
 cp "${SOURCE_DIR}/config.full.example.toml" "${DOC_DIR}/config.full.example.toml"
 # NOTE: config.toml is intentionally NOT shipped as a dpkg/rpm conffile yet —
 # it is being cleaned up for distribution by a separate effort. Once the
@@ -225,6 +226,8 @@ COMMON_ARGS=(
   --package "$OUTPUT_DIR"
 )
 
+# PortAudio is a hard runtime dependency: the Linux sounddevice wheel is pure
+# Python and dlopens the system libportaudio (found by the clean-container smoke).
 # ffmpeg is a weak dependency (Recommends), not a hard Requires: the app runs
 # without it (recording is disabled), and stock Fedora cannot satisfy a hard
 # "ffmpeg" Requires without RPM Fusion — a hard dep would make `dnf install`
@@ -238,6 +241,7 @@ if [[ "$FORMAT" == "deb" ]]; then
     --depends libffi8 \
     --depends libpipewire-0.3-0 \
     --depends libasound2 \
+    --depends libportaudio2 \
     --deb-recommends ffmpeg \
     usr "$INSTALL_TOP"
 else
@@ -247,6 +251,7 @@ else
     --depends libffi \
     --depends pipewire \
     --depends alsa-lib \
+    --depends portaudio \
     --rpm-tag 'Recommends: ffmpeg' \
     usr "$INSTALL_TOP"
 fi

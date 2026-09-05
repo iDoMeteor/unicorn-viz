@@ -1,0 +1,8 @@
+#!/bin/sh
+# Snap launcher for Unicorn Viz. The app package and assets are staged as
+# siblings under $SNAP/share/unicorn-viz so APP_ROOT resolves there (see
+# unicornviz/paths.py); the python plugin's venv provides the interpreter and
+# the pinned dependencies.
+export UNICORNVIZ_APP_ROOT="$SNAP/share/unicorn-viz"
+export PYTHONPATH="$SNAP/share/unicorn-viz${PYTHONPATH:+:$PYTHONPATH}"
+exec "$SNAP/bin/python3" -m unicornviz "$@"
