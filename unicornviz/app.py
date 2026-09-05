@@ -6270,7 +6270,7 @@ void main() {
         if self._recorder:
             self._recorder.stop()
         if self._streamer is not None:
-            self._streamer.stop()
+            self._streamer.destroy()
             self._streamer = None
         if self._auto_vj is not None:
             try:
