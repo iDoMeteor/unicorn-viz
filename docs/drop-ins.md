@@ -101,6 +101,7 @@ Complex drop-ins should also include:
 - control-room-01
   - [Planning](planning/drop-in-planning.md)
   - [Panel Registry, Pages & Runtime Layout Plan](planning/control-room-panel-registry-plan-2026-09-04.md)
+  - [Drop-In Integration & Uplift Plan (2026-09-05, proposed)](planning/control-room-drop-in-integration-plan-2026-09-05.md)
   - [Deck-Sim Plan](../drop-ins/control-room-01/docs/deck-sim-plan.md)
   - [Operations](../drop-ins/control-room-01/docs/operations.md)
   - [Configuration](../drop-ins/control-room-01/docs/configuration.md)
