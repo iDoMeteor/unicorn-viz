@@ -71,6 +71,7 @@ OPTIONAL=(
   LICENSE.txt
   LICENSE.md
   THIRD_PARTY_LICENSES.md
+  config.dist.toml
 )
 
 for item in "${REQUIRED[@]}"; do

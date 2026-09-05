@@ -68,6 +68,7 @@ modules:
     build-commands:
       - mkdir -p /app/share/unicorn-viz
       - cp -a unicornviz assets /app/share/unicorn-viz/
+      - if [ -f config.dist.toml ]; then install -Dm644 config.dist.toml /app/share/unicorn-viz/config.toml; fi
       - install -Dm755 unicorn-viz /app/bin/unicorn-viz
       - install -Dm644 io.unicornviz.UnicornViz.desktop /app/share/applications/io.unicornviz.UnicornViz.desktop
       - install -Dm644 io.unicornviz.UnicornViz.metainfo.xml /app/share/metainfo/io.unicornviz.UnicornViz.metainfo.xml

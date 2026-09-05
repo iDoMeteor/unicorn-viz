@@ -57,3 +57,17 @@ def test_stable_channel_pointer_and_older_release_retained(tmp_path: Path) -> No
     data = json.loads(mpath.read_text())
     assert data['channels']['stable']['version'] == '1.0.0'
     assert '0.9.0' in data['releases'], 'older releases stay listed'
+
+
+def test_empty_base_url_yields_manifest_relative_urls(tmp_path: Path) -> None:
+    out = tmp_path / '1.0.0'
+    out.mkdir()
+    art = _write(out / 'unicorn-viz-1.0.0.tar.gz', b'x')
+    sums = _write(out / 'SHA256SUMS', b'y')
+    mpath = tmp_path / 'manifest.json'
+    assert manifest.main(['update', '--manifest', str(mpath), '--version', '1.0.0', '--channel', 'stable',
+                          '--tag', 'v1.0.0', '--commit', 'c0ffee', '--artifact', f'source={art}',
+                          '--sumsfile', str(sums)]) == 0
+    rel = json.loads(mpath.read_text())['releases']['1.0.0']
+    assert rel['artifacts']['source']['url'] == '1.0.0/unicorn-viz-1.0.0.tar.gz'
+    assert rel['signatures']['sha256sums'] == '1.0.0/SHA256SUMS'

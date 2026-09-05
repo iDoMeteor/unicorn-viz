@@ -168,6 +168,34 @@ believe a secret has been committed, report it via the channel above.
 
 ---
 
+## Release Signing
+
+Release artifacts are signed. Each release directory carries `SHA256SUMS`
+(covering every artifact) and a detached OpenPGP signature `SHA256SUMS.asc`;
+rpm packages additionally carry an embedded signature.
+
+- Key: **Unicorn Viz Release** `<release@unicornviz.io>` (ed25519, expires
+  2028-09-04)
+- Fingerprint: `AC45 E688 33CD B3F4 7ED2 51D8 C6F3 799B F08A CBCB`
+- Public key: [`docs/release-key.asc`](docs/release-key.asc) (also shipped as
+  `release-key.asc` inside every hand-off bundle)
+
+Verify a download:
+
+```bash
+gpg --import release-key.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS      # must report the fingerprint above
+sha256sum -c SHA256SUMS                     # then check the artifact itself
+sudo rpm --import release-key.asc            # once, so rpm can check the signature
+rpm --checksig unicorn-viz-*.rpm            # rpm only
+```
+
+`install.sh` performs this check automatically when it finds the public key
+(next to the bundle's `manifest.json`, at `docs/release-key.asc`, or via
+`UV_RELEASE_KEY`); a bad signature aborts the install.
+
+---
+
 ## Dependency & Supply-Chain
 
 - Dependencies are pinned in `requirements.txt`.

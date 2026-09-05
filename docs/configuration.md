@@ -4,7 +4,20 @@ Owner: Studio Documentation
 Status: active
 Last updated: 2026-09-04
 
-All settings live in `config.toml` in the project root.
+All settings live in `config.toml` next to the app (the *app root*). Where that
+is depends on how Unicorn Viz was installed:
+
+| Install method | `config.toml` location | Notes |
+|---|---|---|
+| Source checkout / `run.sh` | repository root | the developer setup |
+| `install.sh` (one-liner / hand-off bundle) | `~/.local/share/unicorn-viz/config.toml` (or `--prefix`) | created from `config.dist.toml` on first install; never overwritten on upgrade |
+| `.rpm` / `.deb` | `/opt/unicorn-viz/config.toml` | a package config file: upgrades keep your edits (`rpmnew` / dpkg prompt) |
+| Flatpak | `/app/share/unicorn-viz/config.toml` (read-only defaults) | pass `--config ~/.config/unicorn-viz/config.toml` for your own |
+| Windows portable / installer | `config.toml` in the install folder | |
+
+Any install can point elsewhere with `unicorn-viz --config <path>`. `config.dist.toml`
+is the bare-bones starter that ships with packages; `config.full.example.toml`
+documents every key.
 
 Validation behavior:
 - Startup performs fail-fast config validation in `unicornviz.__main__` before

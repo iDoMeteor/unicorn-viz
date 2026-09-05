@@ -1,0 +1,15 @@
+# Unicorn Viz — distribution configuration (bare-bones)
+#
+# Installed as config.toml next to the app on fresh installs. Everything not set
+# here uses the built-in defaults; config.full.example.toml documents every key.
+# Edit freely — package upgrades never overwrite a modified copy.
+
+[window]
+fullscreen = false        # press F to toggle; set true for a dedicated VJ box
+show_cursor = false       # Ctrl reveals the pointer when hidden
+
+[midi]
+device = ""               # substring of a MIDI input name; empty disables MIDI
+
+[logging]
+level = "INFO"            # DEBUG, INFO, WARNING, ERROR, CRITICAL

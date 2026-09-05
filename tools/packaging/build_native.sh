@@ -137,10 +137,15 @@ cp "${PAYLOAD_DIR}/README.md" "${DOC_DIR}/README.md"
 [[ -f "${PAYLOAD_DIR}/LICENSE" ]] && cp "${PAYLOAD_DIR}/LICENSE" "${DOC_DIR}/LICENSE"
 [[ -f "${PAYLOAD_DIR}/THIRD_PARTY_LICENSES.md" ]] && cp "${PAYLOAD_DIR}/THIRD_PARTY_LICENSES.md" "${DOC_DIR}/THIRD_PARTY_LICENSES.md"
 cp "${SOURCE_DIR}/config.full.example.toml" "${DOC_DIR}/config.full.example.toml"
-# NOTE: config.toml is intentionally NOT shipped as a dpkg/rpm conffile yet —
-# it is being cleaned up for distribution by a separate effort. Once the
-# distribution-ready config lands, install it to /etc/unicorn-viz/config.toml and
-# declare it with fpm's --config-files so package upgrades preserve user edits.
+if [[ -f "${PAYLOAD_DIR}/config.dist.toml" ]]; then
+  cp "${PAYLOAD_DIR}/config.dist.toml" "${APP_ROOT}/config.toml"
+  CONFIG_FILE_ARGS=(--config-files "${INSTALL_ROOT}/config.toml")
+else
+  CONFIG_FILE_ARGS=()
+fi
+# config.dist.toml ships as <INSTALL_ROOT>/config.toml (where the app looks by
+# default) and is declared a config file to fpm, so package upgrades preserve
+# the user's edits (rpm %config(noreplace), deb conffile).
 
 # 6. Relocatability: pip wrote console-script shebangs pointing at the staging
 #    path. We launch via `python -m`, but rewrite them so the runtime is
@@ -224,6 +229,7 @@ COMMON_ARGS=(
   --after-remove "${HOOK_DIR}/after-remove.sh"
   --chdir "$STAGING_DIR"
   --package "$OUTPUT_DIR"
+  "${CONFIG_FILE_ARGS[@]}"
 )
 
 # PortAudio is a hard runtime dependency: the Linux sounddevice wheel is pure

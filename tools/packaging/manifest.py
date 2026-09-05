@@ -53,9 +53,14 @@ def _load(path: Path) -> dict:
     return {'schema': SCHEMA_VERSION, 'name': 'unicorn-viz', 'channels': {}, 'releases': {}}
 
 
+def _url(base_url: str, version: str, name: str) -> str:
+    """Absolute URL under *base_url*, or a manifest-relative one when it is empty."""
+    return f'{base_url}/{version}/{name}' if base_url else f'{version}/{name}'
+
+
 def _artifact_entry(base_url: str, version: str, path: Path) -> dict:
     return {
-        'url': f'{base_url}/{version}/{path.name}',
+        'url': _url(base_url, version, path.name),
         'sha256': _sha256(path),
         'size': path.stat().st_size,
     }
@@ -78,9 +83,9 @@ def cmd_update(args: argparse.Namespace) -> int:
 
     signatures: dict[str, str | None] = {'sha256sums': None, 'sha256sums_asc': None}
     if args.sumsfile:
-        signatures['sha256sums'] = f'{base_url}/{args.version}/{Path(args.sumsfile).name}'
+        signatures['sha256sums'] = _url(base_url, args.version, Path(args.sumsfile).name)
     if args.sumsfile_asc:
-        signatures['sha256sums_asc'] = f'{base_url}/{args.version}/{Path(args.sumsfile_asc).name}'
+        signatures['sha256sums_asc'] = _url(base_url, args.version, Path(args.sumsfile_asc).name)
 
     # Merge into an existing entry so incremental runs compose: building the
     # source tarball now and the native packages later yields one release that
@@ -131,7 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     upd.add_argument('--channel', required=True, choices=CHANNELS)
     upd.add_argument('--tag', required=True)
     upd.add_argument('--commit', required=True)
-    upd.add_argument('--base-url', required=True, help='public URL the manifest dir is served at')
+    upd.add_argument('--base-url', default='', help='public URL the manifest dir is served at; empty = manifest-relative URLs (hand-off bundles)')
     upd.add_argument('--artifact', action='append', default=[], metavar='KEY=FILE')
     upd.add_argument('--sumsfile', default=None)
     upd.add_argument('--sumsfile-asc', default=None)

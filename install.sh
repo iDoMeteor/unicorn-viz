@@ -42,6 +42,9 @@ SYSTEM_PYTHON=0
 SRC_URL=""
 SRC_SHA256=""
 SRC_DIR=""
+SUMS_URL=""
+SUMS_ASC_URL=""
+FROM_DIR=""
 
 cleanup() {
   if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR}" ]]; then
@@ -67,6 +70,8 @@ interpreter. Use --system-python to opt out.
 
 Options:
   --prefix <dir>            Install prefix (default: ~/.local/share/unicorn-viz)
+  --from <dir>              Install from a hand-off bundle directory (the one
+                            containing manifest.json) instead of a URL
   --manifest-url <url>      Release manifest to read
                             (default: https://get.unicornviz.io/manifest.json;
                             env UV_MANIFEST_URL overrides)
@@ -88,6 +93,7 @@ parse_args() {
     case "$1" in
       --prefix) PREFIX="$2"; shift 2 ;;
       --manifest-url) MANIFEST_URL="$2"; shift 2 ;;
+      --from) FROM_DIR="$(cd "$2" && pwd)" || uv_die "--from: no such directory: $2"; MANIFEST_URL="file://${FROM_DIR}/manifest.json"; shift 2 ;;
       --python) PYTHON_BIN="$2"; shift 2 ;;
       --system-python) SYSTEM_PYTHON=1; shift ;;
       --version) VERSION="$2"; shift 2 ;;
@@ -116,15 +122,69 @@ resolve_release() {
       stable|prerelease) ;;
       *) uv_die "Invalid channel: ${CHANNEL}. Expected stable or prerelease." ;;
     esac
-    VERSION="$(uv_manifest_query "$manifest" channels "$CHANNEL" version)" \
-      || uv_die "The manifest has no '${CHANNEL}' channel."
+    if ! VERSION="$(uv_manifest_query "$manifest" channels "$CHANNEL" version)"; then
+      # A release-candidate bundle only carries a prerelease channel (and a
+      # stable-only manifest has no prerelease): fall back to whichever exists.
+      local other
+      [[ "$CHANNEL" == "stable" ]] && other="prerelease" || other="stable"
+      VERSION="$(uv_manifest_query "$manifest" channels "$other" version)" \
+        || uv_die "The manifest has neither a '${CHANNEL}' nor a '${other}' channel."
+      uv_log "No '${CHANNEL}' channel in this manifest; using '${other}' (${VERSION})"
+      CHANNEL="$other"
+    fi
   fi
   VERSION="${VERSION#v}"
 
   SRC_URL="$(uv_manifest_query "$manifest" releases "$VERSION" artifacts source url)" \
     || uv_die "The manifest has no source artifact for version ${VERSION}."
+  SRC_URL="$(uv_resolve_url "$MANIFEST_URL" "$SRC_URL")"
   SRC_SHA256="$(uv_manifest_query "$manifest" releases "$VERSION" artifacts source sha256)" \
     || SRC_SHA256=""
+  SUMS_URL="$(uv_manifest_query "$manifest" releases "$VERSION" signatures sha256sums 2>/dev/null)" || SUMS_URL=""
+  SUMS_ASC_URL="$(uv_manifest_query "$manifest" releases "$VERSION" signatures sha256sums_asc 2>/dev/null)" || SUMS_ASC_URL=""
+  [[ "$SUMS_URL" == "None" ]] && SUMS_URL=""
+  [[ "$SUMS_ASC_URL" == "None" ]] && SUMS_ASC_URL=""
+  [[ -n "$SUMS_URL" ]] && SUMS_URL="$(uv_resolve_url "$MANIFEST_URL" "$SUMS_URL")"
+  [[ -n "$SUMS_ASC_URL" ]] && SUMS_ASC_URL="$(uv_resolve_url "$MANIFEST_URL" "$SUMS_ASC_URL")"
+}
+
+# Verify the release's SHA256SUMS signature with the project's public key when
+# the manifest carries one. The key is looked for next to the manifest (bundles
+# ship release-key.asc), next to this script (docs/release-key.asc), or at
+# $UV_RELEASE_KEY. A bad signature is fatal; a missing gpg or key only warns.
+verify_release_signature() {
+  [[ -n "$SUMS_URL" && -n "$SUMS_ASC_URL" ]] || { uv_log "No release signature published for ${VERSION}; relying on sha256 only."; return 0; }
+  if ! command -v gpg >/dev/null 2>&1; then
+    uv_warn "gpg not installed; cannot verify the release signature (sha256 still checked)."
+    return 0
+  fi
+  local sums="${TMP_DIR}/SHA256SUMS" asc="${TMP_DIR}/SHA256SUMS.asc" key="" keyring="${TMP_DIR}/release-keyring.gpg"
+  uv_fetch_to_file "$SUMS_URL" "$sums" || uv_die "Could not download SHA256SUMS from ${SUMS_URL}"
+  uv_fetch_to_file "$SUMS_ASC_URL" "$asc" || uv_die "Could not download SHA256SUMS.asc from ${SUMS_ASC_URL}"
+  for candidate in "${UV_RELEASE_KEY:-}" "${FROM_DIR:+${FROM_DIR}/release-key.asc}" "${SCRIPT_DIR}/docs/release-key.asc" "${SCRIPT_DIR}/release-key.asc"; do
+    [[ -n "$candidate" && -f "$candidate" ]] && { key="$candidate"; break; }
+  done
+  if [[ -z "$key" ]]; then
+    local remote_key="${TMP_DIR}/release-key.asc"
+    if uv_fetch_to_file "$(uv_resolve_url "$MANIFEST_URL" release-key.asc)" "$remote_key" 2>/dev/null; then key="$remote_key"; fi
+  fi
+  if [[ -z "$key" ]]; then
+    uv_warn "Release public key not found; signature NOT verified (sha256 still checked). Set UV_RELEASE_KEY=/path/to/release-key.asc to verify."
+    return 0
+  fi
+  gpg --batch --quiet --no-default-keyring --keyring "$keyring" --import "$key" 2>/dev/null \
+    || uv_die "Could not import the release public key from ${key}"
+  if gpg --batch --quiet --no-default-keyring --keyring "$keyring" --verify "$asc" "$sums" 2>/dev/null; then
+    uv_log "Release signature verified (key $(gpg --batch --no-default-keyring --keyring "$keyring" --list-keys --with-colons 2>/dev/null | awk -F: '/^fpr/{print substr($10, length($10)-15); exit}'))"
+  else
+    uv_die "Release signature verification FAILED for ${VERSION}: SHA256SUMS does not match SHA256SUMS.asc. Do not install this bundle."
+  fi
+  # The signed sums must agree with the manifest's checksum for our tarball.
+  local signed_sha
+  signed_sha="$(awk -v n="unicorn-viz-${VERSION}.tar.gz" '$2 == n {print $1}' "$sums")"
+  if [[ -n "$signed_sha" && -n "$SRC_SHA256" && "$signed_sha" != "$SRC_SHA256" ]]; then
+    uv_die "Signed SHA256SUMS and manifest disagree about unicorn-viz-${VERSION}.tar.gz; refusing to install."
+  fi
 }
 
 download_release_source() {
@@ -193,12 +253,17 @@ run_install() {
   export UV_JSON_PYTHON="$python_path"
 
   resolve_release
+  verify_release_signature
   download_release_source
 
   uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
-  for doc in LICENSE THIRD_PARTY_LICENSES.md README.md; do
+  for doc in LICENSE THIRD_PARTY_LICENSES.md README.md config.full.example.toml; do
     [[ -f "${SRC_DIR}/${doc}" ]] && uv_run cp "${SRC_DIR}/${doc}" "${PREFIX}/${doc}"
   done
+  # Starter config on first install only; a user's edited config.toml survives upgrades.
+  if [[ -f "${SRC_DIR}/config.dist.toml" && ! -f "${PREFIX}/config.toml" ]]; then
+    uv_run cp "${SRC_DIR}/config.dist.toml" "${PREFIX}/config.toml"
+  fi
   uv_create_venv_and_install "$python_path" "${PREFIX}/venv" "$SRC_DIR"
 
   if [[ "$NO_DESKTOP" -eq 0 ]]; then

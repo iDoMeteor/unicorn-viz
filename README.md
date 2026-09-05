@@ -43,101 +43,57 @@ https://rumble.com/v79jc7e-unicorn-viz-beta-made-by-me.html
 
 ## Quick Start
 
-### Install on Fedora
+### Install (Linux, any distro) — recommended
+
+Get the current release bundle (a folder with `manifest.json`, the packages, and
+`install.sh`), then:
 
 ```bash
-# Install system dependencies
-sudo dnf install -y python3.11 python3.11-pip python3.11-devel \
-  SDL2-devel opengl-devel libffi-devel \
-  pipewire-devel alsa-lib-devel
-
-# Clone and set up
-git clone https://github.com/iDoMeteor/unicorn-viz
-cd unicorn-viz
-python3.11 -m venv .venv
-.venv/bin/pip install --upgrade pip wheel
-.venv/bin/pip install -r requirements.txt
-
-# Run
-./run.sh
-
-# CLI help
-.venv/bin/python -m unicornviz --help
+./install.sh --from .          # system libs (sudo once), bundled Python runtime, app, menu entry
+unicorn-viz --self-test        # verifies the install without opening a window
+unicorn-viz                    # go
 ```
 
-### Install on Ubuntu 22.04+
+The installer never touches your system Python: it bundles its own runtime under
+`~/.local/share/unicorn-viz/`. `./install.sh --help` lists `--prefix`,
+`--no-desktop`, `--uninstall`, and more. Releases are signed — the installer
+verifies the signature when `release-key.asc` is present (see `SECURITY.md`).
+
+### Install a native package
 
 ```bash
-# Install system dependencies
-sudo apt-get update
-sudo apt-get install -y python3.11 python3.11-venv python3.11-dev \
-  libsdl2-dev libgl1-mesa-dev libffi-dev \
-  libpipewire-0.3-dev libasound2-dev
+sudo dnf install ./unicorn-viz-*.rpm       # Fedora / RHEL family
+sudo apt install ./unicorn-viz_*.deb       # Ubuntu 24.04 / Debian 12
+unicorn-viz --self-test
+```
 
-# Clone and set up
-git clone https://github.com/iDoMeteor/unicorn-viz
-cd unicorn-viz
-python3.11 -m venv .venv
-.venv/bin/pip install --upgrade pip wheel
-.venv/bin/pip install -r requirements.txt
+Both bundle the Python runtime and all dependencies; only system libraries
+(SDL2, Mesa, PipeWire, ALSA, PortAudio) come from your distro. `ffmpeg` is
+recommended (recording) but optional.
 
-# Run
+### Flatpak (local build until the Flathub listing is live)
+
+```bash
+cd packaging/flatpak
+flatpak-builder --user --install --force-clean build-dir io.unicornviz.UnicornViz.yml
+flatpak run io.unicornviz.UnicornViz --self-test
+```
+
+### Windows 10/11 (preview)
+
+Unzip `UnicornViz-Portable-<version>-win-x64.zip` anywhere and run
+`unicorn-viz.cmd` (or `unicorn-viz.cmd --self-test` first). The build is
+unsigned for now: on first run choose *More info → Run anyway* in SmartScreen.
+A proper installer (`UnicornViz-Setup-<version>.exe`) is produced by CI from
+`packaging/windows/UnicornViz.iss`.
+
+### From source (developers)
+
+```bash
+git clone https://github.com/iDoMeteor/unicorn-viz && cd unicorn-viz
+./tools/install_linux.sh       # distro deps + bundled runtime + .venv   (--system-python to opt out)
 ./run.sh
-
-# CLI help
-.venv/bin/python -m unicornviz --help
 ```
-
-### Install on Windows 11 (Preview)
-
-```powershell
-git clone https://github.com/iDoMeteor/unicorn-viz
-cd unicorn-viz
-
-# Automated installer (Python + ffmpeg + venv + pip deps)
-# Double-click tools\install_windows.bat from Explorer, or run this from PowerShell.
-tools\install_windows.bat
-
-# GUI installer (avatar icon + live log panel)
-powershell -ExecutionPolicy Bypass -File .\tools\install_windows_gui.ps1
-
-# Any installed Python 3.11+ interpreter is fine; the installer will pick it up
-# even if the exact "Python 3.11" launcher entry is missing.
-
-# Run
-.\.venv\Scripts\python -m unicornviz
-
-# GUI launcher (avatar icon)
-tools\launchers\windows\UnicornVizGUI.bat
-
-# CLI help
-.\.venv\Scripts\python -m unicornviz --help
-```
-
-Installer options:
-
-```powershell
-# Skip ffmpeg install
-powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipFfmpeg
-
-# Skip package manager installs (Python/ffmpeg must already exist)
-powershell -ExecutionPolicy Bypass -File .\tools\install_windows.ps1 -SkipPackageManagers
-
-# Force CLI installer mode via batch wrapper (default is GUI)
-tools\install_windows.bat --cli
-```
-
-If double-clicking the `.ps1` file opens it in an editor, use `tools\install_windows.bat` instead. It launches PowerShell with the correct execution policy and keeps the console open at the end.
-
-Native installer packaging (Inno Setup):
-
-```powershell
-# From Windows with Inno Setup installed (ISCC on PATH)
-ISCC.exe .\packaging\windows\UnicornViz.iss
-```
-
-This produces `packaging\windows\UnicornVizInstaller.exe` with avatar icon,
-Start Menu/Desktop shortcuts, and a post-install prompt to run dependency setup.
 
 ### Common CLI Overrides
 

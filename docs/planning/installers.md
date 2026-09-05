@@ -2,7 +2,7 @@
 
 **Owner:** Solo maintainer (one-person studio)
 **Status:** Active — driving toward five gold-star installers
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-05
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -99,8 +99,8 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 
 | Channel | Today | Gap to next star |
 |---|---|---|
-| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Done 2026-09-04:** release path proven via `manifest.json` (channel → tarball → sha256 verified → `--self-test`). **Remaining for ★5:** GPG-sign `SHA256SUMS` (owner key, O3), wire `get.unicornviz.io`; icon size ladder is cosmetic. |
-| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★★ | **Done 2026-09-04:** built by `release.sh` from the curated payload with a bundled relocatable runtime; **installed in clean Fedora 41 and Ubuntu 24.04 containers and passed `--self-test`**; PortAudio dependency and `ffmpeg` Recommends fixed; nightly `native-package-smoke` job. **★5 gates:** GPG signing (O3), `config.toml` conffile (O4). |
+| **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★★ | **Done 2026-09-05:** bundled runtime, canonical `.desktop`, `--self-test`, nightly clean-container smoke, manifest-driven releases, **signed releases verified on install** (tamper-rejecting), hand-off bundles (`--from`). Vanity `get.unicornviz.io` is cosmetic and waits on hosting (O1/O2). |
+| **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★★ (+signed) | **Done 2026-09-05:** clean-container installs pass `--self-test`; rpm signed (`rpmsign`, verified `digests signatures OK`), debs covered by signed `SHA256SUMS`; `config.dist.toml` installed as a package config file. **★5 gate:** the app writes `logs/` and `runtime/` under `APP_ROOT`, read-only at `/opt` for a normal user — needs an XDG state/log location (config-cleanup team). |
 | **Windows** (`tools/packaging/build_windows_portable.sh`, `packaging/windows/UnicornViz.iss`) | ★★ → ★★★★ pending CI | **Done 2026-09-04:** portable zip built on Linux (cross-installed win_amd64 wheels + Windows runtime + `unicorn-viz.cmd`); `UnicornViz.iss` rewritten to package that tree (no repo copy, no post-install pip, PATH task, `pythonw.exe -m unicornviz` shortcuts); nightly `windows-2022` job builds both, **silently installs the `.exe` and runs `--self-test`**. ★4 the first night it passes; **★5:** `signtool` gated on a cert secret (§17). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
 | **Flatpak** (`packaging/flatpak/`) | ★★★★ | **Done 2026-09-04:** manifest for runtime 25.08 consuming the release tarball; PortAudio module; wheels-first offline pip module via `tools/packaging/flatpak_wheels.py` (python-rtmidi built from sdist); tightened `finish-args`; metainfo + desktop + icon ladder; launcher exporting `UNICORNVIZ_APP_ROOT` and `PYSDL2_DLL_PATH`. **Local build + in-sandbox `--self-test` pass.** **★5:** Flathub PR (O5, screenshots, `--device=all` narrowed). |
@@ -1275,6 +1275,42 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-05 — Block B (signing) landed; RC1 ships as a signed hand-off bundle.**
+  - **Owner decisions:** S3/CloudFront deferred (bill); RC1 by direct file
+    transfer; release key generated (O3 done); `config.dist.toml` for O4; store
+    names per §18.7; macOS parked.
+  - **Signing:** `release.sh --sign <key>` signs rpms with `rpmsign --addsign`
+    *before* `SHA256SUMS` is computed, then detaches `SHA256SUMS.asc`; debs and
+    everything else are covered by the signed sums. The embedded rpm signature
+    is checked from the `OPENPGP`/`DSAHEADER`/`RSAHEADER`/`SIGPGP` tags (rpm 4
+    and 6 differ), and `rpm --checksig` runs when the key is in the host's rpm
+    db. `install.sh` verifies the signature with the bundled public key and
+    refuses on mismatch (tamper test in the gate). `SECURITY.md` carries the
+    fingerprint and verify steps.
+  - **Hand-off bundle:** `release.sh --bundle` →
+    `unicorn-viz-<version>-bundle.tar.gz` (artifacts + `install.sh` + helpers +
+    `release-key.asc` + README + a manifest with relative URLs). Recipient:
+    `./install.sh --from .` — it falls back to the channel the bundle actually
+    carries (an RC bundle has only `prerelease`). The manifest is built from
+    every artifact in the version dir, so the Windows zip rides along.
+  - **`config.dist.toml`:** ships on every channel; native packages install it as
+    `<INSTALL_ROOT>/config.toml` declared a config file; the one-liner seeds it on
+    first install; Flatpak ships it read-only next to the app.
+  - **Gate:** PASS (2026-09-05, 1.0.0-beta.116): rpm `digests signatures OK` (EdDSA key
+    `C6F3799BF08ACBCB`); 650 MB bundle with relative URLs; a plain
+    `./install.sh --from .` fell back to the prerelease channel, **verified the
+    release signature and checksum**, installed, seeded `config.toml`, and passed
+    `--self-test`; a tampered `SHA256SUMS` was rejected.
+  - **Known gap (config-cleanup team):** the app writes `logs/` and
+    `runtime/global_state.json` relative to `APP_ROOT`; under `/opt/unicorn-viz`
+    or the Flatpak's `/app` that is read-only for a normal user. `install.sh`
+    prefixes are user-writable, so the one-liner is unaffected; native/Flatpak
+    need an XDG state/log location (or config keys pointing at one) before ★5.
+  - **Commit blocked:** the always-run bandit hook fails on
+    `drop-ins/media-01/tests/test_library_cache_and_deferred_load.py:77` (B108,
+    hardcoded `/tmp` path in a test fixture, media-01 0.29.1). Not this work's
+    code; per policy it is reported, not suppressed — the packaging batch is
+    staged and waits for the media-01 fix or an owner-approved scoped defer.
 - **2026-09-04 (evening) — Block D built and gated; Block E2 written; Windows now
   verifiable nightly without a Windows box.**
   - **Block D (Flatpak) — ★4 reached: local `flatpak-builder` build from the staged release tarball succeeded and
@@ -1858,3 +1894,59 @@ an engineering one.
   expects, and the staged payload carries that seat's uncommitted edits. Pin
   `--version` for gates; real releases only from a clean tree or a tag
   (`release.sh` enforces this unless `--allow-dirty`).
+
+### 18.7 Owner decisions recorded 2026-09-05, and the store-name instructions (O5)
+
+- **O1/O2 — distribution:** S3 + CloudFront later (deferred until the bill is
+  affordable). **RC1 ships by direct file transfer**: `release.sh --bundle`
+  produces `unicorn-viz-<version>-bundle.tar.gz` — the artifacts, `install.sh`
+  and its helpers, the public key, and a manifest with *relative* URLs — so a
+  recipient runs `./install.sh --from .` with no hosting involved. The native
+  packages and the Windows zip inside it install directly.
+- **O3 — release key:** generated on the owner's box, no passphrase (scripted
+  signing): `Unicorn Viz Release <release@unicornviz.io>`, ed25519, expires
+  2028-09-04, fingerprint `AC45E68833CDB3F47ED251D8C6F3799BF08ACBCB`. Public key at `docs/release-key.asc`;
+  `SECURITY.md` documents verification. Back the private key up (`gpg
+  --export-secret-keys --armor C6F3799BF08ACBCB > …` to an offline location).
+- **O4 — config:** `config.dist.toml` (bare-bones, validates with the app) ships
+  on every channel; native packages install it as `<INSTALL_ROOT>/config.toml`
+  declared a config file (rpm `%config(noreplace)`, deb conffile); the one-liner
+  seeds it on first install only.
+- **O6 — macOS:** parked by the owner.
+
+**O5 — claiming the store names (owner, ~10 minutes total):**
+
+*Flathub (`io.unicornviz.UnicornViz`)*
+1. Flathub has no separate "reserve a name" step; the app ID is claimed by the
+   submission itself. Sign in to GitHub and fork
+   `https://github.com/flathub/flathub`.
+2. On the fork, create a branch **from the `new-pr` branch** (not master), named
+   after the app ID, and add exactly the files under `packaging/flatpak/` that
+   the build needs at the repo root: `io.unicornviz.UnicornViz.yml`,
+   `python3-requirements.json`, and the `data/` directory (the manifest's
+   `type: dir path: data` source). The app source must be a public URL with a
+   sha256 — the `url:` form already in the manifest — so the release tarball has
+   to be downloadable first (the S3/CloudFront step, or any public HTTPS host).
+3. Add at least one screenshot URL to the `<screenshots>` block in
+   `data/io.unicornviz.UnicornViz.metainfo.xml` (Flathub rejects GUI apps
+   without one) and run `flatpak run org.flathub.flatpak-external-data-checker`
+   / `appstreamcli validate` locally if convenient.
+4. Open a pull request against `flathub/flathub`'s **`new-pr`** branch titled
+   "Add io.unicornviz.UnicornViz". A bot builds it; reviewers usually ask to
+   narrow `--device=all` and to justify filesystem access — the manifest
+   comments already give the reasons. Once merged, Flathub creates the app repo
+   and the listing goes live within hours.
+   Reference: https://docs.flathub.org/docs/for-app-authors/submission
+
+*Snap Store (`unicorn-viz`)*
+1. Create an Ubuntu One account, then at https://snapcraft.io/register-name
+   register the name **`unicorn-viz`** (publisher: the owner's account). This
+   reserves it immediately; it does not require a snap yet.
+2. Building needs `snapcraft` with LXD (`sudo snap install snapcraft --classic
+   && sudo snap install lxd && lxd init --auto`), then
+   `cd packaging/snap && snapcraft --use-lxd`. Test with
+   `sudo snap install --dangerous ./unicorn-viz_*.snap && unicorn-viz --self-test`.
+3. Publish with `snapcraft login` then `snapcraft upload --release=edge
+   ./unicorn-viz_*.snap`; promote to `stable` after strict confinement passes
+   the automatic review (the manifest already declares strict confinement and
+   explicit plugs). Reference: https://snapcraft.io/docs/releasing-your-app

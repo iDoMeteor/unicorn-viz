@@ -75,6 +75,14 @@ uv_fetch_to_file() {
   local url="$1"
   local output="$2"
 
+  # Local hand-off bundles: file:// needs no downloader at all.
+  if [[ "$url" == file://* ]]; then
+    local path="${url#file://}"
+    [[ -f "$path" ]] || return 1
+    uv_run cp "$path" "$output"
+    return
+  fi
+
   if command -v curl >/dev/null 2>&1; then
     uv_run curl -fsSL --retry 3 --retry-delay 2 -o "$output" "$url"
     return
@@ -386,5 +394,16 @@ uv_sha256_file() {
     shasum -a 256 "$1" | awk '{print $1}'
   else
     uv_die "Neither sha256sum nor shasum is available to verify downloads."
+  fi
+}
+
+# Resolve an artifact URL from a manifest: absolute URLs pass through, relative
+# ones (hand-off bundles) are joined onto the manifest's own directory.
+uv_resolve_url() {
+  local manifest_url="$1" ref="$2"
+  if [[ "$ref" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then
+    echo "$ref"
+  else
+    echo "${manifest_url%/*}/${ref}"
   fi
 }
