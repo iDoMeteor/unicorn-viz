@@ -877,8 +877,23 @@ void main() {
         """Choose the help-icon asset bucket for the current viewport width."""
         return '152px' if int(width) >= 3840 else '76px'
 
+    def _release_help_icon_textures(self) -> None:
+        """Release every loaded help-icon texture and empty the dict."""
+        icon_textures = getattr(self, '_help_icon_textures', None)
+        if not isinstance(icon_textures, dict):
+            return
+        for tex in icon_textures.values():
+            try:
+                tex.release()
+            except Exception:
+                pass
+        icon_textures.clear()
+
     def _load_help_icon_textures(self) -> None:
         """Load icon textures from the selected assets/icons/help bucket."""
+        # Crossing the 3840 px bucket boundary reloads; release the old set
+        # first instead of dropping the dict and leaking its GL textures.
+        self._release_help_icon_textures()
         self._help_icon_textures = {}
         if not _PIL_AVAILABLE:
             return
@@ -3055,7 +3070,8 @@ void main() {
         route_state = (route_modals_elsewhere, active_modal_type)
         if route_state != self._modal_route_debug_last:
             if active_modal_type:
-                destination = 'control_room' if route_modals_elsewhere else 'audience_overlay'
+                mirrored = self._modal_mirrored_elsewhere(active_modal_type, route_modals_elsewhere)
+                destination = 'control_room' if mirrored else 'audience_overlay'
                 log.debug(
                     'Overlay modal route: type=%s destination=%s gate=%s',
                     active_modal_type,
@@ -3064,10 +3080,18 @@ void main() {
                 )
             self._modal_route_debug_last = route_state
 
-        if self._show_presets and not route_modals_elsewhere:
+        # Modal types modal_snapshot() cannot represent (presets, effects
+        # browser, config editor, context menu; the tour below) must keep
+        # rendering here even while modals are routed to the control room --
+        # otherwise they vanish on BOTH surfaces while blocking_modal_open()
+        # still captures keys.  _modal_mirrored_elsewhere() is the one
+        # predicate that decides.
+        if self._show_presets and not self._modal_mirrored_elsewhere('presets', route_modals_elsewhere):
             self._render_presets()
 
-        if self._show_effects_browser and not route_modals_elsewhere:
+        if self._show_effects_browser and not self._modal_mirrored_elsewhere(
+            'effects_browser', route_modals_elsewhere,
+        ):
             self._render_effects_browser()
 
         if self._show_projectm_manager and not route_modals_elsewhere:
@@ -3090,7 +3114,9 @@ void main() {
 
         # Configuration editor (full modal, under the context menu).
         self.tick_config_editor(dt)
-        if self.config_editor_visible and not route_modals_elsewhere:
+        if self.config_editor_visible and not self._modal_mirrored_elsewhere(
+            'config_editor', route_modals_elsewhere,
+        ):
             self._render_config_editor()
 
         # First-run tour dialog — above the other modals, below the context
@@ -3101,7 +3127,9 @@ void main() {
 
         # Context menu floats above everything else (with open/close unroll).
         self.tick_context_menu(dt)
-        if self.context_menu_visible and not route_modals_elsewhere:
+        if self.context_menu_visible and not self._modal_mirrored_elsewhere(
+            'context_menu', route_modals_elsewhere,
+        ):
             self._render_context_menu()
 
         # Hover tooltip for the modal surfaces, above every modal layer.
@@ -5749,10 +5777,36 @@ void main() {
     def webcam_editor_modal_visible(self) -> bool:
         return self._show_webcam_editor_modal
 
+    # Modal types modal_snapshot() can represent for an alternate surface
+    # (the control room).  Keep in sync with the branches below: a type
+    # missing here is rendered on the audience window regardless of routing.
+    _SNAPSHOT_MODAL_TYPES: frozenset[str] = frozenset({
+        'projectm_manager',
+        'system_monitor',
+        'controller_help',
+        'webcam_editor',
+        'audio_selector',
+        'midi_selector',
+        'help_overlay',
+        'hud_overlay',
+    })
+
+    @classmethod
+    def _modal_mirrored_elsewhere(cls, modal_type: str, route_modals_elsewhere: bool) -> bool:
+        """Return True if *modal_type* is drawn by the alternate surface instead.
+
+        Only when modal routing is on AND modal_snapshot() can actually
+        represent the type; anything else stays on the audience window.
+        """
+        return bool(route_modals_elsewhere) and modal_type in cls._SNAPSHOT_MODAL_TYPES
+
     def modal_snapshot(self) -> dict[str, object]:
         """Return active modal state for alternate render surfaces.
 
         Priority mirrors render order so only one modal is active at a time.
+        Types not listed in ``_SNAPSHOT_MODAL_TYPES`` (presets, effects
+        browser, config editor, tour, context menu) have no branch here and
+        yield ``{}``; render() keeps drawing those on the audience window.
         """
         if self._show_projectm_manager:
             selected = self.get_projectm_selected_preset()
@@ -5981,9 +6035,14 @@ void main() {
     # ------------------------------------------------------------------ #
 
     def flash_name(self, name: str, duration: float = 3.0) -> None:
+        # ``_name_text`` doubles as the "an effect is loaded" flag that gates
+        # the HUD and the recording indicator in render(), so it must be
+        # recorded even when flash messages are disabled -- otherwise
+        # ``[overlays] flash_messages = false`` silently killed the HUD.
+        # Only the transient ">> name" flash is suppressed.
+        self._name_text = name
         if not self._flash_enabled:
             return
-        self._name_text = name
         self._flash_text = f">> {name}"
         self._flash_timer = duration
 
@@ -6347,40 +6406,36 @@ void main() {
             self._load_help_icon_textures()
 
 
+    # Every GL object _init_gl()/its helpers allocate directly on this
+    # instance, in release order (VAOs before the buffers/programs they bind).
+    _GL_RESOURCE_ATTRS: tuple[str, ...] = (
+        '_icon_vao', '_icon_vbo', '_icon_prog',
+        '_panel_vao', '_panel_vbo', '_panel_prog',
+        '_vao', '_vbo', '_prog',
+        '_font_tex',
+    )
+
     def destroy(self) -> None:
         """Release all GL resources."""
-        icon_textures = getattr(self, '_help_icon_textures', None)
-        if isinstance(icon_textures, dict):
-            for tex in icon_textures.values():
-                try:
-                    tex.release()
-                except Exception:
-                    pass
-            icon_textures.clear()
+        self._release_help_icon_textures()
 
-        icon_vao = getattr(self, '_icon_vao', None)
-        icon_vbo = getattr(self, '_icon_vbo', None)
-        icon_prog = getattr(self, '_icon_prog', None)
-        if icon_vao is not None:
-            icon_vao.release()
-        if icon_vbo is not None:
-            icon_vbo.release()
-        if icon_prog is not None:
-            icon_prog.release()
+        for attr in self._GL_RESOURCE_ATTRS:
+            obj = getattr(self, attr, None)
+            if obj is None:
+                continue
+            try:
+                obj.release()
+            except Exception:
+                pass
 
-        quad_vao = getattr(self, '_quad_vao', None)
-        quad_vbo = getattr(self, '_quad_vbo', None)
-        blit_prog = getattr(self, '_blit_prog', None)
-        textures = getattr(self, '_textures', None)
-        if quad_vao is not None:
-            quad_vao.release()
-        if quad_vbo is not None:
-            quad_vbo.release()
-        if blit_prog is not None:
-            blit_prog.release()
-        if textures is not None:
-            for _t in textures:
-                _t.release()
+        # The CTA overlay owns its own quad/blit program/textures (those
+        # attrs live on CTAOverlay, never on Overlays).
+        cta = getattr(self, '_cta', None)
+        if cta is not None:
+            try:
+                cta.destroy()
+            except Exception:
+                pass
 
     def _ensure_resources(self, ctx: moderngl.Context) -> None:
         """Lazily build GLSL shader and PIL-rendered textures."""

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.110**
+**Version 1.0.0-beta.111**
 
 ## Contact Me!
 
@@ -557,6 +557,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.111** — Four overlay/API fixes. `vj_api.auto_vj_snapshot()`
+  now reads the HUD state from `Overlays` (it lived there all along; the
+  App-side read always came back empty, so the Control Room's mood/scene/
+  BPM fields were blank). The HUD and recording indicator show again with
+  `[overlays] flash_messages = false` (`flash_name` still records the
+  effect name, only the flash is skipped). Modals the Control Room cannot
+  mirror (presets, effects browser, config editor, context menu) stay on
+  the audience window while modal routing is on instead of vanishing from
+  both surfaces with keys still captured. `Overlays.destroy()` now releases
+  the font atlas, text/panel programs+buffers, and the CTA overlay, and a
+  help-icon bucket change on resize releases the previous textures.
 - **1.0.0-beta.110** — Control Room deck-sim, P2+P3 ("full send" —
   see `drop-ins/control-room-01/docs/deck-sim-plan.md`, now shipped
   end to end). New `vj_api.register_midi_active_actions()`/

@@ -1079,7 +1079,11 @@ class VJApi:
         """Return Auto VJ runtime state for operator/control-room surfaces."""
         try:
             auto_vj = getattr(self._app, '_auto_vj', None)  # noqa: SLF001
-            hud = getattr(self._app, '_hud_state', {})  # noqa: SLF001
+            # The HUD state dict lives on Overlays (App only writes it via
+            # overlays.set_hud_state), not on App -- reading App._hud_state
+            # always yielded {} and blanked mood/scene/bpm on the CR panel.
+            overlays = getattr(self._app, '_overlays', None)  # noqa: SLF001
+            hud = getattr(overlays, '_hud_state', {}) if overlays is not None else {}  # noqa: SLF001
             if not isinstance(hud, dict):
                 hud = {}
             available = auto_vj is not None
