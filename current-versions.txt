@@ -61,6 +61,7 @@
   effects-holiday               0.5.1               alpha ▼       module
   streaming-01                  0.5.2               alpha ▼       module
   webcam-01                     1.5.2               alpha ▼       module
+  audio-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-rollercoast           0.4.1               early alpha   module
@@ -70,7 +71,6 @@
   video-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
-  audio-out-01                  0.4.0               early alpha   MISMATCH (readme=0.5.0)
   lyrics-01                     0.4.0               early alpha   module
   effects-flying                0.3.0               early alpha   module
   effects-ukiyo-e               0.3.0               early alpha   module
@@ -79,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  4 version mismatch(es): core (unicornviz), audio-out-01, effects-cosmic, effects-games
+  ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
 
