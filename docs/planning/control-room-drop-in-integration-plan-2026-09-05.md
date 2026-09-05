@@ -1,8 +1,9 @@
 # Control Room — Drop-In Integration & Uplift Plan
 
 Owner: owner + Claude (overlays/core manager)
-Status: **approved 2026-09-05; P0 shipped (2026-09-05)** — owner took every
-§7 recommendation except #5: media/mixer/Spotify go on a new shared
+Status: **approved 2026-09-05; P0 shipped (2026-09-05); P1 shipped
+(2026-09-05, 10 panels); P2 shipped (2026-09-05)** — owner took every §7
+recommendation except #5: media/mixer/Spotify go on a new shared
 `sources` page, not MAIN. P0: core beta.113 (`STANDARD_PAGES` incl.
 `sources`, lifecycle rule, runtime store built before multi-head and its
 persisted excludes handed over, `multihead` registered as a subsystem);
@@ -11,8 +12,21 @@ control-room-01 0.13.0 (registers the four standard pages); multi-head-01
 bug); unregister-on-shutdown retrofits in spotify-01 rc.5 (also moved to
 `sources`), webcam-01 1.5.2, candy-frame-01 1.1.0-rc.3, auto-vj-01
 rc.127. cta-01 and unicorn-tears-01 have no shutdown/destroy hook that
-`app.py` calls, so there is nothing to retrofit there. P1 next.
-Last updated: 2026-09-05 (P0 shipped)
+`app.py` calls, so there is nothing to retrofit there.
+
+P1: ten cheap declarative panels landed, smallest surface first —
+lyrics-01 0.4.0, chat-01 0.6.0, osc-bridge-01 0.3.0, video-out-01 0.5.0,
+grand-finale-01 0.9.0, beat-flash-01 0.10.0, color-grade-01 0.9.0,
+video-postfx-01 0.2.0, banner-01 0.11.0, audio-out-01 0.5.0.
+
+P2: postfx-01 1.0.0-rc.2 (`fx` panel, retires CR's hardcoded POST FX
+row — control-room-01 0.14.0), streaming-01 0.6.0 (`output` panel, retires
+CR's TRANSPORT STREAM button — control-room-01 0.15.0, `destroy()` now
+stops the stream and unregisters the panel, called from core's shutdown
+path instead of `stop()` directly), midi-controllers-01 0.10.0 (`output`
+panel, no CR retirement — the MIDI/audio selector overlay is a core
+modal; adds `VJApi.midi_active_port_name()`). P3 next.
+Last updated: 2026-09-05 (P2 shipped)
 
 Follows [control-room-panel-registry-plan-2026-09-04.md](control-room-panel-registry-plan-2026-09-04.md)
 (P1–P3 delivered: registry, pages, LAYOUT page). That plan migrated the
