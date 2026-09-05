@@ -25,12 +25,19 @@ class _FakeVJApi:
         self.ctx = ctx
         self._state: dict[str, object] = {}
         self._text_handlers: dict[str, object] = {}
+        self.panels: dict[str, object] = {}
 
     def register_midi_actions(self, section, actions) -> None:
         pass
 
     def register_midi_action_handler(self, action, fn) -> None:
         pass
+
+    def register_operator_panel(self, panel) -> None:
+        self.panels[panel.name] = panel
+
+    def unregister_operator_panel(self, name: str) -> bool:
+        return self.panels.pop(name, None) is not None
 
     def get_runtime_state(self, dotted_path: str = '', default=None):
         return self._state.get(dotted_path, default)
@@ -585,3 +592,51 @@ def test_row_window_keeps_the_cursor_visible(ctx) -> None:
         assert start0 == 0
     finally:
         b.shutdown()
+
+
+# ------------------------------------------------------------ control room
+
+def test_init_registers_the_operator_panel_on_the_overlays_page(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        panel = b._vj_api.panels['banner']
+        assert panel.title == 'Banner' and panel.page == 'overlays' and panel.size == 'small'
+        assert panel.content == b._operator_panel_content
+        assert set(panel.tooltips) == {'toggle', 'edit', 'reset'}
+    finally:
+        b.shutdown()
+
+
+def test_panel_content_mirrors_state(ctx) -> None:
+    b = _banner(ctx, {'max_line_chars': 40, 'font_px': 30})
+    try:
+        b._enabled = False
+        content = b._operator_panel_content()
+        assert content.status == 'OFF'
+        by_label = {r.label: r.value for r in content.rows}
+        assert by_label['Max line'] == '40ch' and by_label['Font'] == '30px'
+        assert by_label['Lines'] == str(len(b._display_lines()))
+        assert {x.action for x in content.buttons if x.active} == set()
+    finally:
+        b.shutdown()
+
+
+def test_panel_actions_match_the_hotkeys(ctx) -> None:
+    b = _banner(ctx, {'max_line_chars': 30})
+    try:
+        b._enabled = False
+        assert b._operator_panel_action('toggle', None) == 'Banner: ON' and b._enabled is True
+        assert b._operator_panel_action('edit', None) == 'Banner config: ON' and b._show_config is True
+        b._text = 'whatever'
+        assert b._operator_panel_action('reset', None) == 'Banner text + max line reset'
+        assert b._max_line_chars == 100
+        assert b._operator_panel_action('nope', None) is None
+    finally:
+        b.shutdown()
+
+
+def test_shutdown_unregisters_the_operator_panel(ctx) -> None:
+    b = _banner(ctx)
+    api = b._vj_api
+    b.shutdown()
+    assert 'banner' not in api.panels
