@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.111**
+**Version 1.0.0-beta.112**
 
 ## Contact Me!
 
@@ -557,6 +557,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.112** — Operator-panel registry, P1 of
+  `docs/planning/control-room-panel-registry-plan-2026-09-04.md`. New
+  `unicornviz/operator_panels.py` (`OperatorPanel`/`OperatorPage` descriptors
+  with declarative `PanelContent` rows/buttons/meters and an opt-in
+  `PanelCanvas` draw tier) and the matching `vj_api` registry
+  (`register_operator_panel()`/`operator_panels()`/`operator_panel()`,
+  `register_operator_page()`/`operator_pages()`/`operator_page()`, plus
+  unregister). Drop-ins can now claim Control Room space through core
+  instead of being hardcoded there; control-room-01 0.11.0 is the host.
 - **1.0.0-beta.111** — Four overlay/API fixes. `vj_api.auto_vj_snapshot()`
   now reads the HUD state from `Overlays` (it lived there all along; the
   App-side read always came back empty, so the Control Room's mood/scene/

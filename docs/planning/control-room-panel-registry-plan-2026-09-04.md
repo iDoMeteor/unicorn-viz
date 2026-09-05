@@ -1,9 +1,11 @@
 # Control Room Panel Registry, Pages & Runtime Layout — Plan
 
 Owner: owner + Claude (overlays/core manager)
-Status: **approved direction (2026-09-04)** — decisions §1 are settled;
-bug-fix pass (§2) landing first as standalone commits; P1–P3 (§7) not
-yet started. Supersedes the "Control Room Follow-Ups" section of
+Status: **P1 shipped (2026-09-04; core beta.112, control-room-01
+0.11.0)** — registry + host + page model + runtime-store defaults are
+live; deck-sim is the first registered page. Bug-fix pass (§2) landed
+first (core beta.111, control-room-01 0.10.1). **P2 (panel migrations,
+INFO/AUTO VJ dress-up) and P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.

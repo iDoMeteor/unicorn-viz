@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from unicornviz.deck_sim import DeckSimLayout
+from unicornviz.operator_panels import MAIN_PAGE, OperatorPage, OperatorPanel, sort_pages
 from unicornviz.effects.registry import get_effects
 
 if TYPE_CHECKING:
@@ -88,6 +89,11 @@ class VJApi:
         self._deck_sim_layouts: dict[str, DeckSimLayout] = {}
         self._midi_action_colors_provider: 'Callable[[], dict[str, tuple[int, int]]] | None' = None
         self._midi_active_actions_provider: 'Callable[[], set[str]] | None' = None
+        # Operator-panel registry (Control Room panels/pages a drop-in claims)
+        # -- see unicornviz/operator_panels.py and
+        # docs/planning/control-room-panel-registry-plan-2026-09-04.md.
+        self._operator_panels: dict[str, OperatorPanel] = {}
+        self._operator_pages: dict[str, OperatorPage] = {}
 
     @classmethod
     def current(cls) -> 'VJApi | None':
@@ -1560,6 +1566,56 @@ class VJApi:
             return set(self._midi_active_actions_provider())
         except Exception:
             return set()
+
+    # -- Operator panels / pages (Control Room registry) --------------------
+    # Same provider-descriptor pattern as register_deck_sim_layout(): a
+    # drop-in registers a frozen descriptor once; the Control Room reads the
+    # registry fresh each frame and calls the descriptor's content() itself.
+
+    def register_operator_panel(self, panel: OperatorPanel) -> None:
+        """Register (or replace, by ``name``) a Control Room panel."""
+        if not isinstance(panel, OperatorPanel):
+            raise TypeError('register_operator_panel expects an OperatorPanel')
+        self._operator_panels[panel.name] = panel
+
+    def unregister_operator_panel(self, name: str) -> bool:
+        """Remove a registered panel; returns whether one was present."""
+        return self._operator_panels.pop(str(name), None) is not None
+
+    def operator_panels(self, page: 'str | None' = None) -> 'list[OperatorPanel]':
+        """Registered panels, ordered by ``(priority, name)``.
+
+        ``page`` filters to one page; ``None`` returns every panel.
+        """
+        panels = [p for p in self._operator_panels.values() if page is None or p.page == page]
+        panels.sort(key=lambda p: (p.priority, p.name))
+        return panels
+
+    def operator_panel(self, name: str) -> 'OperatorPanel | None':
+        """Look one panel up by name (``None`` when unregistered)."""
+        return self._operator_panels.get(str(name))
+
+    def register_operator_page(self, page: OperatorPage) -> None:
+        """Register (or replace, by ``name``) a Control Room page."""
+        if not isinstance(page, OperatorPage):
+            raise TypeError('register_operator_page expects an OperatorPage')
+        self._operator_pages[page.name] = page
+
+    def unregister_operator_page(self, name: str) -> bool:
+        """Remove a registered page; returns whether one was present.
+
+        Panels still pointing at the page keep their ``page`` field; the
+        Control Room treats panels on an unregistered page as hidden.
+        """
+        return self._operator_pages.pop(str(name), None) is not None
+
+    def operator_pages(self) -> 'list[OperatorPage]':
+        """Registered pages in tab order (by title). ``main`` is never listed."""
+        return sort_pages([p for p in self._operator_pages.values() if p.name != MAIN_PAGE])
+
+    def operator_page(self, name: str) -> 'OperatorPage | None':
+        """Look one page up by name (``None`` when unregistered)."""
+        return self._operator_pages.get(str(name))
 
     def midi_add_input_device(self, device_hint: str) -> bool:
         """Open an additional raw-only MIDI input device (e.g. a second controller).
