@@ -11,14 +11,14 @@
   media-01                      0.28.4              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
-  control-room-01               0.11.4              alpha ▲       module
+  control-room-01               0.11.5              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.10.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.126        RC            module
-  candy-frame-01                1.1.0-rc.1          RC            module
+  candy-frame-01                1.1.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   effects-retro                 0.9.1               alpha ▲       module
@@ -30,10 +30,11 @@
   multi-head-01                 1.0.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
   spotify-01                    1.0.0-rc.4          RC            module
-  unicorn-tears-01              1.0.0-rc.1          RC            module
+  unicorn-tears-01              1.0.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   beat-flash-01                 0.9.0               alpha ▲       module
+  cta-01                        0.9.0               alpha ▲       module
   effects-feature               0.9.0               alpha ▲       module
   effects-particles             0.9.0               alpha ▲       module
   effects-psychedelic           0.9.0               alpha ▲       module
@@ -46,7 +47,6 @@
 
   ── alpha ─────────────────────────────────────────────────────────────────
   color-grade-01                0.8.0               alpha         module
-  cta-01                        0.8.0               alpha         module
   grand-finale-01               0.8.0               alpha         module
   sims-01                       0.7.1               alpha         module
   training-kit-01               0.7.1               alpha         module

@@ -4,7 +4,7 @@ Owner: owner + Claude (overlays/core manager)
 Status: **P1 shipped (2026-09-04; core beta.112, control-room-01
 0.11.0)** — registry + host + page model + runtime-store defaults are
 live; deck-sim is the first registered page. Bug-fix pass (§2) landed
-first (core beta.111, control-room-01 0.10.1). **P2 in progress:** Auto
+first (core beta.111, control-room-01 0.10.1). **P2 complete (2026-09-04).** Auto
 VJ migrated (2026-09-04; auto-vj-01 1.0.0-rc.126, control-room-01
 0.11.1 removes the old hardcoded panel) — mood/scene/BPM/action-in plus
 a BPM-lock and beat-pulse meter, real reco/score rows gated on an
@@ -22,8 +22,19 @@ migrated (2026-09-04; webcam-01 1.5.1, control-room-01 0.11.4 removes
 the hardcoded panel, the `_refresh_webcam_state()` poll loop and its
 cache, and the per-device select/enable button — PREV/NEXT/REDISC cover
 the same ground generically; also deletes `webcam_toggle_device`,
-found to be dead code with no button that ever fired it). Remaining:
-the DROP-INS buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
+found to be dead code with no button that ever fired it). DROP-INS
+migrated (2026-09-04; candy-frame-01 1.1.0-rc.2, cta-01 0.9.0,
+unicorn-tears-01 1.0.0-rc.2, control-room-01 0.11.5 removes the
+hardcoded panel entirely) — three separate small registered panels
+(the packer already handles multiple small panels in one band; no
+merge-into-one-panel mechanism was needed after all) replace the six
+hardcoded buttons, and the migration surfaced two real bugs along the
+way: CTA/LAST SONG called `vj_api.trigger_streaming_cta()`/
+`trigger_streaming_song_cta()`, methods that never existed anywhere in
+the codebase (every press silently failed); RAINBOW NOVA was always
+drawn "active" from a method-existence check on an unrelated method.
+Also deleted `_draw_triggers_panel`, dead code with no caller. **P2
+complete.** Next: P3 (LAYOUT page). Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.
@@ -269,19 +280,22 @@ buttons and a RESET (re-seeds defaults). No drag-and-drop.
   + `ui_scale`. Built-ins (preview, browser, transport, tweakables,
   display, post-FX) untouched. Deck-sim moves to a registered page with
   a tier-2 `draw` — proving the page path with zero new UI.
-- **P2 — migrate the drop-in panels + dress up INFO / AUTO VJ.**
-  In order: **Auto VJ** (auto-vj-01 registers a declarative panel from
-  its own state — reveals the data the current 15-key drift hides,
-  drops redundant rows), **INFO** (CR built-in, redesigned: now-playing
-  from `active_now_playing()` instead of a Spotify-only row, session
-  clock, telemetry), **Spotify** (spotify-01 registers; retires
-  `get_subsystem('spotify')` duck-typing), **Webcam** (webcam-01),
-  **DROP-INS buttons** (each owning drop-in registers its own
-  `PanelButton`s into a shared `moments` panel via a `PanelContent`
-  merge rule: same panel `name` from multiple registrars concatenates
-  buttons, ordered by priority). CR's hardcoded field lists and
-  `_TOOLTIP_BY_ACTION` entries for these move out with them. Each
-  migration is its own commit with its own tests.
+- **P2 — migrate the drop-in panels + dress up INFO / AUTO VJ. Shipped
+  (2026-09-04).** In order: **Auto VJ** (auto-vj-01 registers a
+  declarative panel from its own state — reveals the data the former
+  15-key drift hid, drops redundant rows), **INFO** (CR built-in,
+  redesigned: now-playing from `active_now_playing()` instead of a
+  Spotify-only row, session clock, telemetry), **Spotify** (spotify-01
+  registers; retires `get_subsystem('spotify')` duck-typing), **Webcam**
+  (webcam-01), **DROP-INS buttons** (candy-frame-01, cta-01,
+  unicorn-tears-01 each register their own small panel — the packer's
+  existing multi-panel band layout placed them side by side with zero
+  new mechanism, so the `PanelContent` same-name-merge rule floated here
+  originally was never built; simpler and sufficient). CR's hardcoded
+  field lists and `_TOOLTIP_BY_ACTION` entries for these moved out with
+  them. Each migration landed as its own commit with its own tests, and
+  surfaced two real bugs along the way (CTA/LAST SONG calling vj_api
+  methods that never existed; RAINBOW NOVA always drawn "active").
 - **P3 — LAYOUT page** (hide/order/page/size/reset) + `Ctrl+Tab` paging
   + persisted `control_room.page`. Docs: `drop-ins/control-room-01/docs/
   configuration.md` rewritten around the store; core
