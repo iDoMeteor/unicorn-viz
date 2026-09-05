@@ -7,6 +7,12 @@ Last updated: 2026-07-18
 
 ## Control Room Follow-Ups
 
+> **Superseded (2026-09-04):** the registrable-container, dedicated-page,
+> and UI-scale items below are carried forward by
+> [control-room-panel-registry-plan-2026-09-04.md](control-room-panel-registry-plan-2026-09-04.md).
+> Kept here for the breakpoint / compact-fallback notes, which remain
+> input to that plan's packer.
+
 ### Control Room Manager Track (2026-06-05)
 
 - `[active]` Layout and sizing stabilization pass for `control-room-01`.
