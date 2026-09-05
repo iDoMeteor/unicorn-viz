@@ -4,11 +4,19 @@
 # tools/packaging/release.sh (the same artifact install.sh installs), never the
 # repository tree: the working tree carries gigabytes of gitignored training data
 # and licensed asset packs that must not enter a build. Python dependencies are
-# pinned offline via python3-requirements.json, generated from requirements.txt
-# (minus pysdl2-dll — the runtime's SDL2 is used) with flatpak-pip-generator:
+# pinned offline in python3-requirements.json as manylinux WHEELS (Flathub accepts
+# wheels for heavy scientific stacks; building numpy/scipy/OpenCV from source in
+# the sandbox is a toolchain project of its own), generated from requirements.txt
+# minus pysdl2-dll (the runtime's own libSDL2 is used; the launcher points PySDL2
+# at it via PYSDL2_DLL_PATH). python-rtmidi ships no Python 3.13 wheel, so its
+# sdist is built in the sandbox with --no-build-isolation against meson-python +
+# Cython wheels installed just before it. Regenerate when pins change:
 #
-#   flatpak-pip-generator --runtime org.freedesktop.Sdk//25.08 \
-#       --requirements-file requirements-flatpak.txt --output python3-requirements
+#   flatpak run --share=network --filesystem=/var/tmp --command=sh org.freedesktop.Sdk//25.08 -c \
+#     'python3 -m pip download --only-binary=:all: --dest /var/tmp/wheels -r <requirements minus pysdl2-dll,python-rtmidi>;
+#      python3 -m pip download --no-deps --no-binary=:all: --dest /var/tmp/wheels python-rtmidi==<pin>;
+#      python3 -m pip download --only-binary=:all: --dest /var/tmp/wheels "meson-python>=0.16" "Cython>=3" pyproject-metadata packaging "meson>=1.0" ninja'
+#   tools/packaging/flatpak_wheels.py --wheel-dir /var/tmp/wheels --output packaging/flatpak/python3-requirements.json
 #
 # For a local build against a staged release, swap the archive 'url' + 'sha256'
 # for 'path: /path/to/unicorn-viz-<version>.tar.gz'.
@@ -68,7 +76,7 @@ modules:
       - if [ -f THIRD_PARTY_LICENSES.md ]; then install -Dm644 THIRD_PARTY_LICENSES.md /app/share/licenses/io.unicornviz.UnicornViz/THIRD_PARTY_LICENSES.md; fi
     sources:
       - type: archive
-        url: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
-        sha256: 7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
+        url: https://get.unicornviz.io/1.0.0-beta.111/unicorn-viz-1.0.0-beta.111.tar.gz
+        sha256: f7fe2251502a073d54292692a7a2a0d5b552d4143fff5db48bec34c28421bffa
       - type: dir
         path: data

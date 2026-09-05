@@ -17,6 +17,8 @@
 # Usage:
 #   tools/packaging/build_windows_portable.sh [--version X.Y.Z] [--output-dir dir]
 #                                             [--source-dir dir] [--python-version 3.11]
+#                                             [--payload-out dir]   # also leave the assembled
+#                                                                   # UnicornViz/ tree here for Inno Setup
 
 set -Eeuo pipefail
 
@@ -27,6 +29,7 @@ VERSION=""
 OUTPUT_DIR="${REPO_ROOT}/dist"
 SOURCE_DIR="${REPO_ROOT}"
 PYVER="3.11"
+PAYLOAD_OUT=""
 
 log() { echo "[win-portable] $*" >&2; }
 die() { echo "[win-portable] ERROR: $*" >&2; exit 1; }
@@ -38,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
     --python-version) PYVER="$2"; shift 2 ;;
+    --payload-out) PAYLOAD_OUT="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -96,6 +100,11 @@ printf '%s\r\n' \
   'This build is unsigned: on first run Windows SmartScreen may show "Windows' \
   'protected your PC" - choose "More info" then "Run anyway".' \
   > "${APP}/README-PORTABLE.txt"
+
+if [[ -n "$PAYLOAD_OUT" ]]; then
+  log "Leaving the assembled tree at ${PAYLOAD_OUT}/UnicornViz (for packaging/windows/UnicornViz.iss)"
+  mkdir -p "$PAYLOAD_OUT"; rm -rf "${PAYLOAD_OUT}/UnicornViz"; cp -a "$APP" "${PAYLOAD_OUT}/UnicornViz"
+fi
 
 ZIP="${OUTPUT_DIR}/UnicornViz-Portable-${VERSION}-win-x64.zip"
 log "Zipping → ${ZIP}"

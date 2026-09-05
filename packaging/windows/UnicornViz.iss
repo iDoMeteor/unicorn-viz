@@ -1,64 +1,88 @@
-; Unicorn Viz Windows Installer (Inno Setup)
-; Build with ISCC.exe packaging\windows\UnicornViz.iss
+; Unicorn Viz — Windows installer (Inno Setup 6.3+).
+;
+; Packages the tree assembled by tools/packaging/build_windows_portable.sh
+; --payload-out (curated payload + embedded python-build-standalone runtime with
+; the pinned dependencies cross-installed). It never copies the repository and
+; never runs pip on the user's machine (installer plan §8, §18 Block E2).
+;
+; Build:
+;   bash tools/packaging/build_windows_portable.sh --payload-out build\windows
+;   ISCC.exe /DAppVersion=1.0.0-beta.111 /DPayloadDir=..\..\build\windows\UnicornViz packaging\windows\UnicornViz.iss
+;
+; Signing (plan §10): pass /S"signtool=..." and add SignTool=signtool under
+; [Setup] from CI only when a code-signing certificate secret is present.
+; Until then the installer is unsigned — SmartScreen shows "More info → Run
+; anyway" on first launch.
 
 #define AppName "Unicorn Viz"
-#define AppVersion "0.1.0"
-#define AppPublisher "Unicorn Viz"
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
+#ifndef PayloadDir
+  #define PayloadDir "..\..\build\windows\UnicornViz"
+#endif
 #define RepoRoot "..\.."
 
 [Setup]
 AppId={{7F4A7D48-38DE-4B80-95F7-773ECA5B2D13}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher={#AppPublisher}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher=Unicorn Viz
+AppPublisherURL=https://unicornviz.io
+AppSupportURL=https://github.com/djunicorntears/unicorn-viz/issues
 DefaultDirName={autopf}\UnicornViz
 DefaultGroupName={#AppName}
-DisableProgramGroupPage=no
-OutputDir=.
-OutputBaseFilename=UnicornVizInstaller
-Compression=lzma2
-SolidCompression=yes
-WizardStyle=modern
+DisableProgramGroupPage=yes
+LicenseFile={#PayloadDir}\LICENSE
+OutputDir=..\..\dist
+OutputBaseFilename=UnicornViz-Setup-{#AppVersion}
 SetupIconFile={#RepoRoot}\assets\icons\unicorn-viz.ico
-LicenseFile={#RepoRoot}\LICENSE
-UninstallDisplayIcon={app}\assets\icons\unicorn-viz.ico
-ArchitecturesInstallIn64BitMode=x64
+UninstallDisplayIcon={app}\unicorn-viz.ico
+WizardStyle=modern
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+Compression=lzma2/ultra64
+SolidCompression=yes
+ChangesEnvironment=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "addtopath"; Description: "Add unicorn-viz to PATH (run it from any terminal)"; GroupDescription: "Command line:"; Flags: unchecked
 
 [Files]
-; The recursive sweep below packages the whole working tree, so anything that
-; must not be redistributed has to be excluded here explicitly.  Three groups:
-;
-;   1. Restricted third-party assets.  assets\sims\ holds NVIDIA Reallusion USD
-;      packs under the Omniverse License Agreement, which forbids
-;      redistribution; drop-ins\projectm-01\presets\ holds MilkDrop presets
-;      whose authors retain copyright.  Both are git-ignored for the same
-;      reason, but a filesystem sweep does not read .gitignore.
-;   2. Operator secrets and runtime state — .env, tokens under runtime\, logs,
-;      recordings.
-;   3. Build and VCS junk that has no business in an installer.
-;
-; assets\sims\README.md is re-added below: it documents where operators fetch
-; the restricted packs themselves.
-Source: "{#RepoRoot}\*"; DestDir: "{app}"; \
-  Excludes: "\.git,\.git\*,\.github\*,\.venv\*,\venv\*,\build\*,\dist\*,\logs\*,\recordings\*,\runtime\*,\screenshots\*,\.pytest_cache\*,\.ruff_cache\*,\unicorn_viz.egg-info\*,\assets\sims\*,\assets\training\*,\drop-ins\*\presets\*,\drop-ins\*\preset-trash\*,\drop-ins\*\vendor\*,\.env,*.pyc,__pycache__\*"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "{#RepoRoot}\assets\sims\README.md"; DestDir: "{app}\assets\sims"; Flags: ignoreversion
-; Attribution: MIT/BSD/Apache dependencies require their notices to travel with
-; any binary distribution.  Regenerate THIRD_PARTY_LICENSES.md with
-; tools\gen_third_party_licenses.py when requirements.txt pins change.
-Source: "{#RepoRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#RepoRoot}\THIRD_PARTY_LICENSES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#RepoRoot}\assets\icons\unicorn-viz.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Unicorn Viz"; Filename: "{app}\tools\launchers\windows\UnicornVizGUI.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\unicorn-viz.ico"
-Name: "{group}\Unicorn Viz Installer"; Filename: "{app}\tools\install_windows.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\unicorn-viz.ico"
-Name: "{autodesktop}\Unicorn Viz"; Filename: "{app}\tools\launchers\windows\UnicornVizGUI.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icons\unicorn-viz.ico"; Tasks: desktopicon
+; pythonw.exe -m unicornviz with WorkingDir={app}: the package is imported from
+; {app}\unicornviz, so APP_ROOT resolves to {app} and assets are found without
+; any environment variable (see unicornviz/paths.py). No console window.
+Name: "{group}\{#AppName}"; Filename: "{app}\runtime\python\pythonw.exe"; Parameters: "-m unicornviz"; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"
+Name: "{group}\{#AppName} (console)"; Filename: "{app}\unicorn-viz.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\runtime\python\pythonw.exe"; Parameters: "-m unicornviz"; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"; Tasks: desktopicon
+
+[Registry]
+Root: HKA; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}'))
 
 [Run]
-Filename: "{app}\tools\install_windows.bat"; Description: "Run Unicorn Viz dependency installer now"; Flags: postinstall shellexec
+Filename: "{app}\runtime\python\pythonw.exe"; Parameters: "-m unicornviz"; WorkingDir: "{app}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function NeedsAddPath(Param: string): boolean;
+var
+  OrigPath: string;
+begin
+  if not RegQueryStringValue(HKA, 'Environment', 'Path', OrigPath) then
+  begin
+    Result := True;
+    exit;
+  end;
+  Result := Pos(';' + Uppercase(Param) + ';', ';' + Uppercase(OrigPath) + ';') = 0;
+end;

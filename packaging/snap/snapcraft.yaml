@@ -10,7 +10,7 @@
 # tools/packaging/release.sh, never the repository tree.
 name: unicorn-viz
 base: core24
-version: '1.0.0-beta.110'
+version: '1.0.0-beta.111'
 summary: Audio-reactive demoscene visualizer
 description: |
   Unicorn Viz is a fullscreen OpenGL visualizer for live music: audio-reactive
@@ -44,8 +44,8 @@ parts:
   deps:
     # Pinned Python dependencies into the part venv (/snap/code/258/bin/python3).
     plugin: python
-    source: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
-    source-checksum: sha256/7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
+    source: https://get.unicornviz.io/1.0.0-beta.111/unicorn-viz-1.0.0-beta.111.tar.gz
+    source-checksum: sha256/f7fe2251502a073d54292692a7a2a0d5b552d4143fff5db48bec34c28421bffa
     python-requirements: [requirements.txt]
     build-packages: [libasound2-dev, portaudio19-dev]
     stage-packages:
@@ -59,8 +59,8 @@ parts:
   app:
     # The app as source + assets siblings, so APP_ROOT == $SNAP/share/unicorn-viz.
     plugin: dump
-    source: https://get.unicornviz.io/1.0.0-beta.110/unicorn-viz-1.0.0-beta.110.tar.gz
-    source-checksum: sha256/7fc5896edaa832a17dd9b2e3ab669a3a4b305a2b3fcf09d054b11f64b931bdd4
+    source: https://get.unicornviz.io/1.0.0-beta.111/unicorn-viz-1.0.0-beta.111.tar.gz
+    source-checksum: sha256/f7fe2251502a073d54292692a7a2a0d5b552d4143fff5db48bec34c28421bffa
     organize:
       unicornviz: share/unicorn-viz/unicornviz
       assets: share/unicorn-viz/assets

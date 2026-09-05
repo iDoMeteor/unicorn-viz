@@ -3,6 +3,9 @@
 # siblings under /app/share/unicorn-viz so APP_ROOT resolves there (see
 # unicornviz/paths.py); the pip-installed dependencies live under /app.
 PYVER="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+# The runtime ships libSDL2 but has no ldconfig cache, so ctypes.util.find_library
+# cannot see it; point PySDL2 at the library directory explicitly.
+export PYSDL2_DLL_PATH=/usr/lib/x86_64-linux-gnu
 export UNICORNVIZ_APP_ROOT=/app/share/unicorn-viz
 export PYTHONPATH="/app/share/unicorn-viz:/app/lib/python${PYVER}/site-packages${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m unicornviz "$@"

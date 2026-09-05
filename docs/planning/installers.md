@@ -101,9 +101,9 @@ Graded against the actual code in this repo on 2026-06-21, not against intent.
 |---|---|---|
 | **Linux one-liner** (`install.sh` + `tools/install/lib.sh`) | ★★★★ (clone path) | **Done:** bundles `python-build-standalone` via `tools/packaging/fetch_runtime.sh` (no system `python3` needed); full canonical `.desktop` (§7); `set -Eeuo pipefail` + `ERR` trap; `uv_sudo` for root containers; shellcheck gate; **nightly real clean-container install smoke** (ubuntu/fedora/arch) asserting `unicorn-viz --help`. **Done 2026-09-04:** release path proven via `manifest.json` (channel → tarball → sha256 verified → `--self-test`). **Remaining for ★5:** GPG-sign `SHA256SUMS` (owner key, O3), wire `get.unicornviz.io`; icon size ladder is cosmetic. |
 | **Native `.deb` / `.rpm`** (`tools/packaging/build_native.sh`) | ★★★★ | **Done 2026-09-04:** built by `release.sh` from the curated payload with a bundled relocatable runtime; **installed in clean Fedora 41 and Ubuntu 24.04 containers and passed `--self-test`**; PortAudio dependency and `ffmpeg` Recommends fixed; nightly `native-package-smoke` job. **★5 gates:** GPG signing (O3), `config.toml` conffile (O4). |
-| **Windows** (`tools/packaging/build_windows_portable.sh`, `packaging/windows/UnicornViz.iss`) | ★★ | **Done 2026-09-04:** portable zip built on Linux (cross-installed win_amd64 wheels + Windows runtime + `unicorn-viz.cmd` launcher), junk-free, **unverified on Windows**. **Next:** rework `UnicornViz.iss` to consume the staged payload (kill the blanket copy + post-install pip); verify on a Windows box or the `windows-2022` runner; `signtool` gated on a cert secret. |
+| **Windows** (`tools/packaging/build_windows_portable.sh`, `packaging/windows/UnicornViz.iss`) | ★★ → ★★★★ pending CI | **Done 2026-09-04:** portable zip built on Linux (cross-installed win_amd64 wheels + Windows runtime + `unicorn-viz.cmd`); `UnicornViz.iss` rewritten to package that tree (no repo copy, no post-install pip, PATH task, `pythonw.exe -m unicornviz` shortcuts); nightly `windows-2022` job builds both, **silently installs the `.exe` and runs `--self-test`**. ★4 the first night it passes; **★5:** `signtool` gated on a cert secret (§17). |
 | **macOS `.dmg`** (nothing yet) | ☆ | Stand up `briefcase` universal2 bundle with `python-build-standalone`, `.icns`, Info.plist usage strings; **★2–3:** Dock/Spotlight + curated payload; **★4:** `macos-14` CI build + smoke; **★5:** Homebrew cask + README Gatekeeper workaround (notarization deferred behind Apple cert — §17). |
-| **Flatpak** (`packaging/flatpak/`) | ★★ (build pending) | **Done 2026-09-04:** manifest rewritten for runtime 25.08, release-tarball source, PortAudio module, offline pip sources (13 modules, sha256-pinned), tightened `finish-args`, metainfo + desktop + icon ladder, launcher with `UNICORNVIZ_APP_ROOT`. **Next:** local `flatpak-builder` build + `--self-test` in the sandbox (★4), then the Flathub PR (O5). |
+| **Flatpak** (`packaging/flatpak/`) | ★★★★ | **Done 2026-09-04:** manifest for runtime 25.08 consuming the release tarball; PortAudio module; wheels-first offline pip module via `tools/packaging/flatpak_wheels.py` (python-rtmidi built from sdist); tightened `finish-args`; metainfo + desktop + icon ladder; launcher exporting `UNICORNVIZ_APP_ROOT` and `PYSDL2_DLL_PATH`. **Local build + in-sandbox `--self-test` pass.** **★5:** Flathub PR (O5, screenshots, `--device=all` narrowed). |
 | **Snap** (`packaging/snap/snapcraft.yaml`) | ★ (on paper) | **Done 2026-09-04:** manifest upgraded to core24 / strict / explicit plugs, `dump`-staged app + assets siblings, launcher with `UNICORNVIZ_APP_ROOT`, desktop + icon. **Next:** build + test with snapcraft/LXD (not on this box); Snap Store name (O5). |
 
 **Cross-cutting blockers that gate stars on multiple channels at once:**
@@ -1275,6 +1275,43 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-04 (evening) — Block D built and gated; Block E2 written; Windows now
+  verifiable nightly without a Windows box.**
+  - **Block D (Flatpak) — ★4 reached: local `flatpak-builder` build from the staged release tarball succeeded and
+    `flatpak run io.unicornviz.UnicornViz --self-test` passed inside the sandbox
+    (assets resolve; every core dependency imports, including python-rtmidi built from
+    source and sounddevice against the bundled PortAudio module).****
+    `flatpak-pip-generator` was the wrong tool for this stack: it pins *sdists*
+    for compiled packages (Flathub's build-from-source default), which would mean
+    building numpy, scipy and OpenCV inside the sandbox. Replaced with
+    `tools/packaging/flatpak_wheels.py`: pip resolves the wheel set **inside the
+    SDK** (so tags match its Python 3.13 exactly), the tool looks each file up on
+    PyPI for its canonical URL + sha256, verifies the local copy, and writes one
+    offline module. `python-rtmidi` 1.5.8 (its latest release) ships no 3.13
+    wheel, so its sdist is built in the sandbox with `--no-build-isolation`
+    against meson-python + Cython wheels installed just before it (the SDK has
+    meson, ninja, g++, ALSA and Python headers). The runtime's own libSDL2 is
+    used; because the sandbox has no ldconfig cache, the launcher sets
+    `PYSDL2_DLL_PATH`. Manifest: runtime 25.08, release-tarball source, PortAudio
+    module, tightened `finish-args`, metainfo, desktop, icon ladder, launcher
+    exporting `UNICORNVIZ_APP_ROOT`. ★5 = Flathub PR (needs O5 + screenshots).
+  - **Block E2 (Windows installer) — written, compiled nightly in CI.**
+    `packaging/windows/UnicornViz.iss` rewritten: packages the tree assembled by
+    `build_windows_portable.sh --payload-out` (curated payload + embedded runtime
+    + cross-installed wheels); no repository copy, no post-install pip; version
+    from `/DAppVersion`; per-user or per-machine; Start-menu + optional desktop
+    shortcuts launch `pythonw.exe -m unicornviz` with `WorkingDir={app}` (the
+    package is imported from `{app}\unicornviz`, so `APP_ROOT` resolves without
+    any environment variable); optional PATH entry (`NeedsAddPath` guard);
+    `AppUserModelID` for taskbar grouping; `SignTool` left for CI to add when a
+    cert secret exists. `installer-smoke.yml` gained a nightly `windows-2022` job
+    that builds the portable zip and the installer, runs the zip's launcher
+    headlessly, **silently installs the `.exe` and runs `--self-test` through the
+    installed launcher**, and uploads both artifacts — real Windows verification
+    on the free runner, no hardware needed (O6 alternative). The dev-only
+    `tools/install_windows*.{bat,ps1}` scripts were *not* moved (another seat
+    added `tools/install/windows_deps.ps1` recently; leave that reorg for a quiet
+    moment).
 - **2026-09-04 (afternoon) — Blocks C, E1, F, G; two more packaging bugs caught by
   the clean-container smoke.**
   - **Block C (native `.deb`/`.rpm`) — ★4 reached.** `release.sh --formats rpm,deb`
