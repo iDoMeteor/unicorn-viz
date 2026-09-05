@@ -1383,6 +1383,19 @@ class VJApi:
             return {}
         return dict(getattr(m, '_note_map', {}))
 
+    def midi_active_port_name(self) -> str:
+        """Return the connected MIDI input port's name ('' when none is open).
+
+        Public readback of ``MidiManager.port_name`` (see
+        ``sync_midi_selector()``, which reads the same attribute directly
+        for the overlay) -- exposed here so a drop-in's Control Room panel
+        doesn't need to reach into ``app._midi_manager`` itself.
+        """
+        m = getattr(self._app, '_midi_manager', None)
+        if m is None:
+            return ''
+        return str(getattr(m, 'port_name', '') or '')
+
     def midi_preset_name(self) -> str:
         """Return the name of the active MIDI preset/profile ('' when none).
 

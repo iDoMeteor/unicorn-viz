@@ -29,7 +29,7 @@
   effects-retro                 0.9.1               alpha ▲       module
   effects-tech                  0.10.0              alpha ▲       module
   effects-vector                0.10.0              alpha ▲       module
-  midi-controllers-01           0.9.3               alpha ▲       module
+  midi-controllers-01           0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.1          RC            module
