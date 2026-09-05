@@ -8,7 +8,7 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.189.1             alpha ▲       module
-  media-01                      0.28.4              alpha ▲       module
+  media-01                      0.29.0              alpha ▲       module
   control-room-01               0.15.0              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
