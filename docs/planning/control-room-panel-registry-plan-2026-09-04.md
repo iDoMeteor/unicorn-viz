@@ -34,7 +34,11 @@ way: CTA/LAST SONG called `vj_api.trigger_streaming_cta()`/
 the codebase (every press silently failed); RAINBOW NOVA was always
 drawn "active" from a method-existence check on an unrelated method.
 Also deleted `_draw_triggers_panel`, dead code with no caller. **P2
-complete.** Next: P3 (LAYOUT page). Supersedes the "Control Room Follow-Ups" section of
+complete.** **P3 shipped (2026-09-04; control-room-01 0.12.0)** — an
+always-available LAYOUT page tab: hide/show, cycle page, cycle size, and
+reorder any registered panel, persisted in the runtime store, plus a
+RESET. **This plan's initial scope (P1-P3) is now fully delivered.**
+Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.
@@ -296,11 +300,12 @@ buttons and a RESET (re-seeds defaults). No drag-and-drop.
   them. Each migration landed as its own commit with its own tests, and
   surfaced two real bugs along the way (CTA/LAST SONG calling vj_api
   methods that never existed; RAINBOW NOVA always drawn "active").
-- **P3 — LAYOUT page** (hide/order/page/size/reset) + `Ctrl+Tab` paging
-  + persisted `control_room.page`. Docs: `drop-ins/control-room-01/docs/
-  configuration.md` rewritten around the store; core
-  `docs/configuration.md` gains the `[control_room]` hardware keys it is
-  currently missing.
+- **P3 — LAYOUT page** (hide/order/page/size/reset). **Shipped
+  (2026-09-04, control-room-01 0.12.0).** `Ctrl+Tab` paging + persisted
+  `control_room.page` had already landed in P1. Docs:
+  `drop-ins/control-room-01/docs/configuration.md` rewritten around the
+  store; core `docs/configuration.md` gains the `[control_room]`
+  hardware keys it was missing.
 - **Follow-ups (unscheduled):** wire `discover_runtime_capabilities()`
   so the LAYOUT page can also list loaded-but-panel-less drop-ins;
   multi-head-01 owning the monitor editor as a registered page; the

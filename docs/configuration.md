@@ -2,7 +2,7 @@
 
 Owner: Studio Documentation
 Status: active
-Last updated: 2026-08-07
+Last updated: 2026-09-04
 
 All settings live in `config.toml` in the project root.
 
@@ -368,6 +368,32 @@ Additional webcam capture and image keys (for example `device`, `width`,
 `height`, `fps`, `pip_scale`, `pip_position`, `treatment`, `brightness`,
 `contrast`, `flip_horizontal`, `flip_vertical`) are implemented by the
 `WebcamSystem` drop-in subsystem and are read from `[webcam]`.
+
+---
+
+## `[control_room]`
+
+Controls the operator "Control Room" second window
+(`drop-ins/control-room-01`). Per the project's config policy, only
+hardware-type settings live here — display, size, and redraw cadence;
+everything about panel layout, pages, and per-panel overrides lives in
+the runtime store instead (see `drop-ins/control-room-01/docs/
+configuration.md` and `docs/planning/control-room-panel-registry-plan-
+2026-09-04.md`), seeded with defaults on first run and edited live from
+the operator surface's **LAYOUT** page.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Load the drop-in and open the operator window. |
+| `display_index` | int | `1` | Preferred SDL display for the operator window. |
+| `fullscreen` | bool | `true` | Borderless fullscreen on the chosen display. |
+| `width` / `height` | int | `1440` / `900` | Initial windowed size; ignored when `fullscreen` is true. |
+| `render_interval` | float | `0.5` | PIL redraw cadence, seconds between frames — independent of the runtime store's `preview_fps_cap`. |
+
+`preview_fps_cap`, `preview_scale`, and `theme` are read from this section
+only as a one-time seed the first time the runtime store has no value for
+them (back-compat for pre-existing configs); the store's value wins on
+every launch after that.
 
 ---
 
