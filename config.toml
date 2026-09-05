@@ -1,6 +1,6 @@
 [logging]
 level = "info"
-perf_frames = true
+perf_frames = false # requires log level debug on
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
@@ -153,10 +153,10 @@ env_source = "dense_complex"   # 2026-09-04: complex-domain onset function + den
 # drop_signal_engine = "legacy"
 # Per-mood thresholds live in _PROFILE_PRESETS (weights-and-thresholds.md has
 # the table); override any of them here like other profile keys:
-drop_trigger_threshold = 0.55        # trigger entry bar (~p99 of real-audio readings)
-drop_trigger_fastlane = 0.75         # strong-trigger shorter-hold bar (default threshold x1.25)
-drop_sustain_entry = 0.65            # established-sustain entry bar (covers joining mid-drop)
-drop_sustain_fizzle_floor = 0.35     # absolute fizzle floor under the peak-relative (x0.9) check
+drop_trigger_threshold = 0.50        # trigger entry bar (~p99 of real-audio readings)
+drop_trigger_fastlane = 0.70         # strong-trigger shorter-hold bar (default threshold x1.25)
+drop_sustain_entry = 0.55            # established-sustain entry bar (covers joining mid-drop)
+drop_sustain_fizzle_floor = 0.25     # absolute fizzle floor under the peak-relative (x0.9) check
 # -- recommender BPM hard pre-filter (2026-08-20, recommender rc.20) --
 # While confidently locked, genre candidates whose bpm_hint range (± margin)
 # doesn't contain the locked tempo are excluded before scoring (the 2026-08-13
@@ -181,16 +181,26 @@ sequence_training_corpus_path = "assets/training/corpus/sequence-corpus.jsonl"
 # logging) always reads the fast raw value. Off here for now -- soaking
 # with the raw, unsmoothed number visible while validating this week's
 # detector changes. See docs/adr/vj-system.md.
-published_bpm_smoothing_enabled = true
+published_bpm_smoothing_enabled = false
 published_bpm_smoothing_s = 4.0
 
 # Arm B, rc.16 default
-mode_snap_unit_build = "bar"
+#mode_snap_unit_build = "downbeat"
+#mode_snap_unit_breakdown = "phrase"
+#mode_snap_unit_climax = "downbeat"
+#mode_phrase_within_bars_build = 1
+#mode_phrase_within_bars_breakdown = 2
+#mode_phrase_within_bars_climax = 2
+
+# Arm C, tuned 2
+mode_snap_unit_build = "phrase"
+mode_source_min_confidence_build = 0.6    # cruise->build only on confident downbeats
 mode_snap_unit_breakdown = "phrase"
-mode_snap_unit_climax = "bar"
-mode_phrase_within_bars_build = 1
 mode_phrase_within_bars_breakdown = 2
-mode_phrase_within_bars_climax = 2
+mode_snap_unit_climax = "downbeat"
+mode_phrase_unit_climax = 2                # half-phrase grid
+mode_phrase_within_bars_climax = 2         # always chains to the next 4-bar boundary
+drop_cruise_min_confidence = 0.0           # cruise drops parked; 0.71 turns them on
 
 hud_production_mode = false
 
@@ -200,7 +210,6 @@ enabled = false
 fullscreen = true       # borderless fullscreen on the chosen display (default true)
 display_index = 3
 render_interval = 0.5
-output_device = "DDJ-REV1, Windows WASAPI"
 
 [keystrokes]
 enabled = true

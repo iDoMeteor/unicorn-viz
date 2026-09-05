@@ -2,7 +2,8 @@
 
 Owner: owner + Claude (overlays/core manager)
 Status: **approved 2026-09-05; P0 shipped (2026-09-05); P1 shipped
-(2026-09-05, 10 panels); P2 shipped (2026-09-05)** — owner took every §7
+(2026-09-05, 10 panels); P2 shipped (2026-09-05); P3 shipped
+(2026-09-05)** — owner took every §7
 recommendation except #5: media/mixer/Spotify go on a new shared
 `sources` page, not MAIN. P0: core beta.113 (`STANDARD_PAGES` incl.
 `sources`, lifecycle rule, runtime store built before multi-head and its
@@ -25,8 +26,19 @@ CR's TRANSPORT STREAM button — control-room-01 0.15.0, `destroy()` now
 stops the stream and unregisters the panel, called from core's shutdown
 path instead of `stop()` directly), midi-controllers-01 0.10.0 (`output`
 panel, no CR retirement — the MIDI/audio selector overlay is a core
-modal; adds `VJApi.midi_active_port_name()`). P3 next.
-Last updated: 2026-09-05 (P2 shipped)
+modal; adds `VJApi.midi_active_port_name()`).
+
+P3: media-01 0.29.0 and dj-mixer-01 0.190.0 (medium panels on the shared
+`sources` page, no title/artist per the now-playing dedupe rule);
+multi-head-01 1.1.0-rc.2 registers a tier-2-`draw` `displays` page
+(mode buttons, display map/list, include/exclude/save), retiring
+control-room-01's hardcoded DISPLAY panel and monitor-editor modal
+(control-room-01 0.16.0). Closed a real gap this exposed: `OperatorPage`
+had no `on_action` (core beta.115 adds it, mirroring
+`OperatorPanel.on_action`) plus a new `page_action:<name>:<action>`
+hotspot namespace, so a tier-2 page's own hotspots route generically to
+its own handler instead of the host needing new elif branches per page.
+Last updated: 2026-09-05 (P3 shipped)
 
 Follows [control-room-panel-registry-plan-2026-09-04.md](control-room-panel-registry-plan-2026-09-04.md)
 (P1–P3 delivered: registry, pages, LAYOUT page). That plan migrated the
