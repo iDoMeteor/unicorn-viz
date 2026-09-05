@@ -8,9 +8,13 @@ first (core beta.111, control-room-01 0.10.1). **P2 in progress:** Auto
 VJ migrated (2026-09-04; auto-vj-01 1.0.0-rc.126, control-room-01
 0.11.1 removes the old hardcoded panel) — mood/scene/BPM/action-in plus
 a BPM-lock and beat-pulse meter, real reco/score rows gated on an
-actual scoring pass, ON/OFF/PROFILE/PING-PONG buttons. Remaining: INFO
-redesign, Spotify, Webcam, the DROP-INS buttons. **P3 (LAYOUT page) not
-started.** Supersedes the "Control Room Follow-Ups" section of
+actual scoring pass, ON/OFF/PROFILE/PING-PONG buttons. INFO redesigned
+(2026-09-04; control-room-01 0.11.2): dropped the transport/display/
+advance/record/stream/react/invert rows (each duplicated a live readout
+one panel over on the same screen) and replaced the Spotify-only status
+row with a source-agnostic NOW PLAYING line via
+`vj_api.active_now_playing()`. Remaining: Spotify, Webcam, the DROP-INS
+buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.
