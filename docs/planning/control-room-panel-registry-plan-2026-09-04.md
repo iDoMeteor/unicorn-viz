@@ -4,8 +4,13 @@ Owner: owner + Claude (overlays/core manager)
 Status: **P1 shipped (2026-09-04; core beta.112, control-room-01
 0.11.0)** — registry + host + page model + runtime-store defaults are
 live; deck-sim is the first registered page. Bug-fix pass (§2) landed
-first (core beta.111, control-room-01 0.10.1). **P2 (panel migrations,
-INFO/AUTO VJ dress-up) and P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
+first (core beta.111, control-room-01 0.10.1). **P2 in progress:** Auto
+VJ migrated (2026-09-04; auto-vj-01 1.0.0-rc.126, control-room-01
+0.11.1 removes the old hardcoded panel) — mood/scene/BPM/action-in plus
+a BPM-lock and beat-pulse meter, real reco/score rows gated on an
+actual scoring pass, ON/OFF/PROFILE/PING-PONG buttons. Remaining: INFO
+redesign, Spotify, Webcam, the DROP-INS buttons. **P3 (LAYOUT page) not
+started.** Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.

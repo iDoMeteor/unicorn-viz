@@ -950,8 +950,9 @@ Conventions for a drop-in:
 - Add it as a submodule in the main repository.
 - Set `NAME`, `AUTHOR`, `TAGS` on the class.
 - Ensure the main app can discover/load it through `unicornviz/dropins.py`.
-- Any hotkeys the drop-in introduces **must** be added to `HELP_TEXT` in
-  `unicornviz/overlays.py` — that is the single source of truth.
+- Any hotkeys the drop-in introduces **must** be added to its own
+  `HELP_ENTRIES` (discovered by core and merged into `unicornviz/overlays.py`'s
+  `CORE_HELP_SECTIONS`) — that is the single source of truth.
 
 ### Visual effect drop-ins
 
@@ -995,5 +996,6 @@ continue to mature.
 - [ ] ANSI files present in `assets/ansi/acid/` (run `tools/fetch_acid_ans.py` if missing)
 - [ ] `run.sh` is executable (`chmod +x run.sh`)
 - [ ] All drop-in submodules committed and pushed in their own repos before main-repo pointer update
-- [ ] Every new hotkey is listed in `HELP_TEXT` in `unicornviz/overlays.py`
+- [ ] Every new hotkey is listed in the owning module's `HELP_ENTRIES` (core
+      sections live in `unicornviz/overlays.py`'s `CORE_HELP_SECTIONS`)
 - [ ] Screenshots taken at 1920×1080 for README
