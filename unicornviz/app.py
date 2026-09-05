@@ -829,6 +829,9 @@ class App:
         # internals; the null controller is deliberately not registered.
         if not isinstance(self._multihead, _NullMultiHeadController):
             self.vj_api.register_subsystem('multihead', self._multihead)
+            set_vj_api = getattr(self._multihead, 'set_vj_api', None)
+            if callable(set_vj_api):
+                set_vj_api(self.vj_api)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))

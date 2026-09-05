@@ -4,12 +4,12 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.114      BETA          MISMATCH (readme=1.0.0-beta.113)
+  core (unicornviz)             1.0.0-beta.115      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.190.0             alpha ▲       module
   media-01                      0.29.0              alpha ▲       module
-  control-room-01               0.15.0              alpha ▲       module
+  control-room-01               0.16.0              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
@@ -32,7 +32,7 @@
   midi-controllers-01           0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  multi-head-01                 1.1.0-rc.1          RC            module
+  multi-head-01                 1.1.0-rc.2          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
   spotify-01                    1.0.0-rc.5          RC            module
   unicorn-tears-01              1.0.0-rc.2          RC            module
@@ -79,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  3 version mismatch(es): core (unicornviz), effects-cosmic, effects-games
+  ⚠  2 version mismatch(es): effects-cosmic, effects-games
 

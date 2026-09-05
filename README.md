@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.113**
+**Version 1.0.0-beta.115**
 
 ## Contact Me!
 
@@ -557,6 +557,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.115** — P3 of
+  `docs/planning/control-room-drop-in-integration-plan-2026-09-05.md`.
+  `OperatorPage` gains `on_action` (mirrors `OperatorPanel.on_action`):
+  a tier-2 page's own hotspots now route generically to its own action
+  handler (`page_action:<name>:<action>`, control-room-01 side) instead
+  of needing new elif branches in the host. `App` now calls
+  `multihead.set_vj_api(vj_api)` right after constructing it, so the
+  drop-in can register its own Control Room page the same way every
+  `set_vj_api()`-idiom drop-in already does.
 - **1.0.0-beta.113** — P0 of
   `docs/planning/control-room-drop-in-integration-plan-2026-09-05.md`.
   `operator_panels.STANDARD_PAGES` (`fx` / `output` / `overlays` /

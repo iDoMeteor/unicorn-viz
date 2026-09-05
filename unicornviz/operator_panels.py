@@ -188,6 +188,16 @@ class OperatorPage:
     the tab hide itself while the owning device/subsystem is not present --
     the host keeps the tab visible while the page is *current* so an
     operator is never stranded on a page with no way back.
+
+    ``on_action`` mirrors ``OperatorPanel.on_action``: it handles a hotspot
+    click registered by this page's own ``draw`` via ``PanelCanvas.
+    add_hotspot(action, payload, rect)``, runs on the host's main thread (same
+    as a hotkey), and whatever string it returns is flashed. Only meaningful
+    alongside ``draw`` -- a panel-hosting page (no ``draw`` of its own) has no
+    hotspots to route; the host namespaces this page's hotspot actions
+    (``page_action:<name>:<action>``) only when ``on_action`` is set, so an
+    existing ``draw``-only page with no ``on_action`` (e.g. one dispatching
+    its own raw action names directly) is unaffected.
     """
 
     name: str
@@ -195,6 +205,7 @@ class OperatorPage:
     owner: str = ''
     draw: Callable[[PanelCanvas], None] | None = None
     available: Callable[[], bool] | None = None
+    on_action: Callable[[str, Any], str | None] | None = None
 
     def __post_init__(self) -> None:
         if not self.name or not self.name.strip():
