@@ -4,21 +4,21 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.112      BETA          module
+  core (unicornviz)             1.0.0-beta.113      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.189.0             alpha ▲       module
   media-01                      0.28.4              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
+  control-room-01               0.13.0              alpha ▲       module
   projectm-01                   0.12.4              alpha ▲       module
-  control-room-01               0.12.0              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.10.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.126        RC            module
-  candy-frame-01                1.1.0-rc.2          RC            module
+  auto-vj-01                    1.0.0-rc.127        RC            module
+  candy-frame-01                1.1.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   effects-retro                 0.9.1               alpha ▲       module
@@ -27,9 +27,9 @@
   midi-controllers-01           0.9.2               alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  multi-head-01                 1.0.0-rc.1          RC            module
+  multi-head-01                 1.1.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
-  spotify-01                    1.0.0-rc.4          RC            module
+  spotify-01                    1.0.0-rc.5          RC            module
   unicorn-tears-01              1.0.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@
   chat-01                       0.5.1               alpha ▼       module
   effects-holiday               0.5.1               alpha ▼       module
   streaming-01                  0.5.2               alpha ▼       module
-  webcam-01                     1.5.1               alpha ▼       module
+  webcam-01                     1.5.2               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-rollercoast           0.4.1               early alpha   module

@@ -185,3 +185,28 @@ def test_empty_registry() -> None:
     assert api.operator_panels() == []
     assert api.operator_pages() == []
     assert api.operator_page('main') is None
+
+
+# --------------------------------------------------------------------------- #
+# Standard shared pages (integration plan section 3.7)
+# --------------------------------------------------------------------------- #
+
+def test_standard_pages_shape_and_names() -> None:
+    from unicornviz.operator_panels import STANDARD_PAGES
+
+    names = [n for n, _t in STANDARD_PAGES]
+    assert names == ['fx', 'output', 'overlays', 'sources']
+    assert len(set(names)) == len(names)
+    for name, title in STANDARD_PAGES:
+        assert name != MAIN_PAGE
+        assert ':' not in name
+        assert title and title[0].isupper()
+        # Every standard page must be a valid OperatorPage as-is.
+        OperatorPage(name=name, title=title, owner='control-room-01')
+
+
+def test_standard_pages_sort_after_main_by_title() -> None:
+    from unicornviz.operator_panels import STANDARD_PAGES
+
+    pages = [OperatorPage(name=n, title=t) for n, t in STANDARD_PAGES]
+    assert [p.name for p in sort_pages(pages)] == ['fx', 'output', 'overlays', 'sources']

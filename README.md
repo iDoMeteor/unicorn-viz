@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.112**
+**Version 1.0.0-beta.113**
 
 ## Contact Me!
 
@@ -557,6 +557,20 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.113** — P0 of
+  `docs/planning/control-room-drop-in-integration-plan-2026-09-05.md`.
+  `operator_panels.STANDARD_PAGES` (`fx` / `output` / `overlays` /
+  `sources`) so drop-ins can target shared Control Room pages without
+  each re-registering an identical page; the "unregister in
+  `shutdown()`" lifecycle rule documented in the module docstring. The
+  runtime store is now built *before* multi-head so the monitor editor's
+  persisted display excludes (`multihead.monitor_editor.exclude_display_
+  indices`) are handed to `MultiHeadController` on construction -- until
+  now nothing read that key, so "Monitor excludes saved (restart
+  required)" never changed anything (multi-head-01 1.1.0-rc.1 accepts
+  the override). The live multi-head controller is registered as the
+  `multihead` subsystem so drop-ins can reach display state through
+  `vj_api` instead of app internals.
 - **1.0.0-beta.112** — Operator-panel registry, P1 of
   `docs/planning/control-room-panel-registry-plan-2026-09-04.md`. New
   `unicornviz/operator_panels.py` (`OperatorPanel`/`OperatorPage` descriptors

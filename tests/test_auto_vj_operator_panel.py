@@ -43,6 +43,9 @@ class _FakeVJApi:
     def register_operator_panel(self, panel: OperatorPanel) -> None:
         self.panels[panel.name] = panel
 
+    def unregister_operator_panel(self, name: str) -> bool:
+        return self.panels.pop(name, None) is not None
+
     def set_show_duration(self, seconds) -> None:
         pass
 
@@ -219,3 +222,33 @@ def test_action_pingpong_toggles_and_reports_new_state() -> None:
 def test_action_unknown_returns_none() -> None:
     inst = _bare_controller()
     assert inst._operator_panel_action('bogus', None) is None
+
+
+class _FakeEngine:
+    def __init__(self) -> None:
+        self.shut = False
+
+    def shutdown(self) -> None:
+        self.shut = True
+
+
+def test_shutdown_unregisters_the_operator_panel() -> None:
+    """operator_panels.py "Lifecycle": a mid-session shutdown must not leave
+    a dead panel (error box) behind in the Control Room."""
+    inst = _bare_controller()
+    app = _FakeApp()
+    inst._app = app
+    app.vj_api.panels['auto_vj'] = OperatorPanel(
+        name='auto_vj', title='Auto VJ', content=inst._operator_panel_content,
+    )
+    inst._engine = _FakeEngine()
+    inst.shutdown()
+    assert 'auto_vj' not in app.vj_api.panels
+    assert inst._engine.shut
+
+
+def test_shutdown_without_app_still_shuts_engine() -> None:
+    inst = _bare_controller()
+    inst._engine = _FakeEngine()
+    inst.shutdown()
+    assert inst._engine.shut

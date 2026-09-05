@@ -1,9 +1,18 @@
 # Control Room — Drop-In Integration & Uplift Plan
 
 Owner: owner + Claude (overlays/core manager)
-Status: **proposed (2026-09-05)** — audit complete, no code changed;
-awaiting owner decisions in §7 before P0.
-Last updated: 2026-09-05
+Status: **approved 2026-09-05; P0 shipped (2026-09-05)** — owner took every
+§7 recommendation except #5: media/mixer/Spotify go on a new shared
+`sources` page, not MAIN. P0: core beta.113 (`STANDARD_PAGES` incl.
+`sources`, lifecycle rule, runtime store built before multi-head and its
+persisted excludes handed over, `multihead` registered as a subsystem);
+control-room-01 0.13.0 (registers the four standard pages); multi-head-01
+1.1.0-rc.1 (`runtime_excludes=` override + first tests — the audit's #1
+bug); unregister-on-shutdown retrofits in spotify-01 rc.5 (also moved to
+`sources`), webcam-01 1.5.2, candy-frame-01 1.1.0-rc.3, auto-vj-01
+rc.127. cta-01 and unicorn-tears-01 have no shutdown/destroy hook that
+`app.py` calls, so there is nothing to retrofit there. P1 next.
+Last updated: 2026-09-05 (P0 shipped)
 
 Follows [control-room-panel-registry-plan-2026-09-04.md](control-room-panel-registry-plan-2026-09-04.md)
 (P1–P3 delivered: registry, pages, LAYOUT page). That plan migrated the
@@ -99,7 +108,7 @@ in. Existing registrations are listed first for the ordering picture.
 | Drop-in | Reads (content) | Buttons (on_action → method) | Page | Size | Pri | Phase |
 |---|---|---|---|---|---|---|
 | auto-vj-01 *(registered)* | HUD/grid state | ON/OFF, PROFILE, PING-PONG | main | medium | 10 | done |
-| spotify-01 *(registered)* | `snapshot()` | AUTH, LOGOUT | main | medium | 40 | done |
+| spotify-01 *(registered)* | `snapshot()` | AUTH, LOGOUT | sources | medium | 40 | done |
 | webcam-01 *(registered)* | camera state | PREV/NEXT/REDISC, modes | main | medium | 50 | done |
 | candy-frame-01 *(registered)* | enabled, pattern | TOGGLE, CYCLE | main | small | 60 | done |
 | cta-01 *(registered)* | — | HYPE, LAST SONG, ONE MORE | main | small | 70 | done |
@@ -117,8 +126,8 @@ in. Existing registrations are listed first for the ordering picture.
 | **banner-01** | enabled, line count, `max_line_chars`, `font_px`, beat color | TOGGLE, EDIT (opens config modal), RESET | overlays | small | 310 | P1 |
 | **chat-01** | enabled, position, (message count if cheap) | TOGGLE, POS → cycle, T/L/R/B → set position | overlays | small | 320 | P1 |
 | **lyrics-01** | `snapshot()`: enabled, track, has_lyrics, position_s | TOGGLE | overlays | small | 330 | P1 |
-| **media-01** | `snapshot()` (Spotify-shaped), shuffle/repeat/crossfade/auto-level flags | PLAY/PAUSE, PREV, NEXT, SHUFFLE, REPEAT, XFADE, OPEN DECK → `toggle_window()` | main | medium | 42 | P3 |
-| **dj-mixer-01** | `session_snapshot()`, `now_playing_snapshot()`, keep-playing, `is_open` | OPEN/CLOSE → `toggle_window()`, KEEP PLAYING → `toggle_keep_playing()` | main | medium | 44 | P3 |
+| **media-01** | `snapshot()` (Spotify-shaped), shuffle/repeat/crossfade/auto-level flags | PLAY/PAUSE, PREV, NEXT, SHUFFLE, REPEAT, XFADE, OPEN DECK → `toggle_window()` | sources | medium | 42 | P3 |
+| **dj-mixer-01** | `session_snapshot()`, `now_playing_snapshot()`, keep-playing, `is_open` | OPEN/CLOSE → `toggle_window()`, KEEP PLAYING → `toggle_keep_playing()` | sources | medium | 44 | P3 |
 | **midi-controllers-01** | manager: `is_open`, `is_armed`, `selected_action`, active port, preset name | LEARN (arm), SELECTOR → `vj_api.open_midi_selector()` | output | small | 250 | P2 |
 | training-kit-01 | — | — | — | — | — | excluded (§5) |
 
@@ -178,6 +187,7 @@ Notes on specific rows:
    ```python
    STANDARD_PAGES: tuple[tuple[str, str], ...] = (
        ('fx', 'FX'), ('output', 'Output'), ('overlays', 'Overlays'),
+       ('sources', 'Sources'),
    )
    ```
 
@@ -288,7 +298,7 @@ collisions seen on 2026-09-05.
 | 2 | multi-head-01: fold the "excludes are never read" fix into the Displays page (behavior change), or fix it standalone first? | **Standalone first** (it's a bug; users hit it today), then P3 moves the UI. |
 | 3 | Retire TRANSPORT's STREAM button when the streaming panel lands, or keep both? | Retire — same dedupe rule as INFO. RECORD stays. |
 | 4 | Default page for beat-flash: `fx` (with the other post passes) or `main` (it's a "moment")? | `fx`; LAYOUT moves it in one click if MAIN is preferred live. |
-| 5 | media-01 / dj-mixer-01 on MAIN at priority 42/44 (next to Spotify) or on `output`? | MAIN — they are the show's transport. |
+| 5 | media-01 / dj-mixer-01 on MAIN at priority 42/44 (next to Spotify) or on `output`? | ~~MAIN~~ **Owner: a shared `sources` page** for media, mixer, and Spotify (2026-09-05). |
 | 6 | Move `deck_sim` page ownership to midi-controllers-01? | No (cosmetic; `available` already hides it). |
 
 ## 8) Related

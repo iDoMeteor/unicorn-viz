@@ -13,6 +13,15 @@ and the Control Room renders it generically. Core owns the descriptor and the
 registry (Public Runtime Surface rule 1); control-room-01 never imports the
 registering drop-in, and the drop-in never imports control-room-01.
 
+Lifecycle
+---------
+Register where the API first exists (``__init__(app)`` or ``set_vj_api()``),
+guarded with ``getattr(vj_api, 'register_operator_panel', None)`` so an
+older core is a no-op. **Unregister in ``shutdown()``/``destroy()``** with
+``vj_api.unregister_operator_panel(name)``: the host isolates a failing
+``content()`` into an error box rather than a freeze, but a drop-in that
+shut down mid-session would otherwise leave that error box behind.
+
 Declarative first
 -----------------
 A panel's ``content`` is a zero-arg callable returning a :class:`PanelContent`
@@ -58,6 +67,22 @@ PANEL_SIZES: tuple[str, ...] = ('small', 'medium', 'large', 'full')
 
 MAIN_PAGE = 'main'
 """The primary Control Room page; always present, always the first tab."""
+
+STANDARD_PAGES: tuple[tuple[str, str], ...] = (
+    ('fx', 'FX'),
+    ('output', 'Output'),
+    ('overlays', 'Overlays'),
+    ('sources', 'Sources'),
+)
+"""Shared ``(name, title)`` pages the Control Room registers itself on
+startup so drop-ins can target them with ``page='fx'`` etc. without each
+re-registering an identical :class:`OperatorPage` (three copies of one
+title string across three repos is the drift the registry exists to end).
+``fx``: post passes and looks; ``output``: streaming, video/audio out, OSC,
+MIDI, displays; ``overlays``: banner, chat, lyrics; ``sources``: media,
+mixer, Spotify transport. The operator can move any panel elsewhere from
+the LAYOUT page. See docs/planning/control-room-drop-in-integration-plan-
+2026-09-05.md section 3.7."""
 
 
 @dataclass(frozen=True, slots=True)

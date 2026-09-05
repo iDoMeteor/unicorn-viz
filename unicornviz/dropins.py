@@ -60,6 +60,7 @@ MULTIHEAD_RUNTIME_CAPABILITY = DropinRuntimeCapability(
     name='multihead',
     relative_file='multi-head-01/multihead.py',
     class_symbol='MultiHeadController',
+    subsystem_name='multihead',
 )
 
 POSTFX_RUNTIME_CAPABILITY = DropinRuntimeCapability(

@@ -718,12 +718,31 @@ class App:
         self._primary_overlay_view_debug_last: tuple[int, int, int, int] | None = None
         self._display_index = 0
         self._display_mode = 'single'
+        # The runtime store is built here, ahead of multi-head, because the
+        # monitor editor (control-room-01) persists its display excludes into
+        # it and multi-head must see them on construction (multi-head-01
+        # 1.1.0; the 2026-09-05 audit's "excludes are written but never read").
+        runtime_state_path = self.cfg.get(
+            'runtime_state',
+            'path',
+            default='runtime/global_state.json',
+        )
+        self._runtime_state = RuntimeStateStore(str(runtime_state_path))
         multihead_cls = (
             _NullMultiHeadController
             if self._safe_mode or not self._profile_allows('multi_head')
             else _load_multihead_controller_class()
         )
-        self._multihead = multihead_cls(self.cfg)
+        if multihead_cls is _NullMultiHeadController:
+            self._multihead = multihead_cls(self.cfg)
+        else:
+            persisted_excludes = self._runtime_state.get(
+                'multihead.monitor_editor.exclude_display_indices', None,
+            )
+            self._multihead = multihead_cls(
+                self.cfg,
+                runtime_excludes=persisted_excludes if isinstance(persisted_excludes, list) else None,
+            )
         self._fullscreen_mode = str(self.cfg.get('window', 'fullscreen_mode', default='auto')).lower()
         self._render_scale = _clamp_render_scale(
             float(self.cfg.get('render', 'internal_scale', default=1.0))
@@ -735,12 +754,6 @@ class App:
         self._vj_status_pill: str = ''
         self._last_auto_vj_error_key: str = ''
         self._last_auto_vj_error_t: float = -1e9
-        runtime_state_path = self.cfg.get(
-            'runtime_state',
-            'path',
-            default='runtime/global_state.json',
-        )
-        self._runtime_state = RuntimeStateStore(str(runtime_state_path))
         # Effects the operator has disabled from auto-rotation (persisted).
         self._disabled_effects: set[str] = {
             str(n) for n in (self._runtime_state.get('effects.disabled', []) or [])
@@ -807,6 +820,11 @@ class App:
             float(self.cfg.get('now_spinning', 'switch_hold_s', default=5.0)
                   or 0.0))
         self.vj_api = VJApi(self)
+        # Reachable as a subsystem so control-room-01 (or any drop-in) can
+        # read display state through vj_api instead of duck-typing app
+        # internals; the null controller is deliberately not registered.
+        if not isinstance(self._multihead, _NullMultiHeadController):
+            self.vj_api.register_subsystem('multihead', self._multihead)
         self._render_scale_default: float = self._render_scale
         self._render_width = max(1, int(round(self._width * self._render_scale)))
         self._render_height = max(1, int(round(self._height * self._render_scale)))
