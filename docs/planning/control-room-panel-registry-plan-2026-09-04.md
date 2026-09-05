@@ -13,8 +13,12 @@ actual scoring pass, ON/OFF/PROFILE/PING-PONG buttons. INFO redesigned
 advance/record/stream/react/invert rows (each duplicated a live readout
 one panel over on the same screen) and replaced the Spotify-only status
 row with a source-agnostic NOW PLAYING line via
-`vj_api.active_now_playing()`. Remaining: Spotify, Webcam, the DROP-INS
-buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
+`vj_api.active_now_playing()`. Spotify migrated (2026-09-04; spotify-01
+1.0.0-rc.4, control-room-01 0.11.3 removes the hardcoded panel, its
+row-4 3-column special case, and the two remaining
+`get_subsystem('spotify')` `_dispatch_action` branches — auth/logout now
+call the registering instance's own methods via `on_action`). Remaining:
+Webcam, the DROP-INS buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.

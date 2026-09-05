@@ -11,7 +11,7 @@
   media-01                      0.28.4              alpha ▲       module
   effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
   projectm-01                   0.12.4              alpha ▲       module
-  control-room-01               0.11.2              alpha ▲       module
+  control-room-01               0.11.3              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.10.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
@@ -29,7 +29,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.0.0-rc.1          RC            module
   postfx-01                     1.0.0-rc.1          RC            module
-  spotify-01                    1.0.0-rc.3          RC            module
+  spotify-01                    1.0.0-rc.4          RC            module
   unicorn-tears-01              1.0.0-rc.1          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
