@@ -15,6 +15,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from unicornviz.stall_watchdog import StallWatchdog
 from unicornviz.config import Config, ConfigValidationError
 from unicornviz.dropins import register_dropin_config_validators
 from unicornviz.paths import APP_ROOT, resolve_path
@@ -362,7 +363,11 @@ def _install_faulthandler(cfg: Config) -> None:
     """
     global _faulthandler_file
     level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
-    if level_name == 'NONE':
+    # [logging] faulthandler = false keeps the crash handler (it costs
+    # nothing and prints to stderr) but never creates a file -- the release
+    # switch for rigs that do not want a logs/ directory filling up.
+    want_file = bool(cfg.get('logging', 'faulthandler', default=True))
+    if level_name == 'NONE' or not want_file:
         faulthandler.enable()
         return
     log_dir = resolve_path(cfg.get('logging', 'directory', default='logs'))
@@ -370,6 +375,59 @@ def _install_faulthandler(cfg: Config) -> None:
     path = log_dir / f"faulthandler_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     _faulthandler_file = open(path, 'w', encoding='utf-8')  # noqa: SIM115 - kept open for process lifetime
     faulthandler.enable(file=_faulthandler_file)
+
+
+def _install_stall_watchdog(cfg: Config, app: object) -> StallWatchdog | None:
+    """Arm a main-loop stall dump on *app*; ``[logging] stall_dump_s = 0`` disables.
+
+    A hang leaves the same zero-byte faulthandler file a clean run does, so a
+    force-quit after a freeze was indistinguishable from a normal exit.  The
+    watchdog writes an all-thread dump into that file if the render loop
+    stops ticking for ``stall_dump_s`` seconds.  Falls back to stderr when
+    no faulthandler file was opened (``level = "NONE"`` or file disabled).
+    """
+    try:
+        timeout_s = float(cfg.get('logging', 'stall_dump_s', default=5.0) or 0.0)
+    except (TypeError, ValueError):
+        timeout_s = 5.0
+    if timeout_s <= 0.0:
+        return None
+    wd = StallWatchdog(file=_faulthandler_file, timeout_s=timeout_s)
+    app.stall_watchdog = wd  # type: ignore[attr-defined]
+    return wd
+
+
+def _cleanup_faulthandler(watchdog: StallWatchdog | None = None) -> None:
+    """Retire the per-run faulthandler file; delete it if nothing was written.
+
+    Every run opened a fresh ``faulthandler_<stamp>.log`` and left it behind
+    empty, so a logs/ directory accumulated one zero-byte file per launch.
+    A clean exit now removes the file it did not use.  A file with content
+    -- a native-crash dump or a stall dump -- is kept.  The handler itself
+    stays enabled on stderr so a crash during interpreter teardown (the
+    PortAudio/JACK abort at exit was one) is still reported somewhere.
+    """
+    global _faulthandler_file
+    if watchdog is not None:
+        watchdog.stop()
+    fh = _faulthandler_file
+    if fh is None:
+        return
+    _faulthandler_file = None
+    try:
+        faulthandler.enable()          # re-point at stderr before closing
+    except Exception:
+        pass
+    path = Path(fh.name)
+    try:
+        fh.close()
+    except Exception:
+        pass
+    try:
+        if path.is_file() and path.stat().st_size == 0:
+            path.unlink()
+    except OSError as exc:
+        logging.getLogger(__name__).debug('faulthandler cleanup skipped: %s', exc)
 
 
 def _install_exception_logging() -> None:
@@ -460,6 +518,7 @@ def main() -> None:
     _install_exception_logging()
     from unicornviz.app import App
     app = App(cfg)
+    watchdog = _install_stall_watchdog(cfg, app)
     try:
         try:
             app.run()
@@ -467,6 +526,7 @@ def main() -> None:
             # Teardown must run even when run() raises: audio/MIDI/recorder
             # threads and SDL are otherwise left dangling on a crash.
             app.ensure_shutdown()
+            _cleanup_faulthandler(watchdog)
     except RuntimeError as exc:
         if 'audio startup failed' in str(exc).lower() or 'audio capture' in str(exc).lower():
             print(

@@ -630,6 +630,10 @@ class App:
         self._audio_raw: AudioData | None = None
         self._last_frame_fps: float = 0.0
         self._last_frame_ms: float = 0.0
+        # Main-loop stall watchdog (unicornviz.stall_watchdog), installed by
+        # __main__ from [logging] stall_dump_s.  None when disabled or when
+        # the App is driven by tests/tools rather than the CLI.
+        self.stall_watchdog: object | None = None
         # Consecutive _present_subsystems() skips under the frame-budget guard.
         self._subsys_present_skips: int = 0
         self._subsys_skip_ms_cached: float = 0.0
@@ -5013,6 +5017,8 @@ void main() {
             prev_time = now
             self._last_frame_fps = (1.0 / dt) if dt > 0.0 else 0.0
             self._last_frame_ms = dt * 1000.0
+            if self.stall_watchdog is not None:
+                self.stall_watchdog.tick()   # "the loop came back around"
             manager_modal_active = self._projectm_manager_modal_active
             eb_active = self._effects_browser_active
             presets_active = bool(getattr(self._overlays, 'presets_visible', False))

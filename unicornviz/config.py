@@ -132,6 +132,8 @@ _DEFAULTS: dict[str, Any] = {
     "logging": {
         "level": "INFO",
         "directory": "logs",
+        "faulthandler": True,      # per-run crash-dump file under directory
+        "stall_dump_s": 5.0,       # all-thread dump if a frame hangs this long; 0 = off
     },
     "overlays": {
         "flash_messages": True,
@@ -300,6 +302,10 @@ def _extra_constraints(data: dict[str, Any]) -> list[str]:
             'logging.level must be one of '
             "'DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NONE'"
         )
+
+    stall_dump = logging_cfg.get('stall_dump_s')
+    if stall_dump is not None and (not _is_number(stall_dump) or float(stall_dump) < 0.0):
+        errors.append('logging.stall_dump_s must be a number >= 0 (0 disables the stall dump)')
 
     hud_timeout = overlays.get('hud_timeout_s')
     if _is_number(hud_timeout) and float(hud_timeout) < 0.0:

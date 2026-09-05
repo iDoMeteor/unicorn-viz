@@ -523,3 +523,6 @@ core-read keys select the **mixer-only boot profile** (see
 |------------|------|----------|------------------------------------------|
 | `level`    | str  | `"INFO"` | Log verbosity                            |
 | `directory`| str  | `"logs"` | Directory for timestamped run log files  |
+| `perf_frames` | bool | `false` | Per-frame timing breakdown (`Perf frame: ...`). Emitted at DEBUG, so it only reaches the log when `level = "debug"`; at `"info"` it is generated and discarded. |
+| `faulthandler` | bool | `true` | Write native-crash and stall dumps to a per-run `faulthandler_<stamp>.log` under `directory`. A run that writes nothing deletes its file on exit. `false` keeps the handler on stderr only (the release setting). |
+| `stall_dump_s` | float | `5.0` | If the render loop stops advancing for this many seconds, dump every thread's stack into the faulthandler file (or stderr) while the process is still hung. `0` disables. |
