@@ -17,8 +17,13 @@ row with a source-agnostic NOW PLAYING line via
 1.0.0-rc.4, control-room-01 0.11.3 removes the hardcoded panel, its
 row-4 3-column special case, and the two remaining
 `get_subsystem('spotify')` `_dispatch_action` branches — auth/logout now
-call the registering instance's own methods via `on_action`). Remaining:
-Webcam, the DROP-INS buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
+call the registering instance's own methods via `on_action`). Webcam
+migrated (2026-09-04; webcam-01 1.5.1, control-room-01 0.11.4 removes
+the hardcoded panel, the `_refresh_webcam_state()` poll loop and its
+cache, and the per-device select/enable button — PREV/NEXT/REDISC cover
+the same ground generically; also deletes `webcam_toggle_device`,
+found to be dead code with no button that ever fired it). Remaining:
+the DROP-INS buttons. **P3 (LAYOUT page) not started.** Supersedes the "Control Room Follow-Ups" section of
 [drop-in-planning.md](drop-in-planning.md) (archived 2026-07-18), whose
 "category containers that accept rows from drop-ins" and "dedicated
 pages" items are realized here.
