@@ -49,13 +49,15 @@ def test_enables_with_a_file_under_the_logs_directory_when_logging_is_on(tmp_pat
 
 
 def test_defaults_to_the_logs_directory_when_none_configured(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.chdir(tmp_path)
+    # resolve_path() anchors to APP_ROOT, not the cwd, so chdir alone left a
+    # real logs/faulthandler_*.log behind on every run (2026-09-05 audit).
+    monkeypatch.setattr(main_module, 'resolve_path', lambda rel: tmp_path / rel)
     _reset_faulthandler()
     try:
         main_module._install_faulthandler(_StubCfg(level='INFO'))
         assert faulthandler.is_enabled()
         path = Path(main_module._faulthandler_file.name)
-        assert path.parent.name == 'logs'
+        assert path.parent.name == 'logs' and path.parent.parent == tmp_path
     finally:
         _reset_faulthandler()
 

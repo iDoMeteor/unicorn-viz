@@ -78,6 +78,7 @@ This is the canonical map for project documentation.
 - Director placement scoring — per-call "did the scene land" metrics with chance baselines, built into packaging (2026-09-03): [docs/planning/director-placement-scoring-2026-09-03.md](planning/director-placement-scoring-2026-09-03.md)
 - E5 envelope-clock redesign patch — timing-correct onset envelope for the beat tracker, parked pending a stack re-tune (2026-09-03): [docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch](planning/patches/e5-envelope-clock-redesign-2026-09-03.patch)
 - Active audit tracker: [docs/audits](audits)
+  - **System audit — bugs and unexpected side effects (2026-09-05; tests overwriting owner state, store race, per-frame silent excepts, open items ranked):** [docs/audits/2026-09-05-system-audit.md](audits/2026-09-05-system-audit.md)
   - **Director placement + detector observation — full day report (2026-09-03; E6 panel/ablation, owner variant E8 rounds 1–3, OSS bench, dense-envelope prototype):** [docs/audits/2026-09-03-director-and-detector-day-report.md](audits/2026-09-03-director-and-detector-day-report.md)
   - **BPM / tempo detection audit — internal analysis + external state of the art (2026-08-13):** [docs/audits/2026-08-13-bpm-tempo-detection-audit.md](audits/2026-08-13-bpm-tempo-detection-audit.md)
   - **Auto VJ music-theory & algorithms audit — drop-score redesign review (2026-08-11):** [docs/audits/2026-08-11-auto-vj-music-theory-audit.md](audits/2026-08-11-auto-vj-music-theory-audit.md)
