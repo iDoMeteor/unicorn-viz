@@ -1057,6 +1057,13 @@ class Analyzer:
         dt = len(pcm) / self._sample_rate
         self._push_envelope(dt, flux)
 
+        # The tempo estimate the BeatTracker feeds back through
+        # set_expected_bpm().  This was never written: AudioData.bpm stayed
+        # at its constructor default, so every effect saw 120.0 for the life
+        # of the process while the tracker knew better (2026-09-05 audit).
+        # Sticky by design -- a confidence dip does not blank it.
+        data.bpm = float(self._expected_bpm)
+
         # P1+P2+P3: onset detection with MAD threshold and adaptive refractory
         data.beat = 0.0
         if energy > 1e-5 and now >= self._beat_cooldown_until_t:

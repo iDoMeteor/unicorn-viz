@@ -1,7 +1,7 @@
 # System audit — bugs and unexpected side effects (2026-09-05)
 
 Owner: DJ Unicorn Tears
-Status: complete — findings F1–F3 fixed and shipped; O1–O12 open, ranked
+Status: complete — F1–F3 fixed; O2, O4 (bpm), O5, O7, O9 fixed the same evening; O1, O3, O6, O8, O10–O12 open, ranked
 Last updated: 2026-09-05
 
 Scope: the core package and every drop-in, taken as the shipped tree on
@@ -79,7 +79,7 @@ rather than real replays.  Because packaging sweeps `logs/`, anything here
 can reach a training bucket.  **Owner decision: prune** (destructive, so not
 done here); going forward the redirect in F1 stops the test share of it.
 
-### O2. Exceptions swallowed silently inside per-frame paths — severity: medium
+### O2. Exceptions swallowed silently inside per-frame paths — severity: medium — **FIXED** (dj-mixer-01 0.190.3, auto-vj-01 rc.129: throttled DEBUG per site)
 
 350 `except: pass/continue` sites in total; 71 are in `vj_api.py`, where a
 drop-in's failure must not take the app down and that is by design.  The ones
@@ -103,7 +103,7 @@ hang), but undefined behaviour on the driver side; the exit-time aborts
 seen earlier this month came from the same neighbourhood.  Verify with the
 stall/exit logs from the next debug run; if clean, leave it.
 
-### O4. Hand-written `AudioData` field copies — severity: low (now)
+### O4. Hand-written `AudioData` field copies — severity: low (now) — **`bpm` FIXED** (core: the analyzer now publishes the tracker's estimate; 120.0 only before any estimate)
 
 Three sites existed this morning; one dropped `vocal_hnr`/`vocal_fmr`, one
 never wrote `bpm` (effects always saw `120.0`).  Another seat has since
@@ -111,7 +111,7 @@ consolidated the copy into `unicornviz/effects/base.py`; the analyzer still
 does not set `bpm`.  Recommendation: derive the copy from `__slots__` so a
 new field cannot be missed again, and either set `bpm` or remove the field.
 
-### O5. Spotify local poll: the "player unavailable" branch writes state outside the lock — severity: low
+### O5. Spotify local poll: the "player unavailable" branch writes state outside the lock — severity: low — **FIXED** (rc.7)
 
 `_poll_playerctl`'s early return sets `_available/_is_playing/_status`
 without `_state_lock` (the normal path commits under it since rc.6).
@@ -122,7 +122,7 @@ Harmless tearing at worst; one `with` block fixes it.
 `Popen` without `wait()`; a zombie until exit.  `start_new_session=True`
 plus letting `Popen.__del__` reap is enough.
 
-### O7. Lint-level real bugs — severity: low
+### O7. Lint-level real bugs — severity: low — **FIXED** (duplicate key rc.129; unused imports/locals across 12 drop-ins)
 
 - `auto_vj.py:5572` — `'genre_evidence_applied_count'` appears twice in the
   telemetry dict (same expression; harmless duplicate, confusing).
