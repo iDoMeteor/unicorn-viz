@@ -142,6 +142,7 @@ Complex drop-ins should also include:
   - [Configuration](../drop-ins/media-01/docs/configuration.md)
   - [Integration](../drop-ins/media-01/docs/integration.md)
   - [Troubleshooting](../drop-ins/media-01/docs/troubleshooting.md)
+  - [Upcoming Work](../drop-ins/media-01/docs/upcoming-work.md)
 - multi-head-01
   - [Operations](../drop-ins/multi-head-01/docs/operations.md)
   - [Configuration](../drop-ins/multi-head-01/docs/configuration.md)
