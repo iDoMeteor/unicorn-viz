@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.115**
+**Version 1.0.0-beta.117**
 
 ## Contact Me!
 
@@ -513,6 +513,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.117** — Two help-icon-rail entries downgraded from
+  fake-live to honest placeholders: `share` (`unicornviz/overlays.py`
+  `HELP_ICON_ENTRIES`) no longer opens `https://unicorntears.com` — it
+  had no real share flow behind it, just a bare link masquerading as
+  one; `dropins` no longer opens the ProjectM preset manager, which is
+  not a drop-ins browser and only confused operators clicking an icon
+  labeled "Drop-ins" expecting drop-in acquisition/config. Both now
+  flash "... coming soon" like the other five rail icons, honestly,
+  until each has a real destination.
 - **1.0.0-beta.115** — P3 of
   `docs/planning/control-room-drop-in-integration-plan-2026-09-05.md`.
   `OperatorPage` gains `on_action` (mirrors `OperatorPanel.on_action`):

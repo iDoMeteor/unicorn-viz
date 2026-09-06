@@ -487,9 +487,8 @@ class Overlays:
             'description': 'Open share link flow',
             'tooltip': 'Love Unicorn-Viz? Please share!!',
             'accent': (0.98, 0.96, 0.72),
-            'action_kind': 'url',
-            'target': 'https://unicorntears.com',
-            'message': 'Opening share page',
+            'action_kind': 'placeholder',
+            'message': 'Share link coming soon',
         },
         {
             'id': 'shop',
@@ -510,8 +509,8 @@ class Overlays:
             'description': 'ProjectM browser / future in-app purchases',
             'tooltip': 'Acquire & configure drop-in extensions',
             'accent': (0.66, 0.92, 1.00),
-            'action_kind': 'projectm_manager',
-            'message': 'Opening drop-ins browser',
+            'action_kind': 'placeholder',
+            'message': 'Drop-ins browser coming soon',
         },
         {
             'id': 'settings',
