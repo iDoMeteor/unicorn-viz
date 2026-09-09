@@ -60,7 +60,7 @@
   chat-01                       0.6.0               alpha ▼       module
   effects-holiday               0.5.1               alpha ▼       module
   streaming-01                  0.6.0               alpha ▼       module
-  webcam-01                     1.5.2               alpha ▼       module
+  webcam-01                     1.5.3               alpha ▼       module
   audio-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────

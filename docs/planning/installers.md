@@ -1298,10 +1298,25 @@ constraints, stated plainly:
     root, no `UnicornViz/` prefix): Windows "Extract All" yields one folder
     named after the zip instead of `<zip>\UnicornViz\`. CI smoke path updated.
     The Inno Setup payload tree is unchanged.
-  - **crashy** → fixed in beta.119 (entry above). **screen trippin** → not
-    reproduced yet; the log line `SDL display topology change detected` at
-    16:44:29 with no monitor change suggests the topology handler firing on a
-    remote/virtual display; needs the tester's full log.
+  - **crashy / screen trippin** → the tester's two beta.119 logs (read off the
+    mounted Windows volume) show **no crash**: both runs ended with a clean
+    state save. What they do show is the first run spending **90 s in
+    `init_moderngl`** before the splash, because webcam-01 probed and opened
+    three cameras at boot (`cameras=[0, 1, 2]`, Media Foundation on Windows),
+    while the second run, after the tester hid the overlay, took 0.7 s. Root
+    cause: webcam-01's *code* default for `pip_position` was `bottom_right`
+    although its README has called `hidden` the shipped default since rc.2,
+    and the bare `config.dist.toml` has no `[webcam]` section. **webcam-01
+    1.5.3** makes the code default `hidden`. The box has five displays (one
+    4K + four 1080p); multi-head enumerated them fine, no topology events.
+  - **Also seen in the logs, not fixed here (other seats):** midi-controllers'
+    APC LED feedback could not match its output-port hint
+    `'apc mini mk2 notes'` against the Windows port names (`APC mini mk2 1`,
+    `MIDIOUT2 (APC mini mk2) 2`) — LEDs stay dark on Windows; and core MIDI is
+    off because the seeded config has `[midi] device = ""` (the REV1 and APC
+    were both present). Both are for the hardware seat / config seat.
+  - Note for testers of a *new* bundle: an existing `config.toml` is never
+    overwritten, so the fullscreen default only applies to a fresh folder.
   - **Independence audit (owner request).** Static: no core module imports
     drop-in code directly; 51 loader call sites, every one inside `try` or a
     self-guarding `_load_*` helper (helpers that re-raise are treated as
