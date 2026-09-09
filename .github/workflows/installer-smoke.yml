@@ -153,10 +153,28 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The drop-ins are private submodules; the default GITHUB_TOKEN cannot
+      # read them. With a DROPINS_READ_TOKEN secret (fine-grained PAT, read
+      # access to the drop-in repos) the beta pack is fetched and shipped;
+      # without it the job builds core-only and still verifies the installer.
+      - name: Fetch beta-pack drop-ins (needs the DROPINS_READ_TOKEN secret)
+        env:
+          DROPINS_READ_TOKEN: ${{ secrets.DROPINS_READ_TOKEN }}
+        if: ${{ env.DROPINS_READ_TOKEN != '' }}
+        run: |
+          git config --global url."https://x-access-token:${DROPINS_READ_TOKEN}@github.com/".insteadOf "git@github.com:"
+          git submodule update --init $(sed -nE 's/^([a-z0-9-]+).*/drop-ins\/\1/p' packaging/dropins/windows-beta.txt)
+
       - name: Build the portable zip and leave the assembled tree for ISCC
         run: |
           python -m pip install --quiet --upgrade pip
-          bash tools/packaging/build_windows_portable.sh --output-dir dist --payload-out build/windows
+          PACK=""
+          if [ -n "$(ls -A drop-ins/banner-01 2>/dev/null)" ]; then
+            PACK="--dropins packaging/dropins/windows-beta.txt"; echo "Building WITH the Windows beta drop-in pack"
+          else
+            echo "::notice::Drop-in submodules not available (no DROPINS_READ_TOKEN); building core-only"
+          fi
+          bash tools/packaging/build_windows_portable.sh --output-dir dist --payload-out build/windows $PACK
           ls -lh dist/
 
       - name: Portable zip smoke (unzip, run the launcher headlessly)

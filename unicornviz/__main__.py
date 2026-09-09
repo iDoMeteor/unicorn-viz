@@ -495,6 +495,29 @@ def _self_test() -> int:
             print(f'  [FAIL] import {module} ({role}): {exc}')
         else:
             print(f'  [ok]   import {module} ({role})')
+    # Shipped drop-ins: report each one's declared extra dependencies. A missing
+    # dependency does not fail the self-test (the drop-in degrades to disabled),
+    # but it is exactly what a beta tester needs to see.
+    dropins_dir = root / 'drop-ins'
+    if dropins_dir.is_dir():
+        from importlib.metadata import PackageNotFoundError, distribution
+
+        for dropin in sorted(p for p in dropins_dir.iterdir() if p.is_dir()):
+            reqs = dropin / 'requirements.txt'
+            missing: list[str] = []
+            if reqs.is_file():
+                for raw in reqs.read_text(encoding='utf-8').splitlines():
+                    name = raw.split('#', 1)[0].strip()
+                    if not name:
+                        continue
+                    for sep in ('==', '>=', '<=', '~=', '!=', '<', '>', '[', ';'):
+                        name = name.split(sep, 1)[0]
+                    try:
+                        distribution(name.strip())
+                    except PackageNotFoundError:
+                        missing.append(name.strip())
+            status = 'ok' if not missing else f'deps missing: {", ".join(missing)}'
+            print(f'  [{"ok" if not missing else "!!"}]   drop-in {dropin.name} ({status})')
     print('self-test: OK' if failures == 0 else f'self-test: FAILED ({failures} problem(s))')
     return 0 if failures == 0 else 1
 

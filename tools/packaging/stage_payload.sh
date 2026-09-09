@@ -15,6 +15,16 @@
 #
 # Usage:
 #   tools/packaging/stage_payload.sh --dest build/payload [--source-dir .]
+#                                    [--dropins <pack-file>]
+#
+# --dropins <pack-file>: also stage the listed drop-ins (one per line; '#'
+# comments) under <dest>/drop-ins/<name>/ — their TRACKED files only (each is
+# its own git repo), minus tests — and write <dest>/requirements-dropins.txt,
+# the union of their requirements.txt files. A line may carry modifiers after
+# the name: `+pkg` adds a dependency the drop-in uses but does not declare,
+# `-pkg` drops one that must not ship (e.g. `dj-mixer-01 +hidapi -demucs`).
+# The app discovers drop-ins at APP_ROOT/drop-ins, so a payload that carries
+# them works on every channel with no core change.
 #
 # Prints the destination directory on stdout; diagnostics go to stderr.
 
@@ -25,6 +35,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SOURCE_DIR="${REPO_ROOT}"
 DEST=""
+DROPINS_FILE=""
 
 log() { echo "[stage-payload] $*" >&2; }
 die() { echo "[stage-payload] ERROR: $*" >&2; exit 1; }
@@ -47,6 +58,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dest) DEST="$2"; shift 2 ;;
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
+    --dropins) DROPINS_FILE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -152,11 +164,60 @@ if find "${DEST}/assets/training" -mindepth 1 ! -name .gitignore 2>/dev/null | r
 fi
 
 # Guard against regressions: assert nothing that must never ship leaked in.
-for forbidden in .git .venv .venv-runtime logs recordings screenshots drop-ins docs tests build; do
+# (drop-ins/ is allowed only when --dropins asked for it.)
+if [[ -z "$DROPINS_FILE" && -e "${DEST}/drop-ins" ]]; then
+  die "Payload leak detected: drop-ins present in staged output without --dropins"
+fi
+for forbidden in .git .venv .venv-runtime logs recordings screenshots docs tests build; do
   if [[ -e "${DEST}/${forbidden}" ]]; then
     die "Payload leak detected: ${forbidden} present in staged output"
   fi
 done
+
+# Optional drop-in pack.
+if [[ -n "$DROPINS_FILE" ]]; then
+  [[ -f "$DROPINS_FILE" ]] || die "--dropins: no such file: ${DROPINS_FILE}"
+  : > "${DEST}/requirements-dropins.txt"
+  staged=0
+  while IFS= read -r line; do
+    line="${line%%#*}"; line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    read -r name mods <<<"$line"
+    src="${SOURCE_DIR}/drop-ins/${name}"
+    [[ -d "$src" ]] || die "--dropins: drop-in not found: ${name}"
+    if ! git -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      die "--dropins: ${name} is not a git checkout (submodule not initialized?)"
+    fi
+    if [[ -z "$(git -C "$src" ls-files | head -n1)" ]]; then
+      die "--dropins: ${name} has no tracked files (submodule not initialized?)"
+    fi
+    mkdir -p "${DEST}/drop-ins/${name}"
+    ( cd "$src" && git ls-files -z ) \
+      | tar -C "$src" --exclude='__pycache__' --exclude='*.py[cod]' --exclude='tests' --exclude='tests/*' \
+            --null -T - -cf - \
+      | tar -C "${DEST}/drop-ins/${name}" -xf -
+    if [[ -f "${src}/requirements.txt" ]]; then
+      grep -vE '^\s*(#|$)' "${src}/requirements.txt" | sed 's/#.*//; s/[[:space:]]//g' >> "${DEST}/requirements-dropins.txt"
+    fi
+    for mod in $mods; do
+      case "$mod" in
+        +*) echo "${mod#+}" >> "${DEST}/requirements-dropins.txt" ;;
+        -*) pkg="${mod#-}"; grep -viE "^${pkg}([<>=!~ ]|$)" "${DEST}/requirements-dropins.txt" > "${DEST}/requirements-dropins.tmp" || true
+            mv "${DEST}/requirements-dropins.tmp" "${DEST}/requirements-dropins.txt"
+            # ...and from the shipped copy of the drop-in's own requirements, so
+            # `unicorn-viz --self-test` does not flag a deliberate exclusion.
+            shipped="${DEST}/drop-ins/${name}/requirements.txt"
+            if [[ -f "$shipped" ]]; then
+              grep -viE "^\s*${pkg}([<>=!~ ]|$)" "$shipped" > "${shipped}.tmp" || true; mv "${shipped}.tmp" "$shipped"
+            fi ;;
+        *) die "--dropins: bad modifier '${mod}' on ${name} (use +pkg / -pkg)" ;;
+      esac
+    done
+    staged=$((staged + 1))
+  done < "$DROPINS_FILE"
+  sort -u -o "${DEST}/requirements-dropins.txt" "${DEST}/requirements-dropins.txt"
+  log "Drop-in pack: ${staged} drop-in(s); extra requirements: $(tr '\n' ' ' < "${DEST}/requirements-dropins.txt")"
+fi
 
 log "Staged payload contents:"
 ( cd "$DEST" && find . -maxdepth 1 -mindepth 1 | sort | sed 's/^/  /' >&2 )

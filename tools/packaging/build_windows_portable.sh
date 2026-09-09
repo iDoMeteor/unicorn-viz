@@ -19,6 +19,10 @@
 #                                             [--source-dir dir] [--python-version 3.11]
 #                                             [--payload-out dir]   # also leave the assembled
 #                                                                   # UnicornViz/ tree here for Inno Setup
+#                                             [--dropins pack.txt]  # ship a drop-in pack (see
+#                                                                   # stage_payload.sh --dropins)
+#                                             [--vlc-installer vlc-*-win64.exe]  # bundle the official
+#                                                                   # VLC installer for media-01
 
 set -Eeuo pipefail
 
@@ -40,6 +44,8 @@ OUTPUT_DIR="${REPO_ROOT}/dist"
 SOURCE_DIR="${REPO_ROOT}"
 PYVER="3.11"
 PAYLOAD_OUT=""
+DROPINS_FILE=""
+VLC_INSTALLER=""
 
 log() { echo "[win-portable] $*" >&2; }
 die() { echo "[win-portable] ERROR: $*" >&2; exit 1; }
@@ -52,6 +58,8 @@ while [[ $# -gt 0 ]]; do
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
     --python-version) PYVER="$2"; shift 2 ;;
     --payload-out) PAYLOAD_OUT="$2"; shift 2 ;;
+    --dropins) DROPINS_FILE="$2"; shift 2 ;;
+    --vlc-installer) VLC_INSTALLER="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -68,13 +76,19 @@ HOST_PY="${REPO_ROOT}/.venv/bin/python"
 [[ -x "$HOST_PY" ]] || HOST_PY="$(command -v python3 || true)"
 [[ -n "$HOST_PY" ]] || die "python3 is required on the build host"
 
-mkdir -p "$OUTPUT_DIR"
+# Absolute paths: the zip is written from inside the work dir, and CI passes
+# relative --output-dir / --payload-out (that is how the first Windows CI run
+# died with "No such file: dist/...zip").
+mkdir -p "$OUTPUT_DIR"; OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+if [[ -n "$PAYLOAD_OUT" ]]; then mkdir -p "$PAYLOAD_OUT"; PAYLOAD_OUT="$(cd "$PAYLOAD_OUT" && pwd)"; fi
 WORK="$(mktemp -d -p "$(build_tmp_base)")"
 trap 'rm -rf "$WORK"' EXIT
 APP="${WORK}/UnicornViz"
 
-log "Staging curated payload"
-"${SCRIPT_DIR}/stage_payload.sh" --source-dir "$SOURCE_DIR" --dest "$APP" >/dev/null
+log "Staging curated payload${DROPINS_FILE:+ + drop-in pack ${DROPINS_FILE}}"
+stage_args=(--source-dir "$SOURCE_DIR" --dest "$APP")
+[[ -n "$DROPINS_FILE" ]] && stage_args+=(--dropins "$DROPINS_FILE")
+"${SCRIPT_DIR}/stage_payload.sh" "${stage_args[@]}" >/dev/null
 
 log "Provisioning the Windows runtime (python-build-standalone, x86_64)"
 "${SCRIPT_DIR}/fetch_runtime.sh" --dest "${APP}/runtime" --os windows --arch x86_64 >/dev/null
@@ -88,33 +102,79 @@ log "Cross-installing pinned dependencies for win_amd64 / cp${PYVER//./} (wheels
   --target "$SITE" \
   --platform win_amd64 --python-version "$PYVER" --implementation cp --abi "$ABI" \
   --only-binary=:all: \
-  -r "${APP}/requirements.txt" >&2
+  -r "${APP}/requirements.txt" \
+  $( [[ -f "${APP}/requirements-dropins.txt" ]] && echo -r "${APP}/requirements-dropins.txt" ) >&2
 find "$SITE" -type d -name __pycache__ -prune -exec rm -rf {} +
 
-log "Writing launcher"
+log "Writing launchers"
+mkdir -p "${APP}/tools" "${APP}/vendor"
+# Console launcher. Skips the VLC pre-flight for --self-test (headless CI).
 printf '%s\r\n' \
   '@echo off' \
   'setlocal' \
   'rem Unicorn Viz portable launcher: assets resolve under this folder.' \
   'set "UNICORNVIZ_APP_ROOT=%~dp0"' \
   'set "PYTHONPATH=%~dp0;%PYTHONPATH%"' \
+  'echo %* | findstr /C:"--self-test" >nul || powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\vlc-check.ps1" -Vendor "%~dp0vendor"' \
   '"%~dp0runtime\python\python.exe" -m unicornviz %*' \
   > "${APP}/unicorn-viz.cmd"
+# GUI launcher for shortcuts: no console window; same VLC pre-flight.
+printf '%s\r\n' \
+  '# Unicorn Viz GUI launcher (used by the Start-menu / desktop shortcuts).' \
+  '$root = $PSScriptRoot' \
+  '$env:UNICORNVIZ_APP_ROOT = $root' \
+  '$env:PYTHONPATH = "$root;$env:PYTHONPATH"' \
+  '& "$root\tools\vlc-check.ps1" -Vendor "$root\vendor"' \
+  'Start-Process -FilePath "$root\runtime\python\pythonw.exe" -ArgumentList @("-m", "unicornviz") -WorkingDirectory $root' \
+  > "${APP}/unicorn-viz-gui.ps1"
+# VLC pre-flight: media-01 binds libvlc through python-vlc. If VLC is absent,
+# offer the bundled official installer (vendor\vlc-*-win64.exe) when present,
+# else the download page. Never blocks the app: media-01 just stays off.
+printf '%s\r\n' \
+  'param([string]$Vendor = "")' \
+  '$candidates = @()' \
+  'try { $ip = (Get-ItemProperty "HKLM:\SOFTWARE\VideoLAN\VLC" -ErrorAction Stop).InstallDir; if ($ip) { $candidates += (Join-Path $ip "libvlc.dll") } } catch {}' \
+  'if ($env:ProgramFiles) { $candidates += (Join-Path $env:ProgramFiles "VideoLAN\VLC\libvlc.dll") }' \
+  'if (${env:ProgramFiles(x86)}) { $candidates += (Join-Path ${env:ProgramFiles(x86)} "VideoLAN\VLC\libvlc.dll") }' \
+  'foreach ($c in $candidates) { if (Test-Path $c) { exit 0 } }' \
+  'Add-Type -AssemblyName System.Windows.Forms' \
+  '$title = "Unicorn Viz - VLC needed for the media player"' \
+  '$installer = $null' \
+  'if ($Vendor -and (Test-Path $Vendor)) { $installer = Get-ChildItem -Path $Vendor -Filter "vlc-*-win64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 }' \
+  'if ($installer) {' \
+  '  $msg = "The built-in media player needs VLC, which is not installed.`n`nInstall VLC now? Unicorn Viz starts afterwards either way; without VLC the media player stays off."' \
+  '  $r = [System.Windows.Forms.MessageBox]::Show($msg, $title, "YesNo", "Question")' \
+  '  if ($r -eq "Yes") { Start-Process -FilePath $installer.FullName -Wait }' \
+  '} else {' \
+  '  $msg = "The built-in media player needs VLC, which is not installed.`n`nOpen the VLC download page now? (https://www.videolan.org/vlc/download-windows.html)`nUnicorn Viz starts afterwards either way; without VLC the media player stays off."' \
+  '  $r = [System.Windows.Forms.MessageBox]::Show($msg, $title, "YesNo", "Question")' \
+  '  if ($r -eq "Yes") { Start-Process "https://www.videolan.org/vlc/download-windows.html" }' \
+  '}' \
+  'exit 0' \
+  > "${APP}/tools/vlc-check.ps1"
+if [[ -n "$VLC_INSTALLER" ]]; then
+  [[ -f "$VLC_INSTALLER" ]] || die "--vlc-installer: no such file: ${VLC_INSTALLER}"
+  cp "$VLC_INSTALLER" "${APP}/vendor/"; log "Bundled VLC installer: $(basename "$VLC_INSTALLER")"
+fi
+DROPIN_NOTE=""
+if [[ -d "${APP}/drop-ins" ]]; then
+  DROPIN_NOTE="Included drop-ins: $(ls "${APP}/drop-ins" | tr '\n' ' ')"
+fi
 printf '%s\r\n' \
   "Unicorn Viz ${VERSION} - portable build for Windows 10/11 (x64)" \
   '' \
   'Run:        double-click unicorn-viz.cmd (or run it from a terminal with options)' \
-  'Check:      unicorn-viz.cmd --self-test' \
+  'Check:      unicorn-viz.cmd --self-test   (lists what is installed and which drop-ins are live)' \
   'Uninstall:  delete this folder' \
+  '' \
+  'Media player (media-01) needs VLC. If it is missing, the launcher offers to install it' \
+  '(bundled installer under vendor\, or the download page). Everything else runs without it.' \
+  '' \
+  "$DROPIN_NOTE" \
   '' \
   'This build is unsigned: on first run Windows SmartScreen may show "Windows' \
   'protected your PC" - choose "More info" then "Run anyway".' \
   > "${APP}/README-PORTABLE.txt"
-
-if [[ -n "$PAYLOAD_OUT" ]]; then
-  log "Leaving the assembled tree at ${PAYLOAD_OUT}/UnicornViz (for packaging/windows/UnicornViz.iss)"
-  mkdir -p "$PAYLOAD_OUT"; rm -rf "${PAYLOAD_OUT}/UnicornViz"; cp -a "$APP" "${PAYLOAD_OUT}/UnicornViz"
-fi
 
 ZIP="${OUTPUT_DIR}/UnicornViz-Portable-${VERSION}-win-x64.zip"
 log "Zipping → ${ZIP}"
@@ -122,14 +182,17 @@ rm -f "$ZIP"
 ( cd "$WORK" && "$HOST_PY" -m zipfile -c "$ZIP" UnicornViz )
 
 # Sanity: junk-free, runtime present, native wheels really are Windows ones.
-"$HOST_PY" - "$ZIP" <<'PY'
+"$HOST_PY" - "$ZIP" "$DROPINS_FILE" <<'PY'
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 top = {n.split('/')[1] for n in names if n.count('/') >= 1}
-bad = sorted(top & {'.git', '.venv', '.venv-runtime', 'drop-ins', 'logs', 'docs', 'tests', 'build', 'recordings', 'screenshots'})
+forbidden = {'.git', '.venv', '.venv-runtime', 'logs', 'docs', 'tests', 'build', 'recordings', 'screenshots'}
+if not sys.argv[2]:
+    forbidden.add('drop-ins')  # only a --dropins pack may ship drop-ins
+bad = sorted(top & forbidden)
 assert not bad, f'junk in zip: {bad[:5]}'
 assert 'UnicornViz/runtime/python/python.exe' in names, 'python.exe missing'
-assert 'UnicornViz/unicorn-viz.cmd' in names, 'launcher missing'
+assert 'UnicornViz/unicorn-viz.cmd' in names and 'UnicornViz/unicorn-viz-gui.ps1' in names and 'UnicornViz/tools/vlc-check.ps1' in names, 'launcher missing'
 pyd = [n for n in names if n.endswith('.pyd')]
 assert pyd, 'no .pyd extension modules: cross-install did not produce Windows wheels'
 assert not any(n.endswith('.so') for n in names if 'site-packages' in n), 'Linux .so files leaked into site-packages'

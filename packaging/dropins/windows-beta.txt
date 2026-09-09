@@ -1,0 +1,27 @@
+# Windows beta pack — drop-ins shipped to beta testers (owner's list, 2026-09-09).
+# One drop-in per line; optional modifiers: +pkg adds an undeclared dependency,
+# -pkg removes one from the shipped set. Consumed by stage_payload.sh --dropins.
+banner-01
+beat-flash-01
+color-grade-01
+control-room-01
+# dj-mixer-01 imports hidapi + send2trash without declaring them; demucs (stem
+# separation) drags in torch (~2 GB) and stays out of the beta — stems disabled.
+dj-mixer-01 +hidapi +send2trash -demucs
+effects-cosmic
+effects-feature
+effects-games
+effects-immersive
+effects-psychedelic
+effects-retro
+effects-tech
+effects-vector
+images-01
+# media-01 needs VLC on the machine (python-vlc binds libvlc); the launcher
+# checks and offers the installer/download. It also imports av undeclared.
+media-01 +av
+midi-controllers-01
+postfx-01
+spotify-01
+video-clips-01
+webcam-01

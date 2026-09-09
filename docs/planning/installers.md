@@ -2,7 +2,7 @@
 
 **Owner:** Solo maintainer (one-person studio)
 **Status:** Active — driving toward five gold-star installers
-**Last updated:** 2026-09-05
+**Last updated:** 2026-09-09
 **Canonical release repo:** https://github.com/djunicorntears/unicorn-viz
 **Dev repo (not user-facing):** https://github.com/iDoMeteor/unicorn-viz
 
@@ -1275,6 +1275,42 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 — Windows beta pack (drop-ins ship for the first time); Windows CI unblocked.**
+  - **Why the nightly Windows job failed every night since 09-05:** the packaging
+    scripts hard-coded `/var/tmp` as scratch (chosen because `/tmp` is tmpfs on
+    the build box); Git Bash on the `windows-2022` runner has no `/var/tmp`.
+    Scratch is now chosen at runtime (`$TMPDIR` → `/var/tmp` if present →
+    platform default). Linux jobs were green throughout.
+  - **Drop-ins had never shipped.** Every channel was core-only (May decision),
+    but core carries 10 effects and the `effects-*` drop-ins ~60. Interim
+    dependency contract (precursor to §6's `dropin.toml`): a drop-in declares
+    extra Python deps in its own `requirements.txt`; a *pack file*
+    (`packaging/dropins/windows-beta.txt`) lists what ships, with `+pkg` /
+    `-pkg` modifiers for undeclared or excluded deps. `stage_payload.sh
+    --dropins <pack>` stages each listed drop-in's tracked files (minus tests)
+    under `drop-ins/` and writes the union `requirements-dropins.txt`; the app
+    discovers `APP_ROOT/drop-ins` unchanged. `unicorn-viz --self-test` now
+    reports each shipped drop-in's dependency status.
+  - **Windows beta pack (owner's list):** banner, beat-flash, color-grade,
+    control-room, dj-mixer (`+hidapi +send2trash -demucs` — stems off; demucs
+    pulls torch), effects-{cosmic,feature,games,immersive,psychedelic,retro,
+    tech,vector}, images, media (`+av`), midi-controllers, postfx, spotify,
+    video-clips, webcam. Every extra dependency has a cp311/win_amd64 wheel
+    (mediapipe 1.0.0, av, hidapi, python-vlc, mutagen, send2trash).
+  - **VLC for media-01:** `tools/vlc-check.ps1` runs from both launchers
+    (`unicorn-viz.cmd`, and the hidden-window `unicorn-viz-gui.ps1` the
+    installer's shortcuts use): finds libvlc via the VideoLAN registry key or
+    Program Files; if absent, a Yes/No dialog runs the official installer from
+    `vendor\` when the build was given `--vlc-installer <vlc-*-win64.exe>`,
+    otherwise opens the VideoLAN download page. Never blocks the app.
+  - **CI:** the Windows job builds with the pack when a `DROPINS_READ_TOKEN`
+    secret (fine-grained PAT with read access to the private drop-in repos)
+    exists — **owner action O7** — and core-only otherwise.
+  - **Build:** local `UnicornViz-Portable-1.0.0-beta.118-win-x64.zip` (266 MB): 20 drop-ins,
+    all extra wheels present (mediapipe, av, hidapi, python-vlc, mutagen,
+    send2trash), demucs/torch absent, no test dirs, launchers + VLC pre-flight in
+    place. **Unverified on Windows until the nightly job runs green** (its first
+    real run reached the zip step, which exposed a relative-path bug, fixed).
 - **2026-09-05 — Block B (signing) landed; RC1 ships as a signed hand-off bundle.**
   - **Owner decisions:** S3/CloudFront deferred (bill); RC1 by direct file
     transfer; release key generated (O3 done); `config.dist.toml` for O4; store
@@ -1913,6 +1949,10 @@ an engineering one.
   declared a config file (rpm `%config(noreplace)`, deb conffile); the one-liner
   seeds it on first install only.
 - **O6 — macOS:** parked by the owner.
+- **O7 — drop-in read token for CI (new):** the drop-ins are private repos,
+  so the nightly Windows job can only ship the beta pack when a fine-grained
+  PAT with read access to the 20 pack repos is stored as the
+  `DROPINS_READ_TOKEN` secret; until then it builds core-only.
 
 **O5 — claiming the store names (owner, ~10 minutes total):**
 
