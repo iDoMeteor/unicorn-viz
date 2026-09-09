@@ -183,7 +183,7 @@ jobs:
         run: |
           mkdir -p /tmp/uv-portable && cd /tmp/uv-portable
           python -m zipfile -e "$(ls "$GITHUB_WORKSPACE"/dist/UnicornViz-Portable-*-win-x64.zip)" .
-          cmd //c "UnicornViz\unicorn-viz.cmd --self-test" | tee self-test.txt
+          cmd //c "unicorn-viz.cmd --self-test" | tee self-test.txt
           grep -q "self-test: OK" self-test.txt
 
       # MSYS_NO_PATHCONV: Git Bash otherwise rewrites /D... and /VERYSILENT-style

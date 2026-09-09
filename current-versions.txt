@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.119      BETA          MISMATCH (readme=1.0.0-beta.117)
+  core (unicornviz)             1.0.0-beta.120      BETA          MISMATCH (readme=1.0.0-beta.117)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.191.0             alpha ▲       module
@@ -26,6 +26,7 @@
   candy-frame-01                1.1.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
+  color-grade-01                0.10.0              alpha ▲       module
   effects-retro                 0.9.1               alpha ▲       module
   effects-tech                  0.10.0              alpha ▲       module
   effects-vector                0.10.0              alpha ▲       module
@@ -38,7 +39,6 @@
   unicorn-tears-01              1.0.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  color-grade-01                0.9.0               alpha ▲       module
   cta-01                        0.9.0               alpha ▲       module
   effects-feature               0.9.0               alpha ▲       module
   effects-particles             0.9.0               alpha ▲       module

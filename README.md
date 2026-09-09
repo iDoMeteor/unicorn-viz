@@ -513,6 +513,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.120** — The SDL window carries the app icon (title bar,
+  taskbar, alt-tab) instead of the bare python icon. Shipped defaults from
+  the first Windows beta run: `config.dist.toml` starts fullscreen, and
+  color-grade-01 0.10.0 no longer grades at boot. New static test
+  `tests/test_core_dropin_independence.py` pins the core/drop-in boundary.
 - **1.0.0-beta.119** — Fix a crash without the multi-head drop-in: the
   fallback controller's `rebuild_multihead_outputs()` demanded two arguments
   the app never passes, so any display-topology event (monitor hot-plug,

@@ -132,7 +132,10 @@ fi
 
 log "Writing launchers"
 mkdir -p "${APP}/tools" "${APP}/vendor"
-# Console launcher. Skips the VLC pre-flight for --self-test (headless CI).
+# Launcher. Double-click (no arguments): hand off to pythonw.exe with `start`
+# and exit, so no console window stays behind the visualizer. With arguments
+# (--self-test, --help, --windowed ...) run python.exe in this console so the
+# output is visible. The VLC pre-flight is skipped for --self-test (headless CI).
 printf '%s\r\n' \
   '@echo off' \
   'setlocal' \
@@ -141,6 +144,10 @@ printf '%s\r\n' \
   'set "PYTHONPATH=%~dp0;%PYTHONPATH%"' \
   'if exist "%~dp0vendor\demucs\" set "UNICORNVIZ_DEMUCS_REPO=%~dp0vendor\demucs"' \
   'echo %* | findstr /C:"--self-test" >nul || powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\vlc-check.ps1" -Vendor "%~dp0vendor"' \
+  'if "%~1"=="" (' \
+  '  start "" /D "%~dp0\\" "%~dp0runtime\python\pythonw.exe" -m unicornviz' \
+  '  exit /b 0' \
+  ')' \
   '"%~dp0runtime\python\python.exe" -m unicornviz %*' \
   > "${APP}/unicorn-viz.cmd"
 # GUI launcher for shortcuts: no console window; same VLC pre-flight.
@@ -222,20 +229,31 @@ fi
 ZIP="${OUTPUT_DIR}/UnicornViz-Portable${LABEL:+-${LABEL}}-${VERSION}-win-x64.zip"
 log "Zipping → ${ZIP}"
 rm -f "$ZIP"
-( cd "$WORK" && "$HOST_PY" -m zipfile -c "$ZIP" UnicornViz )
+# Entries sit at the zip root (no UnicornViz/ prefix): Windows "Extract All"
+# then produces a single folder named after the zip, not <zip>\\UnicornViz\\.
+"$HOST_PY" - "$ZIP" "$APP" <<'PYZ'
+import os, sys, zipfile
+zip_path, app = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(app):
+        dirs.sort()
+        for name in sorted(files):
+            full = os.path.join(root, name)
+            zf.write(full, os.path.relpath(full, app))
+PYZ
 
 # Sanity: junk-free, runtime present, native wheels really are Windows ones.
 "$HOST_PY" - "$ZIP" "$DROPINS_FILE" <<'PY'
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
-top = {n.split('/')[1] for n in names if n.count('/') >= 1}
+top = {n.split('/')[0] for n in names}
 forbidden = {'.git', '.venv', '.venv-runtime', 'logs', 'docs', 'tests', 'build', 'recordings', 'screenshots'}
 if not sys.argv[2]:
     forbidden.add('drop-ins')  # only a --dropins pack may ship drop-ins
 bad = sorted(top & forbidden)
 assert not bad, f'junk in zip: {bad[:5]}'
-assert 'UnicornViz/runtime/python/python.exe' in names, 'python.exe missing'
-assert 'UnicornViz/unicorn-viz.cmd' in names and 'UnicornViz/tools/unicorn-viz-gui.ps1' in names and 'UnicornViz/tools/vlc-check.ps1' in names, 'launcher missing'
+assert 'runtime/python/python.exe' in names, 'python.exe missing'
+assert 'unicorn-viz.cmd' in names and 'tools/unicorn-viz-gui.ps1' in names and 'tools/vlc-check.ps1' in names, 'launcher missing'
 pyd = [n for n in names if n.endswith('.pyd')]
 assert pyd, 'no .pyd extension modules: cross-install did not produce Windows wheels'
 assert not any(n.endswith('.so') for n in names if 'site-packages' in n), 'Linux .so files leaked into site-packages'

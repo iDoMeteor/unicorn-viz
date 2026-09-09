@@ -6,7 +6,7 @@
 [window]
 width = 1920
 height = 1080
-fullscreen = false
+fullscreen = true
 show_cursor = false   # true keeps pointer visible by default; Ctrl still reveals when false
 title = "Unicorn Viz"
 display_mode = "single"      # single | span_included | span_all | mirror_included | mirror_all
@@ -642,7 +642,7 @@ beat_min_interval_s = 0.18
 # Acid Wash. Drop Adobe .cube files in assets/luts/ to add more.
 [color_grade]
 enabled = true
-start_enabled = true        # passive grade applied at boot; Ctrl+Shift+Alt+L off
+start_enabled = false       # grade at boot is opt-in (default false); Ctrl+Shift+Alt+L toggles
 intensity = 0.85            # 0–1 blend against the ungraded frame
 default_grade = "random"    # built-in look name, LUT file stem, or "random"
 # lut_dir = "assets/luts"   # optional dir of Adobe .cube 3D LUTs (this is the default)

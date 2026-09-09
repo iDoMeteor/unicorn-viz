@@ -5,7 +5,7 @@
 # Edit freely — package upgrades never overwrite a modified copy.
 
 [window]
-fullscreen = false        # press F to toggle; set true for a dedicated VJ box
+fullscreen = true         # borderless fullscreen on the chosen display; press F to toggle
 show_cursor = false       # Ctrl reveals the pointer when hidden
 
 [midi]

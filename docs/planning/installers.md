@@ -1275,6 +1275,44 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (late II) — tester notes worked through; core/drop-in
+  independence audit.** Owner's notes from the crashy first run: *color lut on,
+  full screen not on, terminal background, no icon, files embedded in extra
+  folder, crashy/screen trippin.*
+  - **color lut on** → color-grade-01 **0.10.0**: `start_enabled` defaults to
+    false (was true; the owner's own config had it off). Example config updated.
+  - **full screen not on** → core default was already `true`; the shipped
+    `config.dist.toml` (seeded as `config.toml` on first run) said `false`.
+    Now `true`; the example config matches.
+  - **terminal background** → `unicorn-viz.cmd` with no arguments now hands
+    off to `pythonw.exe` via `start` and exits, so no console sits behind the
+    visualizer; with arguments (`--self-test`, `--help`, `--windowed`) it keeps
+    the console so output is visible. `tools\unicorn-viz-gui.ps1` stays for the
+    installer shortcuts.
+  - **no icon** → core 1.0.0-beta.120 sets the SDL window icon from
+    `assets/icons/unicorn-viz.png` (letterboxed to a square; taskbar + alt-tab
+    on Windows, title bar elsewhere). The `.cmd` file itself still shows the
+    generic script icon in Explorer; only a shortcut (which the installer
+    creates) or a real `.exe` can change that.
+  - **files embedded in extra folder** → the zip is flat now (entries at the
+    root, no `UnicornViz/` prefix): Windows "Extract All" yields one folder
+    named after the zip instead of `<zip>\UnicornViz\`. CI smoke path updated.
+    The Inno Setup payload tree is unchanged.
+  - **crashy** → fixed in beta.119 (entry above). **screen trippin** → not
+    reproduced yet; the log line `SDL display topology change detected` at
+    16:44:29 with no monitor change suggests the topology handler firing on a
+    remote/virtual display; needs the tester's full log.
+  - **Independence audit (owner request).** Static: no core module imports
+    drop-in code directly; 51 loader call sites, every one inside `try` or a
+    self-guarding `_load_*` helper (helpers that re-raise are treated as
+    passthroughs and their callers checked). Dynamic: staged a core-only
+    payload (no `drop-ins/` at all), imported all 50 `unicornviz` modules and
+    ran `--self-test`: clean. The one hard path reference in core
+    (`app.py`: `APP_ROOT/drop-ins/dj-mixer-01/...`) is only an `exists()` probe
+    for the boot profile. Pinned by `tests/test_core_dropin_independence.py`.
+    Not covered: a live run with all drop-ins absent (needs a display); the
+    core-only nightly Windows job is the natural place, once it drives the
+    app rather than just `--self-test`.
 - **2026-09-09 (late) — first Windows tester run: one crash, fixed in core
   (1.0.0-beta.119); multi-head joins the DJ pack; GUI launcher tucked away.**
   - **Crash:** the for-DJs bundle ran on a Windows box for ~80 s, then an SDL

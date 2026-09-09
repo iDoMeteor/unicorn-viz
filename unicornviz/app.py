@@ -1815,6 +1815,37 @@ class App:
         ).upper()
         return 'MATE' in session_bits
 
+    def _set_window_icon(self) -> None:
+        """Give the SDL window (title bar, taskbar, alt-tab) the app icon.
+
+        Without this a Windows build shows the bare python icon. The bundled
+        PNG is letterboxed onto a square canvas so the taskbar tile is not
+        squashed; any failure is logged at debug level and ignored.
+        """
+        icon_path = APP_ROOT / 'assets' / 'icons' / 'unicorn-viz.png'
+        try:
+            from PIL import Image  # noqa: PLC0415 - Pillow is a core dependency; kept lazy
+
+            with Image.open(icon_path) as src:
+                art = src.convert('RGBA')
+                art.thumbnail((256, 256))
+                side = max(art.size)
+                canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+                canvas.paste(art, ((side - art.width) // 2, (side - art.height) // 2))
+                pixels = canvas.tobytes()
+            buf = ctypes.create_string_buffer(pixels, len(pixels))
+            surface = sdl2.SDL_CreateRGBSurfaceWithFormatFrom(
+                buf, side, side, 32, side * 4, sdl2.SDL_PIXELFORMAT_RGBA32,
+            )
+            if not surface:
+                raise RuntimeError(sdl2.SDL_GetError().decode())
+            try:
+                sdl2.SDL_SetWindowIcon(self._window, surface)
+            finally:
+                sdl2.SDL_FreeSurface(surface)
+        except Exception as exc:
+            log.debug('Window icon not set (%s): %s', icon_path, exc)
+
     def _fullscreen_window_geometry(self) -> tuple[int, int, int, int]:
         """Compute the target geometry for fullscreen window creation."""
         if self._is_span_mode(self._display_mode):
@@ -2034,6 +2065,7 @@ class App:
             raise RuntimeError(
                 f"SDL_GL_CreateContext failed: {sdl2.SDL_GetError().decode()}"
             )
+        self._set_window_icon()
         self._apply_frame_limit()
 
         self._set_cursor_visible(self._show_cursor_default)
