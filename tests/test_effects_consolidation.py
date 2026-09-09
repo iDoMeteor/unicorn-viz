@@ -37,7 +37,11 @@ PACK_NAMES = {
     'effects-immersive': {'Tunnel', 'Wormhole', 'Cathedral of Bass'},
     'effects-holiday': {'America 250'},
     'effects-flying': {'Warp Drive', 'Cloud Surfer', 'Canyon Run', 'Wingsuit Dive',
-                  'Nebula Drift', 'Asteroid Run', 'Portal Flight'},
+                  'Nebula Drift', 'Asteroid Run', 'Portal Flight',
+                  # The 1.x originals, kept alongside their 2.0 successors
+                  # because each was worth having in its own right.
+                  'Vector Hallway', 'Space Dance', 'Bass Hammer',
+                  'Cloud Bounce', 'Space Tunnel'},
     'effects-rollercoast': {'First Drop', 'Corkscrew', 'Night Coaster',
                             'Mine Train', 'Coaster Cam', 'Log Flume'},
     'effects-ukiyo-e': {'Floating World', 'Onden Watermill'},
@@ -52,7 +56,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 72
+EXPECTED_TOTAL = 77
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
