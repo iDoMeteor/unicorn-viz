@@ -15,10 +15,13 @@
 # independent: run this locally and publish anywhere.
 #
 # Usage:
-#   tools/packaging/release.sh --dest <dir> --base-url <url> [options]
+#   tools/packaging/release.sh [--dest <dir>] [--base-url <url>] [options]
 #
 # Options:
-#   --dest <dir>          Staging directory laid out as served (required)
+#   --dest <dir>          Staging directory laid out as served (<dest>/<version>/
+#                         + manifest.json). Default: $UV_DIST_DIR/linux, else
+#                         ~/projects/_software-dist/linux when that folder
+#                         exists (the owner's hand-off folder), else dist/linux
 #   --base-url <url>      Public URL <dest> will be served at; written into the
 #                         manifest's artifact URLs. Omit for manifest-relative
 #                         URLs (hand-off bundles, local staging)
@@ -97,7 +100,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$DEST" ]] || { usage; die "--dest is required"; }
+# Default landing folder: a "linux" subtree of the hand-off folder, since this
+# output is a served tree (version subfolder + manifest), not loose files.
+if [[ -z "$DEST" ]]; then
+  if [[ -n "${UV_DIST_DIR:-}" ]]; then DEST="${UV_DIST_DIR}/linux"
+  elif [[ -d "${HOME}/projects/_software-dist" ]]; then DEST="${HOME}/projects/_software-dist/linux"
+  else DEST="${REPO_ROOT}/dist/linux"
+  fi
+  log "No --dest given; staging into ${DEST}"
+fi
 SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd)"
 BASE_URL="${BASE_URL%/}"
 
