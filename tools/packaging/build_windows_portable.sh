@@ -24,6 +24,11 @@
 #                                             [--vlc-installer vlc-*-win64.exe]  # bundle the official
 #                                                                   # VLC installer for media-01
 #                                             [--label for-DJs]     # zip name: UnicornViz-Portable-<label>-...
+#                                             [--demucs-models htdemucs,htdemucs_ft|none]
+#                                                                   # stem-separation weights to ship under
+#                                                                   # vendor\demucs (default: htdemucs whenever
+#                                                                   # the pack installs demucs; cache in
+#                                                                   # $UV_DEMUCS_CACHE or <tmp>/uv-demucs-cache)
 
 set -Eeuo pipefail
 
@@ -48,6 +53,7 @@ PAYLOAD_OUT=""
 DROPINS_FILE=""
 VLC_INSTALLER=""
 LABEL=""
+DEMUCS_MODELS="auto"
 
 log() { echo "[win-portable] $*" >&2; }
 die() { echo "[win-portable] ERROR: $*" >&2; exit 1; }
@@ -63,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     --dropins) DROPINS_FILE="$2"; shift 2 ;;
     --vlc-installer) VLC_INSTALLER="$2"; shift 2 ;;
     --label) LABEL="$2"; shift 2 ;;
+    --demucs-models) DEMUCS_MODELS="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -110,6 +117,19 @@ log "Cross-installing pinned dependencies for win_amd64 / cp${PYVER//./} (wheels
   -r "${APP}/requirements.txt" "${EXTRA_REQS[@]}" >&2
 find "$SITE" -type d -name __pycache__ -prune -exec rm -rf {} +
 
+# Stem-separation weights. Without --repo, demucs asks the HuggingFace hub
+# first and only then its torch-hub cache, so a seeded cache would not keep a
+# bundle offline. The launchers export UNICORNVIZ_DEMUCS_REPO=vendor\demucs and
+# dj-mixer passes it as --repo, which reads only that directory. The download
+# list and checksums come from the installed demucs package itself.
+if [[ "$DEMUCS_MODELS" != "none" && -f "${SITE}/demucs/remote/files.txt" ]]; then
+  [[ "$DEMUCS_MODELS" == "auto" ]] && DEMUCS_MODELS="htdemucs"
+  DEMUCS_CACHE="${UV_DEMUCS_CACHE:-$(build_tmp_base)/uv-demucs-cache}"
+  log "Bundling demucs weights: ${DEMUCS_MODELS} (cache: ${DEMUCS_CACHE})"
+  "$HOST_PY" "${SCRIPT_DIR}/demucs_weights.py" "${SITE}/demucs/remote" "$DEMUCS_CACHE" \
+    "${APP}/vendor/demucs" "$DEMUCS_MODELS"
+fi
+
 log "Writing launchers"
 mkdir -p "${APP}/tools" "${APP}/vendor"
 # Console launcher. Skips the VLC pre-flight for --self-test (headless CI).
@@ -119,6 +139,7 @@ printf '%s\r\n' \
   'rem Unicorn Viz portable launcher: assets resolve under this folder.' \
   'set "UNICORNVIZ_APP_ROOT=%~dp0"' \
   'set "PYTHONPATH=%~dp0;%PYTHONPATH%"' \
+  'if exist "%~dp0vendor\demucs\" set "UNICORNVIZ_DEMUCS_REPO=%~dp0vendor\demucs"' \
   'echo %* | findstr /C:"--self-test" >nul || powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\vlc-check.ps1" -Vendor "%~dp0vendor"' \
   '"%~dp0runtime\python\python.exe" -m unicornviz %*' \
   > "${APP}/unicorn-viz.cmd"
@@ -129,6 +150,7 @@ printf '%s\r\n' \
   '$root = $PSScriptRoot' \
   '$env:UNICORNVIZ_APP_ROOT = $root' \
   '$env:PYTHONPATH = "$root;$env:PYTHONPATH"' \
+  'if (Test-Path "$root\vendor\demucs") { $env:UNICORNVIZ_DEMUCS_REPO = "$root\vendor\demucs" }' \
   '& "$root\tools\vlc-check.ps1" -Vendor "$root\vendor"' \
   'Start-Process -FilePath "$root\runtime\python\pythonw.exe" -ArgumentList @("-m", "unicornviz") -WorkingDirectory $root' \
   > "${APP}/unicorn-viz-gui.ps1"
@@ -172,6 +194,9 @@ printf '%s\r\n' \
   'Run:        double-click unicorn-viz.cmd (or run it from a terminal with options)' \
   'Check:      unicorn-viz.cmd --self-test   (lists what is installed and which drop-ins are live)' \
   'Uninstall:  delete this folder' \
+  '' \
+  'Stem separation (dj-mixer) uses the demucs weights bundled under vendor\demucs, so the' \
+  'first extraction needs no download.' \
   '' \
   'Media player (media-01) needs VLC. If it is missing, the launcher offers to install it' \
   '(bundled installer under vendor\, or the download page). Everything else runs without it.' \

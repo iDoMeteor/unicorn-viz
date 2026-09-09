@@ -1275,6 +1275,28 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (night) — stems work offline: the DJ bundle ships the demucs
+  weights.** Owner asked why the weights were not bundled. They were not because
+  demucs' `get_model()` asks the **HuggingFace hub first** and only then its
+  torch-hub cache, so a pre-seeded cache would still hit the network (and fail
+  without it). The deterministic path is demucs' `--repo <dir>` (a folder of
+  `<sig>-<checksum>.th` + `<model>.yaml`), which reads that folder alone.
+  - **dj-mixer-01 0.191.0:** `[dj_mixer] stems_repo`, or the
+    `UNICORNVIZ_DEMUCS_REPO` env var, is passed as `--repo` when the folder holds
+    the configured model; otherwise demucs keeps its online path (a bundle with
+    only `htdemucs` does not break a user who picks `mdx_q`). Test added.
+  - **Builder:** `tools/packaging/demucs_weights.py` reads the installed demucs
+    wheel's own `remote/files.txt` for the URL and checksum, downloads into a
+    build cache (`$UV_DEMUCS_CACHE`, default `<tmp>/uv-demucs-cache`), verifies
+    the sha256 prefix, and stages `vendor\demucs\` (`htdemucs` = one 84 MB
+    file). `build_windows_portable.sh --demucs-models htdemucs,htdemucs_ft|none`
+    (default: `htdemucs` whenever the pack installs demucs; `htdemucs_ft` is four
+    such files, ~340 MB, not shipped). Both launchers export the env var when
+    the folder exists. bandit B310 on the fixed-https download in the helper is
+    reported below, not suppressed.
+  - **Bundle size:** the for-DJs zip grows by the compressed weight (~80 MB).
+  - Also this evening, per owner: `effects-games` removed from both packs
+    (for-DJs 19 drop-ins, general 13; 40 registered visual effects in each).
 - **2026-09-09 (evening) — two Windows beta bundles; bundled media; Windows CI
   reached the installer.**
   - **CI run 34393850931 (`ef2b37b`) went green** — but reading its log showed the
@@ -1286,8 +1308,8 @@ constraints, stated plainly:
     record: Windows is ★4.** Lesson: a green step must be made to prove it ran —
     grep the expected output.
   - **Packs:** `packaging/dropins/windows-djs.txt` (the full list, **stems
-    packed**: demucs + torch resolve as Windows wheels, ~200 MB; demucs fetches
-    the htdemucs weights on first use) → `UnicornViz-Portable-for-DJs-<v>-win-x64.zip`
+    packed**: demucs + torch resolve as Windows wheels, ~200 MB; the htdemucs
+    weights were fetched on first use until the night entry above) → `UnicornViz-Portable-for-DJs-<v>-win-x64.zip`
     via `--label for-DJs`; `packaging/dropins/windows-general.txt` (without
     dj-mixer, midi-controllers, webcam, beat-flash, banner, color-grade) →
     `UnicornViz-Portable-<v>-win-x64.zip`.
