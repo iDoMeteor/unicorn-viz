@@ -185,13 +185,20 @@ jobs:
           python -m zipfile -e "$(ls "$GITHUB_WORKSPACE"/dist/UnicornViz-Portable-*-win-x64.zip)" .
           cmd //c "UnicornViz\unicorn-viz.cmd --self-test"
 
+      # MSYS_NO_PATHCONV: Git Bash otherwise rewrites /D... and /VERYSILENT-style
+      # switches into Windows paths ("You may not specify more than one script
+      # filename").
       - name: Compile the installer (Inno Setup is preinstalled on windows-2022)
+        env:
+          MSYS_NO_PATHCONV: "1"
         run: |
           VERSION="$(sed -n "s/^__version__ = ['\"]\([^'\"]*\)['\"].*/\1/p" unicornviz/__init__.py | head -n1)"
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DAppVersion=${VERSION}" "/DPayloadDir=..\\..\\build\\windows\\UnicornViz" packaging/windows/UnicornViz.iss
           ls -lh dist/UnicornViz-Setup-*.exe
 
       - name: Silent install, then --self-test through the installed launcher
+        env:
+          MSYS_NO_PATHCONV: "1"
         run: |
           SETUP="$(ls dist/UnicornViz-Setup-*.exe)"
           "$SETUP" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="C:\\uv-installed" /LOG="C:\\uv-setup.log"
