@@ -1275,6 +1275,30 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (late) — first Windows tester run: one crash, fixed in core
+  (1.0.0-beta.119); multi-head joins the DJ pack; GUI launcher tucked away.**
+  - **Crash:** the for-DJs bundle ran on a Windows box for ~80 s, then an SDL
+    display-topology event fired and the app died with `TypeError:
+    _NullMultiHeadController.rebuild_multihead_outputs() missing 2 required
+    positional arguments`. The core fallback for the absent `multi-head-01`
+    demanded `title` and `fullscreen` that `app.py` never passes (the real
+    drop-in takes only the size). Fixed in `unicornviz/_null_controllers.py`
+    with a regression test that pins the null signature to the drop-in's.
+    Lesson for the rubric: `--self-test` proves imports and assets, not the
+    core-without-drop-in code paths; the nightly Windows job runs core-only,
+    which is exactly the configuration that crashed, so a headless soak of a
+    core-only build (drive a display event) is the next CI gap to close.
+  - **Pack:** `multi-head-01` added to `windows-djs.txt` (20 drop-ins; the
+    general pack stays at 13 and single-screen).
+  - **Launchers:** `unicorn-viz-gui.ps1` (hidden-window start for the installer
+    shortcuts) moved to `tools\`, so a tester sees one thing to click:
+    `unicorn-viz.cmd`. The Inno Setup script and the payload assertion follow.
+  - Uninstall answer given to the owner: the portable zips are self-contained
+    (delete the folder; nothing outside it except the torch/HF caches from
+    pre-0.191.0 stem runs and a VLC the tester chose to install). Two installer
+    gaps noted, not yet fixed: the Inno uninstaller leaves runtime-created files
+    (`config.toml`, `runtime\`, `logs\`) and does not revert the optional PATH
+    task. → `UninstallDelete` (behind a prompt) + a PATH-revert `[Code]` step.
 - **2026-09-09 (night) — stems work offline: the DJ bundle ships the demucs
   weights.** Owner asked why the weights were not bundled. They were not because
   demucs' `get_model()` asks the **HuggingFace hub first** and only then its

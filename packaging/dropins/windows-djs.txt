@@ -9,7 +9,7 @@ color-grade-01
 control-room-01
 # dj-mixer-01 imports hidapi + send2trash without declaring them. demucs (stem
 # separation) is packed for DJs: it pulls torch (~200 MB of wheels). Model
-# weights (htdemucs, ~80 MB) are fetched by demucs on first stem use.
+# weights (htdemucs, ~84 MB) are bundled under vendor\demucs by the builder.
 dj-mixer-01 +hidapi +send2trash
 effects-cosmic
 effects-feature
@@ -24,6 +24,9 @@ images-01 +dir:images
 # checks and offers the installer/download. It also imports av undeclared.
 media-01 +av
 midi-controllers-01
+# multi-head: second-screen / mirror outputs. Without it the app runs single-
+# screen (core keeps a null controller), but DJs project, so it ships.
+multi-head-01
 postfx-01
 spotify-01
 video-clips-01 +dir:videos

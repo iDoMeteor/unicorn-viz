@@ -71,7 +71,11 @@ class _NullMultiHeadController:
     def is_mirror_window_id(self, window_id: int) -> bool:
         return False
 
-    def rebuild_multihead_outputs(self, width: int, height: int, title: str, fullscreen: bool) -> int:
+    def rebuild_multihead_outputs(self, width: int, height: int,
+                                  title: str = '', fullscreen: bool = False) -> int:
+        # Same call shape as multi-head-01: app.py passes (width, height) on
+        # every SDL display-topology event, which happens on a plain single
+        # monitor too (hot-plug, DPI change, RDP session resize).
         return 0
 
     def release_readback_pbos(self) -> None:

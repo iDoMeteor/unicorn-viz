@@ -147,13 +147,13 @@ printf '%s\r\n' \
 # shellcheck disable=SC2016  # PowerShell source, deliberately not expanded by bash
 printf '%s\r\n' \
   '# Unicorn Viz GUI launcher (used by the Start-menu / desktop shortcuts).' \
-  '$root = $PSScriptRoot' \
+  '$root = Split-Path -Parent $PSScriptRoot' \
   '$env:UNICORNVIZ_APP_ROOT = $root' \
   '$env:PYTHONPATH = "$root;$env:PYTHONPATH"' \
   'if (Test-Path "$root\vendor\demucs") { $env:UNICORNVIZ_DEMUCS_REPO = "$root\vendor\demucs" }' \
   '& "$root\tools\vlc-check.ps1" -Vendor "$root\vendor"' \
   'Start-Process -FilePath "$root\runtime\python\pythonw.exe" -ArgumentList @("-m", "unicornviz") -WorkingDirectory $root' \
-  > "${APP}/unicorn-viz-gui.ps1"
+  > "${APP}/tools/unicorn-viz-gui.ps1"
 # VLC pre-flight: media-01 binds libvlc through python-vlc. If VLC is absent,
 # offer the bundled official installer (vendor\vlc-*-win64.exe) when present,
 # else the download page. Never blocks the app: media-01 just stays off.
@@ -192,6 +192,8 @@ printf '%s\r\n' \
   "Unicorn Viz ${VERSION}${LABEL:+ (${LABEL})} - portable build for Windows 10/11 (x64)" \
   '' \
   'Run:        double-click unicorn-viz.cmd (or run it from a terminal with options)' \
+  '            tools\unicorn-viz-gui.ps1 starts it without a console window (used by the' \
+  '            installer shortcuts); a normal user never needs it.' \
   'Check:      unicorn-viz.cmd --self-test   (lists what is installed and which drop-ins are live)' \
   'Uninstall:  delete this folder' \
   '' \
@@ -233,7 +235,7 @@ if not sys.argv[2]:
 bad = sorted(top & forbidden)
 assert not bad, f'junk in zip: {bad[:5]}'
 assert 'UnicornViz/runtime/python/python.exe' in names, 'python.exe missing'
-assert 'UnicornViz/unicorn-viz.cmd' in names and 'UnicornViz/unicorn-viz-gui.ps1' in names and 'UnicornViz/tools/vlc-check.ps1' in names, 'launcher missing'
+assert 'UnicornViz/unicorn-viz.cmd' in names and 'UnicornViz/tools/unicorn-viz-gui.ps1' in names and 'UnicornViz/tools/vlc-check.ps1' in names, 'launcher missing'
 pyd = [n for n in names if n.endswith('.pyd')]
 assert pyd, 'no .pyd extension modules: cross-install did not produce Windows wheels'
 assert not any(n.endswith('.so') for n in names if 'site-packages' in n), 'Linux .so files leaked into site-packages'

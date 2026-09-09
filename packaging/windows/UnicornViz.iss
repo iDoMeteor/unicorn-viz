@@ -63,16 +63,16 @@ Source: "{#RepoRoot}\assets\icons\unicorn-viz.ico"; DestDir: "{app}"; Flags: ign
 ; Shortcuts go through the GUI launcher (hidden PowerShell window): it sets the
 ; environment, runs the VLC pre-flight for the media player, then starts
 ; pythonw.exe -m unicornviz with WorkingDir={app} so APP_ROOT resolves there.
-Name: "{group}\{#AppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"
+Name: "{group}\{#AppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\tools\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"
 Name: "{group}\{#AppName} (console)"; Filename: "{app}\unicorn-viz.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\tools\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\unicorn-viz.ico"; AppUserModelID: "io.unicornviz.UnicornViz"; Tasks: desktopicon
 
 [Registry]
 Root: HKA; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}'))
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\tools\unicorn-viz-gui.ps1"""; WorkingDir: "{app}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 function NeedsAddPath(Param: string): boolean;

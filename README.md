@@ -513,6 +513,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.119** — Fix a crash without the multi-head drop-in: the
+  fallback controller's `rebuild_multihead_outputs()` demanded two arguments
+  the app never passes, so any display-topology event (monitor hot-plug,
+  DPI change, remote-desktop resize) took the whole app down on a bundle
+  that ships without `multi-head-01`.
 - **1.0.0-beta.117** — Two help-icon-rail entries downgraded from
   fake-live to honest placeholders: `share` (`unicornviz/overlays.py`
   `HELP_ICON_ENTRIES`) no longer opens `https://unicorntears.com` — it
