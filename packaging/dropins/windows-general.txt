@@ -4,7 +4,6 @@
 control-room-01
 effects-cosmic
 effects-feature
-effects-games
 effects-immersive
 effects-psychedelic
 effects-retro

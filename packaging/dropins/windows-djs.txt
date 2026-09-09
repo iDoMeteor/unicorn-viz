@@ -13,7 +13,6 @@ control-room-01
 dj-mixer-01 +hidapi +send2trash
 effects-cosmic
 effects-feature
-effects-games
 effects-immersive
 effects-psychedelic
 effects-retro
