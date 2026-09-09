@@ -145,7 +145,7 @@ printf '%s\r\n' \
   'if exist "%~dp0vendor\demucs\" set "UNICORNVIZ_DEMUCS_REPO=%~dp0vendor\demucs"' \
   'echo %* | findstr /C:"--self-test" >nul || powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\vlc-check.ps1" -Vendor "%~dp0vendor"' \
   'if "%~1"=="" (' \
-  '  start "" /D "%~dp0\\" "%~dp0runtime\python\pythonw.exe" -m unicornviz' \
+  '  start "" /D "%~dp0" "%~dp0runtime\python\pythonw.exe" -m unicornviz' \
   '  exit /b 0' \
   ')' \
   '"%~dp0runtime\python\python.exe" -m unicornviz %*' \
