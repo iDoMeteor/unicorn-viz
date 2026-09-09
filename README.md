@@ -513,6 +513,12 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.121** — Quit confirmation is an in-app "press again" prompt
+  (3 s window) instead of a native modal dialog, which on Windows froze the
+  render loop under a fullscreen window and could not be reached with a hidden
+  cursor. First launch creates `config.toml` from `config.dist.toml` when none
+  exists, and rescues a `config.toml.toml` saved by Notepad; `--self-test`
+  reports the config state.
 - **1.0.0-beta.120** — The SDL window carries the app icon (title bar,
   taskbar, alt-tab) instead of the bare python icon. Shipped defaults from
   the first Windows beta run: `config.dist.toml` starts fullscreen, and

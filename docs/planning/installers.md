@@ -1275,6 +1275,37 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (night) — beta.120 DJ run "ugly": screen blacking, TV losing
+  signal, hard to quit. Read off the Windows volume: two run logs + a
+  faulthandler dump; System event log checked.**
+  - **No data beyond INFO, and no config at all:** the tester's config was
+    saved as `config.toml.toml` (Notepad appended the extension), so debug +
+    perf frames never turned on and every value was a built-in default. Fix in
+    core 1.0.0-beta.121: first launch creates `config.toml` from
+    `config.dist.toml` when none exists (the zip could not do what the Linux
+    installer's seeding step does), and a stray `config.toml.toml` is renamed
+    into place (or warned about when a real one exists); `--self-test` reports
+    the config state.
+  - **"Can barely quit" = the native quit dialog.** Both faulthandler dumps
+    (5 s stall watchdog, twice) show the main thread inside
+    `SDL_ShowMessageBox` from `request_exit`. Under a borderless-fullscreen
+    window with the cursor hidden, the modal froze rendering and sat where the
+    tester could not answer it; every Esc press re-opened/closed it, each time
+    knocking DWM out of fullscreen presentation (black flashes; some TVs drop
+    signal on that transition). Replaced with an in-app two-press prompt
+    (`Quit? press again to exit`, 3 s, `App.EXIT_CONFIRM_WINDOW_S`); the native
+    dialog is gone from core, pinned by `tests/test_exit_confirm.py`.
+  - **Not the GPU:** the Windows System log has no display-driver reset
+    (no event 4101 / TDR, no `LiveKernelReports\WATCHDOG`) on 2026-09-09. It
+    does show Kernel-Power 41 (unclean shutdown) at 16:34 local, before the
+    beta.118 crash run — the box was hard-reset at some point this afternoon.
+  - Hardware context: Intel NUC12 (Iris Xe), five displays (one 4K TV + four
+    1080p), `Frame limit: locked to 30 fps (vsync/2)` on the 4K head. If
+    blackouts persist with the dialog gone, the next suspects are DWM
+    fullscreen-optimization transitions on the HDMI TV (test with
+    `fullscreen = false`, or Windows' per-app "disable fullscreen
+    optimizations") and the 4K render load; a debug + perf-frames run, now that
+    the config is actually read, is the prerequisite for either.
 - **2026-09-09 — builds land in `~/projects/_software-dist/` (owner).** The
   beta.120 zips and their `SHA256SUMS` moved there (checksums re-verified
   after the move). `build_windows_portable.sh` now defaults its output to

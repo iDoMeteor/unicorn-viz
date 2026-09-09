@@ -11,6 +11,7 @@ import argparse
 import faulthandler
 import logging
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -498,6 +499,13 @@ def _self_test() -> int:
     # Shipped drop-ins: report each one's declared extra dependencies. A missing
     # dependency does not fail the self-test (the drop-in degrades to disabled),
     # but it is exactly what a beta tester needs to see.
+    cfg_path = root / 'config.toml'
+    if cfg_path.is_file():
+        print(f'  [ok]   config.toml present ({cfg_path})')
+    elif (root / 'config.toml.toml').is_file():
+        print('  [!!]   config.toml.toml found (Notepad added .toml); it is renamed to config.toml on the next launch')
+    else:
+        print('  [..]   no config.toml yet; created from config.dist.toml on first launch')
     dropins_dir = root / 'drop-ins'
     if dropins_dir.is_dir():
         from importlib.metadata import PackageNotFoundError, distribution
@@ -522,12 +530,46 @@ def _self_test() -> int:
     return 0 if failures == 0 else 1
 
 
+def _seed_config(path: Path) -> None:
+    """Create ``config.toml`` from the shipped template on a fresh install.
+
+    The portable bundles ship ``config.dist.toml`` next to the app but nothing
+    turned it into ``config.toml`` (the Linux installer does that; a zip
+    cannot). A missing file is silently all-defaults, which is how a tester
+    ended up with no config at all. Also catches the classic Windows slip of
+    a file saved as ``config.toml.toml`` (Notepad appending the extension):
+    that one is renamed into place when no real config exists, else warned
+    about, because it would otherwise be ignored without a trace.
+    """
+    log = logging.getLogger(__name__)
+    if path.name != 'config.toml':
+        return                                  # explicit --config: leave alone
+    doubled = path.with_name('config.toml.toml')
+    if path.exists():
+        if doubled.exists():
+            log.warning('Both %s and %s exist; only %s is read', path.name,
+                        doubled.name, path.name)
+        return
+    try:
+        if doubled.exists():
+            doubled.rename(path)
+            log.warning('Renamed %s to %s (it was being ignored)', doubled.name, path.name)
+            return
+        dist = path.with_name('config.dist.toml')
+        if dist.is_file():
+            shutil.copyfile(dist, path)
+            log.info('Created %s from %s (edit it freely)', path.name, dist.name)
+    except OSError as exc:
+        log.warning('Could not create %s: %s', path, exc)
+
+
 def main() -> None:
     """Create and run the main application."""
     parser = _build_parser()
     args = parser.parse_args()
     if args.self_test:
         raise SystemExit(_self_test())
+    _seed_config(Path(args.config))
     cfg = Config(args.config, overrides=_build_overrides(args))
     register_dropin_config_validators()
     try:
