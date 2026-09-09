@@ -15,7 +15,8 @@
 # unicorn-viz.cmd; `unicorn-viz.cmd --self-test`) — see plan §18 Block E.
 #
 # Usage:
-#   tools/packaging/build_windows_portable.sh [--version X.Y.Z] [--output-dir dir]
+#   tools/packaging/build_windows_portable.sh [--version X.Y.Z] [--output-dir dir]  # default: $UV_DIST_DIR,
+#                                             # else ~/projects/_software-dist if present, else dist/
 #                                             [--source-dir dir] [--python-version 3.11]
 #                                             [--payload-out dir]   # also leave the assembled
 #                                                                   # UnicornViz/ tree here for Inno Setup
@@ -46,7 +47,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 VERSION=""
-OUTPUT_DIR="${REPO_ROOT}/dist"
+# Where finished bundles land. $UV_DIST_DIR wins; on the owner's box the
+# hand-off folder ~/projects/_software-dist/ is used when it exists (builds
+# from 2026-09-09 on are collected there); otherwise the repo's dist/.
+dist_default() {
+  if [[ -n "${UV_DIST_DIR:-}" ]]; then echo "$UV_DIST_DIR"
+  elif [[ -d "${HOME}/projects/_software-dist" ]]; then echo "${HOME}/projects/_software-dist"
+  else echo "${REPO_ROOT}/dist"
+  fi
+}
+OUTPUT_DIR="$(dist_default)"
 SOURCE_DIR="${REPO_ROOT}"
 PYVER="3.11"
 PAYLOAD_OUT=""

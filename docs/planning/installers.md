@@ -1275,6 +1275,14 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 — builds land in `~/projects/_software-dist/` (owner).** The
+  beta.120 zips and their `SHA256SUMS` moved there (checksums re-verified
+  after the move). `build_windows_portable.sh` now defaults its output to
+  `$UV_DIST_DIR`, else that folder when it exists, else the repo's `dist/`.
+  `release.sh` keeps an explicit `--dest` because its output is a served tree
+  (`<dest>/<version>/` + `manifest.json`); for Linux hand-offs use
+  `--dest ~/projects/_software-dist/linux`. Scratch (`/var/tmp/uv-winbeta`)
+  is no longer where finished bundles live.
 - **2026-09-09 (late II) — tester notes worked through; core/drop-in
   independence audit.** Owner's notes from the crashy first run: *color lut on,
   full screen not on, terminal background, no icon, files embedded in extra
