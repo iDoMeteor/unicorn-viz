@@ -22,7 +22,9 @@
 # its own git repo), minus tests — and write <dest>/requirements-dropins.txt,
 # the union of their requirements.txt files. A line may carry modifiers after
 # the name: `+pkg` adds a dependency the drop-in uses but does not declare,
-# `-pkg` drops one that must not ship (e.g. `dj-mixer-01 +hidapi -demucs`).
+# `-pkg` drops one that must not ship (e.g. `dj-mixer-01 +hidapi -demucs`), and
+# `+dir:<folder>` ships a gitignored folder from the drop-in's working tree
+# (bundled media: `images-01 +dir:images`, `video-clips-01 +dir:videos`).
 # The app discovers drop-ins at APP_ROOT/drop-ins, so a payload that carries
 # them works on every channel with no core change.
 #
@@ -79,6 +81,7 @@ REQUIRED=(
 )
 # Optional members — included when present.
 OPTIONAL=(
+  images
   LICENSE
   LICENSE.txt
   LICENSE.md
@@ -201,6 +204,11 @@ if [[ -n "$DROPINS_FILE" ]]; then
     fi
     for mod in $mods; do
       case "$mod" in
+        +dir:*) sub="${mod#+dir:}"
+            [[ -d "${src}/${sub}" ]] || die "--dropins: ${name} +dir:${sub}: no such folder in the working tree"
+            mkdir -p "${DEST}/drop-ins/${name}/${sub}"
+            cp -a "${src}/${sub}/." "${DEST}/drop-ins/${name}/${sub}/"
+            log "  ${name}: bundled ${sub}/ ($(du -sh "${src}/${sub}" | cut -f1), $(find "${src}/${sub}" -type f | wc -l) files)" ;;
         +*) echo "${mod#+}" >> "${DEST}/requirements-dropins.txt" ;;
         -*) pkg="${mod#-}"; grep -viE "^${pkg}([<>=!~ ]|$)" "${DEST}/requirements-dropins.txt" > "${DEST}/requirements-dropins.tmp" || true
             mv "${DEST}/requirements-dropins.tmp" "${DEST}/requirements-dropins.txt"

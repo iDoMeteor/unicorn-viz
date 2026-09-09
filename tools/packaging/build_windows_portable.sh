@@ -23,6 +23,7 @@
 #                                                                   # stage_payload.sh --dropins)
 #                                             [--vlc-installer vlc-*-win64.exe]  # bundle the official
 #                                                                   # VLC installer for media-01
+#                                             [--label for-DJs]     # zip name: UnicornViz-Portable-<label>-...
 
 set -Eeuo pipefail
 
@@ -46,6 +47,7 @@ PYVER="3.11"
 PAYLOAD_OUT=""
 DROPINS_FILE=""
 VLC_INSTALLER=""
+LABEL=""
 
 log() { echo "[win-portable] $*" >&2; }
 die() { echo "[win-portable] ERROR: $*" >&2; exit 1; }
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --payload-out) PAYLOAD_OUT="$2"; shift 2 ;;
     --dropins) DROPINS_FILE="$2"; shift 2 ;;
     --vlc-installer) VLC_INSTALLER="$2"; shift 2 ;;
+    --label) LABEL="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -164,7 +167,7 @@ if [[ -d "${APP}/drop-ins" ]]; then
   DROPIN_NOTE="Included drop-ins: $(find "${APP}/drop-ins" -mindepth 1 -maxdepth 1 -type d -printf '%f ' | sort)"
 fi
 printf '%s\r\n' \
-  "Unicorn Viz ${VERSION} - portable build for Windows 10/11 (x64)" \
+  "Unicorn Viz ${VERSION}${LABEL:+ (${LABEL})} - portable build for Windows 10/11 (x64)" \
   '' \
   'Run:        double-click unicorn-viz.cmd (or run it from a terminal with options)' \
   'Check:      unicorn-viz.cmd --self-test   (lists what is installed and which drop-ins are live)' \
@@ -179,7 +182,17 @@ printf '%s\r\n' \
   'protected your PC" - choose "More info" then "Run anyway".' \
   > "${APP}/README-PORTABLE.txt"
 
-ZIP="${OUTPUT_DIR}/UnicornViz-Portable-${VERSION}-win-x64.zip"
+# Leave the assembled tree for Inno Setup (packaging/windows/UnicornViz.iss
+# packages it via /DPayloadDir). This block sits right before zipping so the
+# tree is complete; an earlier edit deleted it and CI's ISCC step found no tree.
+if [[ -n "$PAYLOAD_OUT" ]]; then
+  log "Leaving the assembled tree at ${PAYLOAD_OUT}/UnicornViz (for packaging/windows/UnicornViz.iss)"
+  rm -rf "${PAYLOAD_OUT}/UnicornViz"
+  cp -a "$APP" "${PAYLOAD_OUT}/UnicornViz"
+  [[ -f "${PAYLOAD_OUT}/UnicornViz/LICENSE" ]] || die "payload-out tree is missing LICENSE"
+fi
+
+ZIP="${OUTPUT_DIR}/UnicornViz-Portable${LABEL:+-${LABEL}}-${VERSION}-win-x64.zip"
 log "Zipping → ${ZIP}"
 rm -f "$ZIP"
 ( cd "$WORK" && "$HOST_PY" -m zipfile -c "$ZIP" UnicornViz )

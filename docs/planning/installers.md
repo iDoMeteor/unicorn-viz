@@ -1275,6 +1275,31 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (evening) — two Windows beta bundles; bundled media; Windows CI
+  reached the installer.**
+  - **Packs:** `packaging/dropins/windows-djs.txt` (the full list, **stems
+    packed**: demucs + torch resolve as Windows wheels, ~200 MB; demucs fetches
+    the htdemucs weights on first use) → `UnicornViz-Portable-for-DJs-<v>-win-x64.zip`
+    via `--label for-DJs`; `packaging/dropins/windows-general.txt` (without
+    dj-mixer, midi-controllers, webcam, beat-flash, banner, color-grade) →
+    `UnicornViz-Portable-<v>-win-x64.zip`.
+  - **Bundled media:** the images and video clips are gitignored inside their
+    drop-ins (`drop-ins/images-01/images/` 23 MB, `drop-ins/video-clips-01/videos/`
+    114 MB) and were never shipped. New pack modifier `+dir:<folder>` copies a
+    gitignored folder from the drop-in's working tree into the shipped drop-in.
+    Also found: the root `images/` dir (splash art, tracked) was missing from
+    the payload allowlist — added.
+  - **Windows CI, three fixes in a row:** `/var/tmp` absent in Git Bash (scratch
+    base chosen at runtime); Git Bash MSYS path conversion mangling ISCC's
+    `/D…` switches (`MSYS_NO_PATHCONV=1`); and the `--payload-out` copy that
+    Inno Setup packages had been deleted by an earlier edit (restored). First
+    hard evidence from real Windows: the cross-built portable zip unzipped on
+    the `windows-2022` runner and `unicorn-viz.cmd --self-test` passed (assets
+    resolve; all ten native deps import in the bundled 3.11 runtime).
+  - ****Built locally:** `UnicornViz-Portable-for-DJs-1.0.0-beta.118-win-x64.zip` (613 MB, 20
+    drop-ins, 246 Windows extension modules) and `UnicornViz-Portable-1.0.0-beta.118-win-x64.zip`
+    (352 MB, 14 drop-ins); both carry the images and video clips. Installer
+    verification is the nightly `windows-2022` job (core-only until O7).**
 - **2026-09-09 — Windows beta pack (drop-ins ship for the first time); Windows CI unblocked.**
   - **Why the nightly Windows job failed every night since 09-05:** the packaging
     scripts hard-coded `/var/tmp` as scratch (chosen because `/tmp` is tmpfs on

@@ -1,0 +1,31 @@
+# Windows "for DJs" pack — the owner's full beta list (2026-09-09), stems included.
+# One drop-in per line; modifiers: +pkg adds an undeclared dependency, -pkg removes
+# one, +dir:<folder> bundles a gitignored media folder from the drop-in's tree.
+# Consumed by stage_payload.sh --dropins; built with
+#   tools/packaging/build_windows_portable.sh --dropins packaging/dropins/windows-djs.txt --label for-DJs
+banner-01
+beat-flash-01
+color-grade-01
+control-room-01
+# dj-mixer-01 imports hidapi + send2trash without declaring them. demucs (stem
+# separation) is packed for DJs: it pulls torch (~200 MB of wheels). Model
+# weights (htdemucs, ~80 MB) are fetched by demucs on first stem use.
+dj-mixer-01 +hidapi +send2trash
+effects-cosmic
+effects-feature
+effects-games
+effects-immersive
+effects-psychedelic
+effects-retro
+effects-tech
+effects-vector
+# bundled media (gitignored in the drop-in repos)
+images-01 +dir:images
+# media-01 needs VLC on the machine (python-vlc binds libvlc); the launcher
+# checks and offers the installer/download. It also imports av undeclared.
+media-01 +av
+midi-controllers-01
+postfx-01
+spotify-01
+video-clips-01 +dir:videos
+webcam-01

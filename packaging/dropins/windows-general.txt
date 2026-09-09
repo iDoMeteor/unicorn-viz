@@ -1,0 +1,17 @@
+# Windows general beta pack (2026-09-09): the DJ pack without the mixer, MIDI
+# controllers, webcam, beat-flash, banner and color-grade.
+#   tools/packaging/build_windows_portable.sh --dropins packaging/dropins/windows-general.txt
+control-room-01
+effects-cosmic
+effects-feature
+effects-games
+effects-immersive
+effects-psychedelic
+effects-retro
+effects-tech
+effects-vector
+images-01 +dir:images
+media-01 +av
+postfx-01
+spotify-01
+video-clips-01 +dir:videos
