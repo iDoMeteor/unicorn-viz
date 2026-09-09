@@ -95,6 +95,8 @@ log "Provisioning the Windows runtime (python-build-standalone, x86_64)"
 [[ -f "${APP}/runtime/python/python.exe" ]] || die "python.exe missing after runtime provisioning"
 
 SITE="${APP}/runtime/python/Lib/site-packages"
+EXTRA_REQS=()
+[[ -f "${APP}/requirements-dropins.txt" ]] && EXTRA_REQS=(-r "${APP}/requirements-dropins.txt")
 log "Cross-installing pinned dependencies for win_amd64 / cp${PYVER//./} (wheels only)"
 # --no-compile: bytecode would be produced by the HOST interpreter (wrong
 # version for the Windows runtime); Windows compiles its own on first run.
@@ -102,8 +104,7 @@ log "Cross-installing pinned dependencies for win_amd64 / cp${PYVER//./} (wheels
   --target "$SITE" \
   --platform win_amd64 --python-version "$PYVER" --implementation cp --abi "$ABI" \
   --only-binary=:all: \
-  -r "${APP}/requirements.txt" \
-  $( [[ -f "${APP}/requirements-dropins.txt" ]] && echo -r "${APP}/requirements-dropins.txt" ) >&2
+  -r "${APP}/requirements.txt" "${EXTRA_REQS[@]}" >&2
 find "$SITE" -type d -name __pycache__ -prune -exec rm -rf {} +
 
 log "Writing launchers"
@@ -119,6 +120,7 @@ printf '%s\r\n' \
   '"%~dp0runtime\python\python.exe" -m unicornviz %*' \
   > "${APP}/unicorn-viz.cmd"
 # GUI launcher for shortcuts: no console window; same VLC pre-flight.
+# shellcheck disable=SC2016  # PowerShell source, deliberately not expanded by bash
 printf '%s\r\n' \
   '# Unicorn Viz GUI launcher (used by the Start-menu / desktop shortcuts).' \
   '$root = $PSScriptRoot' \
@@ -130,6 +132,7 @@ printf '%s\r\n' \
 # VLC pre-flight: media-01 binds libvlc through python-vlc. If VLC is absent,
 # offer the bundled official installer (vendor\vlc-*-win64.exe) when present,
 # else the download page. Never blocks the app: media-01 just stays off.
+# shellcheck disable=SC2016  # PowerShell source, deliberately not expanded by bash
 printf '%s\r\n' \
   'param([string]$Vendor = "")' \
   '$candidates = @()' \
@@ -158,7 +161,7 @@ if [[ -n "$VLC_INSTALLER" ]]; then
 fi
 DROPIN_NOTE=""
 if [[ -d "${APP}/drop-ins" ]]; then
-  DROPIN_NOTE="Included drop-ins: $(ls "${APP}/drop-ins" | tr '\n' ' ')"
+  DROPIN_NOTE="Included drop-ins: $(find "${APP}/drop-ins" -mindepth 1 -maxdepth 1 -type d -printf '%f ' | sort)"
 fi
 printf '%s\r\n' \
   "Unicorn Viz ${VERSION} - portable build for Windows 10/11 (x64)" \

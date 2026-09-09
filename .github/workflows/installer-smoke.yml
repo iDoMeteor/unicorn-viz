@@ -35,7 +35,9 @@ jobs:
             tools/install_linux.sh \
             tools/packaging/fetch_runtime.sh \
             tools/packaging/stage_payload.sh \
-            tools/packaging/build_native.sh
+            tools/packaging/build_native.sh \
+            tools/packaging/release.sh \
+            tools/packaging/build_windows_portable.sh
 
       - name: Smoke test payload stager
         run: |
