@@ -42,6 +42,16 @@
 
 set -Eeuo pipefail
 
+# Scratch space for builds: $TMPDIR if set, else /var/tmp where it exists
+# (disk-backed on Linux; /tmp is tmpfs and too small for 200 MB staging trees),
+# else the platform default (Git Bash on Windows has no /var/tmp).
+build_tmp_base() {
+  if [[ -n "${TMPDIR:-}" && -d "${TMPDIR}" ]]; then echo "$TMPDIR"
+  elif [[ -d /var/tmp ]]; then echo /var/tmp
+  else dirname "$(mktemp -u)"
+  fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -94,7 +104,7 @@ FETCH_SCRIPT="${SCRIPT_DIR}/fetch_runtime.sh"
 [[ -f "$FETCH_SCRIPT" ]] || die "fetch_runtime.sh not found next to this script"
 
 KEEP_STAGING="$NO_PACKAGE"
-TMP_DIR="$(mktemp -d -p "${TMPDIR:-/var/tmp}")"
+TMP_DIR="$(mktemp -d -p "$(build_tmp_base)")"
 cleanup() { [[ "$KEEP_STAGING" -eq 1 ]] || rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 

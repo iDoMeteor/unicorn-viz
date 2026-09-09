@@ -46,6 +46,16 @@
 
 set -Eeuo pipefail
 
+# Scratch space for builds: $TMPDIR if set, else /var/tmp where it exists
+# (disk-backed on Linux; /tmp is tmpfs and too small for 200 MB staging trees),
+# else the platform default (Git Bash on Windows has no /var/tmp).
+build_tmp_base() {
+  if [[ -n "${TMPDIR:-}" && -d "${TMPDIR}" ]]; then echo "$TMPDIR"
+  elif [[ -d /var/tmp ]]; then echo /var/tmp
+  else dirname "$(mktemp -u)"
+  fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -155,7 +165,7 @@ done
 [[ -z "$SIGN_KEY" ]] || command -v rpmsign >/dev/null 2>&1 || log "WARNING: rpmsign not found; rpm packages will not be signed (dnf install rpm-sign)"
 [[ -z "$S3_URL" ]] || command -v aws >/dev/null 2>&1 || die "aws CLI is required for --s3-url"
 
-WORK="$(mktemp -d -p "${TMPDIR:-/var/tmp}")"
+WORK="$(mktemp -d -p "$(build_tmp_base)")"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$OUT"
 
