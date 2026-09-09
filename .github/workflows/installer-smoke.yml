@@ -183,7 +183,8 @@ jobs:
         run: |
           mkdir -p /tmp/uv-portable && cd /tmp/uv-portable
           python -m zipfile -e "$(ls "$GITHUB_WORKSPACE"/dist/UnicornViz-Portable-*-win-x64.zip)" .
-          cmd //c "UnicornViz\unicorn-viz.cmd --self-test"
+          cmd //c "UnicornViz\unicorn-viz.cmd --self-test" | tee self-test.txt
+          grep -q "self-test: OK" self-test.txt
 
       # MSYS_NO_PATHCONV: Git Bash otherwise rewrites /D... and /VERYSILENT-style
       # switches into Windows paths ("You may not specify more than one script
@@ -203,7 +204,11 @@ jobs:
           SETUP="$(ls dist/UnicornViz-Setup-*.exe)"
           "$SETUP" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="C:\\uv-installed" /LOG="C:\\uv-setup.log"
           ls "C:/uv-installed"
-          cmd //c "C:\\uv-installed\\unicorn-viz.cmd --self-test"
+          # MSYS_NO_PATHCONV is on for this step, so cmd's switch is a plain /c
+          # (with conversion on, //c is what collapses to /c). A bare `cmd` would
+          # open an interactive shell, read EOF and exit 0 without running anything.
+          cmd /c "C:\\uv-installed\\unicorn-viz.cmd --self-test" | tee installed-self-test.txt
+          grep -q "self-test: OK" installed-self-test.txt
 
       - name: Keep the artifacts
         uses: actions/upload-artifact@v4
