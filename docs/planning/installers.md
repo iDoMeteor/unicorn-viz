@@ -1275,6 +1275,22 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (night IV) — beta.124 still bad, now with a sharper shape:
+  fine until Alt+Tab / Win key, then drastic.** No logs this time (the
+  debug block was not copied over). That shape is Windows' fullscreen
+  handling: with `SDL_WINDOW_FULLSCREEN_DESKTOP` Windows classifies the app
+  as a fullscreen game (fullscreen optimizations, flip presentation) and
+  every focus change flips the display path — on this 5-display Intel box a
+  mode transition the TV reads as signal loss, with the loop stalled in the
+  driver meanwhile. Earlier tonight's focus-shaped stalls were the same
+  path under a swap interval of 2.
+  - **Fix, core 1.0.0-beta.125:** on Windows `fullscreen` is a borderless
+    window covering the display (the `fullscreen_mode = "borderless"` path
+    that already existed for MATE); `"desktop"` opts back in. Documented in
+    the full example config; test added.
+  - **Instrument for the next run (copy into config.toml):** `[logging]
+    level = "debug"`, `perf_frames = true`, `stall_dump_s = 1.0`. Without
+    it a bad run is a description, not evidence.
 - **2026-09-09 (night III) — found it: the swap interval. beta.123 stall
   dumps (`stall_dump_s = 1.0`, 129 dumps over two runs, recording and audio
   fallback disabled, then everything non-essential unplugged).** In every

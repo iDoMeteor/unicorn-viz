@@ -513,6 +513,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.125** — Windows fullscreen is a borderless window covering
+  the display instead of SDL's fullscreen-desktop flag, so Windows never
+  treats the app as a fullscreen game: Alt+Tab and the Win key no longer flip
+  the display path (TV signal drops, multi-second stalls).
+  `[window] fullscreen_mode = "desktop"` opts back in.
 - **1.0.0-beta.124** — Windows never asks the GL driver for a swap interval
   above 1: the 30 fps cap's "every second vblank" was serviced by the Intel
   driver as a ~1 s deferred wait whenever the window was foreground (2 s

@@ -8,6 +8,8 @@ width = 1920
 height = 1080
 fullscreen = true
 show_cursor = false   # true keeps pointer visible by default; Ctrl still reveals when false
+# fullscreen_mode = "auto"   # auto | borderless | desktop. auto = borderless on Windows
+#                             # and MATE (Alt+Tab-safe), SDL fullscreen-desktop elsewhere
 title = "Unicorn Viz"
 display_mode = "single"      # single | span_included | span_all | mirror_included | mirror_all
 display_index = 0             # raw SDL display index used by single mode

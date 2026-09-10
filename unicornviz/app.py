@@ -1175,6 +1175,12 @@ class App:
             sdl2.SDL_SetHint(b'SDL_WINDOWS_DPI_AWARENESS', b'permonitorv2')
         except Exception as exc:
             log.warning('Failed to set Windows DPI awareness hint: %s', exc)
+        # Never minimize on focus loss: a VJ window on the show display must
+        # keep rendering while the operator works another screen.
+        try:
+            sdl2.SDL_SetHint(b'SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS', b'0')
+        except Exception as exc:
+            log.warning('Failed to set the focus-loss hint: %s', exc)
 
     def rebind_main_gl_context(self) -> bool:
         """Re-bind the main audience window's GL context as current.
@@ -1807,6 +1813,16 @@ class App:
             return True
         if self._fullscreen_mode == 'desktop':
             return False
+        if sys.platform.startswith('win'):
+            # Windows: a plain borderless window covering the display. The
+            # SDL "fullscreen desktop" flag makes Windows treat the window as
+            # a fullscreen app (fullscreen optimizations / flip presentation),
+            # and every Alt+Tab or Win key then flips the display path: the
+            # TV drops signal and the loop stalls for seconds (2026-09-09
+            # beta). A borderless window is composited like any other and
+            # focus changes cost nothing. `fullscreen_mode = "desktop"` opts
+            # back in.
+            return True
         session_bits = ' '.join(
             filter(None, [
                 os.environ.get('XDG_CURRENT_DESKTOP', ''),
