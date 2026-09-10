@@ -37,7 +37,9 @@ def test_bpm_family_partition_boundaries() -> None:
 def test_style_mapping_hits_the_fold_relevant_genres() -> None:
     assert lg.style_to_family('Electronic---Drum n Bass') == ('double', 'drum_and_bass')
     assert lg.style_to_family('Hip Hop---Trap') == ('slow', 'rap_rnb')
-    assert lg.style_to_family('Electronic---Tech House') == ('peak', 'tech_house')
+    # 2026-09-10 (zone-map batch): 'tech_house' removed entirely from the
+    # profile roster -- remapped to 'peak_time'.
+    assert lg.style_to_family('Electronic---Tech House') == ('peak', 'peak_time')
     assert lg.style_to_family('Electronic---Deep House') == ('midlow', 'deep_house')
     assert lg.style_to_family('Electronic---House') == ('house', 'house')
     assert lg.style_to_family('Electronic---Dubstep') == ('fast', 'dubstep')
@@ -45,9 +47,12 @@ def test_style_mapping_hits_the_fold_relevant_genres() -> None:
 
 
 def test_style_mapping_specific_beats_generic() -> None:
-    # 'Tech House' must not fall through to the generic 'house' entry,
-    # and 'Psy-Trance' must not read as plain 'trance'.
-    assert lg.style_to_family('Electronic---Tech House')[1] == 'tech_house'
+    # 'Tech House' must not fall through to the generic 'house' entry
+    # (2026-09-10 zone-map batch: now routes to 'peak_time', its own
+    # 'tech_house' profile having been removed from the roster -- still
+    # a specific match, not the generic fallback), and 'Psy-Trance' must
+    # not read as plain 'trance'.
+    assert lg.style_to_family('Electronic---Tech House')[1] == 'peak_time'
     assert lg.style_to_family('Electronic---Goa Trance')[1] == 'psytrance'
     assert lg.style_to_family('Electronic---Hard Techno')[1] == 'hard_techno'
 
