@@ -26,18 +26,30 @@ def test_band_edge_math_backs_the_fix() -> None:
 
 
 def test_live_sampling_uses_the_kick_window() -> None:
+    """2026-09-10 (zone-map batch): the F8 window (bands 0-11, ~30-97 Hz)
+    is unchanged as the total sampled span -- what changed is that it's
+    now split into sub (0:_SUB_KICK_SPLIT_BAND) and kick-punch
+    (_SUB_KICK_SPLIT_BAND:12) sub-windows instead of one undifferentiated
+    mean over 0:12. See docs/adr/vj-system.md "Sub/Kick Split +
+    Kick-Regularity Reshape"."""
     src = (_REPO / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py').read_text(encoding='utf-8')
-    assert '_kick_bands[0:12].mean()' in src
-    assert '_kick_bands[0:6].mean()' not in src
-    # exp_kick widened together (the audit's "change both together").
+    assert 'kick_bands[0:self._SUB_KICK_SPLIT_BAND].mean()' in src
+    assert 'kick_bands[self._SUB_KICK_SPLIT_BAND:12].mean()' in src
+    assert 'kick_bands[0:12].mean()' not in src
+    assert 'kick_bands[0:6].mean()' not in src
+    # exp_kick's own window is untouched by the sub/kick split (still the
+    # full 12-band kick_regularity_fit comparison basis).
     assert 'expected_bands[i] for i in range(12)' in src
     assert 'expected_bands[i] for i in range(6)' not in src
 
 
 def test_replay_harness_mirror_matches_live() -> None:
+    """2026-09-10 (zone-map batch): the mirror stays faithful to the
+    reshaped live sampling (sub/kick split), same reasoning as above."""
     src = (_REPO / 'drop-ins' / 'training-kit-01' / 'tools'
            / 'track_replay.py').read_text(encoding='utf-8')
-    assert 'bands[0:12].mean()' in src
+    assert 'bands[_SUB_KICK_SPLIT_BAND:12].mean()' in src
+    assert 'bands[0:12].mean()' not in src
     assert 'bands[0:6].mean()' not in src
 
 

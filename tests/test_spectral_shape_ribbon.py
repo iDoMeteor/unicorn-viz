@@ -112,6 +112,7 @@ def _stub_with_bands(band_vec: np.ndarray, n_samples: int = 6) -> SimpleNamespac
         _current_profile_scored=False,
         _last_onset_count=0.0,
         _kick_energies=deque(maxlen=16),
+        _compute_kick_regularity=lambda: 0.0,
         _reco_weights=weights,
         _has_bpm_lock=lambda *a, **kw: True,
         _now_playing_telemetry_snapshot=lambda: {},

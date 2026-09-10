@@ -10762,3 +10762,119 @@ matcher.py` updated for the renamed config key. Full suite green
 **Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.38 → 1.0.0-rc.39`;
 `_VJ_WEIGHTS_DOC_VERSION` `99 → 100`; `auto-vj-01` `__version__`
 `1.0.0-rc.130 → 1.0.0-rc.131`.
+
+## Sub/Kick Split + Kick-Regularity Reshape (2026-09-10, recommender rc.40)
+
+**Trigger.** Phases 3-4 of the zone-map plan, owner: "go ahead and knock
+out p3 & 4 please." Motivated by the recommender-zone investigation
+earlier this session, which found `kick_regularity` conflating "is
+there always bass" with "is there a periodic kick" -- the F8 audit's
+own numbers already showed this happening (widening the sampled band
+from `[0:6]` to `[0:12]` made `kick_regularity_fit` LESS discriminating
+specifically for `rap_rnb`/`chillstep`, the genres most likely to carry
+sustained sub without a hard four-on-the-floor pulse).
+
+**Root cause, restated precisely.** Onset detection is broadband --
+it doesn't distinguish a kick from a snare from a vocal chop. The old
+`_compute_kick_regularity()` sampled `bands[0:12]` (~30-97 Hz) at
+*every* onset and measured the coefficient of variation of that raw
+energy. A sustained bassline, 808, or sub drone sits in exactly that
+range regardless of which percussive element triggered the onset, so
+the metric was really answering "is there reliably something in
+30-97 Hz whenever anything fires," not "is the kick specifically
+hitting a regular pulse." Separately, `kick_regularity` turned out to
+be a live DETECTOR input, not just a recommender/corpus signal --
+`BeatTracker._effective_tactus_ratio()` in `beat_grid.py` tightens
+fold-eagerness at low `kick_regularity` (kr/dbc option B, 2026-08-13) --
+so this reshape's blast radius is bigger than scoring/corpus alone,
+though the fix preserves that consumer's exact contract (0-1, same
+directional meaning) without touching `beat_grid.py` at all.
+
+**Part A: sub/kick split, empirically derived.** Ran two fresh replay
+sessions (`training-dubstep-01`, `training-house-01`, 6 tracks each,
+post the low-band analyzer fix so the data is trustworthy) and compared
+mean per-band energy across bands 0-11. Real result:
+
+| band | Hz (approx) | dubstep/house ratio |
+|---|---|---|
+| 0-2 | 30-37 | 1.65-2.59 (dubstep's sustained sub dominant) |
+| 3 | 40 | 0.94 (near-neutral, house-leaning) |
+| 4-11 | 44-97 | 0.65-1.29 (house's kick punch dominant) |
+
+The ratio flips sign exactly between bands 2 and 3 -- `_SUB_KICK_
+SPLIT_BAND = 3` (~40 Hz), placing the near-neutral band 3 on the kick
+side since its own ratio already leans house. `bands[0:3]` (sub) and
+`bands[3:12]` (kick-punch) now feed two separate deques
+(`self._sub_energies`, `self._kick_energies`) via the new
+`_sample_sub_kick_onset()` method (extracted from `update()`'s own
+sampling site for direct testability).
+
+**Part B: kick-transient gate.** A kick-punch sample only counts as a
+confirmed kick if it exceeds the recent rolling baseline (the mean of
+`self._kick_energies` *before* this sample) by `_KICK_TRANSIENT_GATE_
+RATIO` (1.15 -- a plausible starting value, not yet validated against
+real per-genre confirm/reject rates, flagged for the recalibration
+phase). This is what actually solves the broadband-onset confound:
+sustained presence with no real attack no longer confirms.
+
+**Part C: `_compute_kick_regularity()` reshaped.** Confirmed kicks
+record `self._grid.beat_phase` (0-1) into a new `self._kick_phases`
+deque. Regularity is now the circular-statistics mean resultant length
+of those phases treated as unit-circle angles (`R = |mean(e^(i*2*pi*
+phase))|`) instead of `1 - std/mean` of raw energy -- a steady
+four-on-the-floor kick clusters tightly around one phase (R near 1.0);
+a wandering or absent kick spreads across phases (R near 0.0). Same
+`[0,1]` contract and directional meaning as before, verified to handle
+phase wraparound correctly (phases clustered at the 0.0/1.0 boundary
+score identically to phases clustered mid-range -- a naive linear
+std/mean would have gotten this wrong).
+
+**New signal: `_compute_sub_level()`.** Sustained sub-band presence
+(mean of `self._sub_energies`) -- deliberately NOT a regularity
+computation. Sub content (808s, wobble bass) is fundamentally about how
+much energy is there, not whether it pulses. No recommender term wired
+to this yet (`sub_presence_fit` or similar) -- reaches the corpus
+(`sub_level` field, alongside `kick_regularity` everywhere it already
+reached) so Phase 5's recalibration has real data to fit a fingerprint
+against; scoring wiring is an explicit follow-up decision, not bundled
+here (flag + confirm before any recommender-weight change).
+
+**Deduplication caught along the way.** The recommender's own
+`_update_profile_recommendation()` had an inline duplicate of the exact
+`_compute_kick_regularity()` formula (`raw_kick_regularity`), not a call
+to the method -- a real divergence risk that would have silently split
+the recommender's reading from the director/detector's the moment either
+one changed shape, exactly what landing this reshape would have done if
+left unfixed. Now calls the one canonical method.
+
+**`track_replay.py`'s accuracy-benchmark mirror updated to match.**
+`drop-ins/training-kit-01/tools/track_replay.py` independently
+replicates `AutoVJController`'s kick-regularity computation to feed the
+real `BeatTracker.update()` during accelerated local-track BPM-accuracy
+evaluation (`bpm_eval.py`'s MIREX Acc1/Acc2 metrics) -- its whole
+purpose is staying live-faithful. Left on the old formula, it would have
+silently stopped reproducing what the live app actually does. Updated
+with the same split/gate/circular-regularity logic (sans `sub_level`
+tracking, which nothing in that tool consumes).
+
+**Test updates.** New `tests/test_sub_kick_split.py` (16 tests): the
+empirical crossover's Hz math, split correctness, transient-gate
+confirm/reject behavior (including the "no baseline yet" edge case),
+circular-regularity behavior (tight cluster, scattered, wraparound,
+unit-range contract, defensive-on-bare-stub), and `_compute_sub_level()`
+behavior. `tests/test_f8_kick_band.py` updated for the new split
+sampling (the F8 window itself -- bands 0-11 -- is unchanged as the
+total span; what changed is the split within it).
+`_compute_kick_regularity()`/`_compute_sub_level()` made getattr-
+defensive against a missing deque (`_detector_snapshot()`, which calls
+both, runs on many bare `object.__new__` stubs across the suite that
+predate this work and have no reason to set it up) -- same pattern
+already established for `_genre_matcher_endorse_sigma` and others in
+this class. Full suite green (2400 passed).
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.39 → 1.0.0-rc.40`
+(structural change to `kick_regularity_fit`'s underlying computation,
+not a weight value); `_VJ_WEIGHTS_DOC_VERSION` `100 → 101`; `auto-vj-01`
+`__version__` `1.0.0-rc.131 → 1.0.0-rc.132`. No `_DETECTOR_VERSION` bump
+-- no constant in `beat_grid.py` itself changed, only what value
+`auto_vj.py` feeds into it, with the exact same contract preserved.

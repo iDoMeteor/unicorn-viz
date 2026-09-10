@@ -101,6 +101,7 @@ def _make_stub(*, bpm: float = 124.0, centroid: float = 2000.0, zcr: float = 0.0
         _current_profile_scored=False,
         _last_onset_count=onset_count,
         _kick_energies=deque(maxlen=16),
+        _compute_kick_regularity=lambda: 0.0,
         _reco_weights=dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS),
         _has_bpm_lock=lambda *a, **kw: True,
         _now_playing_telemetry_snapshot=lambda: {},

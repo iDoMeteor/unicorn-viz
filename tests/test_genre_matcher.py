@@ -142,6 +142,7 @@ def _matcher_stub(*, zcr: float, top_candidates: list[tuple[float, float]],
         _current_profile_scored=False,
         _last_onset_count=2.0,
         _kick_energies=deque(maxlen=16),
+        _compute_kick_regularity=lambda: 0.0,
         # zcr is the fixture's ONLY tempo-independent discriminator:
         # vocal weights zeroed (the fixture feeds hnr/fmr = 0, which the
         # vocal-expecting rap_rnb profile would otherwise be penalized
