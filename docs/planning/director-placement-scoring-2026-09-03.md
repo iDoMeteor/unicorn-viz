@@ -640,6 +640,45 @@ rc.15 baseline, pooled metrics table, from_mode source breakdown, the
 prediction scored as written including the pass/fail decision rule's own
 outcome. Code stays uncommitted through this round. BATCH START/END.
 
+### E2 — bass delta gate on drops (pre-registered 2026-09-10, director rc.19 base)
+
+**Why now.** The owner's live C sessions (hotbeats/002 and 003, line
+input, 85 and 127 min, scored from heartbeats by the strategist) showed
+the timing problem solved (build/breakdown/climax on-beat 93–100%) and
+breakdowns landing well (+33/+40 over chance), but **drops landing at
+chance**: energy/bass lift after a drop 24% vs 16–22% chance, median
+post/pre energy 1.00, a drop every 65–80 s at `drop_trigger_threshold`
+0.55 (the owner lowered it from 0.6, where drops were near zero). The
+threshold trades no drops for random drops; the lever is placement.
+
+**Mechanism.** When a drop is due (trigger cleared, downbeat/phrase snap
+resolved), commit it only if the bass over the next bar is at least
+`drop_bass_delta_min` (default 1.10) times the bass over the previous
+two bars, evaluated at the first downbeat after the candidate; a
+candidate that fails re-arms on the next downbeat for up to
+`drop_bass_delta_wait_bars` (default 2) then lapses. Live: fire on the
+first beat that confirms (one-beat look-ahead, the same latency E1 already
+pays). Counters: `drop_delta_gate_blocked_count`,
+`drop_delta_gate_deferred_count`. Cfg-global, live-read, packager
+defaults, instrument reads the counters.
+
+**Predictions (before data):** drop energy-lift rate ×2 on house family
+(19 → ≥ 38%, chance ~10), bass-lift rate similar; drop count −20 to −35%
+(the half-time never-fire guard must hold 12/12: the rescue trigger path
+is exempt from the gate); impact metrics unchanged; mode transitions
+unchanged; lock churn identical. Cells: house-01, tech-house-01,
+big-room-01, dnb-01, hip-hop-01, seed 1, rc.19 control, then the 19×2
+panel against the rc.19 baseline (which must be re-run first: the
+rc.18 dwell retune invalidated every earlier director baseline).
+
+**Owner B vs C.** Since rc.130 (now_playing no longer gates keyframes or
+the lock flag), live line-input sessions record every director event
+with `sequence_training_enabled = true` alone; `log_decisions` is not
+required. B = owner's tuned rc.16 (build downbeat-only, breakdown/climax
+phrase-within-2, threshold 0.55); C = owner variant tuned (climax
+4-bar grid, cruise→build confidence floor 0.53). Packaged with the
+placement section and reported side by side with the E2 cells.
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
