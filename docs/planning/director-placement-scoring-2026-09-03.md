@@ -679,6 +679,42 @@ phrase-within-2, threshold 0.55); C = owner variant tuned (climax
 4-bar grid, cruise→build confidence floor 0.53). Packaged with the
 placement section and reported side by side with the E2 cells.
 
+### E7 — relative cruise-build confidence floor (pre-registered 2026-09-10)
+
+**Finding (live, three owner sessions, heartbeat rows).** The absolute
+`mode_source_min_confidence_build` floor is hostage to the session's
+`downbeat_confidence` distribution, which moves with material and
+detector state:
+
+| session | cruise ticks | downbeat_confidence p50 / p90 on cruise | rising-slope ticks passing 0.53 / 0.60 | builds blocked (counter) |
+| --- | --- | --- | --- | --- |
+| hotbeats/002 (Sep 4, 85 min) | 5653 | 0.58 / 0.67 | 87% / 41% | 499 |
+| hotbeats/003 (Sep 4, 127 min) | 8663 | 0.59 / 0.68 | 82% / 36% | 4095 |
+| unpackaged Sep 5 (14 min, floor 0.6) | 1581 | **0.33 / 0.44** | **2% / 2%** | 267 → **zero builds, whole session in CRUISE** |
+
+The same 0.6 floor that admits 36–41% of build evidence on a good night
+admits 2% on a low-confidence one and the director never leaves cruise.
+This is the E4 lesson again: an absolute threshold on a per-session
+signal needs to be relative to that session (E4 fixed the drop trigger
+the same way with `trigger / rolling p90`).
+
+**Mechanism.** `mode_source_min_confidence_build_rel` (default 0, off): a
+cruise→build transition is admitted when `downbeat_confidence` is at or
+above the given quantile of the session's rolling 60 s
+`downbeat_confidence` history (e.g. 0.50 = the median), instead of an
+absolute value; the absolute floor stays as a hard minimum
+(`mode_source_min_confidence_build`, recommended 0.25 with the relative
+gate on). Counters: `build_blocked_by_rel_confidence_count`; the row
+carries the rolling quantile value so the instrument can audit it.
+
+**Predictions (before data).** On hotbeats-like material, rel 0.50
+reproduces the 0.53-absolute behaviour within 5 points of build count;
+on low-confidence material the director still builds (blocked share
+under 60%); build trend-following no worse than the absolute floor at
+the matched count. Cells: house-01, big-room-01, dnb-01, ambient-01
+(low confidence by nature), seed 1, rc.19 control; then the panel.
+Runs when the training seat has a replay slot; nothing lands without it.
+
 ### E1 — phrase-quantized fires (2026-09-03): PASSED offline, panel bake running
 
 Mechanism: `drop_phrase_snap_bars` (global `[auto_vj]` cfg tunable, 0 = off)
