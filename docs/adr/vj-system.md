@@ -10878,3 +10878,93 @@ not a weight value); `_VJ_WEIGHTS_DOC_VERSION` `100 → 101`; `auto-vj-01`
 `__version__` `1.0.0-rc.131 → 1.0.0-rc.132`. No `_DETECTOR_VERSION` bump
 -- no constant in `beat_grid.py` itself changed, only what value
 `auto_vj.py` feeds into it, with the exact same contract preserved.
+
+---
+
+## `centroid_fit` Removed Entirely (2026-09-10, recommender rc.41)
+
+**Trigger.** Owner, mid-discussion of a fingerprint-family map for Phase 5
+recalibration: "let's remove centroid entirely during this so it stops
+coming up lol. officially retired and dead forever!" -- a decisive
+close-out of a term that had already been dormant (weight `0.0`) since
+rc.19 (2026-08-20) and whose explicit weight-dict entry was removed at
+rc.30/rc.31 (2026-09-04). This landing removes the term itself: its
+computation, the scoring accumulators that fed it, and the `AudioProfile`
+fields it read.
+
+**Why now, not earlier.** The term stayed "retired but present" for three
+weeks specifically so it could be revived if labeled sub-family data ever
+showed a signal the original 57-track study's family-level granularity
+hid (see `weights-and-thresholds.md`'s retirement note). No such data
+appeared, and the term kept surfacing anyway -- most recently as a live
+candidate in the Phase 5 fingerprint-family discussion (the owner asking
+whether "brightness" splits between dark/bright profile pairs should use
+`centroid_fit` or `spectral_shape_fit`). Confirming the answer (`spectral_
+shape_fit`, the only one of the two still carrying real weight) surfaced
+that `centroid_fit` had no path back to relevance for that work either,
+and the owner closed it out rather than let it keep coming up as a
+plausible-sounding option it structurally isn't.
+
+**What was removed, precisely:**
+
+- `drop-ins/auto-vj-01/auto_vj.py`, `_update_profile_recommendation()`:
+  the `centroid_fit`/`mu_cent`/`sigma_cent` computation block; the
+  `centroid_acc` accumulator and its `mean_centroid = centroid_acc / n`
+  reduction (used only by this term); the `'centroid_fit': centroid_fit`
+  entry in the per-candidate `terms` dict.
+- `unicornviz/audio/profiles.py`: the `spectral_centroid_mu`/
+  `spectral_centroid_sigma` fields on `AudioProfile` (dataclass
+  declaration, the ~230-line field-comment block documenting their
+  recalibration history, and both fields on all 23 profile entries).
+- `drop-ins/training-kit-01/tools/package_training_set.py`: `centroid`
+  dropped from `_load_profile_expected_values()`'s per-profile dict and
+  `_format_profile_expected_values_block()`'s rendered line; the
+  `centroid_fit` bullet removed from the LLM tuning prompt's fit-metric
+  explanation; `centroid_fit` dropped from `_RECO_WEIGHT_DEFAULTS`
+  (already absent from the live `_DEFAULT_RECO_WEIGHTS` since rc.30/31,
+  this fallback dict had never been cleaned up to match) and from the
+  prompt's JSON weight-recommendation enum -- the LLM can no longer see,
+  or recommend reweighting, a term that doesn't exist.
+- Three tests deleted (`test_centroid_fit_uses_per_profile_sigma_not_
+  fixed_400`, `test_centroid_fit_is_clipped_for_an_extreme_mismatch`,
+  `test_centroid_fit_clips_symmetrically_below_mu_too`) -- each existed
+  solely to exercise `centroid_fit`'s own mechanism (per-profile sigma
+  reading, the shared Gaussian clip's symmetric behavior). The shared
+  `_gaussian_fit` clip mechanism itself is untouched by this removal and
+  remains covered end-to-end via every other still-live `*_fit` term; no
+  replacement test was added through a different term, since extending
+  clip coverage is a separate concern from removing a retired one.
+
+**What was deliberately NOT touched.** A *second*, independent
+`mean_centroid` computation exists elsewhere in `_update_profile_
+recommendation` (and in the sequence-corpus keyframe writer) -- a raw
+live measurement (linear-FFT centroid against `audio.fft`, Nyquist-aware)
+stamped onto the `profile_recommendation` decision-log mark() and
+sequence-corpus rows as telemetry, fed from `samples`/`n_samp`, structurally
+separate from the `centroid_acc`/`self._reco_samples`-derived accumulator
+that fed `centroid_fit`'s scoring. This raw measurement was never part of
+`centroid_fit`'s own computation (confirmed by reading both code paths
+before editing, not assumed) and stays exactly as-is -- it's genuinely
+independent telemetry, not a scoring term, and removing it wasn't part of
+the owner's ask.
+
+**Verification.** Full suite green after the removal (2397 passed, down
+from 2400 by the three deleted tests -- no unexpected losses). `ruff
+check` clean on every touched file. `bandit` clean (one pre-existing,
+unrelated finding in `package_training_set.py`, not introduced by this
+change). Grepped the full tree afterward for any remaining live-code
+reference to `spectral_centroid_mu`/`spectral_centroid_sigma`/
+`centroid_fit =` outside historical comments -- none found.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.40 → 1.0.0-rc.41`
+(retiring a term is a structural change to what the composite means, per
+the subsystem-versioning rule, even though the weight was already `0.0`
+-- the fields/computation existing at all was the remaining surface
+area). `_VJ_WEIGHTS_DOC_VERSION` `101 → 102`; `weights-and-thresholds.md`'s
+own `centroid_fit` table row and the "Audio profile centroid sigmas"
+section both marked removed/historical rather than rewritten, per the
+"don't rewrite history" convention -- the multi-month weight history and
+original incident accounts stay intact in the changelog. `auto-vj-01`
+`__version__` `1.0.0-rc.132 → 1.0.0-rc.133`. No `_DETECTOR_VERSION` or
+`_DIRECTOR_VERSION` bump -- nothing in `beat_grid.py` or the director's
+phrase-bias logic changed.

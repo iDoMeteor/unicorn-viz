@@ -674,90 +674,28 @@ def test_default_weights_are_genre_pure() -> None:
     assert w['top_cand_fit'] == 0.0
     # centroid_fit joined the zeroed set 2026-08-20 (rc.19): retired on
     # measured evidence (no scalar brightness feature separates genre
-    # families on real audio) -- see docs/adr/vj-system.md. 2026-09-04
-    # (recommender rc.30): the explicit 'centroid_fit': 0.0 entry itself
-    # was removed from _DEFAULT_RECO_WEIGHTS (owner: "let's remove
-    # centroid") -- the composite-score sum now reads a missing weight as
-    # 0.0 via .get(), so an absent key is equivalent to the old explicit
-    # zero, not a behavior change. Term computation/telemetry/profile
-    # fields are untouched -- see the weight dict's own comment.
+    # families on real audio). 2026-09-04 (rc.30): the explicit
+    # 'centroid_fit': 0.0 entry removed from _DEFAULT_RECO_WEIGHTS.
+    # 2026-09-10 (zone-map batch, rc.41): the term itself -- computation,
+    # telemetry, and the AudioProfile fields it read -- fully removed
+    # (owner: "officially retired and dead forever"). See
+    # docs/adr/vj-system.md.
     assert 'centroid_fit' not in w
     for name in ('spectral_shape_fit', 'onset_fit', 'kick_regularity_fit',
                  'zcr_fit', 'vocal_hnr_fit', 'vocal_fmr_fit'):
         assert w[name] > 0.0, name
 
 
-def test_centroid_fit_uses_per_profile_sigma_not_fixed_400(monkeypatch) -> None:
-    """2026-08-06: centroid_fit's Gaussian sigma used to be a fixed 400 Hz
-    for every profile. It now reads spectral_centroid_sigma per profile
-    (tight/medium/wide tiers), mirroring tempo_fit's per-profile mechanism.
-
-    Two variants of the same profile (identical bpm_prior_mu/sigma and
-    spectral_centroid_mu -- only spectral_centroid_sigma differs) isolate
-    the effect: a fixed sigma (the pre-2026-08-06 bug) would score them
-    identically; per-profile sigma must not.
-
-    2026-09-04: which one wins at a GIVEN mismatch is no longer a simple
-    "tight always loses" rule -- _gaussian_fit() gained the missing
-    -log(sigma) normalizer (see its own comment in auto_vj.py), so a
-    tight sigma that's only moderately wrong (this test's 300 Hz mismatch
-    is 1.2 tight-sigma but only 0.5 wide-sigma) gets a real confidence
-    bonus that can outweigh its own larger quadratic penalty at this
-    magnitude -- verified directly: tight_test now wins, not wide_test.
-    A much larger mismatch would eventually flip this back (the quadratic
-    term dominates once x is large enough) -- this test isn't about which
-    one wins at 300 Hz specifically, it's about the two scores being
-    genuinely DIFFERENT (proving sigma is read per-profile, not a fixed
-    constant); the winner is asserted too since it's a real, reproducible
-    consequence of the current formula, not asserted arbitrarily."""
-    import dataclasses
-
-    import unicornviz.audio.profiles as profiles_mod
-    base = profiles_mod.PROFILES['psytrance']
-    tight = dataclasses.replace(base, spectral_centroid_sigma=250.0)
-    wide = dataclasses.replace(base, spectral_centroid_sigma=600.0)
-    restricted = {'tight_test': tight, 'wide_test': wide}
-    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
-    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
-
-    # Centroid measured 300 Hz off both profiles' shared mu -- a real
-    # mismatch, but every other term (tempo, zcr, onset, mu) is identical
-    # between the two candidates, so any score difference is attributable
-    # to spectral_centroid_sigma alone.
-    off_target_centroid = float(base.spectral_centroid_mu) + 300.0
-    stub = _make_full_reco_stub(
-        bpm=float(base.bpm_prior_mu), centroid=off_target_centroid,
-        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
-    )
-    # 2026-08-20 (rc.19): centroid_fit is retired (weight 0.0) in the
-    # defaults; the per-profile-sigma MECHANISM this test guards is still
-    # computed (telemetry, revivable on future evidence), so restore an
-    # explicit weight for the mechanism to show through.
-    stub._reco_weights = dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS)
-    stub._reco_weights['centroid_fit'] = 0.5
-    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
-                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
-
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
-
-    event, kw = stub._engine.marks[0]
-    tight_val = kw['term_values_by_candidate']['tight_test']['centroid_fit']
-    wide_val = kw['term_values_by_candidate']['wide_test']['centroid_fit']
-    assert tight_val != pytest.approx(wide_val), 'sigma appears fixed, not per-profile'
-    assert stub._recommended_profile_key == 'tight_test'
-
-
 def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
-    """2026-08-09: same upgrade as centroid_fit (2026-08-06) and tempo_fit,
-    applied to zcr_fit -- was a fixed 0.020 for every profile, now reads
-    zcr_sigma per profile.
+    """2026-08-09: same upgrade as tempo_fit, applied to zcr_fit -- was a
+    fixed 0.020 for every profile, now reads zcr_sigma per profile.
 
-    2026-09-04: same log-normalizer caveat as centroid_fit's own test
-    above -- at this test's 0.03 offset (3 tight-sigma, 0.75 wide-sigma),
-    tight_test's confidence bonus now outweighs its own quadratic penalty,
-    so tight_test wins where wide_test used to. See that test's docstring
-    for the full reasoning; the point under test is the two scores being
-    genuinely different, not which one happens to win at this magnitude."""
+    2026-09-04: at this test's 0.03 offset (3 tight-sigma, 0.75
+    wide-sigma), _gaussian_fit's -log(sigma) normalizer means
+    tight_test's confidence bonus now outweighs its own quadratic
+    penalty, so tight_test wins where wide_test used to. The point under
+    test is the two scores being genuinely different, not which one
+    happens to win at this magnitude."""
     import dataclasses
 
     import unicornviz.audio.profiles as profiles_mod
@@ -770,7 +708,7 @@ def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
 
     off_target_zcr = float(base.zcr_mu) + 0.03
     stub = _make_full_reco_stub(
-        bpm=float(base.bpm_prior_mu), centroid=float(base.spectral_centroid_mu or 2000.0),
+        bpm=float(base.bpm_prior_mu), centroid=2000.0,
         zcr=off_target_zcr, onset_count=float(base.onset_density_mu or 2.0),
     )
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
@@ -800,7 +738,7 @@ def test_onset_fit_uses_per_profile_sigma_not_fixed_1_2(monkeypatch) -> None:
 
     off_target_onset = float(base.onset_density_mu) + 1.5
     stub = _make_full_reco_stub(
-        bpm=float(base.bpm_prior_mu), centroid=float(base.spectral_centroid_mu or 2000.0),
+        bpm=float(base.bpm_prior_mu), centroid=2000.0,
         zcr=float(base.zcr_mu or 0.08), onset_count=off_target_onset,
     )
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
@@ -944,9 +882,12 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     dh = profiles_mod.PROFILES['deep_house']
     bpm_frac = 0.35  # 0.50 would be the exact midpoint -- see docstring
     mid_bpm = h.bpm_prior_mu + bpm_frac * (dh.bpm_prior_mu - h.bpm_prior_mu)
-    mid_centroid = (h.spectral_centroid_mu + dh.spectral_centroid_mu) / 2
     mid_zcr = (h.zcr_mu + dh.zcr_mu) / 2
-    stub = _make_full_reco_stub(bpm=mid_bpm, centroid=mid_centroid, zcr=mid_zcr, onset_count=2.00)
+    # centroid_fit removed entirely 2026-09-10 (zone-map batch, recommender
+    # rc.41) -- the stub's `centroid` kwarg is now inert (nothing in
+    # _update_profile_recommendation consumes it), kept as a fixed
+    # placeholder rather than touching _make_full_reco_stub's signature.
+    stub = _make_full_reco_stub(bpm=mid_bpm, centroid=2000.0, zcr=mid_zcr, onset_count=2.00)
     stub._app._audio_manager._profile_key = 'deep_house'
     stub._profile_auto_reco_score_margin = 0.08
     stub._profile_auto_reco_confirm_wins = 1
@@ -957,7 +898,7 @@ def _make_trust_test_stub(*, conf: float, dconf: float, locked: bool) -> SimpleN
     # re-deriving the fixture from scratch.
     stub._reco_weights = dict(_AUTO_VJ._DEFAULT_RECO_WEIGHTS)
     stub._reco_weights.update({'tempo_fit': 2.2, 'top_cand_fit': 0.4,
-                               'centroid_fit': 0.5, 'zcr_fit': 0.6,
+                               'zcr_fit': 0.6,
                                'onset_fit': 1.0, 'spectral_shape_fit': 1.4,
                                'kick_regularity_fit': 1.0,
                                'vocal_hnr_fit': 0.3, 'vocal_fmr_fit': 0.4})
@@ -1093,7 +1034,7 @@ def test_term_values_by_candidate_excludes_non_discriminating_terms() -> None:
         assert 'mean_conf' not in terms
         assert 'mean_dconf' not in terms
         assert 'tempo_fit' in terms
-        assert 'centroid_fit' in terms
+        assert 'centroid_fit' not in terms  # removed entirely, rc.41
         assert 'vocal_hnr_fit' in terms
         assert 'vocal_fmr_fit' in terms
 
@@ -1117,91 +1058,27 @@ def test_term_values_by_candidate_reaches_sequence_corpus_too() -> None:
 
 # ---------------------------------------------------------------------------
 # 2026-08-09: found live -- a session whose observed spectral centroid ran
-# ~3700-4000 Hz against every profile's spectral_centroid_mu topping out at
-# 2500 Hz drove centroid_fit past -70 raw for the tightest-sigma candidates,
-# completely swamping every other term (which rarely exceed a few units) and
-# making the composite score effectively just "which candidate's sigma
-# happens to be widest," not genre fit. Every *_fit Gaussian term is now
-# clipped at _GAUSSIAN_FIT_X_CLIP (6.0) sigma before squaring -- the
-# quadratic term's own floor is -0.5*6^2 = -18.0; the two tests below assert
-# against -log(sigma) - 18.0, not a bare -18.0, since 2026-09-04 added the
-# -log(sigma) normalizer to the same shared formula (see _gaussian_fit's own
-# comment in auto_vj.py) -- the clip mechanism itself is unchanged, only
-# what gets added on top of it.
+# ~3700-4000 Hz against every profile's spectral_centroid_mu (removed
+# 2026-09-10, see below) topping out at 2500 Hz drove centroid_fit past -70
+# raw for the tightest-sigma candidates, completely swamping every other
+# term (which rarely exceed a few units) and making the composite score
+# effectively just "which candidate's sigma happens to be widest," not
+# genre fit. Every *_fit Gaussian term is clipped at _GAUSSIAN_FIT_X_CLIP
+# (6.0) sigma before squaring -- the quadratic term's own floor is
+# -0.5*6^2 = -18.0 (see test_gaussian_fit_x_clip_constant_matches_the_
+# documented_floor below for a direct check on the constant).
+#
+# 2026-09-10 (zone-map batch, recommender rc.41): the two end-to-end clip
+# tests that lived here (test_centroid_fit_is_clipped_for_an_extreme_
+# mismatch, test_centroid_fit_clips_symmetrically_below_mu_too) are
+# removed along with centroid_fit itself -- they exercised the shared
+# _gaussian_fit clip mechanism specifically through centroid_fit's own
+# tight-sigma psytrance setup, which no longer exists. The clip mechanism
+# itself is untouched by this removal and still applies to every other
+# *_fit term; this commit doesn't add a replacement end-to-end test
+# through a different term, since that's a separate concern from removing
+# a retired one.
 # ---------------------------------------------------------------------------
-
-
-def test_centroid_fit_is_clipped_for_an_extreme_mismatch(monkeypatch) -> None:
-    import math
-
-    import unicornviz.audio.profiles as profiles_mod
-    base = profiles_mod.PROFILES['psytrance']  # spectral_centroid_sigma=250 (tight)
-    restricted = {'psytrance': base}
-    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
-    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
-
-    # ~16 sigma off mu at this profile's tight 250 Hz sigma -- would be
-    # -0.5*16^2 = -128 raw uncapped; the quadratic term must clip at
-    # exactly -0.5*6^2 = -18.0. 2026-09-04: _gaussian_fit gained the
-    # missing -log(sigma) normalizer (see its own comment in auto_vj.py),
-    # so the CLIPPED total is now -log(sigma) - 18.0, not a bare -18.0 --
-    # the clip itself is unchanged, only the term's own floor moved with
-    # the formula. sigma is a genuine input here (per-profile), not a
-    # feature of the clip, so this asserts the formula directly rather
-    # than a value that would need updating by hand again if sigma ever
-    # changes.
-    extreme_centroid = float(base.spectral_centroid_mu) + 250.0 * 16.0
-    stub = _make_full_reco_stub(
-        bpm=float(base.bpm_prior_mu), centroid=extreme_centroid,
-        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
-    )
-    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
-                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
-
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
-
-    event, kw = stub._engine.marks[0]
-    centroid_fit = kw['term_values_by_candidate']['psytrance']['centroid_fit']
-    expected = -math.log(float(base.spectral_centroid_sigma)) - 18.0
-    # abs=1e-4, not 1e-6: term_values_by_candidate is itself rounded to 4
-    # decimals upstream (terms_by_candidate's own round(value, 4)) before it
-    # ever reaches this dict, so a tighter tolerance would fail on rounding
-    # noise, not a real mismatch.
-    assert centroid_fit == pytest.approx(expected, abs=1e-4)
-
-
-def test_centroid_fit_clips_symmetrically_below_mu_too(monkeypatch) -> None:
-    """Same clip, opposite direction -- an observed value far *below* mu
-    must clip its quadratic term to the same -18.0 floor as far *above*
-    (test above), not just one side of the Gaussian. 2026-09-04: total
-    is -log(sigma) - 18.0, not a bare -18.0 -- see the test above's own
-    updated comment for why."""
-    import math
-
-    import unicornviz.audio.profiles as profiles_mod
-    base = profiles_mod.PROFILES['psytrance']
-    restricted = {'psytrance': base}
-    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
-    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
-
-    extreme_centroid = max(1.0, float(base.spectral_centroid_mu) - 250.0 * 16.0)
-    stub = _make_full_reco_stub(
-        bpm=float(base.bpm_prior_mu), centroid=extreme_centroid,
-        zcr=float(base.zcr_mu or 0.08), onset_count=float(base.onset_density_mu or 2.0),
-    )
-    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
-                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
-
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
-
-    event, kw = stub._engine.marks[0]
-    centroid_fit = kw['term_values_by_candidate']['psytrance']['centroid_fit']
-    expected = -math.log(float(base.spectral_centroid_sigma)) - 18.0
-    # abs=1e-4, not 1e-6: term_values_by_candidate is itself rounded to 4
-    # decimals upstream (terms_by_candidate's own round(value, 4)) before it
-    # ever reaches this dict, so a tighter tolerance would fail on rounding
-    # noise, not a real mismatch.
-    assert centroid_fit == pytest.approx(expected, abs=1e-4)
 
 
 def test_perc_band_centers_hz_matches_the_fingerprint_generator_tool() -> None:
@@ -1291,8 +1168,7 @@ def test_profile_recommendation_mark_stamps_recommender_version() -> None:
 def test_gaussian_fit_x_clip_constant_matches_the_documented_floor() -> None:
     """Direct check on the shared clip constant every *_fit term uses (see
     _gaussian_fit() inside _update_profile_recommendation) -- 6.0 sigma,
-    -18.0 raw ceiling, matches what the two centroid_fit tests above
-    observe end-to-end."""
+    -18.0 raw ceiling."""
     assert _AUTO_VJ._GAUSSIAN_FIT_X_CLIP == pytest.approx(6.0)
     x_clip = _AUTO_VJ._GAUSSIAN_FIT_X_CLIP
     assert -0.5 * x_clip * x_clip == pytest.approx(-18.0)

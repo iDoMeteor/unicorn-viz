@@ -48,29 +48,14 @@ def test_synthwave_tempo_prior_matches_classic_kavinsky_range() -> None:
 
 
 def test_synthwave_spectral_fields_are_calibrated() -> None:
+    """2026-09-10 (zone-map batch, recommender rc.41): spectral_centroid_mu
+    (and the whole centroid_fit term/field pair) removed entirely -- the
+    brightness-ordering claim this test used to make against house no
+    longer applies to anything (no field to compare, no term to score
+    it). zcr_mu/onset_density_mu are still real, live-scoring fields."""
     p = get_profile('synthwave')
-    assert p.spectral_centroid_mu is not None
     assert p.zcr_mu is not None
     assert p.onset_density_mu is not None
-    # 2026-08-09: brightness used to sit below house by design (not
-    # fabricated/arbitrary) -- see the field's comment in profiles.py.
-    #
-    # 2026-09-04 (recommender rc.29): flipped again, this time for real
-    # reasons rather than a data-quality question. house's (and the other
-    # 12 real-fingerprint profiles') spectral_centroid_mu was mechanically
-    # re-derived against the same-night ribbon-redesigned expected_bands
-    # (real per-track median fingerprints), which collapsed every
-    # recomputed value into a narrow 250-450 Hz band -- house is now 450.
-    # synthwave is one of the four still-disabled, no-training-corpus
-    # profiles (see its own field comment / enabled=False) and was
-    # correctly NOT touched by that recompute, so it kept its old
-    # hand-authored 1700. The ordering is now an artifact of which
-    # profiles have real per-track data, not a genre-brightness claim --
-    # see spectral_centroid_mu's own field comment in profiles.py for the
-    # full finding (centroid_fit stays weight-0.0/dormant throughout, so
-    # none of this has live-scoring effect).
-    house = get_profile('house')
-    assert p.spectral_centroid_mu > house.spectral_centroid_mu
 
 
 def test_synthwave_vocal_fields_left_uncalibrated() -> None:

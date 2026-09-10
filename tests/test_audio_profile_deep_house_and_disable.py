@@ -188,10 +188,12 @@ def test_deep_house_tempo_sits_below_house_and_above_chillstep() -> None:
 def test_deep_house_is_warmer_than_house() -> None:
     """2026-09-10 (zone-map batch): 'tech_house' (the third leg of this
     comparison) was removed entirely -- not in the owner's new full-roster
-    genre BPM table. deep_house < house still holds on its own."""
+    genre BPM table. deep_house < house still holds on zcr_mu.
+    spectral_centroid_mu/centroid_fit removed entirely the same batch
+    (recommender rc.41) -- brightness comparisons now belong to
+    spectral_shape_fit's per-profile expected_bands ribbon, not a scalar."""
     deep_house = get_profile('deep_house')
     house = get_profile('house')
-    assert deep_house.spectral_centroid_mu < house.spectral_centroid_mu
     assert deep_house.zcr_mu < house.zcr_mu
 
 

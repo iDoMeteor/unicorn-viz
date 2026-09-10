@@ -582,21 +582,16 @@ def main() -> int:
 
     # Sanity-check: report per-profile peak band and centroid estimate.
     #
-    # 2026-08-09: this centroid≈ estimate is exactly what AudioProfile's
-    # spectral_centroid_mu should be seeded from (same weighted-mean-frequency
-    # formula the live recommender uses against the real capture spectrum) --
-    # but that field has always been set independently (originally hand/LLM-
-    # authored in a separate pass, not derived from this tool's own output).
-    # The two drifted apart badly: 14 of 20 profiles' expected_bands implied
-    # a meaningfully brighter centroid than their stated spectral_centroid_mu
-    # (up to 1.9x), found live when a real session's observed centroid
-    # looked like a wild outlier against the old mu values but was actually
-    # close to what the fingerprints already implied. spectral_centroid_mu
-    # was recalibrated 2026-08-09 to match this exact number (rounded to the
-    # nearest 50 Hz) for every profile -- see the field's comment in
-    # profiles.py and docs/adr/vj-system.md. When adding a new profile here,
-    # copy the printed centroid≈ value straight into spectral_centroid_mu
-    # rather than re-deriving or re-eyeballing a separate number.
+    # 2026-08-09: this centroid≈ estimate used to be exactly what
+    # AudioProfile's spectral_centroid_mu should be seeded from (same
+    # weighted-mean-frequency formula the live recommender used against the
+    # real capture spectrum) -- see docs/adr/vj-system.md for that history.
+    # 2026-09-10 (zone-map batch, recommender rc.41): spectral_centroid_mu
+    # and centroid_fit were removed from the live system entirely (retired
+    # on measured evidence: no scalar brightness feature separates genre
+    # families on real audio). This printout is now a peak-band/shape
+    # sanity check only -- there is no field to copy the value into
+    # anymore.
     print('\nProfile summary (peak band Hz | cosine-diagonal check):')
     for key, vec in fingerprints.items():
         peak_idx = int(np.argmax(vec))

@@ -1217,7 +1217,7 @@ def test_load_profile_expected_values_matches_live_roster() -> None:
     values = _load_profile_expected_values()
     assert set(values.keys()) == set(PROFILES.keys())
     for key, profile in PROFILES.items():
-        assert values[key]['centroid'] == pytest.approx(profile.spectral_centroid_mu)
+        assert 'centroid' not in values[key]  # removed entirely, rc.41
         assert values[key]['zcr'] == pytest.approx(profile.zcr_mu)
         assert values[key]['onset'] == pytest.approx(profile.onset_density_mu)
 
@@ -1245,13 +1245,13 @@ def test_format_profile_expected_values_block_empty() -> None:
 
 def test_format_profile_expected_values_block_renders_all_entries() -> None:
     values = {
-        'house': {'centroid': 1500.0, 'zcr': 0.06, 'onset': 2.5},
-        'ambient': {'centroid': 800.0, 'zcr': 0.03, 'onset': 0.4},
+        'house': {'zcr': 0.06, 'onset': 2.5},
+        'ambient': {'zcr': 0.03, 'onset': 0.4},
     }
     block = _format_profile_expected_values_block(values)
     assert 'ambient:' in block
     assert 'house:' in block
-    assert 'centroid=1500 Hz' in block
+    assert 'zcr=0.060' in block
     assert 'zcr=0.060' in block
     assert 'onset=2.5/s' in block
 

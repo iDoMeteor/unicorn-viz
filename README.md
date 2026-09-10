@@ -513,6 +513,14 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.127** — Removed `AudioProfile.spectral_centroid_mu`/
+  `spectral_centroid_sigma` (`unicornviz/audio/profiles.py`) along with
+  auto-vj-01's `centroid_fit` recommender term that read them -- retired
+  at weight 0.0 since 2026-08-20, deleted outright now per owner
+  direction. No user-facing config change (the fields were never
+  exposed in `config.toml`); see `docs/adr/vj-system.md` §
+  "`centroid_fit` Removed Entirely" and auto-vj-01's own changelog for
+  the full account.
 - **1.0.0-beta.126** — Fixed the shared 64-band perceptual spectrum
   (`audio.bands`) feeding two different units into one normalizer: the
   2026-09-04 low-band fix substituted long-window FFT magnitudes into the
