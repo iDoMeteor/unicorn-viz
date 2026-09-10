@@ -2228,6 +2228,29 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_fmr_mu=0.3117,
         vocal_hnr_sigma=0.1623,
         vocal_fmr_sigma=0.0586,
+        # 2026-09-10 (zone-map batch, Phase 5 pilot-run fix): expected_bands_
+        # sigma was missing entirely here (stayed None) even after synthwave
+        # itself got a real one -- an oversight, not intentional. A missing
+        # sigma keeps a profile on the legacy cosine-similarity fallback
+        # path instead of spectral_shape_fit's Gaussian ribbon fit, which
+        # measures SHAPE match only, independent of scale -- exactly the
+        # coarser mechanism already diagnosed as a false-positive risk for
+        # every other profile's old hand-authored fingerprint (see "Data-
+        # Derived expected_bands" in docs/adr/vj-system.md). Confirmed live
+        # in the Phase 5 pilot run: hardsynth (the same gap, same donor) won
+        # the recommender's live pick across nearly every unrelated genre
+        # tested. synthwave's own real sigma, unshifted -- same convention
+        # as every other tilted dependent in this file.
+        expected_bands_sigma=[
+            0.094, 0.099, 0.057, 0.118, 0.095, 0.110, 0.188, 0.141,
+            0.238, 0.114, 0.206, 0.096, 0.085, 0.101, 0.127, 0.055,
+            0.041, 0.100, 0.034, 0.089, 0.128, 0.088, 0.072, 0.052,
+            0.122, 0.019, 0.017, 0.017, 0.014, 0.013, 0.010, 0.012,
+            0.011, 0.009, 0.009, 0.007, 0.007, 0.004, 0.005, 0.004,
+            0.004, 0.003, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+        ],
         expected_bands=[
             0.173, 0.204, 0.221, 0.306, 0.328, 0.392, 0.444, 0.512,
             0.359, 0.301, 0.277, 0.293, 0.340, 0.328, 0.224, 0.180,
@@ -2275,6 +2298,19 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_fmr_mu=0.3117,
         vocal_hnr_sigma=0.1623,
         vocal_fmr_sigma=0.0586,
+        # 2026-09-10 (zone-map batch, Phase 5 pilot-run fix): same missing-
+        # sigma oversight as vaporwave's own field comment -- synthwave's
+        # real sigma, unshifted.
+        expected_bands_sigma=[
+            0.094, 0.099, 0.057, 0.118, 0.095, 0.110, 0.188, 0.141,
+            0.238, 0.114, 0.206, 0.096, 0.085, 0.101, 0.127, 0.055,
+            0.041, 0.100, 0.034, 0.089, 0.128, 0.088, 0.072, 0.052,
+            0.122, 0.019, 0.017, 0.017, 0.014, 0.013, 0.010, 0.012,
+            0.011, 0.009, 0.009, 0.007, 0.007, 0.004, 0.005, 0.004,
+            0.004, 0.003, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+        ],
         expected_bands=[
             0.158, 0.188, 0.204, 0.284, 0.306, 0.369, 0.420, 0.486,
             0.342, 0.289, 0.268, 0.285, 0.332, 0.322, 0.222, 0.179,
@@ -2325,6 +2361,19 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_fmr_mu=0.3117,
         vocal_hnr_sigma=0.1623,
         vocal_fmr_sigma=0.0586,
+        # 2026-09-10 (zone-map batch, Phase 5 pilot-run fix): same missing-
+        # sigma oversight as vaporwave/chillwave's own field comments --
+        # synthwave's real sigma, unshifted.
+        expected_bands_sigma=[
+            0.094, 0.099, 0.057, 0.118, 0.095, 0.110, 0.188, 0.141,
+            0.238, 0.114, 0.206, 0.096, 0.085, 0.101, 0.127, 0.055,
+            0.041, 0.100, 0.034, 0.089, 0.128, 0.088, 0.072, 0.052,
+            0.122, 0.019, 0.017, 0.017, 0.014, 0.013, 0.010, 0.012,
+            0.011, 0.009, 0.009, 0.007, 0.007, 0.004, 0.005, 0.004,
+            0.004, 0.003, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+        ],
         expected_bands=[
             0.101, 0.124, 0.139, 0.199, 0.221, 0.274, 0.321, 0.382,
             0.277, 0.241, 0.229, 0.250, 0.300, 0.298, 0.211, 0.175,

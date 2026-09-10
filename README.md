@@ -513,6 +513,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.130** — Fixed a real bug found during the owner's Phase
+  5 pilot run: `vaporwave`/`chillwave`/`hardsynth` never received
+  `expected_bands_sigma` when their donor (`synthwave`) got a real one
+  the same session, leaving them on the legacy cosine-similarity
+  fallback path. Confirmed live (`hardsynth`'s share of the
+  recommender's live pick dropped from 25-31% to 2-12% across the same
+  4 re-run sessions once fixed). See `docs/adr/vj-system.md` § "Phase 5
+  Pilot Run" for the full pilot-run findings, including a separate,
+  still-open `electro`/`peak`/`dubstep` over-broad-matching pattern.
 - **1.0.0-beta.129** — Phase 5 first pass on `unicornviz/audio/
   profiles.py`'s fingerprint placeholders: real corpus derived for
   `progressive` (15 already-packaged buckets, never used before) and

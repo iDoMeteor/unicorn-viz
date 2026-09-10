@@ -11297,3 +11297,92 @@ corpus, 11 given directional tilts, 1 gaining a ribbon-fit mechanism for
 the first time); `_VJ_WEIGHTS_DOC_VERSION` `103 → 104`. Full suite green
 (2397 passed, same count -- one test renamed, none added/removed net).
 No `_DETECTOR_VERSION`/`_DIRECTOR_VERSION` bump.
+
+---
+
+## Phase 5 Pilot Run: Missing-Sigma Bug Found and Fixed (2026-09-10, recommender rc.44)
+
+**Trigger.** Owner: run 5 tracks from every genre we have library material
+for, as a pre-big-run pilot, picking familiar tracks and avoiding the
+dedicated `traing - toughies` list. 14 of the 27 profiles have a matching
+`media_playlists.json` entry (`training - <genre> NN`); the other 13
+(`psytrance`, `hard_techno`, `hardstyle`, `chillstep`, `vaporwave`,
+`chillwave`, `hardsynth`, `midtempo`, `electro`, `deeptrance`, `peak`,
+`trap`'s own dedicated list, `rnb`'s thin one aside) have no dedicated
+library material of their own -- skipped, consistent with their
+acknowledged zero/thin-corpus status.
+
+**One real bug found and fixed, live, before the write-up.** Reading
+`recommended_profile_key` (not `current_profile_key`/`audio_profile_key`,
+which only reflects the session's STARTING profile until a switch is
+actually confirmed -- an early read of the wrong field briefly produced
+an alarming false picture, caught before reporting it) showed `hardsynth`
+winning the live recommendation across nearly every unrelated genre
+tested (25-31% of ticks in ambient/house/downtempo/deep-house sessions,
+none of them synth-adjacent). Root cause: `vaporwave`/`chillwave`/
+`hardsynth` never received `expected_bands_sigma` when `synthwave` (their
+donor) got its own real one in the same-session Phase 5 first pass above
+-- an oversight, not intentional. A missing sigma keeps a profile on the
+legacy cosine-similarity fallback path (shape match only, independent of
+scale) instead of `spectral_shape_fit`'s Gaussian ribbon fit -- exactly
+the coarser, false-positive-prone mechanism this file's own "Data-Derived
+expected_bands" entry already diagnosed for every other profile's old
+hand-authored fingerprint. Fixed by giving all three `synthwave`'s real
+sigma, unshifted (same convention as every other tilted dependent).
+**Verified, not assumed:** re-ran the same 4 worst-affected sessions
+after the fix -- `hardsynth`'s share dropped from 25-31% to 2-12% across
+all four.
+
+**What the fix did NOT resolve, flagged not fixed.** The same 4 re-run
+sessions now show `electro` as the new dominant wrong answer (40-45%),
+with `peak`/`dubstep` still showing up broadly across unrelated genres.
+This is a different, deeper pattern than the sigma bug: `electro`/`peak`/
+`deeptrance` are exactly the OTHER profiles tilted (not sigma-fixed) in
+the same Phase 5 first pass -- a directional nudge of a donor's real
+ribbon, with the donor's own sigma left unshifted, apparently isn't
+distinctive enough to hold its own niche against real audio the way an
+independently-measured fingerprint would. This overlaps with, and likely
+compounds, the already-known, already-owner-gated `dubstep` dominance
+bias flagged 2026-09-03 (see the memory record, not this file) -- more
+candidate profiles in an eligible BPM band structurally means more
+chances for a loose-fitting generic winner. Not touched here: this needs
+either real corpus (the Phase 5 harvest this pilot was explicitly a
+precursor to) or a deliberate, owner-reviewed weight/threshold call, not
+a guessed fix on top of a guess.
+
+**Also found, unrelated:** `training - synthwave 01` crashes the replay
+harness outright (`av.error.InvalidDataError`) on a corrupted audio file
+-- a real, reproducible bug in that one library file, not a scoring
+issue. Not investigated further here (out of scope for a fingerprint
+pilot); flagged for whoever owns library file health next.
+
+**Per-genre pilot results** (`recommended_profile_key` distribution,
+`--limit 5 --seed 1` accelerated replay, `training - <genre> 01` unless
+noted):
+
+| Genre list | Expected | Top live picks |
+| --- | --- | --- |
+| ambient | `ambient` | `electro` 41%, `dubstep` 21%, `peak` 19%, `ambient` 6% *(post-fix rerun)* |
+| big room | `peak_time` | `peak` 37%, `electro` 17%, `dubstep` 13%, `hardsynth` 12% |
+| dance | `electronic` | `electro` 46%, `house` 15%, `deeptrance` 10% |
+| deep house | `deep_house` | `electro` 45%, `peak` 16%, `hyphy` 12% *(post-fix rerun)* |
+| downtempo | `downtempo` | `peak` 20%, `dubstep` 19%, `drum_and_bass` 13%, `hardsynth` 12% *(post-fix rerun)* |
+| drum and bass | `drum_and_bass` | `dubstep` 23%, `electro` 22%, `drum_and_bass` 17% |
+| dubstep | `dubstep` | `dubstep` 55%, `electro` 22% -- best result of the batch |
+| hip hop | `rap_rnb` | `dubstep` 30%, `drum_and_bass` 22%, `peak` 15% |
+| house | `house` | `electro` 40%, `peak` 25%, `house` 21% *(post-fix rerun)* |
+| progressive house | `progressive` | `peak` 37%, `electro` 29%, `hardsynth` 12% |
+| rnb | `rnb` | `electro` 38%, `dubstep` 32%, `hardsynth` 20% |
+| techno | `techno` | `peak` 24%, `dubstep` 19%, `electro` 14%, `trance` 9% |
+| trance | `trance` | `peak` 21%, `psytrance` 16%, `peak_time` 12% |
+| trap hip hop | `trap`/`hyphy` | `dubstep` 59%, `drum_and_bass` 19% |
+
+Only `dubstep` reliably recommends itself. This is the expected shape of
+"early data" from a pilot explicitly run to surface exactly this --
+not a regression to panic over, the reason Phase 5's real harvest
+exists.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.43 → 1.0.0-rc.44` (a
+real correctness fix to three profiles' scoring mechanism, not a value
+tune); `_VJ_WEIGHTS_DOC_VERSION` `104 → 105`. No `_DETECTOR_VERSION`/
+`_DIRECTOR_VERSION` bump.
