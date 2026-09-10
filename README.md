@@ -513,6 +513,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.126** — Fixed the shared 64-band perceptual spectrum
+  (`audio.bands`) feeding two different units into one normalizer: the
+  2026-09-04 low-band fix substituted long-window FFT magnitudes into the
+  bottom bands without applying the same peak-normalize-and-energy-scale
+  the short path uses, crushing every band above the replacement boundary
+  toward ~0 regardless of real signal (affected Audio Spectrum, Audio Bass
+  Machine, and auto-vj-01's `spectral_shape_fit`). Also corrected the
+  replacement count from a hardcoded, wrong 25 to the real, rate-aware
+  collapse count (19 at 48kHz, 18 at 44.1kHz). See docs/adr/vj-system.md
+  "Correction: the Dual-Window Fix Was Feeding Two Different Units Into
+  One Normalizer."
 - **1.0.0-beta.125** — Windows fullscreen is a borderless window covering
   the display instead of SDL's fullscreen-desktop flag, so Windows never
   treats the app as a fullscreen game: Alt+Tab and the Win key no longer flip

@@ -106,11 +106,16 @@ _PERC_F_MAX = 16_000.0
 # chosen over doubling (4096, still 7 collapsed) and over widening the
 # SHARED short window that every effect's transient response depends on.
 _LOW_BAND_N_FFT = 8192
-# Number of low bands (0-indexed, exclusive upper bound) replaced by the
-# long-window analysis -- matches exactly how many bands collapse under
-# the SHORT path's own 1024-sample window at 48kHz (verified directly
-# against _recompute_band_edges()'s own construction, not eyeballed).
-_LOW_BAND_REPLACE_N = 25
+# The number of low bands actually replaced by the long-window analysis
+# used to live here as a hardcoded 25, with a comment claiming it was
+# "verified directly against _recompute_band_edges()'s own construction"
+# -- it wasn't: the real collapse count computed from that construction
+# is 19 at 48kHz / 18 at 44.1kHz (matching _LOW_BAND_N_FFT's own comment
+# above, which the 25 directly contradicted). 25 reached to 348 Hz when
+# the short path's resolution problem only extends to ~194 Hz, widening
+# the mismatched-units region by six bands on top of the scale bug fixed
+# below. Now computed per-instance, rate-aware, in
+# _recompute_band_edges() as self._low_band_replace_n -- see there.
 
 # 2026-08-11: public (not underscore-prefixed) geometric-mean center
 # frequency of each of the 64 bands above, Hz -- the same formula
@@ -699,6 +704,13 @@ class Analyzer:
         self._low_band_edges: np.ndarray = np.clip(
             np.round(edges_hz / low_bin_hz).astype(int), 0, _LOW_BAND_N_FFT // 2 - 1,
         )
+        # Number of low bands the long-window FFT should replace: exactly
+        # how many perceptual bands collapse onto the same short-path FFT
+        # bin (edges[i+1] <= edges[i]) -- rate-aware since bin_hz above is.
+        # 19 at 48kHz, 18 at 44.1kHz (see _LOW_BAND_N_FFT's own comment).
+        self._low_band_replace_n: int = int(
+            np.sum(self._perc_edges[1:] <= self._perc_edges[:-1])
+        )
 
     def _window_for(self, n: int) -> np.ndarray:
         """Return a cached Hann window for the given block length."""
@@ -963,27 +975,43 @@ class Analyzer:
             self._perc_work[i] = self._smoothed[lo:hi + 1].mean() if hi > lo else self._smoothed[lo]
 
         # Low-band resolution fix, continued: replace the bottom
-        # _LOW_BAND_REPLACE_N bands (the ones the short FFT above cannot
-        # resolve -- see _LOW_BAND_REPLACE_N's own comment) with values
-        # from the long-window FFT, once the rolling buffer has seen a
-        # full window's worth of real audio. Scale-corrected by the ratio
-        # of window sums so a sustained tone's magnitude is comparable
-        # between the two differently-sized Hann windows -- the short
-        # path applies no normalization of its own either, so this
-        # matches that existing convention rather than inventing a new
-        # one. Deliberately NOT reached during silence (matches every
-        # other energy-gated block in this method) -- a near-zero buffer
-        # would just replace real zeros with differently-scaled near-zero
-        # noise for no benefit.
+        # self._low_band_replace_n bands (the ones the short FFT above
+        # cannot resolve -- see its own comment) with values from the
+        # long-window FFT, once the rolling buffer has seen a full
+        # window's worth of real audio. Deliberately NOT reached during
+        # silence (matches every other energy-gated block in this
+        # method) -- a near-zero buffer would just replace real zeros
+        # with differently-scaled near-zero noise for no benefit.
+        #
+        # 2026-09-10: the previous version scaled low_mag by the ratio of
+        # window sums (float(window.sum()) / float(self._low_band_window.
+        # sum())) on the theory that "the short path applies no
+        # normalization of its own either, so this matches that existing
+        # convention" -- that premise was false. The short path's own
+        # spectrum IS normalized 35 lines above (spectrum /= max_val;
+        # spectrum *= sqrt(energy)), so low_mag was being substituted in
+        # raw units against an already-normalized array. The window-sum
+        # ratio corrects for window-length gain, not for peak-normalize-
+        # and-rescale, so it left low_mag roughly 10x too large -- it
+        # dominated the peak_perc = self._perc_work.max() below on every
+        # frame, crushing bands 25-63 toward ~0.01 regardless of real
+        # signal there (measured: bands>0.10 == exactly the replacement
+        # count, i.e. everything the long path writes lights up and
+        # nothing else does). Fixed by applying the SAME normalization
+        # convention the short path uses, so both paths land in the same
+        # units before peak_perc's shared final normalize.
         if energy > 1e-5 and self._low_band_warm_samples >= _LOW_BAND_N_FFT:
             np.multiply(self._low_band_pcm, self._low_band_window, out=self._low_band_windowed)
             low_mag = np.abs(np.fft.rfft(self._low_band_windowed))
-            low_edges = self._low_band_edges
-            scale = float(window.sum()) / float(self._low_band_window.sum())
-            for i in range(_LOW_BAND_REPLACE_N):
-                lo, hi = int(low_edges[i]), int(low_edges[i + 1])
-                val = low_mag[lo:hi + 1].mean() if hi > lo else low_mag[lo]
-                self._perc_work[i] = val * scale
+            low_max = low_mag.max()
+            if low_max > 1e-6:
+                low_mag /= low_max
+                low_mag *= np.sqrt(energy)
+                low_edges = self._low_band_edges
+                for i in range(self._low_band_replace_n):
+                    lo, hi = int(low_edges[i]), int(low_edges[i + 1])
+                    val = low_mag[lo:hi + 1].mean() if hi > lo else low_mag[lo]
+                    self._perc_work[i] = val
 
         peak_perc = self._perc_work.max()
         if peak_perc > 1e-6:

@@ -9123,6 +9123,84 @@ adjacent `set_sample_rate()` edge-recompute fix (both `_perc_edges` and
 `_low_band_edges` change on a genuine rate change, stay identical on a
 same-rate no-op call). Full suite green (2149 passed) before landing.
 
+### Correction: the Dual-Window Fix Was Feeding Two Different Units Into One Normalizer (2026-09-10)
+
+**Trigger.** The effects team, auditing `audio_spectrum.py` for a
+symptom (bands above ~350Hz reading visually dead), traced it back to
+this same fix and found the scale-correction premise was wrong. Verified
+independently before touching any code: fed the real `Analyzer.process()`
+pipeline synthetic pink noise (which should read roughly flat on a
+log-spaced analyzer) and reproduced the exact symptom from scratch --
+bands 0-24 at 0.42-1.00, a sharp cliff exactly at band 25, bands 25-63
+crushed to 0.01-0.09. `bands > 0.10` count matched the replacement count
+precisely: everything the long path wrote was lit, everything else was
+dead.
+
+**Root cause.** The "What landed" paragraph above states the scale
+correction "matches the existing convention (the short path itself
+applies no additional normalization either)." That premise is false --
+`process()` normalizes the short path's own `spectrum` 35 lines above
+the low-band-replace block (`spectrum /= max_val; spectrum *= sqrt
+(energy)`) before it ever reaches `self._smoothed`/`self._perc_work`.
+The window-sum ratio (`window.sum() / low_window.sum()`) corrects for
+window-length gain, which is a real but different effect -- it does
+nothing about the peak-normalize-and-rescale the short path applies and
+the long path didn't. Measured directly: long-window magnitude vs.
+short-window magnitude on the same bands (20-24), 10.5x larger;
+discontinuity across the band-24→25 seam, 10.2x. The subsequent
+`peak_perc = self._perc_work.max()` (whole-vector normalize) then always
+found its max in the unnormalized low bands, crushing everything above
+band 25 toward ~0.01 regardless of real signal there.
+
+**Also wrong: `_LOW_BAND_REPLACE_N = 25`.** Its own comment claimed it
+was "verified directly against `_recompute_band_edges()`'s own
+construction, not eyeballed." Recomputed the real collapse count from
+that exact construction: **19 at 48kHz, 18 at 44.1kHz** -- matching
+`_LOW_BAND_N_FFT`'s own neighboring comment ("down from 19"), which the
+25 directly contradicted five lines below it in the same file. 25
+reached to 348Hz when the actual resolution problem only extends to
+~194Hz, widening the mismatched-units region by six bands on top of the
+scale bug.
+
+**Fix.** Both paths now share the same normalization convention before
+either is written into the shared 64-band vector: `low_mag` is divided
+by its own max and scaled by `sqrt(energy)`, identically to the short
+path's `spectrum`, in place of the window-sum-ratio scale factor. The
+replacement count is no longer a module constant -- `_recompute_band_
+edges()` now computes `self._low_band_replace_n` from the real collapse
+count (`edges[i+1] <= edges[i]` over `_perc_edges`), so it stays correct
+automatically if the short window or band count ever changes, and is
+already rate-aware via the same method that handles `set_sample_rate()`.
+
+**Blast radius.** Only `data.bands` was affected -- `data.fft` (the raw
+smoothed spectrum) is untouched, so any consumer reading `audio.fft`
+directly was never affected. Confirmed consumers of `bands`: Audio
+Spectrum, Audio Bass Machine, and `auto-vj-01`'s `spectral_shape_fit`
+ribbon match -- the fix this session targeted the detector's own
+fingerprinting, but `bands` is explicitly "shared across all consumers
+(effects + auto-VJ)" (`analyzer.py:96`), so the effects took the same
+hit. This also sharpens the "Open follow-up" note in the original entry
+above: every profile's `expected_bands`/`expected_bands_sigma` was
+already known to predate the low-band fix entirely: it turns out the fix
+itself was also corrupting the very data those fingerprints are matched
+against, for every session run between 2026-09-04 and this correction.
+Any `spectral_shape_fit`-driven finding from a session in that window
+should be treated as unconfirmed until re-run against this fix.
+
+**Verification.** Reproduced the bug independently on synthetic pink
+noise before fixing anything (18.9x low/high ratio, own seed/methodology
+-- same shape, different exact number than the effects team's 46.4x on
+theirs). Re-ran after the fix: `tests/test_analyzer_low_band_resolution.
+py` gains `test_low_and_high_bands_share_units_on_pink_noise` (asserts
+the low/high band means stay within 10x of each other on pink noise, and
+that the high-band mean is genuinely nonzero, not just "no crash").
+Existing tests updated for the now-rate-aware `_low_band_replace_n`
+(was the hardcoded, wrong `_LOW_BAND_REPLACE_N` module constant). Full
+suite green.
+
+**Bookkeeping.** Same as the original entry -- no `_RECOMMENDER_VERSION`/
+`_DETECTOR_VERSION` bump, core `unicornviz` analyzer change only.
+
 ## Evidence-Based Recommender Audit: Vocal Sigma, BPM Re-Fit, Centroid Recompute, Four Profiles Disabled (2026-09-04, recommender rc.29)
 
 **Trigger.** Owner, after the log-normalizer fix below changed how
