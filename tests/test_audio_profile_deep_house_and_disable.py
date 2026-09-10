@@ -220,12 +220,18 @@ def test_deep_house_vocal_fields_now_calibrated() -> None:
     medians re-fit (0.5384->0.5672 / 0.3192->0.3244), which also added a
     real fitted vocal_hnr_sigma/vocal_fmr_sigma in place of the flat
     0.20/0.15 constant every profile previously shared -- see
-    vocal_hnr_sigma's own field comment in profiles.py."""
+    vocal_hnr_sigma's own field comment in profiles.py.
+
+    2026-09-10 (zone-map batch, Phase 5 fingerprint refresh): superseded
+    again -- re-derived pooling ALL packaged training-deep-house-01
+    buckets (11 tracks, up from whatever narrower set fed rc.29's own
+    numbers), including the owner's pilot-run tracks from the same
+    session. 0.5672->0.5386 / 0.3244->0.3192."""
     p = get_profile('deep_house')
-    assert p.vocal_hnr_mu == pytest.approx(0.5672)
-    assert p.vocal_fmr_mu == pytest.approx(0.3244)
-    assert p.vocal_hnr_sigma == pytest.approx(0.0444)
-    assert p.vocal_fmr_sigma == pytest.approx(0.0300)
+    assert p.vocal_hnr_mu == pytest.approx(0.5386)
+    assert p.vocal_fmr_mu == pytest.approx(0.3192)
+    assert p.vocal_hnr_sigma == pytest.approx(0.1624)
+    assert p.vocal_fmr_sigma == pytest.approx(0.0505)
 
 
 # ---- hyphy/chillstep fingerprint regeneration (2026-08-06) -------------

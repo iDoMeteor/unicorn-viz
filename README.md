@@ -513,6 +513,16 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.131** — Re-derived every pilot-tested genre's fingerprint
+  in `unicornviz/audio/profiles.py` (14 profiles) from ALL pooled real
+  corpus per genre, not just the pilot's own 5-track sample:
+  `downtempo`/`rnb`/`trap` upgraded from a guessed tilt to real data;
+  `rap_rnb`/`rnb` decoupled into independent pools; `trap`/`hyphy`
+  intentionally now share a source. Caught and avoided a near-miss on
+  `electronic`/"Dance," whose vocal-presence control-pair design would
+  have been silently defeated by the crate's own (not actually
+  vocal-free) real reading. See `docs/adr/vj-system.md` § "All
+  Fingerprints Updated From Pooled Real Corpus".
 - **1.0.0-beta.130** — Fixed a real bug found during the owner's Phase
   5 pilot run: `vaporwave`/`chillwave`/`hardsynth` never received
   `expected_bands_sigma` when their donor (`synthwave`) got a real one

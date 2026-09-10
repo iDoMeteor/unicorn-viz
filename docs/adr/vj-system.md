@@ -11386,3 +11386,92 @@ exists.
 real correctness fix to three profiles' scoring mechanism, not a value
 tune); `_VJ_WEIGHTS_DOC_VERSION` `104 → 105`. No `_DETECTOR_VERSION`/
 `_DIRECTOR_VERSION` bump.
+
+---
+
+## All Fingerprints Updated From Pooled Real Corpus (2026-09-10, recommender rc.45)
+
+**Trigger.** Owner, after the pilot-run report: "let's update all our
+fingerprints and run the same songs/genres one more time!" For every
+genre with real library material (14 of 27 profiles), pooled ALL
+packaged buckets under that genre's own training-list slug -- not just
+today's 5 pilot tracks -- and re-derived `expected_bands`/
+`expected_bands_sigma`/`vocal_hnr_mu`/`vocal_fmr_mu`/`zcr_mu`/
+`onset_density_mu` (plus sigmas) from scratch, using the same per-track
+median/MAD-derived ribbon methodology already established for every
+other real profile in this roster. Pooling all buckets (not just the
+newest) means every profile's update includes both its full historical
+corpus AND today's fresh pilot tracks, and -- because `per_track_band_
+means()` groups by `track_id` regardless of which bucket a row came from
+-- repeated buckets of the same small crate just make each track's own
+average more robust, not more numerous; track counts below are genuinely
+distinct tracks, not bucket counts.
+
+**Profiles updated, real data, straightforward refresh (8):** `ambient`
+(14 tracks), `house` (46), `deep_house` (11), `drum_and_bass` (16),
+`dubstep` (14), `techno` (14), `trance` (11), `progressive` (13, same
+track count as its earlier derivation this session -- the extra bucket
+pooled was a replay of tracks already counted).
+
+**Profiles upgraded from a guessed tilt to real data (3) -- exactly what
+this pass was for:** `downtempo` (14 tracks, from `training-downtempo-01`,
+which already had 17+ packaged buckets sitting unused -- the same list
+`chillstep`'s own fingerprint was historically partly measured from),
+`rnb` (7 tracks, thin but real), `trap` (21 tracks -- see below).
+
+**Two profiles whose pooling scheme changed, not just refreshed:**
+- `rap_rnb`/`rnb` **decoupled**. `rap_rnb` previously pooled `training-
+  hip-hop-01` + `training-rnb-01` together; now that `rnb` is a real
+  profile in its own right rather than a guessed tilt riding on that
+  pooled reading, continuing to pool them would double-count `rnb-01`'s
+  own tracks into two different profiles. `rap_rnb` now derives from
+  `training-hip-hop-01` alone (47 tracks); `rnb` from `training-rnb-01`
+  alone (7). The original 2026-08-06 confusion-matrix finding (hip-hop-01
+  and rnb-01 are the least separable pair of the family) is still true
+  about the underlying audio -- it just no longer determines how the two
+  profiles' fingerprints get derived.
+- `trap`/`hyphy` **share a source on purpose**. `hyphy` has never had a
+  training list of its own -- its own field comment already says "no
+  content of its own distinct from a straight trap read," derived
+  entirely from `training-trap-hip-hop-01` since it was split from
+  `rap_rnb`. Giving `trap` real data means pointing it at the exact same
+  corpus, so the two profiles now carry nearly identical real
+  fingerprints (21 tracks each). That's an honest reflection of the
+  pre-existing caveat, not a new problem introduced by this pass -- real
+  data that happens to coincide beats a guessed tilt that doesn't.
+
+**One near-miss, caught before landing: `electronic`/"Dance."** This
+profile's entire design is a deliberate control pair -- "otherwise
+identical to house except vocal presence," used to prove the vocal-
+presence discriminator works at all (`vocal_hnr_mu`/`vocal_fmr_mu`
+pinned near-zero by design, not measured). Blindly applying this pass's
+own logic would have overwritten that with `training-dance-01`'s own
+real measured `vocal_hnr_mu` (~0.44) -- which turned out to be
+essentially IDENTICAL to house's own, meaning the "dance" library crate
+isn't actually vocal-free content the way the profile's name assumes.
+That's a real, useful finding about the crate, but applying it here
+would have silently defeated the entire control-pair purpose and broken
+`test_dance_diverges_from_house_only_on_tempo_band_and_vocal_presence`'s
+pinned `vocal_hnr_mu < 0.10` assertion. Caught, not landed:
+`vocal_hnr_mu`/`vocal_fmr_mu` restored to their deliberate `0.05`/`0.05`;
+`expected_bands`/`expected_bands_sigma`/`zcr`/`onset_density` instead
+mirror `house`'s own freshly-updated real values (the profile's actual
+documented design -- "kept identical to house except vocals" -- now
+just following `house`'s data forward instead of a stale snapshot).
+
+**Not touched:** `psytrance`, `hard_techno`, `hardstyle`, `chillstep`,
+`synthwave`, `vaporwave`, `chillwave`, `hardsynth`, `midtempo`, `electro`,
+`deeptrance`, `peak` -- no matching library playlist was tested in the
+pilot, so no fresh real data exists for any of them yet.
+
+**Verification.** Full suite green after the update (2397 passed, same
+count). One pre-existing pinned test needed updating for an intentional
+value change (`test_deep_house_vocal_fields_now_calibrated`, exact
+`vocal_hnr_mu`/`vocal_fmr_mu`/sigma constants refreshed to the new pooled
+values) -- not a bug, the same "supersedes" pattern this test's own
+history already documents twice. `ruff`/`bandit` clean.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.44 → 1.0.0-rc.45`
+(fingerprint data changed for 15 profiles, two structural pooling-scheme
+changes); `_VJ_WEIGHTS_DOC_VERSION` `105 → 106`. No `_DETECTOR_VERSION`/
+`_DIRECTOR_VERSION` bump.
