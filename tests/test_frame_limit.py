@@ -150,3 +150,15 @@ def test_training_and_no_training_are_mutually_exclusive() -> None:
     from unicornviz.__main__ import _build_parser
     with pytest.raises(SystemExit):
         _build_parser().parse_args(['--training', '--no-training'])
+
+
+def test_windows_never_asks_for_an_interval_above_one(monkeypatch) -> None:
+    """Regression for the 2026-09-09 Windows beta: the Intel driver serviced
+    "every 2nd vblank" as a ~1 s deferred wait whenever the window was
+    foreground (2 s frames, TV signal drops). Linux keeps the exact cap."""
+    import unicornviz.app as app_mod
+    monkeypatch.setattr(app_mod.sys, 'platform', 'win32')
+    assert _interval_for(30, refresh=60.0) == 1
+    assert _interval_for(20, refresh=60.0) == 1
+    monkeypatch.setattr(app_mod.sys, 'platform', 'linux')
+    assert _interval_for(30, refresh=60.0) == 2

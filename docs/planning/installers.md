@@ -1275,6 +1275,30 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (night III) — found it: the swap interval. beta.123 stall
+  dumps (`stall_dump_s = 1.0`, 129 dumps over two runs, recording and audio
+  fallback disabled, then everything non-essential unplugged).** In every
+  dump the main thread is blocked inside a *native* call — ~half in
+  `SDL_PollEvent`, ~half in a moderngl `Buffer.write` in the Audio Spectrum
+  effect's render — never in Python, and every other thread is idle in a
+  wait. The perf timeline is focus-shaped: 30 fps while the tour is up or
+  while another window is foreground, ~2 s per frame the moment the
+  visualizer is foreground. That is the GL driver's deferred vblank wait:
+  the 30 fps cap (added 2026-08-08, `[render] fps_limit`, i.e. "weeks ago")
+  is implemented as `SDL_GL_SetSwapInterval(2)`, and under desktop
+  composition the Intel Windows driver (31.0.101.3729 on this NUC) serviced
+  "every 2nd vblank" as a ~1 s wait surfacing at the next GL call and in the
+  message pump; background windows are not composited, so they ran free.
+  It was never the audio system, ffmpeg, the webcam, or the controllers.
+  - **Fix, core 1.0.0-beta.124:** on Windows the interval is clamped to 1
+    (logged); Linux keeps the exact vblank-divided cap. Test added.
+  - **Config-only confirmation on beta.123:** `[render] fps_limit = 0`
+    (interval 1). Owner also noted the Intel driver on the NUC was never
+    updated; do that too, but the clamp stays — testers' drivers vary.
+  - **Method note:** three rounds of "fix the thing that looks guilty" (the
+    quit dialog, the encoder probe) each removed a real problem yet not the
+    symptom. The thread dump settled it in one run. For the next Windows
+    stall, start from `stall_dump_s = 1.0` + `perf_frames = true`.
 - **2026-09-09 (night II) — beta.121 DJ run: same blackouts, now with
   debug + perf frames. Root cause found: the boot-time hardware-encoder
   probe.** The second run's `Perf frame` lines show the loop at **~1 fps for

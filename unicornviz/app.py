@@ -3647,6 +3647,16 @@ void main() {
             return
         refresh = self._display_refresh_hz()
         interval = max(1, int(round(refresh / float(target))))
+        if interval > 1 and sys.platform.startswith('win'):
+            # Windows: never ask the driver for interval > 1. Under desktop
+            # composition the Intel driver serviced "every 2nd vblank" as a
+            # ~1 s deferred wait that surfaced inside the next GL call and the
+            # message pump — 2 s frames whenever the window was foreground,
+            # smooth the moment it lost focus (2026-09-09 beta stall dumps).
+            # Interval 1 plus the frame's own cost lands near the cap anyway.
+            log.info('Frame limit: %d fps requested; Windows uses vsync/1 '
+                     '(interval %d is unreliable under composition)', target, interval)
+            interval = 1
         sdl2.SDL_GL_SetSwapInterval(interval)
         effective = refresh / float(interval)
         if abs(effective - target) > 0.5:

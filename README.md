@@ -513,6 +513,10 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.124** — Windows never asks the GL driver for a swap interval
+  above 1: the 30 fps cap's "every second vblank" was serviced by the Intel
+  driver as a ~1 s deferred wait whenever the window was foreground (2 s
+  frames, TV signal drops). Linux keeps the exact vblank-divided cap.
 - **1.0.0-beta.123** — Windows hardware-encoder probe: NVENC and Intel QSV
   only, 6 s ceiling per candidate (20 s elsewhere), so a hung probe on the
   first record press costs seconds, not most of a minute.
