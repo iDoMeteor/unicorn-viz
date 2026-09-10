@@ -513,6 +513,11 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.122** — The hardware-encoder probe no longer runs at boot
+  unless `[recording] auto_record` is on: its three ffmpeg test encodes share
+  the GPU with the visualizer and, on an Intel iGPU under Windows, held the
+  display at ~1 fps for the first 40 s of every session. VA-API is never
+  probed on Windows or macOS.
 - **1.0.0-beta.121** — Quit confirmation is an in-app "press again" prompt
   (3 s window) instead of a native modal dialog, which on Windows froze the
   render loop under a fullscreen window and could not be reached with a hidden

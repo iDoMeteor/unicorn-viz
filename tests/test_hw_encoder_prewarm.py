@@ -65,3 +65,25 @@ def test_no_hardware_encoder_caches_false_and_returns_none(monkeypatch):
     monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
     assert rec._probe_hw_encoder('ffmpeg') is None
     assert rec._hw_encoder_cache is False
+
+
+def test_vaapi_is_never_probed_on_windows_or_macos(monkeypatch):
+    """VA-API is a Linux API; on the 2026-09-09 Windows beta its probe alone
+    held the visualizer at ~1 fps for 17 s before failing."""
+    monkeypatch.setattr(rec.sys, 'platform', 'win32')
+    assert 'h264_vaapi' not in [c[0] for c in rec._hw_encoder_candidates()]
+    monkeypatch.setattr(rec.sys, 'platform', 'darwin')
+    assert 'h264_vaapi' not in [c[0] for c in rec._hw_encoder_candidates()]
+    monkeypatch.setattr(rec.sys, 'platform', 'linux')
+    assert [c[0] for c in rec._hw_encoder_candidates()] == [c[0] for c in rec._HW_ENCODERS]
+
+
+def test_startup_prewarm_is_gated_on_auto_record():
+    """The boot-time probe competes with the visualizer for the GPU, so it
+    only runs when a recording is going to start by itself."""
+    import inspect
+    import unicornviz.app as app_mod
+    src = inspect.getsource(app_mod)
+    call = src.index('prewarm_hw_encoder_probe(str(self.cfg')
+    gate = src[call - 600:call]
+    assert "'auto_record'" in gate

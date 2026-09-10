@@ -4920,9 +4920,13 @@ void main() {
                 log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
         self._apply_persisted_recording_settings()
-        # Hardware-encoder probe off the main thread, now, so the answer is
-        # cached by the time anyone presses record (it used to run then).
+        # Hardware-encoder probe off the main thread, but only when a recording
+        # will start by itself: each probe is a real ffmpeg encode on the same
+        # GPU, and on an Intel iGPU under Windows it held the visualizer at
+        # ~1 fps for the first 40 s of every session (2026-09-09 beta logs).
+        # Otherwise the probe runs on the first record press, as it used to.
         if (bool(self.cfg.get('recording', 'enabled', default=True))
+                and bool(self.cfg.get('recording', 'auto_record', default=False))
                 and str(self.cfg.get('recording', 'codec', default='auto')).strip().lower() == 'auto'):
             prewarm_hw_encoder_probe(str(self.cfg.get('recording', 'ffmpeg_path', default='ffmpeg')))
         # Video output interop (v4l2loopback / future PipeWire, NDI).

@@ -77,6 +77,13 @@ def prewarm_hw_encoder_probe(ffmpeg_path: str) -> threading.Thread:
     The probe encodes one test frame per candidate with a 20 s ceiling
     each; done lazily it landed on the main thread the moment the operator
     hit record.  Started at boot it is finished long before that.
+
+    Only worth it when a recording is going to start on its own
+    (``auto_record``): the probes compete with the visualizer for the GPU,
+    and on an Intel iGPU under Windows they held the display at ~1 fps for
+    the first 40 s of every session, which read as "the screen keeps going
+    black" (2026-09-09 beta logs). Otherwise the probe waits for the first
+    record press, where a one-off hitch is expected.
     """
     t = threading.Thread(
         target=_probe_hw_encoder, args=(ffmpeg_path,),
@@ -110,10 +117,24 @@ def _probe_hw_encoder(ffmpeg_path: str) -> tuple[str, list[str], str, str] | Non
         return _probe_hw_encoder_locked(ffmpeg_path)
 
 
+def _hw_encoder_candidates() -> tuple[tuple[str, list[str], str, str], ...]:
+    """Candidates worth an ffmpeg launch on this platform.
+
+    Every probe is a real encode on the same GPU the visualizer is drawing
+    with, and on an Intel iGPU under Windows each one held the display for
+    15-20 s at ~1 fps (2026-09-09 beta logs). VA-API is a Linux API, so it is
+    never tried on Windows or macOS; the others fail fast when their driver
+    is absent.
+    """
+    if sys.platform.startswith(('win', 'darwin')):
+        return tuple(c for c in _HW_ENCODERS if c[0] != 'h264_vaapi')
+    return _HW_ENCODERS
+
+
 def _probe_hw_encoder_locked(ffmpeg_path: str) -> tuple[str, list[str], str, str] | None:
     global _hw_encoder_cache
     device = _render_device()
-    for codec, pre_input, filt, quality in _HW_ENCODERS:
+    for codec, pre_input, filt, quality in _hw_encoder_candidates():
         pre = [a.format(device=device) for a in pre_input]
         cmd = [
             ffmpeg_path, '-hide_banner', '-loglevel', 'error', '-y',

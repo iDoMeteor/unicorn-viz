@@ -1275,6 +1275,32 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-09 (night II) — beta.121 DJ run: same blackouts, now with
+  debug + perf frames. Root cause found: the boot-time hardware-encoder
+  probe.** The second run's `Perf frame` lines show the loop at **~1 fps for
+  ~35 s right after load** (`total≈1000 ms`, `events≈500-700 ms`,
+  `draw≈400-500 ms`) in two stretches that line up exactly with the
+  recording probe: nvenc fails in 1 s (no `nvcuda.dll`), then the **VA-API
+  probe runs 17 s** (a Linux API, on Windows), then the **QSV probe runs to
+  its 20 s timeout and ffmpeg dies** — the "ffmpeg crash" dialog the owner
+  saw. Each probe is a real ffmpeg encode on the same Iris Xe the visualizer
+  is drawing with; the display starves, DWM shows black, the TV drops. The
+  beta.119/120 runs had the same stall (QSV *succeeded* there after ~25 s).
+  Box: ffmpeg 8.1.1 (Gyan full build, libvpl) via winget on PATH.
+  - **Fix, core 1.0.0-beta.122:** the boot prewarm runs only when
+    `[recording] auto_record` is true (otherwise the probe waits for the first
+    record press, as it used to); VA-API is never a candidate on Windows or
+    macOS. Tests added. **For the recording seat:** even lazily, the probe can
+    starve the display for up to 40 s on Intel iGPUs — consider QSV-only on
+    Windows with a short timeout, or a software-first default there.
+  - **Quit path worked:** the two-press prompt shows in the log
+    (`Quit requested; press again`) and the app exited cleanly; the slow
+    frames around the quit are the QSV probe timing out at the same moment.
+  - **Baseline on this box:** at 3840×2160 a normal frame is 28-40 ms
+    (`Frame limit: locked to 30 fps (vsync/2)`), i.e. the Iris Xe is
+    GPU-bound at 4K. Not a bug, but the reason any extra GPU load shows.
+  - **Still open for other seats:** APC LED port hint on Windows
+    (`MidiOut: no output port matching 'apc mini mk2 notes'`).
 - **2026-09-09 (night) — beta.120 DJ run "ugly": screen blacking, TV losing
   signal, hard to quit. Read off the Windows volume: two run logs + a
   faulthandler dump; System event log checked.**
