@@ -58,23 +58,30 @@ def test_synthwave_spectral_fields_are_calibrated() -> None:
     assert p.onset_density_mu is not None
 
 
-def test_synthwave_vocal_fields_left_uncalibrated() -> None:
-    """Classic synthwave (Kavinsky et al.) is predominantly instrumental --
-    a fabricated vocal target would be worse than no signal at all."""
+def test_synthwave_vocal_fields_now_real_not_uncalibrated() -> None:
+    """2026-09-10 (zone-map batch, Phase 5 prep): superseded -- real (if
+    thin, n=7) vocal_hnr/vocal_fmr medians measured from a filtered subset
+    of training-synthwave-02/03, replacing the old "predominantly
+    instrumental, leave uncalibrated" theory. The filtered tracks carry
+    real, if modest, vocal presence."""
     p = get_profile('synthwave')
-    assert p.vocal_hnr_mu is None
-    assert p.vocal_fmr_mu is None
+    assert p.vocal_hnr_mu is not None
+    assert p.vocal_fmr_mu is not None
 
 
 def test_synthwave_expected_bands_well_formed() -> None:
+    """2026-09-10 (zone-map batch, Phase 5 prep): peak-band assertion
+    superseded -- expected_bands is now the real per-track ribbon from a
+    filtered, synth-titled subset of training-synthwave-02/03 (n=7), not
+    the old hand-authored ascending-then-descending shape. The real shape
+    peaks in the low-mid register (band ~7, ~500-700 Hz) and rolls off
+    fast, not at bands 39-40."""
     p = get_profile('synthwave')
     assert p.expected_bands is not None
     assert len(p.expected_bands) == 64
     assert all(0.0 <= v <= 1.0 for v in p.expected_bands)
-    # Peak should land in the lead-synth register (bands 39-40, ~1.4-1.6 kHz),
-    # not in the sub-bass region the way a kick-driven genre's fingerprint does.
     peak_idx = max(range(64), key=lambda i: p.expected_bands[i])
-    assert 35 <= peak_idx <= 44
+    assert 0 <= peak_idx <= 12
 
 
 def test_synthwave_hud_bpm_range_label() -> None:

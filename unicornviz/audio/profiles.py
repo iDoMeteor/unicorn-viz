@@ -817,11 +817,29 @@ PROFILES: Dict[str, AudioProfile] = {
         #
         # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
         # full-roster genre BPM table rewrite ("all enabled"). The
-        # zero-corpus caveat above still applies in full -- every scoring
-        # field remains unvalidated placeholder data pending Phase 5 of
-        # the zone-map/sub-kick-split/recalibration plan. Re-derive the
-        # same way house/techno/etc. were once a training-psytrance-01
-        # (or equivalent) list is packaged.
+        # zero-corpus caveat above still applied in full at that point.
+        #
+        # 2026-09-10 (zone-map batch, Phase 5 prep, later): reclassified
+        # as a trance-family dependent instead of waiting on a dedicated
+        # training-psytrance-01 pull -- owner's own framing, "trance but
+        # faster," is the exact deeptrance pattern mirrored (trance's real
+        # tempo bookended slower by deeptrance, faster by this profile).
+        # zcr/onset_density/vocal_hnr/vocal_fmr below now inherit trance's
+        # real values (replacing this profile's own 100%-guessed ones);
+        # expected_bands is trance's real ribbon with a directional tilt
+        # (k=+0.25, brighter -- "psychedelic mids, hyper-detailed tops" is
+        # explicit textual grounding for reading brighter than trance's
+        # own fingerprint), same tilt convention as the dark/bright split
+        # siblings below. expected_bands_sigma is trance's own real sigma,
+        # unshifted -- this is also this profile's FIRST sigma of any
+        # kind, moving it off the legacy cosine-similarity fallback path
+        # onto the same ribbon-fit mechanism (spectral_shape_fit) every
+        # other real/tilted profile in this roster uses -- a genuine
+        # mechanism change, not just new numbers, flagged since it can
+        # shift live scoring behavior a bit. Still a rougher proxy than
+        # real derivation (a tempo-shift-plus-tilt borrow doesn't capture
+        # psytrance's hypnotic/squelchy bassline character), but
+        # categorically better than the fully-guessed state it replaces.
         enabled=True,
         bass_min=28.0,
         bass_max=210.0,
@@ -853,21 +871,33 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.0532,
         bpm_hint_min=140.0,
         bpm_hint_max=150.0,
-        zcr_mu=0.090,
-        zcr_sigma=0.015,
-        onset_density_mu=4.0,
-        onset_density_sigma=0.7,
-        vocal_hnr_mu=0.35,
-        vocal_fmr_mu=0.25,
+        zcr_mu=0.0627,
+        zcr_sigma=0.0271,
+        onset_density_mu=3.32,
+        onset_density_sigma=1.0831,
+        vocal_hnr_mu=0.3711,
+        vocal_fmr_mu=0.2882,
+        vocal_hnr_sigma=0.1156,
+        vocal_fmr_sigma=0.0378,
         expected_bands=[
-            0.850, 0.850, 0.850, 0.820, 0.820, 0.820, 0.820, 0.880,
-            0.920, 0.960, 0.850, 0.780, 0.700, 0.780, 0.850, 0.900,
-            0.950, 0.950, 0.950, 0.850, 0.750, 0.650, 0.750, 0.850,
-            0.950, 1.000, 0.950, 0.950, 0.900, 0.950, 0.900, 0.800,
-            0.700, 0.720, 0.740, 0.760, 0.780, 0.800, 0.820, 0.720,
-            0.650, 0.750, 0.850, 0.950, 1.000, 0.920, 0.850, 0.940,
-            0.920, 0.900, 0.850, 0.800, 0.750, 0.700, 0.750, 0.800,
-            0.850, 0.900, 0.800, 0.700, 0.600, 0.500, 0.400, 0.300,
+            0.638, 0.652, 0.665, 0.678, 0.691, 0.705, 0.718, 0.731,
+            0.730, 0.692, 0.704, 0.716, 0.728, 0.589, 0.445, 0.452,
+            0.459, 0.409, 0.345, 0.334, 0.309, 0.289, 0.277, 0.248,
+            0.233, 0.232, 0.229, 0.216, 0.211, 0.196, 0.196, 0.186,
+            0.171, 0.160, 0.149, 0.129, 0.115, 0.115, 0.111, 0.101,
+            0.103, 0.091, 0.089, 0.081, 0.074, 0.071, 0.070, 0.064,
+            0.060, 0.061, 0.059, 0.045, 0.046, 0.039, 0.035, 0.031,
+            0.029, 0.026, 0.022, 0.020, 0.016, 0.013, 0.009, 0.006,
+        ],
+        expected_bands_sigma=[
+            0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170,
+            0.090, 0.180, 0.180, 0.180, 0.180, 0.162, 0.145, 0.145,
+            0.145, 0.129, 0.128, 0.137, 0.135, 0.131, 0.137, 0.130,
+            0.136, 0.135, 0.139, 0.129, 0.106, 0.099, 0.104, 0.092,
+            0.093, 0.095, 0.078, 0.071, 0.064, 0.061, 0.058, 0.054,
+            0.054, 0.050, 0.044, 0.048, 0.046, 0.045, 0.041, 0.037,
+            0.037, 0.037, 0.037, 0.029, 0.031, 0.028, 0.028, 0.026,
+            0.025, 0.021, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
         ],
     ),
     # 2026-08-10: revived and renamed from 'electronic' (owner call, house-
@@ -1944,8 +1974,35 @@ PROFILES: Dict[str, AudioProfile] = {
         #
         # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
         # full-roster genre BPM table rewrite. Zero-corpus caveat still
-        # applies in full -- flagged for Phase 5 of the zone-map/
-        # sub-kick-split/recalibration plan.
+        # applied in full at that point.
+        #
+        # 2026-09-10 (zone-map batch, Phase 5 prep, later): real corpus
+        # found -- `training-synthwave-02`/`training-synthwave-03`
+        # (packaged 2026-09-04, never used to derive this profile's own
+        # fields). Owner's own caution proved warranted: both lists mix
+        # genuine synthwave/vaporwave with unrelated Italo disco and
+        # generic "80s-style edit" tracks of otherwise-unrelated genres
+        # (one is an 80s-styled edit of a modern hip-hop track) -- checked
+        # by track title, not assumed. Filtered to the 7 tracks whose
+        # title explicitly says "synth"/"synthwave" before deriving
+        # anything below (`Charles Berkhouse - Would It Be Worth It
+        # (Synthwave Mix)`, `Jaguar Grace - Destination Unknown (Neon Wolf
+        # Synthwave Remix)`, `James Tennant - Fool To Your Love (80s Synth
+        # Mix)`, `Jan Salvadore - Synthwave (Original Mix)`, `Jean Koning -
+        # Black Hole Sun (Lone Jon Zilvers Dark Synth Remix)`, `The Death
+        # Beats ft Charley Young - Beyond Repair (Synthwave Mix)`, `Vandi
+        # Lynnae - I Keep On Moving (Synthwave Remix)`). n=7 is thin (other
+        # real profiles in this roster use 11-25 tracks) -- real, but not
+        # yet a confident fit; still a genuine improvement over 100%
+        # hand-authored. BPM_prior/hint fields deliberately NOT touched:
+        # this filtered set's own detected BPMs scatter 110-159, mostly
+        # well outside the current 100-116 hint band -- the same fold-
+        # contamination risk already flagged elsewhere in this roster
+        # (rap_rnb/hyphy/dubstep) for genres with fast hi-hat subdivisions,
+        # not treated as ground truth here either. Spectral content
+        # doesn't depend on correct BPM detection, so expected_bands/
+        # zcr/onset/vocal below are still derived from it; tempo fields
+        # stay exactly as the owner dialed them, pending a dedicated look.
         enabled=True,
         bass_min=20.0,
         bass_max=160.0,
@@ -1985,29 +2042,53 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.25,
         bpm_hint_min=100.0,
         bpm_hint_max=116.0,
-        # Brightness sits between chillstep's pad-only atmosphere (900 Hz)
-        # and house's percussion-driven brightness (1500 Hz) -- present lead
-        # synths without a hi-hat-driven treble floor.
-        zcr_mu=0.050,
-        zcr_sigma=0.020,
-        onset_density_mu=1.9,
-        onset_density_sigma=1.0,
-        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated: classic
-        # synthwave (Kavinsky et al.) is predominantly instrumental, and a
-        # fabricated target would be worse than no signal on this dimension.
-        # Fingerprint: smooth single peak at bands 39-40 (~1.4-1.6 kHz, the
-        # lead-synth register), tapering into a rolled-off extreme-high tail
-        # -- distinguishes it from trance/psytrance's near-constant high-
-        # frequency energy and from house's jagged percussion-transient shape.
+        # 2026-09-10 (zone-map batch, Phase 5 prep): real per-track median
+        # from the 7-track filtered synth-titled subset described above
+        # (5031 heartbeat rows). Supersedes the old hand-authored zcr_mu
+        # (0.050) -- kept close by coincidence, not because the guess was
+        # validated.
+        zcr_mu=0.0313,
+        zcr_sigma=0.029,
+        onset_density_mu=2.7023,
+        onset_density_sigma=0.4838,
+        # 2026-09-10 (zone-map batch, Phase 5 prep): real per-row median
+        # from the same 7-track filtered subset -- supersedes the old
+        # "intentionally uncalibrated, predominantly instrumental" theory.
+        # These filtered tracks carry real (if modest) vocal presence.
+        vocal_hnr_mu=0.4833,
+        vocal_fmr_mu=0.3117,
+        vocal_hnr_sigma=0.1623,
+        vocal_fmr_sigma=0.0586,
+        # 2026-09-10 (zone-map batch, Phase 5 prep): real per-track ribbon
+        # (median/MAD-derived sigma, same methodology as every other
+        # ribbon-redesigned profile) from the 7-track filtered subset --
+        # supersedes the old hand-authored ascending-then-descending shape
+        # (peak at bands 39-40). The real shape is very different: a low
+        # start, a broad low-mid peak around bands 6-8 (~500-700 Hz), then
+        # a fast rolloff essentially dead by band 25 -- not bass-heavy,
+        # not treble-heavy, mid-register-driven, consistent with a lead-
+        # synth/pad-centric genre rather than a kick- or hi-hat-driven one.
+        # n=7 is thin; expected_bands_sigma reflects that (wider than most
+        # of the roster's real fingerprints).
         expected_bands=[
-            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
-            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
-            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
-            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
-            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
-            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
-            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+            0.144, 0.172, 0.188, 0.263, 0.285, 0.345, 0.395, 0.460,
+            0.326, 0.277, 0.258, 0.276, 0.324, 0.316, 0.219, 0.178,
+            0.161, 0.209, 0.179, 0.174, 0.240, 0.189, 0.209, 0.127,
+            0.141, 0.022, 0.020, 0.016, 0.015, 0.014, 0.011, 0.014,
+            0.012, 0.011, 0.010, 0.008, 0.008, 0.005, 0.004, 0.004,
+            0.004, 0.004, 0.003, 0.002, 0.003, 0.002, 0.002, 0.003,
+            0.002, 0.002, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
+            0.001, 0.001, 0.001, 0.000, 0.000, 0.000, 0.000, 0.000,
+        ],
+        expected_bands_sigma=[
+            0.094, 0.099, 0.057, 0.118, 0.095, 0.110, 0.188, 0.141,
+            0.238, 0.114, 0.206, 0.096, 0.085, 0.101, 0.127, 0.055,
+            0.041, 0.100, 0.034, 0.089, 0.128, 0.088, 0.072, 0.052,
+            0.122, 0.019, 0.017, 0.017, 0.014, 0.013, 0.010, 0.012,
+            0.011, 0.009, 0.009, 0.007, 0.007, 0.004, 0.005, 0.004,
+            0.004, 0.003, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
         ],
     ),
     # 2026-09-10 (zone-map batch, owner-provided genre BPM table): seven
@@ -2027,10 +2108,35 @@ PROFILES: Dict[str, AudioProfile] = {
     # Phase 5 of the zone-map/sub-kick-split/recalibration plan, same as
     # every re-enabled zero-corpus profile above.
     #
+    # 2026-09-10 (zone-map batch, Phase 5 prep, later): owner direction --
+    # for a split with no real data of its own, "use the known version as
+    # a best first starting point but shift the spectrum ribbon based on
+    # your best educated guess." `expected_bands` below is no longer a
+    # verbatim donor copy for the six of these seven with an identified
+    # directional discriminator (`downtempo`, `midtempo`, `electro`,
+    # `deeptrance`, plus `vaporwave`/`chillwave`/`hardsynth` once
+    # `synthwave` itself got real data, see its own field comment) --
+    # each gets the donor's real ribbon multiplied by a deliberate
+    # brighten/darken tilt (a linear per-band factor, pivoted around
+    # band 16 with a 16-band half-width so the shift actually lands where
+    # each donor's real energy lives, saturating beyond that so the
+    # already-negligible tail bands aren't perturbed): `1 + k * clip((i -
+    # 16) / 16, -1, 1)`. `k`'s sign/magnitude is a judgment call grounded
+    # in each profile's own already-written description, not a fitted
+    # value -- still a guess, just a directional one instead of an exact
+    # copy. `expected_bands_sigma` is left as the donor's own real value
+    # unshifted (no basis to guess a spread that hasn't been measured).
+    # `psytrance` (trance-family, not one of these seven) gets the same
+    # treatment below at its own definition, since it's the same kind of
+    # split with no data of its own.
+    #
     # downtempo: sibling = chillstep. Not an arbitrary choice -- chillstep's
     # OWN acoustic fields (below chillstep's own definition above) were
     # already measured from training-downtempo-01's corpus, so this is the
-    # most accurate placeholder available, not a generic guess.
+    # most accurate placeholder available, not a generic guess. Tilt
+    # k=-0.20 (darker/warmer): "vibey/jazzy/sultry" vs. chillstep's own
+    # "crisp & light" (owner's own characterization) -- sustained harmonic
+    # instrumentation reads warmer than crisp hi-hat transients.
     "downtempo": AudioProfile(
         name="Downtempo",
         description="Lush, full slow electronic groove: sub-bass kick, atmospheric pads, and soft hi-hats at 60-108 BPM -- fuller/denser than chillstep's sparser sibling pocket",
@@ -2062,14 +2168,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.1017,
         vocal_fmr_sigma=0.0300,
         expected_bands=[
-            0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842,
-            0.729, 0.635, 0.635, 0.635, 0.635, 0.537, 0.407, 0.407,
-            0.407, 0.363, 0.340, 0.333, 0.321, 0.309, 0.284, 0.280,
-            0.288, 0.280, 0.244, 0.219, 0.183, 0.161, 0.153, 0.140,
-            0.131, 0.127, 0.093, 0.087, 0.077, 0.071, 0.064, 0.053,
-            0.048, 0.039, 0.037, 0.030, 0.028, 0.025, 0.021, 0.021,
-            0.020, 0.016, 0.015, 0.013, 0.013, 0.011, 0.009, 0.009,
-            0.008, 0.007, 0.005, 0.005, 0.004, 0.003, 0.002, 0.001,
+            1.000, 1.000, 0.989, 0.979, 0.968, 0.958, 0.947, 0.937,
+            0.802, 0.691, 0.683, 0.675, 0.667, 0.557, 0.417, 0.412,
+            0.407, 0.358, 0.332, 0.321, 0.305, 0.290, 0.263, 0.256,
+            0.259, 0.248, 0.213, 0.189, 0.156, 0.135, 0.126, 0.114,
+            0.105, 0.102, 0.074, 0.070, 0.062, 0.057, 0.051, 0.042,
+            0.038, 0.031, 0.030, 0.024, 0.022, 0.020, 0.017, 0.017,
+            0.016, 0.013, 0.012, 0.010, 0.010, 0.009, 0.007, 0.007,
+            0.006, 0.006, 0.004, 0.004, 0.003, 0.002, 0.002, 0.001,
         ],
         expected_bands_sigma=[
             0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202,
@@ -2084,7 +2190,9 @@ PROFILES: Dict[str, AudioProfile] = {
     ),
     # vaporwave: sibling = synthwave (thematically closest -- synth-driven,
     # predominantly instrumental). "all synth = synth *driven*" per the
-    # owner's own table note.
+    # owner's own table note. Tilt k=-0.20 (darker/warmer) vs. synthwave's
+    # own (now real) fingerprint: "warm analog pads and a laid-back...
+    # groove" reads warmer than synthwave's brighter lead-synth register.
     "vaporwave": AudioProfile(
         name="Vaporwave",
         description="Slowed, synth-driven retro electronic -- warm analog pads and a laid-back, synth-first groove at 60-80 BPM",
@@ -2107,25 +2215,34 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.207,
         bpm_hint_min=60.0,
         bpm_hint_max=80.0,
-        zcr_mu=0.050,
-        zcr_sigma=0.020,
-        onset_density_mu=1.9,
-        onset_density_sigma=1.0,
-        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
-        # reasoning as synthwave's own field comment (predominantly
-        # instrumental -- a fabricated target would be worse than none).
+        # 2026-09-10 (zone-map batch, Phase 5 prep): zcr/onset/vocal now
+        # inherit synthwave's own real (if thin, n=7) values instead of
+        # its old hand-authored ones -- same "family inherits from a
+        # freshly-measured anchor" principle as everywhere else in this
+        # file.
+        zcr_mu=0.0313,
+        zcr_sigma=0.029,
+        onset_density_mu=2.7023,
+        onset_density_sigma=0.4838,
+        vocal_hnr_mu=0.4833,
+        vocal_fmr_mu=0.3117,
+        vocal_hnr_sigma=0.1623,
+        vocal_fmr_sigma=0.0586,
         expected_bands=[
-            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
-            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
-            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
-            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
-            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
-            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
-            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+            0.173, 0.204, 0.221, 0.306, 0.328, 0.392, 0.444, 0.512,
+            0.359, 0.301, 0.277, 0.293, 0.340, 0.328, 0.224, 0.180,
+            0.161, 0.206, 0.175, 0.167, 0.228, 0.177, 0.193, 0.116,
+            0.127, 0.020, 0.018, 0.014, 0.013, 0.012, 0.009, 0.011,
+            0.010, 0.009, 0.008, 0.006, 0.006, 0.004, 0.003, 0.003,
+            0.003, 0.003, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002,
+            0.002, 0.002, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
+            0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
         ],
     ),
     # chillwave: sibling = synthwave (same reasoning as vaporwave above).
+    # Tilt k=-0.10 (mildly darker/warmer): "hazy, reverb-soaked... relaxed"
+    # reads warmer than synthwave's brighter lead-synth focus, but less
+    # extremely so than vaporwave's own "warm analog pads... laid-back."
     "chillwave": AudioProfile(
         name="Chillwave",
         description="Hazy, reverb-soaked synth pop with a relaxed mid-tempo groove at 84-96 BPM",
@@ -2148,26 +2265,34 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.096,
         bpm_hint_min=84.0,
         bpm_hint_max=96.0,
-        zcr_mu=0.050,
-        zcr_sigma=0.020,
-        onset_density_mu=1.9,
-        onset_density_sigma=1.0,
-        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
-        # reasoning as synthwave's own field comment.
+        # 2026-09-10 (zone-map batch, Phase 5 prep): inherits synthwave's
+        # real (n=7) zcr/onset/vocal values, same as vaporwave above.
+        zcr_mu=0.0313,
+        zcr_sigma=0.029,
+        onset_density_mu=2.7023,
+        onset_density_sigma=0.4838,
+        vocal_hnr_mu=0.4833,
+        vocal_fmr_mu=0.3117,
+        vocal_hnr_sigma=0.1623,
+        vocal_fmr_sigma=0.0586,
         expected_bands=[
-            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
-            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
-            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
-            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
-            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
-            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
-            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+            0.158, 0.188, 0.204, 0.284, 0.306, 0.369, 0.420, 0.486,
+            0.342, 0.289, 0.268, 0.285, 0.332, 0.322, 0.222, 0.179,
+            0.161, 0.208, 0.177, 0.171, 0.234, 0.183, 0.201, 0.121,
+            0.134, 0.021, 0.019, 0.015, 0.014, 0.013, 0.010, 0.013,
+            0.011, 0.010, 0.009, 0.007, 0.007, 0.005, 0.004, 0.004,
+            0.004, 0.004, 0.003, 0.002, 0.003, 0.002, 0.002, 0.003,
+            0.002, 0.002, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
+            0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
         ],
     ),
     # hardsynth: sibling = synthwave (timbral family) even though its own
     # tempo sits in the house-family zone rather than synthwave's own
     # pocket -- no other synth-genre data exists to borrow from instead.
+    # Tilt k=+0.30 (the strongest of the three synth-family shifts,
+    # deliberately): the profile's own description is explicit --
+    # "brighter and more forceful than synthwave's classic pocket" -- a
+    # textually confirmed direction, not just a genre-feel guess.
     "hardsynth": AudioProfile(
         name="Hard Synth",
         description="Driving, energetic synth-driven electronic at house-adjacent tempo -- brighter and more forceful than synthwave's classic pocket, 120-130 BPM",
@@ -2190,27 +2315,37 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.058,
         bpm_hint_min=120.0,
         bpm_hint_max=130.0,
-        zcr_mu=0.050,
-        zcr_sigma=0.020,
-        onset_density_mu=1.9,
-        onset_density_sigma=1.0,
-        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
-        # reasoning as synthwave's own field comment.
+        # 2026-09-10 (zone-map batch, Phase 5 prep): inherits synthwave's
+        # real (n=7) zcr/onset/vocal values, same as vaporwave/chillwave.
+        zcr_mu=0.0313,
+        zcr_sigma=0.029,
+        onset_density_mu=2.7023,
+        onset_density_sigma=0.4838,
+        vocal_hnr_mu=0.4833,
+        vocal_fmr_mu=0.3117,
+        vocal_hnr_sigma=0.1623,
+        vocal_fmr_sigma=0.0586,
         expected_bands=[
-            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
-            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
-            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
-            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
-            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
-            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
-            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
-            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+            0.101, 0.124, 0.139, 0.199, 0.221, 0.274, 0.321, 0.382,
+            0.277, 0.241, 0.229, 0.250, 0.300, 0.298, 0.211, 0.175,
+            0.161, 0.213, 0.186, 0.184, 0.258, 0.207, 0.233, 0.144,
+            0.162, 0.026, 0.024, 0.019, 0.018, 0.017, 0.014, 0.018,
+            0.016, 0.014, 0.013, 0.010, 0.010, 0.007, 0.005, 0.005,
+            0.005, 0.005, 0.004, 0.003, 0.004, 0.003, 0.003, 0.004,
+            0.003, 0.003, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
+            0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001,
         ],
     ),
     # midtempo: sibling = deep_house. Owner's own table description:
     # "deep_house... but no 4otf" -- same tempo pocket as deep_house,
     # discriminated (once real data exists) on four-on-the-floor
-    # regularity rather than tempo or timbre.
+    # regularity rather than tempo or timbre. Tilt k=-0.15 (mildly
+    # darker/bass-forward): real-world midtempo (trap-adjacent 808 sub
+    # emphasis) typically reads a bit darker than deep house's soulful
+    # chord-stab presence -- weaker textual grounding than the other
+    # tilts here, since the profile's real discriminator is rhythmic
+    # (kick_regularity), not spectral; flagged as the lowest-confidence
+    # tilt in this batch.
     "midtempo": AudioProfile(
         name="Midtempo",
         description="Deep-house-tempo material without a four-on-the-floor pulse at 112-116 BPM",
@@ -2242,14 +2377,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.0444,
         vocal_fmr_sigma=0.0300,
         expected_bands=[
-            0.650, 0.651, 0.658, 0.721, 0.726, 0.695, 0.682, 0.655,
-            0.678, 0.621, 0.622, 0.621, 0.629, 0.521, 0.388, 0.384,
-            0.381, 0.363, 0.314, 0.314, 0.273, 0.253, 0.219, 0.234,
-            0.239, 0.204, 0.198, 0.170, 0.147, 0.129, 0.115, 0.105,
-            0.092, 0.093, 0.079, 0.070, 0.063, 0.053, 0.048, 0.044,
-            0.040, 0.034, 0.031, 0.028, 0.026, 0.023, 0.022, 0.021,
-            0.019, 0.017, 0.016, 0.015, 0.014, 0.012, 0.011, 0.011,
-            0.009, 0.007, 0.007, 0.006, 0.005, 0.003, 0.002, 0.001,
+            0.747, 0.743, 0.744, 0.809, 0.808, 0.767, 0.746, 0.710,
+            0.729, 0.662, 0.657, 0.650, 0.653, 0.536, 0.395, 0.388,
+            0.381, 0.360, 0.308, 0.305, 0.263, 0.241, 0.207, 0.219,
+            0.221, 0.187, 0.179, 0.152, 0.130, 0.113, 0.100, 0.090,
+            0.078, 0.079, 0.067, 0.060, 0.054, 0.045, 0.041, 0.037,
+            0.034, 0.029, 0.026, 0.024, 0.022, 0.020, 0.019, 0.018,
+            0.016, 0.014, 0.014, 0.013, 0.012, 0.010, 0.009, 0.009,
+            0.008, 0.006, 0.006, 0.005, 0.004, 0.003, 0.002, 0.001,
         ],
         expected_bands_sigma=[
             0.449, 0.435, 0.382, 0.290, 0.276, 0.280, 0.344, 0.389,
@@ -2266,9 +2401,12 @@ PROFILES: Dict[str, AudioProfile] = {
     # own table description flags "broken syncopated beats" as this
     # profile's real discriminator from house -- not represented in any
     # field below yet (no breaks/syncopation feature exists in this
-    # codebase), so this placeholder currently distinguishes electro from
-    # house on nothing at all; a real discriminator needs new
-    # instrumentation, not just corpus data, before Phase 5 can fit it.
+    # codebase); a real discriminator needs new instrumentation, not just
+    # corpus data, before Phase 5 can fit it. Tilt k=+0.10 (mild, the
+    # weakest-grounded tilt in this batch): syncopated, forward hi-hat
+    # transients read marginally brighter than house's smoother groove,
+    # but this isn't the real discriminator either -- kept small
+    # deliberately rather than overstating confidence in a guess.
     "electro": AudioProfile(
         name="Electro",
         description="House-tempo material with vocals but no four-on-the-floor pulse -- broken, syncopated beat patterns at 120-126 BPM",
@@ -2300,14 +2438,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.0764,
         vocal_fmr_sigma=0.0376,
         expected_bands=[
-            0.698, 0.698, 0.698, 0.719, 0.787, 0.780, 0.732, 0.703,
-            0.679, 0.598, 0.597, 0.597, 0.597, 0.465, 0.328, 0.333,
-            0.333, 0.296, 0.272, 0.266, 0.253, 0.220, 0.195, 0.178,
-            0.159, 0.119, 0.107, 0.099, 0.095, 0.088, 0.084, 0.090,
-            0.072, 0.071, 0.064, 0.055, 0.052, 0.046, 0.040, 0.039,
-            0.038, 0.034, 0.031, 0.028, 0.028, 0.027, 0.026, 0.025,
-            0.023, 0.025, 0.024, 0.022, 0.019, 0.019, 0.018, 0.017,
-            0.017, 0.015, 0.013, 0.012, 0.010, 0.007, 0.005, 0.003,
+            0.628, 0.633, 0.637, 0.661, 0.728, 0.726, 0.686, 0.663,
+            0.645, 0.572, 0.575, 0.578, 0.582, 0.456, 0.324, 0.331,
+            0.333, 0.298, 0.275, 0.271, 0.259, 0.227, 0.202, 0.186,
+            0.167, 0.126, 0.114, 0.106, 0.102, 0.095, 0.091, 0.098,
+            0.079, 0.078, 0.070, 0.061, 0.057, 0.051, 0.044, 0.043,
+            0.042, 0.037, 0.034, 0.031, 0.031, 0.030, 0.029, 0.028,
+            0.025, 0.028, 0.026, 0.024, 0.021, 0.021, 0.020, 0.019,
+            0.019, 0.017, 0.014, 0.013, 0.011, 0.008, 0.006, 0.003,
         ],
         expected_bands_sigma=[
             0.434, 0.432, 0.414, 0.336, 0.272, 0.276, 0.333, 0.390,
@@ -2323,7 +2461,11 @@ PROFILES: Dict[str, AudioProfile] = {
     # deeptrance: sibling = trance (thematically closest). Tempo range
     # (120-126) differs substantially from trance's own real 132-138 band
     # -- this placeholder's fingerprint is a rougher proxy than most of
-    # the others above as a result.
+    # the others above as a result. Tilt k=-0.15 (mildly darker): "deep"
+    # variants typically read a bit warmer/bass-forward than the regular
+    # genre they're a slower cousin of -- textually weak grounding
+    # (trance's own family description doesn't call this out directly),
+    # flagged as a softer guess than the hyphy/rap_rnb/peak_time splits.
     "deeptrance": AudioProfile(
         name="Deep Trance",
         description="Melodic, hypnotic trance at a house-adjacent tempo -- 120-126 BPM",
@@ -2355,14 +2497,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.1156,
         vocal_fmr_sigma=0.0378,
         expected_bands=[
-            0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851,
-            0.834, 0.777, 0.777, 0.777, 0.777, 0.618, 0.459, 0.459,
-            0.459, 0.403, 0.335, 0.319, 0.291, 0.268, 0.253, 0.224,
-            0.207, 0.203, 0.198, 0.184, 0.178, 0.163, 0.161, 0.151,
-            0.137, 0.128, 0.119, 0.103, 0.092, 0.092, 0.089, 0.081,
-            0.082, 0.073, 0.071, 0.065, 0.059, 0.057, 0.056, 0.051,
-            0.048, 0.049, 0.047, 0.036, 0.037, 0.031, 0.028, 0.025,
-            0.023, 0.021, 0.018, 0.016, 0.013, 0.010, 0.007, 0.005,
+            0.979, 0.971, 0.963, 0.955, 0.947, 0.939, 0.931, 0.923,
+            0.897, 0.860, 0.857, 0.853, 0.849, 0.672, 0.497, 0.495,
+            0.493, 0.431, 0.357, 0.338, 0.307, 0.281, 0.264, 0.233,
+            0.214, 0.209, 0.203, 0.188, 0.181, 0.165, 0.162, 0.151,
+            0.137, 0.127, 0.118, 0.101, 0.090, 0.090, 0.086, 0.078,
+            0.079, 0.070, 0.067, 0.061, 0.055, 0.053, 0.052, 0.047,
+            0.044, 0.045, 0.043, 0.033, 0.033, 0.028, 0.025, 0.022,
+            0.020, 0.018, 0.016, 0.014, 0.011, 0.009, 0.006, 0.004,
         ],
         expected_bands_sigma=[
             0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170,
@@ -2377,23 +2519,23 @@ PROFILES: Dict[str, AudioProfile] = {
     ),
     # ------------------------------------------------------------------
     # 2026-09-10 (zone-map batch, Phase 5 prep): four dark/bright split
-    # siblings, each a placeholder copy of its donor's full acoustic
-    # fingerprint -- same convention as the 7 family-dependent profiles
-    # added earlier this session (donor real tempo range copied exactly,
-    # since these are timbre splits at the SAME BPM window, not
-    # tempo-shifted the way deeptrance/psytrance are). Real per-profile
-    # brightness discrimination has to come from an independently
-    # measured expected_bands ribbon (spectral_shape_fit, the only live
-    # brightness mechanism left after centroid_fit's removal above) --
-    # copying the donor's ribbon verbatim means these four are currently
-    # scored identically to their donor on everything except vocal_hnr/
-    # vocal_fmr and bpm_prior itself (both real, both donor-derived too),
-    # i.e. genuinely indistinguishable from their donor until Phase 5
-    # measures each one's own real fingerprint. See docs/adr/vj-system.md
-    # "Fingerprint-Family Map Formalized" for the full family/taxonomy
-    # reasoning and the owner discussion this table was built from.
+    # siblings. `progressive` (deep_house's bright pole) got a real
+    # corpus, `training-progressive-house-01`, sitting unused with 15
+    # already-packaged buckets -- see its own field comment below for the
+    # real derivation. The other three (`rnb`, `trap`, `peak`) still have
+    # no data of their own; each gets the same directional-tilt treatment
+    # as the seven family-dependent profiles above rather than a verbatim
+    # donor copy (owner: "for anything we split that we don't have data
+    # for... shift the spectrum ribbon based on your best educated
+    # guess"). See docs/adr/vj-system.md "Fingerprint-Family Map
+    # Formalized" for the full family/taxonomy reasoning this table was
+    # built from.
     # ------------------------------------------------------------------
     # rnb: bright pole of the rap/rnb split, sibling = rap_rnb (donor).
+    # Tilt k=+0.25 (one of the stronger tilts, alongside trap/peak):
+    # "rap (dark) / rnb (bright)" owner split -- R&B's smoother, more
+    # melodic vocal delivery and lighter production reads brighter than
+    # rap's harder-hitting sub-bass focus.
     "rnb": AudioProfile(
         name="R&B",
         description="Heavy sub-bass with sustained, vocal-forward mids at 70-100 BPM -- the brighter pole of the rap/R&B split",
@@ -2425,14 +2567,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.0901,
         vocal_fmr_sigma=0.0300,
         expected_bands=[
-            0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763,
-            0.649, 0.494, 0.494, 0.494, 0.494, 0.406, 0.298, 0.298,
-            0.298, 0.300, 0.298, 0.295, 0.293, 0.274, 0.241, 0.234,
-            0.222, 0.240, 0.256, 0.260, 0.248, 0.234, 0.220, 0.206,
-            0.181, 0.161, 0.136, 0.114, 0.105, 0.096, 0.088, 0.083,
-            0.077, 0.074, 0.069, 0.064, 0.060, 0.057, 0.046, 0.042,
-            0.044, 0.041, 0.034, 0.034, 0.031, 0.029, 0.027, 0.026,
-            0.026, 0.023, 0.021, 0.018, 0.014, 0.010, 0.006, 0.004,
+            0.572, 0.584, 0.596, 0.608, 0.620, 0.632, 0.644, 0.656,
+            0.568, 0.440, 0.448, 0.455, 0.463, 0.387, 0.289, 0.293,
+            0.298, 0.305, 0.307, 0.309, 0.311, 0.295, 0.264, 0.260,
+            0.250, 0.274, 0.296, 0.305, 0.294, 0.282, 0.268, 0.254,
+            0.226, 0.201, 0.170, 0.143, 0.131, 0.120, 0.110, 0.104,
+            0.096, 0.092, 0.086, 0.080, 0.075, 0.071, 0.057, 0.053,
+            0.055, 0.051, 0.043, 0.043, 0.039, 0.036, 0.034, 0.033,
+            0.033, 0.029, 0.026, 0.022, 0.018, 0.013, 0.007, 0.005,
         ],
         expected_bands_sigma=[
             0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245,
@@ -2446,6 +2588,9 @@ PROFILES: Dict[str, AudioProfile] = {
         ],
     ),
     # trap: dark pole of the hyphy/trap split, sibling = hyphy (donor).
+    # Tilt k=-0.25: "hyphy (bright) / trap (dark)" owner split -- trap's
+    # heavier 808 sub-bass and darker, more menacing production reads
+    # darker than hyphy's brighter, more energetic hype-vocal character.
     "trap": AudioProfile(
         name="Trap",
         description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 105-116 BPM -- the darker pole of the hyphy/trap split",
@@ -2477,14 +2622,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.0968,
         vocal_fmr_sigma=0.0300,
         expected_bands=[
-            0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826,
-            0.730, 0.614, 0.614, 0.614, 0.614, 0.501, 0.396, 0.396,
-            0.396, 0.340, 0.295, 0.276, 0.254, 0.242, 0.223, 0.218,
-            0.212, 0.219, 0.231, 0.227, 0.194, 0.170, 0.159, 0.133,
-            0.105, 0.100, 0.090, 0.078, 0.073, 0.066, 0.061, 0.057,
-            0.052, 0.043, 0.042, 0.040, 0.044, 0.040, 0.031, 0.028,
-            0.031, 0.027, 0.024, 0.021, 0.021, 0.021, 0.021, 0.022,
-            0.021, 0.018, 0.015, 0.012, 0.009, 0.006, 0.004, 0.002,
+            1.000, 1.000, 1.000, 0.994, 0.981, 0.968, 0.955, 0.942,
+            0.821, 0.681, 0.672, 0.662, 0.652, 0.524, 0.408, 0.402,
+            0.396, 0.335, 0.286, 0.263, 0.238, 0.223, 0.202, 0.194,
+            0.185, 0.188, 0.195, 0.188, 0.158, 0.135, 0.124, 0.102,
+            0.079, 0.075, 0.068, 0.058, 0.055, 0.050, 0.046, 0.043,
+            0.039, 0.032, 0.032, 0.030, 0.033, 0.030, 0.023, 0.021,
+            0.023, 0.020, 0.018, 0.016, 0.016, 0.016, 0.016, 0.017,
+            0.016, 0.013, 0.011, 0.009, 0.007, 0.005, 0.003, 0.002,
         ],
         expected_bands_sigma=[
             0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208,
@@ -2498,6 +2643,9 @@ PROFILES: Dict[str, AudioProfile] = {
         ],
     ),
     # peak: bright pole of the hard/peak split, sibling = peak_time (donor).
+    # Tilt k=+0.25: "hard (dark) / peak (bright)" owner split -- peak
+    # time's festival-energy, bright-tops character reads brighter than
+    # the darker/heavier "hard" pole.
     "peak": AudioProfile(
         name="Peak Time",
         description="Festival-ready kick, bright tops, and no patience for low-energy lanes at 130-136 BPM -- the brighter pole of the hard/peak split",
@@ -2529,14 +2677,14 @@ PROFILES: Dict[str, AudioProfile] = {
         vocal_hnr_sigma=0.0847,
         vocal_fmr_sigma=0.0357,
         expected_bands=[
-            0.611, 0.620, 0.633, 0.677, 0.690, 0.679, 0.659, 0.640,
-            0.613, 0.567, 0.570, 0.567, 0.570, 0.527, 0.373, 0.394,
-            0.398, 0.375, 0.293, 0.266, 0.224, 0.211, 0.188, 0.203,
-            0.201, 0.155, 0.156, 0.132, 0.127, 0.120, 0.098, 0.081,
-            0.076, 0.070, 0.058, 0.056, 0.052, 0.046, 0.043, 0.039,
-            0.035, 0.030, 0.026, 0.025, 0.023, 0.020, 0.017, 0.015,
-            0.012, 0.010, 0.010, 0.009, 0.010, 0.011, 0.011, 0.011,
-            0.009, 0.011, 0.009, 0.008, 0.007, 0.006, 0.005, 0.004,
+            0.458, 0.475, 0.495, 0.539, 0.561, 0.562, 0.556, 0.550,
+            0.536, 0.505, 0.517, 0.523, 0.534, 0.502, 0.361, 0.388,
+            0.398, 0.381, 0.302, 0.278, 0.238, 0.227, 0.206, 0.225,
+            0.226, 0.177, 0.180, 0.155, 0.151, 0.144, 0.119, 0.100,
+            0.095, 0.088, 0.073, 0.070, 0.065, 0.057, 0.054, 0.049,
+            0.044, 0.037, 0.033, 0.031, 0.029, 0.025, 0.021, 0.019,
+            0.015, 0.013, 0.013, 0.011, 0.013, 0.014, 0.014, 0.014,
+            0.011, 0.014, 0.011, 0.010, 0.009, 0.007, 0.006, 0.005,
         ],
         expected_bands_sigma=[
             0.478, 0.444, 0.406, 0.344, 0.334, 0.320, 0.328, 0.379,
@@ -2553,6 +2701,22 @@ PROFILES: Dict[str, AudioProfile] = {
     # deep_house (donor). Shares deep_house's own 112-116 BPM window
     # exactly (owner-confirmed: "progressive (bright) & deep (dark)
     # house, same bpm range, yes").
+    #
+    # 2026-09-10 (zone-map batch, Phase 5 prep): unlike rnb/trap/peak
+    # above, this one gets REAL data, not a guess --
+    # `training-progressive-house-01` was already sitting on disk with 15
+    # packaged buckets (13 distinct tracks, ~120.6k heartbeat rows),
+    # never used to derive this profile's own fields. expected_bands/
+    # expected_bands_sigma/vocal_hnr_mu/vocal_fmr_mu below are the real
+    # per-track ribbon/median (same methodology as every other real
+    # profile in this roster). zcr_mu/onset_density_mu are NOT
+    # real -- this corpus predates when those fields were wired into the
+    # packaged corpus writer (n=0 rows carry them), so they stay
+    # inherited from deep_house pending a fresher capture. BPM fields
+    # untouched regardless (owner-confirmed, see above) -- this corpus's
+    # own detected BPMs scatter widely (125-176), not treated as ground
+    # truth for tempo the same way its spectral content is trusted for
+    # brightness.
     "progressive": AudioProfile(
         name="Progressive House",
         description=(
@@ -2579,33 +2743,48 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.0445,
         bpm_hint_min=112.0,
         bpm_hint_max=116.0,
+        # 2026-09-10 (zone-map batch, Phase 5 prep): zcr/onset_density are
+        # NOT real -- inherited from deep_house pending a fresher capture
+        # (training-progressive-house-01 predates when these fields were
+        # wired into the corpus writer). vocal_hnr/vocal_fmr below ARE
+        # real (per-row median over the same 15-bucket corpus).
         zcr_mu=0.0372,
         zcr_sigma=0.0213,
         onset_density_mu=3.0,
         onset_density_sigma=0.9913,
-        vocal_hnr_mu=0.5672,
-        vocal_fmr_mu=0.3244,
-        vocal_hnr_sigma=0.0444,
-        vocal_fmr_sigma=0.0300,
+        vocal_hnr_mu=0.4361,
+        vocal_fmr_mu=0.2921,
+        vocal_hnr_sigma=0.1833,
+        vocal_fmr_sigma=0.0585,
+        # 2026-09-10 (zone-map batch, Phase 5 prep): real per-track ribbon
+        # (median/MAD-derived sigma) from training-progressive-house-01's
+        # own 15 packaged buckets (13 tracks, ~120.6k heartbeat rows).
+        # Consistently higher across nearly every band than deep_house's
+        # own real ribbon -- read as generally more energetic/sustained
+        # (progressive's characteristic long builds) rather than a
+        # brightness-only difference; deep_house's own vocal medians
+        # (0.5672/0.3244) are meaningfully higher than this profile's,
+        # consistent with deep house's more pronounced soulful-vocal
+        # presence vs. progressive's more instrumental-build character.
         expected_bands=[
-            0.650, 0.651, 0.658, 0.721, 0.726, 0.695, 0.682, 0.655,
-            0.678, 0.621, 0.622, 0.621, 0.629, 0.521, 0.388, 0.384,
-            0.381, 0.363, 0.314, 0.314, 0.273, 0.253, 0.219, 0.234,
-            0.239, 0.204, 0.198, 0.170, 0.147, 0.129, 0.115, 0.105,
-            0.092, 0.093, 0.079, 0.070, 0.063, 0.053, 0.048, 0.044,
-            0.040, 0.034, 0.031, 0.028, 0.026, 0.023, 0.022, 0.021,
-            0.019, 0.017, 0.016, 0.015, 0.014, 0.012, 0.011, 0.011,
-            0.009, 0.007, 0.007, 0.006, 0.005, 0.003, 0.002, 0.001,
+            0.776, 0.776, 0.776, 0.776, 0.776, 0.776, 0.776, 0.776,
+            0.718, 0.697, 0.697, 0.697, 0.697, 0.591, 0.468, 0.468,
+            0.468, 0.416, 0.357, 0.330, 0.285, 0.275, 0.265, 0.283,
+            0.270, 0.244, 0.182, 0.174, 0.184, 0.164, 0.154, 0.141,
+            0.134, 0.124, 0.121, 0.103, 0.084, 0.083, 0.082, 0.078,
+            0.070, 0.075, 0.063, 0.065, 0.050, 0.045, 0.044, 0.052,
+            0.045, 0.047, 0.045, 0.040, 0.038, 0.040, 0.036, 0.036,
+            0.037, 0.034, 0.037, 0.030, 0.022, 0.016, 0.010, 0.007,
         ],
         expected_bands_sigma=[
-            0.449, 0.435, 0.382, 0.290, 0.276, 0.280, 0.344, 0.389,
-            0.260, 0.269, 0.265, 0.267, 0.254, 0.211, 0.212, 0.221,
-            0.227, 0.223, 0.216, 0.205, 0.204, 0.191, 0.170, 0.174,
-            0.166, 0.246, 0.241, 0.215, 0.180, 0.155, 0.137, 0.132,
-            0.116, 0.117, 0.101, 0.088, 0.078, 0.067, 0.059, 0.055,
-            0.050, 0.044, 0.041, 0.037, 0.034, 0.030, 0.029, 0.027,
-            0.025, 0.023, 0.021, 0.020, 0.019, 0.016, 0.015, 0.014,
-            0.012, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
+            0.132, 0.132, 0.132, 0.132, 0.132, 0.132, 0.132, 0.132,
+            0.108, 0.105, 0.105, 0.105, 0.105, 0.089, 0.095, 0.095,
+            0.095, 0.062, 0.054, 0.049, 0.059, 0.057, 0.128, 0.086,
+            0.091, 0.103, 0.105, 0.088, 0.092, 0.081, 0.064, 0.037,
+            0.035, 0.040, 0.037, 0.062, 0.047, 0.031, 0.044, 0.034,
+            0.034, 0.048, 0.041, 0.042, 0.043, 0.028, 0.031, 0.038,
+            0.033, 0.036, 0.032, 0.024, 0.026, 0.026, 0.021, 0.022,
+            0.027, 0.016, 0.027, 0.022, 0.014, 0.009, 0.007, 0.004,
         ],
     ),
 }

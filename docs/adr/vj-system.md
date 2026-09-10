@@ -11195,3 +11195,105 @@ diff lives entirely in `unicornviz/audio/profiles.py`, core repo --
 same precedent as the earlier zone-map BPM-table rewrite this session,
 which also bumped the recommender axis for a profiles.py-only change).
 No `_DETECTOR_VERSION` or `_DIRECTOR_VERSION` bump.
+
+---
+
+## Phase 5 First Pass: Real Data Where It Existed, Educated-Guess Tilts Where It Didn't (2026-09-10, recommender rc.43)
+
+**Trigger.** Owner: do both checks flagged after the family map landed
+(derive `progressive` from its already-packaged real corpus, check
+`synthwave`'s corpus for genre-match quality), and "for anything we
+split that we don't have data for... use the known version as a best
+first starting point but shift the spectrum ribbon based on your best
+educated guess." Followed by: "run five songs from every genre we have
+tracks for as a pre-big run" once this landed.
+
+### Real data found and used
+
+- **`progressive`**: `training-progressive-house-01` had 15 packaged
+  buckets (13 distinct tracks, ~120.6k heartbeat rows) sitting unused --
+  real `expected_bands`/`expected_bands_sigma` (per-track median/MAD
+  ribbon, same methodology as every other real profile) and real
+  `vocal_hnr_mu`/`vocal_fmr_mu` (0.4361/0.2921) now replace the
+  `deep_house`-copy placeholder. `zcr_mu`/`onset_density_mu` stay
+  inherited -- this corpus predates when those fields were wired into
+  the corpus writer (zero rows carry them). BPM fields untouched
+  (owner-confirmed same range as `deep_house`) despite this corpus's
+  own detected BPMs scattering 125-176 -- spectral content doesn't
+  depend on correct BPM detection, tempo ground-truth does.
+- **`synthwave`**: owner's own caution proved warranted --
+  `training-synthwave-02`/`training-synthwave-03` mix genuine synthwave/
+  vaporwave with Italo disco and generic "80s-style edit" tracks of
+  otherwise-unrelated genres (one is an 80s-styled edit of a modern
+  hip-hop track). Filtered to the 7 tracks whose title explicitly says
+  "synth"/"synthwave" before deriving anything. Real (if thin, n=7)
+  `expected_bands`/`expected_bands_sigma`/`zcr_mu`/`onset_density_mu`/
+  `vocal_hnr_mu`/`vocal_fmr_mu` replace every hand-authored field this
+  profile had. The real shape is nothing like the old hand-authored one
+  -- low start, broad low-mid peak around bands 6-8 (~500-700 Hz), fast
+  rolloff, dead by band 25; not the old ascending-then-descending curve
+  peaking at bands 39-40. BPM fields untouched: the filtered set's own
+  detected BPMs scatter 110-159, mostly outside the 100-116 hint band --
+  the same fold-contamination risk already flagged elsewhere in this
+  roster (`rap_rnb`/`hyphy`/`dubstep`) for fast-hi-hat genres, not acted
+  on here either without a dedicated look.
+- `vaporwave`/`chillwave`/`hardsynth` (synthwave's own dependents) had
+  their `zcr`/`onset_density`/`vocal_hnr`/`vocal_fmr` fields updated to
+  inherit synthwave's new real values too, replacing the old "leave
+  uncalibrated" stance -- same family-inherits-from-a-freshly-measured-
+  anchor principle used everywhere else in this file.
+
+### Educated-guess tilts, where no real data exists
+
+For every split with no data of its own, `expected_bands` is no longer a
+verbatim donor copy -- each gets the donor's real ribbon multiplied by a
+directional brighten/darken factor: `1 + k * clip((i - 16) / 16, -1, 1)`
+for band index `i` (pivoted at band 16 with a 16-band half-width, chosen
+so the shift actually lands where each donor's real energy lives --
+these ribbons decay to near-zero by band ~25-40, so the naive "pivot at
+the array's true center, band 31.5" first attempt barely touched the
+informative region and was corrected before landing). `expected_bands_
+sigma` stays the donor's own real value, unshifted -- no basis to guess
+a spread that hasn't been measured.
+
+| Profile | Donor | k | Grounding |
+| --- | --- | --- | --- |
+| `rnb` | `rap_rnb` | +0.25 | "rap (dark) / rnb (bright)" owner split; R&B's smoother delivery reads brighter |
+| `trap` | `hyphy` | -0.25 | "hyphy (bright) / trap (dark)" owner split; heavier 808s read darker |
+| `peak` | `peak_time` | +0.25 | "hard (dark) / peak (bright)" owner split; festival brightness |
+| `downtempo` | `chillstep` | -0.20 | "vibey/jazzy/sultry" vs. chillstep's own "crisp & light" (owner's characterization) |
+| `vaporwave` | `synthwave` (real) | -0.20 | "warm analog pads... laid-back" reads warmer than synthwave |
+| `chillwave` | `synthwave` (real) | -0.10 | "hazy, reverb-soaked... relaxed," milder than vaporwave |
+| `hardsynth` | `synthwave` (real) | +0.30 | profile's own description states it directly: "brighter and more forceful than synthwave's classic pocket" |
+| `deeptrance` | `trance` | -0.15 | weakest grounding of the batch -- "deep" variants read warmer by convention, not textually confirmed here |
+| `psytrance` | `trance` | +0.25 | "psychedelic mids, hyper-detailed tops" -- explicit textual grounding |
+| `electro` | `house` | +0.10 | weakest-grounded tilt -- real discriminator is rhythmic (syncopation), not spectral; kept small deliberately |
+| `midtempo` | `deep_house` | -0.15 | trap-adjacent 808 emphasis reads darker than deep house's chord stabs; real discriminator is rhythmic (`kick_regularity`) |
+
+Every tilt strength is a judgment call, not a fitted value -- the point
+is a directional guess grounded in each profile's own already-written
+description, not an exact copy, per the owner's explicit framing. Two
+(`electro`, `midtempo`) are flagged as the softest of the batch: their
+real discriminator is rhythmic (`kick_regularity`), and the spectral
+tilt applied to them is a secondary, weakly-grounded guess, not a
+substitute for that mechanism actually getting validated.
+
+### `psytrance` reclassified as a trance-family dependent
+
+Beyond the tilt, `psytrance` gained something the other tilted profiles
+didn't: its first-ever `expected_bands_sigma` (`trance`'s own real
+value), moving it off the legacy cosine-similarity fallback path onto
+the same ribbon-fit mechanism (`spectral_shape_fit`) every real/tilted
+profile in this roster uses -- a genuine mechanism change, not just new
+numbers, since the ribbon Gaussian-fit formula differs from cosine
+similarity. `zcr_mu`/`onset_density_mu`/`vocal_hnr_mu`/`vocal_fmr_mu`
+also now inherit `trance`'s real values, replacing this profile's own
+100%-guessed ones. `bpm_prior_mu`/`sigma` deliberately untouched (a
+pinned test fixture value, see the field's own comment).
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.42 → 1.0.0-rc.43`
+(profile fingerprint data changed for 13 profiles -- 2 promoted to real
+corpus, 11 given directional tilts, 1 gaining a ribbon-fit mechanism for
+the first time); `_VJ_WEIGHTS_DOC_VERSION` `103 → 104`. Full suite green
+(2397 passed, same count -- one test renamed, none added/removed net).
+No `_DETECTOR_VERSION`/`_DIRECTOR_VERSION` bump.

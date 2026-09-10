@@ -513,6 +513,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.129** — Phase 5 first pass on `unicornviz/audio/
+  profiles.py`'s fingerprint placeholders: real corpus derived for
+  `progressive` (15 already-packaged buckets, never used before) and
+  `synthwave` (filtered to 7 genuinely synth-titled tracks out of two
+  lists found mixing in unrelated genres); the other 11 placeholder
+  splits with no data of their own get a directional brighten/darken
+  tilt of their donor's real ribbon instead of a verbatim copy;
+  `psytrance` gains its first real `expected_bands_sigma`. See
+  `docs/adr/vj-system.md` § "Phase 5 First Pass".
 - **1.0.0-beta.128** — Four new `AudioProfile` entries in
   `unicornviz/audio/profiles.py`: `rnb`, `trap`, `peak`, `progressive`
   -- dark/bright split siblings of `rap_rnb`/`hyphy`/`peak_time`/
