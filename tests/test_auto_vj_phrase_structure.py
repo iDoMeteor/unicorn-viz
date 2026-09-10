@@ -20,6 +20,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from unicornviz.vj_api import VJState
+
 _AUTO_VJ_PATH = Path(__file__).resolve().parents[1] / 'drop-ins' / 'auto-vj-01' / 'auto_vj.py'
 _SPEC = importlib.util.spec_from_file_location('test_auto_vj_phrase_structure_module', _AUTO_VJ_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
@@ -680,6 +682,62 @@ def test_fire_drop_corpus_keyframe_includes_pending_score_and_dconf() -> None:
     assert kwargs['dconf_pending'] == 0.62
 
 
+def test_fire_drop_corpus_keyframe_fires_without_now_playing_metadata() -> None:
+    """2026-09-10 (cross-session bug report, unicorn-viz-72): drop_fire's
+    sequence keyframe was gated on `now_playing` truthiness (`if
+    now_playing and audio:`), so a pure line-input session -- real mixer/
+    mic, no dj-mixer-01/media-01/Spotify subsystem, `_now_playing_
+    snapshot()` returns None -- never wrote a single drop_fire row to the
+    corpus. Confirmed live: assets/training/sets/hotbeats/002+003 (85 and
+    127 real minutes) logged 0 mode_transition/drop_fire/impact_fire
+    events despite real detector activity the whole time. now_playing
+    should only gate the keyframe's optional metadata enrichment, never
+    whether the event itself is recorded -- fixed by dropping it from the
+    condition (audio alone still gates it) and passing `now_playing or {}`
+    through. `_bare_drop_controller`'s own default `_now_playing_snapshot`
+    (`lambda: None`) already reproduces the exact broken condition, so
+    this needs no override -- unlike the test above, which had to
+    override it to a real dict to get a keyframe at all before this fix."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_drop_controller(_drop_cycle_count=0, _bars_since_phase_entry=12)
+    inst._last_audio = SimpleNamespace(bass=0.5, mid=0.5, treble=0.5)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    assert inst._now_playing_snapshot() is None  # the exact live condition
+
+    inst._fire_drop()
+
+    assert len(calls) == 1
+    assert calls[0][0][0] == 'drop_fire'
+    assert calls[0][0][3] == {}  # now_playing arg: None coerced to {}
+
+
+def test_do_enter_build_corpus_keyframe_fires_without_now_playing_metadata() -> None:
+    """Same fix, the mode_transition call site (_do_enter_build) -- see
+    test_fire_drop_corpus_keyframe_fires_without_now_playing_metadata
+    above for the full diagnosis. _do_enter_breakdown and the climax/
+    impact_fire/effect_swap/profile_switch call sites got the identical
+    one-line fix in the same commit; not each individually re-tested here
+    since the change is mechanically identical at every site."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_drop_controller(
+        _mode='CRUISE', _breakdown_onset_t=0.0, _mode_allowed_from_build=('CRUISE',),
+    )
+    inst._app.vj_api.state = lambda: SimpleNamespace(
+        audio_source='', playlist_mode='auto', speed=None,
+    )
+    inst._last_audio = SimpleNamespace(bass=0.5, mid=0.5, treble=0.5)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    assert inst._now_playing_snapshot() is None  # the exact live condition
+
+    inst._do_enter_build('CRUISE', 'immediate')
+
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] == 'mode_transition'
+    assert args[3] == {}  # now_playing arg: None coerced to {}
+    assert kwargs['new_mode'] == 'build'
+
+
 # ---------------------------------------------------------------------------
 # IMPACT tick branch -- climax-worthy decision (via _update_director())
 # ---------------------------------------------------------------------------
@@ -1000,3 +1058,142 @@ def test_sequence_director_fields_phrase_clock_defaults_to_zero() -> None:
     assert fields['bars_since_track_start'] == 0
     assert fields['bars_since_phase_entry'] == 0
     assert fields['phrase_neutral_bars_left'] == 0
+
+
+# ---------------------------------------------------------------------------
+# update() end-to-end: BPM-lock Schmidt trigger's now_playing gate (defect 2
+# of the 2026-09-10 cross-session bug report, unicorn-viz-72)
+# ---------------------------------------------------------------------------
+
+_FAKE_VJ_STATE = VJState(
+    effect_name='raymarcher', playlist_mode='auto', playlist_index=0, playlist_size=1,
+    auto_advance=True, paused=False, fullscreen=True, is_transitioning=False,
+    advance_interval=30.0, advance_time_remaining=30.0, reactivity=1.0, speed=None,
+    zoom=None, audio_source='Line In', invert=False, is_postfx_active=False,
+    postfx_slot=-1, is_dancing_active=False, is_nova_active=False, is_burst_active=False,
+    recording_active=False, streaming_active=False, streaming_provider='',
+    display_mode='single', display_index=0, user_busy=False,
+    manual_grace_remaining_s=0.0, status_pill='', session_elapsed_s=0.0,
+    session_remaining_s=None,
+)
+
+
+def _bare_update_controller(*, grid_bpm: float, grid_confidence: float, **overrides) -> AutoVJController:
+    """A real AutoVJController wired to actually run update() end-to-end,
+    with every side-effect method NOT under test (director tick, postfx
+    ping-pong, cruise actions, timed finale, HUD pulses, status pill, ...)
+    stubbed to a no-op. Built by iterating real AttributeErrors from an
+    actual update() call rather than guessed -- this is the full,
+    real dependency set update() touches before/after the BPM-lock block,
+    confirmed by running it, not assumed.
+
+    Unlike _bare_drop_controller (which calls one small method directly),
+    this drives the real, ~400-line update() to completion so the fix's
+    real integration point -- `if self._grid is not None:` no longer
+    also requiring `now_playing` truthy -- is exercised exactly as the
+    live app calls it, not just the isolated boolean logic."""
+    vj_api = _FakeVjApi()
+    vj_api.state = lambda: _FAKE_VJ_STATE
+    grid = SimpleNamespace(
+        bpm=grid_bpm, confidence=grid_confidence, update=lambda *a, **kw: None,
+        downbeat_confidence=0.5, candidate_lock_disagreement=False,
+        energy_slope=0.0, drop_score=0.0,
+    )
+    defaults = dict(
+        _mode='CRUISE', _grid=grid, _app=SimpleNamespace(vj_api=vj_api),
+        _engine=_FakeEngine(), _audio_manager=None, _last_onset_count=0,
+        _onset_density_1min_history=[], _refractory_guard_enabled=False,
+        _refractory_guard_engaged_count=0, _last_bpm_lock_state=False,
+        _bpm_lock_active=False, _now_playing_last_change_counter=-1,
+        _last_logged_playlist_id='', _fire_dj_celebration=None, _enabled=True,
+        _wide_bpm_easter_egg_active=False, _published_bpm=0.0,
+        _BPM_LOCK_CONFIDENCE=0.6, _BPM_LOCK_RELEASE_CONFIDENCE=0.225,
+        _shadow_grid=None, _shadow2_grid=None, _live_corpus_writer=None,
+        _sequence_corpus_writer=None, _startup_guard_until_t=0.0,
+        _startup_was_guarded=False, _last_effect_name='raymarcher',
+        _postfx_cruise_slots=[], _pp_active=False, _allow_tweakables=False,
+        _postfx_cruise_timer=0.0, _param_timer=0.0, _react_timer=0.0,
+        _last_audio=SimpleNamespace(bass=0.5, mid=0.5, treble=0.5),
+        _secs_since_change=0.0,
+    )
+    defaults.update(overrides)
+    inst = object.__new__(AutoVJController)
+    for k, v in defaults.items():
+        setattr(inst, k, v)
+    inst._now_playing_snapshot = lambda: None  # the exact live "C session" condition
+    # Side-effect methods genuinely irrelevant to the BPM-lock block --
+    # no-op'd to isolate it, not because they're broken.
+    for name in (
+        '_sync_auto_advance_override', '_maybe_check_wide_bpm_easter_egg',
+        '_maybe_mood_prime_on_manual_profile_change', '_update_hud_downbeat_pulse',
+        '_update_hud_beat_pulse', '_maybe_log_downbeat_event', '_debug_throttled',
+        '_update_profile_recommendation', '_maybe_log_detector_tick',
+        '_update_director', '_run_postfx_pingpong_tick', '_run_cruise_actions',
+        '_check_timed_finale', '_maybe_exit_after_finale', '_reset_swap_timer',
+        '_maybe_clear_postfx_hold',
+    ):
+        setattr(inst, name, lambda *a, **kw: None)
+    inst._maybe_auto_switch_profile = lambda bpm: None
+    inst._update_published_bpm = lambda bpm, dt: None
+    inst._profile_label = lambda: 'house'
+    inst._compute_kick_regularity = lambda: 0.5
+    inst._now = lambda: 100.0
+    inst._pill = lambda *a, **kw: ''
+    return inst
+
+
+def test_bpm_lock_gains_and_fires_keyframe_without_now_playing_metadata() -> None:
+    """2026-09-10 (cross-session bug report, unicorn-viz-72, defect 2):
+    the BPM-lock Schmidt trigger (`if self._grid is not None and
+    now_playing:`) was gated on now_playing truthiness even though it
+    only reads self._grid.bpm/confidence -- now_playing is only used by
+    the keyframe call's optional metadata enrichment. A pure line-input
+    session (real mixer/mic, no dj-mixer-01/media-01/Spotify subsystem)
+    always has now_playing=None, so self._bpm_lock_active never left its
+    False default. Confirmed live: assets/training/sets/hotbeats/002 (85
+    real minutes, 10,888 heartbeats) read bpm_locked=False on every
+    single row despite a healthy 0.998 median confidence the whole
+    session. Fixed by dropping the now_playing requirement (self._grid
+    is not None is sufficient) and passing now_playing or {} through.
+
+    This drives the real update() end-to-end (not just the isolated
+    Schmidt-trigger condition) with confidence above _BPM_LOCK_CONFIDENCE
+    and now_playing forced to None -- the exact live failure condition."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_update_controller(grid_bpm=128.0, grid_confidence=0.9)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    assert inst._now_playing_snapshot() is None  # the exact live condition
+    audio = SimpleNamespace(
+        bass=0.5, mid=0.5, treble=0.5, beat=0.0,
+        energy_slope=0.0, energy=0.5, spectral_flux=0.0,
+    )
+
+    inst.update(1 / 60, audio)
+
+    assert inst._bpm_lock_active is True
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] == 'bpm_lock_gained'
+    assert args[3] == {}  # now_playing arg: None coerced to {}
+    assert kwargs['bpm'] == 128.0
+
+
+def test_bpm_lock_stays_released_below_confidence_without_now_playing_metadata() -> None:
+    """Companion to the test above: low confidence must still correctly
+    NOT gain the lock (the Schmidt trigger's own threshold logic is
+    unchanged by this fix), and must emit no keyframe at all since
+    _last_bpm_lock_state never changes from its False default -- proves
+    the now_playing-gate removal didn't turn this into an unconditional
+    lock-gain."""
+    calls: list[tuple[tuple, dict]] = []
+    inst = _bare_update_controller(grid_bpm=128.0, grid_confidence=0.1)
+    inst._record_sequence_keyframe = lambda *a, **kw: calls.append((a, kw))
+    audio = SimpleNamespace(
+        bass=0.5, mid=0.5, treble=0.5, beat=0.0,
+        energy_slope=0.0, energy=0.5, spectral_flux=0.0,
+    )
+
+    inst.update(1 / 60, audio)
+
+    assert inst._bpm_lock_active is False
+    assert len(calls) == 0

@@ -10526,3 +10526,81 @@ Full suite green (2238 passed).
 
 **Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.37 → 1.0.0-rc.38`;
 `_VJ_WEIGHTS_DOC_VERSION` `98 → 99`.
+
+## now_playing Falsely Gated the BPM Lock and Every Director Keyframe (2026-09-10, auto-vj-01 rc.130)
+
+**Trigger.** Cross-session bug report from another Claude session
+(unicorn-viz-72), auditing the owner's live line-input "C session" data
+(`assets/training/sets/hotbeats/002` and `003`, 85 and 127 real minutes).
+Two symptoms: scorecards showed 0 mode transitions/drops/impacts despite
+`mode_snap_count` reading real nonzero values (197/296), and
+`bpm_locked` read `False` on every single heartbeat row under v3 despite
+confidence sitting at a healthy 0.998 median the whole session.
+
+**The peer's proposed mechanism was wrong on both counts, verified
+before touching any code.** They attributed the event-count gap to
+`self._engine.mark(...)` requiring `log_decisions=true`, and the
+`bpm_locked` gap to the rc.43 `BeatTrackerV3` duplication losing track
+of a lock flag. Neither holds up: `drop_fire`/`impact_fire`/
+`section_change` already had dedicated `_record_sequence_keyframe(...)`
+calls independent of `log_decisions`; `mode_transition` genuinely had no
+such call, but not for that reason. And `bpm_locked` isn't set anywhere
+in `beat_grid.py` at all -- it's `self._bpm_lock_active` on
+`AutoVJController` itself, a Schmidt trigger over `self._grid.confidence`
+computed in `update()`, with no dependency on which tracker engine is
+active.
+
+**Real root cause, one shared mechanism.** `update()`'s BPM-lock
+hysteresis block was gated `if self._grid is not None and now_playing:`,
+and every `mode_transition`/`drop_fire`/`impact_fire`/`effect_swap`/
+`profile_switch` sequence-keyframe call site had the identical
+`if now_playing and audio:` shape. `now_playing` comes from
+`_now_playing_snapshot()`, which returns `None` whenever no
+dj-mixer-01/media-01/Spotify subsystem is active -- exactly true for a
+pure line-input session (real mixer/mic, no track metadata). So
+`self._bpm_lock_active` never left its `False` default, and every one
+of those keyframe types was silently skipped, every cycle, for the
+entire session. Confirmed directly against `hotbeats/002`'s real corpus
+rows: `track_id`/`track_path`/`metadata_source` all empty strings
+(`audio_source='Built-in Audio Analog Stereo'`), `bpm_locked=False`
+throughout, `confidence=0.998` median.
+
+`now_playing` should only gate the keyframe's optional metadata
+*enrichment* (title/artist/genre) -- never whether the underlying
+detector/director state or the event itself gets recorded. This is the
+same category of bug `_record_sequence_heartbeat()` was already fixed
+for on 2026-08-16 ("no longer requires now_playing.available/is_playing
+... we don't really even train on now_playing, just verify") -- that
+fix never got extended to the keyframe call sites or the BPM-lock block.
+
+**Fix.** `if self._grid is not None and now_playing:` →
+`if self._grid is not None:`; every `if now_playing and audio:` →
+`if audio is not None:`; every `now_playing` argument passed to
+`_record_sequence_keyframe(...)` → `now_playing or {}`. Seven call
+sites total (`_do_enter_build`, `_do_enter_breakdown`, the climax
+`mode_transition`, `_fire_drop`, the impact-fire method, `on_effect_
+changed`, the profile-switch method) plus the BPM-lock block itself.
+`_maybe_record_section_change()` was deliberately left alone -- it
+genuinely needs a real song-structure hint from mixer metadata, so a
+line-input session correctly never fires `section_change`, unlike the
+other five event types which have nothing to do with `now_playing`'s
+content.
+
+**Verification.** `tests/test_auto_vj_phrase_structure.py` gains four
+regression tests: `test_fire_drop_corpus_keyframe_fires_without_now_
+playing_metadata` and `test_do_enter_build_corpus_keyframe_fires_
+without_now_playing_metadata` (direct method calls, matching the file's
+existing `_bare_drop_controller` convention), plus `test_bpm_lock_
+gains_and_fires_keyframe_without_now_playing_metadata` and its
+companion `test_bpm_lock_stays_released_below_confidence_without_now_
+playing_metadata` -- these two drive the real `update()` end-to-end via
+a new `_bare_update_controller()` helper (every dependency stubbed by
+iterating real `AttributeError`s from an actual call, not guessed) with
+`now_playing` forced to `None`, proving the fix at its actual live
+integration point rather than only the isolated boolean condition. Full
+suite green (2383 passed).
+
+**Bookkeeping.** `auto-vj-01` `__version__` `1.0.0-rc.129 → 1.0.0-rc.130`.
+No subsystem version bump -- this changes when a keyframe/lock-state
+update runs, not a detector constant, phrase-bias threshold, or
+recommender scoring term.
