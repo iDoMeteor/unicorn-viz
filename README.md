@@ -513,6 +513,23 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.132** — Clean re-harvest: beta.131's fingerprint refresh
+  unknowingly pooled buckets captured during the dual-window low-band
+  analyzer bug (live 2026-09-04, fixed same day as this pass in
+  beta.126) -- re-derived `expected_bands`/`expected_bands_sigma`/
+  `vocal_hnr_mu`/`vocal_fmr_mu` for all 13 real profiles + `electronic`'s
+  house-mirror in `unicornviz/audio/profiles.py`, excluding the
+  corrupted window. Reverted `deep_house`'s own `bpm_hint_max` widening
+  (116->128, from an earlier phase of the same tuning session) after it
+  broke house-family tempo ordering and was confirmed live as a top
+  wrong-winner on `house`'s own material. Two tests
+  (`test_default_enabled_true_for_profiles_that_dont_set_it`,
+  `test_synthwave_is_registered`) updated to assert the actual current
+  disabled-roster set (a later, more specific "disable zero-coverage
+  genres" owner directive superseded the "all enabled" rewrite an
+  earlier same-day pass pinned) instead of "everything enabled." See
+  `docs/adr/vj-system.md` § "Clean Re-Harvest: the Dual-Window
+  Contamination Window"; auto-vj-01 rc.138 (own commit already pushed).
 - **1.0.0-beta.131** — Re-derived every pilot-tested genre's fingerprint
   in `unicornviz/audio/profiles.py` (14 profiles) from ALL pooled real
   corpus per genre, not just the pilot's own 5-track sample:

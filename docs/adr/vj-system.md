@@ -11475,3 +11475,144 @@ history already documents twice. `ruff`/`bandit` clean.
 (fingerprint data changed for 15 profiles, two structural pooling-scheme
 changes); `_VJ_WEIGHTS_DOC_VERSION` `105 → 106`. No `_DETECTOR_VERSION`/
 `_DIRECTOR_VERSION` bump.
+
+## Clean Re-Harvest: the Dual-Window Contamination Window (2026-09-10, recommender rc.46)
+
+**Trigger.** Owner, mid a collaborative recommender-weight tuning
+session between two agent seats (this session and a peer, "the
+strategist"): a BPM hard-margin widening pass had just been tried,
+proven to backfire badly on live replay (house/big-room/techno
+self-recommendation collapsed to near-zero, `ambient` became a dominant
+wrong-answer attractor), and reverted. While pulling the "own-profile
+wins" offline instrument the strategist had asked to be reported
+alongside live numbers each round, it read **2/12**, not the historical
+**8/14** — `rap_rnb` was winning 10 of 12 lists, including on genres
+with no plausible acoustic similarity to hip-hop. Owner, on being told
+the state of play: "why did you stop? you're both smart enough to
+figure this out, keep going until you have the results i'm looking
+for."
+
+**Root cause, located not inferred.** Two hypotheses were tested and
+falsified with real data before landing on the real one (both peer
+agents' own falsifiable predictions, scored honestly against
+themselves): (1) the rc.34 per-track-vs-16s-window aggregation fix
+being silently undone by rc.45's "per-track median/MAD" refresh —
+falsified: `window_MAD/shipped_sigma` ratio came back ~0.96 for `house`
+and ~0.90 for `rap_rnb`, both near 1, not "well above 1." (2) A mu/shape
+mismatch — also falsified: cosine similarity between `house`'s shipped
+mu and today's clean per-track window-median was 0.9986, an excellent
+fit. The real cause: core `beta.126` (landed earlier the same day, see
+`unicornviz/__init__.py` and `unicornviz/audio/analyzer.py`) fixed a bug
+live since the 2026-09-04 dual-window low-band substitution (introduced
+in `6799bfc`) — long-window FFT magnitudes were ~10x too large, so they
+always won the subsequent peak-normalize, crushing every band above the
+replacement boundary (roughly bands 25-63) toward ~0 regardless of real
+signal, while the replaced bottom bands (0-24) read correspondingly
+inflated. The rc.45 fingerprint refresh pooled ALL packaged buckets per
+genre — including every bucket captured between the 2026-09-04 bug's
+introduction and `beta.126`'s fix. Confirmed directly: scoring only
+today's post-`beta.126` replay rows against the rc.45 shipped mu, bands
+0-24 showed a large mismatch (mean `|z|` ~2.7-3.0) on BOTH `house` and
+`rap_rnb` equally, while bands 25-63 fit well (`|z|` ~0.5-0.6, cos
+~0.986) on both — located exactly in the dual-window replacement
+region, not a coincidence.
+
+**Why the contamination hurt `house` more than `rap_rnb` despite hitting
+both equally.** `rap_rnb`'s shipped `expected_bands_sigma` in that same
+band range (~0.118-0.126) is legitimately ~15-30% wider than `house`'s
+(~0.107-0.117) — confirmed real, not overfit, by the same
+`window_MAD/shipped_sigma` check (both ratios near 1). Under
+`gaussian_ribbon_fit`'s `-log(sigma) - 0.5*z²` formula, a sigma that's
+31% wider shrinks every z-score by that same factor, discounting the
+quadratic penalty by roughly `1 - (1/1.31)² ≈ 42%` — while the
+`-log(sigma)` term only gives up about `log(0.080/0.061) ≈ 0.27` in
+absolute terms for being less precise. The quadratic discount dominates
+the normalizer's penalty in every realistic case where z isn't already
+near zero (i.e. whenever a track has any real deviation from the
+fingerprint's median at all, which real audio always does). This is the
+same "wide sigma wins by default" pathology named once before in this
+file (the missing-`-log(sigma)`-term investigation, "explicitly checked
+and ruled out... made negligible difference" for a *different* case at
+the time) — real here, mathematically confirmed with live numbers, not
+negligible. Flagged as a genuine, unresolved formula-level lever, not
+fixed tonight: a same-median-band roster-wide sigma cap was tried and
+did not move the offline gate (the specific low-sigma cluster that
+loses — `house`/`techno`/`trance`/`deep_house`/`peak_time` — sits well
+below the roster-wide median sigma already, so a global cap doesn't
+touch the actual asymmetry). Real fix needs either a smarter
+regularization anchored to the specific profiles it's costing, or
+accepting the wide-sigma advantage as a structural property of this
+formula and addressing it via weight redesign — left for a dedicated
+follow-up pass.
+
+**A second, independent bug found in the diagnostic instrument itself.**
+`recommender_fingerprints.py diagnose`/`diagnose_list` scores each
+candidate against **raw per-tick `bands` rows**, but the live
+recommender (`_profile_score()` in `auto_vj.py`) scores against
+`band_mean_vec`, a rolling **16-second window mean**. Raw frames carry
+far more instantaneous variance than a 16-second average, which
+mechanically produces much larger z-scores against any profile's
+(smoother, per-track-averaged) mu/sigma — and, per the sigma-width
+finding above, disproportionately punishes the *tighter*-sigma
+"correct" profiles more than wider-sigma competitors. Separately, the
+instrument's `RECONSTRUCTABLE_WEIGHTS` deliberately excludes `zcr_fit`/
+`onset_fit` ("not reconstructable from historical rows packaged before
+2026-09-03's zcr/onset_density_1min corpus fields landed") — but the
+frozen comparison manifest (`director_placement_final-baseline-
+2026-09-03.json`) predates those fields regardless of a given list's own
+later buckets, so this exclusion, while correctly reasoned originally,
+silently drops two real, populated, reconstructable terms from every
+comparison run against fresher corpus. Rescoring with window-chunked
+(16s, non-overlapping, matching the live aggregation exactly) input and
+both extra terms included moved the own-wins gate from a misleadingly
+low reading up through several honest intermediate readings as each fix
+landed: **2/12** (contaminated fingerprints, frozen-manifest raw
+frames) → **3/12** (clean fingerprints, same flawed instrument) →
+**6/12** (clean fingerprints, window-chunked, still missing zcr/onset)
+→ **7/12** (clean fingerprints, window-chunked, full 6-term composite,
+scored against the full clean corpus pool rather than the thin frozen
+manifest) — proportionally at or slightly above the historical 8/14
+rate, and a fair, like-for-like comparison for the first time. The
+instrument fix itself (window-chunking + the two extra terms) was
+validated as a throwaway script this session, not yet landed into
+`recommender_fingerprints.py` as a reusable subcommand — flagged as a
+small, contained follow-up (the module's `diagnose`/`diagnose_list`
+functions need a `window_s` chunking option and the two extra terms
+wired in, gated the same way the module docstring already gates
+`zcr_fit`/`onset_fit` availability).
+
+**Also caught and fixed in the same pass, unrelated to fingerprints.**
+(1) `deep_house`'s own `bpm_hint_max` widening from an earlier phase of
+the same session (116→128) put it within 4 BPM of `house`'s own
+`bpm_hint_min`, failing a pre-existing pinned regression test
+(`test_deep_house_tempo_sits_below_house_and_above_chillstep`) and
+independently confirmed live (deep_house became house's own bucket's #1
+wrong winner, 43/126, once the earlier ambient-widening regression was
+reverted and stopped masking it) — reverted back to 116, alongside the
+other seven widened profiles reverted earlier the same session. (2) A
+real `UnboundLocalError` crash in an experimental, default-off
+BPM-fold-admission prototype (also from earlier the same session,
+unrelated to fingerprints): `_fold_admission_enabled` was only assigned
+inside the `if _prefilter_bpm > 0.0:` guard but read unconditionally
+later in `_update_profile_recommendation()`, breaking on any cycle where
+the prefilter hadn't engaged yet — caught by the shared-tree pre-push
+suite (`tests/test_genre_matcher.py`, 4 failures), fixed by initializing
+the flag to `False` before the guard.
+
+**Verification.** Full suite green (2398 passed, 2 pre-existing failures
+unrelated to this session's work — `psytrance`/`synthwave` both disabled
+per a same-day, more specific "disable zero-coverage genres" owner
+directive that postdates the older, broader "all enabled" directive two
+now-stale tests still pin; not touched, flagged for the owner). One
+pinned test updated for an intentional value shift
+(`test_deep_house_vocal_fields_now_calibrated`, `vocal_hnr_mu`/
+`vocal_fmr_mu` shifted by 0.0001 after excluding corrupted buckets from
+the pool — rounding-level, not a real recalibration, same "supersedes"
+pattern this test's docstring already documents three times).
+`electronic`'s house-mirror fingerprint refreshed to follow `house`'s
+newly clean values, matching its own established "mirrors house" design.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.45 → 1.0.0-rc.46`
+(fingerprint data re-derived for all 13 real profiles + `electronic`'s
+mirror, `deep_house` BPM hint reverted); `_VJ_WEIGHTS_DOC_VERSION`
+`106 → 107`. No `_DETECTOR_VERSION`/`_DIRECTOR_VERSION` bump.

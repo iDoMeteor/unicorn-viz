@@ -19,12 +19,20 @@ def test_synthwave_is_registered() -> None:
 
     2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
     full-roster genre BPM table rewrite ("all enabled"). The zero-corpus
-    caveat above still applies in full, flagged for Phase 5 of the
-    zone-map/sub-kick-split/recalibration plan."""
+    caveat above still applied in full at that point.
+
+    2026-09-10 (zone-map batch, Phase 5 pilot-run cleanup, later):
+    DISABLED again -- owner, direct: "disable all the genres we do not
+    have library coverage for." Disable-not-delete -- direct lookup
+    (get_profile(...)) still resolves it; it just no longer appears in
+    discovery (list_profiles()/enabled_profiles()). See
+    test_default_enabled_true_for_profiles_that_dont_set_it in
+    test_audio_profile_deep_house_and_disable.py for the full current
+    disabled-roster set this test's assertion below is part of."""
     assert 'synthwave' in PROFILES
-    assert 'synthwave' in list_profiles()
+    assert 'synthwave' not in list_profiles()
     assert get_profile('synthwave') is PROFILES['synthwave']
-    assert PROFILES['synthwave'].enabled is True
+    assert PROFILES['synthwave'].enabled is False
 
 
 def test_synthwave_tempo_prior_matches_classic_kavinsky_range() -> None:

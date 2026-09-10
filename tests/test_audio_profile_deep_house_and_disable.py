@@ -82,17 +82,33 @@ def test_enabled_profiles_excludes_only_disabled_entries() -> None:
 
 
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
-    """2026-09-10 (zone-map batch): every profile in the roster is now
-    enabled=True -- the owner's full-roster genre BPM table rewrite
-    re-enabled every previously-disabled profile ("all enabled"). The
-    zero-corpus caveats each of those profiles' own field comments
-    carried (psytrance/hard_techno/hardstyle/synthwave/techno/hyphy/
-    electronic, plus the seven brand-new profiles added the same batch)
-    still apply as data-quality flags, just no longer as a discovery
-    exclusion -- see each profile's own field comment and
-    docs/adr/vj-system.md."""
+    """2026-09-10 (zone-map batch): every profile in the roster was
+    briefly enabled=True -- the owner's full-roster genre BPM table
+    rewrite re-enabled every previously-disabled profile ("all
+    enabled"). Superseded the same day (zone-map batch, Phase 5
+    pilot-run cleanup): owner, direct -- "disable all the genres we do
+    not have library coverage for." Every profile below carries that
+    exact dated, owner-quoted disable-not-delete comment in its own
+    field block (direct lookup via get_profile(...) still resolves each
+    one) except `progressive`, disabled for a separate, also-documented
+    reason (its own real corpus reads well outside its shared hint band
+    with deep_house, a BPM pre-filter issue, not a coverage gap -- see
+    its own field comment). This roster is expected to shrink over time
+    as real library material and matching training-list playlists land
+    for each one; when a name here gets real coverage, remove it from
+    the set below in the same commit that flips its own `enabled=True`."""
+    zero_coverage_or_flagged_disabled = {
+        'chillstep', 'chillwave', 'deeptrance', 'electro', 'hard_techno',
+        'hardstyle', 'hardsynth', 'midtempo', 'peak', 'progressive',
+        'psytrance', 'synthwave', 'vaporwave',
+    }
     for key, profile in PROFILES.items():
-        assert profile.enabled is True, f'{key} unexpectedly disabled'
+        if key in zero_coverage_or_flagged_disabled:
+            assert profile.enabled is False, (
+                f'{key} expected disabled (zero-coverage/flagged set) but is enabled'
+            )
+        else:
+            assert profile.enabled is True, f'{key} unexpectedly disabled'
 
 
 def test_electronic_key_now_resolves_to_the_revived_dance_profile() -> None:
@@ -226,10 +242,20 @@ def test_deep_house_vocal_fields_now_calibrated() -> None:
     again -- re-derived pooling ALL packaged training-deep-house-01
     buckets (11 tracks, up from whatever narrower set fed rc.29's own
     numbers), including the owner's pilot-run tracks from the same
-    session. 0.5672->0.5386 / 0.3244->0.3192."""
+    session. 0.5672->0.5386 / 0.3244->0.3192.
+
+    2026-09-10 (zone-map batch, Phase 5, later -- clean re-harvest):
+    superseded again, same 11 tracks, re-derived excluding the buckets
+    captured inside the 2026-09-04-to-beta.126 dual-window low-band
+    corruption window (see house's own field comment and docs/adr/
+    vj-system.md "All Fingerprints Updated From Pooled Real Corpus" /
+    its follow-up ADR entry) -- deep_house had few corrupted buckets in
+    its own pool, so the shift is a rounding-level 0.5386->0.5385 /
+    0.3192->0.3191, not a real recalibration; landed anyway for
+    consistency with every other profile in this pass."""
     p = get_profile('deep_house')
-    assert p.vocal_hnr_mu == pytest.approx(0.5386)
-    assert p.vocal_fmr_mu == pytest.approx(0.3192)
+    assert p.vocal_hnr_mu == pytest.approx(0.5385)
+    assert p.vocal_fmr_mu == pytest.approx(0.3191)
     assert p.vocal_hnr_sigma == pytest.approx(0.1624)
     assert p.vocal_fmr_sigma == pytest.approx(0.0505)
 
