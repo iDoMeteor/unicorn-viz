@@ -126,9 +126,26 @@ def _hw_encoder_candidates() -> tuple[tuple[str, list[str], str, str], ...]:
     never tried on Windows or macOS; the others fail fast when their driver
     is absent.
     """
-    if sys.platform.startswith(('win', 'darwin')):
+    if sys.platform.startswith('win'):
+        # Intel QSV is the hardware path for the Windows end-user target;
+        # NVENC stays because it answers in ~1 s without an NVIDIA driver and
+        # is the win for NVIDIA boxes. VA-API (libva over Direct3D 12 in the
+        # full ffmpeg builds) spent 17 s enumerating displays before failing.
+        return tuple(c for c in _HW_ENCODERS if c[0] in ('h264_nvenc', 'h264_qsv'))
+    if sys.platform.startswith('darwin'):
         return tuple(c for c in _HW_ENCODERS if c[0] != 'h264_vaapi')
     return _HW_ENCODERS
+
+
+def _probe_timeout_s() -> float:
+    """Ceiling per candidate encode.
+
+    On Windows the whole probe runs while the visualizer is starved of the
+    GPU (the driver serializes the fullscreen GL window behind the probe's
+    video device), so a hung candidate must be cut short: 6 s, versus 20 s
+    elsewhere where a working encode simply shares the GPU.
+    """
+    return 6.0 if sys.platform.startswith('win') else 20.0
 
 
 def _probe_hw_encoder_locked(ffmpeg_path: str) -> tuple[str, list[str], str, str] | None:
@@ -145,7 +162,7 @@ def _probe_hw_encoder_locked(ffmpeg_path: str) -> tuple[str, list[str], str, str
             cmd += ['-vf', filt]
         cmd += ['-c:v', codec, '-f', 'null', '-']
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=20.0)
+            proc = subprocess.run(cmd, capture_output=True, timeout=_probe_timeout_s())
         except Exception as exc:
             log.debug('Recording: %s probe failed to run: %s', codec, exc)
             continue

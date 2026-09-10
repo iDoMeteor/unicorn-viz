@@ -71,11 +71,13 @@ def test_vaapi_is_never_probed_on_windows_or_macos(monkeypatch):
     """VA-API is a Linux API; on the 2026-09-09 Windows beta its probe alone
     held the visualizer at ~1 fps for 17 s before failing."""
     monkeypatch.setattr(rec.sys, 'platform', 'win32')
-    assert 'h264_vaapi' not in [c[0] for c in rec._hw_encoder_candidates()]
+    assert [c[0] for c in rec._hw_encoder_candidates()] == ['h264_nvenc', 'h264_qsv']
+    assert rec._probe_timeout_s() == 6.0          # a hung QSV probe is cut short
     monkeypatch.setattr(rec.sys, 'platform', 'darwin')
     assert 'h264_vaapi' not in [c[0] for c in rec._hw_encoder_candidates()]
     monkeypatch.setattr(rec.sys, 'platform', 'linux')
     assert [c[0] for c in rec._hw_encoder_candidates()] == [c[0] for c in rec._HW_ENCODERS]
+    assert rec._probe_timeout_s() == 20.0
 
 
 def test_startup_prewarm_is_gated_on_auto_record():

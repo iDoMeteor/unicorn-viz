@@ -513,6 +513,9 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.123** — Windows hardware-encoder probe: NVENC and Intel QSV
+  only, 6 s ceiling per candidate (20 s elsewhere), so a hung probe on the
+  first record press costs seconds, not most of a minute.
 - **1.0.0-beta.122** — The hardware-encoder probe no longer runs at boot
   unless `[recording] auto_record` is on: its three ffmpeg test encodes share
   the GPU with the visualizer and, on an Intel iGPU under Windows, held the

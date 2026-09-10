@@ -1293,6 +1293,10 @@ constraints, stated plainly:
     macOS. Tests added. **For the recording seat:** even lazily, the probe can
     starve the display for up to 40 s on Intel iGPUs — consider QSV-only on
     Windows with a short timeout, or a software-first default there.
+  - **Owner call, core beta.123:** on Windows the probe tries NVENC and QSV
+    only (NVENC answers in ~1 s without an NVIDIA driver and is the win for
+    NVIDIA boxes), with a 6 s ceiling per candidate instead of 20 s; VA-API
+    and the 20 s ceiling stay on Linux where they behave.
   - **Quit path worked:** the two-press prompt shows in the log
     (`Quit requested; press again`) and the app exited cleanly; the slow
     frames around the quit are the QSV probe timing out at the same moment.
