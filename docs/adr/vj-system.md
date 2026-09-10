@@ -10968,3 +10968,230 @@ original incident accounts stay intact in the changelog. `auto-vj-01`
 `__version__` `1.0.0-rc.132 → 1.0.0-rc.133`. No `_DETECTOR_VERSION` or
 `_DIRECTOR_VERSION` bump -- nothing in `beat_grid.py` or the director's
 phrase-bias logic changed.
+
+---
+
+## Fingerprint-Family Map Formalized (2026-09-10, recommender rc.42)
+
+**Trigger.** Phase 5 (recalibration) planning surfaced a real problem: 7
+of the 23 profiles added earlier this session (the zone-map genre-table
+rewrite) had zero real corpus and no dedicated training list to pull one
+from. Owner's proposal: treat thin-data profiles as members of acoustic
+*families* anchored on a real sibling, differentiated primarily by BPM
+(with the family anchor's fingerprint as a starting placeholder) rather
+than requiring a from-scratch harvest for every single genre slot. This
+entry formalizes that map after several rounds of owner review, corrects
+mistakes found along the way, and records the four new profiles it
+produced (`rnb`, `trap`, `peak`, `progressive`).
+
+### Data-quality tiers (checked directly against the file, not assumed)
+
+`expected_bands_sigma` is the tell: `None` means the old cosine-
+similarity fallback path, never touched by the ribbon redesign.
+Populated-but-copied is not the same as independently measured.
+
+- **Tier A** — real, corpus-fitted ribbon: `house`, `deep_house`,
+  `peak_time`, `trance`, `electronic` (Dance), `techno`,
+  `drum_and_bass`, `dubstep`, `rap_rnb`, `hyphy`, `ambient`, `chillstep`.
+- **Tier B** — placeholder sigma copied wholesale from a Tier-A sibling:
+  `downtempo` (←`chillstep`), `midtempo` (←`deep_house`), `electro`
+  (←`house`), `deeptrance` (←`trance`).
+- **Tier C** — no sigma at all, 100% hand-authored, zero corpus ever:
+  `psytrance`, `hard_techno`, `hardstyle`, `synthwave`, `vaporwave`,
+  `chillwave`, `hardsynth`.
+
+The load-bearing surprise in this pass: **`synthwave` is Tier C, not a
+real anchor**, despite being proposed as the family anchor for
+`vaporwave`/`chillwave`/`hardsynth` in an earlier round of this same
+discussion. It has never had a real corpus pass either -- its three
+"dependents" inherited nothing real from it (no sigma existed to copy,
+which is *why* they're also Tier C). The whole `synth` family needs a
+first-time harvest, anchor included, not a re-print.
+
+### Taxonomy (owner's breakdown, reconciled against the tiers)
+
+**`hiphop`** — taxonomy grouping, not a shared-fingerprint family (both
+donors are independently Tier A):
+
+- `rap` (dark, key `rap_rnb` kept, Tier A real, 70-100 BPM, display
+  renamed "Rap / R&B" → "Rap") / `rnb` (bright, new key, placeholder
+  ←`rap_rnb`, same 70-100 BPM window, display "R&B").
+- `hyphy` (bright, key kept, Tier A real, 105-116 BPM, display renamed
+  "Hyphy / Trap" → "Hyphy") / `trap` (dark, new key, placeholder
+  ←`hyphy`, same 105-116 BPM window, display "Trap").
+- `drill` (a third hiphop member, "faster") was **dropped** by the owner
+  after initially being proposed -- drill's real-world tempo is
+  frequently detected at half-time (~70-72 BPM felt) rather than its
+  programmed ~140-145, the same ambiguity trap already carries; adding
+  it without first checking what this project's own detector actually
+  locks onto on real drill material risked landing it in entirely the
+  wrong part of the BPM table. Owner: "let's leave drill out, i think it
+  will cause us undue problems."
+
+**`synth`** — real shared-fingerprint family, anchor is Tier C (first
+harvest needed, not a re-print): `vaporwave` (60-80) / `chillwave`
+(84-96) / `synthwave` ANCHOR (100-116) / `hardsynth` (120-130). A clean
+four-rung non-overlapping tempo ladder, no BPM-overlap concerns.
+
+**`house`** — mixed: independents, ribbon-split twins, one pre-existing
+vocal-only twin. No dark/bright pair in this group uses `centroid_fit`
+or any scalar brightness feature (see "`centroid_fit` Removed Entirely"
+above) -- every pair is discriminated by two independently-measured
+`expected_bands` ribbons via `spectral_shape_fit` (weight `0.7`, real),
+the only live spectral-shape mechanism left.
+
+- `house` (regular, Tier A, 120-126) -- anchor of its own right, no
+  dark/bright split.
+- `deep_house` (dark, key kept, Tier A real, 112-116, display unchanged
+  "Deep House") / `progressive` (bright, new key, placeholder
+  ←`deep_house`, **same** 112-116 BPM window -- owner-confirmed:
+  "progressive (bright) & deep (dark) house, same bpm range, yes",
+  display "Progressive House").
+- `peak_time` (dark, key kept, Tier A real, 130-136, display renamed
+  "Hard House" → "Hard" -- this resolves a pre-existing key/display
+  mismatch from earlier the same session, where the key said
+  `peak_time` but the display said "Hard House"; handing "Peak Time" to
+  the new bright sibling instead of leaving it unused fixes that rather
+  than compounding it) / `peak` (bright, new key, placeholder
+  ←`peak_time`, same 130-136 BPM window, display "Peak Time").
+- `electronic` ("Dance", house-but-no-vocals) -- pre-existing vocal-only
+  twin of `house`, Tier A, 116-126, unchanged by this batch.
+
+**`industrial`** — the owner's original label for this taxonomy grouping
+was "electronic," which collides with the *existing* profile dict key
+`electronic` (display "Dance", correctly placed under `house` above,
+not this group) -- renamed to avoid two different things sharing one
+name in this document and any future code comment. Taxonomy grouping
+only ("mostly non-vocal/mechanical/med-dark" per the owner's own
+description) -- every member already has its own independent donor/tier
+from earlier per-profile family work, not a shared fingerprint:
+`downtempo` (Tier B ←`chillstep`, 60-108), `midtempo` (Tier B
+←`deep_house`, 112-116), `techno` (Tier A real, 130-136), `electro`
+(Tier B ←`house`, 120-126), `hard_techno` (Tier C standalone, 140-150),
+`hardstyle` (Tier C standalone, 155-175).
+
+**`dnb`** — isolated, `drum_and_bass`, Tier A real, 155-175, no family
+action.
+
+**`dubstep`** — isolated, `dubstep`, Tier A real, 140-160, no family
+action. Owner's own description, "chillstep on hyperdrive," logged here
+as color/context, not treated as a literal fingerprint-borrow
+instruction -- `dubstep` already has its own real, independently
+measured data.
+
+**`trance`** — real shared-fingerprint family, anchor is Tier A. Owner's
+own family character note: "dark, kickless, low vocals, synthy/buzzy
+feeling but maybe not exactly a synth." `psytrance` folds in here
+instead of needing its own from-scratch harvest -- it's Tier C despite
+being one of the original 17 profiles (the field comment in
+`profiles.py` literally says "zero training-list corpus of any kind...
+100% hand-authored/guessed"), and "trance but faster" (owner's own
+framing) is the `deeptrance` pattern mirrored:
+
+```
+deeptrance (120-126, slower)  <  trance ANCHOR (132-138)  >  psytrance (140-150, faster)
+```
+
+Same caveat `deeptrance` already carries: a rougher proxy than real
+derivation (psytrance's hypnotic/squelchy bassline character isn't
+captured by a tempo-shift-only borrow), but categorically better than
+psytrance's prior all-guessed state, at zero extra harvest cost. No code
+change to `psytrance` itself -- this is a reclassification of what it's
+waiting on (fold into the `trance`-family harvest, not a dedicated
+`training-psytrance-01` pull), not a field edit.
+
+### Swing-margin math, checked against real numbers
+
+Owner: "we have that 4bpm swing allowance.. i was trying to create a
+little overlap within the swing space and not bump straight into each
+other." Checked against the trance cluster's actual hint bands and the
+±4 BPM hard pre-filter margin (Phase 1 of the zone-map plan):
+
+| Seam | Raw gap | Swing-adjusted (±4 BPM each side) | Result |
+| --- | --- | --- | --- |
+| `deeptrance` (≤126) → `trance` (≥132) | 6 BPM | `126+4=130` vs `132-4=128` | **2 BPM overlap** |
+| `trance` (≤138) → `psytrance` (≥140) | 2 BPM | `138+4=142` vs `140-4=136` | **6 BPM overlap** |
+
+Both seams land inside "little overlap, not a flush bump" -- the
+mechanism works as intended on this cluster. The tighter native gap
+(`trance`/`psytrance`) produces the wider swing-overlap, which also
+tracks with those two being closer together acoustically (a 140 BPM
+track reading ambiguously trance-or-psy is a realistic case, not a
+bug). **Not yet done:** the same seam check across the full 27-profile
+table -- flagged as a Phase 5 to-do, not verified everywhere.
+
+**Distinct from seam overlap:** the dark/bright twin pairs above
+(`deep_house`/`progressive`, `peak_time`/`peak`, `rap_rnb`/`rnb`,
+`hyphy`/`trap`) are full-range coincident by design, not a seam -- BPM
+deliberately does *no* discriminating work for these pairs; the
+`expected_bands` ribbon carries all of it, once each side has a real
+one. Keeping these as two conceptually different kinds of overlap
+(seam-swing vs. same-window-different-instrument) in this document so
+they don't get conflated in a future edit.
+
+### `ambient` hypothesis (untested, flagged for Phase 5)
+
+Owner: "ambient is basically... all the useful identifiers are scoring
+low or fluxing wildly because it's not clean enough to fit other
+patterns?" A coherent hypothesis: ambient's low/wide-sigma readings
+across nearly every feature may BE its real signature (lack of
+structural consistency as the signal itself), not a data-quality
+problem to explain away. If it holds against fresh corpus, it resolves
+`ambient` out of a three-way tempo collision with `chillstep`/
+`downtempo` (all three currently sit in the same 60-106/108 BPM window),
+leaving `chillstep` vs. `downtempo` as the pair that still needs its own
+discriminator.
+
+### `chillstep` vs. `downtempo` -- a sharper discriminator than "denser/fuller"
+
+Owner's genre-ear read: `chillstep` is "crisp & light," `downtempo` is
+"more vibey/jazzy/sultry" -- very different low-tempo feels despite
+occupying the identical BPM window. Checked against the file: the two
+profiles currently carry byte-for-byte identical `zcr_mu` (`0.0297`) and
+`onset_density_mu` (`2.94`) -- the earlier placeholder copy left them
+genuinely indistinguishable on every scored field, not just
+approximately close (their `spectral_centroid_mu` was also identical
+before that field was removed entirely, see "`centroid_fit` Removed
+Entirely" above). The qualitative split maps onto real, still-live
+fields:
+
+- **crisp & light** (`chillstep`) → brighter, more noise-like: expect a
+  brighter `expected_bands` ribbon and a higher `zcr_mu` once measured
+  (hi-hats/crisp transients are noise-like, raising zero-crossing rate).
+- **vibey/jazzy/sultry** (`downtempo`) → warmer, more tonal: expect a
+  darker ribbon and lower `zcr_mu` (sustained harmonic instrumentation
+  -- rhodes, sax, upright bass -- is smoother/less noise-like than
+  percussive hi-hat content).
+
+`onset_density`'s direction is left unpredicted -- a jazzy groove can
+still be busy, no confident guess either way; the corpus answers it.
+This upgrades the pair from "no discriminator hypothesis, softest spot
+in the map" to "a specific two-field hypothesis, needs real numbers
+instead of a copy" -- Phase 5 work, not yet measured.
+
+### What landed in this commit vs. what's still open
+
+**Landed:** the four new profiles (`rnb`, `trap`, `peak`, `progressive`)
+as Tier-B placeholders, each a straight donor copy with its own real
+tempo fields; three display-name renames (`rap_rnb` "Rap / R&B" → "Rap",
+`hyphy` "Hyphy / Trap" → "Hyphy", `peak_time` "Hard House" → "Hard")
+resolving the `hyphy`/`peak_time` combo-names into clean dark/bright
+pole pairs; this document's formalized family/taxonomy map.
+
+**Explicitly NOT landed here, deferred to Phase 5 proper:** any real
+corpus harvest; any re-derived `expected_bands`/`expected_bands_sigma`
+for the new placeholders or the Tier-C anchors (`synthwave` chief among
+them); validation of the `chillstep`/`downtempo` and `ambient`
+hypotheses above; the full 27-profile seam-overlap check; and any new
+recommender term (still none proposed) -- this entry is the map the
+harvest will follow, not the harvest itself.
+
+**Bookkeeping.** `_RECOMMENDER_VERSION` `1.0.0-rc.41 → 1.0.0-rc.42`
+(profile roster change -- new `AudioProfile` entries with their own
+`bpm_prior_mu`/`bpm_prior_sigma`, the doc-sync trigger list's own
+bullet); `_VJ_WEIGHTS_DOC_VERSION` `102 → 103`; `auto-vj-01`
+`__version__` `1.0.0-rc.133 → 1.0.0-rc.134` (even though this specific
+diff lives entirely in `unicornviz/audio/profiles.py`, core repo --
+same precedent as the earlier zone-map BPM-table rewrite this session,
+which also bumped the recommender axis for a profiles.py-only change).
+No `_DETECTOR_VERSION` or `_DIRECTOR_VERSION` bump.

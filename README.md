@@ -513,6 +513,15 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.128** — Four new `AudioProfile` entries in
+  `unicornviz/audio/profiles.py`: `rnb`, `trap`, `peak`, `progressive`
+  -- dark/bright split siblings of `rap_rnb`/`hyphy`/`peak_time`/
+  `deep_house` respectively, each sharing its donor's exact BPM window
+  as a placeholder fingerprint pending real corpus. Three display-name
+  renames (`rap_rnb` "Rap / R&B" → "Rap", `hyphy` "Hyphy / Trap" →
+  "Hyphy", `peak_time` "Hard House" → "Hard") resolve the donors into
+  clean dark/bright pole pairs; dict keys unchanged. See
+  `docs/adr/vj-system.md` § "Fingerprint-Family Map Formalized".
 - **1.0.0-beta.127** — Removed `AudioProfile.spectral_centroid_mu`/
   `spectral_centroid_sigma` (`unicornviz/audio/profiles.py`) along with
   auto-vj-01's `centroid_fit` recommender term that read them -- retired

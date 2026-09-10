@@ -291,7 +291,10 @@ def test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01() -> None:
     resolves it."""
     hyphy = get_profile('hyphy')
     assert hyphy.enabled is True
-    assert hyphy.name == 'Hyphy / Trap'
+    # 2026-09-10 (zone-map batch, later): "Hyphy / Trap" -> "Hyphy" -- now
+    # the bright pole of a hyphy/trap split, dark pole is a new 'trap'
+    # profile.
+    assert hyphy.name == 'Hyphy'
     assert 'hyphy' in enabled_profiles()
     assert 'hyphy' in PROFILES
     assert hyphy.bpm_hint_min == 105.0

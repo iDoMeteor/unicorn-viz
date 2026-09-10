@@ -511,12 +511,18 @@ PROFILES: Dict[str, AudioProfile] = {
     # were the only two points on the house-family spectrum, leaving the
     # warmer/slower/chord-driven end uncovered and prone to landing on
     # 'house' with a poor spectral match.
+    # 2026-09-10 (zone-map batch): this profile is the dark pole of a
+    # deep/progressive dark-vs-bright split (owner: "progressive (bright)
+    # & deep (dark) house, same bpm range"), with the bright counterpart a
+    # new 'progressive' profile below (placeholder, borrows this
+    # profile's real Tier-A fingerprint pending its own Phase 5
+    # derivation) sharing this profile's own 112-116 BPM window exactly.
     "deep_house": AudioProfile(
         name="Deep House",
         description=(
             "Warm rolling sub-bass, soulful/jazzy chord stabs, and soft "
             "filtered hats at 112-118 BPM -- slower, darker, and more "
-            "melodic than house"
+            "melodic than house, the darker pole of the deep/progressive split"
         ),
         bass_min=20.0,
         bass_max=200.0,
@@ -626,9 +632,19 @@ PROFILES: Dict[str, AudioProfile] = {
     # compatibility with existing config/corpus data that references it by
     # key (same pattern as electronic/hyphy above) -- only the display
     # name, description, and BPM band changed.
+    #
+    # 2026-09-10 (zone-map batch, later): renamed again, "Hard House" ->
+    # "Hard" -- this profile is now the dark pole of a hard/peak dark-vs-
+    # bright split (owner: "hard (dark) / peak (bright)"), with the
+    # bright counterpart a new 'peak' profile below (placeholder, borrows
+    # this profile's fingerprint pending its own Phase 5 derivation).
+    # Shortening to "Hard" also resolves a pre-existing key/display
+    # mismatch (the dict key already said 'peak_time' while the display
+    # name said "Hard House") by handing "Peak Time" to the new sibling
+    # instead, rather than compounding it.
     "peak_time": AudioProfile(
-        name="Hard House",
-        description="Festival-ready kick, bright tops, and no patience for low-energy lanes -- formerly \"Peak-Time\"",
+        name="Hard",
+        description="Festival-ready kick, bright tops, and no patience for low-energy lanes -- the darker pole of the hard/peak split",
         bass_min=25.0,
         bass_max=230.0,
         mid_min=230.0,
@@ -1426,9 +1442,16 @@ PROFILES: Dict[str, AudioProfile] = {
     # spectral_centroid_sigma tightened 600->400 now that this is a real,
     # intentionally-merged single genre rather than an accidental overlap.
     # See docs/adr/vj-system.md for the full merge record.
+    # 2026-09-10 (zone-map batch): display name "Rap / R&B" -> "Rap" --
+    # this profile is now the dark pole of a rap/rnb dark-vs-bright split
+    # (owner: "rap (dark) / rnb (bright)"), with the bright counterpart a
+    # new 'rnb' profile below (placeholder, borrows this profile's real
+    # Tier-A fingerprint pending its own Phase 5 derivation). Dict key
+    # kept as 'rap_rnb' for backward compatibility with existing
+    # config/corpus data.
     "rap_rnb": AudioProfile(
-        name="Rap / R&B",
-        description="Heavy sub-bass with sustained, vocal-forward mids at 70-100 BPM -- merged hip-hop/R&B sibling profile",
+        name="Rap",
+        description="Heavy sub-bass with sustained, vocal-forward mids at 70-100 BPM -- the darker pole of the rap/R&B split",
         bass_min=30.0,
         bass_max=275.0,
         mid_min=275.0,
@@ -1548,7 +1571,7 @@ PROFILES: Dict[str, AudioProfile] = {
     # world matches are expected to skew trap (808-driven) more than pure
     # hyphy going forward.
     "hyphy": AudioProfile(
-        name="Hyphy / Trap",
+        name="Hyphy",
         # 2026-09-04: RE-ENABLED, then DISABLED AGAIN same day (owner,
         # direct: "disable hyphy" -- mid smoke-test-playlist build, which
         # had just surfaced that the library has zero tracks ID3-tagged
@@ -1584,8 +1607,15 @@ PROFILES: Dict[str, AudioProfile] = {
         # The "no content of its own distinct from a straight trap read"
         # caveat immediately above still applies in full -- flagged for
         # Phase 5 of the zone-map/sub-kick-split/recalibration plan.
+        #
+        # 2026-09-10 (zone-map batch, later): display name "Hyphy / Trap"
+        # -> "Hyphy" -- this profile is now the bright pole of a hyphy/trap
+        # dark-vs-bright split (owner: "hyphy (bright) / trap (dark)"),
+        # with the dark counterpart a new 'trap' profile below
+        # (placeholder, borrows this profile's fingerprint pending its own
+        # Phase 5 derivation).
         enabled=True,
-        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 105-116 BPM",
+        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 105-116 BPM -- the brighter pole of the hyphy/trap split",
         bass_min=20.0,
         bass_max=350.0,
         mid_min=350.0,
@@ -2343,6 +2373,239 @@ PROFILES: Dict[str, AudioProfile] = {
             0.054, 0.050, 0.044, 0.048, 0.046, 0.045, 0.041, 0.037,
             0.037, 0.037, 0.037, 0.029, 0.031, 0.028, 0.028, 0.026,
             0.025, 0.021, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # ------------------------------------------------------------------
+    # 2026-09-10 (zone-map batch, Phase 5 prep): four dark/bright split
+    # siblings, each a placeholder copy of its donor's full acoustic
+    # fingerprint -- same convention as the 7 family-dependent profiles
+    # added earlier this session (donor real tempo range copied exactly,
+    # since these are timbre splits at the SAME BPM window, not
+    # tempo-shifted the way deeptrance/psytrance are). Real per-profile
+    # brightness discrimination has to come from an independently
+    # measured expected_bands ribbon (spectral_shape_fit, the only live
+    # brightness mechanism left after centroid_fit's removal above) --
+    # copying the donor's ribbon verbatim means these four are currently
+    # scored identically to their donor on everything except vocal_hnr/
+    # vocal_fmr and bpm_prior itself (both real, both donor-derived too),
+    # i.e. genuinely indistinguishable from their donor until Phase 5
+    # measures each one's own real fingerprint. See docs/adr/vj-system.md
+    # "Fingerprint-Family Map Formalized" for the full family/taxonomy
+    # reasoning and the owner discussion this table was built from.
+    # ------------------------------------------------------------------
+    # rnb: bright pole of the rap/rnb split, sibling = rap_rnb (donor).
+    "rnb": AudioProfile(
+        name="R&B",
+        description="Heavy sub-bass with sustained, vocal-forward mids at 70-100 BPM -- the brighter pole of the rap/R&B split",
+        bass_min=30.0,
+        bass_max=275.0,
+        mid_min=275.0,
+        mid_max=3000.0,
+        treble_min=3000.0,
+        treble_max=20000.0,
+        bass_weight=1.25,
+        mid_weight=1.3,
+        treble_weight=0.85,
+        beat_threshold=1.12,
+        smoothing=0.135,
+        curve="extreme_bass_boost",
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.1,
+        onset_treble_emphasis=0.75,
+        bpm_prior_mu=85.0,
+        bpm_prior_sigma=0.29,
+        bpm_hint_min=70.0,
+        bpm_hint_max=100.0,
+        zcr_mu=0.0563,
+        zcr_sigma=0.0248,
+        onset_density_mu=2.81,
+        onset_density_sigma=0.6532,
+        vocal_hnr_mu=0.5118,
+        vocal_fmr_mu=0.3642,
+        vocal_hnr_sigma=0.0901,
+        vocal_fmr_sigma=0.0300,
+        expected_bands=[
+            0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763, 0.763,
+            0.649, 0.494, 0.494, 0.494, 0.494, 0.406, 0.298, 0.298,
+            0.298, 0.300, 0.298, 0.295, 0.293, 0.274, 0.241, 0.234,
+            0.222, 0.240, 0.256, 0.260, 0.248, 0.234, 0.220, 0.206,
+            0.181, 0.161, 0.136, 0.114, 0.105, 0.096, 0.088, 0.083,
+            0.077, 0.074, 0.069, 0.064, 0.060, 0.057, 0.046, 0.042,
+            0.044, 0.041, 0.034, 0.034, 0.031, 0.029, 0.027, 0.026,
+            0.026, 0.023, 0.021, 0.018, 0.014, 0.010, 0.006, 0.004,
+        ],
+        expected_bands_sigma=[
+            0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245, 0.245,
+            0.126, 0.126, 0.126, 0.126, 0.126, 0.132, 0.159, 0.159,
+            0.159, 0.150, 0.162, 0.160, 0.171, 0.158, 0.154, 0.148,
+            0.145, 0.145, 0.149, 0.146, 0.145, 0.120, 0.112, 0.098,
+            0.089, 0.077, 0.070, 0.060, 0.060, 0.057, 0.055, 0.051,
+            0.053, 0.047, 0.041, 0.039, 0.038, 0.037, 0.034, 0.031,
+            0.029, 0.030, 0.028, 0.027, 0.023, 0.021, 0.021, 0.020,
+            0.021, 0.018, 0.015, 0.013, 0.010, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # trap: dark pole of the hyphy/trap split, sibling = hyphy (donor).
+    "trap": AudioProfile(
+        name="Trap",
+        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 105-116 BPM -- the darker pole of the hyphy/trap split",
+        bass_min=20.0,
+        bass_max=350.0,
+        mid_min=350.0,
+        mid_max=3000.0,
+        treble_min=3000.0,
+        treble_max=20000.0,
+        bass_weight=1.5,
+        mid_weight=1.3,
+        treble_weight=1.1,
+        beat_threshold=0.95,
+        smoothing=0.15,
+        curve="extreme_bass_boost",
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.80,
+        bpm_prior_mu=109.0,
+        bpm_prior_sigma=0.15,
+        bpm_hint_min=105.0,
+        bpm_hint_max=116.0,
+        zcr_mu=0.0376,
+        zcr_sigma=0.0251,
+        onset_density_mu=2.88,
+        onset_density_sigma=0.6244,
+        vocal_hnr_mu=0.5390,
+        vocal_fmr_mu=0.3622,
+        vocal_hnr_sigma=0.0968,
+        vocal_fmr_sigma=0.0300,
+        expected_bands=[
+            0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826, 0.826,
+            0.730, 0.614, 0.614, 0.614, 0.614, 0.501, 0.396, 0.396,
+            0.396, 0.340, 0.295, 0.276, 0.254, 0.242, 0.223, 0.218,
+            0.212, 0.219, 0.231, 0.227, 0.194, 0.170, 0.159, 0.133,
+            0.105, 0.100, 0.090, 0.078, 0.073, 0.066, 0.061, 0.057,
+            0.052, 0.043, 0.042, 0.040, 0.044, 0.040, 0.031, 0.028,
+            0.031, 0.027, 0.024, 0.021, 0.021, 0.021, 0.021, 0.022,
+            0.021, 0.018, 0.015, 0.012, 0.009, 0.006, 0.004, 0.002,
+        ],
+        expected_bands_sigma=[
+            0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208, 0.208,
+            0.109, 0.157, 0.157, 0.157, 0.157, 0.162, 0.195, 0.195,
+            0.195, 0.167, 0.157, 0.136, 0.139, 0.147, 0.148, 0.155,
+            0.156, 0.159, 0.153, 0.135, 0.108, 0.096, 0.089, 0.077,
+            0.066, 0.074, 0.057, 0.044, 0.038, 0.036, 0.036, 0.041,
+            0.037, 0.033, 0.029, 0.032, 0.031, 0.032, 0.025, 0.021,
+            0.025, 0.022, 0.019, 0.017, 0.016, 0.016, 0.015, 0.016,
+            0.016, 0.014, 0.013, 0.011, 0.010, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # peak: bright pole of the hard/peak split, sibling = peak_time (donor).
+    "peak": AudioProfile(
+        name="Peak Time",
+        description="Festival-ready kick, bright tops, and no patience for low-energy lanes at 130-136 BPM -- the brighter pole of the hard/peak split",
+        bass_min=25.0,
+        bass_max=230.0,
+        mid_min=230.0,
+        mid_max=3800.0,
+        treble_min=3800.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        mid_weight=1.10,
+        treble_weight=1.00,
+        beat_threshold=1.05,
+        smoothing=0.09,
+        curve="bright",
+        onset_bass_emphasis=1.10,
+        onset_mid_emphasis=1.35,
+        onset_treble_emphasis=1.15,
+        bpm_prior_mu=130.0,
+        bpm_prior_sigma=0.0741,
+        bpm_hint_min=130.0,
+        bpm_hint_max=136.0,
+        zcr_mu=0.0502,
+        zcr_sigma=0.0343,
+        onset_density_mu=2.75,
+        onset_density_sigma=0.72,
+        vocal_hnr_mu=0.4573,
+        vocal_fmr_mu=0.3097,
+        vocal_hnr_sigma=0.0847,
+        vocal_fmr_sigma=0.0357,
+        expected_bands=[
+            0.611, 0.620, 0.633, 0.677, 0.690, 0.679, 0.659, 0.640,
+            0.613, 0.567, 0.570, 0.567, 0.570, 0.527, 0.373, 0.394,
+            0.398, 0.375, 0.293, 0.266, 0.224, 0.211, 0.188, 0.203,
+            0.201, 0.155, 0.156, 0.132, 0.127, 0.120, 0.098, 0.081,
+            0.076, 0.070, 0.058, 0.056, 0.052, 0.046, 0.043, 0.039,
+            0.035, 0.030, 0.026, 0.025, 0.023, 0.020, 0.017, 0.015,
+            0.012, 0.010, 0.010, 0.009, 0.010, 0.011, 0.011, 0.011,
+            0.009, 0.011, 0.009, 0.008, 0.007, 0.006, 0.005, 0.004,
+        ],
+        expected_bands_sigma=[
+            0.478, 0.444, 0.406, 0.344, 0.334, 0.320, 0.328, 0.379,
+            0.311, 0.268, 0.264, 0.274, 0.264, 0.203, 0.252, 0.252,
+            0.264, 0.234, 0.224, 0.203, 0.162, 0.139, 0.125, 0.141,
+            0.147, 0.195, 0.187, 0.160, 0.155, 0.143, 0.120, 0.105,
+            0.096, 0.090, 0.075, 0.070, 0.066, 0.059, 0.055, 0.049,
+            0.045, 0.040, 0.035, 0.034, 0.032, 0.027, 0.024, 0.020,
+            0.017, 0.015, 0.015, 0.013, 0.014, 0.015, 0.015, 0.015,
+            0.013, 0.015, 0.012, 0.012, 0.010, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # progressive: bright pole of the deep/progressive split, sibling =
+    # deep_house (donor). Shares deep_house's own 112-116 BPM window
+    # exactly (owner-confirmed: "progressive (bright) & deep (dark)
+    # house, same bpm range, yes").
+    "progressive": AudioProfile(
+        name="Progressive House",
+        description=(
+            "Warm rolling sub-bass, soulful/jazzy chord stabs, and soft "
+            "filtered hats at 112-116 BPM -- the brighter pole of the "
+            "deep/progressive split"
+        ),
+        bass_min=20.0,
+        bass_max=200.0,
+        mid_min=200.0,
+        mid_max=2200.0,
+        treble_min=2200.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        mid_weight=1.15,
+        treble_weight=0.75,
+        beat_threshold=1.2,
+        smoothing=0.13,
+        curve="warm",
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.8,
+        bpm_prior_mu=115.0,
+        bpm_prior_sigma=0.0445,
+        bpm_hint_min=112.0,
+        bpm_hint_max=116.0,
+        zcr_mu=0.0372,
+        zcr_sigma=0.0213,
+        onset_density_mu=3.0,
+        onset_density_sigma=0.9913,
+        vocal_hnr_mu=0.5672,
+        vocal_fmr_mu=0.3244,
+        vocal_hnr_sigma=0.0444,
+        vocal_fmr_sigma=0.0300,
+        expected_bands=[
+            0.650, 0.651, 0.658, 0.721, 0.726, 0.695, 0.682, 0.655,
+            0.678, 0.621, 0.622, 0.621, 0.629, 0.521, 0.388, 0.384,
+            0.381, 0.363, 0.314, 0.314, 0.273, 0.253, 0.219, 0.234,
+            0.239, 0.204, 0.198, 0.170, 0.147, 0.129, 0.115, 0.105,
+            0.092, 0.093, 0.079, 0.070, 0.063, 0.053, 0.048, 0.044,
+            0.040, 0.034, 0.031, 0.028, 0.026, 0.023, 0.022, 0.021,
+            0.019, 0.017, 0.016, 0.015, 0.014, 0.012, 0.011, 0.011,
+            0.009, 0.007, 0.007, 0.006, 0.005, 0.003, 0.002, 0.001,
+        ],
+        expected_bands_sigma=[
+            0.449, 0.435, 0.382, 0.290, 0.276, 0.280, 0.344, 0.389,
+            0.260, 0.269, 0.265, 0.267, 0.254, 0.211, 0.212, 0.221,
+            0.227, 0.223, 0.216, 0.205, 0.204, 0.191, 0.170, 0.174,
+            0.166, 0.246, 0.241, 0.215, 0.180, 0.155, 0.137, 0.132,
+            0.116, 0.117, 0.101, 0.088, 0.078, 0.067, 0.059, 0.055,
+            0.050, 0.044, 0.041, 0.037, 0.034, 0.030, 0.029, 0.027,
+            0.025, 0.023, 0.021, 0.020, 0.019, 0.016, 0.015, 0.014,
+            0.012, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
 }
