@@ -1332,7 +1332,11 @@ constraints, stated plainly:
     `fullscreen = false`, or Windows' per-app "disable fullscreen
     optimizations") and the 4K render load; a debug + perf-frames run, now that
     the config is actually read, is the prerequisite for either.
-- **2026-09-09 — builds land in `~/projects/_software-dist/` (owner).** The
+- **2026-09-09 — builds land in `~/projects/_software-dist/` (owner).** **Append-only (owner rule, same night):** nothing is ever deleted from
+  that folder — every bundle handed to a tester stays, for accountability and
+  support; `SHA256SUMS` is regenerated over everything present. (I had removed
+  the previous beta's zips when landing a new one; beta.120 was restored from
+  the tester's copy, hashes identical; beta.118/119 are gone.) The
   beta.120 zips and their `SHA256SUMS` moved there (checksums re-verified
   after the move). `build_windows_portable.sh` now defaults its output to
   `$UV_DIST_DIR`, else that folder when it exists, else the repo's `dist/`.
