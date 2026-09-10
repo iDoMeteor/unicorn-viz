@@ -156,7 +156,7 @@ def _matcher_stub(*, zcr: float, top_candidates: list[tuple[float, float]],
         _genre_matcher_enabled=matcher_enabled,
         _genre_matcher_endorse_sigma=0.06,
         _genre_matcher_endorse_count=0,
-        _profile_reco_bpm_prefilter_margin=0.15,
+        _profile_reco_bpm_prefilter_margin_bpm=4.0,
     )
     stub._now = lambda: _AV.AutoVJController._now(stub)
     return stub, push

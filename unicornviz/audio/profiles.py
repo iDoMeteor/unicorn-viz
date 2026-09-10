@@ -481,9 +481,14 @@ PROFILES: Dict[str, AudioProfile] = {
         # bands this profile's own bpm_hint_min/max still reflect --
         # updating mu to match would collapse that intentional design,
         # a decision this pass does not make unilaterally.
+        #
+        # 2026-09-10 (zone-map batch, owner-provided genre BPM table):
+        # bpm_hint_min 118 -> 120, narrowing the low edge against the new
+        # 'dance'/electronic-family split below it. mu (122.0) still sits
+        # comfortably inside the new band, left unchanged.
         bpm_prior_mu=122.0,
         bpm_prior_sigma=0.0297,
-        bpm_hint_min=118.0,
+        bpm_hint_min=120.0,
         bpm_hint_max=126.0,
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=600.0,
@@ -588,10 +593,14 @@ PROFILES: Dict[str, AudioProfile] = {
         # 2026-09-04 field comment for the house-family BPM cluster
         # finding this profile is part of (deep_house's own real median,
         # 126.4, sits almost entirely inside house's owner-designed band).
+        # 2026-09-10 (zone-map batch, owner-provided genre BPM table):
+        # bpm_hint_max 118 -> 116, narrowing against the new 'midtempo'
+        # sibling profile (112-116, the "no 4otf" variant of this same
+        # tempo pocket). mu (115.0) still sits inside the new band.
         bpm_prior_mu=115.0,
         bpm_prior_sigma=0.0445,
         bpm_hint_min=112.0,
-        bpm_hint_max=118.0,
+        bpm_hint_max=116.0,
         # Warmer/less bright than house (1500 Hz) -- the chord stabs and
         # rolled-off hats keep energy lower in the spectrum.
         spectral_centroid_mu=350.0,
@@ -659,109 +668,15 @@ PROFILES: Dict[str, AudioProfile] = {
             0.012, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
-    "tech_house": AudioProfile(
-        name="Tech House",
-        # 2026-08-11: disabled -- pending a library with enough tech_house-
-        # specific material to recalibrate spectral_centroid_mu against a
-        # real measured average. Root cause: spectral_centroid_mu here
-        # (2900.0, below) comes from the same buggy expected_bands-derived
-        # formula flagged in auto_vj.py's _DEFAULT_RECO_WEIGHTS
-        # ('centroid_fit' comment) and docs/adr/vj-system.md -- log-band-
-        # weighted, not the live linear-FFT-weighted measurement it's
-        # compared against -- and this profile sits closest of any in the
-        # roster to peak_time on both bpm_prior_mu (130.5 vs 130.0, bands
-        # fully overlapping) and onset_density_mu (2.8 vs peak_time's 3.2),
-        # so it leans on that unreliable centroid axis harder than most to
-        # win ties. Same disable-not-delete pattern as hyphy (owner: this
-        # is a pause, not a removal) -- re-enable once real tech_house
-        # material exists to recalibrate against.
-        enabled=False,
-        description="Punchy low-end, clipped claps, tight hats, and steady 4/4 pressure at 127-134 BPM -- darker than house",
-        bass_min=25.0,
-        bass_max=220.0,
-        mid_min=220.0,
-        mid_max=3200.0,
-        treble_min=3200.0,
-        treble_max=20000.0,
-        bass_weight=1.25,
-        mid_weight=1.05,
-        treble_weight=0.95,
-        beat_threshold=1.10,
-        smoothing=0.10,
-        curve="bass_boost",
-        onset_bass_emphasis=1.55,
-        onset_mid_emphasis=1.10,
-        onset_treble_emphasis=0.80,
-        # 2026-08-10: house-family consolidation, see house's own field
-        # comment for the full rationale. Band moved from 122-130
-        # (overlapping house's old 120-128 across 6 of its 8 BPM span) to
-        # 127-134, adjacent to house's new 118-126, no longer overlapping.
-        # 2026-08-14: sigma-matches-hint-band pass (see house's own field
-        # comment) -- derived value 0.04, unclamped the same night (see house's own field comment).
-        # 2026-09-04 (recommender rc.28, evidence-based sigma pass):
-        # 0.0412 -> 0.0445, real per-track spread on training-tech-house-01
-        # (17 tracks). mu DELIBERATELY unchanged -- see house's own
-        # 2026-09-04 field comment (this profile's real median, 129.9,
-        # sits right at the edge of the house-family cluster).
-        bpm_prior_mu=130.5,
-        bpm_prior_sigma=0.0445,
-        bpm_hint_min=127.0,
-        bpm_hint_max=134.0,
-        # 2026-08-09: 2550 -> 2900 (LLM tuning rec from `library/a`, observed
-        # 2910.5) -- increases separation from house's own mu (2650), the
-        # exact pair behind that session's #1 confusion (Tech House ->
-        # house, 1060x). See docs/planning/
-        # auto-vj-director-detector-refinement-plan-2026-08-09.md section 1.
-        spectral_centroid_mu=400.0,
-        spectral_centroid_sigma=250.0,
-        zcr_mu=0.0449,
-        zcr_sigma=0.0225,
-        onset_density_mu=2.88,
-        onset_density_sigma=0.7619,
-        # 2026-09-03 (recommender rc.27, vocal-term calibration): median
-        # vocal_hnr/vocal_fmr from training-tech-house-01's own corpus.
-        # Replaces the generic 0.35/0.25 default -- see house's own field
-        # comment for the full methodology pointer.
-        vocal_hnr_mu=0.4777,
-        vocal_fmr_mu=0.3171,
-        vocal_hnr_sigma=0.0711,
-        vocal_fmr_sigma=0.0300,
-        # 2026-09-04 (recommender rc.29, per-track median-of-medians re-fit,
-        # n=17 tracks): mu shifted 0.4598->0.4777 / 0.3159->0.3171 and adds
-        # a real fitted sigma in place of the flat 0.20/0.15 constant.
-        # 2026-09-03 (recommender rc.27, data-derived fingerprints): mean
-        # `bands` over training-tech-house-01's own corpus (both seeds,
-        # ~7.6k heartbeats). Updated for consistency/future re-enable even
-        # though this profile is currently disabled=True. See
-        # docs/adr/vj-system.md "Data-Derived expected_bands".
-        expected_bands=[
-            0.686, 0.692, 0.722, 0.757, 0.764, 0.755, 0.723, 0.695,
-            0.643, 0.527, 0.524, 0.519, 0.518, 0.431, 0.323, 0.322,
-            0.325, 0.302, 0.289, 0.267, 0.237, 0.228, 0.205, 0.199,
-            0.174, 0.145, 0.124, 0.118, 0.116, 0.106, 0.102, 0.094,
-            0.084, 0.084, 0.073, 0.070, 0.065, 0.055, 0.053, 0.049,
-            0.045, 0.039, 0.038, 0.036, 0.031, 0.033, 0.028, 0.026,
-            0.025, 0.023, 0.020, 0.018, 0.016, 0.016, 0.014, 0.014,
-            0.013, 0.012, 0.011, 0.009, 0.007, 0.005, 0.004, 0.003,
-        ],
-        # 2026-09-04 (recommender rc.28, "ribbon" redesign): MAD-
-        # derived per-band spread across per-track means, floored at
-        # 15% of that band's own median -- see expected_bands' own
-        # field comment for the full methodology.
-        expected_bands_sigma=[
-            0.430, 0.392, 0.339, 0.283, 0.265, 0.281, 0.333, 0.388,
-            0.279, 0.256, 0.260, 0.268, 0.276, 0.228, 0.192, 0.188,
-            0.192, 0.181, 0.189, 0.167, 0.164, 0.154, 0.137, 0.139,
-            0.128, 0.172, 0.152, 0.144, 0.147, 0.133, 0.128, 0.118,
-            0.102, 0.095, 0.082, 0.081, 0.075, 0.066, 0.064, 0.056,
-            0.056, 0.050, 0.045, 0.044, 0.040, 0.039, 0.033, 0.033,
-            0.032, 0.030, 0.026, 0.023, 0.021, 0.021, 0.019, 0.019,
-            0.018, 0.016, 0.015, 0.013, 0.010, 0.010, 0.010, 0.010,
-        ],
-    ),
+    # 2026-09-10 (zone-map batch, owner-provided genre BPM table): renamed
+    # "Peak-Time" -> "Hard House" ("formerly peaktime, vocals, 4otf" in the
+    # owner's table). Dict key kept as 'peak_time' for backward
+    # compatibility with existing config/corpus data that references it by
+    # key (same pattern as electronic/hyphy above) -- only the display
+    # name, description, and BPM band changed.
     "peak_time": AudioProfile(
-        name="Peak-Time",
-        description="Festival-ready kick, bright tops, and no patience for low-energy lanes",
+        name="Hard House",
+        description="Festival-ready kick, bright tops, and no patience for low-energy lanes -- formerly \"Peak-Time\"",
         bass_min=25.0,
         bass_max=230.0,
         mid_min=230.0,
@@ -783,11 +698,14 @@ PROFILES: Dict[str, AudioProfile] = {
         # 0.0683 -> 0.0741, real per-track spread on training-big-room-01
         # (11 tracks). mu DELIBERATELY unchanged -- see house's own
         # 2026-09-04 field comment (this profile's real median, 129.9,
-        # sits right at the edge of the house-family cluster, same as
-        # tech_house).
+        # sits right at the edge of the house-family cluster).
+        #
+        # 2026-09-10 (zone-map batch, owner-provided genre BPM table):
+        # bpm_hint_min 126 -> 130, closing the gap against house's new
+        # 120-126 band. mu (130.0) still sits inside the new band.
         bpm_prior_mu=130.0,
         bpm_prior_sigma=0.0741,
-        bpm_hint_min=126.0,
+        bpm_hint_min=130.0,
         bpm_hint_max=136.0,
         spectral_centroid_mu=400.0,
         spectral_centroid_sigma=400.0,
@@ -870,10 +788,13 @@ PROFILES: Dict[str, AudioProfile] = {
         # mu 138.0 -> 134.5, sigma 0.0446 -> 0.0593 -- real per-track
         # median/spread on training-trance-01 (11 tracks), no house-
         # family-style separation conflict here, applied directly.
+        # 2026-09-10 (zone-map batch, owner-provided genre BPM table):
+        # hint band 134-142 -> 132-138, tightening against hardhouse/
+        # techno below and deeptrance above. mu (134.5) still sits inside.
         bpm_prior_mu=134.5,
         bpm_prior_sigma=0.0593,
-        bpm_hint_min=134.0,
-        bpm_hint_max=142.0,
+        bpm_hint_min=132.0,
+        bpm_hint_max=138.0,
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=400.0,
         zcr_mu=0.0627,
@@ -926,16 +847,18 @@ PROFILES: Dict[str, AudioProfile] = {
     "psytrance": AudioProfile(
         name="Psytrance",
         description="Relentless rolling kick, psychedelic mids, and hyper-detailed tops",
-        # 2026-09-04 (recommender rc.29, evidence audit): disabled, not
-        # deleted -- zero training-list corpus of any kind exists for this
-        # profile, so every scoring field below (fingerprint, vocal, tempo)
-        # is still 100% hand-authored/guessed with no real-data check.
-        # Owner standing rule: a profile with no real evidence for ANY
-        # scoring field stays out of discovery until it has some -- see
-        # docs/adr/vj-system.md. Re-enable once a training-psytrance-01 (or
-        # equivalent) list is packaged and this profile is re-derived the
-        # same way house/techno/etc. were.
-        enabled=False,
+        # 2026-09-04 (recommender rc.29, evidence audit): was disabled --
+        # zero training-list corpus of any kind, every scoring field below
+        # (fingerprint, vocal, tempo) still 100% hand-authored/guessed.
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+        # full-roster genre BPM table rewrite ("all enabled"). The
+        # zero-corpus caveat above still applies in full -- every scoring
+        # field remains unvalidated placeholder data pending Phase 5 of
+        # the zone-map/sub-kick-split/recalibration plan. Re-derive the
+        # same way house/techno/etc. were once a training-psytrance-01
+        # (or equivalent) list is packaged.
+        enabled=True,
         bass_min=28.0,
         bass_max=210.0,
         mid_min=210.0,
@@ -958,10 +881,14 @@ PROFILES: Dict[str, AudioProfile] = {
         # revert regression test is built around -- re-verified passing
         # after this change (the mismatch penalty only got sharper, same
         # winner), but check that test first if this value moves again.
+        # 2026-09-10 (zone-map batch): bpm_hint_max 149 -> 150 (owner's
+        # genre BPM table). bpm_prior_mu/sigma left untouched -- sigma is
+        # a test fixture value (see the note above), and mu still sits
+        # well inside the new band.
         bpm_prior_mu=145.0,
         bpm_prior_sigma=0.0532,
         bpm_hint_min=140.0,
-        bpm_hint_max=149.0,
+        bpm_hint_max=150.0,
         spectral_centroid_mu=2150.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.090,
@@ -1014,10 +941,16 @@ PROFILES: Dict[str, AudioProfile] = {
         # other profile in the roster it has no distinct acoustic identity
         # by design (a deliberate house-mirror, "otherwise identical to
         # house" per its own description above) -- a genuine generic, not
-        # a genre pending real data like tech_house/techno/synthwave.
-        # Disable-not-delete, same pattern as those three -- direct lookup
+        # a genre pending real data like techno/synthwave.
+        # Disable-not-delete, same pattern as those two -- direct lookup
         # (get_profile('electronic')) still resolves it.
-        enabled=False,
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+        # full-roster genre BPM table rewrite -- 'dance' (this profile's
+        # display name already) fills a distinct slot in the finalized
+        # roster ("no vocals, four on the floor"), no longer purely a
+        # retired control pair.
+        enabled=True,
         bass_min=20.0,
         bass_max=250.0,
         mid_min=250.0,
@@ -1033,14 +966,19 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_bass_emphasis=1.4,
         onset_mid_emphasis=1.0,
         onset_treble_emphasis=0.75,
-        # Same band as house -- tempo is not the discriminator, vocal
-        # presence is. See house's own field comment for the sigma-
-        # tightening/unclamping rationale; kept identical to house on
-        # purpose, including the 2026-09-04 evidence-based sigma update.
-        # See docs/adr/vj-system.md.
+        # Was "same band as house" through 2026-09-04 (tempo wasn't the
+        # discriminator, vocal presence was) -- see house's own field
+        # comment for the sigma-tightening/unclamping rationale this
+        # still carries forward, including the 2026-09-04 evidence-based
+        # sigma update.
+        #
+        # 2026-09-10 (zone-map batch): bpm_hint_min 118 -> 116, now
+        # genuinely distinct from house's own 120-126 band (owner's genre
+        # BPM table gives 'dance' 116-126 vs house 120-126) -- mu (122.0)
+        # still sits inside both.
         bpm_prior_mu=122.0,
         bpm_prior_sigma=0.0297,
-        bpm_hint_min=118.0,
+        bpm_hint_min=116.0,
         bpm_hint_max=126.0,
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=600.0,
@@ -1113,10 +1051,19 @@ PROFILES: Dict[str, AudioProfile] = {
     # direct/explicit use -- re-enable once the spectral-shape fix (plus
     # the fold-aware tempo term and derived sigmas) lands together as
     # recommender rc.28, gated on the rc.41 panel.
+    # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+    # full-roster genre BPM table rewrite ("all enabled"). The disable
+    # rationale above (spectral_shape_fit's plain cosine-similarity defect
+    # rewarding techno's tall low-band plateau) is the SAME root cause the
+    # rest of this session's ribbon/analyzer work has been chasing --
+    # still not independently re-validated for this specific profile, so
+    # treat this re-enable as riding on that broader fix landing, not a
+    # standalone confirmation. Flagged for Phase 5 of the zone-map/
+    # sub-kick-split/recalibration plan regardless.
     "techno": AudioProfile(
         name="Techno",
-        enabled=False,
-        description="Driving, hypnotic 4/4 kick with minimal/industrial texture at 128-142 BPM -- the mid-tempo techno pocket below hard_techno's punishing fast end",
+        enabled=True,
+        description="Driving, hypnotic 4/4 kick with minimal/industrial texture at 130-136 BPM -- no vocals",
         bass_min=28.0,
         bass_max=230.0,
         mid_min=230.0,
@@ -1152,10 +1099,20 @@ PROFILES: Dict[str, AudioProfile] = {
         # median/spread on training-techno-01 (14 tracks), directly
         # resolving the "likely undersized" flag noted above -- this is
         # a real measurement now, not a hint-band-derived placeholder.
-        bpm_prior_mu=136.4,
+        #
+        # 2026-09-10 (zone-map batch, owner-provided genre BPM table):
+        # hint band 128-142 -> 130-136, tightened against trance/hardhouse
+        # on both sides. The real measured mu (136.4) now sits just
+        # outside this owner-redrawn band -- moved to 133.0 (the new
+        # band's midpoint) rather than leaving a prior pointed outside its
+        # own hint range (same precedent as hardstyle's own field comment
+        # below). This is a placeholder reconciliation, not a new
+        # measurement -- real re-fit against the new band belongs in
+        # Phase 5 of the zone-map/sub-kick-split/recalibration plan.
+        bpm_prior_mu=133.0,
         bpm_prior_sigma=0.1260,
-        bpm_hint_min=128.0,
-        bpm_hint_max=142.0,
+        bpm_hint_min=130.0,
+        bpm_hint_max=136.0,
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0406,
@@ -1205,11 +1162,15 @@ PROFILES: Dict[str, AudioProfile] = {
     "hard_techno": AudioProfile(
         name="Hard Techno",
         description="Punishing kick, clipped industrial mids, and high-BPM insistence",
-        # 2026-09-04 (recommender rc.29, evidence audit): disabled, not
-        # deleted -- same reasoning as psytrance's own comment above: zero
-        # training-list corpus, every scoring field still hand-authored/
-        # guessed. See docs/adr/vj-system.md.
-        enabled=False,
+        # 2026-09-04 (recommender rc.29, evidence audit): was disabled --
+        # zero training-list corpus, every scoring field still hand-
+        # authored/guessed.
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+        # full-roster genre BPM table rewrite ("all enabled"). Zero-corpus
+        # caveat still applies in full -- flagged for Phase 5 of the
+        # zone-map/sub-kick-split/recalibration plan.
+        enabled=True,
         bass_min=28.0,
         bass_max=230.0,
         mid_min=230.0,
@@ -1227,10 +1188,12 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=0.95,
         # 2026-08-14: sigma-matches-hint-band pass (see house's own field
         # comment) -- derived value 0.06, unclamped the same night (see house's own field comment).
+        # 2026-09-10 (zone-map batch): hint band 142-154 -> 140-150 (owner's
+        # genre BPM table). mu (148.0) still sits inside the new band.
         bpm_prior_mu=148.0,
         bpm_prior_sigma=0.0627,
-        bpm_hint_min=142.0,
-        bpm_hint_max=154.0,
+        bpm_hint_min=140.0,
+        bpm_hint_max=150.0,
         spectral_centroid_mu=2450.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.075,
@@ -1253,11 +1216,20 @@ PROFILES: Dict[str, AudioProfile] = {
     "hardstyle": AudioProfile(
         name="Hardstyle",
         description="Distorted/pitched kick, reverse-bass sweep, and euphoric screech leads",
-        # 2026-09-04 (recommender rc.29, evidence audit): disabled, not
-        # deleted -- same reasoning as psytrance's own comment above: zero
-        # training-list corpus, every scoring field still hand-authored/
-        # guessed. See docs/adr/vj-system.md.
-        enabled=False,
+        # 2026-09-04 (recommender rc.29, evidence audit): was disabled --
+        # zero training-list corpus, every scoring field still hand-
+        # authored/guessed.
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+        # full-roster genre BPM table rewrite. Owner's own framing for
+        # this slot: "anything in [155-175] that is not just dnb or
+        # dubstep... whatever generic is appropriate for the slot" -- kept
+        # the existing Hardstyle identity/fingerprint rather than
+        # genericizing it, since a real (if under-evidenced) genre label
+        # beats an unnamed placeholder. Zero-corpus caveat still applies
+        # in full -- flagged for Phase 5 of the zone-map/sub-kick-split/
+        # recalibration plan.
+        enabled=True,
         bass_min=25.0,
         bass_max=250.0,
         mid_min=250.0,
@@ -1270,21 +1242,25 @@ PROFILES: Dict[str, AudioProfile] = {
         beat_threshold=1.00,
         smoothing=0.08,
         curve="aggressive",
-        # Hardstyle: distorted/reverse-bass kick + screech leads at 155-165 BPM.
+        # Hardstyle: distorted/reverse-bass kick + screech leads at 155-175 BPM.
         # Mid emphasis raised for onset detection since the screech-lead
         # transients carry as much rhythmic information as the kick itself.
         onset_bass_emphasis=1.50,
         onset_mid_emphasis=1.40,
         onset_treble_emphasis=1.00,
         # 2026-08-14: owner raised bpm_hint_min 145 -> 155 (dialed-in
-        # expectation). mu moved to 160 (midpoint of the new 155-165 band --
-        # it can't stay at 150, which would sit outside its own hint range).
-        # sigma-matches-hint-band pass (see house's own field comment) --
-        # derived value 0.0481, unclamped the same night.
+        # expectation). mu moved to 160 (midpoint of the then-155-165
+        # band -- it can't stay at 150, which would sit outside its own
+        # hint range). sigma-matches-hint-band pass (see house's own field
+        # comment) -- derived value 0.0481, unclamped the same night.
+        # 2026-09-10 (zone-map batch): bpm_hint_max 165 -> 175 (owner's
+        # genre BPM table, widening this slot's upper edge to meet
+        # drum_and_bass's own new 155-175 band). mu (160.0) still sits
+        # inside the new band, left unchanged.
         bpm_prior_mu=160.0,
         bpm_prior_sigma=0.0481,
         bpm_hint_min=155.0,
-        bpm_hint_max=165.0,
+        bpm_hint_max=175.0,
         spectral_centroid_mu=1550.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.130,
@@ -1328,13 +1304,16 @@ PROFILES: Dict[str, AudioProfile] = {
         # comment) -- derived value 0.0805, now stored and used directly (unclamped the same night; was previously rounded to 0.08, effectively at the old floor anyway).
         # 2026-09-04 (recommender rc.28, evidence-based mu/sigma pass):
         # mu 174.0 -> 166.7, sigma 0.0805 -> 0.1260 -- real per-track
-        # median/spread on training-drum-and-bass-01 (16 tracks). Sits at
-        # the low edge of the still-owner-dialed 165-180 hint band, not
-        # touched here.
+        # median/spread on training-drum-and-bass-01 (16 tracks).
+        #
+        # 2026-09-10 (zone-map batch): hint band 165-180 -> 155-175 (owner's
+        # genre BPM table, sharing its upper edge with hardstyle's own new
+        # band -- see that profile's own field comment). mu (166.7) still
+        # sits inside the new band.
         bpm_prior_mu=166.7,
         bpm_prior_sigma=0.1260,
-        bpm_hint_min=165.0,
-        bpm_hint_max=180.0,
+        bpm_hint_min=155.0,
+        bpm_hint_max=175.0,
         spectral_centroid_mu=450.0,
         spectral_centroid_sigma=250.0,
         zcr_mu=0.0609,
@@ -1667,8 +1646,14 @@ PROFILES: Dict[str, AudioProfile] = {
         # vocal_hnr_mu/vocal_fmr_mu is unchanged from the pre-disable
         # values -- not re-derived, since only the fingerprint/tempo/vocal
         # axes had real data to recalibrate against.
-        enabled=False,
-        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 100-118 BPM",
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED AGAIN as part of the
+        # owner's full-roster genre BPM table rewrite ("all enabled").
+        # The "no content of its own distinct from a straight trap read"
+        # caveat immediately above still applies in full -- flagged for
+        # Phase 5 of the zone-map/sub-kick-split/recalibration plan.
+        enabled=True,
+        description="Aggressive sub-bass, sustained hype-vocal chops, bright treble at 105-116 BPM",
         bass_min=20.0,
         bass_max=350.0,
         mid_min=350.0,
@@ -1705,10 +1690,13 @@ PROFILES: Dict[str, AudioProfile] = {
         # fold-aware (track-by-track, not pooled-detector-output) re-fit is
         # wanted later, it needs the owner's explicit sign-off first, same as
         # any other detector/recommender constant change.
+        #
+        # 2026-09-10 (zone-map batch): hint band 100-118 -> 105-116 (owner's
+        # genre BPM table). mu (109.0) still sits inside the new band.
         bpm_prior_mu=109.0,
         bpm_prior_sigma=0.15,
-        bpm_hint_min=100.0,
-        bpm_hint_max=118.0,
+        bpm_hint_min=105.0,
+        bpm_hint_max=116.0,
         spectral_centroid_mu=300.0,
         # 2026-08-10: 600.0 (wide tier) -> 400.0 (medium, the dataclass
         # default tier) -- wide was never re-justified for hyphy the way it
@@ -1761,8 +1749,12 @@ PROFILES: Dict[str, AudioProfile] = {
             0.016, 0.014, 0.013, 0.011, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
+    # 2026-09-10 (zone-map batch, owner-provided genre BPM table): display
+    # name "Ambient / Chillout" -> "Ambient / Chill", owner's own
+    # description note for this slot: "weird" -- kept as informational
+    # context, not acted on further here.
     "ambient": AudioProfile(
-        name="Ambient / Chillout",
+        name="Ambient / Chill",
         description="Smooth, subtle reactivity with slight bass emphasis",
         bass_min=20.0,
         bass_max=120.0,
@@ -1785,14 +1777,25 @@ PROFILES: Dict[str, AudioProfile] = {
         onset_treble_emphasis=1.2,
         # 2026-08-14: 0.60 -> 0.26, sigma-matches-hint-band pass (see
         # house's own field comment) -- the old 0.60 was wider than the
-        # authored 84-116 hint band actually implies; this tightens ambient
-        # to match that band while remaining the widest-or-near-widest
-        # sigma in the roster, consistent with "often weak or no beats"
-        # above.
+        # then-authored 84-116 hint band actually implied; this tightened
+        # ambient to match that band while remaining the widest-or-near-
+        # widest sigma in the roster, consistent with "often weak or no
+        # beats" above.
+        #
+        # 2026-09-10 (zone-map batch): hint band 84-116 -> 60-106 (owner's
+        # genre BPM table). This is also the direct fix for the zone-map
+        # bleed finding earlier this session -- ambient's old hint_max
+        # (116) plus the (then 10%) pre-filter margin reached to ~127.6,
+        # squarely inside house's own real BPM territory; the new, lower
+        # 106 ceiling closes that gap even before the margin itself
+        # changes from relative to a hard +/-4 BPM. mu (100.0) still sits
+        # inside the new band; sigma left unchanged (not re-derived
+        # against the narrower band here -- real re-fit belongs in
+        # Phase 5 of the zone-map/sub-kick-split/recalibration plan).
         bpm_prior_mu=100.0,
         bpm_prior_sigma=0.26,
-        bpm_hint_min=84.0,
-        bpm_hint_max=116.0,
+        bpm_hint_min=60.0,
+        bpm_hint_max=106.0,
         spectral_centroid_mu=350.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0381,
@@ -1847,11 +1850,20 @@ PROFILES: Dict[str, AudioProfile] = {
             0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
         ],
     ),
+    # 2026-09-10 (zone-map batch, owner-provided genre BPM table): display
+    # name "Chillstep / Downtempo" -> "Chillstep" -- 'downtempo' is now
+    # its own separate sibling profile below (owner's table: chillstep
+    # "sparse & crisp" vs. downtempo "lush and full"), no longer folded
+    # into this one's name/description. downtempo's own initial
+    # acoustic-fingerprint fields are a deliberate copy of this profile's
+    # (its own real training-list data, training-downtempo-01, is what
+    # this profile's fingerprint was originally measured from) --
+    # see downtempo's own field comment.
     "chillstep": AudioProfile(
-        name="Chillstep / Downtempo",
+        name="Chillstep",
         description=(
-            "Slow electronic groove: sub-bass kick, atmospheric pads, "
-            "and soft hi-hats at 75-110 BPM"
+            "Slow electronic groove: sparse, crisp sub-bass kick, "
+            "atmospheric pads, and soft hi-hats at 60-106 BPM"
         ),
         bass_min=20.0,
         bass_max=160.0,
@@ -1878,12 +1890,17 @@ PROFILES: Dict[str, AudioProfile] = {
         # the chance the ACF settles on a sub-beat.  Sigma widened 0.45→0.50
         # so tracks genuinely at 105+ BPM can compete against the prior.
         # 2026-08-14: 0.50 -> 0.30, sigma-matches-hint-band pass (see
-        # house's own field comment) -- ties sigma to the actual 78-112
-        # hint band above rather than the wider historical value.
+        # house's own field comment) -- ties sigma to the then-actual
+        # 78-112 hint band rather than the wider historical value.
+        #
+        # 2026-09-10 (zone-map batch): hint band 78-112 -> 60-106 (owner's
+        # genre BPM table). mu (95.0) still sits inside the new band;
+        # sigma left unchanged (real re-fit belongs in Phase 5 of the
+        # zone-map/sub-kick-split/recalibration plan, same as ambient).
         bpm_prior_mu=95.0,
         bpm_prior_sigma=0.30,
-        bpm_hint_min=78.0,
-        bpm_hint_max=112.0,
+        bpm_hint_min=60.0,
+        bpm_hint_max=106.0,
         spectral_centroid_mu=250.0,
         spectral_centroid_sigma=600.0,
         zcr_mu=0.0297,
@@ -1954,17 +1971,31 @@ PROFILES: Dict[str, AudioProfile] = {
     # against real session data the way house/chillstep have been (see the
     # ADR-tracked tuning history on those two) -- recalibrate once a
     # dedicated, more formal synthwave session has been packaged and scored.
+    # 2026-09-10 (zone-map batch, owner-provided genre BPM table): display
+    # name "Synthwave / Retrowave" -> "Synthwave" -- the wider retro-synth
+    # territory this profile used to cover alone is now split across
+    # dedicated siblings below (vaporwave 60-80, chillwave 84-96, this
+    # profile 100-116, hardsynth 120-130), so it no longer needs to carry
+    # "Retrowave" in its own name. The Kavinsky-tempo grounding note below
+    # partially predates that split (Nightcall ~104-107 still fits this
+    # profile's new band; Odd Look ~93 / Deadcruiser ~90-100 now sit
+    # closer to chillwave's 84-96) -- left as historical reference, not
+    # rewritten, since it's real measured tempo data, not a hint value.
     "synthwave": AudioProfile(
-        name="Synthwave / Retrowave",
+        name="Synthwave",
         description=(
             "Retro 80s-style synth-driven electronic: warm analog bass, "
-            "gated-reverb drums, and bright melodic lead synths at 85-118 BPM"
+            "gated-reverb drums, and bright melodic lead synths at 100-116 BPM"
         ),
-        # 2026-09-04 (recommender rc.29, evidence audit): disabled, not
-        # deleted -- same reasoning as psytrance's own comment above: zero
-        # training-list corpus, every scoring field still hand-authored/
-        # guessed. See docs/adr/vj-system.md.
-        enabled=False,
+        # 2026-09-04 (recommender rc.29, evidence audit): was disabled --
+        # zero training-list corpus, every scoring field still hand-
+        # authored/guessed.
+        #
+        # 2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+        # full-roster genre BPM table rewrite. Zero-corpus caveat still
+        # applies in full -- flagged for Phase 5 of the zone-map/
+        # sub-kick-split/recalibration plan.
+        enabled=True,
         bass_min=20.0,
         bass_max=160.0,
         mid_min=160.0,
@@ -1989,14 +2020,20 @@ PROFILES: Dict[str, AudioProfile] = {
         # Classic/melodic synthwave tempo pocket -- grounded in real Kavinsky
         # tempos (Nightcall ~104-107 BPM, Odd Look ~93 BPM, Deadcruiser
         # ~90-100 BPM). Sigma/hint width matches chillstep's real-world
-        # tempo scatter rather than a tightly-quantized genre like tech_house.
+        # tempo scatter rather than a tightly-quantized genre like house.
         # 2026-08-14: 0.34 -> 0.25, sigma-matches-hint-band pass (see
-        # house's own field comment) -- ties sigma to the actual 85-118
-        # hint band above.
-        bpm_prior_mu=100.0,
+        # house's own field comment) -- ties sigma to the then-actual
+        # 85-118 hint band.
+        # 2026-09-10 (zone-map batch): hint band 85-118 -> 100-116 (owner's
+        # genre BPM table, now sharing the lower/upper edges with
+        # chillwave and hardsynth respectively). mu moved 100.0 -> 108.0
+        # (the new band's midpoint) -- the old value sat exactly on the
+        # new floor, a real prior needs some margin on both sides, not a
+        # boundary value.
+        bpm_prior_mu=108.0,
         bpm_prior_sigma=0.25,
-        bpm_hint_min=85.0,
-        bpm_hint_max=118.0,
+        bpm_hint_min=100.0,
+        bpm_hint_max=116.0,
         # Brightness sits between chillstep's pad-only atmosphere (900 Hz)
         # and house's percussion-driven brightness (1500 Hz) -- present lead
         # synths without a hi-hat-driven treble floor.
@@ -2022,6 +2059,385 @@ PROFILES: Dict[str, AudioProfile] = {
             0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
             0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
             0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+        ],
+    ),
+    # 2026-09-10 (zone-map batch, owner-provided genre BPM table): seven
+    # brand-new profiles added in this same pass (downtempo, vaporwave,
+    # chillwave, hardsynth, midtempo, electro, deeptrance). None has a
+    # training-list corpus of its own yet -- every acoustic-fingerprint
+    # field below (spectral_centroid/zcr/onset_density/vocal_hnr/
+    # vocal_fmr/expected_bands) is a DELIBERATE COPY of its closest
+    # existing sibling profile, same "borrowed starting point, not
+    # independently authored" pattern already used for `electronic`
+    # mirroring `house`. Only the tempo fields (bpm_prior_mu/sigma,
+    # bpm_hint_min/max) are genuinely this profile's own, taken directly
+    # from the owner's table. bpm_prior_mu = hint-band midpoint;
+    # bpm_prior_sigma = log2(hint_max/hint_min)/2, the same sigma-
+    # matches-hint-band convention used throughout this file (see
+    # house's own field comment). All flagged for real derivation in
+    # Phase 5 of the zone-map/sub-kick-split/recalibration plan, same as
+    # every re-enabled zero-corpus profile above.
+    #
+    # downtempo: sibling = chillstep. Not an arbitrary choice -- chillstep's
+    # OWN acoustic fields (below chillstep's own definition above) were
+    # already measured from training-downtempo-01's corpus, so this is the
+    # most accurate placeholder available, not a generic guess.
+    "downtempo": AudioProfile(
+        name="Downtempo",
+        description="Lush, full slow electronic groove: sub-bass kick, atmospheric pads, and soft hi-hats at 60-108 BPM -- fuller/denser than chillstep's sparser sibling pocket",
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        mid_weight=1.05,
+        treble_weight=0.85,
+        beat_threshold=1.35,
+        smoothing=0.16,
+        curve="warm",
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.4,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=84.0,
+        bpm_prior_sigma=0.424,
+        bpm_hint_min=60.0,
+        bpm_hint_max=108.0,
+        spectral_centroid_mu=250.0,
+        spectral_centroid_sigma=600.0,
+        zcr_mu=0.0297,
+        zcr_sigma=0.0189,
+        onset_density_mu=2.94,
+        onset_density_sigma=0.5917,
+        vocal_hnr_mu=0.5487,
+        vocal_fmr_mu=0.3273,
+        vocal_hnr_sigma=0.1017,
+        vocal_fmr_sigma=0.0300,
+        expected_bands=[
+            0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842, 0.842,
+            0.729, 0.635, 0.635, 0.635, 0.635, 0.537, 0.407, 0.407,
+            0.407, 0.363, 0.340, 0.333, 0.321, 0.309, 0.284, 0.280,
+            0.288, 0.280, 0.244, 0.219, 0.183, 0.161, 0.153, 0.140,
+            0.131, 0.127, 0.093, 0.087, 0.077, 0.071, 0.064, 0.053,
+            0.048, 0.039, 0.037, 0.030, 0.028, 0.025, 0.021, 0.021,
+            0.020, 0.016, 0.015, 0.013, 0.013, 0.011, 0.009, 0.009,
+            0.008, 0.007, 0.005, 0.005, 0.004, 0.003, 0.002, 0.001,
+        ],
+        expected_bands_sigma=[
+            0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202, 0.202,
+            0.151, 0.164, 0.164, 0.164, 0.164, 0.156, 0.178, 0.178,
+            0.178, 0.152, 0.156, 0.186, 0.209, 0.191, 0.178, 0.175,
+            0.174, 0.175, 0.160, 0.152, 0.124, 0.106, 0.084, 0.073,
+            0.062, 0.067, 0.057, 0.052, 0.041, 0.034, 0.043, 0.025,
+            0.024, 0.023, 0.022, 0.019, 0.018, 0.019, 0.013, 0.013,
+            0.013, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
+            0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # vaporwave: sibling = synthwave (thematically closest -- synth-driven,
+    # predominantly instrumental). "all synth = synth *driven*" per the
+    # owner's own table note.
+    "vaporwave": AudioProfile(
+        name="Vaporwave",
+        description="Slowed, synth-driven retro electronic -- warm analog pads and a laid-back, synth-first groove at 60-80 BPM",
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.0,
+        mid_weight=1.25,
+        treble_weight=0.85,
+        beat_threshold=1.3,
+        smoothing=0.14,
+        curve="warm",
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.5,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=70.0,
+        bpm_prior_sigma=0.207,
+        bpm_hint_min=60.0,
+        bpm_hint_max=80.0,
+        spectral_centroid_mu=1700.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.050,
+        zcr_sigma=0.020,
+        onset_density_mu=1.9,
+        onset_density_sigma=1.0,
+        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
+        # reasoning as synthwave's own field comment (predominantly
+        # instrumental -- a fabricated target would be worse than none).
+        expected_bands=[
+            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
+            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
+            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
+            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
+            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
+            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
+            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
+            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+        ],
+    ),
+    # chillwave: sibling = synthwave (same reasoning as vaporwave above).
+    "chillwave": AudioProfile(
+        name="Chillwave",
+        description="Hazy, reverb-soaked synth pop with a relaxed mid-tempo groove at 84-96 BPM",
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.0,
+        mid_weight=1.25,
+        treble_weight=0.85,
+        beat_threshold=1.3,
+        smoothing=0.14,
+        curve="warm",
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.5,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=90.0,
+        bpm_prior_sigma=0.096,
+        bpm_hint_min=84.0,
+        bpm_hint_max=96.0,
+        spectral_centroid_mu=1700.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.050,
+        zcr_sigma=0.020,
+        onset_density_mu=1.9,
+        onset_density_sigma=1.0,
+        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
+        # reasoning as synthwave's own field comment.
+        expected_bands=[
+            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
+            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
+            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
+            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
+            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
+            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
+            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
+            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+        ],
+    ),
+    # hardsynth: sibling = synthwave (timbral family) even though its own
+    # tempo sits in the house-family zone rather than synthwave's own
+    # pocket -- no other synth-genre data exists to borrow from instead.
+    "hardsynth": AudioProfile(
+        name="Hard Synth",
+        description="Driving, energetic synth-driven electronic at house-adjacent tempo -- brighter and more forceful than synthwave's classic pocket, 120-130 BPM",
+        bass_min=20.0,
+        bass_max=160.0,
+        mid_min=160.0,
+        mid_max=2500.0,
+        treble_min=2500.0,
+        treble_max=20000.0,
+        bass_weight=1.0,
+        mid_weight=1.25,
+        treble_weight=0.85,
+        beat_threshold=1.3,
+        smoothing=0.14,
+        curve="warm",
+        onset_bass_emphasis=1.6,
+        onset_mid_emphasis=1.5,
+        onset_treble_emphasis=1.0,
+        bpm_prior_mu=125.0,
+        bpm_prior_sigma=0.058,
+        bpm_hint_min=120.0,
+        bpm_hint_max=130.0,
+        spectral_centroid_mu=1700.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.050,
+        zcr_sigma=0.020,
+        onset_density_mu=1.9,
+        onset_density_sigma=1.0,
+        # vocal_hnr_mu/vocal_fmr_mu intentionally left uncalibrated, same
+        # reasoning as synthwave's own field comment.
+        expected_bands=[
+            0.350, 0.370, 0.400, 0.420, 0.450, 0.470, 0.500, 0.520,
+            0.550, 0.580, 0.600, 0.620, 0.650, 0.670, 0.660, 0.640,
+            0.630, 0.620, 0.600, 0.590, 0.600, 0.620, 0.640, 0.630,
+            0.620, 0.640, 0.660, 0.680, 0.700, 0.720, 0.750, 0.780,
+            0.820, 0.850, 0.880, 0.900, 0.930, 0.950, 0.970, 1.000,
+            0.980, 0.970, 0.950, 0.930, 0.900, 0.850, 0.800, 0.750,
+            0.680, 0.620, 0.550, 0.500, 0.450, 0.420, 0.380, 0.350,
+            0.320, 0.280, 0.250, 0.220, 0.200, 0.180, 0.160, 0.150,
+        ],
+    ),
+    # midtempo: sibling = deep_house. Owner's own table description:
+    # "deep_house... but no 4otf" -- same tempo pocket as deep_house,
+    # discriminated (once real data exists) on four-on-the-floor
+    # regularity rather than tempo or timbre.
+    "midtempo": AudioProfile(
+        name="Midtempo",
+        description="Deep-house-tempo material without a four-on-the-floor pulse at 112-116 BPM",
+        bass_min=20.0,
+        bass_max=200.0,
+        mid_min=200.0,
+        mid_max=2200.0,
+        treble_min=2200.0,
+        treble_max=20000.0,
+        bass_weight=1.15,
+        mid_weight=1.15,
+        treble_weight=0.75,
+        beat_threshold=1.2,
+        smoothing=0.13,
+        curve="warm",
+        onset_bass_emphasis=1.5,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.8,
+        bpm_prior_mu=114.0,
+        bpm_prior_sigma=0.0253,
+        bpm_hint_min=112.0,
+        bpm_hint_max=116.0,
+        spectral_centroid_mu=350.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.0372,
+        zcr_sigma=0.0213,
+        onset_density_mu=3.0,
+        onset_density_sigma=0.9913,
+        vocal_hnr_mu=0.5672,
+        vocal_fmr_mu=0.3244,
+        vocal_hnr_sigma=0.0444,
+        vocal_fmr_sigma=0.0300,
+        expected_bands=[
+            0.650, 0.651, 0.658, 0.721, 0.726, 0.695, 0.682, 0.655,
+            0.678, 0.621, 0.622, 0.621, 0.629, 0.521, 0.388, 0.384,
+            0.381, 0.363, 0.314, 0.314, 0.273, 0.253, 0.219, 0.234,
+            0.239, 0.204, 0.198, 0.170, 0.147, 0.129, 0.115, 0.105,
+            0.092, 0.093, 0.079, 0.070, 0.063, 0.053, 0.048, 0.044,
+            0.040, 0.034, 0.031, 0.028, 0.026, 0.023, 0.022, 0.021,
+            0.019, 0.017, 0.016, 0.015, 0.014, 0.012, 0.011, 0.011,
+            0.009, 0.007, 0.007, 0.006, 0.005, 0.003, 0.002, 0.001,
+        ],
+        expected_bands_sigma=[
+            0.449, 0.435, 0.382, 0.290, 0.276, 0.280, 0.344, 0.389,
+            0.260, 0.269, 0.265, 0.267, 0.254, 0.211, 0.212, 0.221,
+            0.227, 0.223, 0.216, 0.205, 0.204, 0.191, 0.170, 0.174,
+            0.166, 0.246, 0.241, 0.215, 0.180, 0.155, 0.137, 0.132,
+            0.116, 0.117, 0.101, 0.088, 0.078, 0.067, 0.059, 0.055,
+            0.050, 0.044, 0.041, 0.037, 0.034, 0.030, 0.029, 0.027,
+            0.025, 0.023, 0.021, 0.020, 0.019, 0.016, 0.015, 0.014,
+            0.012, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # electro: sibling = house (same tempo range, vocals present). Owner's
+    # own table description flags "broken syncopated beats" as this
+    # profile's real discriminator from house -- not represented in any
+    # field below yet (no breaks/syncopation feature exists in this
+    # codebase), so this placeholder currently distinguishes electro from
+    # house on nothing at all; a real discriminator needs new
+    # instrumentation, not just corpus data, before Phase 5 can fit it.
+    "electro": AudioProfile(
+        name="Electro",
+        description="House-tempo material with vocals but no four-on-the-floor pulse -- broken, syncopated beat patterns at 120-126 BPM",
+        bass_min=20.0,
+        bass_max=250.0,
+        mid_min=250.0,
+        mid_max=2000.0,
+        treble_min=2000.0,
+        treble_max=20000.0,
+        bass_weight=1.2,
+        mid_weight=1.0,
+        treble_weight=0.9,
+        beat_threshold=1.15,
+        smoothing=0.12,
+        curve="bass_boost",
+        onset_bass_emphasis=1.4,
+        onset_mid_emphasis=1.0,
+        onset_treble_emphasis=0.75,
+        bpm_prior_mu=123.0,
+        bpm_prior_sigma=0.0352,
+        bpm_hint_min=120.0,
+        bpm_hint_max=126.0,
+        spectral_centroid_mu=450.0,
+        spectral_centroid_sigma=600.0,
+        zcr_mu=0.0556,
+        zcr_sigma=0.0287,
+        onset_density_mu=3.0,
+        onset_density_sigma=0.7521,
+        vocal_hnr_mu=0.4347,
+        vocal_fmr_mu=0.3315,
+        vocal_hnr_sigma=0.0764,
+        vocal_fmr_sigma=0.0376,
+        expected_bands=[
+            0.698, 0.698, 0.698, 0.719, 0.787, 0.780, 0.732, 0.703,
+            0.679, 0.598, 0.597, 0.597, 0.597, 0.465, 0.328, 0.333,
+            0.333, 0.296, 0.272, 0.266, 0.253, 0.220, 0.195, 0.178,
+            0.159, 0.119, 0.107, 0.099, 0.095, 0.088, 0.084, 0.090,
+            0.072, 0.071, 0.064, 0.055, 0.052, 0.046, 0.040, 0.039,
+            0.038, 0.034, 0.031, 0.028, 0.028, 0.027, 0.026, 0.025,
+            0.023, 0.025, 0.024, 0.022, 0.019, 0.019, 0.018, 0.017,
+            0.017, 0.015, 0.013, 0.012, 0.010, 0.007, 0.005, 0.003,
+        ],
+        expected_bands_sigma=[
+            0.434, 0.432, 0.414, 0.336, 0.272, 0.276, 0.333, 0.390,
+            0.268, 0.271, 0.278, 0.274, 0.291, 0.218, 0.203, 0.206,
+            0.216, 0.195, 0.193, 0.186, 0.184, 0.178, 0.159, 0.150,
+            0.133, 0.154, 0.142, 0.134, 0.126, 0.114, 0.108, 0.110,
+            0.093, 0.089, 0.082, 0.070, 0.065, 0.058, 0.053, 0.052,
+            0.050, 0.045, 0.042, 0.039, 0.038, 0.036, 0.035, 0.034,
+            0.031, 0.033, 0.032, 0.029, 0.026, 0.026, 0.025, 0.023,
+            0.023, 0.020, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
+        ],
+    ),
+    # deeptrance: sibling = trance (thematically closest). Tempo range
+    # (120-126) differs substantially from trance's own real 132-138 band
+    # -- this placeholder's fingerprint is a rougher proxy than most of
+    # the others above as a result.
+    "deeptrance": AudioProfile(
+        name="Deep Trance",
+        description="Melodic, hypnotic trance at a house-adjacent tempo -- 120-126 BPM",
+        bass_min=30.0,
+        bass_max=200.0,
+        mid_min=200.0,
+        mid_max=4000.0,
+        treble_min=4000.0,
+        treble_max=20000.0,
+        bass_weight=1.0,
+        mid_weight=1.3,
+        treble_weight=1.2,
+        beat_threshold=1.1,
+        smoothing=0.08,
+        curve="mid_treble_boost",
+        onset_bass_emphasis=1.8,
+        onset_mid_emphasis=1.3,
+        onset_treble_emphasis=0.9,
+        bpm_prior_mu=123.0,
+        bpm_prior_sigma=0.0352,
+        bpm_hint_min=120.0,
+        bpm_hint_max=126.0,
+        spectral_centroid_mu=450.0,
+        spectral_centroid_sigma=400.0,
+        zcr_mu=0.0627,
+        zcr_sigma=0.0271,
+        onset_density_mu=3.32,
+        onset_density_sigma=1.0831,
+        vocal_hnr_mu=0.3711,
+        vocal_fmr_mu=0.2882,
+        vocal_hnr_sigma=0.1156,
+        vocal_fmr_sigma=0.0378,
+        expected_bands=[
+            0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851, 0.851,
+            0.834, 0.777, 0.777, 0.777, 0.777, 0.618, 0.459, 0.459,
+            0.459, 0.403, 0.335, 0.319, 0.291, 0.268, 0.253, 0.224,
+            0.207, 0.203, 0.198, 0.184, 0.178, 0.163, 0.161, 0.151,
+            0.137, 0.128, 0.119, 0.103, 0.092, 0.092, 0.089, 0.081,
+            0.082, 0.073, 0.071, 0.065, 0.059, 0.057, 0.056, 0.051,
+            0.048, 0.049, 0.047, 0.036, 0.037, 0.031, 0.028, 0.025,
+            0.023, 0.021, 0.018, 0.016, 0.013, 0.010, 0.007, 0.005,
+        ],
+        expected_bands_sigma=[
+            0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170, 0.170,
+            0.090, 0.180, 0.180, 0.180, 0.180, 0.162, 0.145, 0.145,
+            0.145, 0.129, 0.128, 0.137, 0.135, 0.131, 0.137, 0.130,
+            0.136, 0.135, 0.139, 0.129, 0.106, 0.099, 0.104, 0.092,
+            0.093, 0.095, 0.078, 0.071, 0.064, 0.061, 0.058, 0.054,
+            0.054, 0.050, 0.044, 0.048, 0.046, 0.045, 0.041, 0.037,
+            0.037, 0.037, 0.037, 0.029, 0.031, 0.028, 0.028, 0.026,
+            0.025, 0.021, 0.018, 0.016, 0.013, 0.010, 0.010, 0.010,
         ],
     ),
 }

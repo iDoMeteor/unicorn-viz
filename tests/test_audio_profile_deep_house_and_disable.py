@@ -66,58 +66,32 @@ def test_get_profile_unknown_key_falls_back_to_house_not_generic() -> None:
 
 
 def test_enabled_profiles_excludes_only_disabled_entries() -> None:
+    """2026-09-10 (zone-map batch): the owner's full-roster genre BPM table
+    rewrite re-enabled every profile in the roster ("all enabled") and
+    removed 'tech_house' entirely (not in the new table) -- 'generic' is
+    the only remaining always-excluded key (eliminated entirely, not just
+    disabled -- see test_generic_uk_garage_breaks_hardgroove_eliminated_
+    entirely above)."""
     enabled = enabled_profiles()
     assert set(enabled.keys()) == {k for k, v in PROFILES.items() if v.enabled}
     assert 'generic' not in enabled
-    assert 'electronic' not in enabled   # disabled again 2026-09-04, see docs/adr/vj-system.md
-    assert 'hyphy' not in enabled   # re-enabled then disabled again same day 2026-09-04, see docs/adr/vj-system.md
-    assert 'tech_house' not in enabled   # disabled 2026-08-11, see docs/adr/vj-system.md
+    assert 'electronic' in enabled   # re-enabled 2026-09-10, see docs/adr/vj-system.md
+    assert 'hyphy' in enabled   # re-enabled 2026-09-10, see docs/adr/vj-system.md
+    assert 'tech_house' not in PROFILES   # removed entirely 2026-09-10, not merely disabled
     assert 'house' in enabled   # a normal enabled profile is unaffected
 
 
-def test_tech_house_disabled_pending_recalibrated_library_material() -> None:
-    """2026-08-11: disabled (not eliminated) -- see docs/adr/vj-system.md
-    'Recommender centroid_fit Weight Cut + tech_house Disabled'. Root cause
-    is the same centroid_fit formula-mismatch bug documented on
-    spectral_centroid_mu (expected_bands-derived, log-band-weighted) vs.
-    the live measurement (linear-FFT-weighted); tech_house sits closest of
-    any profile to peak_time on bpm_prior_mu and leans on that unreliable
-    axis to break the tie. Direct lookup must still resolve it (disable,
-    not delete -- same pattern as hyphy)."""
-    tech_house = get_profile('tech_house')
-    assert tech_house.enabled is False
-    assert tech_house.name == 'Tech House'
-    assert 'tech_house' not in enabled_profiles()
-    assert 'tech_house' in PROFILES   # still directly resolvable, not eliminated
-    assert 'tech_house' not in list_profiles()   # excluded from discovery, same as hyphy
-
-
 def test_default_enabled_true_for_profiles_that_dont_set_it() -> None:
-    """Every profile except the explicitly-disabled ones should default to
-    enabled=True without having to set it themselves.
-
-    'generic' is gone entirely now (eliminated, not merely disabled -- see
-    test_generic_uk_garage_breaks_eliminated_entirely above), so it's no
-    longer in this set; 'hyphy' replaced it 2026-08-10 (disabled pending
-    real trap/hyphy library material -- see docs/adr/vj-system.md);
-    'tech_house' added 2026-08-11 (disabled pending recalibrated library
-    material, same doc); 'techno' added 2026-09-03 (disabled on arrival --
-    enabling it as a live candidate re-broke house winning its own list,
-    the third recurrence of spectral_shape_fit's level-reward defect; see
-    docs/adr/vj-system.md "Vocal-Term Calibration"); 'psytrance',
-    'hard_techno', 'hardstyle', 'synthwave' added 2026-09-04 (recommender
-    rc.29, evidence audit -- disabled for having zero training-list corpus
-    of any kind, every scoring field still hand-authored/guessed; see each
-    profile's own field comment and docs/adr/vj-system.md); 'electronic'
-    added 2026-09-04, later the same night (disabled again -- its
-    vocal-presence-discriminator control-pair job is done, and unlike the
-    others it has no distinct acoustic identity by design, a genuine
-    generic rather than a genre pending real data)."""
-    _disabled = {'hyphy', 'tech_house', 'techno', 'psytrance', 'hard_techno',
-                 'hardstyle', 'synthwave', 'electronic'}
+    """2026-09-10 (zone-map batch): every profile in the roster is now
+    enabled=True -- the owner's full-roster genre BPM table rewrite
+    re-enabled every previously-disabled profile ("all enabled"). The
+    zero-corpus caveats each of those profiles' own field comments
+    carried (psytrance/hard_techno/hardstyle/synthwave/techno/hyphy/
+    electronic, plus the seven brand-new profiles added the same batch)
+    still apply as data-quality flags, just no longer as a discovery
+    exclusion -- see each profile's own field comment and
+    docs/adr/vj-system.md."""
     for key, profile in PROFILES.items():
-        if key in _disabled:
-            continue
         assert profile.enabled is True, f'{key} unexpectedly disabled'
 
 
@@ -126,29 +100,36 @@ def test_electronic_key_now_resolves_to_the_revived_dance_profile() -> None:
     existing config/corpus data that references it by key -- only the
     display name and enabled state changed.
 
-    2026-09-04: disabled again -- its vocal-presence-discriminator
-    control-pair job is done (see docs/adr/vj-system.md). Direct lookup
-    still resolves it, same disable-not-delete pattern as tech_house/
-    techno/synthwave -- only discovery (list_profiles/enabled_profiles)
-    excludes it now."""
+    2026-09-10 (zone-map batch): RE-ENABLED again as part of the owner's
+    full-roster genre BPM table rewrite -- 'dance' fills a distinct slot
+    in the finalized roster now (no vocals, four on the floor), not
+    purely a retired control pair. See docs/adr/vj-system.md."""
     assert 'electronic' in PROFILES
     p = PROFILES['electronic']
-    assert p.enabled is False
+    assert p.enabled is True
     assert p.name == 'Dance'
-    assert 'electronic' not in list_profiles()
-    assert 'electronic' not in enabled_profiles()
+    assert 'electronic' in list_profiles()
+    assert 'electronic' in enabled_profiles()
 
 
-def test_dance_matches_house_on_everything_except_vocal_presence() -> None:
-    """The split between 'house' and 'dance' (electronic, revived) is meant
-    to ride entirely on vocal_hnr_fit/vocal_fmr_fit -- owner: 'vocals is
-    enough to carry the split, otherwise basically indistinguishable.'"""
+def test_dance_diverges_from_house_only_on_tempo_band_and_vocal_presence() -> None:
+    """The split between 'house' and 'dance' (electronic) was originally
+    meant to ride entirely on vocal_hnr_fit/vocal_fmr_fit -- owner:
+    'vocals is enough to carry the split, otherwise basically
+    indistinguishable.' Still true for tempo PRIOR (mu/sigma) and the
+    spectral fingerprint (expected_bands, still a deliberate copy).
+
+    2026-09-10 (zone-map batch): the BPM HINT band itself now genuinely
+    diverges (dance 116-126 vs. house 120-126, owner's genre BPM table) --
+    dance's low edge stretches slightly below house's to meet the
+    house-family roster's own adjacent slots, so hint_min/max are no
+    longer expected to match exactly. See docs/adr/vj-system.md."""
     house = get_profile('house')
     dance = get_profile('electronic')
     assert dance.bpm_prior_mu == house.bpm_prior_mu
     assert dance.bpm_prior_sigma == house.bpm_prior_sigma
-    assert dance.bpm_hint_min == house.bpm_hint_min
-    assert dance.bpm_hint_max == house.bpm_hint_max
+    assert dance.bpm_hint_min == 116.0 and house.bpm_hint_min == 120.0
+    assert dance.bpm_hint_max == house.bpm_hint_max == 126.0
     assert dance.expected_bands == house.expected_bands
     # The actual discriminator: dance has near-zero vocal presence, house
     # has a real target.
@@ -204,21 +185,13 @@ def test_deep_house_tempo_sits_below_house_and_above_chillstep() -> None:
     assert deep_house.bpm_hint_min < deep_house.bpm_prior_mu < deep_house.bpm_hint_max
 
 
-def test_deep_house_is_warmer_than_house_and_tech_house() -> None:
+def test_deep_house_is_warmer_than_house() -> None:
+    """2026-09-10 (zone-map batch): 'tech_house' (the third leg of this
+    comparison) was removed entirely -- not in the owner's new full-roster
+    genre BPM table. deep_house < house still holds on its own."""
     deep_house = get_profile('deep_house')
     house = get_profile('house')
-    tech_house = get_profile('tech_house')
-    # 2026-08-09: house < tech_house no longer holds after spectral_centroid_mu
-    # was recalibrated to match each profile's own expected_bands fingerprint
-    # (see the field's comment in profiles.py) -- house's fingerprint now
-    # implies *brighter* (2650) than tech_house's (2550), contradicting
-    # tech_house's own documented "pronounced hi-hat energy 8-16 kHz" vs
-    # house's "modest... moderate presence" acoustic notes. This points at a
-    # data-quality question in the fingerprints themselves (deferred, not
-    # fixed here -- see docs/adr/vj-system.md), not a broken assertion to
-    # paper over. deep_house < both siblings still holds either way.
     assert deep_house.spectral_centroid_mu < house.spectral_centroid_mu
-    assert deep_house.spectral_centroid_mu < tech_house.spectral_centroid_mu
     assert deep_house.zcr_mu < house.zcr_mu
 
 
@@ -305,16 +278,22 @@ def test_hyphy_reenabled_and_recalibrated_from_trap_hip_hop_01() -> None:
     2026-09-04, same day, DISABLED AGAIN: owner, direct ("disable hyphy"),
     mid smoke-test-playlist build -- the library has zero tracks ID3-tagged
     Hyphy, so this profile currently has no content of its own distinct
-    from a straight trap-hip-hop-01 read. Disable-not-delete: direct lookup
-    and every field below (still real, still fit from training-trap-hip-
-    hop-01) is unaffected -- only discovery excludes it now."""
+    from a straight trap-hip-hop-01 read.
+
+    2026-09-10 (zone-map batch), RE-ENABLED AGAIN: owner's full-roster
+    genre BPM table rewrite ("all enabled") -- the "no content of its own"
+    caveat above still applies in full, flagged for Phase 5 of the
+    zone-map/sub-kick-split/recalibration plan. Same batch also narrowed
+    the hint band 100-118 -> 105-116. Disable-not-delete convention still
+    applies regardless of current enabled state -- direct lookup always
+    resolves it."""
     hyphy = get_profile('hyphy')
-    assert hyphy.enabled is False
+    assert hyphy.enabled is True
     assert hyphy.name == 'Hyphy / Trap'
-    assert 'hyphy' not in enabled_profiles()
+    assert 'hyphy' in enabled_profiles()
     assert 'hyphy' in PROFILES
-    assert hyphy.bpm_hint_min == 100.0
-    assert hyphy.bpm_hint_max == 118.0
+    assert hyphy.bpm_hint_min == 105.0
+    assert hyphy.bpm_hint_max == 116.0
     assert 100.0 < hyphy.bpm_prior_mu < 120.0
     assert hyphy.expected_bands_sigma is not None
     assert len(hyphy.expected_bands_sigma) == 64

@@ -12,22 +12,30 @@ from unicornviz.audio.profiles import PROFILES, get_profile, list_profiles
 
 
 def test_synthwave_is_registered() -> None:
-    """2026-09-04 (recommender rc.29, evidence audit): disabled -- zero
+    """2026-09-04 (recommender rc.29, evidence audit): was disabled -- zero
     training-list corpus of any kind, every scoring field still hand-
     authored/guessed (same standing rule as psytrance/hard_techno/
-    hardstyle, see docs/adr/vj-system.md). Still directly resolvable by
-    key/get_profile(), same disable-not-delete pattern as tech_house --
-    only excluded from list_profiles()/enabled_profiles() discovery."""
+    hardstyle, see docs/adr/vj-system.md).
+
+    2026-09-10 (zone-map batch): RE-ENABLED as part of the owner's
+    full-roster genre BPM table rewrite ("all enabled"). The zero-corpus
+    caveat above still applies in full, flagged for Phase 5 of the
+    zone-map/sub-kick-split/recalibration plan."""
     assert 'synthwave' in PROFILES
-    assert 'synthwave' not in list_profiles()
+    assert 'synthwave' in list_profiles()
     assert get_profile('synthwave') is PROFILES['synthwave']
-    assert PROFILES['synthwave'].enabled is False
+    assert PROFILES['synthwave'].enabled is True
 
 
 def test_synthwave_tempo_prior_matches_classic_kavinsky_range() -> None:
+    """2026-09-10 (zone-map batch): hint band 85-118 -> 100-116 (owner's
+    genre BPM table) -- the wider retro-synth territory this profile used
+    to cover alone is now split across dedicated siblings (vaporwave
+    60-80, chillwave 84-96, hardsynth 120-130); see profiles.py's own
+    field comment on the Kavinsky-tempo grounding note this narrowed."""
     p = get_profile('synthwave')
-    assert p.bpm_hint_min == 85.0
-    assert p.bpm_hint_max == 118.0
+    assert p.bpm_hint_min == 100.0
+    assert p.bpm_hint_max == 116.0
     assert p.bpm_hint_min < p.bpm_prior_mu < p.bpm_hint_max
     # Clearly separated from house's hint range so a synthwave track's
     # tempo can't be silently absorbed into the wrong neighbor. <=, not <:
@@ -85,5 +93,6 @@ def test_synthwave_expected_bands_well_formed() -> None:
 
 
 def test_synthwave_hud_bpm_range_label() -> None:
+    """2026-09-10 (zone-map batch): hint band 85-118 -> 100-116."""
     p = get_profile('synthwave')
-    assert p.hud_bpm_range_label() == '85-118'
+    assert p.hud_bpm_range_label() == '100-116'

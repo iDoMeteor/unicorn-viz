@@ -629,6 +629,39 @@ def test_bpm_prefilter_also_active_when_unlocked(monkeypatch) -> None:
     assert kw['bpm_prefilter_excluded'] == ['drum_and_bass']
 
 
+def test_bpm_prefilter_hard_margin_excludes_the_ambient_house_bleed(monkeypatch) -> None:
+    """2026-09-10 (zone-map batch, recommender rc.39): the relative 10%
+    margin let ambient (hint_max 116 pre-batch) reach 116*1.10=127.6 --
+    squarely inside house's own real observed BPM territory (118-130+),
+    the single biggest driver of the zone-map bleed findings earlier this
+    session. Owner: "that's not working, 10% is too much... let's make
+    the allowance a hard +/-4bpm." Reproduces the concrete bleed case
+    directly: at bpm=124 (a real observed house-crate median), ambient's
+    OLD range+margin would have been eligible (116*1.10=127.6 >= 124);
+    under the new hard +/-4 BPM allowance on ambient's own new,
+    also-tightened hint band (60-106, this same batch), 106+4=110 < 124,
+    so ambient is excluded and house wins outright."""
+    import unicornviz.audio.profiles as profiles_mod
+    restricted = {k: profiles_mod.PROFILES[k] for k in ('house', 'ambient')}
+    monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+    monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+
+    stub = _make_full_reco_stub(bpm=124.0, centroid=2650.0, zcr=0.08, onset_count=2.0)
+    stub._bpm_lock_active = True
+    stub._reco_bpm_prefilter_excluded_count = 0
+    stub._reco_bpm_prefilter_fallback_count = 0
+    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+
+    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+
+    assert stub._recommended_profile_key == 'house'
+    assert stub._reco_bpm_prefilter_excluded_count == 1
+    event, kw = stub._engine.marks[0]
+    assert kw['bpm_prefilter_excluded'] == ['ambient']
+    assert 'ambient' not in kw['term_values_by_candidate']
+
+
 def test_default_weights_are_genre_pure() -> None:
     """2026-08-20 (recommender rc.18): the default composite is a
     tempo-blind genre score — both detector-BPM-consuming terms carry
