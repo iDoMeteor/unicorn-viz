@@ -196,28 +196,34 @@ def test_matcher_endorses_the_genre_consistent_fold(monkeypatch) -> None:
     assert kw['matcher_endorsed_genre'] == 'rap_rnb'
 
 
-def test_matcher_favors_rap_rnb_on_zcr_after_fitted_weights(monkeypatch) -> None:
-    """2026-09-11 (recommender rc.48, owner-approved fitted weights):
-    this test's premise (a zcr value exists that tips the fold toward
-    drum_and_bass) is gone, not just shifted -- `zcr_fit`'s weight came
-    out of the ceiling-test fit at `-0.111`, a sign flip from every
-    hand-tuned value this test's history swept against (0.085 -> 0.10
-    -> 0.07 -> 0.15, chasing zcr_mu/zcr_sigma re-fits that always kept
-    the weight positive). Swept the same 0.0-0.19 range this test's own
-    history already covers, post-fit: `rap_rnb` wins at EVERY point,
-    not just past some new crossover. Verifying the new real behavior
-    (rap_rnb endorsed regardless of zcr, in this two-candidate fixture)
-    rather than patching in a crossover value that no longer exists --
-    see docs/adr/vj-system.md "Fitted Weights (Landed)" for why the
-    sign isn't trusted as a real inverted relationship, just landed as
-    fit."""
+def test_matcher_flips_fold_when_genre_flips_after_zcr_recalibration(monkeypatch) -> None:
+    """History: originally swept a zcr crossover against several hand-
+    tuned zcr_fit values (0.085 -> 0.10 -> 0.07 -> 0.15), all positive.
+
+    2026-09-11 (recommender rc.48, owner-approved fitted weights): the
+    ceiling-test fit put `zcr_fit` at `-0.111`, a sign flip -- the
+    crossover vanished and `rap_rnb` won at every swept point instead
+    (renamed to `test_matcher_favors_rap_rnb_on_zcr_after_fitted_
+    weights` to match).
+
+    2026-09-11 (recommender rc.50, zcr recalibration): `zcr_fit` flips
+    back positive (`-0.111 -> 0.2`) once every profile's stale `zcr_mu`
+    is corrected -- the `-0.111` fit doesn't transfer once its input
+    changes (see `_DEFAULT_RECO_WEIGHTS`'s own comment). A crossover
+    exists again, empirically re-measured at this weight rather than
+    assumed to land back on the old hand-tuned value: `rap_rnb` wins at
+    0.0/0.02/0.05/0.07, `drum_and_bass` wins at 0.10/0.15/0.19."""
     _restrict(monkeypatch, ('rap_rnb', 'drum_and_bass'))
-    for zcr in (0.0, 0.02, 0.05, 0.07, 0.10, 0.15, 0.19):
+    expected = {
+        0.0: 'rap_rnb', 0.02: 'rap_rnb', 0.05: 'rap_rnb', 0.07: 'rap_rnb',
+        0.10: 'drum_and_bass', 0.15: 'drum_and_bass', 0.19: 'drum_and_bass',
+    }
+    for zcr, want in expected.items():
         stub, push = _matcher_stub(zcr=zcr, top_candidates=list(_FOLD_CANDS))
         _AV.AutoVJController._update_profile_recommendation(stub, _AUDIO, SimpleNamespace(), {})
         assert len(push.calls) == 1, zcr
         _event, kw = stub._engine.marks[0]
-        assert kw['matcher_endorsed_genre'] == 'rap_rnb', zcr
+        assert kw['matcher_endorsed_genre'] == want, zcr
 
 
 def test_matcher_never_endorses_outside_detector_candidates(monkeypatch) -> None:
@@ -256,7 +262,12 @@ def test_legacy_prior_push_behind_the_rollback_flag(monkeypatch) -> None:
     outside it on both sides; 0.04 sits in the middle of the new
     `drum_and_bass` band, same stability property the old value had for
     `rap_rnb`, just the other genre). See docs/adr/vj-system.md "Fitted
-    Weights (Landed)"."""
+    Weights (Landed)".
+
+    2026-09-11 (recommender rc.50, zcr recalibration): `zcr_fit` flips
+    back positive (`-0.111 -> 0.2`) -- `rap_rnb` wins again at 0.04,
+    matching the original pre-rc.48 direction (empirically re-verified,
+    not assumed to land back at the exact old margin)."""
     _restrict(monkeypatch, ('rap_rnb', 'drum_and_bass'))
     stub, push = _matcher_stub(zcr=0.04, top_candidates=list(_FOLD_CANDS),
                                matcher_enabled=False)
@@ -266,7 +277,7 @@ def test_legacy_prior_push_behind_the_rollback_flag(monkeypatch) -> None:
     assert len(push.calls) == 1
     mu, sigma, _weight = push.calls[0]
     import unicornviz.audio.profiles as profiles_mod
-    dnb = profiles_mod.PROFILES['drum_and_bass']
-    assert mu == pytest.approx(float(dnb.bpm_prior_mu))
-    assert sigma == pytest.approx(float(dnb.bpm_prior_sigma))
+    rnb = profiles_mod.PROFILES['rap_rnb']
+    assert mu == pytest.approx(float(rnb.bpm_prior_mu))
+    assert sigma == pytest.approx(float(rnb.bpm_prior_sigma))
     assert stub._genre_matcher_endorse_count == 0

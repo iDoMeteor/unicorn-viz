@@ -709,8 +709,15 @@ def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
     `zcr_fit`'s weight flipped to `-0.111` -- inverts which of the two
     candidates the term now favors (a negative weight makes the
     tighter-sigma candidate's larger raw penalty score BETTER, not
-    worse), so `wide_test` wins here now. Still the same point under
-    test either way: the two candidates' `zcr_fit` values are
+    worse), so `wide_test` won here at that point.
+
+    2026-09-11 (recommender rc.50, zcr recalibration): `zcr_fit`'s
+    weight flipped back positive (`-0.111 -> 0.2`) once every profile's
+    `zcr_mu` was found stale/too-low and re-derived from fresh corpus --
+    the `-0.111` fit was measured against the OLD `zcr_mu` values, so it
+    doesn't carry over to the corrected ones. `tight_test` wins again
+    here, same as the original pre-rc.48 behavior. Still the same point
+    under test either way: the two candidates' `zcr_fit` values are
     genuinely different (proving per-profile sigma), not which
     direction that difference points."""
     import dataclasses
@@ -737,7 +744,7 @@ def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
     tight_val = kw['term_values_by_candidate']['tight_test']['zcr_fit']
     wide_val = kw['term_values_by_candidate']['wide_test']['zcr_fit']
     assert tight_val != pytest.approx(wide_val), 'sigma appears fixed, not per-profile'
-    assert stub._recommended_profile_key == 'wide_test'
+    assert stub._recommended_profile_key == 'tight_test'
 
 
 def test_onset_fit_uses_per_profile_sigma_not_fixed_1_2(monkeypatch) -> None:

@@ -157,6 +157,18 @@ drop_trigger_threshold = 0.50        # trigger entry bar (~p99 of real-audio rea
 drop_trigger_fastlane = 0.70         # strong-trigger shorter-hold bar (default threshold x1.25)
 drop_sustain_entry = 0.55            # established-sustain entry bar (covers joining mid-drop)
 drop_sustain_fizzle_floor = 0.25     # absolute fizzle floor under the peak-relative (x0.9) check
+# -- drop bass-delta gate (director E2/E2b, director rc.21) --
+# Ships ON by default (1.10/wait4, "C2" -- see docs/adr/vj-system.md
+# "Drop-Gate Retune: C2 (1.10/wait4) Shipped"). For a live A/B against
+# the two other states this program has been comparing, uncomment ONE
+# of the two blocks below (both lines each) and comment the other back
+# out when switching -- never leave more than one active:
+#   "off" (pre-rc.21 behavior, fire immediately once scheduled):
+# drop_bass_delta_min = 0.0
+# drop_bass_delta_wait_bars = 2
+#   "dose A" (the other previously-tested state, tighter retries):
+# drop_bass_delta_min = 1.10
+# drop_bass_delta_wait_bars = 2
 # -- recommender BPM hard pre-filter (2026-08-20, recommender rc.20) --
 # While confidently locked, genre candidates whose bpm_hint range (± margin)
 # doesn't contain the locked tempo are excluded before scoring (the 2026-08-13

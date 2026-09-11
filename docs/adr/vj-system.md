@@ -13073,3 +13073,157 @@ buys nothing on those three lists. `ambient`, `drum_and_bass`, and
 family that isn't their own). This is an offline-instrument change
 only -- no live recommender behavior changed; `_DEFAULT_RECO_WEIGHTS`
 is untouched by this entry.
+
+## ZCR Recalibration (2026-09-11, recommender rc.50)
+
+**Trigger.** The strategist role ended this session (owner: "i fired
+the strategist"); the owner asked this seat to tune director and
+recommender together, using one list per primary target genre (house,
+dance, big_room/peak_time, dubstep, techno, trance), and to land real
+settings rather than only report. Before touching the drop gate, the
+most load-bearing, best-evidenced finding sitting unaddressed was
+`zcr_mu`: six independently LLM-scored sessions earlier this program
+(favorites x2, toughies x2, house-01 x2) each, on their own, flagged
+every high-volume profile's `zcr_mu` as stale-low by 47-198%. That
+convergence, from six separate sessions that never saw each other's
+output, is stronger evidence than any single qualitative read -- worth
+fixing before any weight change built on top of it.
+
+**Fix.** Added `zcr_medians_list()`/`zcr_medians_pooled()` to
+`recommender_fingerprints.py` (mirrors `vocal_medians_list()`'s exact
+methodology -- per-track mean first so no track dominates by frame
+count, then a robust median-and-MAD-derived-sigma ribbon across tracks,
+same as `band_ribbon()`). Ran one fresh, shuffled, seed-1 replay per
+target list (`training-house-01` 15 tracks, `training-dance-01` 16,
+`training-big-room-01` 11, `training-dubstep-01` 14, `training-techno-01`
+14, `training-trance-01` 11) and derived each profile's `zcr_mu`/
+`zcr_sigma` directly from that list's own fresh corpus (not the
+2026-09-03 baseline manifest's buckets, which predate the `zcr` corpus
+field entirely and returned no data at all when tried first).
+
+| Profile | Old `zcr_mu` | New `zcr_mu` | Old `zcr_sigma` | New `zcr_sigma` | n tracks |
+| --- | --- | --- | --- | --- | --- |
+| `house` | 0.0372 | **0.055** (+48%) | 0.0406 | 0.0203 | 15 |
+| `peak_time` | 0.0254 | **0.0502** (+98%) | 0.0261 | 0.0075 | 11 |
+| `dubstep` | 0.0431 | **0.0586** (+36%) | 0.0406 | 0.0171 | 14 |
+| `techno` | 0.0254 | **0.0451** (+77%) | 0.029 | 0.0069 | 14 |
+| `trance` | 0.0391 | **0.062** (+59%) | 0.0406 | 0.017 | 11 |
+| `electronic` | 0.0372 | **0.055** (mirrors `house`, not `training-dance-01` directly -- see below) | 0.0406 | 0.0203 | -- |
+
+`electronic` ("Dance") is deliberately kept identical to `house` on
+every axis except `vocal_hnr`/`vocal_fmr`, by design, since 2026-09-10
+(the profile's own field comment: `training-dance-01`'s crate was found
+NOT actually vocal-free the way the profile's discriminator assumes, so
+its corpus isn't trusted for this profile's other axes either). Mirrored
+`house`'s new value rather than deriving independently from
+`training-dance-01`, consistent with that existing design decision.
+`deep_house`, `ambient`, `downtempo`, `drum_and_bass` were also flagged
+by the same six sessions but are outside this pass's six target-genre
+lists -- left unchanged, a clearly named follow-up, not silently
+dropped.
+
+**`zcr_fit` weight: `-0.111 -> 0.2`.** The `-0.111` ceiling-test fit
+(rc.48) was measured against the OLD, now-known-wrong `zcr_mu` values --
+a weight fit on a miscalibrated input doesn't transfer once the input
+is corrected, so shipping `-0.111` unchanged next to the new `zcr_mu`
+values would combine a real fix with an now-untested pairing. `0.2`
+matches what all six sessions independently suggested for the
+corrected-mu case (their own tuning_recommendations.md rows ranged
+0.2-0.25). This is an interim, reasoned value, explicitly **not** a
+re-run of the full conditional-logit 5-fold-CV fit that produced the
+original ceiling-test vector -- that fitting script was never
+committed to the repo and no longer exists to rerun. A real re-fit
+against the corrected `zcr_mu` is the next rigorous step if this
+matters enough to revisit; until then, `0.2` is a defensible bridge
+value, not a re-validated one.
+
+**Regression tests updated** (three tests whose expectations depended
+on `zcr_fit`'s sign, same discipline as the rc.48 landing -- empirically
+re-measured before rewriting, never patched to pass blindly):
+`test_bpm_detector_audit_regressions.py::test_zcr_fit_uses_per_profile_
+sigma_not_fixed_020` (winner flips back from `wide_test` to `tight_test`,
+matching the original pre-rc.48 direction), `test_genre_matcher.py::
+test_matcher_flips_fold_when_genre_flips_after_zcr_recalibration`
+(renamed back from the rc.48-era `..._favors_rap_rnb_on_zcr_after_
+fitted_weights`; a real crossover exists again, re-measured at
+`rap_rnb` for zcr 0.0-0.07 and `drum_and_bass` for 0.10-0.19, not
+assumed to land on the old hand-tuned crossover value), `test_genre_
+matcher.py::test_legacy_prior_push_behind_the_rollback_flag` (winner at
+zcr=0.04 flips back from `drum_and_bass` to `rap_rnb`).
+
+## Drop-Gate Retune: C2 (1.10/wait4) Shipped (2026-09-11, director rc.21)
+
+**Trigger.** Same "go for the gold" mandate as the ZCR Recalibration
+entry above -- owner's concrete acceptance target for drop count:
+"nearly every song should have 2, some 3, very rare only 1... a few
+songs w/waveforms that are nearly consistent from beginning to end...
+could go silent on drops so there should be a few anomalies."
+
+**Method.** Same six primary-target-genre lists as the zcr work, one
+fresh shuffled seed-1 replay each, four configs compared:
+
+| Config | `drop_bass_delta_min` | `wait_bars` |
+| --- | --- | --- |
+| off | `0.0` | `2` (irrelevant, gate is off) |
+| dose A | `1.10` | `2` |
+| C1 | `1.00` | `2` |
+| C2 | `1.10` | `4` |
+
+**Full table** (drops/track, `drop_fire.bass_lift`/`energy_lift` as
+lift-over-chance percentage points, `director_placement.py`'s
+`placement_score`):
+
+| List | off (d/trk, bass, energy, score) | dose A | C1 | C2 |
+| --- | --- | --- | --- | --- |
+| house-01 | 2.60, 9.8, 10.2, 0.265 | 1.53, 7.0, 4.3, 0.174 | 2.60, 2.6, -3.6, 0.181 | 1.73, 29.2, 6.9, 0.186 |
+| dance-01 | 2.44, 15.0, 5.8, 0.264 | 1.69, 29.6, 15.4, 0.298 | 2.19, 22.8, 15.4, 0.246 | 1.69, 39.9, 31.1, **0.436** |
+| big-room-01 | 3.64, 12.5, 3.0, 0.242 | 1.73, 50.5, 14.7, **0.296** | 3.09, 15.3, 5.9, 0.230 | 2.27, 38.4, 11.2, 0.248 |
+| dubstep-01 | 3.14, -5.9, 6.4, 0.261 | 2.14, 13.3, 12.7, **0.270** | 2.43, 8.2, 11.8, 0.285 | 2.07, 17.9, 21.4, 0.233 |
+| techno-01 | 3.93, 9.8, 9.5, 0.310 | 1.64, 34.2, 26.8, **0.333** | 3.43, 4.6, 1.3, 0.203 | 1.79, 34.4, 15.2, 0.305 |
+| trance-01 | 4.27, 16.1, 9.4, 0.281 | 2.45, 31.0, 19.3, 0.280 | 3.55, 3.6, 3.6, 0.229 | 2.18, 25.8, 11.7, **0.368** |
+| **avg** | **3.34, 9.6, 7.4, 0.271** | **1.86, 27.6, 15.5, 0.275** | **2.88, 9.5, 5.9, 0.229** | **1.96, 30.9, 16.3, 0.296** |
+
+**Reading.** C1 (threshold alone, `1.00`/`wait2`) is a clear failure --
+lowest average placement score of the four (`0.229`), and on three
+lists (house, techno, trance) its `energy_lift` reads WORSE than off's.
+Loosening the threshold lets weak candidates through without the
+retries to find a genuinely better moment; this directly explains why
+the earlier "dose B" (`1.05`/`wait4`, tested and dropped in the E2b
+panel work above) failed -- that cell changed the threshold AND the
+retry count together, and this isolation shows the threshold change
+was the harmful half, not the retries.
+
+C2 (`1.10`/`wait4`) wins on average placement score (`0.296`, best of
+the four) and average bass_lift (`30.9pt`, best of the four), and lands
+closest to the owner's stated count target: **~1.96 drops/track
+average**, vs off's `3.34` (too high, matches "some 3" more often than
+"usually 2") and dose A's `1.86` (a touch low). Per-list, C2 wins
+outright on `dance-01` (`0.436`, the single best score anywhere in the
+table) and `trance-01` (`0.368`); dose A still wins narrowly on
+`big-room-01`, `dubstep-01`, and `techno-01` (by 0.01-0.05); `house-01`
+is the one list where `off` wins the composite score outright (`0.265`
+vs C2's `0.186`) even though C2 has by far the best `bass_lift` on that
+same list (`29.2pt` vs off's `9.8pt`) -- the composite dilutes what the
+gate is actually built to measure. **Shipped C2 anyway**, on the
+average and on hitting the owner's stated count target, with `house`'s
+softer composite score flagged plainly rather than hidden.
+
+**What shipped.** `drop_bass_delta_min` `0.0 -> 1.10` (the gate is ON
+by default for the first time since E2/E2b landed cfg-gated-off on
+2026-09-10), `drop_bass_delta_wait_bars` `2 -> 4`. `_DIRECTOR_VERSION`
+`1.0.0-rc.20 -> 1.0.0-rc.21`, `_VJ_WEIGHTS_DOC_VERSION` `112 -> 113`
+(shared with the ZCR Recalibration entry's own `_RECOMMENDER_VERSION`
+bump). No regression tests broke -- none of the existing E2/E2b tests
+relied on the bare default; they all set `drop_bass_delta_min`
+explicitly in their own fixtures. Full suite green (2422 passed) both
+before and after.
+
+**Not done in this pass, explicitly deferred:** `mode_persist_bars_
+rise`/`_fall` (the LLM's own repeated suggestion, six sessions running)
+was NOT applied -- it is E3, already tested and shipped OFF on
+2026-09-03 (see "Director Placement E3 -- Persistence Raise: Explored,
+Shipped Off" above): even 1 bar cost -35%/-28% mode count on house-01,
+well past the project's own -25% ceiling, and 4 bars zeroed both modes
+entirely. The LLM's suggestion re-litigates a mechanism already
+rejected on hard evidence from a real panel; not reopened here without
+new evidence that would actually clear that bar.

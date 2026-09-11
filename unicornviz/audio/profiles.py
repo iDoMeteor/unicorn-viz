@@ -530,8 +530,17 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.0297,
         bpm_hint_min=120.0,
         bpm_hint_max=126.0,
-        zcr_mu=0.0372,
-        zcr_sigma=0.0406,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): 0.0372 -> 0.055,
+        # 0.0406 -> 0.0203. Six independent LLM-scored sessions this program
+        # (favorites x2, toughies x2, house-01 x2) all flagged house's zcr_mu
+        # as stale-low (~51% below observed); re-derived here via
+        # recommender_fingerprints.zcr_medians_list() -- same per-track-
+        # median-then-robust-MAD-sigma methodology as vocal_hnr_mu -- from a
+        # fresh training-house-01 replay (15 tracks). See docs/adr/
+        # vj-system.md "ZCR Recalibration" for the full six-session finding
+        # and every profile's before/after.
+        zcr_mu=0.055,
+        zcr_sigma=0.0203,
         onset_density_mu=2.9223,
         onset_density_sigma=0.552,
         # 2026-09-04 (recommender rc.29, per-track median-of-medians re-fit,
@@ -778,8 +787,14 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.0741,
         bpm_hint_min=130.0,
         bpm_hint_max=136.0,
-        zcr_mu=0.0254,
-        zcr_sigma=0.0261,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): 0.0254 -> 0.0502,
+        # 0.0261 -> 0.0075 -- the largest gap flagged in the six-session LLM
+        # program (observed ~198% above the old mu). Re-derived from a fresh
+        # training-big-room-01 replay (11 tracks) via recommender_
+        # fingerprints.zcr_medians_list(). See docs/adr/vj-system.md
+        # "ZCR Recalibration".
+        zcr_mu=0.0502,
+        zcr_sigma=0.0075,
         onset_density_mu=2.933,
         onset_density_sigma=0.4915,
         # 2026-09-03 (recommender rc.27, vocal-term calibration, config B):
@@ -865,8 +880,13 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.0593,
         bpm_hint_min=132.0,
         bpm_hint_max=138.0,
-        zcr_mu=0.0391,
-        zcr_sigma=0.0406,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): 0.0391 -> 0.062,
+        # 0.0406 -> 0.017 (observed ~59% above the old mu, six-session LLM
+        # program). Re-derived from a fresh training-trance-01 replay (11
+        # tracks) via recommender_fingerprints.zcr_medians_list(). See
+        # docs/adr/vj-system.md "ZCR Recalibration".
+        zcr_mu=0.062,
+        zcr_sigma=0.017,
         onset_density_mu=3.2721,
         onset_density_sigma=0.8841,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1097,8 +1117,15 @@ PROFILES: Dict[str, AudioProfile] = {
         # "kept identical to house except vocals" design as expected_bands
         # below -- this profile still has no training list of its own,
         # 'training-dance-01' notwithstanding.
-        zcr_mu=0.0372,
-        zcr_sigma=0.0406,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): mirrors house's
+        # own new value (0.0372 -> 0.055, 0.0406 -> 0.0203) rather than an
+        # independent training-dance-01-derived number, same "kept identical
+        # to house except vocals" design this profile has followed since the
+        # 2026-09-10 near-miss noted above (dance-01's own crate isn't a
+        # trusted source for this profile's non-vocal axes). See docs/adr/
+        # vj-system.md "ZCR Recalibration".
+        zcr_mu=0.055,
+        zcr_sigma=0.0203,
         onset_density_mu=2.9223,
         onset_density_sigma=0.552,
         # The actual discriminator: near-zero vocal-formant harmonic/
@@ -1239,8 +1266,14 @@ PROFILES: Dict[str, AudioProfile] = {
         bpm_prior_sigma=0.1260,
         bpm_hint_min=130.0,
         bpm_hint_max=136.0,
-        zcr_mu=0.0254,
-        zcr_sigma=0.029,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): 0.0254 -> 0.0451,
+        # 0.029 -> 0.0069 (observed ~92% above the old mu, six-session LLM
+        # program -- the tightest spread of any profile in this pass,
+        # n_tracks=14). Re-derived from a fresh training-techno-01 replay via
+        # recommender_fingerprints.zcr_medians_list(). See docs/adr/
+        # vj-system.md "ZCR Recalibration".
+        zcr_mu=0.0451,
+        zcr_sigma=0.0069,
         onset_density_mu=3.2193,
         onset_density_sigma=0.6303,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
@@ -1564,8 +1597,13 @@ PROFILES: Dict[str, AudioProfile] = {
         # 2026-08-31: 0.095 -> 0.093. LLM tuning recommendation from the
         # training-house-01/002 matcher-validation session ("observed ZCR
         # slightly lower than expected"), owner-approved.
-        zcr_mu=0.0431,
-        zcr_sigma=0.0406,
+        # 2026-09-11 (recommender rc.50, zcr recalibration): 0.0431 -> 0.0586,
+        # 0.0406 -> 0.0171 (observed ~36% above the old mu). Re-derived from
+        # a fresh training-dubstep-01 replay (14 tracks) via recommender_
+        # fingerprints.zcr_medians_list(). See docs/adr/vj-system.md
+        # "ZCR Recalibration".
+        zcr_mu=0.0586,
+        zcr_sigma=0.0171,
         onset_density_mu=2.8699,
         onset_density_sigma=0.47,
         # 2026-09-03 (recommender rc.27, vocal-term calibration): median
