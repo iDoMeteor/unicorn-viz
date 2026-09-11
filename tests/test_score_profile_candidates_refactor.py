@@ -23,12 +23,15 @@ change (proven, not assumed): every one of 135 term values across 6
 real-data scenarios and 14 profiles came back byte-identical before and
 after.
 
-This file pins two things going forward: (1) `score_profile_candidates`
-is directly callable as a pure function (no controller state) with a
-known, worked-through composite for a simple synthetic case: any future
-change to its math must update this test deliberately, not by accident.
-(2) The `kick_regularity_valid` gate specifically, since that's the
-exact term the offline/live divergence turned on.
+This file pins: (1) `score_profile_candidates` is directly callable as
+a pure function (no controller state) with a known, worked-through
+composite for a simple synthetic case: any future change to its math
+must update this test deliberately, not by accident. (2) The
+`kick_regularity_valid` gate specifically, since that's the exact term
+the offline/live divergence turned on. (3) `_serialize_reco_features()`
+(rc.142) round-trips through JSON into an identical composite --
+reconstruction attempts having already failed three times is the whole
+reason this exists (see docs/adr/vj-system.md "One Scoring Function").
 
 Reuses the `_make_full_reco_stub`/`_bind_now` harness pattern already
 established in test_bpm_detector_audit_regressions.py.
@@ -269,3 +272,56 @@ def test_update_profile_recommendation_wires_through_the_shared_function(monkeyp
     )['house']
     for name, value in real_terms.items():
         assert live_terms[name] == round(float(value), 4), name
+
+
+def test_serialize_reco_features_round_trips_through_score_profile_candidates() -> None:
+    """2026-09-11 (auto-vj-01 rc.142): `_serialize_reco_features()`'s
+    whole purpose is to let the offline own-wins instrument re-score a
+    LOGGED eval's exact input instead of reconstructing it from raw
+    corpus rows -- three reconstruction attempts (disjoint 16s chunks,
+    a naive sliding window, a crossfade-guarded sliding window) topped
+    out at 41%/34%/30.5% agreement against the live recommender's own
+    decision on the same rows. This pins the round trip: serialize a
+    features dict, rebuild it exactly as the offline instrument would
+    (JSON round trip included, since that's the real path), and confirm
+    score_profile_candidates() returns the identical winner and
+    composite as scoring the ORIGINAL (unserialized) features."""
+    import json as _json
+    import numpy as _np
+
+    profile = _make_profile(
+        expected_bands=[0.5] * 64, expected_bands_sigma=[0.1] * 64,
+        zcr_mu=0.08, zcr_sigma=0.02,
+    )
+    profiles = {'synthetic': profile}
+    weights = {'zcr_fit': 1.0, 'spectral_shape_fit': 0.7}
+    band_vec = _np.array([0.5] * 64, dtype=_np.float32)
+    features = _empty_features(mean_zcr=0.08, band_mean_vec=band_vec)
+
+    serialized = _AUTO_VJ._serialize_reco_features(features, profiles)
+    # The real path: this dict is written to JSONL and read back later.
+    round_tripped = _json.loads(_json.dumps(serialized))
+
+    rebuilt_features = {
+        'log2_bpms': [tuple(x) for x in round_tripped['log2_bpms']],
+        'mean_zcr': round_tripped['mean_zcr'],
+        'onset_density': round_tripped['onset_density'],
+        'mean_vocal_hnr': round_tripped['mean_vocal_hnr'],
+        'mean_vocal_fmr': round_tripped['mean_vocal_fmr'],
+        'mean_contrast': round_tripped['mean_contrast'],
+        'top_cand_log2s': [tuple(x) for x in round_tripped['top_cand_log2s']],
+        'band_mean_vec': _np.array(round_tripped['band_mean_vec']) if round_tripped['band_mean_vec'] else None,
+        'raw_kick_regularity': round_tripped['raw_kick_regularity'],
+        'kick_regularity_valid': round_tripped['kick_regularity_valid'],
+    }
+    # Only one profile ('synthetic') was in the eligible set passed to
+    # _serialize_reco_features above, so eligible_profiles round-trips
+    # to exactly that one key; map it back to the same profile object.
+    assert round_tripped['eligible_profiles'] == ['synthetic']
+    rebuilt_profiles = {'synthetic': profile}
+
+    original_composite, _ = _AUTO_VJ.score_profile_candidates(
+        features, profiles, weights, [0.1] * 64)['synthetic']
+    rebuilt_composite, _ = _AUTO_VJ.score_profile_candidates(
+        rebuilt_features, rebuilt_profiles, weights, [0.1] * 64)['synthetic']
+    assert original_composite == rebuilt_composite

@@ -12347,3 +12347,79 @@ not a recommender-version-bump trigger. `_VJ_WEIGHTS_DOC_VERSION`
 unchanged for the same reason (no weight, threshold, or profile-field
 change). training-kit-01 `0.42.8` -> `0.42.9` (schema note + new field
 documentation only, no behavior change).
+
+## Reconstruction Abandoned; Log the Real Features Instead (2026-09-11, auto-vj-01 rc.142)
+
+**Three reconstruction attempts, three failures, in order.** With the
+scoring math unified (above), the offline own-wins instrument's
+reproduction check against the live recommender's own per-eval decision
+(`recommended_profile_key`, confirmed to be the raw argmax winner, no
+hysteresis) still had to RECONSTRUCT the eval's input from raw corpus
+rows, since the live `features` dict itself was never logged. None of
+three attempts cleared the strategist's 90% bar:
+
+1. **BPM-gated disjoint 16s chunks** (same windowing as the earlier
+   own-wins pool scoring, plus the live hard +/-4bpm pre-filter applied
+   per chunk): **41.0%/40.9%** (before/after rc.47) on 6 lists, 483/484
+   evals.
+2. **Naive sliding window** matching live's real schedule
+   (`profile_auto_reco_eval_interval_s=8.0`s eval cadence,
+   `profile_auto_reco_window_s=16.0`s trailing window, 50% overlap,
+   eval boundaries detected via `recommended_profile_score` changes per
+   track): **30.5%** on 12 lists, 3649 evals -- WORSE than the simpler
+   disjoint-chunk attempt, the opposite of what the temporal-alignment
+   hypothesis predicted.
+3. **Crossfade-guarded sliding window** (same as #2, excluding eval
+   boundaries in the first 20s of each track): **34.1%**, still far
+   under the bar. The exclusion was itself a real finding, not a
+   guess -- see below.
+
+**Real finding along the way, not a reconstruction bug:**
+`self._reco_samples` is a rolling TIME window, decoupled from track
+identity -- nothing resets it on a track change, only
+`_reset_phrase_clock_for_track_change()`'s own state
+(`_bars_since_track_start`, `_last_drop_bar`, etc.) resets. Right after
+a crossfade, the window briefly mixes old-track and new-track audio,
+and some tracks showed real evals under 0.5s apart in the first ~20s,
+oscillating between two candidates, before settling into the normal
+~8s cadence. This is a genuine live behavior worth a deliberate look
+(should the recommender's own window flush or partially discount on a
+track change?), logged to memory as a director/recommender item, not
+acted on here -- out of scope for the reproduction question, which is
+what this entry is about.
+
+**Decision: stop reconstructing, log the real input.** Three attempts
+at reconstruction is the signal, not a fourth guess. `reco_features`
+(new, additive, `_serialize_reco_features()` in `auto_vj.py`) is the
+exact JSON-safe `features` dict passed to `score_profile_candidates()`
+that eval -- the 64-float windowed band mean, mean zcr/onset
+density/vocal hnr/fmr/contrast, kick regularity plus its
+`kick_regularity_valid` gate state, and the BPM-pre-filter's eligible
+candidate set -- logged once per eval on the `profile_recommendation`
+sequence-corpus keyframe. The offline instrument now scores this
+logged input directly with the same `score_profile_candidates()`
+function: agreement with `recommended_profile_key` is **100% by
+construction**, verified on a real replay (24/24 eval rows). Every
+future offline experiment that only changes `profiles`/`weights`/
+`shared_sigma`/eligibility (the fold-aware admission work, a new
+tempo term, a re-derived fingerprint) re-scores these logged features
+exactly, with no reconstruction anywhere -- only a change to FEATURE
+EXTRACTION itself (a new signal, a different windowing scheme) would
+ever need a fresh live replay again, and that's rare.
+
+A 64-float payload every 8s (shipped eval interval) is negligible next
+to everything else already logged per eval (`term_values_by_candidate`
+alone is a per-candidate dict of 9 floats).
+
+**Bookkeeping.** `auto_vj.py` `__version__` `1.0.0-rc.141` ->
+`1.0.0-rc.142`. No `_RECOMMENDER_VERSION` bump -- pure logging
+addition, nothing about what the composite means or how it's computed
+changes. New test `test_serialize_reco_features_round_trips_through_
+score_profile_candidates` (`tests/test_score_profile_candidates_
+refactor.py`) pins the JSON round trip specifically. Queued next: one
+fresh 14-list, 5-track, seed-1 live capture as the new frozen pool
+(citing its own manifest hash), the offline instrument switched to
+read `reco_features` when present with the old reconstruction path
+retired, and only then the fold-aware admission work -- which touches
+the pre-filter, so it must be scored on an instrument that's actually
+trusted.
