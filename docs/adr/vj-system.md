@@ -12681,3 +12681,61 @@ fold-aware-admission thread for the recommender; the underlying
 tempo-fold behavior itself (the dnb 2/3 fold found in the per-track
 table above, and whatever drives the wide clean/fold split per list
 here) remains open work for the detector program.
+
+## Ceiling Test: Does Hand-Tuning Leave Signal on the Table? (2026-09-11, measurement only)
+
+**Question.** With the scoring math unified and a logged-features pool
+that can be scored exactly, is the ~2/12 own-wins ceiling a WEIGHTING
+problem (hand-tuned weights are simply wrong) or a FEATURE problem
+(the six terms don't carry enough genre signal for any weighting to do
+much better)? Answered by fitting weights from data and checking
+held-out performance -- a measurement, not a landing; weights stay
+owner-gated and nothing here changes the shipped `_DEFAULT_RECO_
+WEIGHTS`.
+
+**Dataset.** 640 usable eval samples (rows carrying `reco_features`
+where the list's own expected genre was actually in that eval's
+BPM-eligible set -- evals where it wasn't are structurally unlearnable
+and excluded), 46 unique tracks of the pool's 60 (5-track x 12 lists;
+**14 tracks never had their own correct genre eligible on ANY eval**,
+worth its own look separately from this test). 5-fold cross-validation
+grouped by track (`GroupKFold`-style: no track appears in both train
+and test in any fold, so held-out performance can't be leaking on
+per-track spectral quirks).
+
+**Model A: conditional logit, shared weight vector across candidates**
+-- exactly the recommender's own composite structure (`softmax` over
+candidates of `w · terms_c`, one `w` shared by every candidate),
+fit by maximum likelihood on the 6 live, non-dormant terms
+(`spectral_shape_fit`, `kick_regularity_fit`, `vocal_hnr_fit`,
+`vocal_fmr_fit`, `zcr_fit`, `onset_fit`; `tempo_fit`/`top_cand_fit`/
+`spectral_contrast_fit` excluded, all three dormant at weight `0.0`
+today). **Held-out own wins: 6/12** -- three times the hand-tuned
+baseline. Wins: `deep_house`, `downtempo`, `drum_and_bass`, `dubstep`,
+`house`, `rnb`. Losses: `ambient`, `big_room`, `hip_hop`, `techno`,
+`trance`, `trap_hip_hop`.
+
+**Model B: standard multinomial logistic regression, raw features**
+-- one independent weight vector per class (`house`, `techno`, ...)
+over the raw 64-band mean plus 6 scalars (`mean_zcr`, `onset_density`,
+`mean_vocal_hnr`, `mean_vocal_fmr`, `mean_contrast`, `raw_kick_
+regularity`), L2-regularized, same 5-fold-by-track CV. **Held-out own
+wins: 3/12** -- barely above the hand-tuned baseline, worse than Model
+A. 840 parameters (`12 classes × 70 features`) against 640 samples
+spanning 46 tracks overfits even with regularization; the raw
+high-dimensional signal generalizes WORSE than the smaller, already-
+engineered 6-term space, not better.
+
+**Reading.** A fitted model on the EXISTING 6 terms clears `6/12`
+held-out -- real signal being left on the table by hand-tuned weights
+(roughly `3×`), landing right at the boundary the strategist named in
+advance ("if a fitted model cannot beat ~6/12 held out, the limit is
+the features") rather than clearly above it. The features aren't
+hopeless, but they're not generous either: better weights alone are
+unlikely to reach the owner's original `>= 8/14`-era bar, and Model
+B's failure to beat even `6/12` on raw signal suggests MORE/DIFFERENT
+low-level features (the already-queued 8192-sample-buffer ideas --
+bass note/key detection, a steadier `spectral_centroid`, steadier
+vocal-formant input) are a more promising next lever than continuing
+to search the weight space on what's already extracted. No weight
+change landed from this measurement; owner-gated per standing policy.
