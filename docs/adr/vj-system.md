@@ -12106,3 +12106,60 @@ numbers, nothing alarming on the owner's own material.
 **Bookkeeping.** No version bump — this is a measurement report against
 already-shipped, cfg-gated-default-off mechanisms (E2/E2b/E7), not a
 new code or config change.
+
+## E2b Panel Follow-Up: Never-Fire vs. Control, Impact-Phrase Mechanism (2026-09-11)
+
+Two follow-ups the strategist (`unicorn-viz-7d`) asked for before the
+owner's trade decision on dose A vs. dose B.
+
+**1. Never-fire vs. the rc.19 control, not vs. zero.** The rc.19
+baseline panel's own never-fire count (pulled from its existing bucket
+map, scored the same way) is **16** across the 18 tuning lists — not
+0. Dose A's 14 is *below* control (an improvement); dose B's 24 is
+*above* it. Per-list, control / dose A / dose B: ambient 4/2/4,
+big_room 0/0/0, downtempo 2/0/2, nu_disco 4/4/4, progressive_house
+2/2/2, techno 2/2/2, trap_hip_hop 2/4/6, **hip_hop 0/0/2**, rnb 0/0/2;
+every other list reads 0 at control and both doses. `training-hip-hop
+-01` is the one genuine dose-B-only regression (0 at control AND dose
+A, 2 at dose B) — everything else is either flat or, in dose A's
+aggregate, a net improvement over an already-nonzero baseline.
+
+**hip_hop's never-fire track, examined directly** (same track in both
+dose-B seed buckets: "Drum Majors Atl - We The Future Fool
+(Instrumental)"): `vj_mode` history shows the director reached `BUILD`
+and `DROP` mode on this track, and `drop_delta_gate_blocked_count`/
+`drop_delta_gate_deferred_count` read **7/35** by track end — the gate
+was engaged 42 times, not zero. If the first-drop exemption
+(`_last_drop_bar < 0` in `_maybe_fire_drop_with_bass_gate`) had fired
+as designed, the very first attempt should have bypassed the gate
+entirely and every later retry would be the only thing gated —
+ending at 0 real fires with 42 gate engagements is inconsistent with
+that path having ever taken the exemption branch on this track. Not
+root-caused here (would need to trace `_last_drop_bar`'s reset timing
+on track change) — flagged as a concrete, reproducible symptom for
+whoever picks up the exemption's correctness next, separate from the
+dose A/B trade-off question.
+
+**2. Impact-phrase-alignment mechanism: NOT confirmed.** Hypothesis
+was that a gate-deferred drop re-arms at the next downbeat and fires
+off-phrase, shifting the phrase clock impacts chain from. Tested two
+splits on dose A's 124 impacts (18 lists, excl. favorites): (a) impacts
+preceded by a gate-deferred/blocked drop within 8 bars on the same
+track — n=90, `phrase_alignment_8` 66.7% — vs. not preceded — n=34,
+58.8%. Wrong direction for the hypothesis (preceded reads *higher*),
+and both sit well under the rc.19 control's 83.3%. (b) whole-track
+split (any gate engagement anywhere on the track) has no discriminating
+power — 122 of 124 impacts belong to a track gated at least once
+somewhere; only 2 impacts total come from a fully-ungated track.
+Per-list breakdown shows the pooled 64.5% is mostly small-n noise: 18
+lists, 0-18 impacts each, ranging 25%-100%, with `training-hip-hop-01`
+(25%, n=8) and `training-house-01` (40%, n=10) dragging the pooled
+average down rather than a uniform softening across the panel. Per the
+strategist's own conditional framing ("if 2 confirms, E2c...") — it did
+not confirm, so E2c (phrase-boundary re-arm) was not built. The
+impact-phrase softening is not yet explained by anything tested here;
+open question left for the strategist/owner: whether an rc.19 baseline
+per-list `impact_fire.phrase_alignment_8` breakdown exists to check
+whether this level of small-n variance is also present at baseline
+(i.e. whether the pooled 83.3%→64.5% drop is even a real effect versus
+a different list-mix sampling the same noisy small-n metric).
