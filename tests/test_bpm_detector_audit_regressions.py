@@ -666,9 +666,8 @@ def test_bpm_prefilter_hard_margin_excludes_the_ambient_house_bleed(monkeypatch)
 def test_default_weights_are_genre_pure() -> None:
     """2026-08-20 (recommender rc.18): the default composite is a
     tempo-blind genre score — both detector-BPM-consuming terms carry
-    zero weight (owner: "remove both"), while remaining terms stay
-    positive so the score still discriminates. Re-weighting tempo back
-    in must be a deliberate act (the candidate matcher supersedes it)."""
+    zero weight (owner: "remove both"). Re-weighting tempo back in
+    must be a deliberate act (the candidate matcher supersedes it)."""
     w = _AUTO_VJ._DEFAULT_RECO_WEIGHTS
     assert w['tempo_fit'] == 0.0
     assert w['top_cand_fit'] == 0.0
@@ -681,9 +680,18 @@ def test_default_weights_are_genre_pure() -> None:
     # (owner: "officially retired and dead forever"). See
     # docs/adr/vj-system.md.
     assert 'centroid_fit' not in w
+    # 2026-09-11 (recommender rc.48, owner-approved fitted weights):
+    # "stays positive so the score still discriminates" no longer holds
+    # for all six -- `zcr_fit` came out of the ceiling-test fit at
+    # `-0.111`, shipped at that exact value rather than clamped (the
+    # validated CV/live numbers were measured with it). The real
+    # invariant these six terms share now is "nonzero" (each still
+    # discriminates, in whichever direction the fit found), not
+    # "positive". See docs/adr/vj-system.md "Fitted Weights (Landed)".
     for name in ('spectral_shape_fit', 'onset_fit', 'kick_regularity_fit',
-                 'zcr_fit', 'vocal_hnr_fit', 'vocal_fmr_fit'):
+                 'vocal_hnr_fit', 'vocal_fmr_fit'):
         assert w[name] > 0.0, name
+    assert w['zcr_fit'] != 0.0
 
 
 def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
@@ -695,7 +703,16 @@ def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
     tight_test's confidence bonus now outweighs its own quadratic
     penalty, so tight_test wins where wide_test used to. The point under
     test is the two scores being genuinely different, not which one
-    happens to win at this magnitude."""
+    happens to win at this magnitude.
+
+    2026-09-11 (recommender rc.48, owner-approved fitted weights):
+    `zcr_fit`'s weight flipped to `-0.111` -- inverts which of the two
+    candidates the term now favors (a negative weight makes the
+    tighter-sigma candidate's larger raw penalty score BETTER, not
+    worse), so `wide_test` wins here now. Still the same point under
+    test either way: the two candidates' `zcr_fit` values are
+    genuinely different (proving per-profile sigma), not which
+    direction that difference points."""
     import dataclasses
 
     import unicornviz.audio.profiles as profiles_mod
@@ -720,7 +737,7 @@ def test_zcr_fit_uses_per_profile_sigma_not_fixed_020(monkeypatch) -> None:
     tight_val = kw['term_values_by_candidate']['tight_test']['zcr_fit']
     wide_val = kw['term_values_by_candidate']['wide_test']['zcr_fit']
     assert tight_val != pytest.approx(wide_val), 'sigma appears fixed, not per-profile'
-    assert stub._recommended_profile_key == 'tight_test'
+    assert stub._recommended_profile_key == 'wide_test'
 
 
 def test_onset_fit_uses_per_profile_sigma_not_fixed_1_2(monkeypatch) -> None:

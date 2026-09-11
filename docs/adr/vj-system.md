@@ -12739,3 +12739,140 @@ bass note/key detection, a steadier `spectral_centroid`, steadier
 vocal-formant input) are a more promising next lever than continuing
 to search the weight space on what's already extracted. No weight
 change landed from this measurement; owner-gated per standing policy.
+
+## Fitted Weights Landed (2026-09-11, recommender rc.48)
+
+**Owner-approved and landed.** The owner's direct instruction, verbatim:
+"fitted weights: land them" -- given directly, not via peer relay, after
+a separate cross-session trust issue this same day surfaced that a peer
+strategist session had been mis-relaying "owner decided" claims that the
+owner had not actually made (see the live-replay results below, both of
+which were reported to the owner as plain measurements, not as
+recommendations already acted on). `_DEFAULT_RECO_WEIGHTS`' six live
+terms are now set to the Ceiling Test's fitted values (full-data refit,
+same conditional-logit structure as the CV run above, `L2=1.0`):
+
+| Term | Previously | Landed |
+| --- | --- | --- |
+| `spectral_shape_fit` | `0.7` | `0.191` |
+| `kick_regularity_fit` | `1.5` | `0.459` |
+| `vocal_hnr_fit` | `0.4` | `0.855` |
+| `vocal_fmr_fit` | `0.5` | `1.337` |
+| `zcr_fit` | `0.7` | `-0.111` |
+| `onset_fit` | `1.5` | `0.741` |
+
+**Reading.** The fit trusts the two heaviest hand-tuned terms
+(`spectral_shape_fit`, `kick_regularity_fit`) considerably less --
+both cut by more than half -- and the two lightest (`vocal_hnr_fit`,
+`vocal_fmr_fit`) considerably more, with `vocal_fmr_fit` becoming the
+single heaviest fitted term of the six. `onset_fit` drops to roughly
+half its hand-tuned weight but stays meaningfully trusted, not
+dormant.
+
+**`zcr_fit` shipped at its exact fitted value, unclamped.** The fit
+went slightly negative (`-0.111`) -- a sign flip from the old
+hand-tuned `+0.7` that inverts the term's own designed meaning. The
+first pass here clamped this to `0.0` out of caution rather than ship
+an inverted term. The owner's direct question when told about this --
+"why did you guys decide zcr is a 0?" -- and the instruction to land
+the fitted weights as measured made clear the clamp was the wrong
+call: the held-out `6/12` result (see the Ceiling Test entry above)
+was measured WITH this exact `-0.111`, not with a clamped `0.0`, so
+shipping the clamp would ship an untested vector under the name of the
+tested one. Landed unclamped.
+
+**Honest caveat on the two terms the fit trusts most.** `vocal_hnr_
+mu`/`vocal_fmr_mu` were shown on 2026-09-01 (see the vocal-term
+calibration work earlier in this document) to NOT actually measure
+vocal presence in the way their names suggest -- `vocal_hnr` is an
+autocorrelation/harmonic-comb ("pitchedness") proxy, high for voice OR
+any pitched tone; `vocal_fmr` is a syllabic/vibrato modulation-rate
+proxy, high for anything rhythmically modulating at 3-8Hz. Neither
+alone reliably indicates "voice"; the two together would be a much
+stronger joint signal, but the recommender still adds them as
+independent linear terms, not combined/gated. A separate mid/side
+feature (`vocal_mid_ratio`/`vocal_syl`, computed in
+`unicornviz/audio/analyzer.py` since 2026-09-01 but not yet wired into
+`auto_vj.py`) is the real vocal-presence candidate. So what this fit
+rewards under `vocal_hnr_fit`/`vocal_fmr_fit` is whatever OTHER real
+timbral property these two features happen to track, not literally
+"vocal presence." The discrimination the fit found is real (it drove
+the held-out `6/12`); the field names are just misleading about what
+it actually is. Worth a real investigation before trusting these
+weights long-term, not blocking this landing.
+
+**Two live-replay verification cells, run against the frozen own-wins
+pool (`own_wins_pool_logged_features-2026-09-11.json`, hash
+`944dd96f...`), both pure measurement -- nothing was shipped based on
+either cell's result alone; the owner's own final decision (below)
+governs what landed:**
+
+- **Cell A: fitted weights only** (the table above, `zcr_fit`
+  unclamped). Live plurality own-wins: **3/12** (`dubstep`, `house`,
+  `techno`).
+- **Cell B: fitted weights + `deep_house` hint band widened `116 →
+  124`** (not the `126` first floated -- `126` would have violated
+  the already-pinned invariant in
+  `test_deep_house_tempo_sits_below_house_and_above_chillstep`,
+  `deep_house.bpm_hint_max <= house.bpm_hint_min + 4`, itself the
+  result of an earlier documented incident this same session where
+  widening this exact band bled `deep_house` into `house-01`).
+  Live plurality own-wins: **3/12** (`dubstep`, `house`,
+  `deep_house`) -- `deep_house` wins its own list decisively
+  (`2877` vs `340`), `house` holds `house-01` only barely (`931` vs
+  `901`), and `techno` flips back to a loss relative to Cell A. Net:
+  same `3/12` count as Cell A, trading a techno win for a deep_house
+  win with house's own margin thinned to near-parity -- not the clean
+  `deep_house`-wins-without-cost result that would justify touching a
+  pinned band on this evidence alone.
+
+**Owner's final decision (direct, not peer-relayed):** land the fitted
+weights, unclamped, as Cell A represents them; do **not** touch either
+BPM band. Verbatim: "1) fitted weights: land them... 2) i have been
+extremely clear about this. do not change either. (the deep house/house
+bands.. same family, DIFF bpm .. that's IT)." Cell B is therefore
+measurement-only and rejected -- `deep_house`/`house`'s `bpm_hint_min`/
+`bpm_hint_max` are unchanged from their pre-existing values
+(`deep_house`: `112.0`/`116.0`).
+
+**What actually shipped, in plain terms, for anyone comparing this to
+an earlier "2/12 → 3/12" summary:** the shipped weight vector is Cell
+A. The exact own-wins baseline before this landing (scoring every
+logged `reco_features` row directly) was `2/12` (`dubstep`, `house`).
+After landing, live replay against the same 12-list pool is `3/12`
+(`dubstep`, `house`, `techno`) -- one additional list (`techno`) now
+plurality-wins under its own profile, with `dubstep` and `house` still
+winning the same lists as before. This is a small, real, measured
+improvement, not a random fluctuation -- it is the same fitted vector
+that separately reached `6/12` held-out accuracy under 5-fold
+cross-validation grouped by track (vs. `2/12` for the old hand-tuned
+vector under the same CV protocol), so the live `3/12` and the CV
+`6/12` are two independent measurements of the same underlying change,
+not two unrelated numbers.
+
+**Bookkeeping (landed):** `auto_vj.py` `__version__` `1.0.0-rc.142 →
+1.0.0-rc.143`, `_RECOMMENDER_VERSION` `1.0.0-rc.47 → 1.0.0-rc.48`,
+`_VJ_WEIGHTS_DOC_VERSION` `109 → 110`, matching doc header/changelog
+entry. **Tests updated to verify the new intended behavior** (per the
+project's own regression-test discipline -- each rewritten only after
+empirically determining the new correct behavior, never patched
+mechanically to pass): `test_bpm_detector_audit_regressions.py::test_
+default_weights_are_genre_pure` (excludes `zcr_fit` from the `> 0.0`
+loop, asserts `!= 0.0` separately since the fitted sign is negative by
+design now), `test_bpm_detector_audit_regressions.py::test_zcr_fit_
+uses_per_profile_sigma_not_fixed_020` (winner flips from `tight_test`
+to `wide_test` -- the sign flip inverts which of the two candidates
+wins; the point of the test, that per-profile sigma produces a genuine
+difference, is unaffected), `test_genre_matcher.py::test_matcher_
+favors_rap_rnb_on_zcr_after_fitted_weights` (renamed from `test_
+matcher_flips_fold_when_genre_flips`; `rap_rnb` now wins unconditionally
+across the swept `zcr` range under `matcher_enabled=True`, so the old
+"flips" premise no longer holds), `test_genre_matcher.py::test_legacy_
+prior_push_behind_the_rollback_flag` (the separate `matcher_enabled=
+False` code path now favors `drum_and_bass` over `rap_rnb` at the
+test's `zcr=0.04`, a different branch reacting oppositely to the same
+sign flip). Full suite green after all four rewrites: `2422 passed, 1
+skipped`. `training-kit-01`'s `_RECO_WEIGHT_DEFAULTS` fallback dict is
+good-hygiene follow-up (its live-read path already supplies the real
+value from `auto_vj.py` at packaging time regardless of the fallback)
+and is tracked separately, not load-bearing for this landing.
