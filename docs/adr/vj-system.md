@@ -11616,3 +11616,117 @@ newly clean values, matching its own established "mirrors house" design.
 (fingerprint data re-derived for all 13 real profiles + `electronic`'s
 mirror, `deep_house` BPM hint reverted); `_VJ_WEIGHTS_DOC_VERSION`
 `106 → 107`. No `_DETECTOR_VERSION`/`_DIRECTOR_VERSION` bump.
+
+## Director Placement E2/E7 (2026-09-10, director rc.20)
+
+**Trigger.** Same session as the recommender clean re-harvest above,
+continued after the owner brought this seat onto the director program
+too ("keep going until you have the results i'm looking for"), per two
+mechanisms pre-registered in
+`docs/planning/director-placement-scoring-2026-09-03.md` on 2026-09-10:
+E2 (bass delta gate on drops) and E7 (relative cruise-build confidence
+floor). Sequenced per the peer's ("the strategist", `unicorn-viz-84`)
+own ordering: rc.19 baseline panel first (the rc.18 dwell retune
+invalidated every earlier baseline), mechanisms implemented and tested
+second, offline cells third, panel only if the cells hold.
+
+**E2 — drop bass-delta gate.** The owner's live C sessions (hotbeats/002,
+003, line input) showed the director's timing problem solved (build/
+breakdown/climax on-beat 93-100%) but drops landing at chance: energy/
+bass lift 24% vs 16-22% chance, a drop every 65-80s. By the time a drop
+is scheduled, its trigger/score/downbeat-confidence gates have all
+already passed — nothing in the pipeline checks the music is actually
+rising into the moment of the fire itself. `_maybe_fire_drop_with_bass_
+gate()` sits between `_schedule_drop()`'s existing downbeat/phrase-snap
+resolution (E1, untouched) and `_fire_drop()`, on all three of
+`_schedule_drop()`'s firing paths (phrase-chain terminal step, plain
+next-downbeat, no-grid immediate fallback) so the gate can't be
+bypassed by one path. A rolling `(t, bass)` history is sampled every
+tick in `_update_director()` (same time-windowed-prune pattern as E4's
+`impact_novelty` high-water mark), pruned to `drop_bass_delta_window_s`
+(30s default — must exceed 3 bars' worth of seconds at the slowest
+supported BPM). At the check downbeat: commit if the following bar's
+mean bass is at least `drop_bass_delta_min` times the preceding two
+bars' mean; otherwise re-arm (a fresh baseline recomputed at the new
+downbeat, not the original one) for up to `drop_bass_delta_wait_bars`
+attempts, then lapse without ever firing. `drop_bass_delta_min` default
+`0.0` (off, byte-identical immediate fire). Engagement:
+`drop_delta_gate_deferred_count` (individual failed checks),
+`drop_delta_gate_blocked_count` (candidates that lapsed).
+
+**E7 — relative cruise-build confidence floor.** Three owner live
+sessions (hotbeats/002 Sep 4 85min, hotbeats/003 Sep 4 127min, an
+unpackaged Sep 5 14min session) showed the existing absolute
+`mode_source_min_confidence_build` floor is hostage to the session's own
+`downbeat_confidence` distribution: the same `0.6` floor admitted
+36-41% of CRUISE build evidence on the first two sessions and 2% on the
+third (the director never left CRUISE the whole session) — the exact
+lesson E4 already learned for the drop trigger (`drop_trigger_rel_
+threshold`'s rolling p90), now recurring on a different gate.
+`mode_source_min_confidence_build_rel` (default `0.0`, off) admits a
+CRUISE build once `downbeat_confidence` clears a given quantile of a
+rolling `mode_confidence_rel_window_s`-second history
+(`self._downbeat_confidence_hist`, sampled every tick in
+`_update_director()` regardless of mode), checked in `_enter_build()`
+additionally alongside the existing absolute floor — the doc's
+recommended mode is a low absolute floor (e.g. `0.25`) as a hard
+minimum with the relative gate doing the real work. Engagement:
+`build_blocked_by_rel_confidence_count`; telemetry field
+`build_rel_confidence_quantile_value` (the computed threshold, logged
+per row for audit). BREAKDOWN's recovery path is untouched by either
+floor, same as before — it fires off energy/slope, not
+`downbeat_confidence`.
+
+**Verification before landing.** 14 new unit tests
+(`tests/test_director_bass_delta_and_rel_confidence.py`), bare-controller
+style matching `test_director_mode_snap.py`: E2's off/fire/defer-then-
+lapse/no-grid-fallback paths, E7's off/insufficient-history/blocks-below-
+quantile/admits-above-quantile/absolute-floor-still-a-hard-minimum/
+BREAKDOWN-exemption paths. Three existing bare-controller fixtures
+(`test_auto_vj_phrase_structure.py`'s `_PHRASE_DEFAULTS`,
+`test_director_mode_snap.py`'s `_bare_gated()`) needed the new attributes
+backfilled (they construct `AutoVJController` via `object.__new__`
+without `__init__`) — all off-by-default, zero behavior change, caught
+directly by the full suite rather than guessed at. Live-smoke-tested
+(`training - rnb 01`, seed 1, `drop_bass_delta_min=1.10`,
+`mode_source_min_confidence_build=0.25` + `_rel=0.50`): E2 blocked 12
+drop candidates (25 deferred attempts, consistent with `wait_bars=2`);
+E7 blocked 442 builds via the relative gate vs 10 via the absolute
+floor (quantile read `0.83`) — the relative gate doing the bulk of the
+real work, as designed, not rubber-stamping. Full suite green (2414
+passed) after landing.
+
+**rc.19 baseline panel.** 19 lists x 2 seeds (1, 2), shipped defaults,
+`beat_tracker_engine=v3` only, both E2/E7 off — re-establishes the
+reference every future E2/E7 cell diffs against, since the rc.18 dwell
+retune invalidated every rc.15/rc.16-era panel on file. Launched
+3-parallel per the standing convention, raised to 5-parallel mid-run on
+the owner's direct instruction (no live-session conflict announced;
+confirmed directly with the owner mid-batch). All 38 runs completed
+(exit 0), scored with `director_placement.py` (seed 7 for chance
+sampling). First panel with `mode_transition`'s `from_mode`/
+`snap_unit_applied` fields (the rc.130 keyframe fix landed since the
+last full panel) — pooled source breakdown: build 57.3% CRUISE / 42.7%
+BREAKDOWN (2696 events), breakdown 76.3% BUILD / 19.7% CRUISE / 4.0%
+DROP (2088 events), climax 100.0% DROP (46 events, matching E8's
+design — no other source exists). Global pooled headline numbers: drop
+phrase alignment 71.8% (chance 38.0%), drop energy/bass lift 15.3%/
+17.6% (chance 10.8%/10.6%), build/breakdown beat alignment 100.0% on
+both, build trend 43.6% (chance 24.7%), breakdown trend 43.1% (chance
+22.5%), climax phrase alignment 34.8% (chance 36.5%, still the weakest
+mode, consistent with climax's structural anti-alignment already
+documented under E6). Never-fire tracks (E4 guard) down to 1-2 per list
+across the board, the E4 rescue mechanism still holding at this
+baseline. Full report:
+`drop-ins/training-kit-01/tools/baselines/director_placement_rc19_baseline-2026-09-10.md`.
+
+**Not yet done.** The offline cells (E2: house-01, tech-house-01,
+big-room-01, dnb-01, hip-hop-01; E7: house-01, big-room-01, dnb-01,
+ambient-01, seed 1, vs this rc.19 control) and, conditional on those
+cells holding their pre-registered predictions, the full 19x2 panel for
+each mechanism separately (never stacked, per the sub-additivity rule
+already established in the E8 round-2/3 log above).
+
+**Bookkeeping.** `_DIRECTOR_VERSION` `1.0.0-rc.19 → 1.0.0-rc.20`;
+`_VJ_WEIGHTS_DOC_VERSION` `107 → 108`. No `_DETECTOR_VERSION`/
+`_RECOMMENDER_VERSION` bump.

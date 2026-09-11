@@ -134,6 +134,24 @@ _PHRASE_DEFAULTS = dict(
     _mode_phrase_unit_climax=8,
     _mode_source_min_confidence_build=0.0,
     _build_blocked_by_confidence_count=0,
+    # E7 (2026-09-10): off by default here so these pre-existing tests
+    # keep exercising the pre-E7 absolute-floor-only behaviour --
+    # test_director_bass_delta_and_rel_confidence.py covers the relative
+    # gate's own paths.
+    _mode_source_min_confidence_build_rel=0.0,
+    _mode_confidence_rel_window_s=60.0,
+    _build_blocked_by_rel_confidence_count=0,
+    _build_rel_confidence_quantile_value=0.0,
+    _downbeat_confidence_hist=[],
+    # E2 (2026-09-10): off by default here so drop-firing tests keep
+    # exercising immediate fire -- test_director_bass_delta_and_rel_
+    # confidence.py covers the gate's own deferred/lapsed paths.
+    _drop_bass_delta_min=0.0,
+    _drop_bass_delta_wait_bars=2,
+    _drop_bass_delta_window_s=30.0,
+    _bass_delta_hist=[],
+    _drop_delta_gate_blocked_count=0,
+    _drop_delta_gate_deferred_count=0,
 )
 
 

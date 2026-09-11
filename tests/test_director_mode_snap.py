@@ -403,6 +403,13 @@ def _bare_gated(*, mode: str, allowed_from_build=None, allowed_from_breakdown=No
     c._mode_phrase_unit_climax = 8
     c._mode_source_min_confidence_build = 0.0
     c._build_blocked_by_confidence_count = 0
+    # E7 (2026-09-10): off by default here too -- see
+    # test_director_bass_delta_and_rel_confidence.py for the relative
+    # gate's own dedicated coverage.
+    c._mode_source_min_confidence_build_rel = 0.0
+    c._build_blocked_by_rel_confidence_count = 0
+    c._build_rel_confidence_quantile_value = 0.0
+    c._downbeat_confidence_hist = []
     c.scheduled = 0
     c._schedule_mode_transition = lambda *a, **kw: setattr(c, 'scheduled', c.scheduled + 1)  # type: ignore[method-assign]
     return c
