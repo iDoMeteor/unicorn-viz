@@ -257,6 +257,45 @@ class AudioProfile:
     spectral_contrast_mu: float | None = None
     spectral_contrast_sigma: float = 0.15
 
+    # vocal_mid_ratio_mu/sigma, vocal_syl_mu/sigma (2026-09-11): the real
+    # mid/side vocal-presence pair (analyzer._VOCAL_MS_*, Analyzer.
+    # _vocal_ms_ring, built 2026-09-01) -- vocal_mid_ratio is the mean
+    # mid-channel fraction of vocal-band (200-4000 Hz) energy, vocal_syl
+    # is the fraction of that ratio's own time-modulation falling in the
+    # 2-8 Hz syllable-rate band (~0.75 AUC as a joint instrument in
+    # earlier bake-off testing). Unlike vocal_hnr/vocal_fmr (shown
+    # 2026-09-01 to track pitchedness/formant-modulation-rate generally,
+    # not vocal presence specifically), this pair is a genuinely
+    # different signal, computed every frame since 2026-09-01 but never
+    # wired into the recommender until now (owner: "let's wire them up
+    # AND write them to the corpus"). DELIBERATELY unset on every
+    # profile at launch -- dormant (weight 0.0) until real per-profile
+    # fingerprints exist; do not hand-author these.
+    vocal_mid_ratio_mu: float | None = None
+    vocal_syl_mu: float | None = None
+    vocal_mid_ratio_sigma: float | None = None
+    vocal_syl_sigma: float | None = None
+    # vocal_ms_mu/sigma (2026-09-11): a combined term over the SAME pair
+    # above (vocal_mid_ratio * vocal_syl, both required high together --
+    # "aren't the two together required to tell the diff between
+    # noise/percussion and a voice?"), landed alongside vocal_combo_mu/
+    # sigma below (the equivalent combination of vocal_hnr/vocal_fmr) so
+    # the two candidate "real vocal presence" signals can be measured and
+    # compared on the same corpus once fingerprints exist. Dormant.
+    vocal_ms_mu: float | None = None
+    vocal_ms_sigma: float | None = None
+    # vocal_combo_mu/sigma (2026-09-11): vocal_hnr_fit/vocal_fmr_fit were
+    # just landed as independently-weighted fitted terms (rc.48) -- real
+    # discrimination, but added rather than conjoined, even though by
+    # design a voice needs to be BOTH harmonic (hnr) AND syllable-
+    # modulated (fmr) to read as a voice rather than noise/percussion or
+    # a sustained pitched instrument. This term keeps vocal_hnr_fit/
+    # vocal_fmr_fit exactly as landed and ALSO scores their conjunction
+    # (vocal_hnr * vocal_fmr) as a separate dormant candidate, to compare
+    # against vocal_ms_mu/sigma above once both have real fingerprints.
+    vocal_combo_mu: float | None = None
+    vocal_combo_sigma: float | None = None
+
     # 64-element normalized (0.0–1.0) spectral fingerprint: expected relative
     # magnitude per log-spaced band (30 Hz – 16 kHz, matching audio_spectrum.py).
     # None = not yet calibrated.

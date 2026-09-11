@@ -12876,3 +12876,124 @@ skipped`. `training-kit-01`'s `_RECO_WEIGHT_DEFAULTS` fallback dict is
 good-hygiene follow-up (its live-read path already supplies the real
 value from `auto_vj.py` at packaging time regardless of the fallback)
 and is tracked separately, not load-bearing for this landing.
+
+## Vocal-Presence Candidates Wired, Not Yet Weighted (2026-09-11, recommender rc.49)
+
+**Owner feedback on the rc.48 landing above, verbatim intent, three
+points:**
+
+> a) let's wire them up AND write them to the corpus
+>
+> b) well now you've tuned using them independently, which has value...
+> BUT they must be used together to actually do the job. so, let's
+> keep them independent and ALSO combine them into a whole new vocal
+> term, wire that up and write it to the corpus and compare that
+> combined thing against a above.
+>
+> c) [on the "2/12 -> 3/12" summary] ... IS in fact "yes, everything is
+> way worse than when we started". hot garbage in fact. it doesn't
+> help that half of the stuff you were doing/using has been broken or
+> unused for the past week or three or since their invention.
+
+**(a) and (b), landed this entry.** Two things wired:
+
+1. **The real mid/side vocal-presence pair** (`vocal_mid_ratio`,
+   `vocal_syl` -- mean mid-channel fraction of vocal-band (200-4000 Hz)
+   energy, and the fraction of that ratio's own time-modulation in the
+   2-8 Hz syllable-rate band; `analyzer._VOCAL_MS_*`,
+   `Analyzer._vocal_ms_ring`, built 2026-09-01, ~0.75 AUC as a joint
+   instrument in earlier bake-off testing) had been computed every
+   frame for ten days but never read by `auto_vj.py` at all -- a
+   genuinely different signal from `vocal_hnr`/`vocal_fmr` (shown
+   2026-09-01 to track pitchedness/formant-modulation-rate generally,
+   not vocal presence specifically), sitting completely unused. Now
+   flows through the full pipeline: `_reco_samples`/
+   `_build_live_training_row()` sample capture, per-eval mean
+   aggregation, `score_profile_candidates()`'s `features` dict,
+   `_serialize_reco_features()`'s corpus snapshot, and two new terms,
+   `vocal_mid_ratio_fit`/`vocal_syl_fit` (independent Gaussian fits,
+   same shape as `vocal_hnr_fit`/`vocal_fmr_fit`).
+2. **A combined term for each pair.** `vocal_hnr_fit`/`vocal_fmr_fit`
+   were just landed independently at rc.48 -- real discrimination
+   (drove the ceiling test's held-out `6/12`), kept exactly as landed.
+   But by design a voice needs to be *both* harmonic (hnr) *and*
+   syllable-modulated (fmr) to read as a voice rather than noise/
+   percussion or a sustained pitched instrument; the composite adds
+   the two terms rather than conjoining them, which is not the same
+   test. `vocal_combo_fit` (Gaussian fit on `mean_vocal_hnr *
+   mean_vocal_fmr`) scores that conjunction as a separate candidate,
+   alongside `vocal_ms_fit` (`mean_vocal_mid_ratio * mean_vocal_syl`,
+   the same conjunction logic on the new pair) -- so the two "real
+   vocal presence" candidates land side by side and can be compared
+   once corpus data exists, per the owner's explicit ask.
+
+All four new terms (`vocal_mid_ratio_fit`, `vocal_syl_fit`,
+`vocal_ms_fit`, `vocal_combo_fit`) land at weight `0.0` with every
+profile's matching `_mu`/`_sigma` field added to `AudioProfile`
+(`unicornviz/audio/profiles.py`) but left `None` on all 13 real
+profiles -- no fingerprint data exists yet, and per this project's own
+"don't hand-author fingerprints" rule (same one `spectral_contrast_fit`
+followed at its own rc.26 launch), none is guessed here. This is a
+structural change to what the composite *can* score (bumping
+`_RECOMMENDER_VERSION` 1.0.0-rc.48 -> 1.0.0-rc.49 per CLAUDE.md's
+"retiring/adding a term" trigger) with zero live behavior change --
+every new term always evaluates to `0.0` until a real fingerprint is
+derived from fresh corpus (a Phase-5-style recalibration job, not done
+here). The comparison the owner asked for (`vocal_combo_fit` vs.
+`vocal_ms_fit`) is the next real step once that corpus exists, not
+performed in this entry.
+
+**(c), addressed directly, not deflected.** The owner is right that a
+`3/12` (25%) own-profile win rate is bad in absolute terms -- most
+lists still lose to the wrong genre after this landing. But the
+specific claim under dispute ("2/12 -> 3/12 ... IS in fact everything
+is way worse than when we started") deserves a precise answer, because
+"than when we started" is doing a lot of work: this session's own
+history (the 2026-09-10/11 recommender retune program) reported MUCH
+higher numbers earlier in the multi-week program --
+`4/12 -> 9/12` (rc.47's own headline result), `7/12`, `8/12`, an
+earlier `8/14` "previous best" -- and every single one of those was
+later retracted as an artifact of a bug in the *measuring instrument*
+itself, not a real state the system was ever actually in:
+
+- The `8/14` "previous best" (2026-09-04) was flagged, not confirmed,
+  as possibly scored on the same corrupted low-band data (beta.126's
+  bug) that later explained the `2/12` collapse -- soft target from
+  the start.
+- The `9/12` "shared sigma" headline (rc.47) was measured against an
+  UNFROZEN pool whose bucket membership was silently changing between
+  measurements, AND against an offline scorer with no BPM
+  pre-filter at all (live gates candidates by detected tempo before
+  scoring; the offline instrument scored every enabled profile
+  unconditionally). Live-replay verification of that exact "9/12"
+  vector came back `2/12 -> 2/12`, flat -- the offline number never
+  predicted live behavior even once.
+- The `7/12`/`8/12` numbers between those two were measured on the
+  SAME unfrozen, ungated instrument, for the same reasons.
+- The one number in this entire program that has been checked against
+  live behavior and found to match exactly, by construction (not by
+  coincidence), is `2/12` -> `3/12`: the frozen-pool, BPM-gated,
+  single-scoring-function instrument (`reco_features` logging, "One
+  Scoring Function" refactor) that this session's own diagnostic work
+  built specifically because every earlier instrument had been shown
+  to disagree with live. `2/12` is the exact live plurality before the
+  rc.48 fitted weights; `3/12` is the exact live plurality after.
+
+So the honest framing is not "the system regressed from 9/12 down to
+3/12" -- it never was at 9/12 in any sense that live behavior would
+recognize. The honest framing is closer to the owner's own second
+sentence: **the tooling itself was broken or silently unused for weeks
+at a stretch** (the offline scorer's missing BPM gate, the unfrozen
+pool, the corrupted low-band window, `vocal_hnr`/`vocal_fmr` not
+measuring what their names say, `vocal_mid_ratio`/`vocal_syl` computed
+and never read at all until this entry) -- and the real, trustworthy,
+live-verified state of the recommender has been stuck around a quarter
+of lists winning their own genre this whole time, with every higher
+number along the way a mirage produced by one of those defects. That
+is a legitimate, serious problem with how this multi-session program
+was run, not a rhetorical disagreement about which number to quote.
+The ceiling test's own finding (weights alone cap around `6/12`
+held-out; raw 64-band features overfit at `3/12`) already pointed the
+same direction the owner is pointing now: the next real lever is
+features, not more weight search on the same six terms -- which is
+exactly what this entry's two new candidate signals are for.

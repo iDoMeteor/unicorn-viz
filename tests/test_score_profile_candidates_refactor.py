@@ -67,6 +67,8 @@ def _empty_features(**overrides) -> dict:
         'onset_density': 0.0,
         'mean_vocal_hnr': 0.0,
         'mean_vocal_fmr': 0.0,
+        'mean_vocal_mid_ratio': 0.0,
+        'mean_vocal_syl': 0.0,
         'mean_contrast': 0.0,
         'top_cand_log2s': [],
         'band_mean_vec': None,
@@ -264,7 +266,8 @@ def test_update_profile_recommendation_wires_through_the_shared_function(monkeyp
     assert len(calls) == 1
     assert set(calls[0].keys()) == {
         'log2_bpms', 'mean_zcr', 'onset_density', 'mean_vocal_hnr',
-        'mean_vocal_fmr', 'mean_contrast', 'top_cand_log2s', 'band_mean_vec',
+        'mean_vocal_fmr', 'mean_vocal_mid_ratio', 'mean_vocal_syl',
+        'mean_contrast', 'top_cand_log2s', 'band_mean_vec',
         'raw_kick_regularity', 'kick_regularity_valid',
     }
     _, real_terms = real_score_fn(
@@ -308,6 +311,8 @@ def test_serialize_reco_features_round_trips_through_score_profile_candidates() 
         'onset_density': round_tripped['onset_density'],
         'mean_vocal_hnr': round_tripped['mean_vocal_hnr'],
         'mean_vocal_fmr': round_tripped['mean_vocal_fmr'],
+        'mean_vocal_mid_ratio': round_tripped['mean_vocal_mid_ratio'],
+        'mean_vocal_syl': round_tripped['mean_vocal_syl'],
         'mean_contrast': round_tripped['mean_contrast'],
         'top_cand_log2s': [tuple(x) for x in round_tripped['top_cand_log2s']],
         'band_mean_vec': _np.array(round_tripped['band_mean_vec']) if round_tripped['band_mean_vec'] else None,
