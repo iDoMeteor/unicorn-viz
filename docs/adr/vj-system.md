@@ -11840,3 +11840,119 @@ while that panel runs (the `rap_rnb` wide-sigma structural advantage
 from the clean-re-harvest entry above, the fold-aware pre-filter
 calibration, the `dubstep` 70-160 hint band, and the tempo term on
 rc.46 rows, in that order).
+
+## Shared Per-Band Sigma for spectral_shape_fit (2026-09-11, recommender rc.47)
+
+**The misspecification argument.** `spectral_shape_fit` scores every
+candidate profile via a per-band Gaussian log-density,
+`-log(sigma) - 0.5*x²` with `x = clip((value - mu)/sigma, -6, 6)`,
+mean-reduced across 64 bands. Through rc.28-rc.46 each candidate used
+its OWN `expected_bands_sigma` in that formula. This is a
+model-selection problem under misspecification: when the observed
+16s-window band vector is never close to ANY candidate's mu on most of
+the 64 dimensions — the normal live case, since a track's real
+spectral shape rarely sits inside a single profile's fingerprint band
+— the candidate with the WIDEST sigma wins by default, independent of
+shape quality, because `-log(sigma)` keeps shrinking as sigma grows
+while the quadratic penalty `0.5*x²` shrinks even faster (x itself
+scales as `1/sigma`). A profile's own sigma stopped being a measure of
+"how tightly does this profile's fingerprint cluster" and became a
+lever any profile could pull to win regardless of fit.
+
+**Frozen evaluation pool.** All ablation and candidate scoring below
+used a fixed 12-genre own-wins pool, manifest
+`drop-ins/training-kit-01/tools/baselines/own_wins_pool-2026-09-11.json`
+(hash `e6c0567b48df8b8c43fa876b847a83502ddf812596c5b427ffb24bffe8438a38`).
+**Correction made before any of the numbers below were trusted:** the
+first cut of this manifest only selected buckets with
+`mtime >= CORRUPT_END` (2026-09-10T19:11:20), silently excluding every
+legitimate pre-corruption-window bucket (`mtime < CORRUPT_START`,
+2026-09-04T02:33:31) — for every genre the majority of the real corpus
+(house: 60 of 68 real buckets missing, drum_and_bass: 35 of 41,
+techno: 21 of 27). Caught via `ambient`'s self-cosine reading `0.8346`
+instead of the expected ~`1.0` against its own shipped fingerprint;
+after rebuilding the manifest to also include the pre-corruption
+window, the same self-cosine check reads exactly `1.0000`. The hash
+above is the corrected manifest; do not use the superseded hash
+`e0e2d9673d8833425ca32a929a8c3771419701fe07861c437ce69eb6b37414e2`
+anywhere.
+
+**Term ablation (12 genre lists, each term alone / all-minus-one),
+frozen pool:**
+
+| Term alone | Own-wins | All-minus-this-term | Own-wins |
+| --- | --- | --- | --- |
+| `spectral_shape_fit` | 3/12 | minus spectral | 1/12 |
+| `kick_regularity_fit` | 1/12 | minus kick | 1/12 |
+| `vocal_hnr_fit` | 4/12 | minus vocal_hnr | 1/12 |
+| `vocal_fmr_fit` | 4/12 | minus vocal_fmr | 1/12 |
+| `zcr_fit` | 3/12 | minus zcr | 1/12 |
+| `onset_fit` | 4/12 | minus onset | 2/12 |
+| `tempo_fit` (raw Gaussian, historical weight 2.2) | 1/12 | **minus tempo** | **7/12** |
+| all 7 terms together | 1/12 (techno wins nearly every list) | — | — |
+| onset + zcr together | 3/12 | — | — |
+
+Every term is weak alone; the composite with all terms present using
+per-candidate own-sigma scores WORSE (1/12) than dropping tempo alone
+(7/12) — the clearest signal that the own-sigma spectral term and the
+raw-Gaussian tempo term were both actively harmful, not merely
+uninformative, on this pool.
+
+**Candidate 4 (shared roster-median sigma).** `SPECTRAL_SHAPE_SHARED_SIGMA`
+(new module constant, `unicornviz/audio/profiles.py`, 64 floats) is the
+per-band median of `expected_bands_sigma` across the 13 real profiles
+(ambient, deep_house, downtempo, drum_and_bass, dubstep, house, hyphy,
+peak_time, rap_rnb, rnb, techno, trance, trap — `electronic` excluded,
+its sigma mirrors house rather than being independently derived).
+Scored on the frozen pool with every candidate's `spectral_shape_fit`
+computed against its own `expected_bands` (mu, unchanged) but this ONE
+shared sigma: **9/12 own-profile wins**, the strongest recommender
+result of the session. Wins: house, deep_house, techno, trance,
+dubstep, rap_rnb, rnb, ambient, downtempo. Losses: big_room→dubstep
+(5.966 vs 6.028), drum_and_bass→rap_rnb (5.231 vs 5.983),
+trap_hip_hop/hyphy→rap_rnb (6.183 vs 6.209) — all three losses are
+tight margins against `rap_rnb`, not wide misses.
+
+**Decision.** Land the shared-sigma vector as `_profile_score()`'s
+sole sigma source for `spectral_shape_fit`, for every profile with
+`expected_bands` set (rc.28's own-sigma-ribbon-vs-legacy-cosine
+dispatch is retired — the legacy cosine path no longer exists at all).
+Each profile's own `expected_bands_sigma` field stays on `AudioProfile`
+as telemetry only; nothing reads it for scoring anymore.
+`_RECOMMENDER_VERSION` `1.0.0-rc.46` → `1.0.0-rc.47`. Full suite green
+(2417 passed, 1 skipped) including a fully rewritten
+`tests/test_spectral_shape_ribbon.py` (the old file tested rc.28's now-
+retired dispatch; the new file proves a profile's own sigma no longer
+affects its score, the shared path still discriminates fit quality,
+and a profile with no own sigma now also uses the shared-sigma path
+rather than falling back to cosine).
+
+**Tempo — not closed, only the raw formulation.** The ablation's
+`minus tempo` cell (7/12, the best all-terms-together configuration
+found) confirms reviving `tempo_fit` at its historical weight (`2.2`)
+using a raw Gaussian against `bpm_prior_mu`/`bpm_prior_sigma` is
+actively harmful on this pool: techno's mid sigma sweeps under nearly
+every list the same way the own-sigma spectral term did — a central mu
+with a mid-width sigma wins on everything that isn't close to some
+OTHER candidate's mu either. This is the same misspecification
+argument as above, one term over. The live `tempo_fit` weight stays at
+`0.0`; this is not a decision to abandon tempo as a signal, only that
+the raw-Gaussian formulation is unfit for purpose. Queued next (after
+this fix lands and is live-verified): a fold-aware redesign — max over
+`r ∈ {1, 2, 1/2, 3/2, 2/3}` at `bpm·r`, a `0.6` discount for any
+off-unity fold, per-profile sigma derived from each list's own locked
+exact-read spread in the frozen pool, floored `0.06`/capped `0.12` in
+log2 space — scored at candidate weights `0.5` and `1.0` before any
+live change.
+
+**Landing gate — live-replay verification required.** An offline
+own-wins number is not proof the live recommender moved; the shared-
+sigma fix is not considered landed until a live-replay check (5-track,
+seed 1, `recommended_profile_key` distribution per genre across the 14
+real-corpus training lists, old per-profile-sigma vs. this shared-sigma
+build) shows the same 4/12→9/12 direction live: house/techno/trance/
+deep_house self-recommendation share above 40%, dubstep holding, and
+ambient no longer appearing on four-on-the-floor lists. If live does
+not move while the offline own-wins number does, the offline instrument
+is not actually measuring the live recommender's behavior and the fix
+does not ship on the strength of the offline number alone.

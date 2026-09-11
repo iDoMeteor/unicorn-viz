@@ -1,12 +1,21 @@
 """2026-09-04 (recommender rc.28): spectral_shape_fit's "ribbon" redesign.
+2026-09-11 (recommender rc.47): "shared-sigma" fix, superseding rc.28's
+per-profile dispatch entirely.
 
-`_profile_score()` (drop-ins/auto-vj-01/auto_vj.py) now takes two paths for
-this term: a profile with `expected_bands_sigma` set scores via a per-band
-Gaussian log-density against `expected_bands` as mu (mean across 64 bands,
-mirroring every other `*_fit` term's `-0.5*x*x` shape); a profile with only
-`expected_bands` (no sigma) keeps the legacy cosine-similarity path
-unchanged. See docs/adr/vj-system.md "Spectral-Shape Ribbon Redesign" for
-the full diagnosis and methodology this replaces.
+`_profile_score()` (drop-ins/auto-vj-01/auto_vj.py) scores every
+candidate's `spectral_shape_fit` via a per-band Gaussian log-density
+against its OWN `expected_bands` as mu, but against ONE roster-wide
+`SPECTRAL_SHAPE_SHARED_SIGMA` (unicornviz/audio/profiles.py) for every
+candidate -- never each profile's own `expected_bands_sigma`, which is
+telemetry only now. rc.28's two-path dispatch (a profile with its own
+`expected_bands_sigma` used the ribbon Gaussian; a profile without one
+fell back to legacy cosine similarity) is gone: every profile with
+`expected_bands` set now scores via the same shared-sigma ribbon path,
+whether or not it carries its own sigma. See docs/adr/vj-system.md
+"Shared Per-Band Sigma for spectral_shape_fit" for the full diagnosis
+(comparing per-candidate log-densities with different sigmas is a
+model-selection problem under misspecification -- the broadest sigma
+wins by default regardless of shape) and methodology this replaces.
 
 Reuses the `_make_full_reco_stub`/`_bind_now` harness pattern already
 established in test_bpm_detector_audit_regressions.py.
@@ -122,97 +131,105 @@ def _stub_with_bands(band_vec: np.ndarray, n_samples: int = 6) -> SimpleNamespac
     ))
 
 
-def _make_profiles(monkeypatch, sigma_profile_sigma):
-    """Two synthetic profiles restricted into PROFILES: 'sigma_profile' (has
-    expected_bands_sigma -- ribbon path) and 'cosine_profile' (expected_bands
-    only -- legacy cosine path). Both share the SAME expected_bands (mu) so
-    any difference in scoring behavior is attributable to the path taken,
-    not to a different target."""
+def _make_profiles(monkeypatch, *, with_own_sigma: list[float] | None, other_mu: float = 0.5):
+    """Two synthetic profiles restricted into PROFILES: 'sigma_profile'
+    (mu=0.5 everywhere, own expected_bands_sigma = `with_own_sigma`, which
+    rc.47 no longer reads for scoring -- only kept to prove it's ignored)
+    and 'other_profile' (a different mu, no expected_bands_sigma of its
+    own at all -- the hand-authored-profile case). Both must score via
+    the SAME shared sigma regardless of what they carry themselves."""
     import unicornviz.audio.profiles as profiles_mod
     base = profiles_mod.PROFILES['house']
-    mu = [0.5] * 64
     sigma_profile = profiles_mod.AudioProfile(
         name='Sigma', description='', bass_min=base.bass_min, bass_max=base.bass_max,
         mid_min=base.mid_min, mid_max=base.mid_max, treble_min=base.treble_min,
-        treble_max=base.treble_max, expected_bands=list(mu),
-        expected_bands_sigma=sigma_profile_sigma,
+        treble_max=base.treble_max, expected_bands=[0.5] * 64,
+        expected_bands_sigma=with_own_sigma,
     )
-    cosine_profile = profiles_mod.AudioProfile(
-        name='Cosine', description='', bass_min=base.bass_min, bass_max=base.bass_max,
+    other_profile = profiles_mod.AudioProfile(
+        name='Other', description='', bass_min=base.bass_min, bass_max=base.bass_max,
         mid_min=base.mid_min, mid_max=base.mid_max, treble_min=base.treble_min,
-        treble_max=base.treble_max, expected_bands=list(mu),
+        treble_max=base.treble_max, expected_bands=[other_mu] * 64,
         expected_bands_sigma=None,
     )
-    restricted = {'sigma_profile': sigma_profile, 'cosine_profile': cosine_profile}
+    restricted = {'sigma_profile': sigma_profile, 'other_profile': other_profile}
     monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
     monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
     return restricted
 
 
-def test_ribbon_path_scores_below_cosine_floor_for_a_far_mismatch(monkeypatch) -> None:
-    """A band vector far from mu (0.5 everywhere) should score very
-    differently under the two paths: cosine similarity is bounded to
-    [-1, 1] before weighting (`(sim - 0.5) * 2.0` where sim in [-1,1] --
-    if sim is near 0, this reads ~-1.0), so the profile using it can never
-    score below roughly -1.0 raw. The ribbon path's per-band Gaussian
-    log-density has no such floor -- a large deviation relative to a tight
-    sigma can push it far more negative, since it is exactly the -0.5*x*x
-    shape every other *_fit term already uses, unbounded except by the
-    shared 6-sigma clip. Confirms the two profiles' terms come out
-    genuinely different (not just relabeled), which is the whole point of
-    the dispatch added in _profile_score()."""
-    tight_sigma = [0.05] * 64
-    _make_profiles(monkeypatch, tight_sigma)
-    far_bands = np.array([0.05] * 64, dtype=np.float64)  # far from mu=0.5 everywhere
+def test_own_expected_bands_sigma_no_longer_affects_scoring(monkeypatch) -> None:
+    """Two profiles with the IDENTICAL mu but wildly different OWN
+    expected_bands_sigma (one tight, one wide, one None) must score
+    IDENTICALLY -- rc.47's whole point is that per-profile sigma no
+    longer feeds spectral_shape_fit at all, only the shared roster
+    vector does."""
+    import unicornviz.audio.profiles as profiles_mod
+    base = profiles_mod.PROFILES['house']
+    far_bands = np.array([0.1] * 64, dtype=np.float64)
+
+    def _score_with(sigma):
+        p = profiles_mod.AudioProfile(
+            name='P', description='', bass_min=base.bass_min, bass_max=base.bass_max,
+            mid_min=base.mid_min, mid_max=base.mid_max, treble_min=base.treble_min,
+            treble_max=base.treble_max, expected_bands=[0.5] * 64, expected_bands_sigma=sigma,
+        )
+        restricted = {'sigma_profile': p}
+        monkeypatch.setattr(profiles_mod, 'PROFILES', restricted)
+        monkeypatch.setattr(profiles_mod, 'enabled_profiles', lambda: restricted)
+        stub = _stub_with_bands(far_bands)
+        audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                                 treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+        _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+        event, kw = stub._engine.marks[0]
+        return kw['term_values_by_candidate']['sigma_profile']['spectral_shape_fit']
+
+    tight = _score_with([0.02] * 64)
+    wide = _score_with([0.9] * 64)
+    none_ = _score_with(None)
+    assert tight == wide == none_, (tight, wide, none_)
+
+
+def test_far_mismatch_scores_lower_than_close_match(monkeypatch) -> None:
+    """Sanity check the shared-sigma ribbon path still discriminates fit
+    quality: a band vector far from mu scores well below one close to
+    mu, both against the same shared sigma."""
+    _make_profiles(monkeypatch, with_own_sigma=None)
+    close_bands = np.array([0.505] * 64, dtype=np.float64)
+    far_bands = np.array([0.05] * 64, dtype=np.float64)
+
+    def _score(bands):
+        stub = _stub_with_bands(bands)
+        audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
+                                 treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
+        _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
+        event, kw = stub._engine.marks[0]
+        return kw['term_values_by_candidate']['sigma_profile']['spectral_shape_fit']
+
+    close_val = _score(close_bands)
+    far_val = _score(far_bands)
+    assert far_val < close_val, (far_val, close_val)
+    assert close_val > -0.1, close_val  # x is small, -0.5*x*x near 0
+
+
+def test_profile_without_own_sigma_still_uses_the_ribbon_path(monkeypatch) -> None:
+    """A profile with expected_bands but no expected_bands_sigma of its
+    own (every hand-authored profile: psytrance, hard_techno, hardstyle,
+    synthwave) must score via the shared-sigma ribbon path now, not the
+    old legacy cosine fallback -- rc.47 removed that dispatch entirely.
+    A cosine value is bounded to roughly [-2, 0] ((sim-0.5)*2 for
+    sim in [-1,1]); the ribbon path's -0.5*x*x is unbounded below that
+    for a large enough mismatch relative to the shared sigma, which is
+    the discriminator this test checks for."""
+    _make_profiles(monkeypatch, with_own_sigma=None, other_mu=0.9)
+    far_bands = np.array([0.02] * 64, dtype=np.float64)
     stub = _stub_with_bands(far_bands)
+    stub._app._audio_manager = _FakeManager('other_profile')
     audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
                              treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
 
     _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
 
     event, kw = stub._engine.marks[0]
-    terms = kw['term_values_by_candidate']
-    sigma_val = terms['sigma_profile']['spectral_shape_fit']
-    cosine_val = terms['cosine_profile']['spectral_shape_fit']
-    assert cosine_val >= -1.0 - 1e-9, cosine_val   # cosine path's own floor
-    assert sigma_val < cosine_val, (sigma_val, cosine_val)   # ribbon path punishes harder
-    assert sigma_val < -1.0, sigma_val   # actually breaks past cosine's floor
-
-
-def test_ribbon_path_scores_near_zero_for_a_close_match(monkeypatch) -> None:
-    """A band vector very close to mu should score near 0.0 under the
-    ribbon path (small x in -0.5*x*x) -- confirms the path isn't just
-    "always more negative than cosine," it genuinely reflects fit quality."""
-    tight_sigma = [0.05] * 64
-    _make_profiles(monkeypatch, tight_sigma)
-    close_bands = np.array([0.505] * 64, dtype=np.float64)  # 0.1 sigma off
-    stub = _stub_with_bands(close_bands)
-    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
-                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
-
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
-
-    event, kw = stub._engine.marks[0]
-    terms = kw['term_values_by_candidate']
-    sigma_val = terms['sigma_profile']['spectral_shape_fit']
-    assert sigma_val > -0.02, sigma_val   # x = 0.1, -0.5*0.1^2 = -0.005
-
-
-def test_profile_without_sigma_falls_back_to_cosine(monkeypatch) -> None:
-    """A profile with expected_bands but no expected_bands_sigma (every
-    hand-authored profile this redesign hasn't reached: psytrance,
-    hard_techno, hardstyle, synthwave) must keep scoring via cosine
-    similarity, bounded to the pre-redesign [-1, 1] range before
-    weighting -- this redesign is additive/opt-in per profile, not a
-    behavior change for profiles with no ribbon data."""
-    _make_profiles(monkeypatch, [0.05] * 64)
-    bands = np.array([0.1] * 64, dtype=np.float64)
-    stub = _stub_with_bands(bands)
-    audio = SimpleNamespace(waveform=None, fft=None, bands=None, bass=0.34, mid=0.33,
-                             treble=0.33, spectral_flux=0.1, vocal_hnr=0.0, vocal_fmr=0.0)
-
-    _AUTO_VJ.AutoVJController._update_profile_recommendation(stub, audio, SimpleNamespace(), {})
-
-    event, kw = stub._engine.marks[0]
-    cosine_val = kw['term_values_by_candidate']['cosine_profile']['spectral_shape_fit']
-    assert -1.0 - 1e-9 <= cosine_val <= 1.0 + 1e-9, cosine_val
+    other_val = kw['term_values_by_candidate']['other_profile']['spectral_shape_fit']
+    assert other_val < -2.0, other_val  # past the old cosine path's floor of ~-2.0

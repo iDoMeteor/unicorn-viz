@@ -367,6 +367,51 @@ class AudioProfile:
         return f'{lo}-{hi}'
 
 
+# 2026-09-11 (recommender rc.47, "shared-sigma" fix -- candidate 4 of the
+# rap_rnb/ambient wide-sigma investigation, docs/adr/vj-system.md "Shared
+# Per-Band Sigma for spectral_shape_fit"): comparing per-profile
+# log-densities with each profile's OWN expected_bands_sigma is a
+# model-selection problem under misspecification (a live 16s window is
+# never close to ANY profile's mu on most of the 64 bands) -- the
+# BROADEST density wins regardless of shape, which is why `ambient` and
+# `rap_rnb` each became the dominant wrong-answer attractor on different
+# corpus pools purely because they happened to carry the widest sigma at
+# the time, independent of how well their own shape actually matched.
+# SPECTRAL_SHAPE_SHARED_SIGMA removes sigma-width as a lever entirely: one
+# roster-wide per-band sigma (the median across every real profile's own
+# `expected_bands_sigma`, band by band) used for EVERY candidate's
+# spectral_shape_fit scoring, so the `-log(sigma)` terms cancel across
+# candidates and only shape (distance from each profile's own
+# `expected_bands` mu) can decide. Each profile's own `expected_bands_sigma`
+# stays in its own field below as telemetry/audit only -- it no longer
+# feeds live scoring -- and also still feeds this constant's own
+# derivation (the roster median).
+#
+# Derived from the 13 real profiles with a genuine, data-derived
+# `expected_bands_sigma` at recommender rc.46 (ambient, deep_house,
+# downtempo, drum_and_bass, dubstep, house, hyphy, peak_time, rap_rnb,
+# rnb, techno, trance, trap -- `electronic` excluded, its own sigma
+# mirrors house's rather than being independently derived). Validated
+# offline on the frozen own-wins pool (manifest hash
+# `e6c0567b48df8b8c43fa876b847a83502ddf812596c5b427ffb24bffe8438a38`,
+# `drop-ins/training-kit-01/tools/baselines/own_wins_pool-2026-09-11.json`):
+# own-profile wins 4/12 (per-profile sigma, contemporaneous baseline) ->
+# 9/12 (this shared sigma) -- the strongest result of the whole recommender
+# session. Re-derive this constant (roster median of the 13 real
+# profiles' own sigma) any time one of those profiles' own
+# `expected_bands_sigma` is re-derived from fresh corpus data.
+SPECTRAL_SHAPE_SHARED_SIGMA: list[float] = [
+    0.147, 0.138, 0.131, 0.126, 0.126, 0.127, 0.128, 0.137,
+    0.109, 0.118, 0.119, 0.111, 0.111, 0.095, 0.117, 0.113,
+    0.112, 0.100, 0.098, 0.097, 0.094, 0.110, 0.130, 0.117,
+    0.108, 0.111, 0.105, 0.095, 0.089, 0.089, 0.083, 0.055,
+    0.061, 0.062, 0.049, 0.043, 0.038, 0.035, 0.047, 0.035,
+    0.030, 0.028, 0.029, 0.023, 0.023, 0.024, 0.021, 0.022,
+    0.019, 0.017, 0.015, 0.014, 0.012, 0.015, 0.014, 0.015,
+    0.017, 0.014, 0.009, 0.007, 0.007, 0.005, 0.004, 0.003,
+]
+
+
 # Profile definitions tuned for different genres and styles
 PROFILES: Dict[str, AudioProfile] = {
     "house": AudioProfile(
