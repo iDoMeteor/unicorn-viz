@@ -12507,3 +12507,42 @@ entry alone).**
 3. **Seven contamination tracks named above go to the owner for crate
    curation** (4 on `dubstep-01`, 3 on `drum-and-bass-01`) -- not a
    code or config change, a library-content decision.
+
+## Exact Own-Wins Baseline on Logged Features: 2/12 (2026-09-11)
+
+**First real use of `reco_features`.** Fresh 5-track/seed-1 capture,
+one bucket per list, 12 lists (`own_wins_pool_logged_features-2026-09-
+11.json`, hash
+`944dd96fe839eaf04b396e9faf2b0a9da5f9f75de8c25184cbd9280a4fc0c6f0`,
+core `1.0.0-beta.132` / auto-vj-01 `1.0.0-rc.142` / training-kit-01
+`0.42.10`). 94-216 eval rows per list carry `reco_features`, sanity-
+checked present before scoring anything. Every eval scored by feeding
+its logged `reco_features` straight into `score_profile_candidates()`
+-- no reconstruction, no windowing assumption, no eval-cadence
+guesswork. List plurality winner = mode of per-eval winners.
+
+**Result: 2/12 own wins** -- `dubstep` and `house` win their own list;
+every other list loses, mostly to `house` or `dubstep` as the generic
+attractor:
+
+| List | Expected | Top 4 (count) | Result |
+| --- | --- | --- | --- |
+| ambient | ambient | house 67, dubstep 45, peak_time 17, rnb 10 | loss |
+| big_room | peak_time | house 59, peak_time 56, dubstep 39, ambient 19 | loss (close) |
+| deep_house | deep_house | house 112, peak_time 31, deep_house 31, techno 16 | loss |
+| downtempo | downtempo | dubstep 50, peak_time 34, house 33, ambient 20 | loss |
+| drum_and_bass | drum_and_bass | house 42, dubstep 32, deep_house 19, hyphy 11 | loss |
+| dubstep | dubstep | dubstep 65, house 29, peak_time 5, rnb 4 | **WIN** |
+| hip_hop | rap_rnb | dubstep 48, peak_time 18, house 18, drum_and_bass 11 | loss |
+| house | house | house 64, peak_time 53, techno 6, deep_house 3 | **WIN** |
+| rnb | rnb | house 47, dubstep 38, peak_time 7, rnb 7 | loss |
+| techno | techno | dubstep 37, house 34, techno 27, trance 24 | loss |
+| trance | trance | peak_time 61, dubstep 43, trance 30, house 26 | loss |
+| trap_hip_hop | trap | dubstep 62, drum_and_bass 13, house 4, rnb 4 | loss |
+
+**This matches the earlier live-replay verification's plurality result
+exactly** (2/12, same two winners) -- the instrument is now airtight
+(proven by construction, not just argued), and it independently
+reproduces what the live A/B replay already found. The 2/12 number
+itself is not an instrument artifact; it's where the recommender
+genuinely is right now. Baseline for the queued tempo-term cell below.
