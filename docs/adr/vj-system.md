@@ -12546,3 +12546,97 @@ exactly** (2/12, same two winners) -- the instrument is now airtight
 reproduces what the live A/B replay already found. The 2/12 number
 itself is not an instrument artifact; it's where the recommender
 genuinely is right now. Baseline for the queued tempo-term cell below.
+
+## Fold-Aware Tempo Term: Tested, Rejected (2026-09-11)
+
+**Design.** `tempo_fit_folded = max` over `r ∈ {1, 2, 1/2, 3/2, 2/3}`
+of the Gaussian log-density at `log2(bpm·r)` against the profile's own
+`bpm_prior_mu`, with a fixed additive `log(0.6)` discount for any `r ≠
+1` (a fold must beat the direct match by more than that margin to be
+picked). `bpm_prior_sigma` derived per profile from that list's own
+locked, in-band `bpm` spread on the fresh logged-features pool (hash
+`944dd96fe839eaf04b396e9faf2b0a9da5f9f75de8c25184cbd9280a4fc0c6f0`),
+floored `0.06`/capped `0.12` in log2 space. Added on top of the
+existing (unchanged) composite from `score_profile_candidates()` at
+candidate weights `0.5` and `1.0`.
+
+**Every list's own spread came in under the floor.** Raw log2-BPM
+standard deviation on the in-band locked reads ranged `0.006`
+(`trance`) to `0.047` (`dubstep`) across all 12 lists -- every one
+below the `0.06` floor, so every profile landed on the SAME floored
+sigma in practice. The per-profile derivation didn't differentiate
+anything on this pool; noted as a real finding about this specific
+5-track sample size, not a bug in the derivation.
+
+**Result: flat 2/12 at both weights, and a real regression.**
+Weight `0.5`: `dubstep`/`big_room` win (was `dubstep`/`house`) --
+`house-01` flips from a clean win (`house` 64 vs `peak_time` 53) to a
+loss (`peak_time` 70 vs `house` 47), while `big_room` flips from a loss
+to a win (`peak_time` 66 vs `house` 50). Net own-wins count unchanged;
+composition is worse, since `house-01` was one of only two lists that
+worked at all. Weight `1.0`: same two winners, `house-01`'s loss margin
+widens (`peak_time` 71 vs `house` 50), `techno` drops further (edged
+out by `drum_and_bass` entirely, `techno` falls to 4th of its own
+top-4), `trance` picks up a new `ambient` competitor that wasn't
+present before.
+
+**Verdict, per the strategist's own pre-registered criterion** ("must
+not sweep like raw tempo@2.2 did, or it's dropped for good"): does not
+sweep as broadly as the raw formulation did (that made `techno` win
+nearly every list), but `peak_time` becomes the new attractor on both
+tempo-adjacent-to-`house` lists (`house` itself, `big_room`) -- the
+same shared-mid-width-sigma-wins-by-default shape that motivated the
+`spectral_shape_fit` shared-sigma fix in the first place, now showing
+up on tempo instead. Before writing this off outright, the strategist
+raised a specific, mechanical alternative explanation for the
+`house-01` flip: `bpm_prior_mu` stayed hand-authored (`house` `122.0`,
+`peak_time` `130.0`) while this pool's own measured centers sit closer
+together than that (`house` measured median `122.9`, `peak_time`
+`133.6`) -- with sigma floored to `0.06` for both, the two Gaussians
+sit close enough that the term is nearly a coin toss, and any timbre
+noise decides it. That would be the roster's `mu`s being wrong for the
+material, not the term design failing -- the same hand-authored-vs-
+measured lesson as the fingerprint work.
+
+**Second cell: measured `mu`, one more chance.** `bpm_prior_mu`
+replaced per profile with that list's own locked, in-band `bpm` median
+on this same pool (not the profile's hand-authored value), sigma
+unchanged (floored `0.06`), weight `0.5` only (the strategist's own
+pre-registered stopping point: "if it lands under 4, the term is
+dropped for good"). Measured medians vs. hand-authored `mu`: `ambient`
+99.8 vs 100.0, `peak_time` 133.6 vs 130.0, `deep_house` 113.9 vs 115.0,
+`downtempo` 99.8 vs 84.0, `drum_and_bass` 173.8 vs 166.7, `dubstep`
+143.1 vs 140.0, `rap_rnb` 99.1 vs 85.0, `house` 122.9 vs 122.0, `rnb`
+95.8 vs 85.0, `techno` 130.8 vs 133.0, `trance` 132.6 vs 134.5, `trap`
+112.3 vs 109.0 -- several profiles (`downtempo`, `rap_rnb`, `rnb`) are
+measured 10-15 BPM away from their own hand-authored prior on this
+pool, independent of this specific tempo-term question and worth its
+own look later.
+
+**Result: 3/12** (`dubstep`, `big_room`, `house` -- `house` comes back).
+Under the strategist's own `>= 4` bar. `house-01`'s win is thin, not
+the predicted margin `>= 10`: plurality `58` vs `peak_time`'s `56`, and
+the real per-eval margin (`house`'s own score minus the best OTHER
+candidate that eval) has a MEDIAN of `-0.039` with `house` winning the
+individual eval outright only `46.0%` of the time -- the plurality win
+comes from a near-coin-flip per eval, not a clear victory. `techno`
+does not flip (`house` 33 / `techno` 31 / `trance` 25 / `dubstep` 25 --
+still 2nd, still a loss). `trance` does not flip either (`peak_time` 65
+vs `trance` 31, still a clear loss, now with `rap_rnb` also present at
+20).
+
+**Verdict: REJECTED**, per the strategist's own pre-registered
+criterion (`< 4/12`). `tempo_fit`'s live weight stays `0.0`. Not
+re-tried at a third configuration; a different sigma treatment or
+fold-ratio set would need its own pre-registered prediction before
+another cell, not an incremental nudge on this one.
+
+**Worth keeping regardless of the tempo-term outcome:** every one of
+the 12 lists' own locked, in-band `bpm` spread (log2 standard
+deviation) came in under the `0.06` floor -- range `0.006` (`trance`)
+to `0.047` (`dubstep`). That is a real, positive finding about the
+current detector, independent of whether this tempo term ships: within
+a single list's own real material, the detector is now consistent to
+under ~4% in log2-BPM terms (i.e. tighter than a quarter-tone). The
+floor dominating the derived sigma isn't a bug in this cell's design;
+it's the detector being tighter than the floor anticipated.
