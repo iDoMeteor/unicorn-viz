@@ -12124,21 +12124,40 @@ every other list reads 0 at control and both doses. `training-hip-hop
 A, 2 at dose B) — everything else is either flat or, in dose A's
 aggregate, a net improvement over an already-nonzero baseline.
 
-**hip_hop's never-fire track, examined directly** (same track in both
-dose-B seed buckets: "Drum Majors Atl - We The Future Fool
-(Instrumental)"): `vj_mode` history shows the director reached `BUILD`
-and `DROP` mode on this track, and `drop_delta_gate_blocked_count`/
-`drop_delta_gate_deferred_count` read **7/35** by track end — the gate
-was engaged 42 times, not zero. If the first-drop exemption
-(`_last_drop_bar < 0` in `_maybe_fire_drop_with_bass_gate`) had fired
-as designed, the very first attempt should have bypassed the gate
-entirely and every later retry would be the only thing gated —
-ending at 0 real fires with 42 gate engagements is inconsistent with
-that path having ever taken the exemption branch on this track. Not
-root-caused here (would need to trace `_last_drop_bar`'s reset timing
-on track change) — flagged as a concrete, reproducible symptom for
-whoever picks up the exemption's correctness next, separate from the
-dose A/B trade-off question.
+**hip_hop's never-fire track, examined directly, CORRECTED** (same
+track in both dose-B seed buckets: "Drum Majors Atl - We The Future
+Fool (Instrumental)"). First pass misread `drop_delta_gate_blocked_
+count`/`drop_delta_gate_deferred_count` (7/35) as 42 gate engagements
+*on this track* — wrong: these are cumulative session-wide maxima (same
+convention as `mode_snap_count` etc. elsewhere in this doc), and both
+values are **flat at exactly 7/35 across every row of this track**,
+proving zero gate engagements happened during it — the 7/35 was
+inherited from earlier tracks in the same session. Likewise `vj_mode`
+reading `DROP` for this track's first 11 heartbeat rows is inherited
+crossfade state from whatever track preceded it: `_handle_track_change`
+never resets `self._mode`, only `_reset_phrase_clock_for_track_change`
+resets `_last_drop_bar` (to `-10_000`, correctly re-arming the
+exemption) and the bar/phrase counters — the two are genuinely separate
+pieces of state and only one of them resets at a track boundary. Traced
+`_last_drop_bar`'s assignment per the strategist's specific question:
+it is set exactly once, inside `_fire_drop()` at the line commented
+`# E4' rescue-gate clock`, i.e. at FIRE time after `_fire_drop()`'s own
+score/downbeat-confidence revalidation passes — never at schedule time
+in `_schedule_drop()`. The hypothesized bug (exemption keyed off
+scheduling instead of firing, so it could never re-apply) **does not
+exist in the code as written.**
+
+**Real cause, confirmed on the same track:** `drop_trigger_fired_count`
+increments once during this track (19→20) but `drop_sustain_entry_count`
+stays flat at 5 — the trigger crossed threshold once but never reached
+the sustain stage that feeds `_schedule_drop()`. No drop candidate was
+ever scheduled for this track at all; the bass-delta gate (E2/E2b) was
+never reached, let alone exhausted. This is upstream of E2/E2b entirely
+— the trigger→sustain pipeline, not the first-drop exemption — and
+matches the strategist's original framing exactly ("a never-fire under
+E2b means no first candidate ever scheduled... that's the E4 rescue's
+job, not the gate's"). No exemption bug found; nothing to fix here
+before the owner's trade decision.
 
 **2. Impact-phrase-alignment mechanism: NOT confirmed.** Hypothesis
 was that a gate-deferred drop re-arms at the next downbeat and fires
@@ -12152,14 +12171,50 @@ split (any gate engagement anywhere on the track) has no discriminating
 power — 122 of 124 impacts belong to a track gated at least once
 somewhere; only 2 impacts total come from a fully-ungated track.
 Per-list breakdown shows the pooled 64.5% is mostly small-n noise: 18
-lists, 0-18 impacts each, ranging 25%-100%, with `training-hip-hop-01`
-(25%, n=8) and `training-house-01` (40%, n=10) dragging the pooled
-average down rather than a uniform softening across the panel. Per the
-strategist's own conditional framing ("if 2 confirms, E2c...") — it did
-not confirm, so E2c (phrase-boundary re-arm) was not built. The
-impact-phrase softening is not yet explained by anything tested here;
-open question left for the strategist/owner: whether an rc.19 baseline
-per-list `impact_fire.phrase_alignment_8` breakdown exists to check
-whether this level of small-n variance is also present at baseline
-(i.e. whether the pooled 83.3%→64.5% drop is even a real effect versus
-a different list-mix sampling the same noisy small-n metric).
+lists, 0-18 impacts each, ranging 25%-100%. Per the strategist's own
+conditional framing ("if 2 confirms, E2c...") — it did not confirm, so
+E2c (phrase-boundary re-arm) was not built.
+
+**Verdict per the strategist's own noise rule** ("no list moves more
+than ~25pt with n≥15 on both sides ⇒ list-mix noise; if hip-hop and
+house move with n≥15 ⇒ real"), diffed against the rc.19 baseline's own
+per-list table (`director_placement_rc19_baseline-2026-09-10.md`):
+`training-hip-hop-01` (83.3%→25.0%, -58.3pt) and `training-house-01`
+(87.5%→40.0%, -47.5pt) are both LARGE moves, but dose A's own n on
+each is 8 and 10 — under the 15 floor the rule itself sets, so per
+that rule they do **not** count as real, however dramatic they look.
+Only two lists clear n≥15 on the dose-A side: `training-curveballs-01`
+(rc.19 100.0% n=16 → dose A 77.8% n=18, -22.2pt, under the 25pt bar)
+and `training-future-house-01` (rc.19 100.0% n=14 → dose A 50.0% n=16,
+-50pt — a big move, but rc.19's own n=14 sits just under the 15 floor
+on its side). No list clears n≥15 on BOTH sides while also moving more
+than 25pt. **Verdict: list-mix / small-n noise, not a real effect** —
+say so plainly per the strategist's instruction, and the two large
+raw moves (hip-hop, house) are exactly the two the rule says the panel
+cannot resolve with the n it has, not evidence of a real per-list
+regression.
+
+## E2b Panel: The Owner's Trade Table (2026-09-11)
+
+One row per metric, rc.19 control vs. dose A (dose B already ruled out
+by the strategist — costs 22pt of impact phrase alignment and doubles
+never-fire for only 8pt more lift than dose A). No code fix precedes
+this table: item 1 above found no exemption bug, so no re-run of the
+five original E2 lists was needed.
+
+| Metric | rc.19 control | Dose A (1.10 / wait 2) |
+| --- | --- | --- |
+| `drop_fire.energy_lift` | 15.3% (10.8%) | 22.5% (10.4%) — 1.47× |
+| `drop_fire.bass_lift` | 17.6% (10.6%) | 29.9% (12.0%) — 1.70× |
+| `drop_fire.phrase_alignment_8` | 71.8% (38.0%) | 68.0% (37.4%) |
+| `impact_fire.phrase_alignment_8` | 83.3% (37.5%) | 64.5% (37.9%) — pooled drop reads as list-mix noise, not confirmed real (see verdict above) |
+| `mode_transition.build_trend` | 43.6% (24.7%) | 39.0% (23.6%) |
+| Drops per track | 2.77 (1410/510) | 1.68 (856/510) |
+| Never-fire (of 510 track-instances) | 16 | 14 (improvement) |
+
+Default (`drop_bass_delta_min`) stays `0.0`/off in shipped config
+either way; this table is for the owner's own call on whether dose A's
+lift gain (1.4-1.7×) is worth ~39% fewer drops per track, with
+phrase-alignment and build-trend reading mildly softer but not
+resolvably worse given this panel's per-list n. Dose B is off the
+table per the strategist's read above.
