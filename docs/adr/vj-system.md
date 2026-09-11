@@ -11956,3 +11956,153 @@ ambient no longer appearing on four-on-the-floor lists. If live does
 not move while the offline own-wins number does, the offline instrument
 is not actually measuring the live recommender's behavior and the fix
 does not ship on the strength of the offline number alone.
+
+**Live-replay verification result: FLAT NULL, offline instrument does
+not predict live behavior (2026-09-11).** Ran the landing-gate check
+against a `verify-rc46-main` worktree (pre-rc.47, named branch, not
+detached) vs. current HEAD: 12 genre lists (the frozen manifest's own
+scope), 5-track/seed 1. Plurality self-recommendation (does the
+expected profile hold the top share of `recommended_profile_key`) is
+unchanged, **2/12 → 2/12** (only `dubstep` and `house` win their own
+list, before AND after). None of the predicted moves happened:
+`deep_house` 8.3%→13.6%, `techno` 19.4%→16.1%, `trance` 14.3%→14.2%,
+`house` itself fell 60.2%→50.0%. `dubstep` held (58.8%→61.7%). Ambient's
+presence on four-on-the-floor lists barely moved (big_room 10.5%→8.7%,
+trance 3.8%→3.7%, drum_and_bass 3.7%→2.6% — all still present, none
+"stopped appearing"). Full 12-list before/after table and per-list
+distributions in the training-seat report to the strategist,
+2026-09-11 ~09:20.
+
+**Root cause.** `sigma_cand4_v2.py` (the offline own-wins scorer) scores
+every enabled profile unconditionally — `for name, profile in
+profiles.items(): comp[name] = ...` — with no BPM eligibility check at
+all. The live recommender applies a hard ±4bpm-margin pre-filter
+(`_profile_reco_bpm_prefilter_margin_bpm`, rc.39) *before* any candidate
+is scored — only BPM-eligible candidates compete. The two instruments
+answer different competitions: "which profile's timbral fingerprint
+fits best among all 27 profiles" vs. "which profile wins among only the
+handful that are BPM-eligible for this track right now." A spot-check
+of ambient's after-run rows found detected `bpm` readings in the 120s
+and 150s (not the expected ~60-100 for ambient material), suggesting
+the live pre-filter's admission set on this corpus is being driven by
+detector tempo-fold behavior on slow material at least as much as by
+anything `spectral_shape_fit` touches — not chased further here, noted
+for whoever picks up admission/fold-gate work next.
+
+**Decision (strategist + training seat, 2026-09-11): rc.47 stays
+landed** — sound fix on its own terms (real misspecification argument,
+independently verified on its own math), not a live regression either.
+The "4/12→9/12, strongest result of the session" framing is retracted
+as a live-behavior claim and downgraded to a component-quality check:
+it shows the shared-sigma spectral term discriminates shape better in
+isolation, not that the live composite recommends differently, because
+the live composite's candidate set is gated by BPM eligibility that
+this instrument never modeled. Next step (queued, not yet run): rebuild
+the offline scorer to apply the same live BPM pre-filter per tick before
+re-scoring rc.46/rc.47 on the frozen pool, and require it to reproduce
+the live plurality-winner table on ≥10/12 lists for BOTH states before
+its own number is trusted again; if it can't reproduce, something else
+(window, terms, profile set) differs and gets found before scoring
+anything else with it. Until that reproduction passes, live A/B
+(the table above) is the operative instrument for any claim about live
+recommender behavior. The redesigned fold-aware tempo term stays queued
+behind that reproduction, not behind rc.47 itself (which already
+shipped). No hint-band widening in the meantime — the admission
+question gets a calibrated fold signal (cross-genre FP<10% clean /
+TP>50% folded on `v3_fold_suspect_mass`, ACF-candidate corroboration as
+fallback) before any band edit, per the standing lesson from the
+2026-09-10 blanket-widening regression above.
+
+## E2b Full Panel: Both Doses vs. rc.19 Control (2026-09-11)
+
+**Scope.** 18 training genre lists × 2 seeds × 2 doses (A:
+`drop_bass_delta_min=1.10`/`drop_bass_delta_wait_bars=2`; B: `1.05`/`4`),
+full playlists (no `--limit`), `beat_tracker_engine=v3`, no other
+overrides — same shipped-defaults-except-the-cell pattern as the rc.19
+baseline panel it's scored against. `favorites` (doseA only, 1 run) is
+reported separately below as the final "does it still look right on the
+owner's own material" check per the standing rule, never pooled into
+the tuning table. **Known gap:** `training-dance-01` doseB seed 2 was
+never launched (a panel-script gap, not a job failure) — doseB's dance
+row below is single-seed (16 tracks), not the full 32; noted, not
+silently pooled as if complete.
+
+**Bucket-resolution methodology note.** Two jobs that happen to launch
+within the same UTC second get an identical `session_replay.py` corpus
+stamp (second-resolution only) even though they land in two genuinely
+distinct packaged buckets. A naive "first glob match" resolution
+collides on ~80% of this panel's cells (confirmed, then fixed): grouping
+each list's seed-jobs by stamp and taking as many bucket matches as
+seeds sharing that stamp resolves cleanly with zero collisions (38/38
+doseA, 35/35 doseB buckets, one bucket per job, verified no duplicates).
+Flagging the stamp-collision behavior itself as a latent footgun for any
+future high-parallelism panel analysis, not just this one.
+
+**Global pooled vs. rc.19 control** (control column from
+`tools/baselines/director_placement_rc19_baseline-2026-09-10.md`,
+`director_placement.py` seed=7 throughout):
+
+| Metric | rc.19 control | Dose A (1.10/2) | Dose B (1.05/4) |
+| --- | --- | --- | --- |
+| `drop_fire.energy_lift` | 15.3% (10.8%) | 22.5% (10.4%) | 23.7% (11.3%) |
+| `drop_fire.bass_lift` | 17.6% (10.6%) | 29.9% (12.0%) | 32.5% (12.9%) |
+| `drop_fire.phrase_alignment_8` | 71.8% (38.0%) | 68.0% (37.4%) | 60.7% (38.1%) |
+| `drop_fire.novelty_p75` | 38.0% (26.4%) | 35.3% (24.1%) | 34.9% (24.2%) |
+| `impact_fire.energy_lift` | 12.9% (12.7%) | 19.4% (12.7%) | 17.0% (11.2%) |
+| `impact_fire.phrase_alignment_8` | 83.3% (37.5%) | 64.5% (37.9%) | 50.5% (38.2%) |
+| `mode_transition.build_trend` | 43.6% (24.7%) | 39.0% (23.6%) | 38.3% (23.0%) |
+| `mode_transition.breakdown_trend` | 43.1% (22.5%) | 43.1% (22.3%) | 43.7% (21.5%) |
+
+**Gate check (doc's own bar, "pooled drop energy-lift rate ≥1.4x
+control"):** reading the gate as the RATE ratio (own rate_pct ÷
+control's rate_pct) — Dose A energy_lift 22.5/15.3 = **1.47×**, bass_lift
+29.9/17.6 = **1.70×**; Dose B energy_lift 23.7/15.3 = **1.55×**, bass_lift
+32.5/17.6 = **1.85×**. **Both doses clear the gate on both metrics.**
+`impact_fire.phrase_alignment_8` and `drop_fire.phrase_alignment_8` both
+read below the rc.19 control (particularly dose B's impact phrase
+alignment, 50.5% vs. 83.3% control) — a real drop in placement quality
+on those two axes that the doc's gate doesn't cover; flagging it rather
+than letting the energy-lift pass stand in for "everything looks fine."
+`mode_transition` trends read close to control on both doses (breakdown
+essentially flat, build ~4-5pt softer) — roughly unchanged, not exactly
+identical.
+
+**Never-fire: NOT 0/0/0/0/0 across the full panel** — contradicts the
+earlier 5-list single-seed cell's clean result once the panel widens.
+Pooled (18 lists, excl. favorites, per-bucket counted so seed 1/seed 2
+never-fires don't mask each other): **dose A 14 of 510 track-instances
+(2.7%)**, **dose B 24 of 494 (4.9%)**. Per-list, both doses:
+`training-ambient-01` (2/4), `training-nu-disco-01` (4/4),
+`training-progressive-house-01` (2/2), `training-techno-01` (2/2),
+`training-trap-hip-hop-01` (4/6). Dose-B-only: `training-downtempo-01`
+(2), `training-hip-hop-01` (**2**), `training-rnb-01` (2). The
+`training-hip-hop-01` entry is the one that matters most: it was one of
+the five lists the original E2b single-seed cell measured at a clean
+0 never-fire, and the full 2-seed panel now shows 2 never-fire
+track-instances on it under dose B. Reported plainly rather than
+reconciled away — the first-drop exemption (rc.47... rc.140 auto-vj-01)
+demonstrably still leaves some tracks with zero fires; it narrowed the
+regression, it did not eliminate it by construction the way the
+original single-track-single-seed smoke test suggested.
+
+**Drop counts, reported plainly, not gated:** dose A 856 drops / 510
+track-instances (1.68/track); dose B 966 / 494 (1.96/track). No rc.19
+control total exists to diff against directly (the baseline doc reports
+rates and chance rates, not raw counts) — noted as a gap in the
+baseline's own reporting, not filled in here with a guess.
+
+**Lock-churn:** dose A 0.383% of heartbeat rows show a `bpm_locked`
+flip from the previous row, dose B 0.386% — nearly identical between
+doses, consistent with "unchanged." No rc.19 control value exists for
+this metric either (never captured in the baseline panel); reported as
+a same-panel A-vs-B comparison only, not vs. control.
+
+**Favorites (doseA, 1 run, final-check only, never pooled into
+tuning):** 112 track-instances, 248 drops, 2 never-fire,
+`drop_fire.energy_lift` 23.8% (11.0% chance), `drop_fire.bass_lift`
+38.5% (11.3% chance) — reads consistent with the tuning-list pooled
+numbers, nothing alarming on the owner's own material.
+
+**Bookkeeping.** No version bump — this is a measurement report against
+already-shipped, cfg-gated-default-off mechanisms (E2/E2b/E7), not a
+new code or config change.
