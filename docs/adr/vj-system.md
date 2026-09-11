@@ -12218,3 +12218,132 @@ lift gain (1.4-1.7×) is worth ~39% fewer drops per track, with
 phrase-alignment and build-trend reading mildly softer but not
 resolvably worse given this panel's per-list n. Dose B is off the
 table per the strategist's read above.
+
+## One Scoring Function (2026-09-11, recommender rc.48 -- no version bump)
+
+**Why.** The BPM-gated offline own-wins scorer (built to fix the earlier
+discrepancy where the offline instrument had no BPM eligibility gate at
+all) still failed its own reproduction gate on the SAME rows the live
+recommender scored: only 41.0%/40.9% per-chunk agreement (before/after
+rc.47) against six lists' `recommended_profile_key`, far under the
+strategist's 90% bar. Two candidate explanations: a real data/window
+mismatch, or the offline reimplementation's math itself had drifted
+from `_profile_score()`. Decisive test (strategist's framing): if the
+offline scorer doesn't reproduce live even on live's own rows, it isn't
+live's math -- fix is structural, not another data correction.
+
+**What diverged, found by diffing terms directly.** Ran one real 16s
+window (today's ambient-list live-replay corpus) through both the
+unmodified `_profile_score()` closure (via the existing
+`_make_full_reco_stub` test harness) and the offline scorer's own term
+computation, same profile, same inputs. `spectral_shape_fit`/
+`vocal_hnr_fit`/`vocal_fmr_fit`/`zcr_fit` matched to 4-decimal rounding
+(as expected -- these were already unified in spirit, just duplicated
+in code). `tempo_fit`/`onset_fit`/`top_cand_fit`/`spectral_contrast_fit`
+differed in presence (dict-key-absent vs. explicit-0.0) but not in
+COMPOSITE effect, since their shipped weights are 0.0 (tempo_fit,
+top_cand_fit) or the raw value was genuinely 0 either way. **The one
+real, weighted divergence: `kick_regularity_fit`.** Live read `0.0` on
+`house`/`ambient` candidates for this window; the offline scorer read
+`-0.40`/`0.04`. Root cause: `_profile_score()` gates this term on
+`kick_regularity_valid` (`len(self._kick_phases or ()) >= 4` -- at
+least 4 recent kick-transient phases observed), defaulting to a neutral
+`0.0` when there isn't enough recent onset history for the raw ratio to
+mean anything. The offline reimplementation had no equivalent gate --
+it always computed a value from whatever `kick_regularity` a corpus row
+carried, even in windows where live would have suppressed the term.
+`kick_regularity_fit` carries a weight of 1.5 (tied for the highest in
+the composite), so this is not a cosmetic difference: it can plausibly
+decide a close composite, and there is no way to know how often it did
+from the corpus alone (`kick_regularity_valid`'s own gate state was
+never logged).
+
+**Fix: stop having two implementations.** `score_profile_candidates
+(features, profiles, weights, shared_sigma) -> {name: (composite,
+terms)}` is now a module-level pure function in `auto_vj.py` (near
+`_matcher_range_fit`) -- no controller state, everything the math needs
+passed in explicitly. `_update_profile_recommendation()` computes
+`features` from its own rolling-window aggregates exactly as before
+(unchanged) and calls this function once for the whole BPM-eligible
+set; the eligibility computation itself (the BPM pre-filter) stays in
+the caller, since eligibility is a competition-membership question, not
+a per-candidate scoring question. `_safe_log2()`/`_gaussian_fit()`
+(previously nested closures, each with their own local `import math` to
+sidestep a scoping conflict with the enclosing method's own local
+`import math`) are promoted to module level alongside it, unchanged.
+The offline own-wins instrument can now import and call the real
+function instead of re-implementing it, closing off this entire class
+of drift permanently -- there is only one implementation to keep in
+sync with itself.
+
+**Golden test (byte-identical, not a tolerance).** Captured
+`_profile_score()`'s per-candidate composite+terms across 6 real-data
+scenarios (5 genre-list windows plus one with the BPM pre-filter
+disabled to cover all 14 enabled profiles at once) via the pre-refactor
+code (`git show HEAD:auto_vj.py` inside the auto-vj-01 submodule, run
+through the same test harness), pinned as JSON. Refactored the code,
+re-ran the identical scenarios through the post-refactor code, diffed:
+135 term values across 6 scenarios, byte-identical. (One real scare
+along the way: the harness's own sample timestamps used
+`time.monotonic()`, which differs trivially between two separate
+process runs and floated one `onset_fit` value by `0.0001` on the first
+attempt -- fixed by pinning a fixed clock in the harness, not by
+loosening the comparison. A golden test that tolerates noise from its
+own harness isn't proving anything.) Full existing suite: 2417 -> 2421
+passed (4 new tests in `tests/test_score_profile_candidates_refactor.py`
+pinning the pure-function contract, the `kick_regularity_valid` gate
+specifically, per-candidate failure isolation matching the pre-refactor
+try/except, and an end-to-end spy proving `_update_profile_
+recommendation()` actually calls the shared function with the
+documented `features` keys). `ruff` clean throughout.
+
+**Correction, found while designing the "log the raw decision"
+follow-up.** The strategist's next step assumed `recommended_profile_
+key` was a hysteresis-gated "sticky" value that needed a separate "raw"
+field to see past. Traced this fully: `self._recommended_profile_key =
+best_key` is set UNCONDITIONALLY every eval cycle to that eval's own
+argmax winner -- there is no confirm-wins/margin gate on this field at
+all. `_recommended_profile_confirmed` (a separate boolean, requiring
+both `_reco_candidate_wins >= confirm_wins` and `margin >=
+effective_margin`) only gates whether `_maybe_apply_recommended_
+audio_profile()` actually switches the live audio profile -- a
+downstream decision, never what gets logged. So `recommended_profile_
+key` in the corpus already IS the raw per-eval decision; a
+`recommended_profile_raw_key` field would be byte-identical to it and
+was dropped from the plan (documented instead, in training-kit-01's own
+schema note -- see `package_training_set.py`'s `_build_recommender_
+accuracy()`). Two new fields landed instead, both genuinely new
+information: `reco_top3` (`name:score` for the top three eligible
+candidates that eval -- already existed as `top_candidates` on the
+`profile_recommendation` event, now also carried onto every heartbeat
+row the way `recommended_profile_key` itself is) and `reco_eligible_
+count` (how many candidates passed the BPM pre-filter that eval --
+previously visible only as the inverse of the `bpm_prefilter_excluded`
+list, never as a direct count).
+
+**What actually explains the reproduction gap, then.** Not hysteresis
+(doesn't exist) and not entirely the `kick_regularity_valid` gate
+(real, but one term). The live recommender re-evaluates every
+`profile_auto_reco_eval_interval_s` (shipped default `8.0`s) using a
+trailing `profile_auto_reco_window_s` (shipped default `16.0`s) window
+-- a SLIDING window with 50% overlap between consecutive evals. The
+offline scorer's reproduction test chunked the corpus into disjoint,
+non-overlapping 16s blocks, which do not line up with live's actual
+eval instants or overlap structure at all -- a real temporal-alignment
+confound, independent of both the math (now unified) and the (nonexistent)
+hysteresis. Queued next: rebuild the offline reproduction check to
+replay the same 8s-step/16s-window sliding schedule (anchored to the
+corpus's own eval instants) before re-scoring the >= 90% per-eval-vs-
+`recommended_profile_key` gate. If it still misses after that, the
+residual is the feature AGGREGATION itself (windowed band mean, onset
+window, zcr window) and gets diagnosed term-by-term on the specific
+mismatching evals, the same way `kick_regularity_fit` was found here --
+not guessed at.
+
+**Bookkeeping.** `auto_vj.py` `__version__` `1.0.0-rc.140` ->
+`1.0.0-rc.141`. `_RECOMMENDER_VERSION` unchanged (`1.0.0-rc.47`) --
+scoring math is unchanged, proven by the golden test above, so this is
+not a recommender-version-bump trigger. `_VJ_WEIGHTS_DOC_VERSION`
+unchanged for the same reason (no weight, threshold, or profile-field
+change). training-kit-01 `0.42.8` -> `0.42.9` (schema note + new field
+documentation only, no behavior change).
