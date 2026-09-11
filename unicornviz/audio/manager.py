@@ -31,7 +31,13 @@ class AudioManager:
     ) -> None:
         device_hint = cfg.get("audio", "device", default="")
         fft_bands = cfg.get("audio", "fft_bands", default=512)
-        buffer_seconds = cfg.get("audio", "buffer_seconds", default=2.0)
+        # 10.0, matching the documented default in docs/configuration.md --
+        # the code had drifted to 2.0, so the ring held a fifth of what the
+        # reference promised. It is a rolling PCM ring, so the only cost is
+        # memory (~1.9 MB at 48kHz mono) and the only effect of it being
+        # short is that consumers asking for a longer look-back silently get
+        # less than they asked for.
+        buffer_seconds = cfg.get("audio", "buffer_seconds", default=10.0)
         latency = cfg.get("audio", "latency", default="low")
         prefer_default_input = bool(
             cfg.get('audio', 'prefer_default_input', default=False)

@@ -16,6 +16,7 @@ from unicornviz.operator_panels import MAIN_PAGE, OperatorPage, OperatorPanel, s
 from unicornviz.effects.registry import get_effects
 
 if TYPE_CHECKING:
+    import numpy as np
     import moderngl
 
     from unicornviz.app import App
@@ -422,6 +423,38 @@ class VJApi:
         """Return (width, height, components) for the cached frame snapshot."""
         _frame, width, height, components = self._app.get_frame_capture()
         return width, height, components
+
+    def get_recent_pcm_window(
+        self, duration_s: float = 2.0,
+    ) -> 'tuple[np.ndarray, int] | None':
+        """Return recent mono PCM and its sample rate, or ``None``.
+
+        The capture keeps a rolling ring of raw audio (``audio.buffer_seconds``)
+        that nothing outside the audio package could previously read. Effects in
+        particular are handed an :class:`AudioData` snapshot of *this frame* and
+        nothing older, so a scrolling display has no way to show what happened
+        before it was activated and must start blank and fill over several
+        seconds.
+
+        The window returned is at most what the ring currently holds, which is
+        shorter than *duration_s* right after startup or a device change, so
+        callers must size their result off the array they actually get back
+        rather than off what they asked for.
+
+        Analysing the returned block is not free -- it is raw PCM, not a
+        spectrum -- so do it once at activation, never per frame: effects must
+        not run an FFT in ``update()``.
+        """
+        mgr = getattr(self._app, '_audio_manager', None)  # noqa: SLF001
+        if mgr is None:
+            return None
+        fn = getattr(mgr, 'get_recent_pcm_window', None)
+        if not callable(fn):
+            return None
+        try:
+            return fn(float(duration_s))
+        except Exception:      # noqa: BLE001 - optional, never load-bearing
+            return None
 
     def state(self) -> VJState:
         app = self._app
