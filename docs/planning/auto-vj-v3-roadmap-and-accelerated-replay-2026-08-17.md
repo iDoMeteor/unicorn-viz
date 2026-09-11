@@ -188,6 +188,27 @@ bar-phase anchor, Thread 6's perf log, Thread 3's harmonic-family fold
   the owner's acceptance session (§ 0.3, "Validation session") and the
   whole-library shuffle run.
 
+### 0.3b Detector item D1 — fast-tempo folds gate the recommender (2026-09-11)
+
+Found by the recommender re-tune once its instrument became exact (logged
+`reco_features`, pool hash `944dd96f…`): half of the recommender's own-genre
+losses are **admission** losses, where the right profile never competes
+because the detector reads the material at a folded tempo and the hard
+±4 BPM pre-filter excludes it. Per-row classification against the owner's
+arbitrated tags (ADR `9ff592a`): fold rows / clean rows per list — rnb-01
+1524 / 306, drum-and-bass-01 1290 / 571, house-01 2 / 2199. The dnb case
+is a consistent **2:3 fold** (tag 174 → detected 119.5 on both in-band
+tracks); hip-hop/rnb/trap read double-time on the hi-hats. Neither
+recommender-side fold signal discriminates (`v3_fold_suspect_mass`: no
+threshold with FP < 10% and TP > 50%; ACF corroboration: 93% FP on clean
+rows), so admission cannot be repaired downstream: **it is a detector
+item.** rc.44's fold-symmetric observation boost covers 2×, 1.5× and 4:3;
+the 3:2 case on dnb material and the 2× hi-hat lock on rap material are
+the two failure modes to pre-register against the 22-hardest set and the
+bench's per-list madmom/BTrack numbers (both trackers read these lists
+correctly). Runs after the recommender ceiling test reports; not before
+the owner's acceptance session is scheduled.
+
 ### 0.4 Operating rules this program runs under
 
 Pre-registration before every batch; leverage checks on every null
