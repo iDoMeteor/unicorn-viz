@@ -12423,3 +12423,87 @@ read `reco_features` when present with the old reconstruction path
 retired, and only then the fold-aware admission work -- which touches
 the pre-filter, so it must be scored on an instrument that's actually
 trusted.
+
+## dubstep-01 / drum-and-bass-01: Per-Track BPM Table, No Band Change (2026-09-11)
+
+**Origin.** The owner's own observation ("dubstep & dnb are supposed to
+span like 100 bpm lol, they're supposed to be SPLIT") raised whether
+`dubstep`/`drum_and_bass`'s single `bpm_hint_min`/`bpm_hint_max` band
+should become two (a written tempo and its half-time feel). Owner's
+own decision rule: on post-beta.126 (rc.44+, fold-up fix) locked reads,
+>= 85% in the written band means ship narrow only; otherwise investigate
+further before picking band numbers -- not a blind "add a second band
+at half tempo" without checking where the actual data sits.
+
+**Aggregate histogram (post-beta.126 frozen-pool buckets + a fresh
+live capture, locked reads only, exact written-band math).**
+`dubstep-01` (written 140-160): in-band 55.9% (frozen pool, n=9418) /
+61.7% (live, n=2130) -- below 85%. `drum-and-bass-01` (written
+155-175): in-band only 7.8% (n=14784) / 4.7% (n=2410) -- far below.
+Neither clears the bar. But the below-band mass on BOTH lists sits at
+~115-145 BPM, not near either list's predicted half-tempo location
+(70-80 for dubstep, 77.5-87.5 for dnb) -- ruling out "blind second
+band at half tempo" before any track-level work, since that band
+placement wouldn't even capture the actual secondary cluster.
+
+**Per-track table** (post-beta.126 locked-read median vs.
+`tag_bpm` from `training-kit-01/tools/baselines/genre_labels-2026-09-
+01-newhaul.json` + `-08-31.json`, the owner-arbitrated tag source; a
+`bench_reference_19lists.csv` referenced from memory was a bench
+seat's own derived copy of this same data, not found on disk, and not
+needed once this was located). Four-way classification: CLEAN (tag and
+detector both in the written band), HALFTIME-TAG (tag records the
+genre's half-time feel -- `tag*2` lands in-band -- and the detector
+already reads the true, correct, in-band tempo: nothing wrong here at
+all), DETECTOR-FOLD (tag is in-band but the detector reads a
+sub-multiple of it, ratio reported), CONTAMINATION (neither the tag
+nor the detector's reading relates to the written band by any clean
+ratio -- the track's own real tempo just isn't this genre's range).
+
+`training-dubstep-01` (10 tracks, all matched): 3 CLEAN (Dmstry ft
+Temwani Daka - Soar 143/141.2; Hvrcrft X Layne Tadesse Champion
+150/151.3; Xygnomus - Time 140/141.2), 3 HALFTIME-TAG (Kuhlosul -
+Nocturnal 70/141.2; Rico21 - Silence 70/141.2; Rory David - Take Me To
+Hell 71/141.2 -- all three correctly detected at ~2x their tag, squarely
+in-band), 4 CONTAMINATION (Black Majestic - We In The Know 125/126.4;
+DJ Ouijah - Ouijah Says 91/125.5; Kingston Ray - Street Dance Choko
+97/130.8; Tatiana Kurtukova - Matushka 94/126.4 -- none of these fold
+cleanly to the written band by any ratio, and these four tracks are the
+exact, named source of the aggregate ~122-131 cluster: each reads
+consistently across 480-1776 ticks, not noise).
+
+`training-drum-and-bass-01` (5 tracks, all matched): 0 CLEAN, 2
+DETECTOR-FOLD (Roderic H - Miss You 174/119.5, ratio 0.687; Route 94 ft
+Jess Glynne - My Love 173/119.5, ratio 0.691 -- both a real, consistent
+~2/3 fold, not noise), 3 CONTAMINATION (H2so4 ft Mavis - Frequency
+86/138.3; Jordanlivingood - All The Time 87/117.9; Unsolicited Thoughts
+- The Day Phil Collins Stopped Caring 148/148.2 -- tag and detector
+agree at 148 on the last one, it's just genuinely not dnb-range tempo,
+not a detection error).
+
+**Decisions (strategist + owner-facing, no code change from this
+entry alone).**
+
+1. **No `bpm_hint_min`/`bpm_hint_max` band change on either profile.**
+   `dubstep`'s three "problem" tracks (the halftime-tag set) already
+   detect correctly in-band -- there is nothing to fix. The remaining
+   below-band mass on both lists is contamination or a narrow, specific
+   detector fold, neither of which a second hand-placed band would
+   correctly target (the actual below-band cluster sits at house/techno
+   tempo, not at a clean half-time location).
+2. **The dnb ~2/3 fold is a detector-program item, not a recommender
+   admission rule.** v3 reads 174 as 119.5 on both in-band `dnb`
+   tracks -- rc.44's fold-symmetric boost already covers 2x/1.5x/4:3
+   and evidently not 3:2 (i.e. 2/3 the other direction) on this
+   material. Admitting a candidate at a 2/3-fold ratio in the
+   recommender's BPM pre-filter would NOT be genre-specific enough to
+   land safely: `117 * 3/2 = 175.5`, inside `dnb`'s own written band,
+   meaning a 2/3-admission rule keyed only on ratio would also admit
+   `dnb` as eligible on genuinely house-tempo material (117-119) --
+   reopening exactly the kind of bleed the whole hard-margin pre-filter
+   program was built to close. Filed as a named detector item instead
+   (echoes the OSS beat-tracker bench's already-on-record fast-tempo
+   observation weakness).
+3. **Seven contamination tracks named above go to the owner for crate
+   curation** (4 on `dubstep-01`, 3 on `drum-and-bass-01`) -- not a
+   code or config change, a library-content decision.
