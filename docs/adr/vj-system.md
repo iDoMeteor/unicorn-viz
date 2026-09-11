@@ -11730,3 +11730,113 @@ already established in the E8 round-2/3 log above).
 **Bookkeeping.** `_DIRECTOR_VERSION` `1.0.0-rc.19 → 1.0.0-rc.20`;
 `_VJ_WEIGHTS_DOC_VERSION` `107 → 108`. No `_DETECTOR_VERSION`/
 `_RECOMMENDER_VERSION` bump.
+
+## E2 Offline Cells: a Real Regression, Then E2b (2026-09-10 night)
+
+**E2 offline cells** (house-01, tech-house-01, big-room-01, dnb-01,
+hip-hop-01, seed 1, vs the rc.19 control, two doses:
+`drop_bass_delta_min` 1.10 and 1.05). Drop count fell 44-54% (1.10) and
+38-46% (1.05) on every list — the two doses landed much closer to each
+other than the pre-registered "1.05 keeps count within 15%" prediction
+called for; that specific prediction missed on all five lists. Energy/
+bass lift rose 1.6-2.5x on most lists, holding the "1.10 doubles the
+lift rate" prediction.
+
+**The real finding: a never-fire regression on primary-target genres
+that had zero at the rc.19 baseline.** House/tech-house/big-room/dnb/
+hip-hop all read 0 never-fire tracks at rc.19 — these are not the
+half-time genres E4's rescue was built for, so they never needed it.
+Under E2 (either dose), every one of the five picked up 2-5 never-fire
+tracks. Root cause, confirmed by reading the code before guessing:
+`_schedule_drop()` has exactly four call sites, including the E4 rescue
+path, and all four route to `_maybe_fire_drop_with_bass_gate()`
+unconditionally — the rescue path was never exempt. Since
+`blocked_count * 2 ≈ deferred_count` in every cell (consistent with
+`wait_bars=2`), most gate-checked candidates fail both retries and
+lapse; a track whose every candidate lapses fires nothing, and E4's
+rescue being first-only means one failed rescue attempt ends the
+track's only remaining shot.
+
+**E2b — first-drop exemption.** `_maybe_fire_drop_with_bass_gate()` now
+checks `self._last_drop_bar < 0` (E4's own "no drop yet on this track"
+signal, reset on track change) and fires the first drop on any track
+ungated, before the gate can ever apply — restores the never-fire
+guarantee by construction rather than by tuning a threshold. 3 new
+unit tests (first-drop exempt, second-drop gated normally, defensive
+`getattr` on a missing attribute); backfilled `_bare_drop`'s test
+fixture with a `last_drop_bar` default so the pre-existing gate-
+engagement tests still exercise the gated path. Full suite green (2417
+passed). Live-smoke-tested (rnb-01) before the real cell: 0/5 never-fire
+under the same flat-bass conditions that lapsed under plain E2.
+
+**E2b offline cell result** (same five lists, `drop_bass_delta_min=1.10`,
+seed 1): never-fire **0/0/0/0/0** — held exactly as predicted, the fix
+works. Drop-count cost -24% to -38%, mostly inside the "-25 to -35%"
+prediction (tech-house/big-room ran ~3pt past the ceiling). Energy-lift
+ratio vs control, predicted `>= 1.5x`: **2 of 5 lists (house 0.82x, dnb
+0.84x) scored WORSE than the unmodified rc.19 control**, not merely a
+diluted gain — tech-house (2.58x) and big-room (2.61x) held clearly,
+hip-hop (1.42x) fell just short. A single-seed, 25-40-drop cell cannot
+distinguish "0.8x" from "1.5x" with confidence (house: 5 vs 3 drops
+landed) — the quality question is deferred to the panel (see below),
+which exists for exactly this reason.
+
+## E7 Offline Cells: Falsified (2026-09-10 night)
+
+**Cells run:** house-01, big-room-01, dnb-01, ambient-01, seed 1, vs the
+rc.19 control, five configurations total —
+`mode_source_min_confidence_build` (absolute) at `0.25+rel 0.50`,
+`0.53` alone, `0.60` alone (the owner's own live config), and
+`mode_source_min_confidence_build_rel` (relative) at `0.50` alone and
+`0.35` alone.
+
+**Build count vs rc.19 control** (62 / 72 / 43 / 67 on house / big-room /
+dnb / ambient):
+
+| Cell | house | big-room | dnb | ambient |
+| --- | --- | --- | --- | --- |
+| abs 0.53 | 0.0% | −9.7% | −30.2% | −31.3% |
+| abs 0.60 (owner's live config) | −8.1% | −43.1% | **−69.8%** | **−62.7%** |
+| rel 0.50 (round 1, alone) | −25.8% | — | — | −25.4% |
+| rel 0.35 | −14.5% | −20.8% | −9.3% | −19.4% |
+
+**Build trend vs control** (50.8 / 34.7 / 48.8 / 50.7): rel 0.35 read
+44.2 / 31.6 / 38.5 / 51.9 — worse than control on house/big-room/dnb
+(−3 to −10pt), marginally better on ambient (+1.2pt). None of the five
+configurations beat the rc.19 control's own trend on more than one of
+the four lists.
+
+**Verdict, per the peer's (`unicorn-viz-84`) read after seeing the full
+table: the mechanism is falsified, not merely under-tuned.** The
+premise — that low-confidence CRUISE-build evidence is disproportion-
+ately noisy, so gating it should cost little trend quality for the
+builds it removes — does not hold: every configuration tested simply
+removes builds, unevenly for the absolute floor (0% to −70% depending
+on the list) and more uniformly for the relative floor (−9% to −21%),
+without buying better trend anywhere except a 1.2pt wobble on one list.
+The `abs 0.60` result deserves its own line: that is the owner's own
+current live configuration, and it costs **−62.7% on ambient and
+−69.8% on drum-and-bass** — a real, quantified, severe collapse on
+lower-confidence material, the same failure shape (if not the same
+magnitude) as the historical Sep-5 zero-build session this mechanism
+was built to prevent, while barely touching house (−8.1%).
+
+**Recommendation to the owner:** run no build floor live (`abs=0`,
+`rel=0` — the rc.19 control has both the best trend and the most
+builds of everything tested), or `rel=0.35` specifically if fewer,
+more deliberate builds are wanted for feel — never `abs=0.60`, the
+worst-performing configuration tested by a wide margin. Both keys stay
+in the code, default off; no further E7 cells are planned. `_rel`'s
+own absolute-floor companion (`mode_source_min_confidence_build`) was
+separately shown to do nothing measurable once the relative gate is
+active (round-1 ablation, `docs/adr/vj-system.md` "Director Placement
+E2/E7" above) — not a reason to keep it set to a nonzero value either.
+
+**Next.** E2b goes to the full 19×2 panel (two dose cells, `1.10`/
+`wait=2` and `1.05`/`wait=4`, vs the rc.19 baseline) to settle the lift
+question a five-list single-seed cell cannot. Per the owner's own
+2026-09-10 instruction, the recommender program resumes in parallel
+while that panel runs (the `rap_rnb` wide-sigma structural advantage
+from the clean-re-harvest entry above, the fold-aware pre-filter
+calibration, the `dubstep` 70-160 hint band, and the tempo term on
+rc.46 rows, in that order).

@@ -59,7 +59,8 @@ class _Grid:
 # E2 -- drop bass-delta gate
 # ---------------------------------------------------------------------------
 
-def _bare_drop(*, delta_min: float = 0.0, wait_bars: int = 2, bpm: float = 120.0):
+def _bare_drop(*, delta_min: float = 0.0, wait_bars: int = 2, bpm: float = 120.0,
+                last_drop_bar: int = 5):
     c = object.__new__(AutoVJController)
     c._grid = _Grid()
     c._grid.bpm = bpm
@@ -69,6 +70,10 @@ def _bare_drop(*, delta_min: float = 0.0, wait_bars: int = 2, bpm: float = 120.0
     c._drop_bass_delta_wait_bars = wait_bars
     c._drop_delta_gate_blocked_count = 0
     c._drop_delta_gate_deferred_count = 0
+    # E2b: >= 0 means this track has already fired at least once (not the
+    # first-drop-exemption case) -- most gate-engagement tests want that,
+    # since the exemption itself has its own dedicated tests below.
+    c._last_drop_bar = last_drop_bar
     c.fired = 0
     c._fire_drop = lambda: setattr(c, 'fired', c.fired + 1)  # type: ignore[attr-defined]
     c._clock = [0.0]
@@ -138,6 +143,45 @@ def test_gate_config_is_global_cfg_read() -> None:
     assert "_cfg.get('drop_bass_delta_min'" in _SRC
     assert "_cfg.get('drop_bass_delta_wait_bars'" in _SRC
     assert "_cfg.get('drop_bass_delta_window_s'" in _SRC
+
+
+def test_e2b_first_drop_on_track_fires_ungated() -> None:
+    """E2b (2026-09-10): the offline cells found E2 introduced never-fire
+    tracks on genres that had zero at the rc.19 baseline -- the E4 rescue
+    path is first-only and not exempt from this gate, so one lapsed
+    rescue attempt ended the track. last_drop_bar < 0 (E4's own "no drop
+    yet on this track" signal) exempts the first drop unconditionally,
+    restoring the never-fire guarantee by construction, even with a flat
+    bass history that would otherwise fail the check every time."""
+    c = _bare_drop(delta_min=1.10, last_drop_bar=-10_000)
+    c._bass_delta_hist = [(-4.0, 0.5), (-2.0, 0.5)]  # flat -- would lapse if gated
+    c._maybe_fire_drop_with_bass_gate()
+    assert c.fired == 1
+    assert len(c._grid.queue) == 0
+    assert c._drop_delta_gate_deferred_count == 0
+    assert c._drop_delta_gate_blocked_count == 0
+
+
+def test_e2b_second_drop_on_track_is_gated_normally() -> None:
+    """last_drop_bar >= 0 (a drop already fired on this track) goes
+    through the normal gate -- the exemption is first-drop-only, not a
+    standing bypass."""
+    c = _bare_drop(delta_min=1.10, last_drop_bar=8)
+    c._bass_delta_hist = [(-4.0, 0.5), (-2.0, 0.5)]  # flat -- should not fire immediately
+    c._maybe_fire_drop_with_bass_gate()
+    assert c.fired == 0
+    assert len(c._grid.queue) == 1
+
+
+def test_e2b_exemption_reads_last_drop_bar_defensively() -> None:
+    """Missing last_drop_bar (bare stub without it set) must not crash --
+    same getattr-defensive convention as every other gate attribute."""
+    c = _bare_drop(delta_min=1.10)
+    del c._last_drop_bar
+    c._bass_delta_hist = [(-4.0, 0.5), (-2.0, 0.5)]
+    c._maybe_fire_drop_with_bass_gate()
+    # default (-10_000) reads as "no drop yet" -- exempt, fires immediately
+    assert c.fired == 1
 
 
 def test_schedule_drop_routes_through_the_gate_entry_point() -> None:

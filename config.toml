@@ -192,15 +192,22 @@ published_bpm_smoothing_s = 4.0
 #mode_phrase_within_bars_breakdown = 2
 #mode_phrase_within_bars_climax = 2
 
-# Arm C, tuned 2
+# Director mode snapping (2026-09-11, strategist seat, from the rc.19 E7 cells
+# and the E8 round-2 climax cell -- see docs/planning/director-placement-
+# scoring-2026-09-03.md). The build-confidence floor is OFF: every floor
+# tested removed builds without improving build trend, and the 0.6 that sat
+# here cost -63% builds on ambient and -70% on drum & bass (-8% on house).
+# Climax snaps to a 4-bar half-phrase grid, the only climax setting that kept
+# climax alive while landing it on its own grid (E8 round 2).
 mode_snap_unit_build = "phrase"
-mode_source_min_confidence_build = 0.6    # cruise->build only on confident downbeats
+mode_source_min_confidence_build = 0.0    # E7: falsified as a quality lever; 0 = off
+mode_source_min_confidence_build_rel = 0.0
 mode_snap_unit_breakdown = "phrase"
 mode_phrase_within_bars_breakdown = 2
-mode_snap_unit_climax = "downbeat"
-mode_phrase_unit_climax = 2                # half-phrase grid
-mode_phrase_within_bars_climax = 2         # always chains to the next 4-bar boundary
-drop_cruise_min_confidence = 0.0           # cruise drops parked; 0.71 turns them on
+mode_snap_unit_climax = "phrase"
+mode_phrase_unit_climax = 4                # half-phrase grid (E8 round 2 winner)
+mode_phrase_within_bars_climax = 4         # always chains to the next 4-bar boundary
+drop_cruise_min_confidence = 0.0           # no cruise->drop path in the shipped director
 
 hud_production_mode = false
 
