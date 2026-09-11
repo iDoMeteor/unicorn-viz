@@ -12997,3 +12997,79 @@ held-out; raw 64-band features overfit at `3/12`) already pointed the
 same direction the owner is pointing now: the next real lever is
 features, not more weight search on the same six terms -- which is
 exactly what this entry's two new candidate signals are for.
+
+## Family-Tolerant Own-Wins Scoring (2026-09-11)
+
+Owner's third instruction from the rc.48 landing feedback (see entry
+above): ground truth for the own-wins instrument should be the ID3 tag
+at the FAMILY level, not the exact profile -- "within a family, sub-
+profile by our detector's tempo, not the tag's BPM... TRUST US as
+that's the whole damn point." When asked for the family breakdown, the
+owner recalled pasting the full list once already but not having saved
+it, and offered a rough memory-jogger instead ("the easy version...
+\*house + dance = house, \*wave = synth, \*trance = trance, the other
+techno-ish ones were industrial and the others were mostly one-offs").
+
+**That memory-jogger was NOT used as the taxonomy.** Before building
+anything from it, a search of this document found the actual taxonomy
+already formalized and owner-approved: "Fingerprint-Family Map
+Formalized" (2026-09-10, recommender rc.42, above) -- written after
+"several rounds of owner review." The memory-jogger disagrees with it
+in real places: `downtempo`, `midtempo`, and `electro` are `industrial`
+taxonomy members in the formalized map (character-based: "mostly non-
+vocal/mechanical/med-dark," per the owner's own description there),
+despite none of them being named anything like "techno." Using the
+memory-jogger instead would have silently misclassified three profiles
+relative to the owner's own already-recorded decision. The formalized
+map is the one used below.
+
+**New tool:** `drop-ins/training-kit-01/tools/own_wins_family_scorer.py`
+-- scores the same frozen `reco_features` pool
+(`own_wins_pool_logged_features-2026-09-11.json`, hash `944dd96f...`)
+via the same live `score_profile_candidates()` (imported directly from
+`auto_vj.py`, never reimplemented -- reimplementing this math is
+exactly what caused the earlier 41% offline/live mismatch; see "One
+Scoring Function" above), computing the SAME per-list plurality winner
+already used for the exact-profile baseline, then checking two
+criteria side by side: does the plurality winner equal the list's own
+profile (exact), and does the plurality winner's family equal the
+list's own profile's family (family-tolerant, per the formalized map).
+
+**Result on the frozen pool (rc.49 weights, unchanged from rc.48 --
+the four new vocal terms are dormant and cannot move this number):**
+
+| List | Own profile (family) | Plurality winner (family) | Exact | Family |
+| --- | --- | --- | --- | --- |
+| `training-ambient-01` | `ambient` (isolated) | `house` (house) | . | . |
+| `training-big-room-01` | `peak_time` (house) | `house` (house) | . | **Y** |
+| `training-deep-house-01` | `deep_house` (house) | `house` (house) | . | **Y** |
+| `training-downtempo-01` | `downtempo` (industrial) | `dubstep` (dubstep) | . | . |
+| `training-drum-and-bass-01` | `drum_and_bass` (isolated) | `deep_house` (house) | . | . |
+| `training-dubstep-01` | `dubstep` (isolated) | `dubstep` (dubstep) | **Y** | **Y** |
+| `training-hip-hop-01` | `rap_rnb` (hiphop) | `dubstep` (dubstep) | . | . |
+| `training-house-01` | `house` (house) | `house` (house) | **Y** | **Y** |
+| `training-rnb-01` | `rnb` (hiphop) | `house` (house) | . | . |
+| `training-techno-01` | `techno` (industrial) | `techno` (industrial) | **Y** | **Y** |
+| `training-trance-01` | `trance` (trance) | `peak_time` (house) | . | . |
+| `training-trap-hip-hop-01` | `trap` (hiphop) | `dubstep` (dubstep) | . | . |
+
+**Exact own-wins: `3/12`** (dubstep, house, techno -- matches the
+already-established rc.48 baseline exactly, confirming this new
+scorer reproduces the known-good number before trusting its new
+column). **Family own-wins: `5/12`** (adds `big_room`/`peak_time` and
+`deep_house`, both of which lose to `house` exactly but stay inside
+the `house` family).
+
+**Reading, plainly, both numbers together, not just the higher one:**
+the family-tolerant number is a real, modest improvement (`3/12` ->
+`5/12`), entirely explained by the `house` family absorbing two close
+internal losses (`peak_time`/`deep_house` both losing to `house`
+itself, a sibling in the same family) -- exactly the kind of miss the
+owner's instruction was meant to stop penalizing. It is NOT evidence
+that the `hiphop` family helps at all: `rap_rnb`/`rnb`/`trap` all lose
+to `dubstep` or `house`, neither a `hiphop` member, so family tolerance
+buys nothing on those three lists. `ambient`, `drum_and_bass`, and
+`trance` are unaffected either way (isolated families, or losing to a
+family that isn't their own). This is an offline-instrument change
+only -- no live recommender behavior changed; `_DEFAULT_RECO_WEIGHTS`
+is untouched by this entry.
