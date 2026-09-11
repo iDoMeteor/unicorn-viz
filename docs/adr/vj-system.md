@@ -12640,3 +12640,44 @@ a single list's own real material, the detector is now consistent to
 under ~4% in log2-BPM terms (i.e. tighter than a quarter-tone). The
 floor dominating the derived sigma isn't a bug in this cell's design;
 it's the detector being tighter than the floor anticipated.
+
+## Fold-Gate Calibration: Neither Signal Passes -- a Detector Item (2026-09-11)
+
+**Method.** Every row across the 12-list fresh pool classified against
+`genre_labels`' owner-arbitrated `tag_bpm`: `CLEAN` (detected `bpm`
+within 4% of `tag_bpm`), `FOLD` (within 4% of `tag_bpm·r` for
+`r ∈ {2, 1/2, 3/2, 2/3, 4/3, 3/4}`), `OTHER` (neither -- excluded from
+this calibration; largely the same contamination population as the
+per-track table above). 18,117 clean rows, 10,083 fold rows with a
+`v3_fold_suspect_mass` reading; per-list clean/fold/other counts vary
+widely (`training-house-01` 2199/2/83 -- almost no folding; `training-
+rnb-01` 306/1524/218 -- mostly folded; `training-drum-and-bass-01`
+571/1290/567 similarly fold-heavy).
+
+**`v3_fold_suspect_mass` threshold sweep: no threshold passes.**
+`FP < 10%` first holds at `t=0.50` (`FP=8.0%`) but `TP` there is only
+`13.2%`, far under the `50%` bar; `TP` first crosses `50%` at `t=0.20`
+but `FP` is already `40.9%` there. The full sweep (`t=0.05` to `0.90`,
+step `0.05`) never has both conditions hold simultaneously. Confirms
+the 2026-09-10 zone-map batch's own finding on a different pool (fires
+on ~50% of clean ticks) -- this constant is not a per-tick fold
+discriminator at any threshold, on this data or the earlier one.
+
+**ACF corroboration: worse, not better.** `92.9%` false-positive rate
+on CLEAN rows (an `acf_top_candidates` entry lands within 4% of
+`bpm·r` for some fold ratio on the clean row too, essentially always)
+vs. `85.1%` true-positive on fold rows -- indistinguishable, and both
+near-unconditional. With 6 fold ratios tested against typically 3 ACF
+candidates per row, a coincidental near-match is the expected outcome
+regardless of whether the row is genuinely folded; this signal carries
+no real information here.
+
+**Verdict, per the strategist's own pre-registered rule ("if neither
+passes, admission is a detector item and we say so"): admission stays
+a detector-program item, not a recommender pre-filter rule.** No
+fold-admission cell is run on the recommender side from this finding --
+there is no calibrated gate to admit through. This closes the
+fold-aware-admission thread for the recommender; the underlying
+tempo-fold behavior itself (the dnb 2/3 fold found in the per-track
+table above, and whatever drives the wide clean/fold split per list
+here) remains open work for the detector program.
