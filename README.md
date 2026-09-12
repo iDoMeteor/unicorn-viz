@@ -513,6 +513,12 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.137** — Switching display mode on the X11 driver under
+  XWayland no longer kills the app with `X Error ... BadMatch
+  (X_SetInputFocus)`: an Xlib error handler now swallows that one
+  benign error (an SDL race inside its border toggle, where the window
+  manager reparents the window between SDL's viewable check and its
+  focus call) and forwards every other X error unchanged.
 - **1.0.0-beta.136** — The native quit confirmation dialog is back (owner
   decision): the in-app "press again" prompt from beta.121 was part of
   chasing the Windows stalls, which turned out to be the swap interval and

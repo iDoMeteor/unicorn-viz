@@ -2010,6 +2010,17 @@ class App:
                 else:
                     log.info('Using x11 for display_mode=%s', self._multihead.requested_mode)
 
+        # On the x11 driver (XWayland fallback included) a display-mode
+        # switch can exit the whole process with "X Error ... BadMatch
+        # (X_SetInputFocus)" -- an SDL race in its border toggle.  Chain a
+        # handler that ignores that one error; see unicornviz/x11_errors.py.
+        if sdl2.SDL_GetCurrentVideoDriver() == b'x11':
+            try:
+                from unicornviz.x11_errors import install_focus_error_guard
+                install_focus_error_guard()
+            except Exception as exc:
+                log.debug('x11 focus-error guard not installed: %s', exc)
+
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MAJOR_VERSION, 3)
         sdl2.SDL_GL_SetAttribute(sdl2.SDL_GL_CONTEXT_MINOR_VERSION, 3)
         sdl2.SDL_GL_SetAttribute(
