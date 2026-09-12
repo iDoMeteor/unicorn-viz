@@ -73,7 +73,7 @@
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-flying                0.4.0               early alpha   module
-  effects-ukiyo-e               0.3.0               early alpha   module
+  effects-ukiyo-e               0.4.0               early alpha   module
   osc-bridge-01                 0.3.0               early alpha   module
   video-postfx-01               0.2.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────

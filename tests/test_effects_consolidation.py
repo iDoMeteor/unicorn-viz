@@ -45,7 +45,8 @@ PACK_NAMES = {
                   'Cloud Bounce', 'Space Tunnel'},
     'effects-rollercoast': {'First Drop', 'Corkscrew', 'Night Coaster',
                             'Mine Train', 'Coaster Cam', 'Log Flume'},
-    'effects-ukiyo-e': {'Floating World', 'Onden Watermill'},
+    'effects-ukiyo-e': {'Floating World', 'Onden Watermill',
+                        "Raijin's Drums", 'Night Parade'},
 }
 ISOLATED_NAMES = {
     'ProjectM Presets', 'Texture Showcase', 'Image Showcase', 'Video Clips',
@@ -57,7 +58,7 @@ OLD_CLASSES = {'SineScroller', 'CrystalPyramids', 'PrismStorm', 'PrismLattice',
 # Grand Finale is a system sequence, not a playlist effect, so it is an allowed
 # (intentional) ping-pong-friend target that won't resolve to a discovered effect.
 ALLOWED_PPF_ORPHANS = {'Grand Finale'}
-EXPECTED_TOTAL = 81
+EXPECTED_TOTAL = 83
 
 # --- Tag-normalization taxonomy (2026-07-01) ---------------------------------
 # Every effect carries exactly one canonical category tag as its FIRST tag:
