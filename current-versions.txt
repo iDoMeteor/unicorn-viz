@@ -10,7 +10,7 @@
   dj-mixer-01                   0.193.0             alpha ▲       module
   media-01                      0.29.2              alpha ▲       module
   control-room-01               0.16.1              alpha ▲       module
-  effects-games                 0.13.2              alpha ▲       MISMATCH (readme=0.14.0)
+  effects-games                 0.15.0              alpha ▲       module
   projectm-01                   0.12.6              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.11.0              alpha ▲       module
@@ -79,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  4 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic, effects-games
+  ⚠  3 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic
 
