@@ -5555,17 +5555,27 @@ void main() {
                 except Exception as exc:
                     log.warning('BeatFlashController update failed: %s', exc)
 
+            # The auto_vj perf bucket wraps five controllers; the three
+            # sub-timers below split out the ones that have shown up as
+            # real per-frame cost (2026-09-12 analysis: the bucket held a
+            # 6-10 ms median with no way to tell which of them it was).
+            if perf_debug_enabled:
+                perf_before_osc = time.perf_counter()
             if self._osc_bridge is not None:
                 try:
                     self._osc_bridge.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('OscBridgeController update failed: %s', exc)
+            if perf_debug_enabled:
+                perf_after_osc = time.perf_counter()
 
             if self._lyrics is not None:
                 try:
                     self._lyrics.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('LyricsController update failed: %s', exc)
+            if perf_debug_enabled:
+                perf_after_lyrics = time.perf_counter()
 
             if self._auto_vj is not None and not manager_modal_active:
                 try:
@@ -6318,7 +6328,8 @@ void main() {
                     log.debug(
                         (
                             'Perf frame: total=%.2fms events=%.2fms midi=%.2fms '
-                            'auto=%.2fms audio=%.2fms auto_vj=%.2fms finale=%.2fms '
+                            'auto=%.2fms audio=%.2fms auto_vj=%.2fms osc=%.2fms '
+                            'lyrics=%.2fms vj=%.2fms finale=%.2fms '
                             'subsys_upd=%.2fms effects=%.2fms hud=%.2fms draw=%.2fms '
                             'swap=%.2fms subsys_present=%.2fms fps=%.1f mode=%s'
                         ),
@@ -6327,7 +6338,13 @@ void main() {
                         (perf_after_midi - perf_after_events) * 1000.0,
                         (perf_after_auto_advance - perf_after_midi) * 1000.0,
                         (perf_after_audio - perf_after_auto_advance) * 1000.0,
+                        # auto_vj stays the whole five-controller bucket (older
+                        # logs and tools/profiling/perf_frames.py read it that
+                        # way); osc/lyrics/vj are its named sub-spans.
                         (perf_after_auto_vj - perf_after_audio) * 1000.0,
+                        (perf_after_osc - perf_before_osc) * 1000.0,
+                        (perf_after_lyrics - perf_after_osc) * 1000.0,
+                        (perf_after_auto_vj - perf_after_lyrics) * 1000.0,
                         (perf_after_grand_finale - perf_after_auto_vj) * 1000.0,
                         (perf_after_subsystem_update - perf_after_grand_finale) * 1000.0,
                         (perf_after_effect_update - perf_after_subsystem_update) * 1000.0,

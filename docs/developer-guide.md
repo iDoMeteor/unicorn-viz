@@ -82,6 +82,8 @@ unicorn-viz/
 ├── tools/
 │   ├── generate_ansi_art.py   Generates the hand-crafted .ANS files
 │   ├── fetch_acid_ans.py      Downloads real ACiD art from 16colo.rs
+│   ├── profiling/             perf_frames.py (Perf frame log summary),
+│   │                          mixer_store_bench.py, projectm_bench.py
 │   └── launchers/             Linux .sh/.desktop, Windows .bat/.ps1
 ├── unicornviz/
 │   ├── __init__.py

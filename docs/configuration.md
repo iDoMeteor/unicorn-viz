@@ -536,6 +536,6 @@ core-read keys select the **mixer-only boot profile** (see
 |------------|------|----------|------------------------------------------|
 | `level`    | str  | `"INFO"` | Log verbosity                            |
 | `directory`| str  | `"logs"` | Directory for timestamped run log files  |
-| `perf_frames` | bool | `false` | Per-frame timing breakdown (`Perf frame: ...`). Emitted at DEBUG, so it only reaches the log when `level = "debug"`; at `"info"` it is generated and discarded. |
+| `perf_frames` | bool | `false` | Per-frame timing breakdown (`Perf frame: ...`). Emitted at DEBUG, so it only reaches the log when `level = "debug"`; at `"info"` it is generated and discarded. Logged for every frame over 25 ms and every 120th frame otherwise. Buckets are wall-clock spans of the main loop in order: `events`, `midi`, `auto`, `audio`, `auto_vj` (five controllers, with its `osc`, `lyrics` and `vj` sub-spans reported alongside), `finale`, `subsys_upd` (every registered subsystem's `update()`), `effects`, `hud`, `draw`, `swap`, `subsys_present`. Summarize a log with `tools/profiling/perf_frames.py`. |
 | `faulthandler` | bool | `true` | Write native-crash and stall dumps to a per-run `faulthandler_<stamp>.log` under `directory`. A run that writes nothing deletes its file on exit. `false` keeps the handler on stderr only (the release setting). |
 | `stall_dump_s` | float | `5.0` | If the render loop stops advancing for this many seconds, dump every thread's stack into the faulthandler file (or stderr) while the process is still hung. `0` disables. |
