@@ -1,6 +1,6 @@
 [logging]
-level = "info"
-perf_frames = false # requires log level debug on
+level = "debug"
+perf_frames = true # requires log level debug on
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
@@ -157,6 +157,7 @@ drop_trigger_threshold = 0.50        # trigger entry bar (~p99 of real-audio rea
 drop_trigger_fastlane = 0.70         # strong-trigger shorter-hold bar (default threshold x1.25)
 drop_sustain_entry = 0.55            # established-sustain entry bar (covers joining mid-drop)
 drop_sustain_fizzle_floor = 0.25     # absolute fizzle floor under the peak-relative (x0.9) check
+
 # -- drop bass-delta gate (director E2/E2b, director rc.21) --
 # Ships ON by default (1.10/wait4, "C2" -- see docs/adr/vj-system.md
 # "Drop-Gate Retune: C2 (1.10/wait4) Shipped"). For a live A/B against
@@ -169,6 +170,7 @@ drop_sustain_fizzle_floor = 0.25     # absolute fizzle floor under the peak-rela
 #   "dose A" (the other previously-tested state, tighter retries):
 # drop_bass_delta_min = 1.10
 # drop_bass_delta_wait_bars = 2
+
 # -- recommender BPM hard pre-filter (2026-08-20, recommender rc.20) --
 # While confidently locked, genre candidates whose bpm_hint range (± margin)
 # doesn't contain the locked tempo are excluded before scoring (the 2026-08-13
@@ -359,7 +361,7 @@ start_preset = ""
 # seconds gets excluded permanently (excluded_presets.txt). No warm-up
 # grace period -- a preset that opens flat and takes its time waking up
 # is caught just like one that stays flat forever.
-solid_color_skip_enabled = true
+solid_color_skip_enabled = false # off 2026-09-12: library is clean of flat presets for now; flip back on if that changes
 solid_color_duration = 0.2       # seconds continuously flat before exclusion
 # solid_color_std_threshold = 4.0  # 0-255 scale; below this counts as "flat"
 preset_warmup_frames = 8
