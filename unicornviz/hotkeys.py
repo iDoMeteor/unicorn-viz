@@ -1222,7 +1222,10 @@ class HotkeyHandler:
                     o.flash_message(f'Effect: {name}', 1.4)
                 return
             if sym == sdl2.SDLK_p and not (mod & (sdl2.KMOD_CTRL | sdl2.KMOD_ALT | sdl2.KMOD_GUI)):
-                msg = a.effects_browser_pin()
+                if mod & sdl2.KMOD_SHIFT:
+                    msg = a.effects_browser_pin_category()
+                else:
+                    msg = a.effects_browser_pin()
                 if msg:
                     o.flash_message(msg, 1.6)
                 return

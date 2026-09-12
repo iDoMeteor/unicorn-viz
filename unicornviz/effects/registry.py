@@ -60,6 +60,16 @@ def _pack_of(cls: Type[BaseEffect]) -> str:
     return 'core'
 
 
+def category_of(cls: Type[BaseEffect]) -> str:
+    """Return an effect's browser category: its first (canonical) tag, falling
+    back to its pack when it declares no tags. The single source of this
+    formula -- ``browser_entries()`` and any caller needing an arbitrary
+    class's category (e.g. ``App``'s category-pin feature) both go through
+    this instead of re-deriving it."""
+    tags = tuple(getattr(cls, 'TAGS', ()) or ())
+    return tags[0] if tags else _pack_of(cls)
+
+
 def browser_entries() -> list[BrowserEntry]:
     """Return the effect catalog as browser rows, sorted like ``get_effects()``.
 
@@ -69,14 +79,12 @@ def browser_entries() -> list[BrowserEntry]:
     entries: list[BrowserEntry] = []
     for cls in get_effects():
         tags = tuple(getattr(cls, 'TAGS', ()) or ())
-        pack = _pack_of(cls)
-        category = tags[0] if tags else pack
         entries.append(
             BrowserEntry(
                 name=cls.NAME,
                 cls=cls,
-                pack=pack,
-                category=category,
+                pack=_pack_of(cls),
+                category=category_of(cls),
                 tags=tags,
             )
         )

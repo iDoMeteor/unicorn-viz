@@ -629,6 +629,7 @@ class Overlays:
         self._effects_browser = CatalogBrowser()
         self._effects_browser_current: str = ''
         self._effects_browser_pinned: str = ''
+        self._effects_browser_pinned_category: str = ''
         self._eb_thumb_tex: 'moderngl.Texture | None' = None
         # Right-click context menu (entries are built by App from the help
         # registry; Overlays only renders + hit-tests them).
@@ -3631,6 +3632,10 @@ void main() {
         """Set the display NAME of the currently pinned effect ('' for none)."""
         self._effects_browser_pinned = str(name or '')
 
+    def set_effects_browser_pinned_category(self, category: str) -> None:
+        """Set the category key rotation is currently pinned to ('' for none)."""
+        self._effects_browser_pinned_category = str(category or '')
+
     @staticmethod
     def _eb_hit(
         rects: list[tuple[float, float, float, float, int]],
@@ -4035,6 +4040,8 @@ void main() {
             ry = cat_start_y + local_idx * row_h
             matches, _ = b.category_stats(category)
             label = f'{category} [{matches}]'
+            if category != '' and category == self._effects_browser_pinned_category:
+                label += '  [PIN]'
             if idx == cat_idx:
                 self._draw_rect(left_x + 6.0, ry - 2.0, left_w - 12.0, row_h - 3.0, (0.25, 0.18, 0.06, 0.90))
                 self._draw_text(f'> {label}', left_x + 16.0, ry + 4.0, scale=2.0, color=(1.0, 0.92, 0.22, 1.0))
@@ -4128,7 +4135,7 @@ void main() {
 
         self._draw_text(
             'Left/Right: pane   Up/Down: browse   Enter/Click: go   Space: on/off   '
-            'P: pin/unpin   F: favorite   /: search   Esc: close',
+            'P: pin/unpin   Shift+P: pin/unpin category   F: favorite   /: search   Esc: close',
             px + 18.0, footer_y + 6.0, scale=1.8, color=(0.60, 0.66, 0.80, 0.86),
         )
         self._draw_text(

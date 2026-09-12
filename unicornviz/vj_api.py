@@ -594,6 +594,21 @@ class VJApi:
         """Display NAME of the locked effect, or None when not locked."""
         return self._app.effect_lock
 
+    def pin_category(self, category: str) -> bool:
+        """Pin rotation to one browser category -- see ``App.pin_category()``.
+        Unlike ``lock_effect()``, rotation keeps picking freely within the
+        category rather than freezing on one effect."""
+        return self._app.pin_category(category)
+
+    def unpin_category(self) -> None:
+        """Clear any category pin so normal (whole-catalog) rotation resumes."""
+        self._app.unpin_category()
+
+    @property
+    def category_lock(self) -> 'str | None':
+        """Browser category key rotation is pinned to, or None when unpinned."""
+        return self._app.category_lock
+
     def toggle_projectm_only(self) -> tuple[bool, str]:
         """Toggle ProjectM-only mode; returns (is_on, status message)."""
         return self._app.toggle_projectm_only()

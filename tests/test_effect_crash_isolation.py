@@ -83,6 +83,7 @@ class _AppStub:
         self._invert_colors = False
         self._projectm_manager_modal_active = False
         self._effect_lock = None
+        self._category_lock = None
         self._playlist: Any = None
         self._transition_t = 0.5
         self._rng = np.random.default_rng(0)

@@ -45,6 +45,7 @@ def _app_with_playlist(tmp_path: Path, names: list[str], start: str | None = Non
     app._disabled_effects = set()
     app._playlist = playlist
     app._effect_lock = None
+    app._category_lock = None
     app._overlays = None  # _refresh_effect_shortcuts no-ops when overlays is None
     app._current_effect = playlist.current()
     app._deleted_effects_session = []
@@ -174,6 +175,7 @@ def _app_with_projectm(tmp_path: Path, presets: list[str]):
     app._disabled_effects = set()
     app._playlist = None
     app._effect_lock = None
+    app._category_lock = None
     app._overlays = None
     app._current_effect = _FakeProjectM(presets)
     app._disable_undo_stack = []

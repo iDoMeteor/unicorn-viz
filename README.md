@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.117**
+**Version 1.0.0-beta.135**
 
 ## Contact Me!
 
@@ -513,6 +513,21 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.135** — **Category pinning for the effects browser.**
+  Shift+P (alongside plain P for a single-effect pin) pins rotation
+  (auto_advance, auto-vj-01, manual next/prev) to the selected effect's
+  browser category instead of leaving it -- unlike a single-effect pin
+  (`lock_effect()`/ProjectM-only mode), rotation keeps picking freely
+  among every effect in the category rather than freezing on one.
+  `App.pin_category()`/`unpin_category()` (mutually exclusive with the
+  effect lock) narrow the playlist's own rotation via
+  `Playlist.set_disabled()`; `_switch_effect()` enforces the same
+  boundary for any caller that bypasses the playlist (e.g. auto-vj-01's
+  own picks), redirecting into an in-category replacement rather than
+  silently dropping the switch. `effects.registry.category_of()`
+  factors out the category formula (first tag, else pack) so this and
+  `browser_entries()` share one source. Exposed on `VJApi` as
+  `pin_category()`/`unpin_category()`/`category_lock`.
 - **1.0.0-beta.132** — Clean re-harvest: beta.131's fingerprint refresh
   unknowingly pooled buckets captured during the dual-window low-band
   analyzer bug (live 2026-09-04, fixed same day as this pass in

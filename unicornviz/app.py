@@ -519,6 +519,16 @@ class App:
         # effects are redirected into a variation of the locked effect (e.g. a
         # ProjectM preset advance) so automation keeps the show moving.
         self._effect_lock: str | None = None
+        # Category lock: when set to a browser category key, rotation (auto-
+        # advance, auto-vj-01, manual next/prev) stays within that category
+        # instead of freezing on one effect -- see pin_category(). Mutually
+        # exclusive with _effect_lock (setting one clears the other).
+        # _sync_playlist_disabled() is the single place that pushes the
+        # combined "operator's own disables plus (while pinned) everything
+        # outside this category" set to the playlist, so unpin_category()
+        # only has to clear this field and resync to fall straight back to
+        # the operator's real baseline.
+        self._category_lock: str | None = None
         self._auto_advance = bool(self.cfg.get('demo', 'auto_advance', default=True))  # Toggle with hotkey T
         self._ctrl_held = False
         self._ctx: moderngl.Context | None = None
@@ -4080,6 +4090,24 @@ void main() {
                 log.debug('Effect switch blocked by lock (%s): %s', lock,
                           getattr(cls, 'NAME', cls))
             return
+        cat_lock = self._category_lock
+        if cat_lock is not None:
+            from unicornviz.effects.registry import category_of
+            if category_of(cls) != cat_lock:
+                # Locked to a category: playlist.set_disabled() (see
+                # pin_category()) already narrows auto_advance/random
+                # rotation to it, so this only catches a caller that bypasses
+                # the playlist entirely (auto-vj-01's own picks). Redirect
+                # into the playlist's own advance() -- which, for the same
+                # reason, always lands in-category -- rather than dropping
+                # the switch and leaving automation looking stalled.
+                replacement = self._playlist.advance() if self._playlist is not None else None
+                if replacement is not None and category_of(replacement) == cat_lock:
+                    cls = replacement
+                else:
+                    log.debug('Effect switch blocked by category lock (%s): %s',
+                              cat_lock, getattr(cls, 'NAME', cls))
+                    return
         resolved = self._resolve_unblocked_effect(cls)
         if resolved is None:
             return
@@ -7105,6 +7133,8 @@ void main() {
         # fail while an effect is pinned.
         if self._effect_lock is not None and self._effect_lock != 'ProjectM Presets':
             self.unlock_effect()
+        if self._category_lock is not None:
+            self.unpin_category()
 
         log.info('ProjectM manager: switching to ProjectM Presets from %s', self.current_effect_name or '(none)')
         self.goto_effect(projectm_cls)
@@ -8016,6 +8046,76 @@ void main() {
         """Clear any effect lock."""
         self._effect_lock = None
 
+    @property
+    def category_lock(self) -> str | None:
+        """Browser category key rotation is pinned to, or None when unpinned."""
+        return self._category_lock
+
+    def pin_category(self, category: str) -> bool:
+        """Pin rotation (auto_advance, auto-vj-01, manual next/prev) to one
+        browser category: only effects whose category matches stay eligible
+        until unpin_category(). Unlike lock_effect(), this keeps things
+        moving -- rotation still picks freely among every effect in the
+        category, it just can't leave it.
+
+        Mutually exclusive with the effect lock (clears it first). Switches
+        to an in-category effect immediately if the current one isn't
+        already in it. Returns False, doing nothing, if the category has no
+        effects in the *playlist's* effect set (not the whole registry --
+        e.g. a [playlist] sequence= restriction or the mixer-only boot
+        profile's empty list).
+        """
+        if self._playlist is None:
+            return False
+        from unicornviz.effects.registry import category_of
+
+        in_category = {cls.NAME for cls in self._playlist.effects if category_of(cls) == category}
+        if not in_category:
+            return False
+        if self._effect_lock is not None:
+            self.unlock_effect()
+        self._category_lock = category
+        self._sync_playlist_disabled()
+        current = self._current_effect
+        current_name = str(getattr(current, 'NAME', '')) if current is not None else ''
+        if current_name not in in_category:
+            cls = self._playlist.advance()
+            if cls is not None:
+                self._switch_effect(cls)
+        return True
+
+    def unpin_category(self) -> None:
+        """Clear the category lock; the playlist's disabled set falls back
+        to just the operator's own persisted manual disables."""
+        if self._category_lock is None:
+            return
+        self._category_lock = None
+        self._sync_playlist_disabled()
+
+    def _sync_playlist_disabled(self) -> None:
+        """Push the effective auto-rotation-disabled set to the playlist:
+        the operator's own persisted disables, plus (while a category is
+        pinned) every effect outside that category.
+
+        Single source of truth for what goes into ``playlist.set_disabled()``
+        -- set_effect_enabled()/set_disabled_effects() and pin_category()/
+        unpin_category() all go through this instead of computing their own
+        version of "disabled", which would otherwise silently clobber
+        whichever one wrote last (e.g. disabling one effect while a category
+        is pinned would erase the category narrowing if it called
+        ``playlist.set_disabled(self._disabled_effects)`` directly).
+        """
+        if self._playlist is None:
+            return
+        disabled = set(self._disabled_effects)
+        if self._category_lock is not None:
+            from unicornviz.effects.registry import category_of
+            disabled |= {
+                cls.NAME for cls in self._playlist.effects
+                if category_of(cls) != self._category_lock
+            }
+        self._playlist.set_disabled(disabled)
+
     def disable_current_effect_and_advance(self) -> str:
         """Delete-key action: disable the active effect and jump to a new one.
 
@@ -8169,8 +8269,7 @@ void main() {
             self._disabled_effects.add(name)
         self._runtime_state.set('effects.disabled', sorted(self._disabled_effects))
         self._runtime_state.save()
-        if self._playlist is not None:
-            self._playlist.set_disabled(self._disabled_effects)
+        self._sync_playlist_disabled()
         self._refresh_effect_shortcuts()
 
     def set_disabled_effects(self, names: 'set[str] | list[str]') -> None:
@@ -8178,8 +8277,7 @@ void main() {
         self._disabled_effects = {str(n) for n in (names or [])}
         self._runtime_state.set('effects.disabled', sorted(self._disabled_effects))
         self._runtime_state.save()
-        if self._playlist is not None:
-            self._playlist.set_disabled(self._disabled_effects)
+        self._sync_playlist_disabled()
         self._refresh_effect_shortcuts()
 
     # -- Numeric-hotkey slot pins (persisted) ---------------------------------
@@ -8476,6 +8574,7 @@ void main() {
                 b.set_selected_index(i)
                 break
         o.set_effects_browser_pinned(self._effect_lock or '')
+        o.set_effects_browser_pinned_category(self._category_lock or '')
         self._eb_last_nav_monotonic = 0.0
         if not o.effects_browser_visible:
             o.toggle_effects_browser()
@@ -8528,6 +8627,13 @@ void main() {
             self.unlock_effect()
             self._overlays.set_effects_browser_pinned('')
             return f'{name}: unpinned'
+        # A category pin and an effect lock are mutually exclusive -- release
+        # the category narrowing first so this effect's own switch isn't
+        # blocked by it, and so unpin_category() restores the true baseline
+        # rather than one it never saw.
+        if self._category_lock is not None:
+            self.unpin_category()
+            self._overlays.set_effects_browser_pinned_category('')
         # Clear any existing lock first so the switch to the new pin target is
         # not blocked by the old lock, then switch and lock onto the new effect.
         self._effect_lock = None
@@ -8536,6 +8642,28 @@ void main() {
         self._effect_lock = name
         self._overlays.set_effects_browser_pinned(name)
         return f'{name}: pinned'
+
+    def effects_browser_pin_category(self) -> str | None:
+        """Toggle pinning the selected effect's category. While pinned,
+        rotation (auto_advance, auto-vj-01, manual next/prev) is narrowed to
+        that category instead of leaving it, but keeps moving freely within
+        it -- unlike effects_browser_pin(), which freezes on one specific
+        effect. Pinning a different category re-pins to it; pinning the
+        already-pinned one again unpins."""
+        entry = self._overlays.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        category = str(entry.get('category_key', '') or '')
+        if not category:
+            return None
+        if self._category_lock == category:
+            self.unpin_category()
+            self._overlays.set_effects_browser_pinned_category('')
+            return f'{category}: unpinned'
+        if not self.pin_category(category):
+            return f'{category}: no effects'
+        self._overlays.set_effects_browser_pinned_category(category)
+        return f'{category}: pinned'
 
     def effects_browser_toggle_enabled(self) -> str | None:
         """Toggle the selected effect's rotation-enabled state and persist it."""

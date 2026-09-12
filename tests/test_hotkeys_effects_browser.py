@@ -75,6 +75,7 @@ class _App:
         self._midi_manager = None
         self._overlay = overlay
         self.pinned: str = ''
+        self.pinned_category: str = ''
         self.calls: list[tuple[str, object]] = []
 
     def open_effects_browser(self) -> None:
@@ -109,6 +110,19 @@ class _App:
         self.pinned = name
         self.calls.append(('pin', name))
         return f'{name}: pinned'
+
+    def effects_browser_pin_category(self):
+        entry = self._overlay.effects_browser.selected_entry()
+        if entry is None:
+            return None
+        category = entry['category_key']
+        if self.pinned_category == category:
+            self.pinned_category = ''
+            self.calls.append(('unpin_category', category))
+            return f'{category}: unpinned'
+        self.pinned_category = category
+        self.calls.append(('pin_category', category))
+        return f'{category}: pinned'
 
     def effects_browser_toggle_enabled(self):
         entry = self._overlay.effects_browser.selected_entry()
@@ -228,6 +242,19 @@ def test_p_toggles_pin_and_keeps_browser_open():
     handler.handle(sdl2.SDLK_p, 0)          # P again -> unpin
     assert ('unpin', 'Plasma') in app.calls
     assert app.pinned == ''
+
+
+def test_shift_p_pins_category_instead_of_effect():
+    handler, app, overlay = _setup()
+    overlay.effects_browser_visible = True
+    handler.handle(sdl2.SDLK_p, sdl2.KMOD_SHIFT)   # pin Plasma's category
+    assert ('pin_category', 'psychedelic') in app.calls
+    assert app.pinned_category == 'psychedelic'
+    assert app.pinned == ''                        # the effect pin is untouched
+    assert overlay.effects_browser_visible          # stays open
+    handler.handle(sdl2.SDLK_p, sdl2.KMOD_SHIFT)   # Shift+P again -> unpin
+    assert ('unpin_category', 'psychedelic') in app.calls
+    assert app.pinned_category == ''
 
 
 def test_space_toggles_enabled():
