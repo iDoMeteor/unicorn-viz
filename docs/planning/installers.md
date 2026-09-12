@@ -1275,6 +1275,11 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-12 — quit dialog restored (core beta.136).** The native yes/no
+  box replaced by beta.121's two-press prompt is back by owner decision: that
+  change was chasing the Windows stalls, which were the swap interval and the
+  fullscreen flag, and the prompt was a worse experience. With Windows
+  fullscreen now borderless the dialog is composited and reachable.
 - **2026-09-09 (night IV) — beta.124 still bad, now with a sharper shape:
   fine until Alt+Tab / Win key, then drastic.** No logs this time (the
   debug block was not copied over). That shape is Windows' fullscreen

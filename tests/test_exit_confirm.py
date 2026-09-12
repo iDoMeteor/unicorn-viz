@@ -1,59 +1,42 @@
-"""Quit confirmation is an in-app two-press prompt, never a native modal.
+"""Quit confirmation is a native yes/no dialog (owner decision, 2026-09-12).
 
-Regression for the 2026-09-09 Windows beta: the SDL message box blocked the
-render loop under a borderless-fullscreen window (frozen/black screen, TV
-signal drops) and sat where a tester with a hidden cursor could not answer it.
+The in-app "press again" prompt of beta.121 is gone; the dialog's answer
+decides, `force=True` and a disabled confirmation skip it.
 """
 from __future__ import annotations
-
-import time
 
 from unicornviz.app import App
 
 
-class _Overlays:
-    def __init__(self) -> None:
-        self.flashed: list[tuple[str, float]] = []
-
-    def flash_message(self, msg: str, duration: float = 2.0) -> None:
-        self.flashed.append((msg, duration))
-
-
-def _app(confirm: bool) -> App:
+def _app(confirm: bool, answer: bool) -> App:
     app = App.__new__(App)
     app._confirm_exit_enabled = confirm
-    app._exit_armed_until = 0.0
-    app._overlays = _Overlays()
     app._running = True
+    app.asked = 0
+
+    def _dialog() -> bool:
+        app.asked += 1
+        return answer
+
+    app._confirm_exit_dialog = _dialog
     return app
 
 
-def test_second_press_inside_the_window_exits() -> None:
-    app = _app(confirm=True)
-    assert app.request_exit() is False           # armed, not exited
-    assert app._running is True
-    assert app._overlays.flashed and 'press again' in app._overlays.flashed[0][0]
-    assert app.request_exit() is True
-    assert app._running is False
+def test_yes_exits_and_no_keeps_running() -> None:
+    app = _app(confirm=True, answer=True)
+    assert app.request_exit() is True and app._running is False and app.asked == 1
+    app = _app(confirm=True, answer=False)
+    assert app.request_exit() is False and app._running is True and app.asked == 1
 
 
-def test_armed_press_expires() -> None:
-    app = _app(confirm=True)
-    app.request_exit()
-    app._exit_armed_until = time.monotonic() - 1.0    # the window has lapsed
-    assert app.request_exit() is False                 # re-armed, no exit
-    assert app._running is True
-    assert len(app._overlays.flashed) == 2
+def test_force_and_disabled_confirm_skip_the_dialog() -> None:
+    app = _app(confirm=True, answer=False)
+    assert app.request_exit(force=True) is True and app._running is False and app.asked == 0
+    app = _app(confirm=False, answer=False)
+    assert app.request_exit() is True and app._running is False and app.asked == 0
 
 
-def test_force_and_disabled_confirm_exit_at_once() -> None:
-    app = _app(confirm=True)
-    assert app.request_exit(force=True) is True and app._running is False
-    app = _app(confirm=False)
-    assert app.request_exit() is True and app._running is False
-
-
-def test_no_native_message_box_left_in_core() -> None:
-    import inspect
-    import unicornviz.app as mod
-    assert 'SDL_ShowMessageBox' not in inspect.getsource(mod)
+def test_no_window_means_no_dialog() -> None:
+    app = App.__new__(App)
+    app._window = None
+    assert app._confirm_exit_dialog() is True

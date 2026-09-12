@@ -484,7 +484,6 @@ class App:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
         self._running = False
         self._confirm_exit_enabled = bool(self.cfg.get('ui', 'confirm_exit', default=True))
-        self._exit_armed_until = 0.0     # monotonic deadline of an armed quit press
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
         # Boot profile (mixer-only mode): resolved exactly once, here — every
         # boot gate reads _boot_profile, never the raw config (see
@@ -7174,24 +7173,51 @@ void main() {
     def set_zoom_randomized(self, enabled: bool) -> None:
         self._zoom_randomized = bool(enabled)
 
-    # Seconds a first quit press stays armed; a second press inside this window
-    # exits. Replaces the native SDL message box: on Windows that modal blocked
-    # the render loop under a borderless-fullscreen window (the screen froze or
-    # went black, the TV dropped signal, the dialog sat where a tester with a
-    # hidden cursor could not reach it) — see the 2026-09-09 beta logs.
-    EXIT_CONFIRM_WINDOW_S = 3.0
+    def _confirm_exit_dialog(self) -> bool:
+        """Show a modal yes/no confirmation dialog for app shutdown.
+
+        Native SDL message box, by owner decision (2026-09-12): the in-app
+        "press again" prompt that replaced it in beta.121 was part of chasing
+        the Windows stalls, which turned out to be the swap interval and the
+        fullscreen flag (beta.124/125), and a real dialog is what the owner
+        wants. With Windows fullscreen now a borderless window the box is
+        composited and reachable like any other dialog.
+        """
+        if self._window is None:
+            return True
+
+        buttons = (sdl2.SDL_MessageBoxButtonData * 2)()
+        buttons[0] = sdl2.SDL_MessageBoxButtonData(
+            flags=sdl2.SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+            buttonid=0,
+            text=b'No',
+        )
+        buttons[1] = sdl2.SDL_MessageBoxButtonData(
+            flags=sdl2.SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,
+            buttonid=1,
+            text=b'Yes',
+        )
+
+        message_box = sdl2.SDL_MessageBoxData(
+            flags=sdl2.SDL_MESSAGEBOX_WARNING,
+            window=self._window,
+            title=b'Quit Unicorn Viz?',
+            message=b'Exit the main program now?',
+            numbuttons=2,
+            buttons=buttons,
+            colorScheme=None,
+        )
+        selected = ctypes.c_int(0)
+        result = sdl2.SDL_ShowMessageBox(ctypes.byref(message_box), ctypes.byref(selected))
+        if result < 0:
+            log.warning('Quit confirmation dialog failed: %s', sdl2.SDL_GetError().decode())
+            return False
+        return int(selected.value) == 1
 
     def request_exit(self, *, force: bool = False) -> bool:
-        """Stop the main loop; with confirmation on, ask for a second press."""
+        """Stop the main loop; with confirmation on, ask first."""
         if not bool(force) and self._confirm_exit_enabled:
-            now = time.monotonic()
-            if now > self._exit_armed_until:
-                self._exit_armed_until = now + self.EXIT_CONFIRM_WINDOW_S
-                flash = getattr(self._overlays, 'flash_message', None)
-                if callable(flash):
-                    flash('Quit? press again to exit', self.EXIT_CONFIRM_WINDOW_S)
-                log.info('Quit requested; press again within %.0fs to exit',
-                         self.EXIT_CONFIRM_WINDOW_S)
+            if not self._confirm_exit_dialog():
                 return False
         self._running = False
         return True

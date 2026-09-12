@@ -513,6 +513,10 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.136** — The native quit confirmation dialog is back (owner
+  decision): the in-app "press again" prompt from beta.121 was part of
+  chasing the Windows stalls, which turned out to be the swap interval and
+  the fullscreen flag; a real yes/no box is what the owner wants.
 - **1.0.0-beta.135** — **Category pinning for the effects browser.**
   Shift+P (alongside plain P for a single-effect pin) pins rotation
   (auto_advance, auto-vj-01, manual next/prev) to the selected effect's
