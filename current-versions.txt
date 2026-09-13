@@ -54,14 +54,11 @@
   ── alpha ─────────────────────────────────────────────────────────────────
   sims-01                       0.7.1               alpha         module
   training-kit-01               0.7.1               alpha         module
-  videos-01                     0.7.1               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
-  chat-01                       0.6.0               alpha ▼       module
   effects-holiday               0.5.1               alpha ▼       module
   streaming-01                  0.6.0               alpha ▼       module
   webcam-01                     1.5.4               alpha ▼       module
-  audio-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-rollercoast           0.4.1               early alpha   module
@@ -69,15 +66,20 @@
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   video-clips-01                0.5.0               alpha ▼       module
-  video-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-flying                0.4.0               early alpha   module
   effects-ukiyo-e               0.4.0               early alpha   module
-  osc-bridge-01                 0.3.0               early alpha   module
-  video-postfx-01               0.2.0               early alpha   module
+
+  ── UNVERSIONED ───────────────────────────────────────────────────────────
+  audio-out-01                  not set             UNVERSIONED   missing
+  chat-01                       not set             UNVERSIONED   missing
+  osc-bridge-01                 not set             UNVERSIONED   missing
+  video-out-01                  not set             UNVERSIONED   missing
+  video-postfx-01               not set             UNVERSIONED   missing
+  videos-01                     not set             UNVERSIONED   missing
 ────────────────────────────────────────────────────────────────────────────
 
-  44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
+  44 components total  ·  6 RC  1 beta  31 alpha  6 unversioned
   ⚠  3 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic
 
