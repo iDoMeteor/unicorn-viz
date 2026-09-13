@@ -54,7 +54,7 @@
   ── alpha ─────────────────────────────────────────────────────────────────
   sims-01                       0.7.1               alpha         module
   training-kit-01               0.7.1               alpha         module
-  videos-01                     0.7.1               alpha         module
+  videos-01                     0.8.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   chat-01                       0.6.0               alpha ▼       module
