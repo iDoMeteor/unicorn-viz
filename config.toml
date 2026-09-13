@@ -1,6 +1,6 @@
 [logging]
-level = "debug"
-perf_frames = true # requires log level debug on
+level = "none"
+perf_frames = false # requires log level debug on
 
 [window]
 display_mode  = "mirror"   # single | span_all | mirror_all
