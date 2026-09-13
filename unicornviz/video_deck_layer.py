@@ -299,6 +299,16 @@ class VideoDeckLayer:
         if slot.source is None or rec is None:
             slot.opacity = 0.0
             return
+        # videos-01 0.8.2: the constructor returns at once and a file that
+        # cannot be opened reports through ``open_error`` instead of raising.
+        # Close it and keep the path recorded, so the deck reads as no-video
+        # until its path changes -- not a silent black quad, and not a retry
+        # every frame.
+        err = getattr(slot.source, 'open_error', None)
+        if err:
+            log.warning('Video decks: deck %s could not open %s: %s', key.upper(), slot.path, err)
+            self._close_slot(key, slot, reason='open failed')
+            return
         position = float(rec.get('position_s', 0.0) or 0.0)
         # A/V alignment.  The mixer's position is its *write* cursor; what is
         # audible is that minus the output stream's latency (its
@@ -317,8 +327,7 @@ class VideoDeckLayer:
             got = slot.source.frame_for(position)
         except Exception as exc:
             log.warning('Video decks: source for deck %s failed (%s); closing it', key.upper(), exc)
-            self._close_slot(key, slot, reason='source error')
-            slot.path = ''
+            self._close_slot(key, slot, reason='source error')   # path kept: no reopen until it changes
             return
         if got is None:
             return
@@ -327,6 +336,11 @@ class VideoDeckLayer:
             return                       # same frame: no re-upload
         self._upload(slot, frame)
         slot.last_pts = float(pts)
+        if not slot.has_frame:
+            # The open is non-blocking, so this is the first moment the real
+            # (post-downscale) frame size is known.
+            log.info('Video decks: deck %s first frame %dx%d from %s',
+                     key.upper(), slot.tex_size[0], slot.tex_size[1], slot.path)
         slot.has_frame = True
 
     def _open_slot(self, key: str, slot: _DeckSlot, path: str) -> None:

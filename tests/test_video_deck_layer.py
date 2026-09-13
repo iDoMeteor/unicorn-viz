@@ -54,6 +54,14 @@ class FailingSource(FakeSource):
         raise RuntimeError('no video stream')
 
 
+class OpenErrorSource(FakeSource):
+    """videos-01 0.8.2: the constructor returns; the failure is a property."""
+
+    def __init__(self, path, **kw):
+        super().__init__(path, **kw)
+        self.open_error = 'no video stream in container'
+
+
 class FakeTexture:
     def __init__(self, size):
         self.size = size
@@ -380,3 +388,27 @@ def test_trace_file_gets_one_line_per_visible_deck_frame(tmp_path, monkeypatch):
     rows = [json.loads(line) for line in trace.read_text().splitlines()]
     assert rows and rows[-1]['deck'] == 'a' and rows[-1]['pts'] == 1.0
     assert rows[-1]['upload_ms'] >= 0.0 and rows[-1]['position_s'] == 1.0
+
+
+def test_open_error_closes_the_source_once_and_does_not_retry(caplog):
+    layer = VideoDeckLayer(FakeCtx(), OpenErrorSource)
+    with caplog.at_level(logging.WARNING, logger='unicornviz.video_deck_layer'):
+        layer.update(_state(a=_deck('/bad.mp4', audibility=1.0)))
+        layer.update(_state(a=_deck('/bad.mp4', audibility=1.0)))
+        layer.update(_state(a=_deck('/bad.mp4', audibility=1.0)))
+    assert len(FakeSource.instances) == 1                    # opened once, not per frame
+    assert FakeSource.instances[0].closed
+    assert sum('could not open /bad.mp4' in r.getMessage() for r in caplog.records) == 1
+    assert layer.active is False and layer.layer_opacity == 0.0
+    layer.update(_state(a=_deck('/good.mp4')))               # a new path is tried again
+    assert len(FakeSource.instances) == 2
+
+
+def test_first_frame_logs_the_real_size(caplog):
+    layer = _layer()
+    layer.update(_state(a=_deck()))
+    FakeSource.instances[0].frames = [(1.0, np.zeros((36, 64, 3), dtype=np.uint8))]
+    with caplog.at_level(logging.INFO, logger='unicornviz.video_deck_layer'):
+        layer.update(_state(a=_deck()))
+        layer.update(_state(a=_deck()))
+    assert sum('first frame 64x36' in r.getMessage() for r in caplog.records) == 1
