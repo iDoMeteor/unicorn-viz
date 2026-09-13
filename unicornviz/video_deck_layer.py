@@ -31,7 +31,9 @@ decodes on its own worker; ``frame_for`` is documented never to block.
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from typing import Any, Callable
 
@@ -45,6 +47,10 @@ DECK_ORDER: tuple[str, ...] = ('a', 'b', 'c', 'd')
 _MIN_OPACITY = 0.005
 #: How many decks may hold an open video source at once.
 _MAX_SOURCES = 2
+#: Set to a file path to append one JSON line per frame per visible deck
+#: (deck, position_s, rate, playing, pts shown, upload_ms, opacity).  Part-B
+#: measurement only: A/V mapping and upload cost.  Off unless set.
+_TRACE_ENV = 'UNICORNVIZ_VIDEO_DECKS_TRACE'
 
 _VERT = """
 #version 330
@@ -120,6 +126,11 @@ class VideoDeckLayer:
         self._last_draw_ms = 0.0
         self._next_log_t = 0.0
         self._cap_warned = False
+        self._last_upload_ms = 0.0          # this frame's texture uploads, summed
+        self._upload_ms_total = 0.0
+        self._upload_count = 0
+        trace = os.environ.get(_TRACE_ENV, '').strip()
+        self._trace = open(trace, 'a', encoding='utf-8') if trace else None  # noqa: SIM115
         if self._source_cls is None:
             log.info('Video decks: DeckVideoSource unavailable (videos-01 absent); layer disabled')
 
@@ -146,6 +157,11 @@ class VideoDeckLayer:
         return max(vis) if vis else 0.0
 
     @property
+    def last_upload_ms(self) -> float:
+        """Texture upload time this frame (all decks), separate from draw."""
+        return self._last_upload_ms
+
+    @property
     def last_frame_ms(self) -> float:
         """Cost of this frame's update + draw, for the ``video_decks`` profiler stage."""
         return self._last_update_ms + self._last_draw_ms
@@ -170,9 +186,12 @@ class VideoDeckLayer:
         if not self.enabled:
             return
         t0 = time.perf_counter()
+        self._last_upload_ms = 0.0
         decks = self._normalize(deck_state)
         for key in DECK_ORDER:
             self._reconcile(key, decks.get(key))
+            if self._trace is not None:
+                self._trace_frame(key, decks.get(key))
         self._last_update_ms = (time.perf_counter() - t0) * 1000.0
         self._maybe_log()
 
@@ -208,8 +227,30 @@ class VideoDeckLayer:
             self._ctx.disable(self._blend_flag())
         self._last_draw_ms = (time.perf_counter() - t0) * 1000.0
 
+    def _trace_frame(self, key: str, rec: dict | None) -> None:
+        slot = self._slots[key]
+        if rec is None or slot.source is None:
+            return
+        try:
+            self._trace.write(json.dumps({
+                't': time.monotonic(), 'deck': key,
+                'position_s': float(rec.get('position_s', 0.0) or 0.0),
+                'rate': float(rec.get('rate', 1.0) or 0.0),
+                'playing': bool(rec.get('playing', False)),
+                'pts': slot.last_pts, 'opacity': slot.opacity,
+                'upload_ms': self._last_upload_ms,
+            }) + '\n')
+        except Exception:
+            pass
+
     def destroy(self) -> None:
         """Close every source and release GL objects.  Idempotent."""
+        if self._trace is not None:
+            try:
+                self._trace.close()
+            except Exception:
+                pass
+            self._trace = None
         for key, slot in self._slots.items():
             self._close_slot(key, slot, reason='shutdown')
         for obj in (self._vao, self._vbo, self._prog):
@@ -259,6 +300,15 @@ class VideoDeckLayer:
             slot.opacity = 0.0
             return
         position = float(rec.get('position_s', 0.0) or 0.0)
+        # A/V alignment.  The mixer's position is its *write* cursor; what is
+        # audible is that minus the output stream's latency (its
+        # prebuffer).  When the publisher includes it as ``latency_s`` the
+        # frame is chosen for the audible instant, not the written one --
+        # otherwise the picture leads the sound by the whole buffer.
+        try:
+            position -= max(0.0, float(rec.get('latency_s', 0.0) or 0.0))
+        except (TypeError, ValueError):
+            pass
         rate = float(rec.get('rate', 1.0) if rec.get('rate') is not None else 1.0)
         playing = bool(rec.get('playing', False))
         slot.opacity = max(0.0, min(1.0, float(rec.get('audibility', 0.0) or 0.0)))
@@ -340,7 +390,12 @@ class VideoDeckLayer:
                 pass
             slot.tex_size = (w, h)
         data = frame if frame.flags['C_CONTIGUOUS'] else np.ascontiguousarray(frame)
+        t0 = time.perf_counter()
         slot.texture.write(data)
+        ms = (time.perf_counter() - t0) * 1000.0
+        self._last_upload_ms += ms
+        self._upload_ms_total += ms
+        self._upload_count += 1
 
     def _ensure_program(self) -> None:
         if self._prog is not None:
@@ -371,8 +426,10 @@ class VideoDeckLayer:
                 f'seek={slot.stats.get("seeks", 0)}'
             )
         if parts:
-            log.debug('Video decks: %s | update=%.2fms draw=%.2fms',
-                      ' '.join(parts), self._last_update_ms, self._last_draw_ms)
+            log.debug('Video decks: %s | update=%.2fms draw=%.2fms upload_avg=%.3fms (n=%d)',
+                      ' '.join(parts), self._last_update_ms, self._last_draw_ms,
+                      (self._upload_ms_total / self._upload_count) if self._upload_count else 0.0,
+                      self._upload_count)
 
     # moderngl constants, resolved lazily so the module imports without GL.
     @staticmethod

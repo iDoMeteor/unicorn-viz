@@ -353,3 +353,30 @@ def test_debug_log_carries_opacity_pts_and_cache_stats(caplog, monkeypatch):
         layer.update(_state(a=_deck(audibility=0.82)))
     line = next(r.getMessage() for r in caplog.records if 'Video decks: A' in r.getMessage())
     assert 'op=0.82' in line and 'pts=1.000' in line and 'hit=7 miss=2 seek=1' in line
+
+
+def test_output_latency_shifts_the_frame_to_the_audible_instant():
+    """The mixer publishes its write cursor; the ear hears it latency_s later.
+    With latency_s in the payload the layer targets position - latency."""
+    layer = _layer()
+    rec = _deck(position=10.0)
+    rec['latency_s'] = 0.256
+    layer.update(_state(a=rec))
+    assert FakeSource.instances[0].targets == [(10.0 - 0.256, 1.0, True)]
+    rec2 = _deck(position=10.0)                               # no latency field: unchanged
+    layer.update(_state(a=rec2))
+    assert FakeSource.instances[0].targets[-1] == (10.0, 1.0, True)
+
+
+def test_trace_file_gets_one_line_per_visible_deck_frame(tmp_path, monkeypatch):
+    trace = tmp_path / 'trace.jsonl'
+    monkeypatch.setenv('UNICORNVIZ_VIDEO_DECKS_TRACE', str(trace))
+    layer = _layer()
+    layer.update(_state(a=_deck(position=1.0)))
+    FakeSource.instances[0].frames = [(1.0, _frame())]
+    layer.update(_state(a=_deck(position=1.0)))
+    layer.destroy()
+    import json
+    rows = [json.loads(line) for line in trace.read_text().splitlines()]
+    assert rows and rows[-1]['deck'] == 'a' and rows[-1]['pts'] == 1.0
+    assert rows[-1]['upload_ms'] >= 0.0 and rows[-1]['position_s'] == 1.0
