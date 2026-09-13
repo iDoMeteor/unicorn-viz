@@ -13227,3 +13227,41 @@ well past the project's own -25% ceiling, and 4 bars zeroed both modes
 entirely. The LLM's suggestion re-litigates a mechanism already
 rejected on hard evidence from a real panel; not reopened here without
 new evidence that would actually clear that bar.
+
+## Music-Video Decks: Deck-State Bus + Video Layer (2026-09-13, core beta.139)
+
+**Decision.** Two new runtime surfaces on `vj_api`, and one new composite
+layer in core, for the owner-approved music-video-decks feature
+(`docs/planning/music-video-decks-plan-2026-09-13.md`):
+
+- **Bus channel:** `publish_deck_state(source, payload)` /
+  `get_deck_state(exclude='')`.  Same shape as the section and session
+  buses (source -> (payload, monotonic ts); freshest non-stale wins;
+  `exclude` lets a reader skip itself).  **TTL is 1.0 s**, not the 5.0 s the
+  other buses use: the mixer publishes at frame rate, so a feed that stops
+  is stale within a few frames, and a stale deck state would leave the
+  video layer drawing a frozen picture over a deck that is no longer
+  playing.
+- **Query:** `get_video_layer_opacity() -> float` -- max audibility over
+  the video decks actually being drawn, 0.0 when the layer is absent,
+  disabled, or nothing is visible.  Auto-vj reads it and compares against
+  `[video_decks] swap_hold_opacity` (config, default 0.9) to decide whether
+  the picture is "the video" and a scene swap should hold.
+- **Layer:** `unicornviz/video_deck_layer.py` (`VideoDeckLayer`).  The
+  frame source class is injected -- `DeckVideoSource` from videos-01 via
+  a guarded `load_dropin_symbol` (the fourth guarded load site) -- and the
+  layer is a no-op when it is `None`.  Opacity **is** the deck's
+  audibility (channel fader x crossfader x master), never a timer, which
+  is the plan's one-sentence design.  Drawn before the post-FX chain by
+  default (`postfx_over_video = true`; owner decision 1); the visualizer
+  keeps rendering underneath at every opacity (owner decision 3: measure
+  first -- the layer reports its own cost as the `video_decks` stage in
+  the frame profiler).
+
+**Why a bus and not a direct call.** Drop-in independence: the mixer, the
+video source and the layer must each be removable.  The mixer publishes
+without knowing who reads; the layer reads without knowing who published;
+videos-01 supplies frames without knowing about either.  Remove any one
+and the app starts and the deck plays the file's audio as a normal track
+(plan acceptance).
+

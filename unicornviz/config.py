@@ -149,6 +149,15 @@ _DEFAULTS: dict[str, Any] = {
         "preview_scale": 0.52,
         "theme": "dark",
     },
+    # Music-video decks: a DJ deck loaded with a video file draws it as a
+    # composite layer at the deck's audibility (videos-01 + dj-mixer-01).
+    "video_decks": {
+        "enabled": True,
+        "postfx_over_video": True,     # draw before the post-FX chain (False: after)
+        "cache_window_s": 4.0,         # decoded-frame ring per deck, seconds
+        "cache_long_edge": 720,        # cached frame long edge, pixels
+        "swap_hold_opacity": 0.9,      # auto-vj: hold scene swaps above this opacity
+    },
 }
 
 
@@ -302,6 +311,18 @@ def _extra_constraints(data: dict[str, Any]) -> list[str]:
             'logging.level must be one of '
             "'DEBUG', 'INFO', 'WARN', 'WARNING', 'ERROR', 'CRITICAL', 'NONE'"
         )
+
+    video_decks = data.get('video_decks', {})
+    if isinstance(video_decks, dict):
+        cw = video_decks.get('cache_window_s')
+        if cw is not None and (not _is_number(cw) or float(cw) <= 0.0):
+            errors.append('video_decks.cache_window_s must be a number > 0')
+        edge = video_decks.get('cache_long_edge')
+        if edge is not None and (not _is_int(edge) or int(edge) < 16):
+            errors.append('video_decks.cache_long_edge must be an integer >= 16')
+        hold = video_decks.get('swap_hold_opacity')
+        if hold is not None and (not _is_number(hold) or not 0.0 <= float(hold) <= 1.0):
+            errors.append('video_decks.swap_hold_opacity must be between 0 and 1')
 
     stall_dump = logging_cfg.get('stall_dump_s')
     if stall_dump is not None and (not _is_number(stall_dump) or float(stall_dump) < 0.0):

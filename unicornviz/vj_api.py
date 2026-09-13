@@ -302,6 +302,52 @@ class VJApi:
         result = fn(str(exclude))
         return result if isinstance(result, dict) else None
 
+    def publish_deck_state(self, source: str, payload: dict) -> None:
+        """Publish the DJ decks' transport state on the shared bus (under *source*).
+
+        Published by dj-mixer-01 every frame; read by the core video-deck
+        layer and by auto-vj.  *payload* is the wire contract from
+        docs/planning/music-video-decks-plan-2026-09-13.md section 1: per
+        deck ``deck``, ``path``, ``has_video``, ``position_s``, ``rate``,
+        ``playing``, ``audibility`` (channel fader x crossfader x master,
+        1.0 = fully open), plus ``crossfader``.  Same threading rules as
+        :meth:`publish_section` (main thread).  Degrades to a no-op on
+        older cores.
+        """
+        fn = getattr(self._app, 'publish_deck_state', None)
+        if callable(fn):
+            fn(str(source), payload)
+
+    def get_deck_state(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale deck state from a source != *exclude*,
+        or None when nothing usable has been published (the mixer is closed
+        or has not published within the last second).
+
+        Degrades to None on older cores.
+        """
+        fn = getattr(self._app, 'get_deck_state', None)
+        if not callable(fn):
+            return None
+        result = fn(str(exclude))
+        return result if isinstance(result, dict) else None
+
+    def get_video_layer_opacity(self) -> float:
+        """How much of the picture is music video right now: the max
+        audibility over the video decks being drawn, 0.0 when the layer is
+        absent, disabled, or has nothing visible.
+
+        Read by auto-vj (which reads ``[video_decks] swap_hold_opacity``
+        from config to decide what to do above that level).  Degrades to
+        0.0 on older cores.
+        """
+        fn = getattr(self._app, 'get_video_layer_opacity', None)
+        if not callable(fn):
+            return 0.0
+        try:
+            return max(0.0, min(1.0, float(fn())))
+        except Exception:
+            return 0.0
+
     def register_playlist_sink(self, name: str, fn) -> None:
         """Register this drop-in as a destination for playlists from others.
 

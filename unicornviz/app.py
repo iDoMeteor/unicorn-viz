@@ -73,6 +73,7 @@ from unicornviz.runtime_state import RuntimeStateStore
 from unicornviz.presets import ShowPresetStore
 from unicornviz.config_profiles import ConfigProfileStore
 from unicornviz.vj_api import VJApi
+from unicornviz.video_deck_layer import VideoDeckLayer
 
 log = logging.getLogger(__name__)
 
@@ -286,6 +287,19 @@ def _load_webcam_system_class() -> type:
     except Exception as exc:
         log.warning('WebcamSystem not available: %s', exc)
         return _NullWebcamSystem
+
+
+def _load_deck_video_source_class() -> type | None:
+    """Load DeckVideoSource from the videos-01 drop-in, or None when absent.
+
+    None (not a null class): the video-deck layer is a no-op without a
+    source class, so there is nothing for a fallback object to do.
+    """
+    try:
+        return load_dropin_symbol('videos-01/deck_video_source.py', 'DeckVideoSource')
+    except Exception as exc:
+        log.info('DeckVideoSource not available (videos-01 absent): %s', exc)
+        return None
 
 
 def _load_rtmp_streamer_class() -> type:
@@ -550,6 +564,7 @@ class App:
         self._webcam_cycle_timer: float = 0.0
         self._webcam_cycle_interval: float = 0.0
         self._webcam_system = None
+        self._video_deck_layer = None
         self._postfx_controller = None
         self._color_grade = None
         self._beat_flash = None
@@ -594,6 +609,12 @@ class App:
         # See docs/planning/auto-vj-phrase-structure-plan-2026-08-05.md
         # section 6.3.
         self._session_hints: dict[str, tuple[dict, float]] = {}
+        # Shared deck-state bus: source -> (payload, monotonic timestamp).
+        # The DJ mixer publishes every deck's path/position/rate/playing/
+        # audibility at frame rate; the video-deck layer (and, later, auto-vj)
+        # read it.  Same shape as the other buses; a much shorter TTL, since
+        # a frame-rate feed that stops is stale within a few frames.
+        self._deck_state_hints: dict[str, tuple[dict, float]] = {}
         # name -> callable(playlist_name, paths) -> accepted count.
         # Destinations a playlist can be handed to (see
         # register_playlist_sink); lets one drop-in send a set to
@@ -1036,6 +1057,58 @@ class App:
             if ts > best_t:
                 best_payload, best_t = payload, ts
         return dict(best_payload) if best_payload is not None else None
+
+    # -- shared deck-state bus (music-video decks) ----------------------------
+
+    _DECK_STATE_TTL_S = 1.0
+
+    def publish_deck_state(self, source: str, payload: dict) -> None:
+        """Publish the decks' transport state under *source* for other drop-ins.
+
+        Published by dj-mixer-01 every frame.  *payload* is the wire
+        contract from docs/planning/music-video-decks-plan-2026-09-13.md
+        section 1: per deck ``deck``, ``path``, ``has_video``,
+        ``position_s``, ``rate`` (signed during scratch), ``playing`` and
+        ``audibility`` (channel fader x crossfader x master, 1.0 = fully
+        open), plus ``crossfader``.  Read by the core video-deck layer and
+        by auto-vj.  Stored as-is (a shallow copy); anything but a dict is
+        dropped.
+        """
+        if not str(source) or not isinstance(payload, dict):
+            return
+        self._deck_state_hints[str(source)] = (dict(payload), time.monotonic())
+
+    def get_deck_state(self, exclude: str = '') -> dict | None:
+        """Return the freshest non-stale deck state from a source != *exclude*.
+
+        None when nothing has been published within ``_DECK_STATE_TTL_S``
+        -- a mixer that closed or stalled leaves the video layer with
+        nothing to draw rather than a frozen frame.
+        """
+        now = time.monotonic()
+        best_payload: dict | None = None
+        best_t = -1.0
+        for src, (payload, ts) in self._deck_state_hints.items():
+            if src == exclude or (now - ts) > self._DECK_STATE_TTL_S:
+                continue
+            if ts > best_t:
+                best_payload, best_t = payload, ts
+        return dict(best_payload) if best_payload is not None else None
+
+    def get_video_layer_opacity(self) -> float:
+        """Max audibility over the video decks being drawn; 0.0 when none.
+
+        Read by auto-vj to know how much of the picture is video right now
+        (it reads ``[video_decks] swap_hold_opacity`` from config to decide
+        what to do about it).  0.0 when the layer is absent or disabled.
+        """
+        layer = self._video_deck_layer
+        if layer is None:
+            return 0.0
+        try:
+            return float(layer.layer_opacity)
+        except Exception:
+            return 0.0
 
     def register_playlist_sink(self, name: str, fn) -> None:
         """Register a destination that can receive a playlist from elsewhere.
@@ -2203,6 +2276,28 @@ class App:
             except Exception as exc:
                 log.warning('CandyFrameController not available: %s', exc)
                 self._candy_frame = None
+            # Music-video decks: the composite layer that draws a DJ deck's
+            # video at the deck's audibility.  Source class from videos-01
+            # (None when absent -> the layer is a no-op); deck state from the
+            # mixer over the vj_api deck-state bus.
+            vd_cfg = self.cfg.get('video_decks', default={}) or {}
+            if not isinstance(vd_cfg, dict):
+                vd_cfg = {}
+            try:
+                self._video_deck_layer = VideoDeckLayer(
+                    self._ctx,
+                    _load_deck_video_source_class(),
+                    enabled=bool(vd_cfg.get('enabled', True)),
+                    postfx_over_video=bool(vd_cfg.get('postfx_over_video', True)),
+                    cache_window_s=float(vd_cfg.get('cache_window_s', 4.0) or 4.0),
+                    cache_long_edge=int(vd_cfg.get('cache_long_edge', 720) or 720),
+                )
+                if self._video_deck_layer.enabled:
+                    log.info('Video decks: layer ready (postfx over video: %s)',
+                             self._video_deck_layer.postfx_over_video)
+            except Exception as exc:
+                log.warning('Video decks: layer unavailable: %s', exc)
+                self._video_deck_layer = None
             # System-level webcam overlay (always-on PiP above effects, below HUD).
             webcam_cls = _load_webcam_system_class()
             cam_cfg = self.cfg.get('webcam', default={}) or {}
@@ -5986,7 +6081,7 @@ void main() {
                 'display_mode': self._display_mode,
                 'display_index': str(self._display_index),
                 'invert': 'ON' if self._invert_colors else 'OFF',
-                'vj_status': self._vj_status_pill,
+                'vj_status': self._status_pill_with_video(),
                 'audio_xruns': (
                     str(self._audio_manager.get_xrun_count())
                     if self._audio_manager is not None else '0'
@@ -6023,6 +6118,11 @@ void main() {
                 self._config_editor_was_open = False
 
             # Render
+            if self._video_deck_layer is not None:
+                # Reads the mixer's deck state off the bus, opens/closes
+                # sources and uploads changed frames -- before the frame is
+                # drawn so this frame composites this frame's picture.
+                self._video_deck_layer.update(self.get_deck_state())
             self._render(dt)
             mirror_mode_active = (
                 self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
@@ -6342,7 +6442,7 @@ void main() {
                             'auto=%.2fms audio=%.2fms auto_vj=%.2fms osc=%.2fms '
                             'lyrics=%.2fms vj=%.2fms finale=%.2fms '
                             'subsys_upd=%.2fms effects=%.2fms hud=%.2fms draw=%.2fms '
-                            'swap=%.2fms subsys_present=%.2fms fps=%.1f mode=%s'
+                            'swap=%.2fms subsys_present=%.2fms video_decks=%.2fms fps=%.1f mode=%s'
                         ),
                         frame_total_ms,
                         (perf_after_events - perf_frame_start) * 1000.0,
@@ -6363,6 +6463,7 @@ void main() {
                         (perf_before_swap - perf_after_hud) * 1000.0,
                         (perf_after_swap - perf_before_swap) * 1000.0,
                         (perf_after_subsystem_present - perf_after_swap) * 1000.0,
+                        (self._video_deck_layer.last_frame_ms if self._video_deck_layer is not None else 0.0),
                         (1.0 / dt) if dt > 0.0 else 0.0,
                         self._display_mode,
                     )
@@ -6430,6 +6531,11 @@ void main() {
             self._audio_manager.stop()
         if self._midi_manager is not None:
             self._midi_manager.stop()
+        # getattr: ensure_shutdown() must work on a cold App (see the crash-
+        # isolation tests), which may predate this attribute.
+        if getattr(self, '_video_deck_layer', None) is not None:
+            self._video_deck_layer.destroy()
+            self._video_deck_layer = None
         if self._webcam_system is not None:
             self._persist_webcam_runtime_state()
             self._webcam_system.destroy()
@@ -6601,12 +6707,17 @@ void main() {
         post_chain_active = (
             not manager_modal_active and bool(self._active_post_chain())
         )
+        video_active = (
+            self._video_deck_layer is not None
+            and not manager_modal_active
+            and self._video_deck_layer.active
+        )
         # Advance burst timer
         if burst_active:
             self._burst_controller.step(dt)
         if self._next_effect is None:
             # No transition — render current effect; optionally apply invert/burst pass.
-            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or post_chain_active or nova_active or candy_active or finale_overlay_active:
+            if mirror_mode or self._invert_colors or self._render_scale < 0.999 or burst_active or post_chain_active or nova_active or candy_active or finale_overlay_active or video_active:
                 self._fbo_a.use()
                 ctx.viewport = (0, 0, self._render_width, self._render_height)
                 ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -6615,6 +6726,7 @@ void main() {
                     self._render_width,
                     self._render_height,
                 )
+                self._compose_video_decks('pre')
                 if mirror_mode:
                     if self._invert_colors:
                         # Invert into fbo_b, copy back into fbo_a so webcam/HUD
@@ -6643,6 +6755,7 @@ void main() {
                     if post_chain_active:
                         # Global post chain into fbo_b, copied back into fbo_a.
                         self._apply_post_chain(dt)
+                    self._compose_video_decks('post')
                     # Leave fbo_a bound at logical viewport so webcam/HUD compose
                     # into the same target. Tile-blit happens at end of frame.
                     self._fbo_a.use()
@@ -6657,8 +6770,10 @@ void main() {
                         self._invert_prog['tex'].value = 0
                         self._invert_vao.render(moderngl.TRIANGLE_STRIP)
                         self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
+                        self._compose_video_decks('post')
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
+                        self._compose_video_decks('post')
                         self._render_inverted_from_tex(self._fbo_a.color_attachments[0])
                 elif burst_active:
                     if candy_active or nova_active or finale_overlay_active:
@@ -6673,13 +6788,17 @@ void main() {
                         self._burst_prog['uScale'].value = scale
                         self._burst_vao.render(moderngl.TRIANGLE_STRIP)
                         self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height)
+                        self._compose_video_decks('post')
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
+                        self._compose_video_decks('post')
                         self._present_burst_from_tex(self._fbo_a.color_attachments[0])
                 elif post_chain_active:
                     self._apply_post_chain(dt)
+                    self._compose_video_decks('post')
                     self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
+                    self._compose_video_decks('post')
                     self._present_from_tex(self._fbo_a.color_attachments[0])
             else:
                 ctx.screen.use()
@@ -6713,7 +6832,7 @@ void main() {
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
-                if mirror_mode or self._render_scale < 0.999 or post_chain_active or nova_active or candy_active or finale_overlay_active:
+                if mirror_mode or self._render_scale < 0.999 or post_chain_active or nova_active or candy_active or finale_overlay_active or video_active:
                     self._fbo_a.use()
                     ctx.viewport = (0, 0, self._render_width, self._render_height)
                     ctx.clear(0.0, 0.0, 0.0, 1.0)
@@ -6722,14 +6841,18 @@ void main() {
                         self._render_width,
                         self._render_height,
                     )
+                    self._compose_video_decks('pre')
                     if mirror_mode:
+                        self._compose_video_decks('post')
                         # Leave fbo_a bound; tile-blit at end of frame.
                         self._fbo_a.use()
                         ctx.viewport = (0, 0, self._render_width, self._render_height)
                     elif post_chain_active:
                         self._apply_post_chain(dt)
+                        self._compose_video_decks('post')
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                     else:
+                        self._compose_video_decks('post')
                         self._present_from_tex(self._fbo_a.color_attachments[0])
                 else:
                     ctx.screen.use()
@@ -6763,7 +6886,7 @@ void main() {
 
                 # Transition composite — to mirror compose FBO if mirror,
                 # fbo_a when postfx is active, else directly to screen.
-                if mirror_mode or post_chain_active:
+                if mirror_mode or post_chain_active or video_active:
                     composite_fbo = (
                         self._make_or_get_mirror_composite_fbo()
                         if mirror_mode
@@ -6797,9 +6920,50 @@ void main() {
                     self._mirror_composite_fbo.color_attachments[0].use(location=0)
                     self._present_prog['tex'].value = 0
                     self._present_vao.render(moderngl.TRIANGLE_STRIP)
+                    self._compose_video_decks('pre')
+                    self._compose_video_decks('post')
                 elif post_chain_active:
+                    self._compose_video_decks('pre')
                     self._apply_post_chain(dt)
+                    self._compose_video_decks('post')
                     self._present_from_tex(self._fbo_a.color_attachments[0])
+                elif video_active:
+                    self._compose_video_decks('pre')
+                    self._compose_video_decks('post')
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
+
+    def _status_pill_with_video(self) -> str:
+        """The HUD status pill: whatever set_status_pill() holds, plus
+        ``VIDEO A 82%`` while any video deck is visible.
+
+        Composed at read time rather than written through set_status_pill()
+        so the Auto VJ text (rewritten every frame) and the video pill never
+        overwrite each other.
+        """
+        base = self._vj_status_pill
+        layer = self._video_deck_layer
+        pill = layer.status_pill() if layer is not None else None
+        if not pill:
+            return base
+        return f'{base}   {pill}' if base else pill
+
+    def _compose_video_decks(self, stage: str) -> None:
+        """Draw the video-deck layer into fbo_a at the requested stage.
+
+        ``'pre'`` runs before the post-FX chain, ``'post'`` after it; the
+        layer's ``postfx_over_video`` flag decides which of the two calls
+        actually draws, so every render path calls both and the toggle is
+        honored in one place.  Binds fbo_a at the logical render size and
+        leaves it bound.
+        """
+        layer = self._video_deck_layer
+        if layer is None or not layer.active:
+            return
+        if (stage == 'pre') != bool(layer.postfx_over_video):
+            return
+        self._fbo_a.use()
+        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+        layer.draw(self._render_width, self._render_height)
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
         """Lazy-create a single FBO used to compose mirror transitions."""

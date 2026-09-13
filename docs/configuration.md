@@ -384,6 +384,29 @@ Additional webcam capture and image keys (for example `device`, `width`,
 
 ---
 
+## `[video_decks]`
+
+Music-video decks: a DJ deck (`drop-ins/dj-mixer-01`) loaded with a video
+file draws its picture as a full-screen, letterboxed layer at that deck's
+audibility, so it fades with the fader rather than with a timer. Frames
+come from `drop-ins/videos-01`'s `DeckVideoSource`; the layer itself is
+core (`unicornviz/video_deck_layer.py`) and is a no-op when either drop-in
+is absent. The visualizer keeps rendering underneath at every opacity.
+Design: `docs/planning/music-video-decks-plan-2026-09-13.md`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Draw the layer at all. |
+| `postfx_over_video` | bool | `true` | Draw the video *before* the post-FX chain, so bloom / grading / beat-flash apply over it. `false` draws it after, untouched, on top of the processed visualizer. |
+| `cache_window_s` | float | `4.0` | Seconds of decoded frames each deck keeps in its ring, so a scratch or loop inside that window never seeks. |
+| `cache_long_edge` | int | `720` | Long edge, in pixels, of the cached (and uploaded) frames. 960 is sharper at more GPU upload per frame; the `video_decks` stage in the frame profiler shows the cost. |
+| `swap_hold_opacity` | float | `0.9` | Read by auto-vj via `vj_api.get_video_layer_opacity()`: above this opacity the picture is essentially the video, so scene swaps are held. |
+
+The HUD shows `VIDEO A 82%` (per visible deck) while any video deck is
+drawn.
+
+---
+
 ## `[control_room]`
 
 Controls the operator "Control Room" second window

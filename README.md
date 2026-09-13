@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.139** — **Music-video decks (core half).** A DJ deck loaded with a video file draws its picture as a letterboxed layer at the deck's audibility — it fades with the fader, never with a timer — through the new `VideoDeckLayer`, the `publish_deck_state` / `get_deck_state` bus and `get_video_layer_opacity()` on `vj_api`, and a new `[video_decks]` config section (`postfx_over_video`, `cache_window_s`, `cache_long_edge`, `swap_hold_opacity`). The layer is a no-op without videos-01 or the mixer; its per-frame cost shows as the `video_decks` profiler stage and the HUD shows `VIDEO A 82%` while a deck is visible. Design: `docs/planning/music-video-decks-plan-2026-09-13.md`.
 - **1.0.0-beta.138** — The pysdl2-dll "Using SDL2 binaries from pysdl2-dll" notice no longer prints at launch or in test runs; bundled binaries are the supported case, so the warning carried no information.
 - **1.0.0-beta.137** — Switching display mode on the X11 driver under
   XWayland no longer kills the app with `X Error ... BadMatch

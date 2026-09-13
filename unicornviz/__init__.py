@@ -60,4 +60,4 @@ warnings.filterwarnings(
 # Semantic version of the core package (see CLAUDE.md "Versioning & Release
 # Standards"). Pre-1.0 while in alpha; the first feature-complete, validated
 # release is 1.0.0. Owner-adjustable initial value.
-__version__ = '1.0.0-beta.138'
+__version__ = '1.0.0-beta.139'

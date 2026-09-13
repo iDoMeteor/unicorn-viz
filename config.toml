@@ -551,3 +551,16 @@ fps_cap = 30              # 0 = every rendered frame
 # [video_out.pipewire]
 # enabled = false
 # name = "Unicorn Viz"
+
+# Music-video decks (core 1.0.0-beta.139 + dj-mixer-01 + videos-01).  A DJ
+# deck loaded with a video file (.mp4 .mkv .mov .webm .m4v .avi) draws its
+# picture as a composite layer at that deck's audibility -- crossfade the
+# deck out and the video fades with it.  The visualizer keeps rendering
+# underneath at every opacity.  All keys optional; these are the defaults.
+#
+# [video_decks]
+# enabled = true
+# postfx_over_video = true    # post-FX (bloom, grade, ...) applies over the video; false = video on top
+# cache_window_s = 4.0        # seconds of decoded frames kept per deck (scratch/loop hits stay in cache)
+# cache_long_edge = 720       # cached frame long edge in pixels (960 for sharper, at more GPU upload)
+# swap_hold_opacity = 0.9     # auto-vj: hold scene swaps while the video layer is above this
