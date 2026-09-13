@@ -918,6 +918,52 @@ Use `pre-commit run --all-files` to run the same checks on demand.
 
 ---
 
+## Seat Worktrees (one checkout per agent seat)
+
+Every agent seat works in its **own git worktree**, not in the shared
+checkout.  `pre-commit` stashes a tree's unstaged changes while its hooks
+run, so in one shared checkout a seat's hook would stash -- and, on a
+collision, lose -- another seat's uncommitted work, revert `config.toml`
+under a live app, and fail on files the committer never touched
+(2026-09-13: three lost commits, a stashed batch, a reverted config and
+two collided live runs in one afternoon).  A worktree per seat gives each
+its own index and working tree; hooks then only ever see the committing
+seat's files.
+
+```bash
+tools/seat_worktree.sh core        # creates ~/Repos/unicorn-viz-seats/core on branch seat/core
+tools/seat_worktree.sh --list      # every worktree the repository knows about
+```
+
+The script is idempotent (re-run it to refresh submodules after a pointer
+bump).  A seat gets: a worktree on `seat/<name>` cut from `origin/master`;
+every drop-in submodule cloned from the main checkout's local object store
+(seconds, no network) and checked out at the pinned commit **on its own
+branch** (never detached); a `.venv` symlink to the main checkout's venv,
+because the hooks run `.venv/bin/python` by relative path; and a Claude
+memory directory symlinked to the shared one, so a session started in the
+seat keeps every note.
+
+**Landing work from a seat** -- the rules in `CLAUDE.md` still hold: no
+rebase, no cherry-pick, no force-push, never detached.
+
+```bash
+git push origin HEAD:master                      # fast-forward master on origin
+# rejected as non-fast-forward?  someone landed first:
+git fetch origin && git merge origin/master      # a merge commit is fine
+git push origin HEAD:master
+```
+
+Drop-in work is unchanged: commit and push inside `drop-ins/<name>` first
+(each seat's submodule checkout is a real clone with `origin` on GitHub),
+then commit the pointer bump on the seat branch, then push as above.
+
+**The main checkout stays on `master` and only ever pulls**
+(`git pull --ff-only`).  It is where the app runs: `runtime/`, `logs/`, the
+mixer's stores and the 64 GB of session data live there and are not
+duplicated into seats.  Tests run fine inside a seat (the owner-state
+guards in `tests/conftest.py` see the seat's own empty `runtime/`).
+
 ## Adding Platform Support
 
 ### Windows 11

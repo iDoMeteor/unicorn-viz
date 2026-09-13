@@ -278,7 +278,11 @@ out vec2 out_pos;
 
 ## Commit & Branch Conventions
 
-- Branch names: `feature/<name>`, `fix/<name>`, `docs/<name>`.
+- Branch names: `feature/<name>`, `fix/<name>`, `docs/<name>`; agent seats work
+  on `seat/<name>` in their own worktree (`tools/seat_worktree.sh <name>`, see
+  the developer guide's "Seat Worktrees") and land with
+  `git push origin HEAD:master`.  The shared main checkout stays on `master`
+  and only pulls -- it is where the app runs.
 - Commit messages: imperative mood, 72-char subject, blank line before body.
   - ✅ `Add Raymarcher effect with fog and audio-reactive shockwave`
   - ❌ `Added raymarcher, fixed some stuff`
