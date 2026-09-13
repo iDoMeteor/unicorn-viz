@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.138** — The pysdl2-dll "Using SDL2 binaries from pysdl2-dll" notice no longer prints at launch or in test runs; bundled binaries are the supported case, so the warning carried no information.
 - **1.0.0-beta.137** — Switching display mode on the X11 driver under
   XWayland no longer kills the app with `X Error ... BadMatch
   (X_SetInputFocus)`: an Xlib error handler now swallows that one

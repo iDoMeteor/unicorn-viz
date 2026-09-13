@@ -54,6 +54,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-ra"
+# The pysdl2-dll "Using SDL2 binaries" notice: filtered at runtime by
+# unicornviz/__init__.py; repeated here for tests that import sdl2 before
+# unicornviz so the warnings summary stays meaningful.
+filterwarnings = [
+    "ignore:Using SDL2 binaries from pysdl2-dll:UserWarning",
+]
 markers = [
     "local_tracks: opt-in replay tests over local audio fixtures (set UNICORNVIZ_TRACK_FIXTURES)",
 ]

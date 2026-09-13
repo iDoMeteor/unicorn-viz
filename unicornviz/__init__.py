@@ -43,7 +43,21 @@ Run from the project root after ``pip install -r requirements.txt``::
 """
 from __future__ import annotations
 
+import warnings
+
+# pysdl2 announces "Using SDL2 binaries from pysdl2-dll <ver>" as a
+# UserWarning the moment `sdl2` is first imported.  Bundled binaries are the
+# normal, supported case for this project (see requirements.txt), so the
+# notice carries no information and only clutters every launch and every
+# test run.  Filtered here, in the package init, because this runs before
+# any submodule pulls in sdl2 -- the filter has to be in place first.
+warnings.filterwarnings(
+    'ignore',
+    message=r'Using SDL2 binaries from pysdl2-dll',
+    category=UserWarning,
+)
+
 # Semantic version of the core package (see CLAUDE.md "Versioning & Release
 # Standards"). Pre-1.0 while in alpha; the first feature-complete, validated
 # release is 1.0.0. Owner-adjustable initial value.
-__version__ = '1.0.0-beta.137'
+__version__ = '1.0.0-beta.138'
