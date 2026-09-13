@@ -13265,3 +13265,145 @@ videos-01 supplies frames without knowing about either.  Remove any one
 and the app starts and the deck plays the file's audio as a normal track
 (plan acceptance).
 
+## Music-Video Decks: Auto VJ Swap-Hold Gate (2026-09-13, director rc.22)
+
+**Trigger.** Section 4 of `docs/planning/music-video-decks-plan-2026-09-13.md`
+(owner-consensus), ticketed by the strategist seat (`unicorn-viz-4c`,
+orchestrating the whole feature to completion per direct owner
+confirmation) once core's half landed (`688de8e`, core beta.139) and the
+final method name (`vj_api.get_video_layer_opacity() -> float`) and
+config key (`[video_decks] swap_hold_opacity`) were known. Verified
+directly against the actual plan doc and the actual landed commit before
+building anything, not taken on the ticket's word alone -- this program's
+own standing practice after an earlier, unrelated peer session was found
+fabricating "owner decided" specifics (see "Fitted Weights (Landed)"
+above). Both checked out exactly as described.
+
+**What it does.** While a visible video-deck layer's opacity is at or
+above `video_swap_hold_opacity` (`0.9` default), nobody can see an effect
+swap or a ping-pong transition happen, and a swap still instantiates GL
+resources for nothing -- so both are held. Everything else keeps running
+exactly as before: the mode/phrase clock, drop/impact postfx, scroll
+effects, and the recommender read none of this.
+
+**Two suppression paths, because they're genuinely different mechanisms.**
+`_allow_swap` already gates all 14 of the codebase's effect-swap call
+sites (drop tags, impact tags, climax tags, projectM checks, cruise
+actions, ...) -- but it was previously only recomputed once per profile/
+mood switch (`_apply_profile_settings()`), not per tick. Video opacity
+changes continuously (a crossfade), so the per-mood base setting moved to
+a new `_profile_allow_swap`, and `_allow_swap` itself is now recomputed
+every real `update()` tick (`_refresh_video_swap_hold()`, called right
+after the early-return guard, before anything later in the same tick can
+act on it) as `_profile_allow_swap AND NOT _video_swap_held`. This left
+all 14 existing call sites completely untouched. Ping-pong's own swap
+path (`_run_pingpong_tick()` -> `_run_pingpong_swap()`) runs INSTEAD of
+the normal director tick while ping-pong is active and was never gated
+by `_allow_swap` at all -- it needed its own check, added directly in
+`_run_pingpong_tick()`.
+
+**No catch-up burst.** A naive "just don't call `_run_pingpong_swap()`
+while held" would let `_pp_beat_count` silently accumulate past
+threshold during the hold, firing an immediately-queued swap the instant
+opacity drops back below threshold -- exactly the burst the ticket said
+to avoid. Fixed by resetting `_pp_beat_count` to `0` on a held beat
+(the same state a real swap leaves it in), so a full `beat_threshold`
+has to elapse again after the hold releases, identical to normal timing.
+The 14 `_allow_swap`-gated sites needed no equivalent treatment: their
+triggers are transient per-tick conditions (a tag present this tick,
+a threshold crossed this tick), not an accumulating counter, so gating
+them off for a few ticks cannot queue up a burst the way a beat counter
+can.
+
+**Config source.** `[video_decks] swap_hold_opacity` is core-owned
+(`self._app.cfg.get('video_decks', 'swap_hold_opacity', default=0.9)`,
+the same `Config.get(*keys, default=...)` call shape already used for
+`self._app.cfg.get('overlays', 'font_path', ...)`) -- read first since
+it's the authoritative value, shared with the composite layer that
+actually renders the video. Falls back to this drop-in's own
+`video_swap_hold_opacity` cfg key only if that raises (an older core, or
+an unreachable config surface); no session has needed the fallback path
+yet, but it's exercised in `test_video_swap_hold.py` regardless.
+
+**Engagement:** `video_swap_hold_ticks`, incremented once
+per tick the gate is engaged (same convention as `refractory_guard_
+engaged_count` -- counts ticks held, not individual blocked swap
+attempts, since instrumenting all 14 `_allow_swap` call sites
+individually for the latter would be far more invasive for the same
+information).
+
+**Verification.** New `tests/test_video_swap_hold.py` (bare controller
+instances, mirroring `test_auto_vj_pingpong_pinning.py`'s and
+`test_director_bass_delta_and_rel_confidence.py`'s style): the
+defensive-wrapper opacity read (absent/raises/real value), the hold
+decision at/above/below threshold, that the gate never overrides a mood
+that already disallows swaps the other way, the suppressed-count
+increment, resuming below threshold, both ping-pong paths (swaps
+normally when not held; holds and resets when held; no catch-up burst
+on release), and the config-source fallback shape. Two pre-existing
+bare-controller fixtures (`test_auto_vj_phrase_structure.py`'s
+`_PHRASE_DEFAULTS`/`_bare_update_controller`) needed the new attributes
+backfilled, same pattern as every previous cfg-gated mechanism landed
+this way -- caught directly by the full suite, not guessed at. Full
+suite green (2502 passed) after landing.
+
+**Bookkeeping.** `_DIRECTOR_VERSION` `1.0.0-rc.21 -> 1.0.0-rc.22`,
+`_VJ_WEIGHTS_DOC_VERSION` `113 -> 114`, `__version__` `1.0.0-rc.146 ->
+1.0.0-rc.147`. `training-kit-01`'s `_DIRECTOR_CONSTANT_DEFAULTS` gets a
+new `video_swap_hold_opacity` key; while touching that dict, also
+synced its stale `drop_bass_delta_min`/`_wait_bars` fallback values
+(`0.0`/`2.0`) to the real shipped rc.21 defaults (`1.10`/`4.0`), missed
+when that entry landed two days ago -- good-hygiene catch, not load-
+bearing (the live-read path already supplies the real values).
+
+**Follow-up: peer review found a real catch-up-burst bug the first
+landing missed, plus two hygiene items (2026-09-13, same day).**
+`unicorn-viz-4c` (strategist seat) audited the initial commit (`7230bc7`)
+directly against the code rather than the diff alone and found three
+things:
+
+1. **Real bug: `_run_cruise_actions()`'s own swap timer wasn't
+   protected against a catch-up burst.** Its check
+   (`self._secs_since_change >= self._next_swap_at`) IS gated by
+   `_allow_swap`, but `_secs_since_change` itself accumulates every
+   tick UNCONDITIONALLY, near the top of `update()`, regardless of the
+   hold. So on release, `_secs_since_change` could already sit far past
+   `_next_swap_at` from having climbed the whole time the hold was
+   engaged, firing an effect swap the SAME tick the hold lifts -- the
+   exact catch-up burst the ticket said to avoid, and the one class of
+   `_allow_swap`-gated site this entry's original "transient per-tick
+   conditions, not an accumulating counter" reasoning was wrong about.
+   Verified directly in the source before fixing, not taken on the
+   peer's word. **Fix:** `_refresh_video_swap_hold()` now resets
+   `self._secs_since_change = 0.0` on the held -> released transition
+   specifically (not every tick, not on engage) -- the same value a
+   real swap already leaves it at, so a full normal interval has to
+   elapse again, exactly mirroring the ping-pong beat-counter reset
+   this entry already had for that other path. New tests: `test_secs_
+   since_change_untouched_while_engaging_and_staying_held`, `test_secs_
+   since_change_resets_on_release_no_catch_up_swap` (500s of simulated
+   accumulated hold time, release, assert the timer reads `0.0`, not
+   `500.0`).
+2. **Counter renamed `video_layer_swap_suppressed_count` ->
+   `video_swap_hold_ticks`.** The original name implied "count of
+   suppressed swap attempts"; the actual semantic (documented correctly
+   above, just misleadingly named) is "ticks the gate was engaged" --
+   kept that simpler per-tick semantic (touching all 14 `_allow_swap`
+   call sites individually for a true per-attempt count would be far
+   more invasive for the same information) and fixed the name instead,
+   since the owner reads this number directly.
+3. **Logging added.** `log.info` once per transition (`"Video swap
+   hold engaged (opacity %.2f >= %.2f, source %s)"` /
+   `"...released..."`), `log.debug` at init only when the threshold
+   falls back to this drop-in's own `video_swap_hold_opacity` key
+   (core's config was unreachable) -- no per-tick logging.
+
+`_refresh_video_swap_hold()` is confirmed called exactly once per real
+`update()` tick (right after the early-return guard, before the
+ping-pong/director dispatch later in the same tick), not only from
+`_apply_profile_settings()`. Full suite green (2503 passed) after the
+fix; the one other failure seen on a re-run
+(`test_hw_encoder_prewarm.py::test_sync_probe_waits_for_the_in_flight_
+prewarm`) is a pre-existing, unrelated background-thread timing flake
+(passes in isolation, confirmed before and after this entry's changes).
+

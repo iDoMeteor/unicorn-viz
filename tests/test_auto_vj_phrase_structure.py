@@ -152,6 +152,15 @@ _PHRASE_DEFAULTS = dict(
     _bass_delta_hist=[],
     _drop_delta_gate_blocked_count=0,
     _drop_delta_gate_deferred_count=0,
+    # Music-video decks (2026-09-13, director rc.22): no video layer in
+    # these pre-existing tests, so the gate never engages -- opacity from
+    # the fake vj_api's absent get_video_layer_opacity() reads 0.0, well
+    # under the default 0.9 threshold.
+    _profile_allow_swap=True,
+    _allow_swap=True,
+    _video_swap_hold_opacity=0.9,
+    _video_swap_held=False,
+    _video_swap_hold_ticks=0,
 )
 
 
@@ -1133,6 +1142,11 @@ def _bare_update_controller(*, grid_bpm: float, grid_confidence: float, **overri
         _postfx_cruise_timer=0.0, _param_timer=0.0, _react_timer=0.0,
         _last_audio=SimpleNamespace(bass=0.5, mid=0.5, treble=0.5),
         _secs_since_change=0.0,
+        # Music-video decks (2026-09-13, director rc.22): no video layer
+        # in this fixture's fake vj_api, so the gate never engages.
+        _profile_allow_swap=True, _allow_swap=True,
+        _video_swap_hold_opacity=0.9, _video_swap_held=False,
+        _video_swap_hold_ticks=0,
     )
     defaults.update(overrides)
     inst = object.__new__(AutoVJController)
