@@ -133,6 +133,16 @@ class VideoDeckLayer:
         self._trace = open(trace, 'a', encoding='utf-8') if trace else None  # noqa: SIM115
         if self._source_cls is None:
             log.info('Video decks: DeckVideoSource unavailable (videos-01 absent); layer disabled')
+        if self.enabled:
+            # Compile now, not on the first frame a video becomes visible:
+            # a shader compile mid-show is a hitch on the first fade-in.
+            t0 = time.perf_counter()
+            try:
+                self._ensure_program()
+                log.info('Video decks: layer program ready (%.1f ms)', (time.perf_counter() - t0) * 1000.0)
+            except Exception as exc:
+                log.warning('Video decks: shader build failed, layer disabled: %s', exc)
+                self.enabled = False
 
     # -- properties read by the app / vj_api ---------------------------------
 
@@ -185,6 +195,10 @@ class VideoDeckLayer:
         """
         if not self.enabled:
             return
+        if deck_state is None and not any(sl.source is not None for sl in self._slots.values()):
+            # Audio-only night: no publisher, nothing open -- a null check and out.
+            self._last_update_ms = 0.0
+            return
         t0 = time.perf_counter()
         self._last_upload_ms = 0.0
         decks = self._normalize(deck_state)
@@ -213,6 +227,13 @@ class VideoDeckLayer:
                 continue
             if drawn == 0:
                 self._ensure_program()
+                # GL state contract with the composite chain: the app's
+                # _normalize_gl_render_state() baseline is BLEND *off* with
+                # SRC_ALPHA/ONE_MINUS_SRC_ALPHA, effects are expected to
+                # leave it that way, and the post passes write opaque quads
+                # that do not depend on BLEND.  So enabling here and disabling
+                # at the end returns the chain to its own baseline; moderngl
+                # exposes no getter for the enable flags to "restore" from.
                 self._ctx.enable(self._blend_flag())
                 self._ctx.blend_func = self._blend_func()
             tw, th = slot.tex_size
@@ -238,6 +259,7 @@ class VideoDeckLayer:
                 'rate': float(rec.get('rate', 1.0) or 0.0),
                 'playing': bool(rec.get('playing', False)),
                 'pts': slot.last_pts, 'opacity': slot.opacity,
+                'latency_s': float(rec.get('latency_s', 0.0) or 0.0),
                 'upload_ms': self._last_upload_ms,
             }) + '\n')
         except Exception:
@@ -294,8 +316,12 @@ class VideoDeckLayer:
             if slot.source is not None:
                 self._close_slot(key, slot, reason='path changed' if path else 'deck cleared')
             slot.path = path
-            if path:
-                self._open_slot(key, slot, path)
+            if path and not self._open_slot(key, slot, path):
+                # Refused at the source cap: leave the path unrecorded so the
+                # deck is retried next frame and picks a source up as soon as
+                # another deck lets one go (a failed *open* keeps the path;
+                # see the open_error branch below).
+                slot.path = ''
         if slot.source is None or rec is None:
             slot.opacity = 0.0
             return
@@ -343,14 +369,16 @@ class VideoDeckLayer:
                      key.upper(), slot.tex_size[0], slot.tex_size[1], slot.path)
         slot.has_frame = True
 
-    def _open_slot(self, key: str, slot: _DeckSlot, path: str) -> None:
+    def _open_slot(self, key: str, slot: _DeckSlot, path: str) -> bool:
+        """Open a source for *path*; False only when refused at the cap."""
         open_count = sum(1 for s in self._slots.values() if s.source is not None)
         if open_count >= _MAX_SOURCES:
             if not self._cap_warned:
                 self._cap_warned = True
-                log.info('Video decks: %d sources already open; deck %s (%s) will not get one',
+                log.info('Video decks: %d sources already open; deck %s (%s) waits for one',
                          _MAX_SOURCES, key.upper(), path)
-            return
+            return False
+        self._cap_warned = False        # below the cap again: a later refusal logs again
         try:
             slot.source = self._source_cls(
                 path,
@@ -360,11 +388,13 @@ class VideoDeckLayer:
         except Exception as exc:
             log.warning('Video decks: could not open %s for deck %s: %s', path, key.upper(), exc)
             slot.source = None
-            return
-        size = getattr(slot.source, 'size', (0, 0))
-        log.info('Video decks: deck %s opened %s (%dx%d)', key.upper(), path, size[0], size[1])
+            return True                 # opened-and-failed, not refused: keep the path
+        # (5) no size here: the open is non-blocking and the size is not known
+        # until the worker publishes it; the first upload logs "first frame WxH".
+        log.info('Video decks: deck %s opened %s', key.upper(), path)
         slot.last_pts = None
         slot.has_frame = False
+        return True
 
     def _close_slot(self, key: str, slot: _DeckSlot, *, reason: str) -> None:
         src = slot.source

@@ -99,16 +99,26 @@ def upload_table(layer, trace_rows) -> str:
 
 
 def av_table(trace_rows, flashes: list[float], tol: float) -> str:
-    lines = ['A/V mapping (deck position when the flash frame was chosen - flash pts):']
+    """Headline is the residual after the latency subtraction; the raw
+    (write-cursor) offset sits beside it as the structural figure."""
+    lines = ['A/V (flash frame): residual after latency subtraction | raw write-cursor offset:']
+    residuals: list[float] = []
     for f in flashes:
         picks = [r for r in trace_rows if r.get('pts') is not None and abs(r['pts'] - f) <= tol]
         if not picks:
             lines.append(f'  flash {f:5.1f}s: not shown')
             continue
         first = min(picks, key=lambda r: r['t'])
-        lines.append(f'  flash {f:5.1f}s: chosen at position {first["position_s"]:.3f}s  '
-                     f'offset {(first["position_s"] - f) * 1000.0:+.0f} ms  '
-                     f'(held {len(picks)} frames)')
+        raw = (first['position_s'] - f) * 1000.0
+        lat = float(first.get('latency_s', 0.0) or 0.0) * 1000.0
+        res = raw - lat
+        residuals.append(res)
+        lines.append(f'  flash {f:5.1f}s: residual {res:+5.0f} ms   (raw {raw:+.0f} ms, latency_s {lat:.0f} ms, '
+                     f'held {len(picks)} frames)')
+    if residuals:
+        lines.append(f'  residual mean {statistics.mean(residuals):+.0f} ms, '
+                     f'range {min(residuals):+.0f}..{max(residuals):+.0f} ms  '
+                     f'(one display frame = {1000.0/30.0:.0f} ms at the 30 fps lock)')
     return '\n'.join(lines)
 
 
@@ -117,7 +127,7 @@ def scratch_table(layer) -> str:
     position moves against the clock -- approximated as consecutive DEBUG
     lines whose pts went backwards."""
     secs = sorted(layer)
-    lines = ['scratch (ring hit rate over seconds where pts moved backwards):']
+    lines = ['scratch (ring hit rate over seconds where pts moved backwards by < 5 s, counter resets skipped):']
     for d in 'ABCD':
         prev = None
         hits = misses = 0
@@ -126,7 +136,10 @@ def scratch_table(layer) -> str:
             if cur is None or prev is None:
                 prev = cur
                 continue
-            if cur['pts'] is not None and prev['pts'] is not None and cur['pts'] < prev['pts']:
+            counters_reset = cur['hit'] < prev['hit'] or cur['miss'] < prev['miss']
+            backwards = (cur['pts'] is not None and prev['pts'] is not None
+                         and prev['pts'] - 5.0 < cur['pts'] < prev['pts'])   # a scratch, not a loop restart
+            if backwards and not counters_reset:               # a swapped source restarts its counters
                 hits += cur['hit'] - prev['hit']
                 misses += cur['miss'] - prev['miss']
             prev = cur

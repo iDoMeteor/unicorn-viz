@@ -6955,6 +6955,15 @@ void main() {
         actually draws, so every render path calls both and the toggle is
         honored in one place.  Binds fbo_a at the logical render size and
         leaves it bound.
+
+        Why ~15 call sites rather than two: _render() has no single point
+        where fbo_a holds the final pre-post or post-post image for every
+        branch -- the invert/burst/mirror/transition paths each present from
+        fbo_a at a different place, and several present straight to screen
+        without a post chain at all.  The calls sit right before each of
+        those presents (and after each post chain), which is the only
+        placement that is correct in every branch.  Collapsing them would
+        mean restructuring _render() itself.
         """
         layer = self._video_deck_layer
         if layer is None or not layer.active:

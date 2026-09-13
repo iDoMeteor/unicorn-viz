@@ -174,7 +174,7 @@ def test_opens_on_first_sight_with_the_configured_cache(caplog):
     src = FakeSource.instances[0]
     assert src.path == '/music/a.mp4'
     assert src.kwargs == {'cache_window_s': 4.0, 'cache_long_edge': 720}
-    assert 'opened /music/a.mp4 (64x36)' in caplog.text
+    assert 'opened /music/a.mp4' in caplog.text               # no size: open is non-blocking
 
 
 def test_closes_when_the_path_changes_and_opens_the_new_one(caplog):
@@ -203,7 +203,24 @@ def test_at_most_two_sources_are_open(caplog):
     with caplog.at_level(logging.INFO, logger='unicornviz.video_deck_layer'):
         layer.update(_state(a=_deck('/1.mp4'), b=_deck('/2.mp4'), c=_deck('/3.mp4')))
     assert len(FakeSource.instances) == 2
-    assert 'will not get one' in caplog.text
+    assert 'waits for one' in caplog.text
+
+
+def test_a_deck_refused_at_the_cap_gets_a_source_when_one_frees_up(caplog):
+    """Audit item 1: deck C used to stay black for the rest of its track."""
+    layer = _layer()
+    st = _state(a=_deck('/1.mp4'), b=_deck('/2.mp4'), c=_deck('/3.mp4'))
+    layer.update(st)
+    layer.update(st)                                         # still refused, no spam
+    assert len(FakeSource.instances) == 2
+    with caplog.at_level(logging.INFO, logger='unicornviz.video_deck_layer'):
+        layer.update(_state(b=_deck('/2.mp4'), c=_deck('/3.mp4')))   # A cleared
+    assert len(FakeSource.instances) == 3
+    assert FakeSource.instances[2].path == '/3.mp4'
+    assert FakeSource.instances[0].closed
+    with caplog.at_level(logging.INFO, logger='unicornviz.video_deck_layer'):
+        layer.update(_state(b=_deck('/2.mp4'), c=_deck('/3.mp4'), d=_deck('/4.mp4')))
+    assert caplog.text.count('waits for one') >= 1
 
 
 def test_a_source_that_fails_to_open_leaves_the_deck_as_no_video(caplog):
@@ -319,6 +336,7 @@ def test_layer_is_a_no_op_when_the_source_class_is_none():
     layer.update(_state(a=_deck(audibility=1.0)))
     layer.draw(1920, 1080)
     assert ctx.textures == [] and ctx.vao.renders == 0
+    assert layer._prog is None                               # nothing compiled when disabled
     assert layer.active is False and layer.layer_opacity == 0.0
     assert layer.status_pill() is None and layer.last_frame_ms == 0.0
 
@@ -412,3 +430,15 @@ def test_first_frame_logs_the_real_size(caplog):
         layer.update(_state(a=_deck()))
         layer.update(_state(a=_deck()))
     assert sum('first frame 64x36' in r.getMessage() for r in caplog.records) == 1
+
+
+def test_program_is_compiled_at_construction_not_first_fade_in(caplog):
+    with caplog.at_level(logging.INFO, logger='unicornviz.video_deck_layer'):
+        layer = _layer()
+    assert layer._prog is not None and 'layer program ready' in caplog.text
+
+
+def test_idle_update_with_no_publisher_is_a_null_check():
+    layer = _layer()
+    layer.update(None)
+    assert layer.last_frame_ms == 0.0 and layer.active is False
