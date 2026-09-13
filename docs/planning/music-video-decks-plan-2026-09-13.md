@@ -2,8 +2,8 @@
 
 Owner: Auto VJ strategist seat (design), dj-mixer-01 / videos-01 / core /
 auto-vj-01 seats (implementation)
-Status: consensus reached with the owner 2026-09-13; tickets issued; nothing
-implemented yet
+Status: **LANDED and live-verified 2026-09-13** (see "Landed" at the end);
+audited the same day
 Last updated: 2026-09-13
 
 ## What the owner asked for
@@ -154,3 +154,48 @@ appear; crossfade A→B and back: the video fades in and out with the fader,
 never with a fixed timer; scratch, cue-jump and loop on A: the picture
 follows within a frame or two; remove any one of the three drop-ins: the
 app starts and the deck plays the video's audio as a normal track.
+
+## Landed (2026-09-13, same day)
+
+| piece | version / commit | audit |
+| --- | --- | --- |
+| videos-01 `DeckVideoSource` | 0.8.2 (`deck_video_source.py`), 21 tests | passed after 4 fixes (partial-ring publish on far jumps, stats counted per lookup, non-blocking open with `open_error`, bisect lookup) |
+| dj-mixer-01 video tracks + deck-state bus | 0.194.1 (`latency_s` = measured `OutputStream.latency`); 0.194.2 boot-set race fix | passed after 3 fixes (has_video cached at load, publish only while a video deck exists, load INFO / reject WARNING) |
+| core `VideoDeckLayer` + bus + config | 1.0.0-beta.141 (`8971145`), 44 layer/bus tests | passed after 6 items (source-cap starvation bug, blend-state restore, shader compile at init, idle early-return, first-frame size line + `open_error`, call-site docstring) |
+| auto-vj swap-hold gate | director rc.22 (auto-vj rc.147 + `5eb4ca3`), 16 tests | passed after 3 items (swap clock reset on release, counter renamed `video_swap_hold_ticks`, engage/release INFO) |
+
+Demucs accepts video containers directly (verified with real stems), so
+the audio-extract fallback in section 1 was never needed.
+
+### Live measurement (owner's rig, machine exclusive, 30 fps lock, mirror mode, prebuffer 24 blocks)
+
+`video_decks` stage mean / p95 ms:
+
+| phase | 720 long edge | 960 long edge |
+| --- | --- | --- |
+| idle, no video deck | 0.06 / 0.14 | 0.16 / 1.29 (boot noise) |
+| one deck visible | 0.51 / 1.67 | 0.57 / 2.58 |
+| two decks, crossfade | 0.66 / 2.56 | 0.72 / 2.82 |
+
+Texture upload per new frame: 720×405 mean 0.81 / p95 2.01 ms; 960×540
+mean 1.35 / p95 3.24 ms. Draw ~0.02 ms. **Decision 3 stands:** under 1 ms
+mean and under 3 ms p95 with two quads over a running visualizer; no pause
+path needed.
+
+**A/V:** the deck publishes its *write* cursor; the ear hears it one output
+buffer later (256 ms on this rig, published as `latency_s` and subtracted
+by the layer). Residual after subtraction across nine clapper flashes:
+mean 0 ms, range −16..+12 ms, inside one display frame every time. The raw
+offset (+240..+268 ms) is what the picture led the sound by before the
+field existed.
+
+**Scratch:** 2 s back-and-forth on the REV1 jog, 100% ring hits, zero
+seeks, at both resolutions. Owner: "the video moved with it, w00t".
+
+### Follow-ups outside this feature
+- Clean shutdown after SIGINT took 40–50 s in two runs (final frame 1.27 s
+  in the events stage); not video-related; for whoever owns shutdown.
+- `~/Music/crates/_test/` (two clappers) and the `_video_test` set remain;
+  owner's call to delete.
+- `git stash@{0}` in the main repo holds a superseded copy of the core
+  batch; drop on the owner's word.
