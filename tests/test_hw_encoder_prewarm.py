@@ -43,16 +43,21 @@ def test_prewarm_runs_the_probe_on_a_worker_and_caches(monkeypatch):
 
 def test_sync_probe_waits_for_the_in_flight_prewarm(monkeypatch):
     spawns = 0
+    probing = threading.Event()   # set by the worker once it holds the lock
 
     def fake_run(cmd, **k):
         nonlocal spawns
         spawns += 1
+        probing.set()
         time.sleep(0.2)
         return type('P', (), {'returncode': 0, 'stderr': b''})()
     monkeypatch.setattr(rec.subprocess, 'run', fake_run)
     monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
     t = rec.prewarm_hw_encoder_probe('ffmpeg')
-    time.sleep(0.05)                                   # prewarm is mid-probe
+    # Wait for the worker to be mid-probe rather than sleeping a fixed 50 ms:
+    # under a loaded full-suite run the thread had not even started by then,
+    # so the "record press" below ran its own probe and the count read 2.
+    assert probing.wait(timeout=2.0)
     result = rec._probe_hw_encoder('ffmpeg')           # "record pressed"
     t.join(timeout=2.0)
     assert result is not None
