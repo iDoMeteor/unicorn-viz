@@ -290,6 +290,36 @@ out vec2 out_pos;
 - Screenshots (`unicornviz_*.png`) are gitignored; don't commit them.
 - Commit & push after each substantial change; avoid large monolithic commits.
 
+## Seat Worktrees (one checkout per agent)
+
+Pre-commit stashes every *unstaged* change in the tree it runs in.  With
+several agent seats sharing one checkout those stashes collide and edits
+vanish mid-commit (it cost three commits, a reverted `config.toml` under a
+live app and two collided live runs in one afternoon).  So each seat gets
+its own git worktree:
+
+- A seat works in `~/Repos/unicorn-viz-seats/<name>` on branch
+  `seat/<name>`, created by `tools/seat_worktree.sh <name>` (idempotent,
+  no network; `--list` shows them).  `.venv` and the Claude memory dir are
+  symlinked in, so hooks, tests and memory behave exactly as before.
+- **The shared main checkout (`~/Repos/unicorn-viz`) stays on `master` and
+  only ever `git pull --ff-only`s.**  The app runs there (`runtime/`,
+  `logs/`, the mixer and media stores).  A seat must not edit, stage, stash
+  or commit files there.
+- Landing: commit on `seat/<name>`, run the hooks there, then
+  `git push origin HEAD:master`.  If the push is rejected as non-fast-forward:
+  `git fetch origin && git merge origin/master` (a merge commit is fine),
+  rerun the tests, push again.  Never rebase, cherry-pick or force.
+- Drop-ins follow the same order as before, from inside the seat: commit
+  and push in `drop-ins/<x>` first, then the submodule pointer bump on the
+  seat branch, then land as above.
+- Never `git worktree remove` / `git worktree prune` another seat's tree and
+  never pop, apply or drop another seat's stash.  Report a stray stash or
+  worktree to the owner instead.
+- A session that is still running in the main checkout (not yet moved to
+  its seat) remains exposed to the stash hazard.  Say so when it bites
+  rather than retrying blind; recover from `~/.cache/pre-commit/patch*`.
+
 ## Versioning & Release Standards
 
 The project follows **Semantic Versioning 2.0.0** (`MAJOR.MINOR.PATCH`).  The
@@ -377,6 +407,12 @@ results still play; surface the stale count and let the owner decide.
   and only then proceed to push.
 - Do not push with known unresolved hook warnings/errors unless the owner
   explicitly approves a defer for that specific warning/error set.
+- `--no-verify` is never an agent's call.  It needs the owner's explicit word
+  for that specific commit; an approval given once does not carry over.
+- Run hooks only inside your own seat worktree (see "Seat Worktrees").  A
+  hook run in a tree another seat is also editing stashes their unstaged
+  work; if a hook reports a stash conflict or "reverted" edits, stop and
+  report instead of re-running.
 
 ## Git History Safety (Hard Stop)
 
@@ -388,6 +424,9 @@ results still play; surface the stale count and let the owner decide.
   `git push --force-with-lease`, or equivalent).
 - Agents must **never** rewrite branch history in any repository (main repo or
   drop-in submodule repos).
+- Agents must **never** remove or prune another seat's worktree, check out a
+  different branch in the shared main checkout, or pop/apply/drop a stash
+  they did not create.
 - If an operation would require any of the above, the agent must stop
   immediately and report:
   1. the exact conflict/blocker,
@@ -432,8 +471,8 @@ The agent does **not** need to ask permission before:
 
 Permission **is required** before any action that deletes, destroys, or
 irreversibly overwrites data — including `rm`, `git reset --hard`, force-push,
-dropping tables, overwriting committed history, or any destructive shell
-invocation.
+`git stash drop`, `git worktree remove` / `prune`, `git branch -D`, dropping
+tables, overwriting committed history, or any destructive shell invocation.
 
 ---
 
@@ -498,7 +537,8 @@ The owner makes their own edits to `config.toml` at any time.
   private GitHub repository for it and wire it into `drop-ins/` as a submodule.
 - When modifying a drop-in, the agent must commit and push changes in the
   drop-in's own repository first, then commit and push the updated submodule
-  pointer in the main `unicorn-viz` repository.
+  pointer in the main `unicorn-viz` repository (from the seat worktree, landed
+  with `git push origin HEAD:master`; see "Seat Worktrees").
 - **Every drop-in that introduces hotkeys must add its control lines to its
   `HELP_ENTRIES`** (discovered by core's `discover_dropin_help_entries` and
   merged into `unicornviz/overlays.py`'s `CORE_HELP_SECTIONS` /
