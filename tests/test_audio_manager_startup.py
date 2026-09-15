@@ -92,6 +92,67 @@ def test_start_times_out_when_capture_hangs() -> None:
         manager.start(timeout_s=0.01)
 
 
+class _CaptureHang(_CaptureBase):
+    """start() blocks until released, like Pa_OpenStream stuck behind a busy
+    PipeWire JACK shim (OBS running, 2026-09-14)."""
+
+    def __init__(self) -> None:
+        import threading
+        self.release = threading.Event()
+        self.closed_cleanly = True
+        self.starts = 0
+
+    def start(self) -> None:
+        self.starts += 1
+        self.release.wait(timeout=5.0)
+        self.active = True
+
+
+def test_stop_skips_pa_terminate_while_open_is_in_flight(monkeypatch) -> None:
+    """2026-09-14 abort: start() timed out, the retry path called stop(),
+    and Pa_Terminate ran while the start worker was still inside
+    Pa_OpenStream -- PortAudio's JACK host API asserted and took the
+    process down.  With the open still in flight, stop() must not
+    terminate PortAudio and must drop sounddevice's atexit teardown too."""
+    import atexit
+
+    import sounddevice as sd
+
+    calls: list[str] = []
+    monkeypatch.setattr(sd, '_terminate', lambda: calls.append('terminate'))
+    monkeypatch.setattr(atexit, 'unregister', lambda fn: calls.append('unregister'))
+    manager = _manager()
+    cap = _CaptureHang()
+    manager._capture = cap
+    with pytest.raises(TimeoutError, match='timed out'):
+        manager.start(timeout_s=0.01)
+    assert manager._start_worker is not None and manager._start_worker.is_alive()
+
+    manager.stop()
+    assert calls == ['unregister']          # no Pa_Terminate under a live open
+    cap.release.set()
+    manager._start_worker.join(timeout=2.0)
+
+
+def test_retry_does_not_open_a_second_stream_over_a_stuck_one() -> None:
+    """The retry must wait for the stuck worker, not launch a second open
+    (PortAudio's open path is not reentrant)."""
+    manager = _manager()
+    cap = _CaptureHang()
+    manager._capture = cap
+    with pytest.raises(TimeoutError, match='timed out'):
+        manager.start(timeout_s=0.01)
+    with pytest.raises(TimeoutError, match='still in flight'):
+        manager.start(timeout_s=0.01)
+    assert cap.starts == 1
+    # Once the stuck open finally completes, the next attempt adopts the
+    # live capture instead of opening again.
+    cap.release.set()
+    manager.start(timeout_s=0.5)
+    assert cap.starts == 1
+    manager.stop()
+
+
 def test_start_wraps_capture_exception() -> None:
     manager = _manager()
     manager._capture = _CaptureRaise()

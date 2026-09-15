@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.143** — Startup no longer aborts when the audio open is slow (OBS holding PipeWire's JACK shim busy): a timed-out capture open is waited for instead of torn down underneath (PortAudio's JACK host API asserted and killed the process on `Pa_Terminate`), and the retry adopts the late-finishing open rather than opening a second stream.
 - **1.0.0-beta.142** — Windows packs render every text surface with the
   bundled font: dj-mixer-01 0.194.3 and midi-controllers-01 0.10.1 now go
   through core's font resolver instead of Linux-only font paths (their

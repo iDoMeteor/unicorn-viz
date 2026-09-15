@@ -31,6 +31,10 @@ def test_stub_catalog_build_succeeds_without_init(tmp_path: Path, caplog, monkey
     # cannot leak into the count.
     monkeypatch.setattr(PM, '_excluded_presets_file', lambda self: tmp_path / 'excluded.txt')
     monkeypatch.setattr(PM, '_preset_state_file', lambda self: tmp_path / 'state.json')
+    # The migration path reads the runtime file directly (not via
+    # _preset_state_file), and creating it in the working tree trips the
+    # owner-state guard in a fresh worktree (2026-09-14).
+    monkeypatch.setattr(PM, '_runtime_preset_state_file', lambda self: tmp_path / 'state.json')
 
     with caplog.at_level(logging.WARNING, logger=_pm_mod.log.name):
         PM._build_catalog_cache({'preset_dir': str(presets)}, source='test')

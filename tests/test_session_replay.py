@@ -382,27 +382,25 @@ def test_accelerated_sets_root_is_a_sibling_of_sets(tmp_path: Path) -> None:
     assert session_replay._ACCELERATED_SETS_ROOT.parent.name == 'training'
 
 
-def test_run_session_default_out_dir_is_unique_per_call(tmp_path: Path) -> None:
+def test_run_session_default_out_dir_is_unique_per_call(tmp_path: Path, monkeypatch) -> None:
     """2026-08-19: two sequential calls with no explicit --out-dir must
     never land in the same directory -- the bug that let a failed run's
     orphaned corpus file get swept into an unrelated later run's bucket.
-    Uses the real repo's logs/replay/ (the actual default), so it cleans
-    up the two dirs it creates there afterward."""
+    The default root is ``<repo>/logs/replay/``; the repo root is pointed at
+    tmp_path so the test exercises the real default path derivation without
+    creating ``logs/replay/`` in the working tree (the owner-state guard in
+    conftest.py flags that in a fresh worktree, 2026-09-14)."""
+    monkeypatch.setattr(session_replay, '_REPO', tmp_path)
     audio = tmp_path / 'clip.wav'
     pcm, _ = _GEN.generate_clip(124.0, duration_s=1.0, seed=1)
     wavfile.write(str(audio), _GEN.SR, (pcm * 32767).astype(np.int16))
 
     s1 = session_replay.run_session([audio], max_duration_s=1.0, gap_s=0.1)
     s2 = session_replay.run_session([audio], max_duration_s=1.0, gap_s=0.1)
-    try:
-        assert s1['out_dir'] != s2['out_dir']
-        default_root = session_replay._REPO / 'logs' / 'replay'
-        assert Path(s1['out_dir']).parent == default_root
-        assert Path(s2['out_dir']).parent == default_root
-    finally:
-        import shutil as _shutil
-        _shutil.rmtree(s1['out_dir'], ignore_errors=True)
-        _shutil.rmtree(s2['out_dir'], ignore_errors=True)
+    assert s1['out_dir'] != s2['out_dir']
+    default_root = tmp_path / 'logs' / 'replay'
+    assert Path(s1['out_dir']).parent == default_root
+    assert Path(s2['out_dir']).parent == default_root
 
 
 def test_main_skips_packaging_with_no_package_flag(tmp_path: Path, monkeypatch) -> None:

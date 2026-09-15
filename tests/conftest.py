@@ -37,6 +37,33 @@ def _snapshot() -> dict[str, set[str]]:
 
 
 @pytest.fixture(autouse=True)
+def _runtime_state_in_tmp(monkeypatch, tmp_path_factory):
+    """Keep every App's runtime store out of the working tree.
+
+    ``App()`` builds a ``RuntimeStateStore`` at the configured path, which
+    defaults to the relative ``runtime/global_state.json`` -- i.e. the
+    owner's live state file under APP_ROOT.  Eight test modules construct
+    a real App with a default Config; each one used to create that file
+    (masked in the long-lived main checkout, where it already existed, and
+    caught by the guard below the first time a fresh seat worktree ran the
+    suite, 2026-09-14).  Relative store paths are rooted under a per-test
+    tmp dir here; absolute paths a test chose itself are left alone.
+    """
+    import unicornviz.app as app_mod
+    from unicornviz.runtime_state import RuntimeStateStore
+
+    base = tmp_path_factory.mktemp('runtime-state')
+
+    class _TmpRuntimeStateStore(RuntimeStateStore):
+        def __init__(self, path='runtime/global_state.json') -> None:
+            p = Path(path)
+            super().__init__(p if p.is_absolute() else base / p)
+
+    monkeypatch.setattr(app_mod, 'RuntimeStateStore', _TmpRuntimeStateStore)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _redirect_autovj_logs(monkeypatch, tmp_path_factory):
     monkeypatch.setenv('UNICORNVIZ_AUTOVJ_LOG_DIR',
                        str(tmp_path_factory.mktemp('autovj-logs')))

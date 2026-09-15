@@ -113,6 +113,10 @@ class AudioManager:
         self._analysis_lock: threading.Lock = threading.Lock()
         self._analysis_stop: threading.Event = threading.Event()
         self._analysis_thread: threading.Thread | None = None
+        # The timed startup worker, kept only while a capture open is still
+        # in flight after start() gave up waiting on it.  stop() must not
+        # tear PortAudio down underneath it (see stop()).
+        self._start_worker: threading.Thread | None = None
         # Onset events published by the analysis thread, drained by main thread.
         self._onset_pending: list[OnsetEvent] = []
         # Audio timestamp of the last published block.  Written under
@@ -187,8 +191,27 @@ class AudioManager:
 
         log.debug('AudioManager: starting capture')
 
+        # A previous timed attempt may still be inside Pa_OpenStream (the
+        # 2026-09-14 abort: OBS held PipeWire's JACK shim busy, the open
+        # outlived the 4 s budget, and the retry opened a second stream on
+        # top of it).  PortAudio's open path is not reentrant, so wait for
+        # that worker rather than racing it; if it is still stuck, this
+        # attempt fails the same way the first did.
+        stale = self._start_worker
+        if stale is not None and stale.is_alive():
+            stale.join(timeout=float(timeout_s) if timeout_s else 1.0)
+            if stale.is_alive():
+                raise TimeoutError(
+                    'Audio capture startup still in flight from a previous attempt'
+                )
+        self._start_worker = None
+
         if timeout_s is None or timeout_s <= 0:
             self._capture.start()
+        elif self._capture.active:
+            # The stale worker finished late and the capture is live -- do
+            # not open it a second time.
+            log.info('AudioManager: capture became active after a timed-out attempt')
         else:
             start_exc: Exception | None = None
 
@@ -207,6 +230,7 @@ class AudioManager:
             worker.start()
             worker.join(timeout=float(timeout_s))
             if worker.is_alive():
+                self._start_worker = worker
                 raise TimeoutError(
                     f'Audio capture startup timed out after {float(timeout_s):.2f}s'
                 )
@@ -264,11 +288,29 @@ class AudioManager:
         # capture reports an unclean close this skips Pa_Terminate *and*
         # unregisters sounddevice's atexit hook, leaving the OS to reclaim
         # the device rather than aborting on the way out.
+        #
+        # The same abort fires when the *open* is still in flight: a timed
+        # start() that gave up on its worker left that worker inside
+        # Pa_OpenStream, and the startup retry path calls stop() right
+        # after.  Terminating then is the 2026-09-14 crash.  So a live start
+        # worker gets a short grace period and, if it is still stuck,
+        # counts as unclean.
+        start_in_flight = False
+        worker = self._start_worker
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=2.0)
+            start_in_flight = worker.is_alive()
         try:
             import atexit  # noqa: PLC0415
 
             import sounddevice as _sd  # noqa: PLC0415
-            if self._capture.closed_cleanly:
+            if start_in_flight:
+                atexit.unregister(_sd._terminate)  # noqa: SLF001
+                log.warning(
+                    'AudioManager: capture open still in flight; skipping '
+                    'PortAudio teardown to avoid a host-API abort'
+                )
+            elif self._capture.closed_cleanly:
                 _sd._terminate()  # noqa: SLF001
                 log.debug('AudioManager: PortAudio terminated cleanly')
             else:
