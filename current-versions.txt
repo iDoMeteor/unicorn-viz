@@ -7,14 +7,15 @@
   core (unicornviz)             1.0.0-beta.143      BETA          MISMATCH (readme=1.0.0-beta.135)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.196.0             alpha ▲       module
+  dj-mixer-01                   0.195.0             alpha ▲       module
   media-01                      0.29.3              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
-  control-room-01               0.16.2              alpha ▲       module
+  control-room-01               0.17.0              alpha ▲       module
   projectm-01                   0.12.8              alpha ▲       module
+  banner-01                     0.12.0              alpha ▲       MISMATCH (readme=0.11.0)
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
-  banner-01                     0.11.0              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
+  midi-controllers-01           0.10.1              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.147        RC            MISMATCH (readme=1.0.0-rc.142)
@@ -30,7 +31,6 @@
   effects-retro                 0.9.1               alpha ▲       module
   effects-tech                  0.10.0              alpha ▲       module
   effects-vector                0.10.0              alpha ▲       module
-  midi-controllers-01           0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.2          RC            module
@@ -79,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  3 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic
+  ⚠  4 version mismatch(es): core (unicornviz), auto-vj-01, banner-01, effects-cosmic
 
