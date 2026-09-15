@@ -16,10 +16,25 @@ import pytest
 from unicornviz import recording as rec
 
 
+def _join_stray_probe_threads(timeout: float = 5.0) -> None:
+    """Wait for any live probe worker before and after each test.
+
+    The worker looks ``subprocess.run`` up at call time, so a thread left
+    over from an earlier test (its own join timed out under a loaded
+    full-suite run) called the *next* test's fake and inflated its spawn
+    count -- the ``assert spawns == 1`` flake of 2026-09-09/14.
+    """
+    for th in threading.enumerate():
+        if th.name == 'uv-hw-encoder-probe' and th is not threading.current_thread():
+            th.join(timeout=timeout)
+
+
 @pytest.fixture(autouse=True)
 def _reset_cache(monkeypatch):
+    _join_stray_probe_threads()
     monkeypatch.setattr(rec, '_hw_encoder_cache', None)
     yield
+    _join_stray_probe_threads()
 
 
 def test_prewarm_runs_the_probe_on_a_worker_and_caches(monkeypatch):

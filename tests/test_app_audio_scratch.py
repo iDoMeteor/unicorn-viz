@@ -23,12 +23,18 @@ from unicornviz.app import App
 from unicornviz.effects.base import AudioData
 
 
-def _default_cfg() -> Config:
-    return Config(Path('tests') / '_missing_config_for_tests.toml')
+def _default_cfg(tmp_path: Path) -> Config:
+    # Runtime state under tmp_path: App() otherwise creates the owner's
+    # runtime/global_state.json in the working tree (owner-state guard,
+    # conftest.py; caught in a fresh seat worktree 2026-09-14).
+    return Config(
+        Path('tests') / '_missing_config_for_tests.toml',
+        overrides={'runtime_state': {'path': str(tmp_path / 'global_state.json')}},
+    )
 
 
-def test_fill_audio_scratch_copies_every_audiodata_slot_at_unity_scale() -> None:
-    app = App(_default_cfg())
+def test_fill_audio_scratch_copies_every_audiodata_slot_at_unity_scale(tmp_path: Path) -> None:
+    app = App(_default_cfg(tmp_path))
     source = AudioData()
     target = AudioData()
     for i, name in enumerate(AudioData.__slots__):
@@ -49,11 +55,11 @@ def test_fill_audio_scratch_copies_every_audiodata_slot_at_unity_scale() -> None
             assert target_val == source_val, f'{name} not copied'
 
 
-def test_fill_audio_scratch_copies_vocal_hnr_and_fmr() -> None:
+def test_fill_audio_scratch_copies_vocal_hnr_and_fmr(tmp_path: Path) -> None:
     """Narrower, explicit regression for the specific fields that were
     dropped -- kept alongside the exhaustive test above so this exact
     symptom has a test that names it directly."""
-    app = App(_default_cfg())
+    app = App(_default_cfg(tmp_path))
     source = AudioData()
     target = AudioData()
     source.vocal_hnr = 0.6899
@@ -65,10 +71,10 @@ def test_fill_audio_scratch_copies_vocal_hnr_and_fmr() -> None:
     assert target.vocal_fmr == pytest.approx(0.6804)
 
 
-def test_fill_audio_scratch_scales_only_level_fields() -> None:
+def test_fill_audio_scratch_scales_only_level_fields(tmp_path: Path) -> None:
     """Reactivity scale must affect bass/mid/treble/fft only -- everything
     else (including vocal_hnr/vocal_fmr) is reactivity-invariant by design."""
-    app = App(_default_cfg())
+    app = App(_default_cfg(tmp_path))
     source = AudioData()
     target = AudioData()
     source.bass = 0.3
@@ -86,8 +92,8 @@ def test_fill_audio_scratch_scales_only_level_fields() -> None:
     assert target.bass_n == pytest.approx(0.5)      # unscaled
 
 
-def test_fill_audio_scratch_clamps_scaled_level_fields_to_one() -> None:
-    app = App(_default_cfg())
+def test_fill_audio_scratch_clamps_scaled_level_fields_to_one(tmp_path: Path) -> None:
+    app = App(_default_cfg(tmp_path))
     source = AudioData()
     target = AudioData()
     source.bass = 0.9
