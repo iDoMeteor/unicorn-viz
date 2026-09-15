@@ -66,7 +66,13 @@ def test_ride_declares_a_zoom_floor(rides, name):
     """Every ride states the widest view it can draw."""
     floor = getattr(rides[name], '_MIN_ZOOM', None)
     assert isinstance(floor, float), f'{name} has no _MIN_ZOOM'
-    assert 0.0 < floor <= 1.0, f'{name}: implausible floor {floor}'
+    # A floor above 1.0 is legitimate: it frames the ride tighter than the
+    # nominal default rather than merely capping how far out you may go. The
+    # Log Flume does exactly that at 1.25, because its channel is open water
+    # with the scenery set well back. What such a floor must not do is exceed
+    # the ride's own configured zoom and clamp it silently -- that is what
+    # test_configured_zoom_is_not_already_below_the_floor is for.
+    assert 0.0 < floor <= 2.0, f'{name}: implausible floor {floor}'
 
 
 @pytest.mark.parametrize('name', sorted(RIDES))
