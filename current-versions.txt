@@ -7,10 +7,10 @@
   core (unicornviz)             1.0.0-beta.142      BETA          MISMATCH (readme=1.0.0-beta.135)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.194.3             alpha ▲       module
+  dj-mixer-01                   0.195.0             alpha ▲       module
   media-01                      0.29.3              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
-  control-room-01               0.16.2              alpha ▲       module
+  control-room-01               0.17.0              alpha ▲       module
   projectm-01                   0.12.8              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
   banner-01                     0.11.0              alpha ▲       module
