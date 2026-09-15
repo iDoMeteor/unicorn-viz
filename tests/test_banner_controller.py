@@ -83,6 +83,24 @@ def _audio(bass=0.0, mid=0.0, treble=0.0, beat=0.0):
     return types.SimpleNamespace(bass_n=bass, mid_n=mid, treble_n=treble, beat=beat)
 
 
+class _ScreenlessCtx:
+    """Wraps a real standalone moderngl context so render_overlay()'s
+    ``ctx.screen.use()`` doesn't blow up outside a real window -- a
+    standalone context's ``screen`` is None and unsettable (a read-only
+    property). Everything else forwards straight through to the real
+    context, including ``viewport`` assignment."""
+
+    def __init__(self, real) -> None:
+        object.__setattr__(self, '_real', real)
+        object.__setattr__(self, 'screen', types.SimpleNamespace(use=lambda: None))
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, '_real'), name)
+
+    def __setattr__(self, name, value) -> None:
+        setattr(object.__getattribute__(self, '_real'), name, value)
+
+
 # --------------------------------------------------------------- default text
 
 def test_default_text_reflows_to_default_max_line_chars(ctx) -> None:
@@ -311,6 +329,25 @@ def test_left_right_in_config_modal_adjust_max_line_chars(ctx) -> None:
         result = b.handle_key(sdl2.SDLK_RIGHT, 0)
         assert b._max_line_chars == 100
         assert result == 'Banner max line: 100ch'
+    finally:
+        b.shutdown()
+
+
+def test_alt_d_toggles_drip_in_config_modal(ctx) -> None:
+    import sdl2
+
+    b = _banner(ctx)
+    try:
+        b._show_config = True
+        assert b._drip_enabled is False
+        result = b.handle_key(sdl2.SDLK_d, sdl2.KMOD_ALT)
+        assert result == 'Banner drip: ON'
+        assert b._drip_enabled is True
+        assert b._vj_api._state['banner']['drip_enabled'] is True
+
+        result = b.handle_key(sdl2.SDLK_d, sdl2.KMOD_ALT)
+        assert result == 'Banner drip: OFF'
+        assert b._drip_enabled is False
     finally:
         b.shutdown()
 
@@ -640,3 +677,124 @@ def test_shutdown_unregisters_the_operator_panel(ctx) -> None:
     api = b._vj_api
     b.shutdown()
     assert 'banner' not in api.panels
+
+
+# --------------------------------------------------------------- drip toggle
+
+def test_drip_enabled_defaults_to_false(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        assert b._drip_enabled is False
+    finally:
+        b.shutdown()
+
+
+def test_persist_runtime_state_includes_drip_enabled(ctx) -> None:
+    b = _banner(ctx, {'drip_enabled': True})
+    try:
+        b._persist_runtime_state()
+        payload = b._vj_api._state['banner']
+        assert payload['drip_enabled'] is True
+    finally:
+        b.shutdown()
+
+
+def test_apply_state_payload_restores_drip_enabled(ctx) -> None:
+    b = _banner(ctx)
+    try:
+        assert b._drip_enabled is False
+        b._apply_state_payload({'drip_enabled': True})
+        assert b._drip_enabled is True
+    finally:
+        b.shutdown()
+
+
+def test_drip_disabled_draws_text_in_one_call_not_per_character(ctx) -> None:
+    """The static (non-drippy) path should be a single draw.text() call --
+    that's both the perf win and what makes the banner cacheable."""
+    from PIL import Image, ImageDraw
+
+    b = _banner(ctx, {'drip_enabled': False})
+    try:
+        img = Image.new('RGBA', (300, 60), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        calls = []
+        real_text = draw.text
+
+        def _counting_text(*args, **kwargs):
+            calls.append(1)
+            return real_text(*args, **kwargs)
+
+        draw.text = _counting_text
+        b._draw_drippy_text(draw, 0.0, 0.0, 'Hello there', (255, 255, 255, 255), 1.0)
+        assert len(calls) == 1
+    finally:
+        b.shutdown()
+
+
+# ------------------------------------------------------------ render caching
+
+def test_render_overlay_reuses_cached_banner_when_unchanged(ctx, monkeypatch) -> None:
+    b = _banner(ctx, {'enabled': True, 'text': 'Hi there'})
+    try:
+        b._ctx = _ScreenlessCtx(ctx)
+        b._line_cycle_t = 1.1  # inside the hold phase -- fade == 1.0, stable
+        calls: list[int] = []
+        real_build = b._build_banner_image
+
+        def _counting_build(width):
+            calls.append(1)
+            return real_build(width)
+
+        monkeypatch.setattr(b, '_build_banner_image', _counting_build)
+
+        b.render_overlay(200, 100, 0.0, _audio())
+        assert len(calls) == 1
+        b.render_overlay(200, 100, 0.0, _audio())
+        assert len(calls) == 1, 'an unchanged frame must not rebuild the banner'
+    finally:
+        b.shutdown()
+
+
+def test_render_overlay_rebuilds_when_the_displayed_line_changes(ctx, monkeypatch) -> None:
+    b = _banner(ctx, {'enabled': True, 'text': 'Hi\nBye'})
+    try:
+        b._ctx = _ScreenlessCtx(ctx)
+        b._line_cycle_t = 1.1
+        calls: list[int] = []
+        real_build = b._build_banner_image
+
+        def _counting_build(width):
+            calls.append(1)
+            return real_build(width)
+
+        monkeypatch.setattr(b, '_build_banner_image', _counting_build)
+
+        b.render_overlay(200, 100, 0.0, _audio())
+        assert len(calls) == 1
+        b._line_idx = 1
+        b.render_overlay(200, 100, 0.0, _audio())
+        assert len(calls) == 2, 'a changed displayed line must rebuild the banner'
+    finally:
+        b.shutdown()
+
+
+def test_render_overlay_always_rebuilds_with_drip_enabled(ctx, monkeypatch) -> None:
+    b = _banner(ctx, {'enabled': True, 'text': 'Hi', 'drip_enabled': True})
+    try:
+        b._ctx = _ScreenlessCtx(ctx)
+        b._line_cycle_t = 1.1
+        calls: list[int] = []
+        real_build = b._build_banner_image
+
+        def _counting_build(width):
+            calls.append(1)
+            return real_build(width)
+
+        monkeypatch.setattr(b, '_build_banner_image', _counting_build)
+
+        b.render_overlay(200, 100, 0.0, _audio())
+        b.render_overlay(200, 100, 0.0, _audio())
+        assert len(calls) == 2, 'drip is continuous animation -- nothing to cache'
+    finally:
+        b.shutdown()
