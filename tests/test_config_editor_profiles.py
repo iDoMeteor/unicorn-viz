@@ -157,6 +157,7 @@ def _app(tmp_path: Path, overlay, current=None) -> App:
     # Settings-spec aggregation (save/load) reads these.
     app._audio_manager = None
     app._effect_duration = 30.0
+    app._transition_duration = 1.0
     app._render_scale = 1.0
     app._color_grade = None
     app._audio_out = None

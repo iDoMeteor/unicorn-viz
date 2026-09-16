@@ -238,6 +238,54 @@ def _context_menu_label_from_help(desc: str) -> str:
     return text or 'Action'
 
 
+def _ce_slider(
+    key: str, name: str, value: float, lo: float, hi: float,
+    setter: Callable[[float], object], *, fmt: str = '{:.3f}',
+    display: str | None = None, hint: str = '', badge: str = '',
+    section: str = '', step: float | None = None,
+) -> dict:
+    """Config-editor slider spec (see ``App._config_editor_settings_specs``)."""
+    spec: dict = {
+        'key': key, 'name': name, 'kind': 'slider', 'value': float(value),
+        'min': float(lo), 'max': float(hi), 'set': setter,
+        'display': display if display is not None else fmt.format(float(value)),
+        'hint': hint, 'badge': badge, 'section': section,
+    }
+    if step is not None:
+        spec['step'] = float(step)
+    return spec
+
+
+def _ce_toggle(
+    key: str, name: str, value: bool, setter: Callable[[float], object], *,
+    hint: str = '', badge: str = '', section: str = '',
+) -> dict:
+    """Config-editor ON/OFF spec; the setter receives 1.0 or 0.0."""
+    on = bool(value)
+    return {
+        'key': key, 'name': name, 'kind': 'toggle', 'value': 1.0 if on else 0.0,
+        'min': 0.0, 'max': 1.0, 'step': 1.0, 'set': setter,
+        'display': 'ON' if on else 'OFF', 'hint': hint, 'badge': badge,
+        'section': section,
+    }
+
+
+def _ce_choice(
+    key: str, name: str, index: int, choices: tuple[str, ...],
+    setter: Callable[[float], object], *, hint: str = '', badge: str = '',
+    section: str = '',
+) -> dict:
+    """Config-editor enum spec; the setter receives the chosen index."""
+    labels = tuple(str(c) for c in choices)
+    idx = max(0, min(len(labels) - 1, int(index))) if labels else 0
+    return {
+        'key': key, 'name': name, 'kind': 'choice', 'value': float(idx),
+        'min': 0.0, 'max': float(max(0, len(labels) - 1)), 'step': 1.0,
+        'set': setter, 'choices': labels, 'display': labels[idx] if labels else '',
+        'hint': hint, 'badge': badge, 'section': section,
+    }
+
+
 def _infer_param_range(value: float) -> tuple[float, float]:
     """Infer a sensible (min, max) slider range for a bare float parameter.
 
@@ -668,6 +716,13 @@ class App:
         # Consecutive _present_subsystems() skips under the frame-budget guard.
         self._subsys_present_skips: int = 0
         self._subsys_skip_ms_cached: float = 0.0
+        # Performance tab (config editor) live knobs; restored from runtime
+        # state at the end of startup (_restore_performance_settings).
+        self._subsys_present_max_skips: int = _SUBSYS_PRESENT_MAX_SKIPS
+        self._preview_capture_enabled: bool = True
+        self._preview_fps_ceiling: int = 0
+        self._preview_max_width: int = _PREVIEW_MAX_WIDTH
+        self._perf_frames_enabled: bool = False
         self._audio_manager: AudioManager | None = None
         # Selector row -> candidate index, and which rows are dividers.
         # Rebuilt whenever get_audio_sources() runs.
@@ -1321,7 +1376,13 @@ class App:
         self._update_ctrl_state(int(sym), False)
 
     def _subsystems_need_frame_capture(self) -> bool:
-        """Return True when any registered subsystem wants preview-frame bytes."""
+        """Return True when any registered subsystem wants preview-frame bytes.
+
+        The Performance tab's "Preview capture" switch overrides every
+        consumer: off means no readback at all, whatever they ask for.
+        """
+        if not self._preview_capture_enabled:
+            return False
         return any(bool(getattr(subsystem, 'needs_frame_bytes', False)) for subsystem in self._subsystems.values())
 
     def _subsystem_preview_capture_interval_s(self) -> float:
@@ -1341,6 +1402,8 @@ class App:
             if isinstance(cap, (int, float)) and cap > 0:
                 caps.append(float(cap))
         fps = max(caps) if caps else _DEFAULT_SUBSYSTEM_PREVIEW_FPS
+        if self._preview_fps_ceiling > 0:
+            fps = min(fps, float(self._preview_fps_ceiling))
         return 1.0 / max(1.0, fps)
 
     def _render_now_spinning(self, width: int, height: int) -> None:
@@ -1426,7 +1489,7 @@ class App:
             'Secondary-window present guard: skip above %.1f ms '
             '(display refresh %.1f ms), max %d consecutive skips',
             self._subsys_skip_ms_cached, interval_ms,
-            _SUBSYS_PRESENT_MAX_SKIPS,
+            self._subsys_present_max_skips,
         )
         return self._subsys_skip_ms_cached
 
@@ -1450,7 +1513,7 @@ class App:
         """
         if (
             self._last_frame_ms > self._subsys_present_skip_ms()
-            and self._subsys_present_skips < _SUBSYS_PRESENT_MAX_SKIPS
+            and self._subsys_present_skips < self._subsys_present_max_skips
         ):
             self._subsys_present_skips += 1
             return
@@ -3478,21 +3541,34 @@ void main() {
         return rows
 
     def _push_config_editor_model(self) -> None:
-        """Feed the config editor its per-tab data each frame while open."""
+        """Feed the config editor its per-tab data each frame while open.
+
+        Drains any pointer-driven value request first so the rows pushed
+        below already reflect it.  Tab order: Effects (the landing tab)
+        first, then the rest alphabetically, so a tab's position is
+        derivable rather than remembered.
+        """
         overlays = self._overlays
-        tabs = ['Effects', 'Audio', 'Visuals', 'Recording', 'System', 'Hotkeys']
-        if self._auto_vj is not None:
-            tabs.append('Auto VJ')
+        req = overlays.take_config_editor_value_request()
+        if req is not None:
+            try:
+                self._config_editor_set_value(*req)
+            except Exception:
+                log.debug('Config editor set failed: %r', req, exc_info=True)
+        tabs = ['Effects'] + sorted(
+            ['Audio', 'Hotkeys', 'Performance', 'Recording', 'Visuals'])
         overlays.set_config_editor_tabs(tabs)
 
+        current = self.current_effect_class_name()
         effects = [
-            {'class_name': cls.__name__, 'display_name': str(getattr(cls, 'NAME', cls.__name__))}
+            {'class_name': cls.__name__,
+             'display_name': str(getattr(cls, 'NAME', cls.__name__)),
+             'active': cls.__name__ == current}
             for cls in get_effects()
         ]
         overlays.set_config_editor_effects(effects)
         if not self._config_editor_was_open:
             # Rising edge: default-select the current effect.
-            current = self.current_effect_class_name()
             idx = next(
                 (i for i, e in enumerate(effects) if e['class_name'] == current), 0
             )
@@ -3505,68 +3581,12 @@ void main() {
             overlays.set_config_editor_params(
                 self.config_editor_param_rows(cls) if cls else []
             )
-        elif tab in ('Audio', 'Visuals', 'Recording'):
-            overlays.set_config_editor_params(self.config_editor_global_rows(tab))
         elif tab == 'Hotkeys':
             overlays.set_config_editor_params(self.config_editor_hotkey_rows())
-        else:  # System, Auto VJ — read-only info rows.
-            overlays.set_config_editor_params(self.config_editor_info_rows(tab))
+        else:
+            overlays.set_config_editor_params(self.config_editor_global_rows(tab))
         overlays.set_config_editor_profiles(self.config_profile_names())
         overlays.set_config_editor_dirty(bool(self._effect_config_overrides))
-
-    def config_editor_info_rows(self, tab: str) -> list[dict[str, str]]:
-        """Return read-only info rows for the System / Auto VJ tabs."""
-        def info(name: str, value: object) -> dict[str, str]:
-            return {'name': name, 'kind': 'info', 'info': str(value)}
-
-        rows: list[dict[str, str]] = []
-        if tab == 'System':
-            rows.append(info('FPS', f'{getattr(self, "_last_frame_fps", 0.0):.1f}'))
-            rows.append(info('Frame ms', f'{getattr(self, "_last_frame_ms", 0.0):.2f}'))
-            if self._audio_manager is not None:
-                rows.append(info('Audio xruns', self._audio_manager.get_xrun_count()))
-                rows.append(info('Audio source', self._audio_manager.get_source_label()))
-                rows.append(info('BPM profile', self._audio_manager.get_profile_name()))
-            rows.append(info('Render size', f'{self._render_width}x{self._render_height}'))
-            rows.append(info('Window size', f'{self._width}x{self._height}'))
-            rows.append(info('Resolution scale', f'{self._render_scale:.2f}'))
-            rows.append(info('Display mode', self._display_mode))
-            rows.append(info('Effects', len(get_effects())))
-            rows.append(info('Platform', sys.platform))
-            rows.append(info(
-                'Python',
-                f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}',
-            ))
-        elif tab == 'Auto VJ' and self._auto_vj is not None:
-            av = self._auto_vj
-
-            def lab(attr: str) -> str:
-                value = getattr(av, attr, None)
-                return str(value) if value not in (None, '') else '-'
-
-            # [auto_vj] hud_production_mode also gates these rows -- this tab
-            # is a second surface (besides the main H-toggled HUD's bottom
-            # Auto VJ pane) where the same "detector internals" (BPM +
-            # confidence, recommender score/rec) were visible unconditionally,
-            # missed by the first production-mode pass. Deliberately keyed on
-            # production_mode alone, not the individual [overlays]
-            # hud_show_detector_bpm/hud_show_profile_score/hud_show_reco_profile
-            # flags -- those govern the always-on-screen HUD; this tab is an
-            # on-demand operator diagnostic view and stays fully populated by
-            # default (see test_auto_vj_info_rows), same as before this change.
-            production_mode = bool(
-                self.cfg.get('auto_vj', 'hud_production_mode', default=False)
-            )
-            rows.append(info('Mood', lab('hud_mood_label')))
-            rows.append(info('Scene', lab('hud_scene_label')))
-            if not production_mode:
-                rows.append(info('BPM', lab('hud_bpm_label')))
-                rows.append(info('BPM confidence', lab('hud_bpm_confidence_label')))
-            rows.append(info('Action in', lab('hud_action_in_label')))
-            if not production_mode:
-                rows.append(info('Profile score', lab('current_profile_score_hud')))
-                rows.append(info('Profile rec', lab('profile_recommendation_hud')))
-        return rows
 
     # -- Hotkeys tab (rebind global actions) ----------------------------------
     # Hand-authored labels for the rebindable actions in hotkeys.action_names()
@@ -3690,6 +3710,17 @@ void main() {
     # (Which of the app's own subsystems to poll — the *settings* still come
     # from each drop-in via the convention, so nothing drop-in-specific is
     # hard-coded here.)
+    # Performance-tab knobs, class-level so the ``object.__new__(App)`` shells
+    # across the test suite (and any caller that never ran __init__) see the
+    # shipped defaults; __init__ replaces them with per-instance values.
+    _subsys_present_max_skips: int = _SUBSYS_PRESENT_MAX_SKIPS
+    _preview_capture_enabled: bool = True
+    _preview_fps_ceiling: int = 0
+    _preview_max_width: int = _PREVIEW_MAX_WIDTH
+    _perf_frames_enabled: bool = False
+    _transition_duration: float = 1.0
+    _overlays = None
+
     _CONFIG_CONTRIBUTOR_ATTRS = (
         '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
         '_lyrics', '_webcam_system',
@@ -3698,45 +3729,359 @@ void main() {
     def _config_editor_settings_specs(self, tab: str) -> list[dict]:
         """Return unified setting specs for a tab.
 
-        Each spec: ``{'key','name','value','min','max','set'}``.  Combines core
-        globals with drop-in contributions gathered via the config-editor
-        convention (``CONFIG_EDITOR_CATEGORY`` + ``config_editor_settings()`` +
-        ``set_config_setting()``).
+        Each spec: ``{'key','name','value','min','max','set'}`` plus the
+        presentation keys the editor understands -- ``kind`` ('slider' |
+        'toggle' | 'choice'), ``choices`` (labels, for 'choice'), ``display``
+        (value text), ``hint``, ``badge``, ``section`` and ``step``.  Core
+        globals first, then drop-in contributions gathered via the
+        config-editor convention (``CONFIG_EDITOR_CATEGORY`` +
+        ``config_editor_settings()`` + ``set_config_setting()``).
         """
         specs: list[dict] = []
         if tab == 'Audio':
             if self._audio_manager is not None:
                 am = self._audio_manager
-                specs.append({'key': 'audio.reactivity', 'name': 'reactivity',
-                              'value': float(am.get_reactivity()), 'min': 0.1, 'max': 5.0,
-                              'set': am.set_reactivity})
-            specs.append({'key': 'audio.advance_interval_s', 'name': 'advance_interval_s',
-                          'value': float(self._effect_duration), 'min': 10.0, 'max': 120.0,
-                          'set': lambda v: setattr(self, '_effect_duration', max(10.0, float(v)))})
-            # Latency is an enum, so it rides the numeric slider as an index.
-            # Marked (restart) because changing it means tearing down and
-            # reopening the PortAudio stream underneath a running analysis
-            # thread; the value persists and applies on next launch rather
-            # than pretending to be live.
-            specs.append({'key': 'audio.latency',
-                          'name': 'latency 0=low 1=med 2=high (restart)',
-                          'value': float(self._audio_latency_index()),
-                          'min': 0.0, 'max': 2.0,
-                          'set': self._set_audio_latency_index})
+                specs.append(_ce_slider(
+                    'audio.reactivity', 'Reactivity', float(am.get_reactivity()),
+                    0.1, 5.0, am.set_reactivity, fmt='{:.2f}x',
+                    hint='Scales every audio signal the effects see',
+                    section='Analysis',
+                ))
         elif tab == 'Visuals':
-            specs.append({'key': 'visuals.render_scale', 'name': 'render_scale',
-                          'value': float(self._render_scale), 'min': 0.5, 'max': 1.0,
-                          'set': self.set_render_scale})
-            specs.append({'key': 'visuals.fps_limit',
-                          'name': 'fps limit 0=display/24/30/60',
-                          'value': float(self._frame_limit_index()),
-                          'min': 0.0,
-                          'max': float(len(self._FRAME_LIMIT_CHOICES) - 1),
-                          'set': self._set_frame_limit_index})
+            specs.append(_ce_slider(
+                'audio.advance_interval_s', 'Effect duration',
+                float(self._effect_duration), 10.0, 120.0,
+                lambda v: setattr(self, '_effect_duration', max(10.0, float(v))),
+                fmt='{:.0f} s', hint='Auto-advance interval between effects',
+                section='Show',
+            ))
+            specs.append(_ce_slider(
+                'visuals.transition_duration', 'Transition length',
+                float(self._transition_duration), 0.2, 4.0,
+                self._set_transition_duration, fmt='{:.1f} s',
+                hint='How long each effect crossfade takes', section='Show',
+            ))
+            ov = self._overlays
+            if ov is not None and callable(getattr(ov, 'set_hud_auto_hide', None)):
+                specs.append(_ce_toggle(
+                    'visuals.hud_auto_hide', 'HUD auto-hide', ov.hud_auto_hide,
+                    ov.set_hud_auto_hide,
+                    hint='Hide the status HUD after the timeout', section='Overlays',
+                ))
+                specs.append(_ce_slider(
+                    'visuals.hud_timeout_s', 'HUD timeout', float(ov.hud_timeout_s),
+                    5.0, 300.0, ov.set_hud_timeout_s, fmt='{:.0f} s',
+                    hint='Seconds the HUD stays up before auto-hiding',
+                    section='Overlays',
+                ))
+                specs.append(_ce_toggle(
+                    'visuals.flash_messages', 'Flash messages',
+                    ov.flash_messages_enabled, ov.set_flash_messages_enabled,
+                    hint='Toast notifications for hotkey actions', section='Overlays',
+                ))
+        elif tab == 'Performance':
+            specs.extend(self._config_editor_performance_specs())
         elif tab == 'Recording':
             specs.extend(self._config_editor_recording_specs())
         specs.extend(self._config_editor_dropin_specs(tab))
         return specs
+
+    def _set_transition_duration(self, value: float) -> None:
+        """Set the effect crossfade length (clamped to 0.2..4 s)."""
+        self._transition_duration = max(0.2, min(4.0, float(value)))
+
+    # -- Performance tab ------------------------------------------------------
+    # Every core knob that trades render/audio/overlay cost for something.
+    # Live rows apply at once and are remembered in runtime state
+    # (perf_*); RESTART rows are remembered and laid over config.toml at the
+    # next launch (see _apply_runtime_config_overrides).  None of these are
+    # part of a configuration profile: they describe the machine, not the
+    # look of a show.
+
+    _PREVIEW_WIDTH_CHOICES = (480, 640, 960, 1280)
+    _FFT_BANDS_CHOICES = (256, 512, 1024, 2048)
+    _BLOCKSIZE_CHOICES = (256, 512, 1024, 2048)
+    _VIDEO_CACHE_EDGE_CHOICES = (360, 480, 720, 1080)
+    _PRESENT_GUARD_MAX_SKIPS = 4
+
+    @staticmethod
+    def _choice_index(choices: tuple, current: object) -> int:
+        """Index of ``current`` in ``choices`` (nearest numeric match)."""
+        try:
+            return list(choices).index(current)
+        except ValueError:
+            pass
+        try:
+            cur = float(current)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0
+        return min(range(len(choices)), key=lambda i: abs(float(choices[i]) - cur))
+
+    def _config_editor_performance_specs(self) -> list[dict]:
+        """Rows for the Performance tab (core knobs only)."""
+        specs: list[dict] = []
+        # -- Render -----------------------------------------------------------
+        specs.append(_ce_slider(
+            'perf.render_scale', 'Render scale', float(self._render_scale), 0.5, 1.0,
+            self.set_render_scale, fmt='{:.2f}x',
+            hint='Internal render resolution; lower = cheaper frames',
+            section='Render',
+        ))
+        specs.append(_ce_choice(
+            'perf.fps_limit', 'Frame limit', self._frame_limit_index(),
+            ('DISPLAY', '24', '30', '60'), self._set_frame_limit_index,
+            hint='Lock to a whole division of the display refresh rate',
+            section='Render',
+        ))
+        specs.append(_ce_slider(
+            'perf.present_guard', 'Present guard',
+            float(self._subsys_present_max_skips), 0.0,
+            float(self._PRESENT_GUARD_MAX_SKIPS), self._set_present_guard_skips,
+            fmt='{:.0f} skips', step=1.0,
+            hint='Skip secondary-window presents after a long frame (0 = never)',
+            section='Render',
+        ))
+        # -- Previews ---------------------------------------------------------
+        specs.append(_ce_toggle(
+            'perf.preview_capture', 'Preview capture', self._preview_capture_enabled,
+            self._set_preview_capture_enabled,
+            hint='GPU readback feeding the control room / mixer preview panes',
+            section='Previews',
+        ))
+        ceiling = float(self._preview_fps_ceiling)
+        specs.append(_ce_slider(
+            'perf.preview_fps', 'Preview fps ceiling', ceiling, 0.0, 30.0,
+            self._set_preview_fps_ceiling, step=1.0,
+            display='auto' if ceiling <= 0 else f'{ceiling:.0f} fps',
+            hint='Caps how often the preview readback runs (0 = consumers decide)',
+            section='Previews',
+        ))
+        specs.append(_ce_choice(
+            'perf.preview_width', 'Preview width',
+            self._choice_index(self._PREVIEW_WIDTH_CHOICES, int(self._preview_max_width)),
+            tuple(str(c) for c in self._PREVIEW_WIDTH_CHOICES),
+            self._set_preview_width_index,
+            hint='Downsampled readback width in pixels', section='Previews',
+        ))
+        # -- Audio ------------------------------------------------------------
+        specs.append(_ce_choice(
+            'perf.audio_latency', 'Capture latency', self._audio_latency_index(),
+            ('LOW', 'MEDIUM', 'HIGH'), self._set_audio_latency_index, badge='RESTART',
+            hint='PortAudio latency class; raise it if xruns appear', section='Audio',
+        ))
+        specs.append(_ce_choice(
+            'perf.fft_bands', 'FFT bands',
+            self._choice_index(self._FFT_BANDS_CHOICES,
+                               int(self.cfg.get('audio', 'fft_bands', default=512))),
+            tuple(str(c) for c in self._FFT_BANDS_CHOICES), self._set_fft_bands_index,
+            badge='RESTART',
+            hint='Spectrum resolution; fewer bands = cheaper analysis', section='Audio',
+        ))
+        specs.append(_ce_choice(
+            'perf.blocksize', 'Capture block size',
+            self._choice_index(self._BLOCKSIZE_CHOICES,
+                               int(self.cfg.get('audio', 'blocksize', default=1024))),
+            tuple(str(c) for c in self._BLOCKSIZE_CHOICES), self._set_blocksize_index,
+            badge='RESTART',
+            hint='Samples per capture read; larger = fewer wakeups, more lag',
+            section='Audio',
+        ))
+        # -- Overlays ---------------------------------------------------------
+        ov = self._overlays
+        if ov is not None:
+            specs.append(_ce_slider(
+                'perf.sysmon_interval', 'System monitor sampling',
+                float(ov.sysmon_sample_interval), 0.2, 2.0, self._set_sysmon_interval,
+                fmt='{:.2f} s', hint='Seconds between psutil reads for the M monitor',
+                section='Overlays',
+            ))
+            specs.append(_ce_toggle(
+                'perf.tooltips', 'Tooltips', ov.tooltips_enabled, self._set_tooltips_enabled,
+                hint='Off also skips building hover regions every frame',
+                section='Overlays',
+            ))
+        # -- Video decks ------------------------------------------------------
+        specs.append(_ce_toggle(
+            'perf.video_decks', 'Video deck layer',
+            bool(self.cfg.get('video_decks', 'enabled', default=True)),
+            self._set_video_decks_enabled, badge='RESTART',
+            hint='Composite music videos loaded on the mixer decks', section='Video decks',
+        ))
+        specs.append(_ce_choice(
+            'perf.video_cache_edge', 'Video cache edge',
+            self._choice_index(self._VIDEO_CACHE_EDGE_CHOICES,
+                               int(self.cfg.get('video_decks', 'cache_long_edge', default=720) or 720)),
+            tuple(str(c) for c in self._VIDEO_CACHE_EDGE_CHOICES),
+            self._set_video_cache_edge_index, badge='RESTART',
+            hint='Decoded-frame cache resolution (long edge, px)', section='Video decks',
+        ))
+        # -- Diagnostics ------------------------------------------------------
+        specs.append(_ce_toggle(
+            'perf.perf_frames', 'Per-frame perf logging', self._perf_frames_enabled,
+            self._set_perf_frames_enabled,
+            hint='Log slow frames and periodic timing samples', section='Diagnostics',
+        ))
+        return specs
+
+    def _remember_runtime(self, key: str, value: object) -> None:
+        """Persist a config-editor choice to runtime state (no-op without a store)."""
+        store = getattr(self, '_runtime_state', None)
+        if store is not None:
+            store.set(key, value)
+
+    def _flash(self, text: str, seconds: float = 3.0) -> None:
+        """Flash a message when the overlays exist (quiet on bare shells)."""
+        ov = getattr(self, '_overlays', None)
+        if ov is not None and callable(getattr(ov, 'flash_message', None)):
+            ov.flash_message(text, seconds)
+
+    def _set_present_guard_skips(self, value: float) -> None:
+        """Set how many secondary-window presents a long frame may skip."""
+        self._subsys_present_max_skips = max(
+            0, min(self._PRESENT_GUARD_MAX_SKIPS, int(round(float(value)))))
+        self._remember_runtime('perf_present_guard_skips', self._subsys_present_max_skips)
+
+    def _set_preview_capture_enabled(self, value: float) -> None:
+        """Master switch for the subsystem preview readback."""
+        self._preview_capture_enabled = float(value) >= 0.5
+        self._remember_runtime('perf_preview_capture', self._preview_capture_enabled)
+        self._flash('Preview capture: ' + ('on' if self._preview_capture_enabled else 'off'))
+
+    def _set_preview_fps_ceiling(self, value: float) -> None:
+        """Cap the preview readback rate (0 = each consumer's own cap)."""
+        self._preview_fps_ceiling = max(0, min(30, int(round(float(value)))))
+        self._remember_runtime('perf_preview_fps_ceiling', self._preview_fps_ceiling)
+
+    def _set_preview_width_index(self, value: float) -> None:
+        """Pick the downsampled preview width; the FBO reallocates lazily."""
+        idx = max(0, min(len(self._PREVIEW_WIDTH_CHOICES) - 1, int(round(float(value)))))
+        self._preview_max_width = int(self._PREVIEW_WIDTH_CHOICES[idx])
+        self._remember_runtime('perf_preview_max_width', self._preview_max_width)
+
+    def _set_fft_bands_index(self, value: float) -> None:
+        """Persist a new FFT band count; applies on next launch."""
+        idx = max(0, min(len(self._FFT_BANDS_CHOICES) - 1, int(round(float(value)))))
+        bands = int(self._FFT_BANDS_CHOICES[idx])
+        self.cfg.set_override('audio', 'fft_bands', bands)
+        self._remember_runtime('audio_fft_bands', bands)
+        self._flash(f'FFT bands: {bands} (applies on restart)')
+
+    def _set_blocksize_index(self, value: float) -> None:
+        """Persist a new capture block size; applies on next launch."""
+        idx = max(0, min(len(self._BLOCKSIZE_CHOICES) - 1, int(round(float(value)))))
+        size = int(self._BLOCKSIZE_CHOICES[idx])
+        self.cfg.set_override('audio', 'blocksize', size)
+        self._remember_runtime('audio_blocksize', size)
+        self._flash(f'Capture block size: {size} (applies on restart)')
+
+    def _set_sysmon_interval(self, value: float) -> None:
+        """Set the system-monitor sampling interval live."""
+        if self._overlays is not None:
+            self._overlays.set_sysmon_sample_interval(float(value))
+            self._remember_runtime('perf_sysmon_interval_s',
+                                   float(self._overlays.sysmon_sample_interval))
+
+    def _set_tooltips_enabled(self, value: float) -> None:
+        """Turn hover tooltips on/off live."""
+        if self._overlays is not None:
+            enabled = float(value) >= 0.5
+            self._overlays.set_tooltips_enabled(enabled)
+            self._remember_runtime('perf_tooltips', enabled)
+
+    def _set_video_decks_enabled(self, value: float) -> None:
+        """Persist the video-deck layer switch; applies on next launch."""
+        enabled = float(value) >= 0.5
+        self.cfg.set_override('video_decks', 'enabled', enabled)
+        self._remember_runtime('video_decks_enabled', enabled)
+        self._flash('Video deck layer: ' + ('on' if enabled else 'off') + ' (applies on restart)')
+
+    def _set_video_cache_edge_index(self, value: float) -> None:
+        """Persist the video-deck cache resolution; applies on next launch."""
+        idx = max(0, min(len(self._VIDEO_CACHE_EDGE_CHOICES) - 1, int(round(float(value)))))
+        edge = int(self._VIDEO_CACHE_EDGE_CHOICES[idx])
+        self.cfg.set_override('video_decks', 'cache_long_edge', edge)
+        self._remember_runtime('video_decks_cache_long_edge', edge)
+        self._flash(f'Video cache edge: {edge} px (applies on restart)')
+
+    def _set_perf_frames_enabled(self, value: float) -> None:
+        """Toggle per-frame perf logging live."""
+        self._perf_frames_enabled = float(value) >= 0.5
+        self._remember_runtime('perf_perf_frames', self._perf_frames_enabled)
+
+    # Runtime-state keys the config editor persists for RESTART rows, laid
+    # over config.toml (in memory only) before the reader is constructed.
+    _RUNTIME_CONFIG_OVERRIDES: tuple[tuple[str, str, str, type], ...] = (
+        ('render_fps_limit', 'render', 'fps_limit', int),
+        ('audio_latency', 'audio', 'latency', str),
+        ('audio_fft_bands', 'audio', 'fft_bands', int),
+        ('audio_blocksize', 'audio', 'blocksize', int),
+        ('video_decks_enabled', 'video_decks', 'enabled', bool),
+        ('video_decks_cache_long_edge', 'video_decks', 'cache_long_edge', int),
+    )
+
+    def _apply_runtime_config_overrides(self) -> None:
+        """Apply remembered RESTART choices on top of the loaded config."""
+        for state_key, section, key, caster in self._RUNTIME_CONFIG_OVERRIDES:
+            stored = self.get_runtime_state(state_key, default=None)
+            if stored is None:
+                continue
+            if caster is str:
+                if not (isinstance(stored, str) and stored.strip()):
+                    continue
+                value: object = stored.strip()
+            elif caster is bool:
+                if not isinstance(stored, (bool, int, float)):
+                    continue
+                value = bool(stored)
+            else:
+                if isinstance(stored, bool) or not isinstance(stored, (int, float)):
+                    continue
+                value = caster(stored)
+            self.cfg.set_override(section, key, value)
+            log.info('Runtime override: [%s] %s = %r', section, key, value)
+
+    def _restore_performance_settings(self) -> None:
+        """Lay the config editor's live performance choices over a fresh app.
+
+        Called once at the end of startup, when the GL context, overlays and
+        subsystems all exist, so every setter can apply for real.
+        """
+        def _num(key: str) -> float | None:
+            v = self.get_runtime_state(key, default=None)
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return None
+            return float(v)
+
+        def _flag(key: str) -> bool | None:
+            v = self.get_runtime_state(key, default=None)
+            return v if isinstance(v, bool) else None
+
+        scale = _num('perf_render_scale')
+        if scale is not None and abs(scale - float(self._render_scale)) > 1e-6:
+            self._set_render_scale(scale)
+        skips = _num('perf_present_guard_skips')
+        if skips is not None:
+            self._subsys_present_max_skips = max(
+                0, min(self._PRESENT_GUARD_MAX_SKIPS, int(round(skips))))
+        capture = _flag('perf_preview_capture')
+        if capture is not None:
+            self._preview_capture_enabled = capture
+        ceiling = _num('perf_preview_fps_ceiling')
+        if ceiling is not None:
+            self._preview_fps_ceiling = max(0, min(30, int(round(ceiling))))
+        width = _num('perf_preview_max_width')
+        if width is not None and int(width) in self._PREVIEW_WIDTH_CHOICES:
+            self._preview_max_width = int(width)
+        perf_frames = _flag('perf_perf_frames')
+        if perf_frames is not None:
+            self._perf_frames_enabled = perf_frames
+        if self._overlays is not None:
+            interval = _num('perf_sysmon_interval_s')
+            if interval is not None:
+                self._overlays.set_sysmon_sample_interval(interval)
+            tooltips = _flag('perf_tooltips')
+            if tooltips is not None:
+                self._overlays.set_tooltips_enabled(tooltips)
 
     # Selectable render frame-rate caps.  0 means "follow the display".
     #
@@ -3920,36 +4265,53 @@ void main() {
             return []
         specs: list[dict] = []
 
-        def tweak(key: str, name: str, value: float, low: float, high: float) -> None:
-            def _set(v: float, k: str = key) -> None:
-                rec.apply_setting(k, v)
-                self.set_runtime_state(f'recording_{k}', float(v))
-            specs.append({'key': f'recording.{key}', 'name': name, 'value': float(value),
-                          'min': low, 'max': high, 'set': _set})
+        def _setter(key: str) -> Callable[[float], None]:
+            def _set(v: float) -> None:
+                rec.apply_setting(key, v)
+                self.set_runtime_state(f'recording_{key}', float(v))
+            return _set
 
-        specs.append({'key': 'recording.fps',
-                      'name': f'fps {self._recording_fps_label()} (next recording)',
-                      'value': float(self._recording_fps_index()),
-                      'min': 0.0,
-                      'max': float(len(self._RECORDING_FPS_CHOICES) - 1),
-                      'set': self._set_recording_fps_index})
-        tweak('crf', 'quality crf lower=better', rec._crf, 0.0, 51.0)  # noqa: SLF001
-        tweak('capture_audio', 'capture_audio 0=off 1=on',
-              1.0 if rec._capture_audio else 0.0, 0.0, 1.0)  # noqa: SLF001
+        specs.append(_ce_choice(
+            'recording.fps', 'Frame rate', self._recording_fps_index(),
+            tuple(str(v) for v in self._RECORDING_FPS_CHOICES),
+            self._set_recording_fps_index, badge='NEXT REC',
+            hint='Muxed frame rate; the render loop is paced to it', section='Video',
+        ))
+        specs.append(_ce_slider(
+            'recording.crf', 'Quality (CRF)', float(rec._crf), 0.0, 51.0,  # noqa: SLF001
+            _setter('crf'), fmt='{:.0f}', step=1.0, badge='NEXT REC',
+            hint='x264 constant rate factor: lower = better and bigger',
+            section='Video',
+        ))
+        specs.append(_ce_choice(
+            'recording.preset', 'Encoder preset', self._recording_preset_index(),
+            tuple(p.upper() for p in self._RECORDING_PRESET_ORDER),
+            self._set_recording_preset_index, badge='NEXT REC',
+            hint='x264 speed/size trade-off; faster presets cost less CPU',
+            section='Video',
+        ))
+        specs.append(_ce_toggle(
+            'recording.capture_audio', 'Capture audio', bool(rec._capture_audio),  # noqa: SLF001
+            _setter('capture_audio'), badge='NEXT REC',
+            hint='Record the audio the visualizer is analyzing', section='Audio',
+        ))
         sources = self._recording_audio_sources()
-        specs.append({'key': 'recording.audio_device',
-                      'name': f'audio source 0=auto ({len(sources) - 1} outputs)',
-                      'value': float(self._recording_source_index()),
-                      'min': 0.0, 'max': float(max(0, len(sources) - 1)),
-                      'set': self._set_recording_source_index})
-        specs.append({'key': 'recording.preset', 'name': 'preset 0=ultrafast 5=medium',
-                      'value': float(self._recording_preset_index()),
-                      'min': 0.0, 'max': float(len(self._RECORDING_PRESET_ORDER) - 1),
-                      'set': self._set_recording_preset_index})
-        tweak('auto_record', 'auto_record 0=off 1=on',
-              1.0 if rec.auto_record else 0.0, 0.0, 1.0)
-        tweak('show_indicator', 'show_indicator 0=off 1=on',
-              1.0 if rec.show_indicator else 0.0, 0.0, 1.0)
+        specs.append(_ce_choice(
+            'recording.audio_device', 'Audio source', self._recording_source_index(),
+            tuple(label for _name, label in sources), self._set_recording_source_index,
+            badge='NEXT REC', hint='Pin a PipeWire/Pulse output, or follow the visualizer',
+            section='Audio',
+        ))
+        specs.append(_ce_toggle(
+            'recording.auto_record', 'Auto-record', bool(rec.auto_record),
+            _setter('auto_record'), hint='Start recording as soon as the app is up',
+            section='Behavior',
+        ))
+        specs.append(_ce_toggle(
+            'recording.show_indicator', 'REC indicator', bool(rec.show_indicator),
+            _setter('show_indicator'), hint='Show the on-screen REC badge while recording',
+            section='Behavior',
+        ))
         return specs
 
     def _apply_persisted_recording_settings(self) -> None:
@@ -4057,20 +4419,25 @@ void main() {
         return specs
 
     def _config_editor_all_specs(self) -> list[dict]:
-        """All persistable setting specs across the settings tabs."""
+        """All persistable setting specs across the profile-backed tabs.
+
+        Performance and Recording are deliberately excluded: those settings
+        describe the machine (frame cap, capture device, encoder speed)
+        rather than the look of a show, so loading a visual profile must not
+        silently repoint them.  They persist on their own via runtime state.
+        """
         specs: list[dict] = []
-        # Recording is deliberately excluded: those settings describe the
-        # machine (capture device, encoder speed) rather than the look of a
-        # show, so loading a visual profile must not silently repoint the
-        # recorder.  They persist on their own via runtime state.
         for tab in ('Audio', 'Visuals'):
             specs.extend(self._config_editor_settings_specs(tab))
         return specs
 
-    def config_editor_global_rows(self, tab: str) -> list[dict[str, float | str]]:
-        """Return ``[{'name','value','min','max'}]`` for a tab's settings rows."""
+    _CE_ROW_PASSTHROUGH = ('name', 'value', 'min', 'max', 'kind', 'choices',
+                           'display', 'hint', 'badge', 'section', 'step')
+
+    def config_editor_global_rows(self, tab: str) -> list[dict[str, object]]:
+        """Return the editor's row dicts for a settings tab (no setters)."""
         return [
-            {'name': s['name'], 'value': s['value'], 'min': s['min'], 'max': s['max']}
+            {k: s[k] for k in self._CE_ROW_PASSTHROUGH if k in s}
             for s in self._config_editor_settings_specs(tab)
         ]
 
@@ -4102,7 +4469,12 @@ void main() {
                 overlays.flash_message(f'Reverted: {cls}', 1.4)
 
     def _config_editor_adjust(self, notches: float) -> None:
-        """Adjust the selected parameter/setting by ``notches`` steps, live."""
+        """Nudge the selected row by ``notches`` steps, live.
+
+        Sliders move by their step (default 1/40 of the range); toggles go
+        ON for a positive nudge and OFF for a negative one; choices step
+        through their options without wrapping.
+        """
         overlays = self._overlays
         i = overlays.config_editor_param_index()
         tab = overlays.config_editor_tab_name
@@ -4119,14 +4491,59 @@ void main() {
             new_value = min(hi, max(lo, float(row['value']) + notches * step))
             self.set_effect_parameter(cls, str(row['name']), new_value)
             return
-        # Audio / Visuals: apply to the setting via its setter.
         specs = self._config_editor_settings_specs(tab)
         if not (0 <= i < len(specs)):
             return
         spec = specs[i]
+        kind = str(spec.get('kind') or 'slider')
         lo, hi = float(spec['min']), float(spec['max'])
+        if kind == 'toggle':
+            spec['set'](1.0 if notches > 0 else 0.0)
+            return
+        if kind == 'choice':
+            cur = int(round(float(spec['value'])))
+            spec['set'](float(max(int(lo), min(int(hi), cur + (1 if notches > 0 else -1)))))
+            return
         step = float(spec.get('step', 0.0)) or ((hi - lo) / 40.0 if hi > lo else 0.01)
         spec['set'](min(hi, max(lo, float(spec['value']) + notches * step)))
+
+    def _config_editor_set_value(self, index: int, value: float) -> None:
+        """Set row ``index`` on the active tab to an absolute ``value``.
+
+        Backs pointer input (a click or drag on a slider track, a chip, a
+        toggle pill): the overlay computes the target value from geometry
+        and the app applies it through the same setter the keyboard uses.
+        """
+        overlays = self._overlays
+        tab = overlays.config_editor_tab_name
+        if tab == 'Effects':
+            cls = overlays.config_editor_selected_class()
+            if not cls:
+                return
+            rows = self.config_editor_param_rows(cls)
+            if not (0 <= index < len(rows)):
+                return
+            row = rows[index]
+            lo, hi = float(row['min']), float(row['max'])
+            self.set_effect_parameter(cls, str(row['name']), min(hi, max(lo, float(value))))
+            return
+        specs = self._config_editor_settings_specs(tab)
+        if not (0 <= index < len(specs)):
+            return
+        spec = specs[index]
+        lo, hi = float(spec['min']), float(spec['max'])
+        clamped = min(hi, max(lo, float(value)))
+        step = float(spec.get('step', 0.0))
+        if step > 0:
+            clamped = lo + round((clamped - lo) / step) * step
+        spec['set'](clamped)
+
+    def _config_editor_activate(self) -> None:
+        """Enter on the active tab: flip a toggle, or step a choice."""
+        if self._overlays.activate_config_editor_row():
+            req = self._overlays.take_config_editor_value_request()
+            if req is not None:
+                self._config_editor_set_value(*req)
 
     # ------------------------------------------------------------------ #
     # Effect management                                                    #
@@ -4555,12 +4972,7 @@ void main() {
         # A latency change from the config editor is persisted rather than
         # applied live (see _set_audio_latency_index); honour it here, at the
         # one point where the capture stream has not been opened yet.
-        _persisted_limit = self.get_runtime_state('render_fps_limit', default=None)
-        if isinstance(_persisted_limit, (int, float)):
-            self.cfg.set_override('render', 'fps_limit', int(_persisted_limit))
-        _persisted_latency = self.get_runtime_state('audio_latency', default=None)
-        if isinstance(_persisted_latency, str) and _persisted_latency.strip():
-            self.cfg.set_override('audio', 'latency', _persisted_latency.strip())
+        self._apply_runtime_config_overrides()
         audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
         mixer_profile = self._boot_profile == PROFILE_MIXER
         if mixer_profile:
@@ -5175,6 +5587,7 @@ void main() {
             started, _ = self.start_recording()
             if started:
                 log.info('Auto-record enabled')
+        self._restore_performance_settings()
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
         self._running = True
@@ -5209,12 +5622,16 @@ void main() {
             self.cfg.get('logging', 'level', default='INFO')
         ).strip().upper() == 'DEBUG'
 
+        if self.get_runtime_state('perf_perf_frames', default=None) is None:
+            # No config-editor choice remembered: the config file decides.
+            self._perf_frames_enabled = perf_debug_enabled
+
         perf_frame_counter = 0
         perf_sample_every = 120
         perf_slow_frame_ms = 25.0
 
         while self._running:
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_frame_start = time.perf_counter()
             now = time.perf_counter()
             dt = min(now - prev_time, 0.1)  # cap at 100 ms to avoid spiral
@@ -5294,10 +5711,13 @@ void main() {
                         elif _sym == sdl2.SDLK_DOWN:
                             self._overlays.move_config_editor_row(1)
                         elif _sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
-                            if not event.key.repeat and self._overlays.config_editor_tab_name == 'Hotkeys':
-                                _row = self._overlays.config_editor_selected_row()
-                                if _row is not None and _row.get('kind') == 'bind':
-                                    self.start_hotkey_capture(str(_row.get('action', '')))
+                            if not event.key.repeat:
+                                if self._overlays.config_editor_tab_name == 'Hotkeys':
+                                    _row = self._overlays.config_editor_selected_row()
+                                    if _row is not None and _row.get('kind') == 'bind':
+                                        self.start_hotkey_capture(str(_row.get('action', '')))
+                                else:
+                                    self._config_editor_activate()
                         elif _sym == sdl2.SDLK_BACKSPACE:
                             if self._overlays.config_editor_tab_name == 'Hotkeys':
                                 _row = self._overlays.config_editor_selected_row()
@@ -5592,6 +6012,10 @@ void main() {
                         else:
                             msg = self.toggle_auto_vj()
                             self._overlays.flash_message(msg, 2.0)
+                elif event.type == sdl2.SDL_MOUSEBUTTONUP:
+                    if (self._overlays.config_editor_open
+                            and event.button.button == sdl2.SDL_BUTTON_LEFT):
+                        self._overlays.handle_config_editor_release()
                 elif event.type == sdl2.SDL_DISPLAYEVENT:
                     if event.display.event in (
                         sdl2.SDL_DISPLAYEVENT_CONNECTED,
@@ -5600,13 +6024,13 @@ void main() {
                         log.info('SDL display topology change detected; rebuilding multi-head outputs')
                         self._rebuild_multihead_outputs()
             self._set_cursor_visible(self._cursor_should_be_visible())
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_events = time.perf_counter()
 
             if self._midi_manager is not None:
                 self._midi_manager.maintenance_update()
             hotkeys.process_pending_midi()
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_midi = time.perf_counter()
 
             # Debounced live preview while the effects browser is open.
@@ -5640,13 +6064,13 @@ void main() {
                     if next_cls is not None:
                         log.info("Auto-advance → %s", next_cls.NAME)
                         self._switch_effect(next_cls)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_auto_advance = time.perf_counter()
 
             # Update audio
             self._audio = audio_manager.get_audio_data()
             self._audio_raw = audio_manager.get_audio_data_raw()
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_audio = time.perf_counter()
 
             if self._audio_out is not None:
@@ -5665,14 +6089,14 @@ void main() {
             # sub-timers below split out the ones that have shown up as
             # real per-frame cost (2026-09-12 analysis: the bucket held a
             # 6-10 ms median with no way to tell which of them it was).
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_before_osc = time.perf_counter()
             if self._osc_bridge is not None:
                 try:
                     self._osc_bridge.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('OscBridgeController update failed: %s', exc)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_osc = time.perf_counter()
 
             if self._lyrics is not None:
@@ -5680,7 +6104,7 @@ void main() {
                     self._lyrics.update(dt, self._audio or AudioData())
                 except Exception as exc:
                     log.warning('LyricsController update failed: %s', exc)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_lyrics = time.perf_counter()
 
             if self._auto_vj is not None and not manager_modal_active:
@@ -5717,7 +6141,7 @@ void main() {
                     except Exception:
                         pass
                     self.vj_api.set_status_pill('AUTO VJ  ERROR')
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_auto_vj = time.perf_counter()
 
             if self._grand_finale is not None and not manager_modal_active:
@@ -5725,7 +6149,7 @@ void main() {
                     self._grand_finale.update(dt, self._audio)
                 except Exception as exc:
                     log.warning('GrandFinaleController update failed: %s', exc)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_grand_finale = time.perf_counter()
 
             if not manager_modal_active:
@@ -5737,7 +6161,7 @@ void main() {
                         updater(dt, self._audio)
                     except Exception as exc:
                         log.warning('%s subsystem update failed: %s', name, exc)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_subsystem_update = time.perf_counter()
 
             # Update effects
@@ -5793,7 +6217,7 @@ void main() {
                         self._next_effect.update(dt, audio_next)
                     except Exception:
                         self._handle_effect_crash(self._next_effect, 'update')
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_effect_update = time.perf_counter()
 
             # Keep persistent name overlay in sync with the active effect.
@@ -6103,7 +6527,7 @@ void main() {
                         self._auto_vj.training_badge() if self._auto_vj is not None else ''
                     ),
                 })
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_hud = time.perf_counter()
 
             _wf_audio = self._audio_raw if self._audio_raw is not None else self._audio
@@ -6414,11 +6838,11 @@ void main() {
                 overlays.resize(self._width, self._height)
                 self._normalize_gl_render_state()
                 overlays.render_live_recording_indicator()
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_before_swap = time.perf_counter()
 
             sdl2.SDL_GL_SwapWindow(self._window)
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_swap = time.perf_counter()
 
             self._present_subsystems()
@@ -6428,7 +6852,7 @@ void main() {
                 elif mixer_console_was_open:
                     log.info('Mixer profile: console closed — quitting')
                     self.request_exit()
-            if perf_debug_enabled:
+            if self._perf_frames_enabled:
                 perf_after_subsystem_present = time.perf_counter()
                 perf_frame_counter += 1
                 frame_total_ms = (perf_after_subsystem_present - perf_frame_start) * 1000.0
@@ -7802,18 +8226,21 @@ void main() {
         """Reset render scale to config default."""
         self._render_scale = self._render_scale_default
         self._rebuild_fbos()
+        self._remember_runtime('perf_render_scale', float(self._render_scale))
         return self._render_scale
 
     def _set_render_scale(self, value: float) -> float:
         """Set render scale to an explicit value and rebuild FBOs."""
         self._render_scale = _clamp_render_scale(float(value))
         self._rebuild_fbos()
+        self._remember_runtime('perf_render_scale', float(self._render_scale))
         return self._render_scale
 
     def _apply_render_scale_delta(self, delta: float) -> float:
         """Nudge render scale by delta and rebuild FBOs."""
         self._render_scale = _clamp_render_scale(self._render_scale + float(delta))
         self._rebuild_fbos()
+        self._remember_runtime('perf_render_scale', float(self._render_scale))
         return self._render_scale
 
     def apply_random_speed(self) -> None:
@@ -7906,7 +8333,7 @@ void main() {
             # Never read/sample self._ctx.screen directly — see the comment
             # on self._screen_copy_fbo's declaration.
             self._ctx.copy_framebuffer(staging, self._ctx.screen)
-        pw = min(int(self._width), _PREVIEW_MAX_WIDTH)
+        pw = min(int(self._width), int(self._preview_max_width))
         ph = max(1, round(int(self._height) * pw / max(1, int(self._width))))
         fbo = self._ensure_preview_fbo(pw, ph)
         fbo.use()

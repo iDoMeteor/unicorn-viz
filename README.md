@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.144** — **Configuration editor 2.0.** The `c` editor is rebuilt as a declarative control surface: rows are sliders, ON/OFF pills or segmented choice chips (with `< label >` arrows when the labels are long), grouped under section headers, with a hint line on the selected row and a tooltip on hover; click or drag a slider track, click a chip or pill, Enter flips a toggle, and the tab bar wraps onto a second row instead of overflowing. The read-only System and Auto VJ tabs are gone (the HUD and the Control Room already show that), and the remaining tabs run Effects first then alphabetical. New **Performance** tab collects every core cost knob: render scale, frame limit, present guard, preview capture / fps ceiling / width, capture latency, FFT bands, block size, system-monitor sampling, tooltips, the video-deck layer and its cache edge, per-frame perf logging. Live rows apply at once; RESTART rows are remembered and laid over `config.toml` at the next launch. Every Performance choice persists in runtime state and is excluded from configuration profiles (it describes the machine, not the show). Visuals gains transition length, HUD auto-hide/timeout and flash messages; Recording rows use the new kinds. Drip: bass-lit neon frame with a halo, border sparkles, palette-gradient slider fills, a live FPS / frame-ms readout on the Performance tab.
 - **1.0.0-beta.143** — Startup no longer aborts when the audio open is slow (OBS holding PipeWire's JACK shim busy): a timed-out capture open is waited for instead of torn down underneath (PortAudio's JACK host API asserted and killed the process on `Pa_Terminate`), and the retry adopts the late-finishing open rather than opening a second stream.
 - **1.0.0-beta.142** — Windows packs render every text surface with the
   bundled font: dj-mixer-01 0.194.3 and midi-controllers-01 0.10.1 now go
@@ -745,8 +746,8 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
   `[auto_vj] hud_production_mode`: one config flag for a live show that
   hides every "detector internals" readout — the Auto VJ status bar's BPM
   + confidence, the active profile's recommender score, the `REC PROF`
-  line, *and* the same fields in the Configuration Editor's "Auto VJ" info
-  tab (a second surface the first pass missed) — regardless of the
+  line, *and* (until beta.144 removed that tab) the same fields in the
+  Configuration Editor's "Auto VJ" info tab — regardless of the
   individual `[overlays] hud_show_*` settings, without changing them.
 - **1.0.0-beta.106** — Two new `AudioData` fields, promoted from ad hoc
   computations that were invisible to effects and the training corpus:

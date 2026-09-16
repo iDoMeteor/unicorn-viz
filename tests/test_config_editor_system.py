@@ -1,8 +1,10 @@
-"""Configuration editor — System / Auto VJ tabs + drop-in settings (Increment 6).
+"""Configuration editor 2.0 — tabs, Performance tab, drop-in settings.
 
-Covers dynamic tab list (Auto VJ conditional), System/Auto-VJ read-only info
-rows, and the guarded audio/video drop-in settings folded into Audio/Visuals.
-No GL context needed.
+Covers the fixed tab order (Effects first, then alphabetical), the
+Performance tab's row model (every core cost knob as a slider / toggle /
+choice with a live setter and runtime-state persistence), the RESTART rows'
+config overlay at the next launch, profile exclusion, and the guarded
+audio/video drop-in settings folded into Audio/Visuals.  No GL context.
 """
 from __future__ import annotations
 
@@ -11,28 +13,31 @@ from pathlib import Path
 from unicornviz.app import App
 from unicornviz.config_profiles import ConfigProfileStore
 from unicornviz.overlays import Overlays
+from unicornviz.runtime_state import RuntimeStateStore
 
 
 class _StubCfg:
-    def get(self, section, key=None, default=None):
-        return default
+    """cfg.get(section, key, default) + set_override, backed by a dict."""
+
+    def __init__(self, values: dict | None = None) -> None:
+        self._values: dict[tuple, object] = dict(values or {})
+
+    def get(self, *keys, default=None):
+        return self._values.get(tuple(keys), default)
+
+    def set_override(self, section, key, value):
+        self._values[(section, key)] = value
 
 
 class _AudioManager:
+    def __init__(self) -> None:
+        self.reactivity = 1.0
+
     def get_reactivity(self):
-        return 1.0
+        return self.reactivity
 
     def set_reactivity(self, v):
-        return v
-
-    def get_xrun_count(self):
-        return 3
-
-    def get_source_label(self):
-        return 'PipeWire Monitor'
-
-    def get_profile_name(self):
-        return 'Raver'
+        self.reactivity = float(v)
 
 
 class _ColorGrade:
@@ -69,95 +74,304 @@ class _AudioOut:
             self._wet = max(0.0, min(1.0, float(value)))
 
 
-class _AutoVJ:
-    hud_mood_label = 'HYPE'
-    hud_scene_label = 'Tunnel'
-    hud_bpm_label = '128'
-    hud_bpm_confidence_label = '0.82'
-    hud_action_in_label = '2 bars'
-    profile_recommendation_hud = 'raver'
+class _Overlays(Overlays):
+    """Bare overlay shell with the state the settings rows read and write."""
+
+    def __init__(self, tab: str) -> None:  # noqa: D107 - test shell, no super()
+        self._config_editor_tabs = ['Effects', 'Audio', 'Hotkeys', 'Performance',
+                                    'Recording', 'Visuals']
+        self._config_editor_tab = self._config_editor_tabs.index(tab)
+        self._ce_effects = []
+        self._ce_effect_idx = 0
+        self._ce_params = []
+        self._ce_param_idx = 0
+        self._ce_profiles = []
+        self._ce_profile_idx = -1
+        self._ce_value_request = None
+        self._sysmon_sample_interval = 0.45
+        self._tooltips_enabled = True
+        self._hud_auto_hide = True
+        self._hud_timeout_s = 60.0
+        self._hud_timer = 0.0
+        self._show_name = False
+        self._flash_enabled = True
+        self.messages: list[str] = []
+
+    def flash_message(self, text, _dur=0.0):
+        self.messages.append(text)
 
 
-def _app(tmp_path: Path, *, tab='System', auto_vj=None, color_grade=None,
-         audio_out=None, audio=True) -> App:
+def _app(tmp_path: Path, *, tab='Performance', color_grade=None, audio_out=None,
+         audio=True, cfg=None) -> App:
     app = object.__new__(App)
-    app.cfg = _StubCfg()
+    app.cfg = cfg if cfg is not None else _StubCfg()
+    app._runtime_state = RuntimeStateStore(tmp_path / 'state.json')
     app._config_profile_store = ConfigProfileStore(tmp_path / 'cp.json')
     app._effect_config_overrides = {}
     app._current_effect = None
     app._audio_manager = _AudioManager() if audio else None
-    # Real App.__init__ always sets these; the Recording tab reads them when
-    # the walk below visits it.
     app._recorder = None
     app._recording_sources_cache = None
     app._effect_duration = 30.0
+    app._transition_duration = 1.0
     app._render_scale = 0.9
-    app._render_width = 1728
-    app._render_height = 972
-    app._width = 1920
-    app._height = 1080
-    app._display_mode = 'single'
-    app._last_frame_fps = 59.9
-    app._last_frame_ms = 16.7
-    app._auto_vj = auto_vj
+    app._render_scale_default = 1.0
+    app._rebuild_fbos = lambda: None
+    app._subsys_present_max_skips = 1
+    app._subsys_skip_ms_cached = 0.0
+    app._preview_capture_enabled = True
+    app._preview_fps_ceiling = 0
+    app._preview_max_width = 960
+    app._perf_frames_enabled = False
+    app._subsystems = {}
     app._color_grade = color_grade
     app._audio_out = audio_out
     app._config_editor_was_open = False
-    ov = Overlays.__new__(Overlays)
-    ov._config_editor_tabs = ['Effects', 'Audio', 'Visuals', 'System']
-    ov._config_editor_tab = ov._config_editor_tabs.index(tab) if tab in ov._config_editor_tabs else 0
-    ov._ce_effects = []
-    ov._ce_effect_idx = 0
-    ov._ce_params = []
-    ov._ce_param_idx = 0
-    ov._ce_profiles = []
-    ov._ce_profile_idx = -1
-    app._overlays = ov
+    app._overlays = _Overlays(tab)
     return app
 
 
-# --- dynamic tabs ---------------------------------------------------------- #
+def _rows(app: App, tab: str) -> dict[str, dict]:
+    return {r['name']: r for r in app.config_editor_global_rows(tab)}
 
-def test_auto_vj_tab_only_when_enabled(tmp_path: Path) -> None:
-    app = _app(tmp_path)
+
+def _specs(app: App, tab: str) -> dict[str, dict]:
+    return {s['name']: s for s in app._config_editor_settings_specs(tab)}
+
+
+# --- tabs ----------------------------------------------------------------- #
+
+def test_tabs_are_effects_then_alphabetical_and_info_tabs_are_gone(monkeypatch) -> None:
+    import unicornviz.app as app_mod
+    monkeypatch.setattr(app_mod, 'get_effects', lambda: [])
+    ov = _Overlays('Performance')
+    ov.set_config_editor_effects = lambda effects: None
+    ov.set_config_editor_effect_index = lambda i: None
+    ov.set_config_editor_params = lambda rows: None
+    ov.set_config_editor_profiles = lambda names: None
+    ov.set_config_editor_dirty = lambda d: None
+    app = object.__new__(App)
+    app._overlays = ov
+    app._config_editor_was_open = True
+    app._effect_config_overrides = {}
+    app.current_effect_class_name = lambda: ''
+    app.config_editor_global_rows = lambda tab: []
+    app.config_profile_names = lambda: []
     app._push_config_editor_model()
-    assert 'System' in app._overlays._config_editor_tabs
-    assert 'Auto VJ' not in app._overlays._config_editor_tabs
-
-    app2 = _app(tmp_path, auto_vj=_AutoVJ())
-    app2._push_config_editor_model()
-    assert 'Auto VJ' in app2._overlays._config_editor_tabs
+    assert ov._config_editor_tabs == [
+        'Effects', 'Audio', 'Hotkeys', 'Performance', 'Recording', 'Visuals']
+    assert 'System' not in ov._config_editor_tabs
+    assert 'Auto VJ' not in ov._config_editor_tabs
+    assert not hasattr(app, 'config_editor_info_rows')
 
 
 def test_set_tabs_clamps_index() -> None:
     ov = Overlays.__new__(Overlays)
     ov._config_editor_tabs = ['Effects', 'Audio', 'Visuals', 'System', 'Auto VJ']
-    ov._config_editor_tab = 4  # Auto VJ
-    ov.set_config_editor_tabs(['Effects', 'Audio', 'Visuals', 'System'])  # auto-vj gone
-    assert ov._config_editor_tab == 3  # clamped
+    ov._config_editor_tab = 4
+    ov.set_config_editor_tabs(['Effects', 'Audio', 'Visuals', 'System'])
+    assert ov._config_editor_tab == 3
 
 
-# --- info rows ------------------------------------------------------------- #
+# --- Performance tab ------------------------------------------------------ #
 
-def test_system_info_rows(tmp_path: Path) -> None:
-    rows = _app(tmp_path).config_editor_info_rows('System')
-    names = {r['name'] for r in rows}
-    assert {'FPS', 'Frame ms', 'Render size', 'Display mode', 'Effects', 'Platform'} <= names
-    assert all(r.get('kind') == 'info' for r in rows)
-    render_size = next(r for r in rows if r['name'] == 'Render size')
-    assert render_size['info'] == '1728x972'
-
-
-def test_auto_vj_info_rows(tmp_path: Path) -> None:
-    rows = _app(tmp_path, auto_vj=_AutoVJ()).config_editor_info_rows('Auto VJ')
-    by = {r['name']: r['info'] for r in rows}
-    assert by['Mood'] == 'HYPE'
-    assert by['BPM'] == '128'
-    assert by['Scene'] == 'Tunnel'
+_PERF_ROWS = {
+    'Render scale': 'slider', 'Frame limit': 'choice', 'Present guard': 'slider',
+    'Preview capture': 'toggle', 'Preview fps ceiling': 'slider',
+    'Preview width': 'choice', 'Capture latency': 'choice', 'FFT bands': 'choice',
+    'Capture block size': 'choice', 'System monitor sampling': 'slider',
+    'Tooltips': 'toggle', 'Video deck layer': 'toggle', 'Video cache edge': 'choice',
+    'Per-frame perf logging': 'toggle',
+}
 
 
-def test_auto_vj_info_rows_empty_without_controller(tmp_path: Path) -> None:
-    assert _app(tmp_path).config_editor_info_rows('Auto VJ') == []
+def test_performance_rows_cover_every_core_knob(tmp_path: Path) -> None:
+    rows = _rows(_app(tmp_path), 'Performance')
+    assert {n: r['kind'] for n, r in rows.items()} == _PERF_ROWS
+    # Every row is self-describing: a hint for the tooltip, a section header.
+    assert all(r['hint'] and r['section'] for r in rows.values())
+    # Restart-only rows say so; live rows do not.
+    restart = {n for n, r in rows.items() if r['badge'] == 'RESTART'}
+    assert restart == {'Capture latency', 'FFT bands', 'Capture block size',
+                       'Video deck layer', 'Video cache edge'}
+    # Choices carry their labels; toggles/choices step by one.
+    assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
+    assert rows['Preview width']['choices'] == ('480', '640', '960', '1280')
+    assert all(rows[n]['step'] == 1.0 for n, k in _PERF_ROWS.items()
+               if k in ('toggle', 'choice'))
+
+
+def test_performance_live_rows_apply_and_persist(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    specs = _specs(app, 'Performance')
+    specs['Present guard']['set'](3.0)
+    assert app._subsys_present_max_skips == 3
+    assert app.get_runtime_state('perf_present_guard_skips') == 3
+
+    specs['Preview capture']['set'](0.0)
+    assert app._preview_capture_enabled is False
+    assert app._subsystems_need_frame_capture() is False
+    assert app.get_runtime_state('perf_preview_capture') is False
+
+    specs['Preview fps ceiling']['set'](12.0)
+    assert app._preview_fps_ceiling == 12
+    assert abs(app._subsystem_preview_capture_interval_s() - 1.0 / 10.0) < 1e-9  # default 10 < 12
+    specs['Preview fps ceiling']['set'](4.0)
+    assert abs(app._subsystem_preview_capture_interval_s() - 0.25) < 1e-9  # ceiling wins
+
+    specs['Preview width']['set'](0.0)
+    assert app._preview_max_width == 480
+    assert app.get_runtime_state('perf_preview_max_width') == 480
+
+    specs['System monitor sampling']['set'](1.25)
+    assert abs(app._overlays.sysmon_sample_interval - 1.25) < 1e-9
+    assert abs(app.get_runtime_state('perf_sysmon_interval_s') - 1.25) < 1e-9
+
+    specs['Tooltips']['set'](0.0)
+    assert app._overlays.tooltips_enabled is False
+    assert app.get_runtime_state('perf_tooltips') is False
+
+    specs['Per-frame perf logging']['set'](1.0)
+    assert app._perf_frames_enabled is True
+    assert app.get_runtime_state('perf_perf_frames') is True
+
+    specs['Render scale']['set'](0.6)
+    assert abs(app._render_scale - 0.6) < 1e-9
+    assert abs(app.get_runtime_state('perf_render_scale') - 0.6) < 1e-9
+
+    # The rows re-read the new state.
+    rows = _rows(app, 'Performance')
+    assert rows['Present guard']['display'] == '3 skips'
+    assert rows['Preview capture']['display'] == 'OFF'
+    assert rows['Preview fps ceiling']['display'] == '4 fps'
+    assert rows['Preview width']['value'] == 0.0
+
+
+def test_performance_restart_rows_persist_and_overlay_config(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    specs = _specs(app, 'Performance')
+    specs['FFT bands']['set'](3.0)          # 2048
+    specs['Capture block size']['set'](0.0)  # 256
+    specs['Video deck layer']['set'](0.0)
+    specs['Video cache edge']['set'](1.0)    # 480
+    specs['Capture latency']['set'](2.0)     # high
+    assert app.get_runtime_state('audio_fft_bands') == 2048
+    assert app.get_runtime_state('audio_blocksize') == 256
+    assert app.get_runtime_state('video_decks_enabled') is False
+    assert app.get_runtime_state('video_decks_cache_long_edge') == 480
+    assert app.get_runtime_state('audio_latency') == 'high'
+    assert any('restart' in m for m in app._overlays.messages)
+    # Same session: the rows show the pending choice.
+    rows = _rows(app, 'Performance')
+    assert rows['FFT bands']['display'] == '2048'
+    assert rows['Capture block size']['display'] == '256'
+    assert rows['Video deck layer']['display'] == 'OFF'
+
+    # Next launch: the remembered values are laid over a fresh config.
+    fresh = _app(tmp_path, cfg=_StubCfg({('audio', 'fft_bands'): 512}))
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('audio', 'fft_bands') == 2048
+    assert fresh.cfg.get('audio', 'blocksize') == 256
+    assert fresh.cfg.get('audio', 'latency') == 'high'
+    assert fresh.cfg.get('video_decks', 'enabled') is False
+    assert fresh.cfg.get('video_decks', 'cache_long_edge') == 480
+
+
+def test_restore_performance_settings_lays_live_choices_back(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    specs = _specs(app, 'Performance')
+    specs['Present guard']['set'](0.0)
+    specs['Preview capture']['set'](0.0)
+    specs['Preview fps ceiling']['set'](6.0)
+    specs['Preview width']['set'](3.0)
+    specs['System monitor sampling']['set'](0.8)
+    specs['Tooltips']['set'](0.0)
+    specs['Per-frame perf logging']['set'](1.0)
+    specs['Render scale']['set'](0.75)
+
+    fresh = _app(tmp_path)
+    fresh._restore_performance_settings()
+    assert fresh._subsys_present_max_skips == 0
+    assert fresh._preview_capture_enabled is False
+    assert fresh._preview_fps_ceiling == 6
+    assert fresh._preview_max_width == 1280
+    assert abs(fresh._overlays.sysmon_sample_interval - 0.8) < 1e-9
+    assert fresh._overlays.tooltips_enabled is False
+    assert fresh._perf_frames_enabled is True
+    assert abs(fresh._render_scale - 0.75) < 1e-9
+
+
+def test_restore_is_a_noop_without_remembered_state(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._restore_performance_settings()
+    assert app._subsys_present_max_skips == 1
+    assert app._preview_capture_enabled is True
+    assert app._preview_max_width == 960
+    assert abs(app._render_scale - 0.9) < 1e-9
+
+
+def test_performance_and_recording_are_not_profile_settings(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    keys = {s['key'] for s in app._config_editor_all_specs()}
+    assert not any(k.startswith('perf.') for k in keys)
+    assert not any(k.startswith('recording.') for k in keys)
+    assert 'audio.reactivity' in keys
+
+
+# --- adjust / set paths for the new row kinds ----------------------------- #
+
+def test_adjust_flips_toggle_and_steps_choice(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    names = [r['name'] for r in app.config_editor_global_rows('Performance')]
+    app._overlays._ce_param_idx = names.index('Preview capture')
+    app._config_editor_adjust(-1.0)
+    assert app._preview_capture_enabled is False
+    app._config_editor_adjust(1.0)
+    assert app._preview_capture_enabled is True
+
+    app._overlays._ce_param_idx = names.index('Preview width')
+    app._config_editor_adjust(1.0)    # 960 -> 1280
+    assert app._preview_max_width == 1280
+    app._config_editor_adjust(1.0)    # clamps at the end, no wrap
+    assert app._preview_max_width == 1280
+
+
+def test_set_value_clamps_and_snaps_to_step(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    names = [r['name'] for r in app.config_editor_global_rows('Performance')]
+    app._config_editor_set_value(names.index('Present guard'), 2.4)
+    assert app._subsys_present_max_skips == 2
+    app._config_editor_set_value(names.index('Present guard'), 99.0)
+    assert app._subsys_present_max_skips == 4
+    app._config_editor_set_value(names.index('Render scale'), 0.1)
+    assert abs(app._render_scale - 0.5) < 1e-9
+
+
+def test_activate_drains_the_overlay_request(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    rows = app.config_editor_global_rows('Performance')
+    app._overlays._ce_params = rows
+    app._overlays._ce_param_idx = [r['name'] for r in rows].index('Tooltips')
+    app._config_editor_activate()
+    assert app._overlays.tooltips_enabled is False
+
+
+# --- Visuals / Audio core rows -------------------------------------------- #
+
+def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    rows = _rows(app, 'Visuals')
+    assert set(rows) == {'Effect duration', 'Transition length', 'HUD auto-hide',
+                         'HUD timeout', 'Flash messages'}
+    specs = _specs(app, 'Visuals')
+    specs['Transition length']['set'](2.5)
+    assert abs(app._transition_duration - 2.5) < 1e-9
+    specs['HUD auto-hide']['set'](0.0)
+    assert app._overlays.hud_auto_hide is False
+    specs['HUD timeout']['set'](30.0)
+    assert abs(app._overlays.hud_timeout_s - 30.0) < 1e-9
+    specs['Flash messages']['set'](0.0)
+    assert app._overlays.flash_messages_enabled is False
 
 
 # --- drop-in settings folded into Audio/Visuals ---------------------------- #
@@ -165,32 +379,27 @@ def test_auto_vj_info_rows_empty_without_controller(tmp_path: Path) -> None:
 def test_color_grade_in_visuals(tmp_path: Path) -> None:
     cg = _ColorGrade()
     app = _app(tmp_path, tab='Visuals', color_grade=cg)
-    rows = app.config_editor_global_rows('Visuals')
-    names = [r['name'] for r in rows]
-    assert 'render_scale' in names
+    names = [r['name'] for r in app.config_editor_global_rows('Visuals')]
     assert 'intensity' in names  # contributed by color-grade via convention
-    # Adjust it live via the global adjust path.
     app._overlays._ce_param_idx = names.index('intensity')
     app._config_editor_adjust(-1.0)
-    assert cg.intensity < 0.85  # decreased
+    assert cg.intensity < 0.85
 
 
 def test_audio_out_in_audio(tmp_path: Path) -> None:
     ao = _AudioOut()
     app = _app(tmp_path, tab='Audio', audio_out=ao)
-    rows = app.config_editor_global_rows('Audio')
-    names = [r['name'] for r in rows]
-    assert 'reverb_wet' in names  # contributed by audio-out via convention
+    names = [r['name'] for r in app.config_editor_global_rows('Audio')]
+    assert names[0] == 'Reactivity'
+    assert 'reverb_wet' in names
     app._overlays._ce_param_idx = names.index('reverb_wet')
     app._config_editor_adjust(1.0)
-    assert ao._wet > 0.45  # increased
+    assert ao._wet > 0.45
 
 
 def test_no_dropins_no_extra_rows(tmp_path: Path) -> None:
-    app = _app(tmp_path, tab='Visuals')
-    names = [r['name'] for r in app.config_editor_global_rows('Visuals')]
-    # no contributor → only the core Visuals rows
-    assert names == ['render_scale', 'fps limit 0=display/24/30/60']
+    app = _app(tmp_path, tab='Audio')
+    assert [r['name'] for r in app.config_editor_global_rows('Audio')] == ['Reactivity']
 
 
 def test_profile_persists_and_restores_dropin_setting(tmp_path: Path) -> None:
@@ -199,7 +408,6 @@ def test_profile_persists_and_restores_dropin_setting(tmp_path: Path) -> None:
     cg.set_config_setting('intensity', 0.2)
     app.save_config_profile('Look A')
 
-    # Fresh app + fresh controller at a different value; load must restore 0.2.
     cg2 = _ColorGrade()
     app2 = _app(tmp_path, tab='Visuals', color_grade=cg2)
     assert cg2.intensity == 0.85

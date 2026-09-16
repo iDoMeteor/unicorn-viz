@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import logging
 import math
+import random
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -357,6 +358,34 @@ class Overlays:
     _tour_show_on_startup = True
     _tour_hover = ''
     _tour_button_rects: tuple = ()
+    # Config editor 2.0 — class-level defaults for the same shell reason.
+    _ce_hover_row = -1
+    _ce_hover_effect = -1
+    _ce_hover_control = ''
+    _ce_drag_row = -1
+    _ce_value_request: tuple[int, float] | None = None
+    _ce_slider_rects: list = []
+    _ce_chip_rects: list = []
+    _ce_toggle_rects: list = []
+    _ce_sparkles: tuple = ()
+    _ce_tab_rows = 1
+    _ce_scroll_px: float | None = None
+    _ce_capture_mode = False
+    _ce_capture_action = ''
+    _sysmon_sample_interval = 0.45
+    _config_editor_tabs: list = []
+    _config_editor_tab = 0
+    _ce_params: list = []
+    _ce_param_idx = 0
+    _ce_param_row_rects: list = []
+    _ce_effect_row_rects: list = []
+    _ce_footer_button_rects: list = []
+    _ce_profile_chip_rects: list = []
+    _hud_auto_hide = True
+    _hud_timeout_s = 60.0
+    _hud_timer = 0.0
+    _flash_enabled = True
+    _show_name = False
     # Mixer boot profile: restricts CORE_HELP_SECTIONS (None = show all).
     _core_help_filter: tuple | None = None
     # BPM tapper (KP 0): tap timestamps, newest last. Class-level defaults so
@@ -670,6 +699,17 @@ class Overlays:
         # Hotkeys tab: "press new key" capture mode for the selected action row.
         self._ce_capture_mode = False
         self._ce_capture_action: str = ''
+        self._ce_hover_row = -1
+        self._ce_hover_effect = -1
+        self._ce_hover_control = ''
+        self._ce_drag_row = -1
+        self._ce_value_request = None
+        self._ce_slider_rects: list[tuple[float, float, float, float, int]] = []
+        self._ce_chip_rects: list[tuple[float, float, float, float, int, int]] = []
+        self._ce_toggle_rects: list[tuple[float, float, float, float, int]] = []
+        self._ce_sparkles: tuple = ()
+        self._ce_tab_rows = 1
+        self._ce_scroll_px: float | None = None
         # Show-presets modal (single-pane list + inline name entry).
         self._show_presets = False
         self._presets_browser = CatalogBrowser()
@@ -695,6 +735,7 @@ class Overlays:
         self._sysmon_disk_mbs: float = 0.0
         self._sysmon_net_mbs: float = 0.0
         self._sysmon_sample_t: float = 0.0
+        self._sysmon_sample_interval: float = 0.45
         self._sysmon_prev_io_t: float | None = None
         self._sysmon_prev_disk_bytes: float | None = None
         self._sysmon_prev_net_bytes: float | None = None
@@ -2332,28 +2373,79 @@ void main() {
         if self._config_editor_fading and self._config_editor_anim <= 0.001:
             self._config_editor_fading = False
 
+    # ------------------------------------------------------------------
+    # Configuration editor 2.0 — geometry + pointer input
+    #
+    # The editor is a declarative row surface: App pushes rows (see
+    # set_config_editor_params) and Overlays owns the cursor, hover, drag
+    # and the pending "set row i to value v" request that App drains once
+    # per frame (take_config_editor_value_request).  Row kinds:
+    #   slider  {'value','min','max','display'}     drag / click the track
+    #   toggle  {'value': 0|1}                      click the pill, Enter
+    #   choice  {'value': idx, 'choices': [...]}    click a chip, [ ] / Enter
+    #   bind    {'action','chord','is_override'}    Enter captures a key
+    # Every row may carry 'hint' (tooltip + inline for the selected row),
+    # 'badge' ('RESTART' / 'NEXT REC' / ...) and 'section' (a header is
+    # drawn whenever the section changes between consecutive rows).
+    # ------------------------------------------------------------------
+
+    _CE_TAB_H = 44.0
+    _CE_TAB_GAP = 8.0
+    _CE_TAB_ROW_GAP = 6.0
+    _CE_ROW_H = 44.0
+    _CE_SECTION_H = 30.0
+    _CE_FOOTER_H = 128.0
+    _CE_PAD = 22.0
+    _CE_SPARKLE_COUNT = 28
+
+    def _ce_text_w(self, text: str, scale: float) -> float:
+        """Pixel width of ``text`` at ``scale`` in the overlay font."""
+        return len(text) * float(self._glyph_w) * self._font_scale_norm * scale
+
     def _config_editor_tab_boxes(
         self, panel_rect: tuple[float, float, float, float]
     ) -> list[tuple[int, float, float, float, float]]:
-        """Return clickable tab boxes ``(index, x, y, w, h)`` for the tab bar."""
-        px, py, _pw, _ph = panel_rect
+        """Return clickable tab boxes ``(index, x, y, w, h)`` for the tab bar.
+
+        Tabs flow left to right and wrap onto further rows when they would
+        overrun the panel, so adding a tab can never push one off the edge
+        (the overflow dj-mixer-01 hit at nine tabs).  ``_ce_tab_rows``
+        records how many rows the bar took so the body can start below it.
+        """
+        px, py, pw, _ph = panel_rect
         scale = 2.4
-        char_w = float(self._glyph_w) * self._font_scale_norm * scale
-        tab_h = 44.0
-        tab_y = py + 64.0
-        gap = 10.0
+        x0 = px + self._CE_PAD
+        x_max = px + pw - self._CE_PAD
+        x = x0
+        y = py + 64.0
+        rows = 1
         boxes: list[tuple[int, float, float, float, float]] = []
-        x = px + 22.0
         for i, name in enumerate(self._config_editor_tabs):
-            w = len(name) * char_w + 34.0
-            boxes.append((i, x, tab_y, w, tab_h))
-            x += w + gap
+            w = self._ce_text_w(name.upper(), scale) + 34.0
+            if x > x0 and x + w > x_max:
+                x = x0
+                y += self._CE_TAB_H + self._CE_TAB_ROW_GAP
+                rows += 1
+            boxes.append((i, x, y, w, self._CE_TAB_H))
+            x += w + self._CE_TAB_GAP
+        self._ce_tab_rows = rows
         return boxes
 
+    def _config_editor_body_top(self, py: float) -> float:
+        """Y of the content area: just under however many tab rows there are."""
+        rows = max(1, int(getattr(self, '_ce_tab_rows', 1)))
+        return py + 64.0 + rows * (self._CE_TAB_H + self._CE_TAB_ROW_GAP) + 6.0
+
     def handle_config_editor_motion(self, x: float, y: float) -> None:
-        """Update the hovered tab from cursor position."""
+        """Update hover state (tabs, rows, chips, buttons) or drive a drag."""
         self._config_editor_tab_hover = -1
+        self._ce_hover_row = -1
+        self._ce_hover_effect = -1
+        self._ce_hover_control = ''
         if not self._show_config_editor or self._config_editor_panel_rect is None:
+            return
+        if self._ce_drag_row >= 0:
+            self._ce_drag_to(x)
             return
         self._feed_modal_tooltips(
             'config_editor', x, y, self._config_editor_tooltip_regions(),
@@ -2362,9 +2454,30 @@ void main() {
             if bx <= x <= bx + bw and by <= y <= by + bh:
                 self._config_editor_tab_hover = i
                 return
+        for rx, ry, rw, rh, action in self._ce_footer_button_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_hover_control = f'button:{action}'
+                return
+        for rx, ry, rw, rh, idx in self._ce_profile_chip_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_hover_control = f'profile:{idx}'
+                return
+        for rx, ry, rw, rh, idx, choice in self._ce_chip_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_hover_control = f'chip:{idx}:{choice}'
+                self._ce_hover_row = idx
+                return
+        for rx, ry, rw, rh, idx in self._ce_param_row_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_hover_row = idx
+                return
+        for rx, ry, rw, rh, idx in self._ce_effect_row_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_hover_effect = idx
+                return
 
     def _config_editor_tooltip_regions(self) -> list[TooltipRegion]:
-        """Build tooltip regions for the config editor's tab bar."""
+        """Tooltip regions: tab bar, footer buttons and every row with a hint."""
         if self._config_editor_panel_rect is None:
             return []
         regions: list[TooltipRegion] = []
@@ -2374,12 +2487,49 @@ void main() {
                     rect=(int(bx), int(by), int(bw), int(bh)),
                     text=f'Edit {self._config_editor_tabs[i]} settings',
                 ))
+        button_tips = {
+            'save': 'Save the current Audio/Visuals/effect settings as a named profile',
+            'load': 'Load the selected profile (applies live)',
+            'delete': 'Delete the selected profile',
+            'revert': 'Drop the selected effect\'s pinned parameters (re-randomize)',
+        }
+        for rx, ry, rw, rh, action in self._ce_footer_button_rects:
+            tip = button_tips.get(action)
+            if tip:
+                regions.append(TooltipRegion(rect=(int(rx), int(ry), int(rw), int(rh)), text=tip))
+        for rx, ry, rw, rh, idx in self._ce_param_row_rects:
+            if 0 <= idx < len(self._ce_params):
+                hint = str(self._ce_params[idx].get('hint') or '')
+                if hint:
+                    regions.append(TooltipRegion(rect=(int(rx), int(ry), int(rw), int(rh)), text=hint))
         return regions
 
-    def handle_config_editor_click(self, x: float, y: float) -> bool:
-        """Handle a click; switch tab or select an effect/parameter row.
+    def _ce_row_value_from_frac(self, idx: int, frac: float) -> float | None:
+        """Map a 0..1 track fraction onto row ``idx``'s value range."""
+        if not (0 <= idx < len(self._ce_params)):
+            return None
+        p = self._ce_params[idx]
+        lo = float(p.get('min', 0.0))
+        hi = float(p.get('max', 1.0))
+        frac = max(0.0, min(1.0, float(frac)))
+        return lo + (hi - lo) * frac
 
-        Returns True if the click was consumed.
+    def _ce_drag_to(self, x: float) -> None:
+        """Turn a pointer x during a slider drag into a value request."""
+        for sx, _sy, sw, _sh, idx in self._ce_slider_rects:
+            if idx == self._ce_drag_row and sw > 0:
+                value = self._ce_row_value_from_frac(idx, (x - sx) / sw)
+                if value is not None:
+                    self._ce_value_request = (idx, value)
+                return
+
+    def handle_config_editor_click(self, x: float, y: float) -> bool:
+        """Handle a left click anywhere on the editor.
+
+        Tabs, footer buttons and profile chips first; then the row controls
+        (choice chips, toggle pills, slider tracks - a track click also starts
+        a drag until :meth:`handle_config_editor_release`); then plain row /
+        effect selection.  Returns True if the click was consumed.
         """
         if not self._show_config_editor or self._config_editor_panel_rect is None:
             return False
@@ -2401,7 +2551,27 @@ void main() {
                 if 0 <= idx < len(self._ce_profiles):
                     self._ce_name_text = self._ce_profiles[idx]
                 return True
-        # Effect / parameter rows (Effects tab).
+        # Row controls.
+        for rx, ry, rw, rh, idx, choice in self._ce_chip_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_param_idx = idx
+                self._ce_focus = 1
+                self._ce_value_request = (idx, float(choice))
+                return True
+        for rx, ry, rw, rh, idx in self._ce_toggle_rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self._ce_param_idx = idx
+                self._ce_focus = 1
+                self._ce_value_request = (idx, self._ce_toggled_value(idx))
+                return True
+        for sx, sy, sw, sh, idx in self._ce_slider_rects:
+            if sx <= x <= sx + sw and sy <= y <= sy + sh:
+                self._ce_param_idx = idx
+                self._ce_focus = 1
+                self._ce_drag_row = idx
+                self._ce_drag_to(x)
+                return True
+        # Effect / parameter rows.
         for rx, ry, rw, rh, idx in self._ce_effect_row_rects:
             if rx <= x <= rx + rw and ry <= y <= ry + rh:
                 self._ce_effect_idx = idx
@@ -2413,6 +2583,44 @@ void main() {
                 self._ce_focus = 1
                 return True
         return False
+
+    def handle_config_editor_release(self) -> None:
+        """End a slider drag (left button released anywhere)."""
+        self._ce_drag_row = -1
+
+    def _ce_toggled_value(self, idx: int) -> float:
+        """The flipped value for toggle row ``idx`` (1 -> 0, 0 -> 1)."""
+        if 0 <= idx < len(self._ce_params):
+            return 0.0 if float(self._ce_params[idx].get('value', 0.0)) >= 0.5 else 1.0
+        return 1.0
+
+    def activate_config_editor_row(self) -> bool:
+        """Enter on a toggle flips it; on a choice it steps to the next option.
+
+        Returns True when a value request was queued (bind rows are handled
+        by the caller, which owns hotkey capture).
+        """
+        row = self.config_editor_selected_row()
+        if row is None:
+            return False
+        kind = str(row.get('kind') or 'slider')
+        idx = self._ce_param_idx
+        if kind == 'toggle':
+            self._ce_value_request = (idx, self._ce_toggled_value(idx))
+            return True
+        if kind == 'choice':
+            n = len(row.get('choices') or ())
+            if n:
+                cur = int(round(float(row.get('value', 0.0))))
+                self._ce_value_request = (idx, float((cur + 1) % n))
+                return True
+        return False
+
+    def take_config_editor_value_request(self) -> tuple[int, float] | None:
+        """Pop the pending ``(row_index, value)`` set request, if any."""
+        req = self._ce_value_request
+        self._ce_value_request = None
+        return req
 
     # -- Effects tab data + selection (App pushes data; Overlays owns cursor) --
 
@@ -2541,8 +2749,72 @@ void main() {
             return self._ce_params[self._ce_param_idx]
         return None
 
+    # ------------------------------------------------------------------
+    # Configuration editor 2.0 — rendering
+    # ------------------------------------------------------------------
+
+    def _ce_audio_levels(self) -> tuple[float, float, float]:
+        """Bass / mid / treble from the HUD payload, safe on a bare shell."""
+        state = getattr(self, '_hud_state', None) or {}
+
+        def _fv(key: str) -> float:
+            try:
+                return max(0.0, min(1.0, float(state.get(key, '0.0') or 0.0)))
+            except (ValueError, TypeError):
+                return 0.0
+
+        return _fv('bass'), _fv('mid'), _fv('treble')
+
+    def _ce_draw_sparkles(
+        self, x: float, y: float, w: float, h: float, t: float,
+        treble: float, bass: float,
+    ) -> None:
+        """Glinting accent crosses scattered along the panel border.
+
+        Anchors live in panel-local (u, v) so they track the open/close
+        animation for free; brightness twinkles with treble and lifts on
+        bass, the same recipe as cta-01's editor sparkles.
+        """
+        anchors = self._ce_sparkles
+        if not anchors:
+            rng = random.Random(0x5EED)
+            built = []
+            for _ in range(self._CE_SPARKLE_COUNT):
+                edge = rng.randrange(4)
+                jitter = rng.uniform(-0.012, 0.012)
+                if edge == 0:
+                    u, v = rng.uniform(0.03, 0.97), jitter
+                elif edge == 1:
+                    u, v = rng.uniform(0.03, 0.97), 1.0 + jitter
+                elif edge == 2:
+                    u, v = jitter, rng.uniform(0.05, 0.95)
+                else:
+                    u, v = 1.0 + jitter, rng.uniform(0.05, 0.95)
+                built.append((
+                    u, v, rng.uniform(0.0, math.tau), rng.uniform(0.6, 1.6),
+                    rng.uniform(0.7, 1.3), rng.randrange(3),
+                ))
+            anchors = tuple(built)
+            self._ce_sparkles = anchors
+        palette = ((0.55, 0.95, 1.0), (0.85, 0.55, 1.0), (1.0, 0.9, 0.5))
+        boost = 0.35 + 0.65 * treble
+        for u, v, phase, speed, size, ci in anchors:
+            twinkle = 0.5 + 0.5 * math.sin(t * speed * 3.0 + phase)
+            bright = twinkle * boost + bass * 0.45
+            if bright < 0.18:
+                continue
+            bright = min(1.0, bright)
+            sx = x + u * w
+            sy = y + v * h
+            s = (2.0 + 4.0 * bright) * size
+            col = (*palette[ci], 0.25 + 0.75 * bright)
+            self._draw_rect(sx - s, sy - 0.5, 2.0 * s, 1.0, col)
+            self._draw_rect(sx - 0.5, sy - s, 1.0, 2.0 * s, col)
+            if bright > 0.55:
+                self._draw_rect(sx - 1.5, sy - 1.5, 3.0, 3.0, (1.0, 1.0, 1.0, bright))
+
     def _render_config_editor(self) -> None:
-        """Draw the tabbed configuration editor (shell + tab bar + placeholder body)."""
+        """Draw the tabbed configuration editor: frame, tabs, body, footer."""
         if not self.config_editor_visible:
             return
         px, py, pw, ph, _W, _H = self._begin_panel(
@@ -2550,6 +2822,7 @@ void main() {
         )
         self._config_editor_panel_rect = (px, py, pw, ph)
         t = self._hud_t
+        bass, mid, treble = self._ce_audio_levels()
         pulse = 0.55 + 0.45 * math.sin(t * 2.6)
 
         # Open/close animation: expand vertically from the centre.
@@ -2557,75 +2830,83 @@ void main() {
         ease = a * a * (3.0 - 2.0 * a)
         vis_h = max(6.0, ph * ease)
         vy = py + (ph - vis_h) * 0.5
-
+        # Base plate with a soft top-down gradient (six bands is plenty).
         self._draw_rect(px, vy, pw, vis_h, (0.03, 0.05, 0.11, 0.97))
+        bands = 6
+        for k in range(bands):
+            frac = k / bands
+            self._draw_rect(px, vy + vis_h * frac, pw, vis_h / bands + 1.0,
+                            (0.10, 0.16, 0.34, 0.10 * (1.0 - frac)))
+        # Neon border, lit by bass; a wider faint halo behind the hard line.
+        lit = 0.75 + 0.25 * bass
+        c_border = (0.18 * pulse * lit, 0.55 * pulse * lit, 1.0 * pulse * lit, 0.9)
+        c_halo = (c_border[0], c_border[1], c_border[2], 0.22)
         bw = 2.0
-        c_border = (0.18 * pulse, 0.55 * pulse, 1.0 * pulse, 0.9)
+        self._draw_rect(px - 3.0, vy - 3.0, pw + 6.0, 4.0, c_halo)
+        self._draw_rect(px - 3.0, vy + vis_h - 1.0, pw + 6.0, 4.0, c_halo)
+        self._draw_rect(px - 3.0, vy, 4.0, vis_h, c_halo)
+        self._draw_rect(px + pw - 1.0, vy, 4.0, vis_h, c_halo)
         self._draw_rect(px, vy, pw, bw, c_border)
         self._draw_rect(px, vy + vis_h - bw, pw, bw, c_border)
         self._draw_rect(px, vy, bw, vis_h, c_border)
         self._draw_rect(px + pw - bw, vy, bw, vis_h, c_border)
-
-        def _fv(key: str) -> float:
-            try:
-                return float(self._hud_state.get(key, '0.0') or 0.0)
-            except (ValueError, TypeError):
-                return 0.0
-
         self._draw_audio_reactive_border_bulbs(
-            px, vy, pw, vis_h, _fv('bass'), _fv('mid'), _fv('treble'), t,
-            speed_scale=0.5, size_scale=0.6,
+            px, vy, pw, vis_h, bass, mid, treble, t, speed_scale=0.5, size_scale=0.6,
         )
-        # HUD-style frame decorators (corner accents + crosshair arms + ticks).
         self._draw_modal_frame_decor(px, vy, pw, vis_h, pulse)
+        self._ce_draw_sparkles(px, vy, pw, vis_h, t, treble, bass)
 
         # Content appears once the panel is mostly open.
         if ease < 0.82:
             return
 
-        self._draw_text('CONFIGURATION', px + 22, py + 16, scale=3.6,
-                        color=(0.4 + 0.2 * pulse, 0.8, 1.0, 1.0))
+        # Title: drop shadow + palette shimmer + a bass-breathing underline.
+        title = 'CONFIGURATION'
+        tc = self._neon_palette_rgb(t * 0.35)
+        self._draw_text(title, px + 24, py + 18, scale=3.6, color=(0.0, 0.0, 0.0, 0.6))
+        self._draw_text(title, px + 22, py + 16, scale=3.6,
+                        color=(0.55 + 0.45 * tc[0], 0.78 + 0.22 * tc[1], 1.0, 1.0))
+        uw = self._ce_text_w(title, 3.6) * (0.55 + 0.45 * bass)
+        self._draw_rect(px + 22, py + 52, uw, 2.0, (0.4, 0.95, 1.0, 0.7))
+        hints = 'ESC close   </> tabs   ^/v rows   [ ] adjust   ENTER toggle   drag sliders'
+        hw = self._ce_text_w(hints, 1.5)
+        self._draw_text(hints, px + pw - 22 - hw, py + 22, scale=1.5,
+                        color=(0.5, 0.6, 0.75, 0.8))
 
-        # Tab bar.
+        # Tab bar (wraps; see _config_editor_tab_boxes).
         for i, bx, by, bw2, bh in self._config_editor_tab_boxes((px, py, pw, ph)):
-            name = self._config_editor_tabs[i]
+            name = self._config_editor_tabs[i].upper()
             active = i == self._config_editor_tab
             hovered = i == self._config_editor_tab_hover
             if active:
-                self._draw_rect(bx, by, bw2, bh, (0.12, 0.30, 0.62, 0.9))
-                self._draw_rect(bx, by + bh - 3.0, bw2, 3.0, (0.4, 0.95, 1.0, 0.95))
+                self._draw_rect(bx, by, bw2, bh, (0.12, 0.30, 0.62, 0.92))
+                self._draw_rect(bx, by, bw2, bh * 0.35, (0.35, 0.7, 1.0, 0.16))
+                self._draw_rect(bx, by + bh - 3.0, bw2, 3.0,
+                                (0.4, 0.95, 1.0, 0.75 + 0.25 * pulse))
             elif hovered:
                 self._context_menu_hover_glow(bx, by, bw2, bh, t)
             else:
                 self._draw_rect(bx, by, bw2, bh, (0.06, 0.10, 0.22, 0.7))
+                self._draw_rect(bx, by + bh - 1.0, bw2, 1.0, (0.2, 0.35, 0.6, 0.5))
             tcol = (1.0, 0.97, 0.6, 1.0) if active else (0.75, 0.85, 1.0, 0.9)
             self._draw_text(name, bx + 17, by + 11, scale=2.4, color=tcol)
 
-        # Two-pane body (list | detail).
-        body_y = py + 120.0
-        footer_h = 128.0
-        body_h = ph - (body_y - py) - footer_h
-        left_w = pw * 0.32
-        left_x = px + 22.0
-        right_x = px + 22.0 + left_w
-        right_w = pw - left_w - 44.0
-        self._draw_rect(left_x, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
-        self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
-
+        body_y = self._config_editor_body_top(py)
+        body_h = ph - (body_y - py) - self._CE_FOOTER_H
         tab_name = self.config_editor_tab_name
         if tab_name == 'Effects':
+            left_w = pw * 0.32
+            left_x = px + self._CE_PAD
+            right_x = left_x + left_w
+            right_w = pw - left_w - 2.0 * self._CE_PAD
             self._render_config_editor_effects(
                 left_x, right_x, body_y, left_w, right_w, body_h
             )
         else:
-            # Audio / Visuals: global settings as parameter rows (no effect list).
             self._ce_effect_row_rects = []
-            self._draw_text(tab_name.upper(), left_x + 14, body_y + 12, scale=1.8,
-                            color=(0.55, 0.75, 1.0, 0.85))
-            self._draw_text('Global', left_x + 16, body_y + 44, scale=1.9,
-                            color=(0.75, 0.83, 0.98, 0.9))
             self._render_config_editor_param_rows(
-                right_x, body_y, right_w, body_h, f'{tab_name.upper()} SETTINGS'
+                px + self._CE_PAD, body_y, pw - 2.0 * self._CE_PAD, body_h,
+                tab_name.upper(),
             )
 
         self._render_config_editor_footer(px, py, pw, ph, t)
@@ -2638,11 +2919,16 @@ void main() {
         self._ce_profile_chip_rects = []
         scale = 2.0
         char_w = float(self._glyph_w) * self._font_scale_norm * scale
-        footer_h = 128.0
+        footer_h = self._CE_FOOTER_H
         fy = py + ph - footer_h + 10.0
+        hover = str(getattr(self, '_ce_hover_control', ''))
+        self._draw_rect(px + 22, fy - 8.0, pw - 44, 1.0, (0.2, 0.4, 0.8, 0.35))
 
-        # Saved-profile chips (single row; overflow is clipped for v1).
+        # Saved-profile chips (single row; overflow is clipped).
         self._draw_text('PROFILES', px + 22, fy, scale=1.7, color=(0.55, 0.75, 1.0, 0.85))
+        if self.config_editor_tab_name in ('Performance', 'Recording'):
+            note = 'this tab follows the machine, not the profile'
+            self._draw_text(note, px + 140, fy + 1, scale=1.4, color=(0.5, 0.6, 0.72, 0.7))
         chip_y = fy + 24.0
         chip_h = 28.0
         cx = px + 22.0
@@ -2651,14 +2937,19 @@ void main() {
             if cx + w > px + pw - 22.0:
                 break
             selected = i == self._ce_profile_idx
-            self._draw_rect(cx, chip_y, w, chip_h,
-                            (0.12, 0.30, 0.62, 0.9) if selected else (0.06, 0.10, 0.22, 0.75))
+            if selected:
+                self._draw_rect(cx, chip_y, w, chip_h, (0.12, 0.30, 0.62, 0.9))
+                self._draw_rect(cx, chip_y, w, chip_h * 0.4, (0.35, 0.7, 1.0, 0.14))
+            elif hover == f'profile:{i}':
+                self._context_menu_hover_glow(cx, chip_y, w, chip_h, t)
+            else:
+                self._draw_rect(cx, chip_y, w, chip_h, (0.06, 0.10, 0.22, 0.75))
             self._draw_text(name, cx + 10, chip_y + 6, scale=1.7,
                             color=(1.0, 0.95, 0.55, 1.0) if selected else (0.75, 0.85, 1.0, 0.9))
             self._ce_profile_chip_rects.append((cx, chip_y, w, chip_h, i))
             cx += w + 8.0
         if not self._ce_profiles:
-            self._draw_text('(none saved yet)', px + 140, fy, scale=1.7,
+            self._draw_text('(none saved yet)', px + 22, chip_y + 6, scale=1.7,
                             color=(0.55, 0.6, 0.7, 0.7))
 
         # Name field + dirty indicator.
@@ -2666,10 +2957,13 @@ void main() {
         caret = '_' if (self._ce_name_mode and int(t * 2.0) % 2 == 0) else ''
         field_col = (0.10, 0.18, 0.34, 0.9) if self._ce_name_mode else (0.06, 0.10, 0.20, 0.8)
         self._draw_rect(px + 22, name_y, 360.0, 32.0, field_col)
+        self._draw_rect(px + 22, name_y + 30.0, 360.0, 2.0,
+                        (0.4, 0.9, 1.0, 0.8) if self._ce_name_mode else (0.2, 0.4, 0.7, 0.5))
         self._draw_text(f'NAME: {self._ce_name_text}{caret}', px + 30, name_y + 7,
                         scale=2.0, color=(0.9, 0.95, 1.0, 0.95))
         if self._ce_dirty:
-            self._draw_rect(px + 392, name_y + 9, 14.0, 14.0, (1.0, 0.58, 0.12, 0.9))
+            blink = 0.7 + 0.3 * math.sin(t * 4.0)
+            self._draw_rect(px + 392, name_y + 9, 14.0, 14.0, (1.0, 0.58, 0.12, 0.9 * blink))
             self._draw_text('unsaved', px + 414, name_y + 7, scale=1.7,
                             color=(1.0, 0.7, 0.3, 0.85))
 
@@ -2679,7 +2973,11 @@ void main() {
                               ('Load', 'load'), ('Save', 'save')):
             w = len(label) * char_w + 26.0
             bxx = bx - w
-            self._draw_rect(bxx, name_y, w, 32.0, (0.10, 0.24, 0.50, 0.85))
+            if hover == f'button:{action}':
+                self._context_menu_hover_glow(bxx, name_y, w, 32.0, t)
+            else:
+                self._draw_rect(bxx, name_y, w, 32.0, (0.10, 0.24, 0.50, 0.85))
+                self._draw_rect(bxx, name_y, w, 11.0, (0.35, 0.7, 1.0, 0.12))
             self._draw_rect(bxx, name_y + 29.0, w, 2.0, (0.4, 0.9, 1.0, 0.8))
             self._draw_text(label, bxx + 13, name_y + 7, scale=2.0, color=(0.9, 0.96, 1.0, 0.95))
             self._ce_footer_button_rects.append((bxx, name_y, w, 32.0, action))
@@ -2691,27 +2989,42 @@ void main() {
     ) -> None:
         """Render the Effects tab: effect list (left) + parameter rows (right)."""
         self._ce_effect_row_rects = []
-        self._ce_param_row_rects = []
+        t = getattr(self, '_hud_t', 0.0)
+        hover_eff = int(getattr(self, '_ce_hover_effect', -1))
+        self._draw_rect(left_x, body_y, left_w - 12, body_h, (0.05, 0.08, 0.16, 0.85))
+        self._draw_rect(left_x, body_y, left_w - 12, 2.0, (0.2, 0.5, 0.9, 0.35))
 
         # Left pane — effect list.
-        self._draw_text('EFFECTS', left_x + 14, body_y + 12, scale=1.8,
+        n_eff = len(self._ce_effects)
+        self._draw_text(f'EFFECTS  ({n_eff})', left_x + 14, body_y + 12, scale=1.8,
                         color=(0.55, 0.75, 1.0, 0.85))
         list_top = body_y + 42.0
         row_h = 30.0
         max_rows = max(1, int((body_h - 52.0) / row_h))
-        n_eff = len(self._ce_effects)
         start = max(0, min(self._ce_effect_idx - max_rows // 2, max(0, n_eff - max_rows)))
+        focus_list = getattr(self, '_ce_focus', 0) == 0
         for vis, i in enumerate(range(start, min(n_eff, start + max_rows))):
             ry = list_top + vis * row_h
             eff = self._ce_effects[i]
             name = str(eff.get('display_name') or eff.get('class_name') or '')
             selected = i == self._ce_effect_idx
+            on_screen = bool(eff.get('active', False))
             if selected:
-                col = (0.10, 0.25, 0.55, 0.9) if self._ce_focus == 0 else (0.08, 0.16, 0.34, 0.8)
-                self._draw_rect(left_x + 6, ry - 2, left_w - 24, row_h - 2, col)
+                if focus_list:
+                    self._context_menu_hover_glow(left_x + 6, ry - 2, left_w - 24, row_h - 2, t)
+                else:
+                    self._draw_rect(left_x + 6, ry - 2, left_w - 24, row_h - 2, (0.08, 0.16, 0.34, 0.8))
+            elif i == hover_eff:
+                self._draw_rect(left_x + 6, ry - 2, left_w - 24, row_h - 2, (0.10, 0.18, 0.36, 0.35))
+            if on_screen:
+                glow = 0.6 + 0.4 * math.sin(t * 4.0)
+                self._draw_rect(left_x + 10, ry + 6, 5.0, row_h - 16, (0.2, 1.0, 0.6, 0.5 + 0.5 * glow))
             tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.75, 0.83, 0.98, 0.9)
-            self._draw_text(name[:24], left_x + 16, ry + 4, scale=1.9, color=tcol)
+            self._draw_text(name[:24], left_x + 22, ry + 4, scale=1.9, color=tcol)
             self._ce_effect_row_rects.append((left_x + 6, ry - 2, left_w - 24, row_h - 2, i))
+        if n_eff > max_rows:
+            self._ce_draw_scrollbar(left_x + left_w - 18, list_top, body_h - 52.0,
+                                    n_eff * row_h, start * row_h)
 
         # Right pane — parameters of the selected effect.
         cls = self.config_editor_selected_class()
@@ -2723,90 +3036,303 @@ void main() {
                         right_x + 16, body_y + body_h - 44.0, scale=1.7,
                         color=(1.0, 0.72, 0.3, 0.85))
 
+    def _ce_draw_scrollbar(
+        self, x: float, y: float, view_h: float, total_h: float, offset: float,
+    ) -> None:
+        """Thin track + proportional thumb on the right edge of a pane."""
+        if total_h <= view_h or view_h <= 0:
+            return
+        self._draw_rect(x, y, 4.0, view_h, (0.12, 0.18, 0.30, 0.6))
+        thumb_h = max(18.0, view_h * (view_h / total_h))
+        thumb_y = y + (view_h - thumb_h) * (offset / max(1.0, total_h - view_h))
+        self._draw_rect(x, thumb_y, 4.0, thumb_h, (0.4, 0.85, 1.0, 0.8))
+
     def _render_config_editor_param_rows(
         self, right_x: float, body_y: float, right_w: float, body_h: float, title: str,
     ) -> None:
-        """Render the ``_ce_params`` rows (name + value bar + value) in a pane.
+        """Render ``_ce_params`` as a sectioned, scrolling list of control rows.
 
-        Shared by the Effects tab (per-effect params) and the Audio/Visuals tabs
-        (global settings).
+        Shared by the Effects tab (per-effect params) and the settings tabs
+        (Audio / Visuals / Performance / Recording / Hotkeys).  The scroll
+        position eases toward the selected row rather than jumping.
         """
         self._ce_param_row_rects = []
+        self._ce_slider_rects = []
+        self._ce_chip_rects = []
+        self._ce_toggle_rects = []
+        t = getattr(self, '_hud_t', 0.0)
+        self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
+        self._draw_rect(right_x, body_y, right_w, 2.0, (0.2, 0.5, 0.9, 0.35))
         self._draw_text(title[:40], right_x + 16, body_y + 12, scale=1.9,
                         color=(0.6, 0.8, 1.0, 0.9))
+        if self.config_editor_tab_name == 'Performance':
+            self._ce_draw_vitals(right_x + right_w - 18, body_y + 12)
         if not self._ce_params:
             self._draw_text('No tunable settings.', right_x + 18, body_y + 52, scale=2.0,
                             color=(0.6, 0.65, 0.75, 0.8))
             return
-        p_top = body_y + 48.0
-        prow_h = 40.0
-        max_prows = max(1, int((body_h - 64.0) / prow_h))
-        n_p = len(self._ce_params)
-        pstart = max(0, min(self._ce_param_idx - max_prows // 2, max(0, n_p - max_prows)))
+
+        # Display list: section headers interleaved with rows.
+        items: list[tuple[str, object, float]] = []
+        last_section: str | None = None
+        for i, p in enumerate(self._ce_params):
+            section = str(p.get('section') or '')
+            if section and section != last_section:
+                items.append(('section', section, self._CE_SECTION_H))
+                last_section = section
+            items.append(('row', i, self._CE_ROW_H))
+        total_h = sum(h for _k, _p, h in items)
+        view_top = body_y + 44.0
+        view_h = max(self._CE_ROW_H, body_h - 44.0 - 30.0)
+
+        # Ease the scroll offset toward keeping the selected row centred.
+        sel_off = 0.0
+        off = 0.0
+        for kind, payload, h in items:
+            if kind == 'row' and payload == self._ce_param_idx:
+                sel_off = off
+                break
+            off += h
+        target = max(0.0, min(max(0.0, total_h - view_h),
+                              sel_off - view_h * 0.5 + self._CE_ROW_H * 0.5))
+        cur = getattr(self, '_ce_scroll_px', None)
+        if cur is None or abs(float(cur) - target) < 0.5:
+            cur = target
+        else:
+            cur = float(cur) + (target - float(cur)) * 0.35
+        self._ce_scroll_px = cur
+
         any_adjustable = False
         any_bindable = False
-        for vis, i in enumerate(range(pstart, min(n_p, pstart + max_prows))):
-            ry = p_top + vis * prow_h
-            p = self._ce_params[i]
-            name = str(p.get('name', ''))
-            if p.get('kind') == 'info':
-                # Read-only diagnostic/status row: name + right-aligned value.
-                self._draw_text(name[:26], right_x + 16, ry + 2, scale=1.9,
-                                color=(0.72, 0.8, 0.95, 0.9))
-                info = str(p.get('info', ''))
-                iw = len(info) * float(self._glyph_w) * self._font_scale_norm * 1.9
-                self._draw_text(info[:28], right_x + right_w - 18 - iw, ry + 2, scale=1.9,
-                                color=(0.85, 0.95, 0.7, 0.95))
-                continue
-            if p.get('kind') == 'bind':
-                any_bindable = True
-                selected = i == self._ce_param_idx
-                capturing = selected and self._ce_capture_mode
-                if selected:
-                    self._context_menu_hover_glow(right_x + 6, ry - 2, right_w - 12, prow_h - 4, self._hud_t)
-                tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
-                self._draw_text(name[:30], right_x + 16, ry + 2, scale=1.9, color=tcol)
-                if capturing:
-                    pulse = 0.5 + 0.5 * math.sin(self._hud_t * 6.0)
-                    chord_text = 'Press a key...'
-                    ccol = (1.0, 0.55 + 0.35 * pulse, 0.2, 1.0)
+        y = view_top - cur
+        for kind, payload, h in items:
+            if y >= view_top - 0.5 and y + h <= view_top + view_h + 0.5:
+                if kind == 'section':
+                    self._ce_draw_section(str(payload), right_x, y, right_w)
                 else:
-                    chord_text = str(p.get('chord', '-'))
-                    is_override = bool(p.get('is_override', False))
-                    ccol = (0.4, 0.95, 1.0, 0.95) if is_override else (0.75, 0.80, 0.88, 0.85)
-                cw = len(chord_text) * float(self._glyph_w) * self._font_scale_norm * 1.9
-                self._draw_text(chord_text, right_x + right_w - 18 - cw, ry + 2, scale=1.9, color=ccol)
-                self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
-                continue
-            any_adjustable = True
-            val = float(p.get('value', 0.0))
-            pmin = float(p.get('min', 0.0))
-            pmax = float(p.get('max', 1.0))
-            selected = i == self._ce_param_idx
-            if selected:
-                col = (0.10, 0.25, 0.55, 0.9) if self._ce_focus == 1 else (0.08, 0.16, 0.34, 0.8)
-                self._draw_rect(right_x + 6, ry - 2, right_w - 12, prow_h - 4, col)
-            tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
-            self._draw_text(name[:22], right_x + 16, ry + 2, scale=1.9, color=tcol)
-            # Value bar.
-            bar_x = right_x + 16.0
-            bar_w = right_w - 150.0
-            bar_y = ry + 24.0
-            self._draw_rect(bar_x, bar_y, bar_w, 8.0, (0.15, 0.2, 0.3, 0.8))
-            frac = 0.0 if pmax <= pmin else max(0.0, min(1.0, (val - pmin) / (pmax - pmin)))
-            self._draw_rect(bar_x, bar_y, bar_w * frac, 8.0, (0.3, 0.85, 1.0, 0.9))
-            self._draw_text(f'{val:.3f}', right_x + right_w - 118, ry + 2, scale=1.9,
-                            color=(0.85, 0.95, 0.7, 0.95))
-            self._ce_param_row_rects.append((right_x + 6, ry - 2, right_w - 12, prow_h - 4, i))
+                    i = int(payload)
+                    row_kind = str(self._ce_params[i].get('kind') or 'slider')
+                    if row_kind == 'bind':
+                        any_bindable = True
+                    elif row_kind != 'info':
+                        any_adjustable = True
+                    self._ce_draw_row(i, right_x, y + 2.0, right_w, t)
+            y += h
+        self._ce_draw_scrollbar(right_x + right_w - 10, view_top, view_h, total_h, cur)
 
         if any_adjustable:
-            self._draw_text('Up/Down: select   [ / ]: adjust',
+            self._draw_text('Up/Down: select   [ / ]: adjust   Enter: toggle   click or drag a control',
                             right_x + 16, body_y + body_h - 22.0, scale=1.7,
                             color=(0.5, 0.6, 0.72, 0.75))
         elif any_bindable:
             self._draw_text('Up/Down: select   Enter: rebind   Backspace: reset to default',
                             right_x + 16, body_y + body_h - 22.0, scale=1.7,
                             color=(0.5, 0.6, 0.72, 0.75))
+
+    def _ce_draw_vitals(self, right_edge: float, y: float) -> None:
+        """Live FPS / frame-time readout beside the Performance tab title."""
+        state = getattr(self, '_hud_state', None) or {}
+        try:
+            fps = float(state.get('fps', '0') or 0.0)
+            ms = float(state.get('frame_ms', '0') or 0.0)
+        except (ValueError, TypeError):
+            return
+        if fps <= 0.0 and ms <= 0.0:
+            return
+        if ms <= 17.5:
+            col = (0.35, 1.0, 0.6, 0.95)
+        elif ms <= 34.5:
+            col = (1.0, 0.8, 0.3, 0.95)
+        else:
+            col = (1.0, 0.4, 0.35, 0.95)
+        text = f'{fps:.0f} FPS  {ms:.1f} MS'
+        self._draw_text(text, right_edge - self._ce_text_w(text, 1.9), y, scale=1.9, color=col)
+
+    def _ce_draw_section(self, name: str, rx: float, y: float, rw: float) -> None:
+        """Section header: teal tick, label, and a faint rule to the right."""
+        self._draw_rect(rx + 16, y + 12, 6.0, 6.0, (0.10, 0.94, 1.0, 0.9))
+        self._draw_text(name.upper(), rx + 28, y + 7, scale=1.6, color=(0.55, 0.8, 1.0, 0.9))
+        line_x = rx + 28 + self._ce_text_w(name, 1.6) + 12
+        self._draw_rect(line_x, y + 15, max(0.0, rx + rw - 18 - line_x), 1.0,
+                        (0.25, 0.45, 0.8, 0.3))
+
+    def _ce_draw_row(self, i: int, rx: float, ry: float, rw: float, t: float) -> None:
+        """Draw one control row and register its hit rectangles."""
+        p = self._ce_params[i]
+        kind = str(p.get('kind') or 'slider')
+        name = str(p.get('name', ''))
+        selected = i == self._ce_param_idx
+        hovered = i == int(getattr(self, '_ce_hover_row', -1))
+        focused = getattr(self, '_ce_focus', 1) == 1
+        row_h = self._CE_ROW_H - 4.0
+        if kind == 'bind':
+            self._ce_draw_bind_row(i, p, rx, ry, rw, row_h, selected, t)
+            return
+        if selected:
+            if focused:
+                self._context_menu_hover_glow(rx + 6, ry, rw - 12, row_h, t)
+            else:
+                self._draw_rect(rx + 6, ry, rw - 12, row_h, (0.08, 0.16, 0.34, 0.8))
+        elif hovered:
+            self._draw_rect(rx + 6, ry, rw - 12, row_h, (0.10, 0.18, 0.36, 0.35))
+        elif i % 2:
+            self._draw_rect(rx + 6, ry, rw - 12, row_h, (1.0, 1.0, 1.0, 0.025))
+        tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
+        label = name[:26]
+        self._draw_text(label, rx + 16, ry + 6, scale=1.9, color=tcol)
+        badge = str(p.get('badge') or '')
+        if badge:
+            bx = rx + 16 + self._ce_text_w(label, 1.9) + 10
+            bw = self._ce_text_w(badge, 1.3) + 12
+            warm = badge.upper().startswith('RESTART')
+            fill = (0.55, 0.28, 0.05, 0.85) if warm else (0.32, 0.16, 0.55, 0.85)
+            text_c = (1.0, 0.8, 0.45, 1.0) if warm else (0.9, 0.75, 1.0, 1.0)
+            self._draw_rect(bx, ry + 7, bw, 16.0, fill)
+            self._draw_text(badge, bx + 6, ry + 9, scale=1.3, color=text_c)
+        hint = str(p.get('hint') or '')
+        if selected and hint:
+            self._draw_text(hint[:48], rx + 16, ry + 27, scale=1.4,
+                            color=(0.6, 0.7, 0.85, 0.75))
+        if kind == 'info':
+            info = str(p.get('display') or p.get('info') or '')
+            self._draw_text(info[:28], rx + rw - 18 - self._ce_text_w(info[:28], 1.9), ry + 6,
+                            scale=1.9, color=(0.85, 0.95, 0.7, 0.95))
+            self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
+            return
+
+        cx0 = rx + rw * 0.44
+        cx1 = rx + rw - 118.0
+        val = float(p.get('value', 0.0))
+        display = str(p.get('display') or f'{val:.3f}')
+        if kind == 'toggle':
+            self._ce_draw_toggle(i, cx0, ry + 10.0, val >= 0.5, t)
+        elif kind == 'choice':
+            self._ce_draw_choice(i, p, cx0, rx + rw - 18.0, ry + 8.0, t)
+            display = ''
+        else:
+            self._ce_draw_slider(i, p, cx0, cx1, ry, selected, t)
+        if display:
+            self._draw_text(display[:12], rx + rw - 18 - self._ce_text_w(display[:12], 1.9),
+                            ry + 6, scale=1.9, color=(0.85, 0.95, 0.7, 0.95))
+        self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
+
+    def _ce_draw_bind_row(
+        self, i: int, p: dict, rx: float, ry: float, rw: float, row_h: float,
+        selected: bool, t: float,
+    ) -> None:
+        """Hotkeys tab row: action label + current chord (or capture prompt)."""
+        capturing = selected and self._ce_capture_mode
+        if selected:
+            self._context_menu_hover_glow(rx + 6, ry, rw - 12, row_h, t)
+        elif i == int(getattr(self, '_ce_hover_row', -1)):
+            self._draw_rect(rx + 6, ry, rw - 12, row_h, (0.10, 0.18, 0.36, 0.35))
+        tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
+        self._draw_text(str(p.get('name', ''))[:30], rx + 16, ry + 6, scale=1.9, color=tcol)
+        if capturing:
+            pulse = 0.5 + 0.5 * math.sin(t * 6.0)
+            chord_text = 'Press a key...'
+            ccol = (1.0, 0.55 + 0.35 * pulse, 0.2, 1.0)
+        else:
+            chord_text = str(p.get('chord', '-'))
+            is_override = bool(p.get('is_override', False))
+            ccol = (0.4, 0.95, 1.0, 0.95) if is_override else (0.75, 0.80, 0.88, 0.85)
+        cw = self._ce_text_w(chord_text, 1.9)
+        self._draw_rect(rx + rw - 30 - cw, ry + 4, cw + 12, row_h - 8, (0.06, 0.10, 0.22, 0.75))
+        self._draw_text(chord_text, rx + rw - 24 - cw, ry + 6, scale=1.9, color=ccol)
+        self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
+
+    def _ce_draw_slider(
+        self, i: int, p: dict, x0: float, x1: float, ry: float, selected: bool, t: float,
+    ) -> None:
+        """Neon-filled track with a glowing knob; registers the drag rect."""
+        val = float(p.get('value', 0.0))
+        lo = float(p.get('min', 0.0))
+        hi = float(p.get('max', 1.0))
+        track_w = max(40.0, x1 - x0)
+        track_y = ry + 18.0
+        self._draw_rect(x0, track_y, track_w, 8.0, (0.12, 0.17, 0.28, 0.85))
+        frac = 0.0 if hi <= lo else max(0.0, min(1.0, (val - lo) / (hi - lo)))
+        segments = 14
+        seg_w = track_w / segments
+        filled = frac * segments
+        for s in range(segments):
+            if s >= filled:
+                break
+            part = min(1.0, filled - s)
+            col = self._neon_palette_rgb(t * 0.3 + s * 0.16)
+            self._draw_rect(x0 + s * seg_w, track_y, seg_w * part + 0.5, 8.0,
+                            (col[0], col[1], col[2], 0.85))
+        kx = x0 + track_w * frac
+        glow = 0.6 + 0.4 * math.sin(t * 5.0) if selected else 0.5
+        kc = self._neon_palette_rgb(t * 0.3 + filled * 0.16)
+        self._draw_rect(kx - 7.0, ry + 9.0, 14.0, 26.0, (kc[0], kc[1], kc[2], 0.28 * glow))
+        self._draw_rect(kx - 3.0, ry + 12.0, 6.0, 20.0, (1.0, 1.0, 1.0, 0.85 + 0.15 * glow))
+        # Generous hit box so the track is easy to grab.
+        self._ce_slider_rects.append((x0, ry + 6.0, track_w, 32.0, i))
+
+    def _ce_draw_toggle(self, i: int, x: float, y: float, on: bool, t: float) -> None:
+        """ON/OFF pill: lit teal with the knob right, dim with the knob left."""
+        w, h = 58.0, 22.0
+        if on:
+            glow = 0.85 + 0.15 * math.sin(t * 3.0)
+            self._draw_rect(x - 2, y - 2, w + 4, h + 4, (0.1, 0.7, 0.85, 0.18 * glow))
+            self._draw_rect(x, y, w, h, (0.10, 0.60, 0.75, 0.92))
+            self._draw_rect(x, y, w, h * 0.4, (0.5, 0.95, 1.0, 0.16))
+            self._draw_rect(x + w - 20, y + 2, 18.0, 18.0, (0.95, 1.0, 1.0, 0.98))
+        else:
+            self._draw_rect(x, y, w, h, (0.08, 0.12, 0.24, 0.92))
+            self._draw_rect(x, y + h - 1, w, 1.0, (0.3, 0.4, 0.6, 0.5))
+            self._draw_rect(x + 2, y + 2, 18.0, 18.0, (0.5, 0.55, 0.65, 0.9))
+        self._ce_toggle_rects.append((x, y, w, h, i))
+
+    def _ce_draw_choice(
+        self, i: int, p: dict, x0: float, x_max: float, y: float, t: float,
+    ) -> None:
+        """Segmented chips for an enum row; falls back to ``< label >`` when
+        the labels would not fit the control zone (long device names)."""
+        choices = [str(c) for c in (p.get('choices') or ())]
+        cur = int(round(float(p.get('value', 0.0))))
+        if not choices:
+            return
+        cur = max(0, min(len(choices) - 1, cur))
+        hover = str(getattr(self, '_ce_hover_control', ''))
+        chip_h = 26.0
+        widths = [self._ce_text_w(c, 1.5) + 16.0 for c in choices]
+        total = sum(widths) + 6.0 * (len(choices) - 1)
+        if x0 + total <= x_max:
+            cx = x0
+            for k, (label, w) in enumerate(zip(choices, widths)):
+                active = k == cur
+                if active:
+                    self._draw_rect(cx, y, w, chip_h, (0.12, 0.34, 0.66, 0.95))
+                    self._draw_rect(cx, y, w, chip_h * 0.4, (0.4, 0.75, 1.0, 0.16))
+                    self._draw_rect(cx, y + chip_h - 2, w, 2.0, (0.4, 0.95, 1.0, 0.9))
+                elif hover == f'chip:{i}:{k}':
+                    self._context_menu_hover_glow(cx, y, w, chip_h, t)
+                else:
+                    self._draw_rect(cx, y, w, chip_h, (0.06, 0.10, 0.22, 0.8))
+                self._draw_text(label, cx + 8, y + 7, scale=1.5,
+                                color=(1.0, 0.97, 0.6, 1.0) if active else (0.72, 0.82, 1.0, 0.9))
+                self._ce_chip_rects.append((cx, y, w, chip_h, i, k))
+                cx += w + 6.0
+            return
+        # Select mode: < current label >.
+        arrow_w = 26.0
+        label_w = max(60.0, min(x_max - x0 - 2 * arrow_w - 12.0, 320.0))
+        prev_k = max(0, cur - 1)
+        next_k = min(len(choices) - 1, cur + 1)
+        for label, bx, target in (('<', x0, prev_k), ('>', x0 + arrow_w + 6 + label_w + 6, next_k)):
+            if hover == f'chip:{i}:{target}' and target != cur:
+                self._context_menu_hover_glow(bx, y, arrow_w, chip_h, t)
+            else:
+                self._draw_rect(bx, y, arrow_w, chip_h, (0.10, 0.24, 0.50, 0.85))
+            self._draw_text(label, bx + 9, y + 7, scale=1.5, color=(0.9, 0.96, 1.0, 0.95))
+            self._ce_chip_rects.append((bx, y, arrow_w, chip_h, i, target))
+        lx = x0 + arrow_w + 6
+        self._draw_rect(lx, y, label_w, chip_h, (0.06, 0.10, 0.22, 0.8))
+        text = choices[cur]
+        max_chars = max(4, int(label_w / max(1.0, self._ce_text_w('M', 1.5))) - 1)
+        self._draw_text(text[:max_chars], lx + 8, y + 7, scale=1.5, color=(1.0, 0.97, 0.6, 1.0))
 
     # ------------------------------------------------------------------
     # First-run tour modal (v1 slide dialog)
@@ -4628,7 +5154,7 @@ void main() {
         if not _PSUTIL_AVAILABLE:
             return
         now = time.monotonic()
-        if now - self._sysmon_sample_t < 0.45:
+        if now - self._sysmon_sample_t < self._sysmon_sample_interval:
             return
         self._sysmon_sample_t = now
         try:
@@ -6288,6 +6814,45 @@ void main() {
     def set_flash_messages_enabled(self, enabled: bool) -> None:
         """Set flash-message notification state explicitly."""
         self._flash_enabled = bool(enabled)
+
+    @property
+    def tooltips_enabled(self) -> bool:
+        """Whether hover tooltips are built and drawn."""
+        return bool(self._tooltips_enabled)
+
+    def set_tooltips_enabled(self, enabled: bool) -> None:
+        """Turn hover tooltips on or off (off also skips region building)."""
+        self._tooltips_enabled = bool(enabled)
+
+    @property
+    def hud_auto_hide(self) -> bool:
+        """Whether the status HUD hides itself after ``hud_timeout_s``."""
+        return bool(self._hud_auto_hide)
+
+    def set_hud_auto_hide(self, enabled: bool) -> None:
+        """Set HUD auto-hide; re-arms the timer when the HUD is showing."""
+        self._hud_auto_hide = bool(enabled)
+        self._hud_timer = self._hud_timeout_s if (self._show_name and self._hud_auto_hide) else 0.0
+
+    @property
+    def hud_timeout_s(self) -> float:
+        """Seconds the status HUD stays up before auto-hiding."""
+        return float(self._hud_timeout_s)
+
+    def set_hud_timeout_s(self, seconds: float) -> None:
+        """Set the HUD auto-hide timeout (clamped to 1..600 s)."""
+        self._hud_timeout_s = max(1.0, min(600.0, float(seconds)))
+        if self._show_name and self._hud_auto_hide:
+            self._hud_timer = min(self._hud_timer, self._hud_timeout_s) if self._hud_timer > 0 else self._hud_timeout_s
+
+    @property
+    def sysmon_sample_interval(self) -> float:
+        """Seconds between psutil samples for the system-monitor modal."""
+        return float(self._sysmon_sample_interval)
+
+    def set_sysmon_sample_interval(self, seconds: float) -> None:
+        """Set the system-monitor sampling interval (clamped to 0.1..5 s)."""
+        self._sysmon_sample_interval = max(0.1, min(5.0, float(seconds)))
 
     def toggle_audio_selector(self) -> None:
         self._show_audio = not self._show_audio
