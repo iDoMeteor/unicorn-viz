@@ -2390,14 +2390,78 @@ void main() {
     # drawn whenever the section changes between consecutive rows).
     # ------------------------------------------------------------------
 
-    _CE_TAB_H = 44.0
-    _CE_TAB_GAP = 8.0
-    _CE_TAB_ROW_GAP = 6.0
-    _CE_ROW_H = 44.0
-    _CE_SECTION_H = 30.0
-    _CE_FOOTER_H = 128.0
-    _CE_PAD = 22.0
     _CE_SPARKLE_COUNT = 28
+    # Base geometry at 1080p; every _CE_* property below is this times the
+    # UI scale, so the editor reads the same on a 4K primary as on 1080p.
+    _CE_BASE = {'tab_h': 44.0, 'tab_gap': 8.0, 'tab_row_gap': 6.0, 'row_h': 44.0,
+                'section_h': 30.0, 'footer_h': 128.0, 'pad': 22.0}
+
+    def _ce_u(self) -> float:
+        """Config editor UI scale: 1.0 at 1080p, 1.8 at 4K (the cap).
+
+        Near-linear so the panel keeps its 1080p proportions of the canvas
+        on a 4K primary instead of shrinking to a postage stamp.
+        """
+        try:
+            res_ratio = min(float(self._width), float(self._height)) / 1080.0
+        except (AttributeError, TypeError, ValueError):
+            return 1.0
+        return min(1.8, max(1.0, res_ratio ** 0.85))
+
+    @property
+    def _CE_TAB_H(self) -> float:
+        return self._CE_BASE['tab_h'] * self._ce_u()
+
+    @property
+    def _CE_TAB_GAP(self) -> float:
+        return self._CE_BASE['tab_gap'] * self._ce_u()
+
+    @property
+    def _CE_TAB_ROW_GAP(self) -> float:
+        return self._CE_BASE['tab_row_gap'] * self._ce_u()
+
+    @property
+    def _CE_ROW_H(self) -> float:
+        return self._CE_BASE['row_h'] * self._ce_u()
+
+    @property
+    def _CE_SECTION_H(self) -> float:
+        return self._CE_BASE['section_h'] * self._ce_u()
+
+    @property
+    def _CE_FOOTER_H(self) -> float:
+        return self._CE_BASE['footer_h'] * self._ce_u()
+
+    @property
+    def _CE_PAD(self) -> float:
+        return self._CE_BASE['pad'] * self._ce_u()
+
+    def _wrap_text_to_width(self, text: str, scale: float, max_w: float,
+                            max_lines: int = 0) -> list[str]:
+        """Greedy word-wrap ``text`` to ``max_w`` pixels at ``scale``.
+
+        With ``max_lines`` the last kept line ends in an ellipsis when more
+        text remains, so a long list never runs past its pane.
+        """
+        char_w = max(1e-6, float(self._glyph_w) * self._font_scale_norm * scale)
+        max_chars = max(8, int(max_w / char_w))
+        lines: list[str] = []
+        current = ''
+        for word in str(text).split():
+            candidate = word if not current else f'{current} {word}'
+            if len(candidate) <= max_chars or not current:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        if max_lines and len(lines) > max_lines:
+            kept = lines[:max_lines]
+            last = kept[-1]
+            kept[-1] = (last[:max_chars - 3].rstrip() + '...') if len(last) > max_chars - 3 else last + '...'
+            return kept
+        return lines
 
     def _ce_text_w(self, text: str, scale: float) -> float:
         """Pixel width of ``text`` at ``scale`` in the overlay font."""
@@ -2414,15 +2478,16 @@ void main() {
         records how many rows the bar took so the body can start below it.
         """
         px, py, pw, _ph = panel_rect
-        scale = 2.4
+        u = self._ce_u()
+        scale = 2.4 * u
         x0 = px + self._CE_PAD
         x_max = px + pw - self._CE_PAD
         x = x0
-        y = py + 64.0
+        y = py + 64.0 * u
         rows = 1
         boxes: list[tuple[int, float, float, float, float]] = []
         for i, name in enumerate(self._config_editor_tabs):
-            w = self._ce_text_w(name.upper(), scale) + 34.0
+            w = self._ce_text_w(name.upper(), scale) + 34.0 * u
             if x > x0 and x + w > x_max:
                 x = x0
                 y += self._CE_TAB_H + self._CE_TAB_ROW_GAP
@@ -2435,7 +2500,8 @@ void main() {
     def _config_editor_body_top(self, py: float) -> float:
         """Y of the content area: just under however many tab rows there are."""
         rows = max(1, int(getattr(self, '_ce_tab_rows', 1)))
-        return py + 64.0 + rows * (self._CE_TAB_H + self._CE_TAB_ROW_GAP) + 6.0
+        u = self._ce_u()
+        return py + 64.0 * u + rows * (self._CE_TAB_H + self._CE_TAB_ROW_GAP) + 6.0 * u
 
     def handle_config_editor_motion(self, x: float, y: float) -> None:
         """Update hover state (tabs, rows, chips, buttons) or drive a drag."""
@@ -2818,8 +2884,9 @@ void main() {
         """Draw the tabbed configuration editor: frame, tabs, body, footer."""
         if not self.config_editor_visible:
             return
+        u = self._ce_u()
         px, py, pw, ph, _W, _H = self._begin_panel(
-            0.84, 1400.0, 0.86, 900.0, underlay_alpha=0.6, underlay_pad=12.0
+            0.84, 1400.0 * u, 0.86, 900.0 * u, underlay_alpha=0.6, underlay_pad=12.0
         )
         self._config_editor_panel_rect = (px, py, pw, ph)
         t = self._hud_t
@@ -2864,14 +2931,15 @@ void main() {
         # Title: drop shadow + palette shimmer + a bass-breathing underline.
         title = 'CONFIGURATION'
         tc = self._neon_palette_rgb(t * 0.35)
-        self._draw_text(title, px + 24, py + 18, scale=3.6, color=(0.0, 0.0, 0.0, 0.6))
-        self._draw_text(title, px + 22, py + 16, scale=3.6,
+        pad = self._CE_PAD
+        self._draw_text(title, px + pad + 2, py + 18 * u, scale=3.6 * u, color=(0.0, 0.0, 0.0, 0.6))
+        self._draw_text(title, px + pad, py + 16 * u, scale=3.6 * u,
                         color=(0.55 + 0.45 * tc[0], 0.78 + 0.22 * tc[1], 1.0, 1.0))
-        uw = self._ce_text_w(title, 3.6) * (0.55 + 0.45 * bass)
-        self._draw_rect(px + 22, py + 52, uw, 2.0, (0.4, 0.95, 1.0, 0.7))
+        uw = self._ce_text_w(title, 3.6 * u) * (0.55 + 0.45 * bass)
+        self._draw_rect(px + pad, py + 52 * u, uw, 2.0, (0.4, 0.95, 1.0, 0.7))
         hints = 'ESC close   </> tabs   ^/v rows   [ ] adjust   ENTER toggle   drag sliders'
-        hw = self._ce_text_w(hints, 1.5)
-        self._draw_text(hints, px + pw - 22 - hw, py + 22, scale=1.5,
+        hw = self._ce_text_w(hints, 1.5 * u)
+        self._draw_text(hints, px + pw - pad - hw, py + 22 * u, scale=1.5 * u,
                         color=(0.5, 0.6, 0.75, 0.8))
 
         # Tab bar (wraps; see _config_editor_tab_boxes).
@@ -2890,7 +2958,7 @@ void main() {
                 self._draw_rect(bx, by, bw2, bh, (0.06, 0.10, 0.22, 0.7))
                 self._draw_rect(bx, by + bh - 1.0, bw2, 1.0, (0.2, 0.35, 0.6, 0.5))
             tcol = (1.0, 0.97, 0.6, 1.0) if active else (0.75, 0.85, 1.0, 0.9)
-            self._draw_text(name, bx + 17, by + 11, scale=2.4, color=tcol)
+            self._draw_text(name, bx + 17 * u, by + 11 * u, scale=2.4 * u, color=tcol)
 
         body_y = self._config_editor_body_top(py)
         body_h = ph - (body_y - py) - self._CE_FOOTER_H
@@ -2918,23 +2986,24 @@ void main() {
         """Render the profile footer: chips + name field + Save/Load/Delete/Revert."""
         self._ce_footer_button_rects = []
         self._ce_profile_chip_rects = []
-        scale = 2.0
+        u = self._ce_u()
+        scale = 2.0 * u
         char_w = float(self._glyph_w) * self._font_scale_norm * scale
         footer_h = self._CE_FOOTER_H
-        fy = py + ph - footer_h + 10.0
+        fy = py + ph - footer_h + 10.0 * u
         hover = str(getattr(self, '_ce_hover_control', ''))
         self._draw_rect(px + 22, fy - 8.0, pw - 44, 1.0, (0.2, 0.4, 0.8, 0.35))
 
         # Saved-profile chips (single row; overflow is clipped).
-        self._draw_text('PROFILES', px + 22, fy, scale=1.7, color=(0.55, 0.75, 1.0, 0.85))
+        self._draw_text('PROFILES', px + 22, fy, scale=1.7 * u, color=(0.55, 0.75, 1.0, 0.85))
         if self.config_editor_tab_name in ('Performance', 'Recording'):
             note = 'this tab follows the machine, not the profile'
-            self._draw_text(note, px + 140, fy + 1, scale=1.4, color=(0.5, 0.6, 0.72, 0.7))
-        chip_y = fy + 24.0
-        chip_h = 28.0
+            self._draw_text(note, px + 140 * u, fy + 1, scale=1.4 * u, color=(0.5, 0.6, 0.72, 0.7))
+        chip_y = fy + 24.0 * u
+        chip_h = 28.0 * u
         cx = px + 22.0
         for i, name in enumerate(self._ce_profiles):
-            w = len(name) * char_w + 20.0
+            w = len(name) * char_w + 20.0 * u
             if cx + w > px + pw - 22.0:
                 break
             selected = i == self._ce_profile_idx
@@ -2945,43 +3014,43 @@ void main() {
                 self._context_menu_hover_glow(cx, chip_y, w, chip_h, t)
             else:
                 self._draw_rect(cx, chip_y, w, chip_h, (0.06, 0.10, 0.22, 0.75))
-            self._draw_text(name, cx + 10, chip_y + 6, scale=1.7,
+            self._draw_text(name, cx + 10 * u, chip_y + 6 * u, scale=1.7 * u,
                             color=(1.0, 0.95, 0.55, 1.0) if selected else (0.75, 0.85, 1.0, 0.9))
             self._ce_profile_chip_rects.append((cx, chip_y, w, chip_h, i))
             cx += w + 8.0
         if not self._ce_profiles:
-            self._draw_text('(none saved yet)', px + 22, chip_y + 6, scale=1.7,
+            self._draw_text('(none saved yet)', px + 22, chip_y + 6 * u, scale=1.7 * u,
                             color=(0.55, 0.6, 0.7, 0.7))
 
         # Name field + dirty indicator.
-        name_y = chip_y + chip_h + 14.0
+        name_y = chip_y + chip_h + 14.0 * u
         caret = '_' if (self._ce_name_mode and int(t * 2.0) % 2 == 0) else ''
         field_col = (0.10, 0.18, 0.34, 0.9) if self._ce_name_mode else (0.06, 0.10, 0.20, 0.8)
-        self._draw_rect(px + 22, name_y, 360.0, 32.0, field_col)
-        self._draw_rect(px + 22, name_y + 30.0, 360.0, 2.0,
+        self._draw_rect(px + 22, name_y, 360.0 * u, 32.0 * u, field_col)
+        self._draw_rect(px + 22, name_y + 30.0 * u, 360.0 * u, 2.0,
                         (0.4, 0.9, 1.0, 0.8) if self._ce_name_mode else (0.2, 0.4, 0.7, 0.5))
-        self._draw_text(f'NAME: {self._ce_name_text}{caret}', px + 30, name_y + 7,
-                        scale=2.0, color=(0.9, 0.95, 1.0, 0.95))
+        self._draw_text(f'NAME: {self._ce_name_text}{caret}', px + 30, name_y + 7 * u,
+                        scale=2.0 * u, color=(0.9, 0.95, 1.0, 0.95))
         if self._ce_dirty:
             blink = 0.7 + 0.3 * math.sin(t * 4.0)
-            self._draw_rect(px + 392, name_y + 9, 14.0, 14.0, (1.0, 0.58, 0.12, 0.9 * blink))
-            self._draw_text('unsaved', px + 414, name_y + 7, scale=1.7,
+            self._draw_rect(px + 392 * u, name_y + 9 * u, 14.0 * u, 14.0 * u, (1.0, 0.58, 0.12, 0.9 * blink))
+            self._draw_text('unsaved', px + 414 * u, name_y + 7 * u, scale=1.7 * u,
                             color=(1.0, 0.7, 0.3, 0.85))
 
         # Buttons (right-to-left so Save is rightmost).
         bx = px + pw - 22.0
         for label, action in (('Revert', 'revert'), ('Delete', 'delete'),
                               ('Load', 'load'), ('Save', 'save')):
-            w = len(label) * char_w + 26.0
+            w = len(label) * char_w + 26.0 * u
             bxx = bx - w
             if hover == f'button:{action}':
-                self._context_menu_hover_glow(bxx, name_y, w, 32.0, t)
+                self._context_menu_hover_glow(bxx, name_y, w, 32.0 * u, t)
             else:
-                self._draw_rect(bxx, name_y, w, 32.0, (0.10, 0.24, 0.50, 0.85))
-                self._draw_rect(bxx, name_y, w, 11.0, (0.35, 0.7, 1.0, 0.12))
-            self._draw_rect(bxx, name_y + 29.0, w, 2.0, (0.4, 0.9, 1.0, 0.8))
-            self._draw_text(label, bxx + 13, name_y + 7, scale=2.0, color=(0.9, 0.96, 1.0, 0.95))
-            self._ce_footer_button_rects.append((bxx, name_y, w, 32.0, action))
+                self._draw_rect(bxx, name_y, w, 32.0 * u, (0.10, 0.24, 0.50, 0.85))
+                self._draw_rect(bxx, name_y, w, 11.0 * u, (0.35, 0.7, 1.0, 0.12))
+            self._draw_rect(bxx, name_y + 29.0 * u, w, 2.0, (0.4, 0.9, 1.0, 0.8))
+            self._draw_text(label, bxx + 13, name_y + 7 * u, scale=2.0 * u, color=(0.9, 0.96, 1.0, 0.95))
+            self._ce_footer_button_rects.append((bxx, name_y, w, 32.0 * u, action))
             bx = bxx - 10.0
 
     def _render_config_editor_effects(
@@ -2996,12 +3065,13 @@ void main() {
         self._draw_rect(left_x, body_y, left_w - 12, 2.0, (0.2, 0.5, 0.9, 0.35))
 
         # Left pane — effect list.
+        u = self._ce_u()
         n_eff = len(self._ce_effects)
-        self._draw_text(f'EFFECTS  ({n_eff})', left_x + 14, body_y + 12, scale=1.8,
+        self._draw_text(f'EFFECTS  ({n_eff})', left_x + 14 * u, body_y + 12 * u, scale=1.8 * u,
                         color=(0.55, 0.75, 1.0, 0.85))
-        list_top = body_y + 42.0
-        row_h = 30.0
-        max_rows = max(1, int((body_h - 52.0) / row_h))
+        list_top = body_y + 42.0 * u
+        row_h = 30.0 * u
+        max_rows = max(1, int((body_h - 52.0 * u) / row_h))
         start = max(0, min(self._ce_effect_idx - max_rows // 2, max(0, n_eff - max_rows)))
         focus_list = getattr(self, '_ce_focus', 0) == 0
         for vis, i in enumerate(range(start, min(n_eff, start + max_rows))):
@@ -3021,10 +3091,10 @@ void main() {
                 glow = 0.6 + 0.4 * math.sin(t * 4.0)
                 self._draw_rect(left_x + 10, ry + 6, 5.0, row_h - 16, (0.2, 1.0, 0.6, 0.5 + 0.5 * glow))
             tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.75, 0.83, 0.98, 0.9)
-            self._draw_text(name[:24], left_x + 22, ry + 4, scale=1.9, color=tcol)
+            self._draw_text(name[:24], left_x + 22 * u, ry + 4 * u, scale=1.9 * u, color=tcol)
             self._ce_effect_row_rects.append((left_x + 6, ry - 2, left_w - 24, row_h - 2, i))
         if n_eff > max_rows:
-            self._ce_draw_scrollbar(left_x + left_w - 18, list_top, body_h - 52.0,
+            self._ce_draw_scrollbar(left_x + left_w - 18, list_top, body_h - 52.0 * u,
                                     n_eff * row_h, start * row_h)
 
         # Right pane — parameters of the selected effect.
@@ -3034,7 +3104,7 @@ void main() {
         )
         # Make the randomization behaviour obvious to the operator.
         self._draw_text('Adjusting a value pins it (skips its per-run randomization).',
-                        right_x + 16, body_y + body_h - 44.0, scale=1.7,
+                        right_x + 16, body_y + body_h - 44.0 * u, scale=1.7 * u,
                         color=(1.0, 0.72, 0.3, 0.85))
 
     def _ce_draw_scrollbar(
@@ -3062,14 +3132,15 @@ void main() {
         self._ce_chip_rects = []
         self._ce_toggle_rects = []
         t = getattr(self, '_hud_t', 0.0)
+        u = self._ce_u()
         self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
         self._draw_rect(right_x, body_y, right_w, 2.0, (0.2, 0.5, 0.9, 0.35))
-        self._draw_text(title[:40], right_x + 16, body_y + 12, scale=1.9,
+        self._draw_text(title[:40], right_x + 16 * u, body_y + 12 * u, scale=1.9 * u,
                         color=(0.6, 0.8, 1.0, 0.9))
         if self.config_editor_tab_name == 'Performance':
-            self._ce_draw_vitals(right_x + right_w - 18, body_y + 12)
+            self._ce_draw_vitals(right_x + right_w - 18 * u, body_y + 12 * u)
         if not self._ce_params:
-            self._draw_text('No tunable settings.', right_x + 18, body_y + 52, scale=2.0,
+            self._draw_text('No tunable settings.', right_x + 18 * u, body_y + 52 * u, scale=2.0 * u,
                             color=(0.6, 0.65, 0.75, 0.8))
             return
 
@@ -3083,8 +3154,8 @@ void main() {
                 last_section = section
             items.append(('row', i, self._CE_ROW_H))
         total_h = sum(h for _k, _p, h in items)
-        view_top = body_y + 44.0
-        view_h = max(self._CE_ROW_H, body_h - 44.0 - 30.0)
+        view_top = body_y + 44.0 * u
+        view_h = max(self._CE_ROW_H, body_h - 44.0 * u - 30.0 * u)
 
         # Ease the scroll offset toward keeping the selected row centred.
         sel_off = 0.0
@@ -3117,17 +3188,17 @@ void main() {
                         any_bindable = True
                     elif row_kind != 'info':
                         any_adjustable = True
-                    self._ce_draw_row(i, right_x, y + 2.0, right_w, t)
+                    self._ce_draw_row(i, right_x, y + 2.0 * u, right_w, t)
             y += h
         self._ce_draw_scrollbar(right_x + right_w - 10, view_top, view_h, total_h, cur)
 
         if any_adjustable:
             self._draw_text('Up/Down: select   [ / ]: adjust   Enter: toggle   click or drag a control',
-                            right_x + 16, body_y + body_h - 22.0, scale=1.7,
+                            right_x + 16 * u, body_y + body_h - 22.0 * u, scale=1.7 * u,
                             color=(0.5, 0.6, 0.72, 0.75))
         elif any_bindable:
             self._draw_text('Up/Down: select   Enter: rebind   Backspace: reset to default',
-                            right_x + 16, body_y + body_h - 22.0, scale=1.7,
+                            right_x + 16 * u, body_y + body_h - 22.0 * u, scale=1.7 * u,
                             color=(0.5, 0.6, 0.72, 0.75))
 
     def _ce_draw_vitals(self, right_edge: float, y: float) -> None:
@@ -3146,26 +3217,29 @@ void main() {
             col = (1.0, 0.8, 0.3, 0.95)
         else:
             col = (1.0, 0.4, 0.35, 0.95)
+        u = self._ce_u()
         text = f'{fps:.0f} FPS  {ms:.1f} MS'
-        self._draw_text(text, right_edge - self._ce_text_w(text, 1.9), y, scale=1.9, color=col)
+        self._draw_text(text, right_edge - self._ce_text_w(text, 1.9 * u), y, scale=1.9 * u, color=col)
 
     def _ce_draw_section(self, name: str, rx: float, y: float, rw: float) -> None:
         """Section header: teal tick, label, and a faint rule to the right."""
-        self._draw_rect(rx + 16, y + 12, 6.0, 6.0, (0.10, 0.94, 1.0, 0.9))
-        self._draw_text(name.upper(), rx + 28, y + 7, scale=1.6, color=(0.55, 0.8, 1.0, 0.9))
-        line_x = rx + 28 + self._ce_text_w(name, 1.6) + 12
-        self._draw_rect(line_x, y + 15, max(0.0, rx + rw - 18 - line_x), 1.0,
+        u = self._ce_u()
+        self._draw_rect(rx + 16 * u, y + 12 * u, 6.0 * u, 6.0 * u, (0.10, 0.94, 1.0, 0.9))
+        self._draw_text(name.upper(), rx + 28 * u, y + 7 * u, scale=1.6 * u, color=(0.55, 0.8, 1.0, 0.9))
+        line_x = rx + 28 * u + self._ce_text_w(name, 1.6 * u) + 12 * u
+        self._draw_rect(line_x, y + 15 * u, max(0.0, rx + rw - 18 * u - line_x), 1.0,
                         (0.25, 0.45, 0.8, 0.3))
 
     def _ce_draw_row(self, i: int, rx: float, ry: float, rw: float, t: float) -> None:
         """Draw one control row and register its hit rectangles."""
         p = self._ce_params[i]
+        u = self._ce_u()
         kind = str(p.get('kind') or 'slider')
         name = str(p.get('name', ''))
         selected = i == self._ce_param_idx
         hovered = i == int(getattr(self, '_ce_hover_row', -1))
         focused = getattr(self, '_ce_focus', 1) == 1
-        row_h = self._CE_ROW_H - 4.0
+        row_h = self._CE_ROW_H - 4.0 * u
         if kind == 'bind':
             self._ce_draw_bind_row(i, p, rx, ry, rw, row_h, selected, t)
             return
@@ -3180,41 +3254,41 @@ void main() {
             self._draw_rect(rx + 6, ry, rw - 12, row_h, (1.0, 1.0, 1.0, 0.025))
         tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
         label = name[:26]
-        self._draw_text(label, rx + 16, ry + 6, scale=1.9, color=tcol)
+        self._draw_text(label, rx + 16 * u, ry + 6 * u, scale=1.9 * u, color=tcol)
         badge = str(p.get('badge') or '')
         if badge:
-            bx = rx + 16 + self._ce_text_w(label, 1.9) + 10
-            bw = self._ce_text_w(badge, 1.3) + 12
+            bx = rx + 16 * u + self._ce_text_w(label, 1.9 * u) + 10 * u
+            bw = self._ce_text_w(badge, 1.3 * u) + 12 * u
             warm = badge.upper().startswith('RESTART')
             fill = (0.55, 0.28, 0.05, 0.85) if warm else (0.32, 0.16, 0.55, 0.85)
             text_c = (1.0, 0.8, 0.45, 1.0) if warm else (0.9, 0.75, 1.0, 1.0)
-            self._draw_rect(bx, ry + 7, bw, 16.0, fill)
-            self._draw_text(badge, bx + 6, ry + 9, scale=1.3, color=text_c)
+            self._draw_rect(bx, ry + 7 * u, bw, 16.0 * u, fill)
+            self._draw_text(badge, bx + 6 * u, ry + 9 * u, scale=1.3 * u, color=text_c)
         hint = str(p.get('hint') or '')
         if selected and hint:
-            self._draw_text(hint[:48], rx + 16, ry + 27, scale=1.4,
+            self._draw_text(hint[:48], rx + 16 * u, ry + 27 * u, scale=1.4 * u,
                             color=(0.6, 0.7, 0.85, 0.75))
         if kind == 'info':
             info = str(p.get('display') or p.get('info') or '')
-            self._draw_text(info[:28], rx + rw - 18 - self._ce_text_w(info[:28], 1.9), ry + 6,
-                            scale=1.9, color=(0.85, 0.95, 0.7, 0.95))
+            self._draw_text(info[:28], rx + rw - 18 * u - self._ce_text_w(info[:28], 1.9 * u), ry + 6 * u,
+                            scale=1.9 * u, color=(0.85, 0.95, 0.7, 0.95))
             self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
             return
 
         cx0 = rx + rw * 0.44
-        cx1 = rx + rw - 118.0
+        cx1 = rx + rw - 118.0 * u
         val = float(p.get('value', 0.0))
         display = str(p.get('display') or f'{val:.3f}')
         if kind == 'toggle':
-            self._ce_draw_toggle(i, cx0, ry + 10.0, val >= 0.5, t)
+            self._ce_draw_toggle(i, cx0, ry + 10.0 * u, val >= 0.5, t)
         elif kind == 'choice':
-            self._ce_draw_choice(i, p, cx0, rx + rw - 18.0, ry + 8.0, t)
+            self._ce_draw_choice(i, p, cx0, rx + rw - 18.0 * u, ry + 8.0 * u, t)
             display = ''
         else:
             self._ce_draw_slider(i, p, cx0, cx1, ry, selected, t)
         if display:
-            self._draw_text(display[:12], rx + rw - 18 - self._ce_text_w(display[:12], 1.9),
-                            ry + 6, scale=1.9, color=(0.85, 0.95, 0.7, 0.95))
+            self._draw_text(display[:12], rx + rw - 18 * u - self._ce_text_w(display[:12], 1.9 * u),
+                            ry + 6 * u, scale=1.9 * u, color=(0.85, 0.95, 0.7, 0.95))
         self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
 
     def _ce_draw_bind_row(
@@ -3222,13 +3296,14 @@ void main() {
         selected: bool, t: float,
     ) -> None:
         """Hotkeys tab row: action label + current chord (or capture prompt)."""
+        u = self._ce_u()
         capturing = selected and self._ce_capture_mode
         if selected:
             self._context_menu_hover_glow(rx + 6, ry, rw - 12, row_h, t)
         elif i == int(getattr(self, '_ce_hover_row', -1)):
             self._draw_rect(rx + 6, ry, rw - 12, row_h, (0.10, 0.18, 0.36, 0.35))
         tcol = (1.0, 0.95, 0.5, 1.0) if selected else (0.78, 0.86, 1.0, 0.92)
-        self._draw_text(str(p.get('name', ''))[:30], rx + 16, ry + 6, scale=1.9, color=tcol)
+        self._draw_text(str(p.get('name', ''))[:30], rx + 16 * u, ry + 6 * u, scale=1.9 * u, color=tcol)
         if capturing:
             pulse = 0.5 + 0.5 * math.sin(t * 6.0)
             chord_text = 'Press a key...'
@@ -3237,9 +3312,16 @@ void main() {
             chord_text = str(p.get('chord', '-'))
             is_override = bool(p.get('is_override', False))
             ccol = (0.4, 0.95, 1.0, 0.95) if is_override else (0.75, 0.80, 0.88, 0.85)
-        cw = self._ce_text_w(chord_text, 1.9)
-        self._draw_rect(rx + rw - 30 - cw, ry + 4, cw + 12, row_h - 8, (0.06, 0.10, 0.22, 0.75))
-        self._draw_text(chord_text, rx + rw - 24 - cw, ry + 6, scale=1.9, color=ccol)
+        cw = self._ce_text_w(chord_text, 1.9 * u)
+        self._draw_rect(rx + rw - 30 * u - cw, ry + 4 * u, cw + 12 * u, row_h - 8 * u, (0.06, 0.10, 0.22, 0.75))
+        self._draw_text(chord_text, rx + rw - 24 * u - cw, ry + 6 * u, scale=1.9 * u, color=ccol)
+        midi = str(p.get('midi') or '')
+        if midi:
+            # Read-only MIDI column left of the chord: "MIDI N36 N40".
+            label = f'MIDI {midi}'
+            mw = self._ce_text_w(label, 1.5 * u)
+            self._draw_text(label, rx + rw - 44 * u - cw - mw, ry + 9 * u, scale=1.5 * u,
+                            color=(0.55, 0.85, 0.75, 0.85))
         self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
 
     def _ce_draw_slider(
@@ -3249,9 +3331,10 @@ void main() {
         val = float(p.get('value', 0.0))
         lo = float(p.get('min', 0.0))
         hi = float(p.get('max', 1.0))
+        u = self._ce_u()
         track_w = max(40.0, x1 - x0)
-        track_y = ry + 18.0
-        self._draw_rect(x0, track_y, track_w, 8.0, (0.12, 0.17, 0.28, 0.85))
+        track_y = ry + 18.0 * u
+        self._draw_rect(x0, track_y, track_w, 8.0 * u, (0.12, 0.17, 0.28, 0.85))
         frac = 0.0 if hi <= lo else max(0.0, min(1.0, (val - lo) / (hi - lo)))
         segments = 14
         seg_w = track_w / segments
@@ -3261,29 +3344,30 @@ void main() {
                 break
             part = min(1.0, filled - s)
             col = self._neon_palette_rgb(t * 0.3 + s * 0.16)
-            self._draw_rect(x0 + s * seg_w, track_y, seg_w * part + 0.5, 8.0,
+            self._draw_rect(x0 + s * seg_w, track_y, seg_w * part + 0.5, 8.0 * u,
                             (col[0], col[1], col[2], 0.85))
         kx = x0 + track_w * frac
         glow = 0.6 + 0.4 * math.sin(t * 5.0) if selected else 0.5
         kc = self._neon_palette_rgb(t * 0.3 + filled * 0.16)
-        self._draw_rect(kx - 7.0, ry + 9.0, 14.0, 26.0, (kc[0], kc[1], kc[2], 0.28 * glow))
-        self._draw_rect(kx - 3.0, ry + 12.0, 6.0, 20.0, (1.0, 1.0, 1.0, 0.85 + 0.15 * glow))
+        self._draw_rect(kx - 7.0 * u, ry + 9.0 * u, 14.0 * u, 26.0 * u, (kc[0], kc[1], kc[2], 0.28 * glow))
+        self._draw_rect(kx - 3.0 * u, ry + 12.0 * u, 6.0 * u, 20.0 * u, (1.0, 1.0, 1.0, 0.85 + 0.15 * glow))
         # Generous hit box so the track is easy to grab.
-        self._ce_slider_rects.append((x0, ry + 6.0, track_w, 32.0, i))
+        self._ce_slider_rects.append((x0, ry + 6.0 * u, track_w, 32.0 * u, i))
 
     def _ce_draw_toggle(self, i: int, x: float, y: float, on: bool, t: float) -> None:
         """ON/OFF pill: lit teal with the knob right, dim with the knob left."""
-        w, h = 58.0, 22.0
+        u = self._ce_u()
+        w, h = 58.0 * u, 22.0 * u
         if on:
             glow = 0.85 + 0.15 * math.sin(t * 3.0)
             self._draw_rect(x - 2, y - 2, w + 4, h + 4, (0.1, 0.7, 0.85, 0.18 * glow))
             self._draw_rect(x, y, w, h, (0.10, 0.60, 0.75, 0.92))
             self._draw_rect(x, y, w, h * 0.4, (0.5, 0.95, 1.0, 0.16))
-            self._draw_rect(x + w - 20, y + 2, 18.0, 18.0, (0.95, 1.0, 1.0, 0.98))
+            self._draw_rect(x + w - 20 * u, y + 2 * u, 18.0 * u, 18.0 * u, (0.95, 1.0, 1.0, 0.98))
         else:
             self._draw_rect(x, y, w, h, (0.08, 0.12, 0.24, 0.92))
             self._draw_rect(x, y + h - 1, w, 1.0, (0.3, 0.4, 0.6, 0.5))
-            self._draw_rect(x + 2, y + 2, 18.0, 18.0, (0.5, 0.55, 0.65, 0.9))
+            self._draw_rect(x + 2 * u, y + 2 * u, 18.0 * u, 18.0 * u, (0.5, 0.55, 0.65, 0.9))
         self._ce_toggle_rects.append((x, y, w, h, i))
 
     def _ce_draw_choice(
@@ -3297,9 +3381,10 @@ void main() {
             return
         cur = max(0, min(len(choices) - 1, cur))
         hover = str(getattr(self, '_ce_hover_control', ''))
-        chip_h = 26.0
-        widths = [self._ce_text_w(c, 1.5) + 16.0 for c in choices]
-        total = sum(widths) + 6.0 * (len(choices) - 1)
+        u = self._ce_u()
+        chip_h = 26.0 * u
+        widths = [self._ce_text_w(c, 1.5 * u) + 16.0 * u for c in choices]
+        total = sum(widths) + 6.0 * u * (len(choices) - 1)
         if x0 + total <= x_max:
             cx = x0
             for k, (label, w) in enumerate(zip(choices, widths)):
@@ -3312,28 +3397,28 @@ void main() {
                     self._context_menu_hover_glow(cx, y, w, chip_h, t)
                 else:
                     self._draw_rect(cx, y, w, chip_h, (0.06, 0.10, 0.22, 0.8))
-                self._draw_text(label, cx + 8, y + 7, scale=1.5,
+                self._draw_text(label, cx + 8 * u, y + 7 * u, scale=1.5 * u,
                                 color=(1.0, 0.97, 0.6, 1.0) if active else (0.72, 0.82, 1.0, 0.9))
                 self._ce_chip_rects.append((cx, y, w, chip_h, i, k))
-                cx += w + 6.0
+                cx += w + 6.0 * u
             return
         # Select mode: < current label >.
-        arrow_w = 26.0
-        label_w = max(60.0, min(x_max - x0 - 2 * arrow_w - 12.0, 320.0))
+        arrow_w = 26.0 * u
+        label_w = max(60.0 * u, min(x_max - x0 - 2 * arrow_w - 12.0 * u, 320.0 * u))
         prev_k = max(0, cur - 1)
         next_k = min(len(choices) - 1, cur + 1)
-        for label, bx, target in (('<', x0, prev_k), ('>', x0 + arrow_w + 6 + label_w + 6, next_k)):
+        for label, bx, target in (('<', x0, prev_k), ('>', x0 + arrow_w + 6 * u + label_w + 6 * u, next_k)):
             if hover == f'chip:{i}:{target}' and target != cur:
                 self._context_menu_hover_glow(bx, y, arrow_w, chip_h, t)
             else:
                 self._draw_rect(bx, y, arrow_w, chip_h, (0.10, 0.24, 0.50, 0.85))
-            self._draw_text(label, bx + 9, y + 7, scale=1.5, color=(0.9, 0.96, 1.0, 0.95))
+            self._draw_text(label, bx + 9 * u, y + 7 * u, scale=1.5 * u, color=(0.9, 0.96, 1.0, 0.95))
             self._ce_chip_rects.append((bx, y, arrow_w, chip_h, i, target))
-        lx = x0 + arrow_w + 6
+        lx = x0 + arrow_w + 6 * u
         self._draw_rect(lx, y, label_w, chip_h, (0.06, 0.10, 0.22, 0.8))
         text = choices[cur]
-        max_chars = max(4, int(label_w / max(1.0, self._ce_text_w('M', 1.5))) - 1)
-        self._draw_text(text[:max_chars], lx + 8, y + 7, scale=1.5, color=(1.0, 0.97, 0.6, 1.0))
+        max_chars = max(4, int(label_w / max(1.0, self._ce_text_w('M', 1.5 * u))) - 1)
+        self._draw_text(text[:max_chars], lx + 8 * u, y + 7 * u, scale=1.5 * u, color=(1.0, 0.97, 0.6, 1.0))
 
     # ------------------------------------------------------------------
     # First-run tour modal (v1 slide dialog)
@@ -5677,13 +5762,20 @@ void main() {
             _draw_shortcut_block('ALT',   alt_lines,   right_x + half, bottom_y, bottom_offsets, (1.0,  0.92, 0.82, 0.95))
 
             if self._unmapped_effects:
-                self._draw_text(
+                # Wrapped to the pane, bottom-up, at most three lines: the
+                # list grows with every effect drop-in and used to run off
+                # the right edge of the panel (owner screenshot 2026-09-15).
+                extra_scale = 1.16
+                extra_lines = self._wrap_text_to_width(
                     f"Extra effects (no direct key): {', '.join(self._unmapped_effects)}",
-                    right_x + 10.0,
-                    right_y + right_h - 20.0,
-                    scale=1.16,
-                    color=(1.0, 0.62, 0.62, 0.94),
+                    extra_scale, right_w - 20.0, max_lines=3,
                 )
+                extra_lh = 8.0 * extra_scale + 6.0
+                yy = right_y + right_h - 20.0 - extra_lh * (len(extra_lines) - 1)
+                for line in extra_lines:
+                    self._draw_text(line, right_x + 10.0, yy, scale=extra_scale,
+                                    color=(1.0, 0.62, 0.62, 0.94))
+                    yy += extra_lh
 
         elif active_right_tab in ('Post FX', 'Mouse'):
             entries = self._postfx_help_entries if active_right_tab == 'Post FX' else self._mouse_help_entries

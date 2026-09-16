@@ -306,8 +306,9 @@ buttons and a RESET (re-seeds defaults). No drag-and-drop.
   `drop-ins/control-room-01/docs/configuration.md` rewritten around the
   store; core `docs/configuration.md` gains the `[control_room]`
   hardware keys it was missing.
-- **Follow-ups (unscheduled):** wire `discover_runtime_capabilities()`
-  so the LAYOUT page can also list loaded-but-panel-less drop-ins;
+- **Follow-ups:** ✅ `discover_runtime_capabilities(loaded_only=True)`
+  wired (core beta.148, control-room-01 0.19.0): the LAYOUT page names
+  loaded-but-panel-less drop-ins, reading the module cache only;
   multi-head-01 owning the monitor editor as a registered page; the
   `overlays.py` track (§1 #5).
 
