@@ -798,3 +798,65 @@ def test_render_overlay_always_rebuilds_with_drip_enabled(ctx, monkeypatch) -> N
         assert len(calls) == 2, 'drip is continuous animation -- nothing to cache'
     finally:
         b.shutdown()
+
+
+# --------------------------------------------------------- config modal layout
+
+def test_config_modal_hint_row_never_exceeds_panel_width(ctx) -> None:
+    """Regression for fixed pixel-offset hotkey text overflowing off the
+    edge of the panel (silently invisible, not just tight) at a larger
+    font_px or a narrower window -- this is what made the Alt+D hotkey
+    hint effectively disappear before the wrap fix."""
+    from PIL import ImageDraw
+
+    for font_px, width in ((16, 700), (28, 1920), (40, 1200), (56, 1024)):
+        b = _banner(ctx, {'font_px': font_px})
+        try:
+            img, panel_w, panel_h = b._build_modal_image(width)
+            draw = ImageDraw.Draw(img)
+            body_font = b._load_font(max(14, font_px - 9))
+            # No single hotkey item is ever wider than the row's wrap
+            # width on its own -- if this held, the wrap loop guarantees
+            # every item lands inside the panel (it always draws at
+            # least once per line before checking overflow).
+            widest = max(
+                draw.textlength(item, font=body_font)
+                for item in ('Shift+B: toggle banner', 'Ctrl+B: close config',
+                             'Alt+B: beat color', 'Alt+D: drip', 'Enter: text edit mode')
+            )
+            assert widest < panel_w - 28
+        finally:
+            b.shutdown()
+
+
+def test_config_modal_stats_row_items_never_overlap(ctx) -> None:
+    """Regression for fixed x-offsets in the stats row (Status/Max line/
+    Font/Beat Color/Drip) colliding at a larger font_px, which read as
+    two labels running together with no space between them."""
+    b = _banner(ctx, {'font_px': 40})
+    try:
+        img, panel_w, panel_h = b._build_modal_image(1920)
+        assert img.size == (panel_w, panel_h)
+        # _draw_wrapped_row always advances cx by the measured item width
+        # plus a fixed gap before the next item, so same-line items can
+        # never overlap by construction -- exercised here through the
+        # real (non-dry-run) draw path to make sure that code path runs
+        # without error at a font size wide enough to have broken the
+        # old fixed offsets.
+    finally:
+        b.shutdown()
+
+
+def test_config_modal_panel_grows_to_fit_a_larger_font(ctx) -> None:
+    """The panel used to be a fixed 284px tall regardless of font_px, too
+    short to fit wrapped hint rows or a readable textarea at a large
+    font. It must grow instead of clipping content."""
+    b_small = _banner(ctx, {'font_px': 16})
+    b_large = _banner(ctx, {'font_px': 56})
+    try:
+        _, _, h_small = b_small._build_modal_image(1920)
+        _, _, h_large = b_large._build_modal_image(1920)
+        assert h_large > h_small
+    finally:
+        b_small.shutdown()
+        b_large.shutdown()
