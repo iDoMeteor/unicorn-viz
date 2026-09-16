@@ -1,7 +1,7 @@
 # Drop-in performance options audit — candidates for the config editor
 
 Owner: overlays / core manager seat
-Status: Core + Tier A wired 2026-09-16 (auto-vj-01 deferred to the VJ seat); Tier B open
+Status: Core, Tier A (incl. auto-vj-01 rc.148 by the VJ seat) and Tier B wired 2026-09-16; mixer items stay with the mixer team
 Last updated: 2026-09-16
 
 The core config editor shipped its Performance tab in beta.144 with core
@@ -34,10 +34,10 @@ or belongs to that team's own surface; **C** = nothing to do.
 |---|---|---|---|---|
 | audio-out-01 | `max_voices` (16) | one-shot mixing per block | A | live; already a contributor (Audio) |
 | audio-out-01 | `blocksize` (1024), `samplerate` | output stream wakeups / underruns | A | RESTART badge |
-| auto-vj-01 | `shadow_engine` (v3 shadow detector) | a second full beat tracker per block | A | owner-gated area: needs the VJ seat's word before it goes live-toggleable |
-| auto-vj-01 | `genre_matcher_enabled`, `genre_candidate_scoring_enabled` | recommender scoring per eval | A | same caveat |
-| auto-vj-01 | `live_training_enabled`, `sequence_training_enabled` | JSONL logging per beat / heartbeat | A | toggle; off for a show, on for training |
-| auto-vj-01 | `profile_auto_reco_eval_interval_s`, `detector_log_interval_s`, `wide_bpm_sample_interval_s` | eval cadence | A | sliders |
+| auto-vj-01 | `shadow_engine` (v3 shadow detector) | a second full beat tracker per block | A → done (rc.148) | RESTART row: the tracker is built in `__init__` only and it is the v3 soak instrument, so no live toggle (VJ seat's decision) |
+| auto-vj-01 | `genre_matcher_enabled`, `genre_candidate_scoring_enabled` | recommender scoring per eval | A → done (rc.148) | live toggles |
+| auto-vj-01 | `live_training_enabled`, `sequence_training_enabled` | JSONL logging per beat / heartbeat | A → done (rc.148) | live toggles driving the corpus writers' `set_enabled()` (same path as the hotkeys); the hint names the JSONL-gap trade-off |
+| auto-vj-01 | `profile_auto_reco_eval_interval_s`, `detector_log_interval_s`, `wide_bpm_sample_interval_s` | eval cadence | A → done (rc.148) | all three as live sliders |
 | banner-01 | `drip_enabled` | re-rasterizes the banner every frame while animating (0.13.0 caches the static case) | B | already Alt+D in its modal; a Performance row would mirror it |
 | beat-flash-01 | `max_hz`, `max_brightness` | none (look) | C | |
 | candy-frame-01 | `pattern_interval_s` | none (look) | C | |
@@ -70,7 +70,7 @@ Effects tab for free. No Performance-tab rows for effects.
 | Drop-in | Knob | Cost | Tier | Notes |
 |---|---|---|---|---|
 | grand-finale-01 | none | | C | |
-| images-01, video-clips-01 | `_MAX_IMAGE_EDGE` decode cap, `scale_when_framed` | decode + VRAM | B | expose the edge cap (RESTART, re-warm) |
+| images-01 | `_MAX_IMAGE_EDGE` decode cap | decode + VRAM | B → done | `[images] max_image_edge` (0.9.0), next launch; config-only, since the showcase is an effect with no controller to carry a row. video-clips-01 has no decode cap at all (reclassified C). |
 | lyrics-01 | `poll_interval_s` (0.5) | now-playing polling | A | slider 0.25–5 s; already a contributor |
 | media-01 | `render_interval`, `_TAG_WORKERS = 8` (scan threads), `auto_level` (per-track loudness pass, cached) | window raster, scan CPU | A | `render_interval` live; workers RESTART |
 | midi-controllers-01 | `_UPDATE_INTERVAL_S = 0.05` LED refresh (20 Hz) | USB writes | B | a 5–30 Hz slider; MIDI lane, needs their OK |
@@ -84,7 +84,7 @@ Effects tab for free. No Performance-tab rows for effects.
 | postfx-01 | `enabled` (chain) | fullscreen passes | C | hotkey already |
 | video-postfx-01 | `max_layers` (4) | stacked video passes | A | choice 1/2/4/8 |
 | projectm-01 | `fps_hint`, `preset_warmup_frames`, `preset_duration` | none live | C | Corrected while wiring: `fps_hint` only seeds `configure()`; at runtime projectM's fps follows the measured frame time. Warm-up frames are a one-off cost at each preset switch, not a running one. `preset_duration` is already an effect parameter. Nothing to expose. |
-| sims-01 | `fps` hardcoded 30 (USD sim playback) | sim stepping | B | make it a parameter |
+| sims-01 | `fps` hardcoded 30 (USD sim playback) | none | C | Corrected while wiring: frames are baked at load and `fps` is the playback rate (the `speed` parameter already scales it); nothing is stepped per frame. |
 | spotify-01 | `poll_interval_s`, `poll_fallback_s`, `http_timeout_s` | network polling | A | sliders; low risk |
 | streaming-01 | `fps`, `preset`, `audio_bitrate`, `max_queued_frames` | encoder CPU + readback | A | same row kinds as Recording; RESTART while streaming |
 | textures-01 | warm-cache at boot | boot time only | C | |
@@ -95,13 +95,26 @@ Effects tab for free. No Performance-tab rows for effects.
 | webcam-01 | `selfie_seg` mode + `grow/feather/blur px`, `selfie_seg_temporal` | segmentation is the heaviest per-frame CPU in the app when on | A | mode as a choice row under Performance; already a Visuals contributor |
 | webcam-01 | capture `fps`, `width`, `height`, `cycle_interval`, `pip_scale` | capture + upload | A | fps/size RESTART; cycle live |
 
+## Landed 2026-09-16 (Tier B, same day)
+
+banner-01 0.14.0 (drip + beat color toggles), cta-01 0.10.0 (editor FX,
+drip, sparkles, density; pushed live into an open editor),
+midi-controllers-01 0.11.0 (LED refresh 5/10/20/30 Hz), effects-particles
+0.10.0 (`particles`, live buffer rebuild), effects-tech 0.11.0
+(`march_steps` uniform), effects-rollercoast 0.5.0 (`march_steps` per ride,
+next activation), images-01 0.9.0 (`max_image_edge`, config-only),
+unicorn-tears-01 rc.3 (`max_sparkles`, next launch). Left alone: the
+dj-mixer-01 items (mixer team's own tab), auto-vj-01 (handoff:
+`docs/planning/auto-vj-config-editor-performance-rows-2026-09-16.md`).
+
 ## Landed 2026-09-16
 
 Core beta.146 (convention 2.0) and the Tier A rows: control-room-01 0.18.0,
 audio-out-01 0.6.0, lyrics-01 0.5.0, spotify-01 rc.8, video-out-01 0.6.0,
 video-postfx-01 0.3.0, streaming-01 0.7.0, media-01 0.30.0, webcam-01 1.6.0.
-auto-vj-01 rows wait for the VJ seat's word. projectm-01 was reclassified
-(see its row).
+auto-vj-01 rows landed the same day by the VJ seat (rc.148, master 4770791;
+shadow engine as a RESTART row, everything else live). projectm-01 was
+reclassified (see its row).
 
 ## Proposed order (as written before wiring)
 

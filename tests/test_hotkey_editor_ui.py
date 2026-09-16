@@ -239,3 +239,44 @@ def test_render_hotkeys_tab_capture_prompt_smoke() -> None:
 def test_default_action_binding_matches_expected() -> None:
     assert default_action_binding('fullscreen') == (sdl2.SDLK_f, 0)
     assert default_action_binding('help') == (sdl2.SDLK_h, 0)
+
+
+# --------------------------------------------------------------------------- #
+# MIDI column (read-only): notes bound to each action from the active note map
+# --------------------------------------------------------------------------- #
+
+class _MidiManager:
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def note_map(self):
+        return dict(self._mapping)
+
+
+def test_hotkey_rows_show_midi_notes_bound_to_each_action(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._midi_manager = _MidiManager({40: 'fullscreen', 36: 'fullscreen', 41: 'help'})
+    rows = {r['action']: r for r in app.config_editor_hotkey_rows()}
+    assert rows['fullscreen']['midi'] == 'N36 N40'      # sorted by note
+    assert rows['help']['midi'] == 'N41'
+    assert rows['next']['midi'] == ''
+
+
+def test_hotkey_rows_without_midi_manager_have_an_empty_column(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._midi_manager = None
+    assert all(r['midi'] == '' for r in app.config_editor_hotkey_rows())
+
+
+def test_render_hotkeys_tab_draws_the_midi_column_smoke() -> None:
+    ov = _bare_overlays()
+    ov._ce_params = [
+        {'name': 'Toggle Fullscreen', 'kind': 'bind', 'action': 'fullscreen',
+         'chord': 'F', 'is_override': False, 'midi': 'N36'},
+    ]
+    texts: list[str] = []
+    ov._draw_rect = lambda *a, **k: None
+    ov._draw_text = lambda text, *a, **k: texts.append(text)
+    ov._context_menu_hover_glow = lambda *a, **k: None
+    ov._render_config_editor_param_rows(100.0, 80.0, 700.0, 500.0, 'HOTKEYS')
+    assert 'MIDI N36' in texts

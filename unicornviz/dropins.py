@@ -483,29 +483,34 @@ def unregister_runtime_capability(vj_api: Any, capability: DropinRuntimeCapabili
         vj_api.unregister_subsystem(capability.subsystem_name)
 
 
-def discover_runtime_capabilities() -> list[dict[str, Any]]:
+def discover_runtime_capabilities(loaded_only: bool = False) -> list[dict[str, Any]]:
     """Discover optional CAPABILITIES metadata from drop-in modules.
 
-    This is a schema-light skeleton used for incremental migration away from
-    hardcoded app-side drop-in wiring. Modules may expose either
-    ``CAPABILITIES`` or ``DROPIN_CAPABILITIES`` as a dict/list payload.
+    Modules may expose either ``CAPABILITIES`` or ``DROPIN_CAPABILITIES`` as
+    a dict/list payload.  With ``loaded_only`` only modules the app has
+    already imported (the module cache) are inspected -- no new imports, so
+    it is safe to call at runtime from an operator surface; the default
+    walks every drop-in file and imports it, which is a tools-only mode.
     """
-    root = _dropins_root()
-    if not root.exists():
-        return []
+    if loaded_only:
+        candidates = [(path, mod) for path, mod in list(_MODULE_CACHE.items())]
+    else:
+        root = _dropins_root()
+        if not root.exists():
+            return []
+        candidates = []
+        for file_path in sorted(root.glob('*/*.py')):
+            if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
+                continue
+            if _is_dropin_excluded(file_path.parent.name):
+                continue
+            try:
+                candidates.append((file_path, _load_module_from_file(file_path)))
+            except Exception as exc:
+                log.warning('Skipping drop-in capability module %s: %s', file_path, exc)
 
     discovered: list[dict[str, Any]] = []
-    for file_path in sorted(root.glob('*/*.py')):
-        if file_path.name == '__init__.py' or '__pycache__' in file_path.parts:
-            continue
-        if _is_dropin_excluded(file_path.parent.name):
-            continue
-        try:
-            module = _load_module_from_file(file_path)
-        except Exception as exc:
-            log.warning('Skipping drop-in capability module %s: %s', file_path, exc)
-            continue
-
+    for file_path, module in candidates:
         for attr_name in ('DROPIN_CAPABILITIES', 'CAPABILITIES'):
             raw = getattr(module, attr_name, None)
             if raw is None:

@@ -3646,19 +3646,43 @@ void main() {
         """
         from unicornviz.hotkeys import action_names, chord_label, default_action_binding
 
+        midi_notes = self._midi_notes_by_action()
         rows: list[dict[str, object]] = []
         for action in action_names():
             override = self._hotkey_overrides.get(action)
             sym_mod = override or default_action_binding(action)
             chord = chord_label(*sym_mod) if sym_mod is not None else '-'
+            notes = midi_notes.get(action, ())
             rows.append({
                 'name': self._HOTKEY_ACTION_LABELS.get(action, action),
                 'kind': 'bind',
                 'action': action,
                 'chord': chord,
                 'is_override': override is not None,
+                'midi': ' '.join(f'N{n}' for n in notes) if notes else '',
             })
         return rows
+
+    def _midi_notes_by_action(self) -> dict[str, tuple[int, ...]]:
+        """MIDI notes bound to each action (from the active MIDI note map).
+
+        Read-only on the Hotkeys tab so the rebinding view shows the whole
+        picture; the map itself is edited through the MIDI preset / learn
+        surfaces, not here.
+        """
+        manager = getattr(self, '_midi_manager', None)
+        note_map = getattr(manager, 'note_map', None)
+        if manager is None or not callable(note_map):
+            return {}
+        try:
+            mapping = note_map()
+        except Exception:
+            log.debug('MIDI note map unavailable for the Hotkeys tab', exc_info=True)
+            return {}
+        by_action: dict[str, list[int]] = {}
+        for note, action in sorted(mapping.items()):
+            by_action.setdefault(str(action), []).append(int(note))
+        return {a: tuple(n) for a, n in by_action.items()}
 
     def hotkey_action_for_chord(self, sym: int, mod: int, exclude_action: 'str | None' = None) -> 'str | None':
         """Return the rebindable action currently bound to (sym, mod), if any.
@@ -3736,7 +3760,7 @@ void main() {
 
     _CONFIG_CONTRIBUTOR_ATTRS = (
         '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
-        '_lyrics', '_webcam_system', '_streamer', '_control_room',
+        '_lyrics', '_webcam_system', '_streamer', '_control_room', '_unicorn_tears',
     )
 
     def _config_editor_settings_specs(self, tab: str) -> list[dict]:

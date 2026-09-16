@@ -863,6 +863,7 @@ Exit codes:
 | MIDI callbacks **only write to queues** | rtmidi fires on its own thread |
 | `RuntimeStateStore` uses `threading.RLock` for all reads/writes | Safe from any thread |
 | Recording bytes are passed via `queue.Queue` | Writer thread never reads GL state |
+| OpenBLAS is pinned to **one thread** (`OPENBLAS_NUM_THREADS=1`, set in `unicornviz/__main__.py` before the first numpy import) | OpenBLAS otherwise spawns a worker per core at numpy import and those workers busy-wait after every call, taking CPU from the audio, render and mixer-analysis threads (2026-09-16). Nothing in-process needs a threaded BLAS; the Demucs subprocess sets its own counts. An exported value is kept (`setdefault`). |
 
 ### Module boundary contract
 

@@ -137,6 +137,24 @@ class VJApi:
         """Return True when a named runtime subsystem is registered."""
         return self._app.has_subsystem(name)
 
+
+    def subsystem_names(self) -> list[str]:
+        """Names of every registered subsystem, in registration order."""
+        return list((getattr(self._app, '_subsystems', None) or {}).keys())  # noqa: SLF001
+
+    def dropin_capabilities(self) -> list[dict]:
+        """Capability payloads of the drop-ins the app has actually loaded.
+
+        Reads the drop-in module cache only (no imports), so an operator
+        surface can call it every frame.  Each dict carries at least
+        ``name`` and ``dropin``; loaders add ``subsystem_name`` and friends.
+        """
+        try:
+            from unicornviz.dropins import discover_runtime_capabilities  # noqa: PLC0415
+            return discover_runtime_capabilities(loaded_only=True)
+        except Exception:
+            return []
+
     def get_subsystem(self, name: str) -> object | None:
         """Return a named runtime subsystem instance when registered."""
         return self._app.get_subsystem(name)
