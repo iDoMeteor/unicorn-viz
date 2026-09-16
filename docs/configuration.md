@@ -215,7 +215,7 @@ unicorn-viz --dj-mixer-source --dj-mixer-autoplay-mode smart \
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `internal_scale` | float | `1.0` | Internal effect render scale before upscaling to screen. Use `0.5`-`1.0` for extra headroom on heavy scenes. |
-| `fps_limit` | int | `30` | Render frame cap. `0` follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank). Also on the config editor's Visuals tab. |
+| `fps_limit` | int | `30` | Render frame cap. `0` follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank). Also on the config editor's Performance tab. |
 
 **Why the default is 30, not 60.** A loop that cannot finish inside one
 vblank misses it and lands on the next one regardless, so the effective rate
@@ -448,6 +448,17 @@ Notes:
     - `schema_version = 1`
 - Webcam persistence writes under `webcam.*` and includes per-camera image
     settings.
+- The config editor (`c`) remembers its Performance tab here rather than
+    rewriting this file. Live rows persist as `perf_render_scale`,
+    `perf_present_guard_skips`, `perf_preview_capture`,
+    `perf_preview_fps_ceiling`, `perf_preview_max_width`,
+    `perf_sysmon_interval_s`, `perf_tooltips` and `perf_perf_frames` and are
+    re-applied at the end of startup. RESTART rows persist as
+    `render_fps_limit`, `audio_latency`, `audio_fft_bands`, `audio_blocksize`,
+    `video_decks_enabled` and `video_decks_cache_long_edge` and are laid over
+    the loaded config (in memory only) before the subsystem that reads them
+    is built. Delete a key to fall back to `config.toml`. None of these are
+    part of a configuration profile.
 
 ---
 

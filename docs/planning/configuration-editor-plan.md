@@ -1,8 +1,8 @@
 # Configuration Editor — Design & Build Plan
 
 Owner: owner + Claude Opus (master coordinator)
-Status: In progress — Increment 1 (foundation) landing; UI increments queued
-Last updated: 2026-07-01
+Status: Shipped through 2.0 (core beta.144); follow-ups listed in §5
+Last updated: 2026-09-16
 
 A tabbed, LCARS-glossy in-app **configuration editor** for tuning effect (and
 later, subsystem) settings live, and saving them as named **configuration
@@ -137,8 +137,53 @@ A tab-based modal reusing the house style:
 - ✅ **Randomization note surfaced** in the Effects tab UI and
   `docs/effect-settings.md`.
 
+### 2.0 (2026-09-16, core beta.144): declarative rows + Performance tab
+
+Owner brief: "clunky, devoid of drip/sparkle, half the stuff is information
+not configuration, and we need a performance tab."
+
+- ✅ **Row kinds.** Rows are now `slider` / `toggle` / `choice` / `bind`, each
+  with `display` text, a `hint` (tooltip + inline on the selected row), an
+  optional `badge` (`RESTART`, `NEXT REC`) and a `section` header. Built by
+  `_ce_slider` / `_ce_toggle` / `_ce_choice` in `app.py`; drawn by
+  `Overlays._ce_draw_row` and friends. Choice chips fall back to `< label >`
+  arrows when the labels would not fit (recording audio sources).
+- ✅ **Pointer input.** Click or drag a slider track, click a chip or a pill;
+  Enter flips a toggle / steps a choice. The overlay queues
+  `(row, value)` requests that `App._push_config_editor_model` drains each
+  frame and applies through the same setters the keyboard uses.
+- ✅ **Tab bar wraps** instead of overflowing (the bug dj-mixer-01 hit at nine
+  tabs). Order: Effects first, then alphabetical.
+- ✅ **Information removed.** The read-only System and Auto VJ tabs are gone;
+  the HUD and the Control Room INFO panel already show that data. The only
+  read-only element left is the live `FPS / frame ms` readout beside the
+  Performance title, because it is the feedback loop for that tab.
+- ✅ **Performance tab** (core only, per the brief): render scale, frame limit,
+  present guard, preview capture / fps ceiling / width, capture latency, FFT
+  bands, block size, system-monitor sampling, tooltips, video-deck layer and
+  cache edge, per-frame perf logging. Live rows apply at once and persist as
+  `perf_*` runtime keys (`_restore_performance_settings`); RESTART rows
+  persist and overlay `config.toml` at the next launch
+  (`_apply_runtime_config_overrides`). Excluded from profiles, like Recording.
+- ✅ **Visuals** gains transition length, HUD auto-hide / timeout and flash
+  messages; effect duration moved here from Audio. **Audio** is reactivity plus
+  drop-in rows.
+- ✅ **Drip.** Bass-lit neon frame with a halo, border sparkles (cta-01's
+  recipe), palette-gradient slider fills with glowing knobs, glossy tabs,
+  hover glow on rows / chips / buttons, eased scrolling with a scrollbar,
+  an on-screen marker in the effect list.
+
 ### Open follow-ups
 
+- **Drop-in performance rows:** the brief scoped the Performance tab to core;
+  webcam capture/cycle, ProjectM mesh/fps and the like can join via the
+  existing contributor convention with `CONFIG_EDITOR_CATEGORY = 'Performance'`
+  once each team decides its own knobs.
+- **Contributor discovery:** `_CONFIG_CONTRIBUTOR_ATTRS` is still a fixed list
+  of app attributes; discovery through the subsystem registry would let any
+  drop-in contribute without touching core.
+- **UI scale:** the panel is laid out in fixed pixels (capped at 1400x900);
+  the help overlay's DPI scale should eventually apply here too.
 - **Bindings tab:** read-only hotkey/MIDI map from the help registry.
 - **Sparse-vs-full profile settings:** profiles snapshot the full exposed
   settings set (fine for named "looks"); the always-on active-settings layer of

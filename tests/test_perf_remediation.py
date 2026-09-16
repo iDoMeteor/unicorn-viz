@@ -24,6 +24,7 @@ def test_present_guard_halves_rather_than_quarters() -> None:
 
 class _Stub:
     _subsys_present_skip_ms = App._subsys_present_skip_ms
+    _subsys_present_max_skips = 1
 
     def __init__(self, display_index: int = 0) -> None:
         self._display_index = display_index
