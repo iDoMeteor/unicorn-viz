@@ -8,9 +8,9 @@
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.206.0             alpha ▲       module
-  media-01                      0.29.3              alpha ▲       module
-  control-room-01               0.18.0              alpha ▲       module
+  media-01                      0.30.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
+  control-room-01               0.17.0              alpha ▲       module
   banner-01                     0.13.1              alpha ▲       module
   projectm-01                   0.12.8              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
@@ -35,7 +35,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.2          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
-  spotify-01                    1.0.0-rc.7          RC            module
+  spotify-01                    1.0.0-rc.8          RC            module
   unicorn-tears-01              1.0.0-rc.2          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -55,27 +55,27 @@
   videos-01                     0.8.2               alpha         module
   sims-01                       0.7.2               alpha         module
   training-kit-01               0.7.1               alpha         module
+  streaming-01                  0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
+  audio-out-01                  0.6.0               alpha ▼       module
   chat-01                       0.6.0               alpha ▼       module
   effects-holiday               0.5.1               alpha ▼       module
-  streaming-01                  0.6.0               alpha ▼       module
-  webcam-01                     1.5.4               alpha ▼       module
-  audio-out-01                  0.5.0               alpha ▼       module
+  video-out-01                  0.6.0               alpha ▼       module
+  webcam-01                     1.6.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-rollercoast           0.4.2               early alpha   module
-  lyrics-01                     0.4.1               early alpha   module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
+  lyrics-01                     0.5.0               alpha ▼       module
   video-clips-01                0.5.0               alpha ▼       module
-  video-out-01                  0.5.0               alpha ▼       module
 
   ── early alpha ───────────────────────────────────────────────────────────
   effects-flying                0.4.0               early alpha   module
   effects-ukiyo-e               0.4.0               early alpha   module
   osc-bridge-01                 0.3.0               early alpha   module
-  video-postfx-01               0.2.0               early alpha   module
+  video-postfx-01               0.3.0               early alpha   module
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned

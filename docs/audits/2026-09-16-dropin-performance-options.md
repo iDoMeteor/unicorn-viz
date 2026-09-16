@@ -1,7 +1,7 @@
 # Drop-in performance options audit — candidates for the config editor
 
 Owner: overlays / core manager seat
-Status: Findings; wiring proposed, not started
+Status: Core + Tier A wired 2026-09-16 (auto-vj-01 deferred to the VJ seat); Tier B open
 Last updated: 2026-09-16
 
 The core config editor shipped its Performance tab in beta.144 with core
@@ -83,7 +83,7 @@ Effects tab for free. No Performance-tab rows for effects.
 |---|---|---|---|---|
 | postfx-01 | `enabled` (chain) | fullscreen passes | C | hotkey already |
 | video-postfx-01 | `max_layers` (4) | stacked video passes | A | choice 1/2/4/8 |
-| projectm-01 | `fps_hint`, `preset_warmup_frames`, `preset_duration` | projectM render target / warm-up | A | `fps_hint` choice, warmup slider (RESTART) |
+| projectm-01 | `fps_hint`, `preset_warmup_frames`, `preset_duration` | none live | C | Corrected while wiring: `fps_hint` only seeds `configure()`; at runtime projectM's fps follows the measured frame time. Warm-up frames are a one-off cost at each preset switch, not a running one. `preset_duration` is already an effect parameter. Nothing to expose. |
 | sims-01 | `fps` hardcoded 30 (USD sim playback) | sim stepping | B | make it a parameter |
 | spotify-01 | `poll_interval_s`, `poll_fallback_s`, `http_timeout_s` | network polling | A | sliders; low risk |
 | streaming-01 | `fps`, `preset`, `audio_bitrate`, `max_queued_frames` | encoder CPU + readback | A | same row kinds as Recording; RESTART while streaming |
@@ -95,7 +95,15 @@ Effects tab for free. No Performance-tab rows for effects.
 | webcam-01 | `selfie_seg` mode + `grow/feather/blur px`, `selfie_seg_temporal` | segmentation is the heaviest per-frame CPU in the app when on | A | mode as a choice row under Performance; already a Visuals contributor |
 | webcam-01 | capture `fps`, `width`, `height`, `cycle_interval`, `pip_scale` | capture + upload | A | fps/size RESTART; cycle live |
 
-## Proposed order
+## Landed 2026-09-16
+
+Core beta.146 (convention 2.0) and the Tier A rows: control-room-01 0.18.0,
+audio-out-01 0.6.0, lyrics-01 0.5.0, spotify-01 rc.8, video-out-01 0.6.0,
+video-postfx-01 0.3.0, streaming-01 0.7.0, media-01 0.30.0, webcam-01 1.6.0.
+auto-vj-01 rows wait for the VJ seat's word. projectm-01 was reclassified
+(see its row).
+
+## Proposed order (as written before wiring)
 
 1. Core: per-row `tab` + presentation passthrough, registry discovery
    (one small commit, tests on the convention).
