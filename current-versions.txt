@@ -19,7 +19,7 @@
   midi-controllers-01           0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.147        RC            MISMATCH (readme=1.0.0-rc.142)
+  auto-vj-01                    1.0.0-rc.148        RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   beat-flash-01                 0.10.0              alpha ▲       module
@@ -71,5 +71,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  3 version mismatch(es): core (unicornviz), auto-vj-01, effects-cosmic
+  ⚠  2 version mismatch(es): core (unicornviz), effects-cosmic
 
