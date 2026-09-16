@@ -182,9 +182,10 @@ not configuration, and we need a performance tab."
 - **Contributor discovery:** `_CONFIG_CONTRIBUTOR_ATTRS` is still a fixed list
   of app attributes; discovery through the subsystem registry would let any
   drop-in contribute without touching core.
-- **UI scale:** the panel is laid out in fixed pixels (capped at 1400x900);
-  the help overlay's DPI scale should eventually apply here too.
-- **Bindings tab:** read-only hotkey/MIDI map from the help registry.
+- ✅ **UI scale** (beta.148): every `_CE_*` dimension and text scale is
+  multiplied by `Overlays._ce_u()` (1.0 at 1080p, 1.8 at 4K).
+- ✅ **MIDI on the Hotkeys tab** (beta.148): read-only notes per action from
+  the active note map; editing stays on the MIDI learn / preset surfaces.
 - **Sparse-vs-full profile settings:** profiles snapshot the full exposed
   settings set (fine for named "looks"); the always-on active-settings layer of
   the config.toml retirement (§7) should still be sparse deltas.

@@ -312,3 +312,23 @@ def test_drop_in_still_gets_pageup_pagedown_when_help_is_closed(tmp_path: Path) 
 
     assert overlay.moves == []
     assert vj_api.camera_switch_calls == 1
+
+
+# --------------------------------------------------------------------------- #
+# "Extra effects (no direct key)" wraps to the pane instead of running off it
+# --------------------------------------------------------------------------- #
+
+def test_wrap_text_to_width_wraps_and_ellipsizes() -> None:
+    from unicornviz.overlays import Overlays
+    ov = Overlays.__new__(Overlays)
+    ov._glyph_w = 13
+    ov._font_scale_norm = 8.0 / 18.0
+    words = ' '.join(f'Effect{i}' for i in range(40))
+    # ~6.7 px per char at 1.16 -> ~60 chars per 400 px line.
+    lines = ov._wrap_text_to_width('Extra effects (no direct key): ' + words, 1.16, 400.0)
+    assert len(lines) > 3
+    assert all(len(line) <= 60 for line in lines)
+    assert ' '.join(lines) == 'Extra effects (no direct key): ' + words   # nothing lost
+    capped = ov._wrap_text_to_width('Extra effects (no direct key): ' + words, 1.16, 400.0, max_lines=3)
+    assert len(capped) == 3 and capped[-1].endswith('...')
+    assert ov._wrap_text_to_width('short', 1.16, 400.0) == ['short']
