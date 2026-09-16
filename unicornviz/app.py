@@ -904,6 +904,15 @@ class App:
         self._now_spinning = None
         self.now_spinning_enabled = bool(
             self.cfg.get('now_spinning', 'enabled', default=True))
+        _stored_platter = self.get_runtime_state('now_spinning_enabled', default=None)
+        if isinstance(_stored_platter, bool):
+            self.now_spinning_enabled = _stored_platter
+        # Track-change banner ("now playing" announcer) mute, across every
+        # now-playing source at once; each source's own [x] now_playing_banner
+        # config still applies underneath.  Remembered in runtime state.
+        _stored_banner = self.get_runtime_state('now_playing_banner_enabled', default=None)
+        self.now_playing_banner_enabled = (
+            _stored_banner if isinstance(_stored_banner, bool) else True)
         # Crossfade guard: the platter switches tracks only after the new
         # identity has been reported continuously for switch_hold_s.
         self._now_spinning_filter = TrackStabilityFilter(
@@ -3614,6 +3623,8 @@ void main() {
         'screenshot': 'Screenshot',
         'replay_splash': 'Replay Splash',
         'invert': 'Invert Colors',
+        'now_spinning': 'Now Spinning Platter',
+        'now_playing_banner': 'Now Playing Banner',
         'display_single': 'Display: Single',
         'display_span_included': 'Display: Span (Included)',
         'display_span_all': 'Display: Span (All)',
@@ -3720,6 +3731,8 @@ void main() {
     _perf_frames_enabled: bool = False
     _transition_duration: float = 1.0
     _overlays = None
+    now_spinning_enabled: bool = True
+    now_playing_banner_enabled: bool = True
 
     _CONFIG_CONTRIBUTOR_ATTRS = (
         '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
@@ -3761,6 +3774,19 @@ void main() {
                 self._set_transition_duration, fmt='{:.1f} s',
                 hint='How long each effect crossfade takes', section='Show',
             ))
+            specs.append(_ce_toggle(
+                'visuals.now_playing_banner', 'Now Playing banner',
+                self.now_playing_banner_enabled,
+                lambda v: self.set_now_playing_banner(float(v) >= 0.5),
+                hint='Track-change announcer, muted across every source (Shift+W)',
+                section='Announcements',
+            ))
+            specs.append(_ce_toggle(
+                'visuals.now_spinning', 'Now Spinning platter', self.now_spinning_enabled,
+                lambda v: self.set_now_spinning(float(v) >= 0.5),
+                hint='Corner platter card for the audible track (W)',
+                section='Announcements',
+            ))
             ov = self._overlays
             if ov is not None and callable(getattr(ov, 'set_hud_auto_hide', None)):
                 specs.append(_ce_toggle(
@@ -3789,6 +3815,18 @@ void main() {
     def _set_transition_duration(self, value: float) -> None:
         """Set the effect crossfade length (clamped to 0.2..4 s)."""
         self._transition_duration = max(0.2, min(4.0, float(value)))
+
+    def set_now_spinning(self, enabled: bool) -> bool:
+        """Enable/disable the Now Spinning platter; remembered across runs."""
+        self.now_spinning_enabled = bool(enabled)
+        self._remember_runtime('now_spinning_enabled', self.now_spinning_enabled)
+        return self.now_spinning_enabled
+
+    def set_now_playing_banner(self, enabled: bool) -> bool:
+        """Mute/unmute the track-change banner for every now-playing source."""
+        self.now_playing_banner_enabled = bool(enabled)
+        self._remember_runtime('now_playing_banner_enabled', self.now_playing_banner_enabled)
+        return self.now_playing_banner_enabled
 
     # -- Performance tab ------------------------------------------------------
     # Every core knob that trades render/audio/overlay cost for something.
@@ -6286,7 +6324,8 @@ void main() {
                         hh_b, mm_b = divmod(mm_b, 60)
                         now_playing_length = f'{hh_b:02d}:{mm_b:02d}:{ss_b:02d}' if hh_b > 0 else f'{mm_b:02d}:{ss_b:02d}'
             overlays.set_overlay_banner(*_hub.banner_args(
-                _now_playing_snap, now_playing_visible == 'YES',
+                _now_playing_snap,
+                now_playing_visible == 'YES' and self.now_playing_banner_enabled,
                 now_playing_status))
 
             # Playlist sync (cheap, always)

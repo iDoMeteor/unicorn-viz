@@ -481,6 +481,7 @@ class Overlays:
                 ('Ctrl+L', 'Toggle ProjectM-only mode (lock to ProjectM)'),
                 ('i', 'Invert colors'),
                 ('w', 'Now Spinning platter overlay'),
+                ('Shift+W', 'Now Playing banner (track-change announcer) on/off'),
             ],
         ),
     ]

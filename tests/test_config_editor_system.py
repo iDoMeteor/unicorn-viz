@@ -361,9 +361,17 @@ def test_activate_drains_the_overlay_request(tmp_path: Path) -> None:
 def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     rows = _rows(app, 'Visuals')
-    assert set(rows) == {'Effect duration', 'Transition length', 'HUD auto-hide',
-                         'HUD timeout', 'Flash messages'}
+    assert set(rows) == {'Effect duration', 'Transition length', 'Now Playing banner',
+                         'Now Spinning platter', 'HUD auto-hide', 'HUD timeout',
+                         'Flash messages'}
     specs = _specs(app, 'Visuals')
+    specs['Now Playing banner']['set'](0.0)
+    assert app.now_playing_banner_enabled is False
+    assert app.get_runtime_state('now_playing_banner_enabled') is False
+    specs['Now Spinning platter']['set'](0.0)
+    assert app.now_spinning_enabled is False
+    assert app.get_runtime_state('now_spinning_enabled') is False
+    assert _rows(app, 'Visuals')['Now Playing banner']['display'] == 'OFF'
     specs['Transition length']['set'](2.5)
     assert abs(app._transition_duration - 2.5) < 1e-9
     specs['HUD auto-hide']['set'](0.0)

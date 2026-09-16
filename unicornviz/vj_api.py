@@ -190,6 +190,9 @@ class VJApi:
 
     def set_now_spinning(self, enabled: bool) -> bool:
         """Enable/disable the core Now Spinning corner-platter overlay."""
+        setter = getattr(self._app, 'set_now_spinning', None)
+        if callable(setter):
+            return bool(setter(enabled))
         self._app.now_spinning_enabled = bool(enabled)
         return self._app.now_spinning_enabled
 
@@ -201,6 +204,23 @@ class VJApi:
     @property
     def now_spinning_enabled(self) -> bool:
         return bool(getattr(self._app, 'now_spinning_enabled', False))
+
+    def set_now_playing_banner(self, enabled: bool) -> bool:
+        """Mute/unmute the track-change ("now playing") banner for every source."""
+        setter = getattr(self._app, 'set_now_playing_banner', None)
+        if callable(setter):
+            return bool(setter(enabled))
+        self._app.now_playing_banner_enabled = bool(enabled)
+        return self._app.now_playing_banner_enabled
+
+    def toggle_now_playing_banner(self) -> bool:
+        """Flip the track-change banner mute; returns the new enabled state."""
+        return self.set_now_playing_banner(
+            not getattr(self._app, 'now_playing_banner_enabled', True))
+
+    @property
+    def now_playing_banner_enabled(self) -> bool:
+        return bool(getattr(self._app, 'now_playing_banner_enabled', True))
 
     def publish_bpm(self, source: str, bpm: float) -> None:
         """Publish a BPM estimate on the shared hint bus (under *source*).

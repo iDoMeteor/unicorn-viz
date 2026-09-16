@@ -76,11 +76,12 @@ def test_visuals_global_rows(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     rows = app.config_editor_global_rows('Visuals')
     assert [r['name'] for r in rows] == [
-        'Effect duration', 'Transition length', 'HUD auto-hide', 'HUD timeout',
-        'Flash messages',
+        'Effect duration', 'Transition length', 'Now Playing banner',
+        'Now Spinning platter', 'HUD auto-hide', 'HUD timeout', 'Flash messages',
     ]
     assert (rows[0]['min'], rows[0]['max']) == (10.0, 120.0)
-    assert [r['kind'] for r in rows] == ['slider', 'slider', 'toggle', 'slider', 'toggle']
+    assert [r['kind'] for r in rows] == [
+        'slider', 'slider', 'toggle', 'toggle', 'toggle', 'slider', 'toggle']
 
 
 def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:
