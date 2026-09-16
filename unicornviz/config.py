@@ -467,8 +467,12 @@ class Config:
         the right home for a runtime choice.
         """
         bucket = self._data.get(section)
-        if isinstance(bucket, dict):
-            bucket[key] = value
+        if not isinstance(bucket, dict):
+            # A drop-in section the owner never wrote: create it so the
+            # drop-in's ``cfg.get(section, default={})`` sees the override.
+            bucket = {}
+            self._data[section] = bucket
+        bucket[key] = value
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node = self._data

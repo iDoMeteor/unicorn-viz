@@ -577,6 +577,52 @@ Discovery path:
 2. Entries are forwarded to `Overlays.register_help_entries()`.
 3. Malformed entries are skipped safely; they should still be fixed promptly.
 
+## Contributing Settings to the Config Editor
+
+Any registered subsystem (or one of the app's own controller attributes)
+joins the `c` configuration editor by implementing two methods; core
+discovers it through the subsystem registry, so no core edit is needed.
+
+```python
+class MyController:
+    CONFIG_EDITOR_CATEGORY = 'Visuals'      # default tab for its rows
+    CONFIG_EDITOR_KEY = 'my_dropin'         # persistence prefix
+    CONFIG_EDITOR_TITLE = 'My drop-in'      # default section header
+
+    def config_editor_settings(self) -> list[dict]:
+        return [
+            {'name': 'glow', 'value': self.glow, 'min': 0.0, 'max': 1.0,
+             'hint': 'How much the frame glows'},
+            {'name': 'preview_fps', 'label': 'Preview fps cap', 'tab': 'Performance',
+             'kind': 'choice', 'choices': ('OFF', '10', '30', '60'),
+             'value': self.cap_index, 'hint': 'GPU readback ceiling'},
+            {'name': 'workers', 'tab': 'Performance', 'kind': 'choice',
+             'choices': ('2', '4', '8'), 'value': self.worker_index,
+             'restart': 'my_dropin'},        # a next-launch setting
+        ]
+
+    def set_config_setting(self, name: str, value: float):
+        ...  # apply live; a 'restart' row returns {config_key: value}
+```
+
+Row keys: `name` (setter key), `value`, `min`/`max` (sliders), and
+optionally `tab`, `kind` (`slider` | `toggle` | `choice`), `choices`,
+`label`, `display`, `hint` (tooltip + inline on the selected row),
+`badge`, `section`, `step`, `restart`.
+
+Persistence is core's job:
+
+- **Audio / Visuals rows** are saved in configuration profiles
+  (`runtime/config_profiles.json`) under `dropin.<KEY>.<name>`.
+- **Performance rows** (live) are remembered in runtime state as
+  `perf_dropin.<KEY>.<name>` and replayed through `set_config_setting`
+  at the end of the next startup.
+- **`restart` rows** call the setter, take its return value (a
+  `{config_key: value}` dict, or the raw value under `name`) and lay it
+  over the loaded config in memory, remembering it as
+  `config_overrides.<section>.<key>` so the next launch applies it
+  before the drop-in is built. `config.toml` itself is never written.
+
 ### Runtime Surface Rules
 
 For live runtime code, private fields are owner-module implementation details,

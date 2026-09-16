@@ -3736,7 +3736,7 @@ void main() {
 
     _CONFIG_CONTRIBUTOR_ATTRS = (
         '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
-        '_lyrics', '_webcam_system',
+        '_lyrics', '_webcam_system', '_streamer', '_control_room',
     )
 
     def _config_editor_settings_specs(self, tab: str) -> list[dict]:
@@ -4077,6 +4077,15 @@ void main() {
                 value = caster(stored)
             self.cfg.set_override(section, key, value)
             log.info('Runtime override: [%s] %s = %r', section, key, value)
+        # Drop-in RESTART rows (see _persist_dropin_restart): whole sections.
+        stored = self.get_runtime_state('config_overrides', default=None)
+        if isinstance(stored, dict):
+            for section, keys in stored.items():
+                if not isinstance(keys, dict):
+                    continue
+                for key, value in keys.items():
+                    self.cfg.set_override(str(section), str(key), value)
+                    log.info('Runtime override: [%s] %s = %r', section, key, value)
 
     def _restore_performance_settings(self) -> None:
         """Lay the config editor's live performance choices over a fresh app.
@@ -4120,6 +4129,20 @@ void main() {
             tooltips = _flag('perf_tooltips')
             if tooltips is not None:
                 self._overlays.set_tooltips_enabled(tooltips)
+        stored = self.get_runtime_state('perf_dropin', default=None)
+        if isinstance(stored, dict):
+            for prefix, ctrl in self._config_editor_contributors():
+                values = stored.get(prefix)
+                if not isinstance(values, dict):
+                    continue
+                for name, value in values.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    try:
+                        ctrl.set_config_setting(str(name), float(value))
+                    except Exception:
+                        log.debug('Performance restore failed: %s.%s', prefix, name,
+                                  exc_info=True)
 
     # Selectable render frame-rate caps.  0 means "follow the display".
     #
@@ -4418,43 +4441,123 @@ void main() {
             self._overlays.flash_message(
                 f'Audio latency: {label} (applies on restart)', 3.0)
 
+    def _config_editor_contributors(self) -> list[tuple[str, object]]:
+        """Controllers implementing the config-editor convention, as (prefix, ctrl).
+
+        The fixed attribute list plus every registered subsystem (deduped by
+        identity), so a drop-in appears the moment it registers, without a
+        core edit.  A contributor exposes ``config_editor_settings()`` and
+        ``set_config_setting(name, value)``; ``CONFIG_EDITOR_KEY`` names its
+        persistence prefix (default: the attribute / registry name).
+        """
+        candidates: list[tuple[str, object]] = [
+            (attr.lstrip('_'), getattr(self, attr, None))
+            for attr in self._CONFIG_CONTRIBUTOR_ATTRS
+        ]
+        subsystems = getattr(self, '_subsystems', None) or {}
+        candidates.extend((str(name), ctrl) for name, ctrl in list(subsystems.items()))
+        seen: set[int] = set()
+        found: list[tuple[str, object]] = []
+        for fallback, ctrl in candidates:
+            if ctrl is None or id(ctrl) in seen:
+                continue
+            if not (callable(getattr(ctrl, 'config_editor_settings', None))
+                    and callable(getattr(ctrl, 'set_config_setting', None))):
+                continue
+            seen.add(id(ctrl))
+            found.append((str(getattr(ctrl, 'CONFIG_EDITOR_KEY', fallback) or fallback), ctrl))
+        return found
+
     def _config_editor_dropin_specs(self, tab: str) -> list[dict]:
-        """Gather drop-in setting specs for a tab via the config-editor convention."""
+        """Gather drop-in setting specs for a tab via the config-editor convention.
+
+        A row is ``{'name', 'value', 'min', 'max'}`` plus, optionally:
+        ``tab`` (overrides the controller's ``CONFIG_EDITOR_CATEGORY`` for
+        that row), ``kind`` ('slider' | 'toggle' | 'choice'), ``choices``,
+        ``label`` (display name; ``name`` stays the setter key), ``display``,
+        ``hint``, ``badge``, ``section`` (default: the controller's
+        ``CONFIG_EDITOR_TITLE``), ``step``, and ``restart`` -- a config
+        section name marking a next-launch setting: the setter's return value
+        (a ``{key: value}`` dict, or the raw value under ``name``) is laid
+        over the loaded config and remembered as ``config_overrides.<section>``
+        for the next launch.  Live Performance-tab rows are remembered as
+        ``perf_dropin.<prefix>.<name>`` and re-applied at the end of startup.
+        """
         specs: list[dict] = []
-        for attr in self._CONFIG_CONTRIBUTOR_ATTRS:
-            ctrl = getattr(self, attr, None)
-            if ctrl is None or getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', None) != tab:
-                continue
-            getter = getattr(ctrl, 'config_editor_settings', None)
-            setter = getattr(ctrl, 'set_config_setting', None)
-            if not (callable(getter) and callable(setter)):
-                continue
-            prefix = str(getattr(ctrl, 'CONFIG_EDITOR_KEY', attr.lstrip('_')))
+        for prefix, ctrl in self._config_editor_contributors():
+            default_tab = str(getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', '') or '')
+            title = str(getattr(ctrl, 'CONFIG_EDITOR_TITLE', '')
+                        or prefix.replace('_', ' ').title())
             try:
-                rows = getter()
+                rows = ctrl.config_editor_settings()
             except Exception:
-                log.debug('config_editor_settings failed for %s', attr, exc_info=True)
+                log.debug('config_editor_settings failed for %s', prefix, exc_info=True)
                 continue
             for row in rows:
-                name = str(row.get('name', ''))
-                if not name:
+                if not isinstance(row, dict) or not str(row.get('name', '')):
                     continue
-                spec = {
-                    'key': f'dropin.{prefix}.{name}',
-                    'name': name,
-                    'value': float(row.get('value', 0.0)),
-                    'min': float(row.get('min', 0.0)),
-                    'max': float(row.get('max', 1.0)),
-                    'set': (lambda v, s=setter, n=name: s(n, v)),
-                }
-                # Optional per-row step (e.g. 1.0 for a 0/1 toggle). Without
-                # it, a quantizing setter can make a row unreachable: the
-                # default (max-min)/40 notch moves 0.0 -> 0.025, the setter
-                # floors it back to 0, and the value never accumulates.
-                if 'step' in row:
-                    spec['step'] = float(row['step'])
-                specs.append(spec)
+                if str(row.get('tab') or default_tab) != tab:
+                    continue
+                specs.append(self._dropin_row_spec(prefix, ctrl, title, tab, row))
         return specs
+
+    def _dropin_row_spec(self, prefix: str, ctrl: object, title: str, tab: str,
+                         row: dict) -> dict:
+        """Turn one contributor row into an editor spec with a persisting setter."""
+        name = str(row['name'])
+        kind = str(row.get('kind') or 'slider')
+        choices = tuple(str(c) for c in (row.get('choices') or ()))
+        value = float(row.get('value', 0.0))
+        step: float | None
+        if kind == 'choice' and choices:
+            lo, hi, step = 0.0, float(len(choices) - 1), 1.0
+        elif kind == 'toggle':
+            lo, hi, step = 0.0, 1.0, 1.0
+        else:
+            lo, hi = float(row.get('min', 0.0)), float(row.get('max', 1.0))
+            # Optional per-row step (e.g. 1.0 for a quantizing setter).
+            # Without it the default (max-min)/40 notch can be floored back
+            # by the setter and the row never moves.
+            step = float(row['step']) if 'step' in row else None
+        display = row.get('display')
+        if display is None:
+            if kind == 'choice' and choices:
+                display = choices[max(0, min(len(choices) - 1, int(round(value))))]
+            elif kind == 'toggle':
+                display = 'ON' if value >= 0.5 else 'OFF'
+            else:
+                display = f'{value:.3f}'
+        restart = str(row.get('restart') or '')
+        setter = ctrl.set_config_setting
+
+        def _set(v: float, s=setter, n=name, p=prefix, t=tab, r=restart) -> None:
+            result = s(n, v)
+            if r:
+                self._persist_dropin_restart(r, n, v, result)
+            elif t == 'Performance':
+                self._remember_runtime(f'perf_dropin.{p}.{n}', float(v))
+
+        spec: dict = {
+            'key': f'dropin.{prefix}.{name}',
+            'name': str(row.get('label') or name),
+            'kind': kind, 'value': value, 'min': lo, 'max': hi, 'set': _set,
+            'display': str(display), 'hint': str(row.get('hint') or ''),
+            'badge': str(row.get('badge') or ('RESTART' if restart else '')),
+            'section': str(row.get('section') or title),
+        }
+        if choices:
+            spec['choices'] = choices
+        if step:
+            spec['step'] = step
+        return spec
+
+    def _persist_dropin_restart(self, section: str, name: str, value: float,
+                                result: object) -> None:
+        """Lay a next-launch drop-in setting over the config and remember it."""
+        overrides = result if isinstance(result, dict) else {name: value}
+        for key, val in overrides.items():
+            self.cfg.set_override(section, str(key), val)
+            self._remember_runtime(f'config_overrides.{section}.{key}', val)
 
     def _config_editor_all_specs(self) -> list[dict]:
         """All persistable setting specs across the profile-backed tabs.

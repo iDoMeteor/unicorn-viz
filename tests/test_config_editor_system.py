@@ -421,3 +421,123 @@ def test_profile_persists_and_restores_dropin_setting(tmp_path: Path) -> None:
     assert cg2.intensity == 0.85
     assert app2.load_config_profile('Look A') is True
     assert abs(cg2.intensity - 0.2) < 1e-6
+
+
+# --- contributor convention 2.0: registry discovery, row tabs, restart rows -- #
+
+class _PerfContrib:
+    """A drop-in that puts look rows on Visuals and cost rows on Performance."""
+
+    CONFIG_EDITOR_CATEGORY = 'Visuals'
+    CONFIG_EDITOR_KEY = 'gizmo'
+    CONFIG_EDITOR_TITLE = 'Gizmo'
+
+    def __init__(self) -> None:
+        self.glow = 0.5
+        self.fps_cap = 2       # index into _CAPS
+        self.workers = 4
+        self.sparkle = True
+        self.calls: list[tuple[str, float]] = []
+
+    _CAPS = ('OFF', '10', '30', '60')
+
+    def config_editor_settings(self):
+        return [
+            {'name': 'glow', 'value': self.glow, 'min': 0.0, 'max': 1.0},
+            {'name': 'fps_cap', 'label': 'Preview fps cap', 'tab': 'Performance',
+             'kind': 'choice', 'choices': self._CAPS, 'value': self.fps_cap,
+             'hint': 'Readback ceiling'},
+            {'name': 'sparkle', 'tab': 'Performance', 'kind': 'toggle',
+             'value': 1.0 if self.sparkle else 0.0, 'section': 'Sparkle'},
+            {'name': 'workers', 'tab': 'Performance', 'kind': 'choice',
+             'choices': ('2', '4', '8'), 'value': ('2', '4', '8').index(str(self.workers)),
+             'restart': 'gizmo'},
+        ]
+
+    def set_config_setting(self, name, value):
+        self.calls.append((name, float(value)))
+        if name == 'glow':
+            self.glow = float(value)
+        elif name == 'fps_cap':
+            self.fps_cap = int(round(value))
+        elif name == 'sparkle':
+            self.sparkle = float(value) >= 0.5
+        elif name == 'workers':
+            self.workers = int(('2', '4', '8')[int(round(value))])
+            return {'tag_workers': self.workers}
+
+
+def test_contributors_are_discovered_through_the_registry(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    gizmo = _PerfContrib()
+    app._subsystems = {'gizmo_sub': gizmo}
+    assert [p for p, _c in app._config_editor_contributors()] == ['gizmo']
+    # Registered twice (attribute + registry) still counts once.
+    app._audio_out = gizmo
+    assert [p for p, _c in app._config_editor_contributors()] == ['gizmo']
+
+
+def test_rows_route_to_their_own_tab_with_presentation_passthrough(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    gizmo = _PerfContrib()
+    app._subsystems = {'gizmo': gizmo}
+    visuals = _rows(app, 'Visuals')
+    assert 'glow' in visuals and 'Preview fps cap' not in visuals
+    assert visuals['glow']['section'] == 'Gizmo'       # default section = title
+    perf = _rows(app, 'Performance')
+    cap = perf['Preview fps cap']
+    assert (cap['kind'], cap['choices'], cap['min'], cap['max'], cap['step']) == (
+        'choice', ('OFF', '10', '30', '60'), 0.0, 3.0, 1.0)
+    assert cap['display'] == '30' and cap['hint'] == 'Readback ceiling'
+    assert perf['sparkle']['display'] == 'ON' and perf['sparkle']['section'] == 'Sparkle'
+    assert perf['workers']['badge'] == 'RESTART'
+    # Core rows still come first; the drop-in section follows.
+    names = [r['name'] for r in app.config_editor_global_rows('Performance')]
+    assert names.index('Render scale') < names.index('Preview fps cap')
+
+
+def test_live_performance_rows_persist_and_restore_through_the_setter(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    gizmo = _PerfContrib()
+    app._subsystems = {'gizmo': gizmo}
+    specs = _specs(app, 'Performance')
+    specs['Preview fps cap']['set'](3.0)
+    specs['sparkle']['set'](0.0)
+    assert gizmo.fps_cap == 3 and gizmo.sparkle is False
+    assert app.get_runtime_state('perf_dropin') == {'gizmo': {'fps_cap': 3.0, 'sparkle': 0.0}}
+    # A fresh app + fresh controller: restore replays the remembered values.
+    fresh = _app(tmp_path)
+    gizmo2 = _PerfContrib()
+    fresh._subsystems = {'gizmo': gizmo2}
+    fresh._restore_performance_settings()
+    assert gizmo2.fps_cap == 3 and gizmo2.sparkle is False
+    assert ('fps_cap', 3.0) in gizmo2.calls
+
+
+def test_restart_rows_overlay_config_now_and_at_the_next_launch(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    gizmo = _PerfContrib()
+    app._subsystems = {'gizmo': gizmo}
+    _specs(app, 'Performance')['workers']['set'](2.0)      # '8'
+    assert app.cfg.get('gizmo', 'tag_workers') == 8         # applied in memory now
+    assert app.get_runtime_state('config_overrides') == {'gizmo': {'tag_workers': 8}}
+    assert 'perf_dropin' not in (app.get_runtime_state('', default={}) or {})
+    fresh = _app(tmp_path)
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('gizmo', 'tag_workers') == 8
+
+
+def test_visuals_rows_are_not_remembered_as_performance_state(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._subsystems = {'gizmo': _PerfContrib()}
+    _specs(app, 'Visuals')['glow']['set'](0.9)
+    assert app.get_runtime_state('perf_dropin', default=None) is None
+
+
+def test_set_override_creates_a_missing_section() -> None:
+    from unicornviz.config import Config
+    cfg = Config.__new__(Config)
+    cfg._data = {}
+    cfg.set_override('webcam', 'fps', 60)
+    assert cfg.get('webcam', 'fps') == 60
+    assert cfg.get('webcam', default={}) == {'fps': 60}
