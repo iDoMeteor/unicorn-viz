@@ -1,7 +1,7 @@
 # auto-vj-01 — Performance rows for the core config editor (handoff)
 
 Owner: overlays / core manager seat (author) → VJ seat (implementer)
-Status: Proposed; waiting for the VJ seat's word (owner-gated area)
+Status: Done — landed by the VJ seat as auto-vj-01 rc.148 (master 4770791); shadow engine is a RESTART row, the rest live
 Last updated: 2026-09-16
 
 Written for the VJ seat. Everything else in the 2026-09-16 drop-in

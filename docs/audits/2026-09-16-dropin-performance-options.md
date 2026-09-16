@@ -1,7 +1,7 @@
 # Drop-in performance options audit — candidates for the config editor
 
 Owner: overlays / core manager seat
-Status: Core, Tier A and Tier B wired 2026-09-16 (auto-vj-01 handed to the VJ seat; mixer items stay with the mixer team)
+Status: Core, Tier A (incl. auto-vj-01 rc.148 by the VJ seat) and Tier B wired 2026-09-16; mixer items stay with the mixer team
 Last updated: 2026-09-16
 
 The core config editor shipped its Performance tab in beta.144 with core
@@ -34,10 +34,10 @@ or belongs to that team's own surface; **C** = nothing to do.
 |---|---|---|---|---|
 | audio-out-01 | `max_voices` (16) | one-shot mixing per block | A | live; already a contributor (Audio) |
 | audio-out-01 | `blocksize` (1024), `samplerate` | output stream wakeups / underruns | A | RESTART badge |
-| auto-vj-01 | `shadow_engine` (v3 shadow detector) | a second full beat tracker per block | A | owner-gated area: needs the VJ seat's word before it goes live-toggleable |
-| auto-vj-01 | `genre_matcher_enabled`, `genre_candidate_scoring_enabled` | recommender scoring per eval | A | same caveat |
-| auto-vj-01 | `live_training_enabled`, `sequence_training_enabled` | JSONL logging per beat / heartbeat | A | toggle; off for a show, on for training |
-| auto-vj-01 | `profile_auto_reco_eval_interval_s`, `detector_log_interval_s`, `wide_bpm_sample_interval_s` | eval cadence | A | sliders |
+| auto-vj-01 | `shadow_engine` (v3 shadow detector) | a second full beat tracker per block | A → done (rc.148) | RESTART row: the tracker is built in `__init__` only and it is the v3 soak instrument, so no live toggle (VJ seat's decision) |
+| auto-vj-01 | `genre_matcher_enabled`, `genre_candidate_scoring_enabled` | recommender scoring per eval | A → done (rc.148) | live toggles |
+| auto-vj-01 | `live_training_enabled`, `sequence_training_enabled` | JSONL logging per beat / heartbeat | A → done (rc.148) | live toggles driving the corpus writers' `set_enabled()` (same path as the hotkeys); the hint names the JSONL-gap trade-off |
+| auto-vj-01 | `profile_auto_reco_eval_interval_s`, `detector_log_interval_s`, `wide_bpm_sample_interval_s` | eval cadence | A → done (rc.148) | all three as live sliders |
 | banner-01 | `drip_enabled` | re-rasterizes the banner every frame while animating (0.13.0 caches the static case) | B | already Alt+D in its modal; a Performance row would mirror it |
 | beat-flash-01 | `max_hz`, `max_brightness` | none (look) | C | |
 | candy-frame-01 | `pattern_interval_s` | none (look) | C | |
@@ -112,8 +112,9 @@ dj-mixer-01 items (mixer team's own tab), auto-vj-01 (handoff:
 Core beta.146 (convention 2.0) and the Tier A rows: control-room-01 0.18.0,
 audio-out-01 0.6.0, lyrics-01 0.5.0, spotify-01 rc.8, video-out-01 0.6.0,
 video-postfx-01 0.3.0, streaming-01 0.7.0, media-01 0.30.0, webcam-01 1.6.0.
-auto-vj-01 rows wait for the VJ seat's word. projectm-01 was reclassified
-(see its row).
+auto-vj-01 rows landed the same day by the VJ seat (rc.148, master 4770791;
+shadow engine as a RESTART row, everything else live). projectm-01 was
+reclassified (see its row).
 
 ## Proposed order (as written before wiring)
 
