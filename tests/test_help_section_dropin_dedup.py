@@ -85,7 +85,7 @@ def test_removed_entries_are_gone_from_core_help_sections() -> None:
 
 def test_audio_visual_section_shrank_to_genuinely_core_entries() -> None:
     entries = _audio_visual_entries()
-    assert len(entries) <= 13, (
+    assert len(entries) <= 14, (
         f'Audio + Visual has {len(entries)} entries — check for drop-in '
         'hotkeys that should live in their own drop-in HELP_ENTRIES instead'
     )
@@ -94,7 +94,7 @@ def test_audio_visual_section_shrank_to_genuinely_core_entries() -> None:
 def test_audio_visual_only_contains_genuinely_core_keys() -> None:
     expected = {
         'e', 'a / A', 'Ctrl+A', 'Alt+A / Alt+Shift+A', 'KP 0', 'm', 'Alt+M',
-        'B', 'c', 'Ctrl+Shift+P', 'Ctrl+L', 'i', 'w',
+        'B', 'c', 'Ctrl+Shift+P', 'Ctrl+L', 'i', 'w', 'Shift+W',
     }
     actual = {key for key, _desc in _audio_visual_entries()}
     assert actual == expected

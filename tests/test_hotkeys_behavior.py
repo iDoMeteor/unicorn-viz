@@ -18,6 +18,10 @@ class _VJApi:
         self.now_spinning_toggles = getattr(self, 'now_spinning_toggles', 0) + 1
         return self.now_spinning_toggles % 2 == 1
 
+    def toggle_now_playing_banner(self) -> bool:
+        self.banner_toggles = getattr(self, 'banner_toggles', 0) + 1
+        return self.banner_toggles % 2 == 0
+
     def register_key_handler(self, name: str, handler) -> None:
         self._handlers.append((name, handler))
 
@@ -481,3 +485,11 @@ def test_alt_a_falls_back_to_raw_cycle_without_auto_vj() -> None:
     handler.handle(sdl2.SDLK_a, sdl2.KMOD_ALT)
 
     assert any('house' in m for m in overlays.messages)
+
+
+def test_shift_w_toggles_now_playing_banner_not_the_platter() -> None:
+    handler, app, overlays = _handler()
+    handler.handle(sdl2.SDLK_w, sdl2.KMOD_SHIFT)
+    assert app.vj_api.banner_toggles == 1
+    assert getattr(app.vj_api, 'now_spinning_toggles', 0) == 0
+    assert overlays.messages[-1] == 'Now Playing banner: OFF'

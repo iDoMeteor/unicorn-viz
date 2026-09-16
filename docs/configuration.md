@@ -459,6 +459,12 @@ Notes:
     the loaded config (in memory only) before the subsystem that reads them
     is built. Delete a key to fall back to `config.toml`. None of these are
     part of a configuration profile.
+- Drop-in rows on the Performance tab persist the same way:
+    `perf_dropin.<KEY>.<name>` for live rows (replayed through the drop-in's
+    `set_config_setting` at startup) and `config_overrides.<section>.<key>`
+    for RESTART rows (laid over the loaded config before the drop-in is
+    built). See the developer guide, "Contributing Settings to the Config
+    Editor".
 
 ---
 
