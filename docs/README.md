@@ -28,6 +28,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **auto-vj-01 Performance rows for the config editor — handoff to the VJ seat (2026-09-16, proposed, owner-gated):** [docs/planning/auto-vj-config-editor-performance-rows-2026-09-16.md](planning/auto-vj-config-editor-performance-rows-2026-09-16.md)
 - **Music video decks — video files as DJ tracks, deck-clocked video layer, fader-driven fade (2026-09-13, consensus reached, tickets issued):** [docs/planning/music-video-decks-plan-2026-09-13.md](planning/music-video-decks-plan-2026-09-13.md)
 - **Control Room drop-in integration & uplift plan — every non-visual drop-in registers a panel/page, CR built-ins (POST FX, OUTPUT, STREAM) retire into their owners (2026-09-05, proposed, awaiting owner decisions §7):** [docs/planning/control-room-drop-in-integration-plan-2026-09-05.md](planning/control-room-drop-in-integration-plan-2026-09-05.md)
 - **Post-soak reminders — Progressive Trance/Melodic Techno genre gap, 8192-sample low-band buffer ideas (2026-09-04, deferred to "next week"):** [docs/planning/post-soak-reminders-2026-09-04.md](planning/post-soak-reminders-2026-09-04.md)

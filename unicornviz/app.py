@@ -3736,7 +3736,7 @@ void main() {
 
     _CONFIG_CONTRIBUTOR_ATTRS = (
         '_color_grade', '_audio_out', '_beat_flash', '_postfx_controller',
-        '_lyrics', '_webcam_system', '_streamer', '_control_room',
+        '_lyrics', '_webcam_system', '_streamer', '_control_room', '_unicorn_tears',
     )
 
     def _config_editor_settings_specs(self, tab: str) -> list[dict]:
