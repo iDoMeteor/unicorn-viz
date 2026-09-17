@@ -1275,6 +1275,18 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-16 — Windows DJ pack drops `webcam-01` and `multi-head-01`;
+  both packs repackaged from current code (core beta.149).** Owner call:
+  the DJ testers don't need the camera overlay or the second-screen
+  controller, and dropping them shrinks the bundle and removes two more
+  moving parts from an already-large pack. `packaging/dropins/windows-djs.txt`
+  now lists 18 drop-ins (was 20); `windows-general.txt` is unchanged (it
+  never carried either). Repackaged both zips against the current tree —
+  three weeks of drop-in work since the 2026-09-09 baseline, including the
+  quit-dialog restore, the Windows swap-interval/fullscreen fixes, the
+  font-resolver fixes in dj-mixer-01/midi-controllers-01, banner-01
+  defaulting off, the owner-state test-leak fixes, and the Config Editor
+  2.0 initiative (core beta.144-148).
 - **2026-09-12 — quit dialog restored (core beta.136).** The native yes/no
   box replaced by beta.121's two-press prompt is back by owner decision: that
   change was chasing the Windows stalls, which were the swap interval and the
