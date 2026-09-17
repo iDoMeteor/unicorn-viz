@@ -544,11 +544,6 @@ class App:
 
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
-        # Before any AudioData() gets constructed below -- including the
-        # scratch buffers further down in this method, well before
-        # AudioManager (which would otherwise set this itself) is built --
-        # see AudioData.configure_fft_bins's docstring.
-        AudioData.configure_fft_bins(self.cfg.get('audio', 'fft_bands', default=512))
         self._running = False
         self._confirm_exit_enabled = bool(self.cfg.get('ui', 'confirm_exit', default=True))
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))
@@ -746,8 +741,7 @@ class App:
         self._recorder: Recorder | None = None
         # Cached pactl sink enumeration for the Recording tab's source picker.
         self._recording_sources_cache: list[tuple[str, str]] | None = None
-        self._audio_scratch_current = AudioData()
-        self._audio_scratch_next = AudioData()
+        self._configure_audio_data_fft_bins()
         self._splash_config: dict | None = None
         self._last_splash_replay_t: float = -1e9
         self._fbo_a: moderngl.Framebuffer | None = None
@@ -5130,6 +5124,35 @@ void main() {
             self._dj_mixer = None
             log.warning('DjMixerController not available: %s', exc)
 
+    def _configure_audio_data_fft_bins(self) -> None:
+        """Apply ``[audio] fft_bands`` to ``AudioData`` and rebuild the scratch buffers.
+
+        Called twice: once in ``__init__`` (a reasonable default from
+        ``self.cfg`` as it stands then, for callers that never reach
+        ``run()`` -- tests construct an ``App`` directly) and again in
+        ``run()`` right after ``_apply_runtime_config_overrides()``, because
+        a RESTART-badged fft_bands choice persisted from a previous session
+        is only known once that override has actually been laid over
+        ``self.cfg`` -- which happens well after ``__init__`` already ran.
+
+        ``_audio_scratch_current``/``_audio_scratch_next`` must be rebuilt
+        here, not just ``AudioData.configure_fft_bins()`` called: unlike
+        ``self._audio``/``self._audio_raw`` (replaced every frame with
+        ``AudioManager``'s own already-correctly-sized buffers via
+        ``get_audio_data()``), the scratch pair is constructed once and only
+        ever written into in place by ``copy_audio_data()`` -- so a stale
+        size surviving from an earlier call here would crash the first such
+        write at the true final size instead of silently self-correcting.
+        Confirmed live 2026-09-17: a fft_bands=256 override applied in
+        ``run()`` after ``__init__`` had already built these two at the
+        on-disk default of 512 raised ``ValueError: operands could not be
+        broadcast together with shapes (256,) () (512,)`` in
+        ``copy_audio_data`` on the very first frame.
+        """
+        AudioData.configure_fft_bins(self.cfg.get('audio', 'fft_bands', default=512))
+        self._audio_scratch_current = AudioData()
+        self._audio_scratch_next = AudioData()
+
     def run(self) -> None:
         boot = _StartupProfiler()
         self._init_sdl()
@@ -5143,6 +5166,11 @@ void main() {
         # applied live (see _set_audio_latency_index); honour it here, at the
         # one point where the capture stream has not been opened yet.
         self._apply_runtime_config_overrides()
+        # A RESTART-badged fft_bands choice from a previous session is only
+        # known once the override above has been laid over self.cfg -- redo
+        # this now that it has been (see the method's own docstring for why
+        # __init__'s earlier call isn't enough on its own).
+        self._configure_audio_data_fft_bins()
         audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
         mixer_profile = self._boot_profile == PROFILE_MIXER
         if mixer_profile:
