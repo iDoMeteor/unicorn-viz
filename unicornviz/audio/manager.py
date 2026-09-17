@@ -31,6 +31,10 @@ class AudioManager:
     ) -> None:
         device_hint = cfg.get("audio", "device", default="")
         fft_bands = cfg.get("audio", "fft_bands", default=512)
+        # Before any AudioData() gets constructed below (or by App, if it
+        # hasn't already done the same from this same config value) -- see
+        # AudioData.configure_fft_bins's docstring.
+        AudioData.configure_fft_bins(fft_bands)
         # 10.0, matching the documented default in docs/configuration.md --
         # the code had drifted to 2.0, so the ring held a fifth of what the
         # reference promised. It is a rolling PCM ring, so the only cost is

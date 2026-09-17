@@ -65,9 +65,7 @@ from unicornviz.vj_api import VJApi
 
 _CLASSES = 12
 _W = 320          # chromagram strip time axis (columns)
-_F_BINS = 512     # matches AudioData.fft length
 _SAMPLE_RATE = 48000.0
-_BIN_HZ = _SAMPLE_RATE / (_F_BINS * 2.0)
 _SMOOTH = 0.80    # per-frame chroma EMA factor
 
 # A column is emitted on a fixed time base rather than once per frame. Per
@@ -327,8 +325,8 @@ void main() {
 """
 
 
-def _build_chroma_weights() -> np.ndarray:
-    """Build a (F_BINS, 12) bin-to-pitch-class weight matrix.
+def _build_chroma_weights(f_bins: int, bin_hz: float) -> np.ndarray:
+    """Build an (f_bins, 12) bin-to-pitch-class weight matrix.
 
     The shared Analyzer's FFT is 1024-point at 48kHz (46.875 Hz/bin) —
     deliberately small for low-latency beat detection, not tuned for pitch
@@ -356,8 +354,8 @@ def _build_chroma_weights() -> np.ndarray:
     """
     sigma = 0.85
     conf_power = 1.5
-    bins = np.arange(1, _F_BINS)
-    freqs = bins * _BIN_HZ
+    bins = np.arange(1, f_bins)
+    freqs = bins * bin_hz
     midi = 69.0 + 12.0 * np.log2(freqs / 440.0)
     midi_mod = np.mod(midi, 12.0)
 
@@ -367,10 +365,10 @@ def _build_chroma_weights() -> np.ndarray:
     gauss = np.exp(-(diff / sigma) ** 2)
 
     semitone_width_hz = freqs * (2.0 ** (1.0 / 12.0) - 1.0)
-    confidence = np.clip(semitone_width_hz / _BIN_HZ, 0.0, 1.0) ** conf_power
+    confidence = np.clip(semitone_width_hz / bin_hz, 0.0, 1.0) ** conf_power
     confidence = np.maximum(confidence, 0.05)
 
-    weights = np.zeros((_F_BINS, 12), dtype=np.float32)
+    weights = np.zeros((f_bins, 12), dtype=np.float32)
     weights[bins, :] = gauss * confidence[:, None]
     return weights
 
@@ -429,14 +427,14 @@ def _build_band_chroma_weights() -> np.ndarray:
     return weights
 
 
-def _fft_low_rolloff() -> np.ndarray:
+def _fft_low_rolloff(f_bins: int, bin_hz: float) -> np.ndarray:
     """Per-bin taper that hands the sub-``_BAND_XOVER_HZ`` region to the bands.
 
     Without it both sources would contribute down there and the low end would
     simply count twice, which reads as a permanent bass-heavy tilt across the
     whole strip.
     """
-    freqs = np.arange(_F_BINS, dtype=np.float64) * _BIN_HZ
+    freqs = np.arange(f_bins, dtype=np.float64) * bin_hz
     return np.clip((freqs - _BAND_XOVER_HZ * 0.6)
                    / (_BAND_XOVER_HZ * 0.8), 0.0, 1.0).astype(np.float32)
 
@@ -464,13 +462,17 @@ class AudioChromogram(BaseEffect):
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad(self._prog)
 
-        self._weights = _build_chroma_weights()
+        # f_bins/bin_hz track AudioData.fft_bins() (== [audio] fft_bands) so
+        # every array below agrees with the actual length of audio.fft.
+        self._fft_bins = AudioData.fft_bins()
+        self._bin_hz = _SAMPLE_RATE / (self._fft_bins * 2.0)
+        self._weights = _build_chroma_weights(self._fft_bins, self._bin_hz)
         self._band_weights = _build_band_chroma_weights()
-        self._fft_rolloff = _fft_low_rolloff()
+        self._fft_rolloff = _fft_low_rolloff(self._fft_bins, self._bin_hz)
         # Where each source's energy sits on the octave axis, for the strip's
         # second channel.
         self._fft_oct = np.log2(
-            np.maximum(np.arange(_F_BINS, dtype=np.float64) * _BIN_HZ, 1.0),
+            np.maximum(np.arange(self._fft_bins, dtype=np.float64) * self._bin_hz, 1.0),
         ).astype(np.float32)
         self._band_oct = np.log2(
             np.asarray(PERC_BAND_CENTERS_HZ, dtype=np.float64),

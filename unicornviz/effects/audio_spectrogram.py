@@ -15,7 +15,6 @@ from unicornviz.effects.base import AudioData, BaseEffect
 
 _W = 320  # time axis (columns)
 _H = 256  # frequency axis (rows)
-_F_BINS = 512
 
 _VERT = """
 #version 330
@@ -146,7 +145,7 @@ class AudioSpectrogram(BaseEffect):
         self._spec_tex = self.ctx.texture((_W, _H), 1, data=self._upload.tobytes())
         self._spec_tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
 
-        self._lut = _build_log_lut(_H, _F_BINS)
+        self._lut = _build_log_lut(_H, AudioData.fft_bins())
 
         self._bass = 0.0
         self._mid = 0.0
@@ -183,8 +182,9 @@ class AudioSpectrogram(BaseEffect):
             self._choose_style()
 
         # Build newest spectrogram column from FFT with log-frequency mapping.
-        fft = audio.fft[:_F_BINS]
-        col = fft[self._lut].astype(np.float32)
+        # self._lut was built against AudioData.fft_bins(), which is always
+        # audio.fft's actual length -- no slice needed to bring them in line.
+        col = audio.fft[self._lut].astype(np.float32)
         col = np.sqrt(np.clip(col, 0.0, 1.0))
 
         react = max(0.1, float(self.parameters['reactivity']))

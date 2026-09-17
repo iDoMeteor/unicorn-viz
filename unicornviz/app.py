@@ -544,6 +544,11 @@ class App:
 
     def __init__(self, config_path: str | Config = "config.toml") -> None:
         self.cfg = config_path if isinstance(config_path, Config) else Config(config_path)
+        # Before any AudioData() gets constructed below -- including the
+        # scratch buffers further down in this method, well before
+        # AudioManager (which would otherwise set this itself) is built --
+        # see AudioData.configure_fft_bins's docstring.
+        AudioData.configure_fft_bins(self.cfg.get('audio', 'fft_bands', default=512))
         self._running = False
         self._confirm_exit_enabled = bool(self.cfg.get('ui', 'confirm_exit', default=True))
         self._safe_mode = bool(self.cfg.get('dropins', 'safe_mode', default=False))

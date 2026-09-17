@@ -18,9 +18,7 @@ import numpy as np
 from unicornviz.audio.analyzer import PERC_BAND_CENTERS_HZ
 from unicornviz.effects.audio_chromogram import (
     _BAND_XOVER_HZ,
-    _BIN_HZ,
     _CLASSES,
-    _F_BINS,
     _build_band_chroma_weights,
     _build_chroma_weights,
     _fft_low_rolloff,
@@ -28,6 +26,12 @@ from unicornviz.effects.audio_chromogram import (
 )
 
 _CENTERS = np.asarray(PERC_BAND_CENTERS_HZ, dtype=np.float64)
+# The effect derives these from AudioData.fft_bins() at _init() time; these
+# tests exercise the module-level math functions directly (GL-free) at the
+# default band count, which is what fft_bands=512 (the shipped default)
+# resolves to.
+_F_BINS = 512
+_BIN_HZ = 48000.0 / (_F_BINS * 2.0)
 
 
 def test_band_weights_cover_only_below_the_crossover():
@@ -41,7 +45,7 @@ def test_band_weights_cover_only_below_the_crossover():
 
 def test_fft_rolloff_hands_the_low_end_over():
     """The FFT is fully faded out under the crossover and fully on above it."""
-    roll = _fft_low_rolloff()
+    roll = _fft_low_rolloff(_F_BINS, _BIN_HZ)
     assert roll.shape == (_F_BINS,)
     freqs = np.arange(_F_BINS) * _BIN_HZ
     assert roll[freqs < _BAND_XOVER_HZ * 0.5].max() == 0.0
@@ -55,7 +59,7 @@ def test_the_low_end_is_not_counted_twice():
     Summing an untapered FFT with the bands would double the sub-crossover
     region, which reads as a permanent bass-heavy tilt across the whole strip.
     """
-    roll = _fft_low_rolloff()
+    roll = _fft_low_rolloff(_F_BINS, _BIN_HZ)
     freqs = np.arange(_F_BINS) * _BIN_HZ
     low = freqs < _BAND_XOVER_HZ
     # Where the bands are authoritative, the FFT's contribution is well under
@@ -126,6 +130,6 @@ def test_sub_audio_bins_are_excluded_from_the_prefill():
 
 def test_live_fft_weights_still_present_and_shaped():
     """The original FFT path is unchanged in shape and still contributes."""
-    w = _build_chroma_weights()
+    w = _build_chroma_weights(_F_BINS, _BIN_HZ)
     assert w.shape == (_F_BINS, _CLASSES)
     assert w.sum() > 0.0
