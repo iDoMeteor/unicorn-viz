@@ -162,3 +162,24 @@ def test_windows_never_asks_for_an_interval_above_one(monkeypatch) -> None:
     assert _interval_for(20, refresh=60.0) == 1
     monkeypatch.setattr(app_mod.sys, 'platform', 'linux')
     assert _interval_for(30, refresh=60.0) == 2
+
+
+def test_no_cap_by_default() -> None:
+    """The real default (no config override at all) is 0 -- follow vsync.
+
+    Reverted 2026-09-18: a locked-30 default (beta.60, 2026-08-08) requested
+    SDL_GL_SetSwapInterval(2) on every session everywhere, tuned against one
+    Linux box under mirror+webcam load with zero Windows testing. On Windows
+    that interval is serviced as a multi-second deferred wait whenever the
+    window has focus -- the graphics-flashing/TV-signal-loss root cause.
+    """
+    from unicornviz.config import Config
+
+    cfg = Config('/nonexistent/path/does-not-exist.toml')
+    assert cfg.get('render', 'fps_limit') == 0
+
+
+def test_frame_limit_index_defaults_to_follow_vsync() -> None:
+    """The Performance-tab slider must default to the "0" position too."""
+    app = _app(limit=0)
+    assert app._frame_limit_index() == App._FRAME_LIMIT_CHOICES.index(0)

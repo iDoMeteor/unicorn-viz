@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.135**
+**Version 1.0.0-beta.152**
 
 ## Contact Me!
 
@@ -513,6 +513,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.152** — `[render] fps_limit` defaults to `0` (follow display
+  vsync) again, not `30`. The 30 default (beta.60, 2026-08-08) was tuned
+  against one Linux box under 4K mirror + webcam load and requested
+  `SDL_GL_SetSwapInterval(2)` on every session on every platform; on Windows
+  the driver serviced that as a multi-second deferred wait whenever the
+  window had focus, which is what the graphics-flashing/TV-signal-loss
+  reports traced back to (beta.124 already clamped a non-zero cap to
+  interval 1 on Windows specifically — this removes the need for that
+  clamp to ever fire by not capping anywhere by default). The setting
+  itself is unchanged and still selectable (0/24/30/60) on the config
+  editor's Performance tab.
 - **1.0.0-beta.151** — Second half of the fft_bands fix, caught live: `App.__init__` built `_audio_scratch_current`/`_audio_scratch_next` before a RESTART-badged fft_bands choice persisted from a previous session gets laid over `self.cfg` (that override only applies in `run()`), so the scratch pair could still be sized at the stale on-disk default and crash `copy_audio_data()` on the first real frame against the now-correctly-sized live buffers. `App._configure_audio_data_fft_bins()` is now called again right after the override is applied, before `AudioManager` is built.
 - **1.0.0-beta.150** — Fixed a crash on any `[audio] fft_bands` choice other than the default 512 (256/1024/2048, all offered in the config editor's Performance tab): `AudioData.fft` was a hardcoded 512-length buffer, independent of the analyzer's own fft_bands-sized arrays, so the audio-analysis thread died on the first frame (`could not broadcast input array from shape (N,) into shape (512,)`) and every audio-reactive effect went silently dead for the rest of the session. `AudioData.fft`'s length is now a single configured value (`AudioData.configure_fft_bins`) set from `fft_bands` before startup; Audio Centroid's FFT texture, Audio Chromogram's chroma-weight matrices and Audio Spectrogram's log-frequency LUT — each of which independently assumed 512 — now derive their own sizing from it too.
 - **1.0.0-beta.149** — OpenBLAS pinned to one thread at the entry point (`OPENBLAS_NUM_THREADS=1`, before numpy loads): its per-core workers busy-waited after every call and took CPU from the audio, render and mixer-analysis threads; an exported value still wins, and the Demucs subprocess keeps its own thread counts.

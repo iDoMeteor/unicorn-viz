@@ -89,7 +89,7 @@ def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:
     rows = {r['name']: r for r in app.config_editor_global_rows('Performance')}
     assert (rows['Render scale']['min'], rows['Render scale']['max']) == (0.5, 1.0)
     assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
-    assert rows['Frame limit']['value'] == 2.0  # config default 30
+    assert rows['Frame limit']['value'] == 0.0  # config default: follow vsync
     assert rows['Capture latency']['badge'] == 'RESTART'
 
 
@@ -125,10 +125,13 @@ def test_adjust_choice_steps_without_wrapping(tmp_path: Path) -> None:
     app._set_frame_limit_index = lambda v: picked.append(v)
     names = [r['name'] for r in app.config_editor_global_rows('Performance')]
     app._overlays._ce_param_idx = names.index('Frame limit')
-    app._config_editor_adjust(1.0)   # 30 -> 60
-    assert picked == [3.0]
-    app._config_editor_adjust(-1.0)  # back toward 30 (the stub never moved it)
-    assert picked == [3.0, 1.0]
+    app._config_editor_adjust(1.0)   # DISPLAY (config default, index 0) -> 24
+    assert picked == [1.0]
+    # The stub never writes back, so this re-reads the same unmoved default
+    # (index 0) and steps -1 from it -- the lower bound, which must clamp to
+    # 0 rather than wrap to the last choice (60, index 3).
+    app._config_editor_adjust(-1.0)
+    assert picked == [1.0, 0.0]
 
 
 class _ToggleDropin:

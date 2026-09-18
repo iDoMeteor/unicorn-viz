@@ -1275,6 +1275,48 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-18 (II) — root-caused and reversed against the whole
+  installer-break window (core beta.152).** Owner asked for an outline of
+  every rendering-pipeline change made during their August break, since the
+  Windows flashing/TV-signal-loss saga started once they resumed installer
+  testing. Traced it: installer-path commits stop 2026-08-08, resume
+  2026-09-04; every render-pipeline change in that gap was diagnosed and
+  validated from one live capture on the owner's own 3-display Linux mirror
+  rig (`performance-remediation-plan-2026-08-08.md`), zero Windows testing.
+  Two confirmed causes, both already found via stall dumps and both
+  Windows-special-cased days ago (beta.124 swap-interval clamp, beta.125
+  borderless fullscreen) — this entry is the paper trail connecting them to
+  their actual origin, plus the owner's decision on each:
+  - **`fullscreen_mode`**: the borderless-vs-`SDL_WINDOW_FULLSCREEN_DESKTOP`
+    branch traces to 2026-05-12 (`8a07548`, see
+    `drop-ins/multi-head-01/MATE-X11-MULTIHEAD-NOTES.md`) — added because
+    Marco/MATE on X11 ignores SDL fullscreen placement hints, reproduced on
+    Fedora 44/MATE. Checked this box directly: it's Fedora 44 **GNOME**/
+    Wayland, so the MATE branch is currently inactive here regardless —
+    `FULLSCREEN_DESKTOP` is what's been running on the owner's own daily
+    session the whole time, uneventfully. Owner call: keep the Linux logic
+    exactly as is (real, reproduced reason; inert on this box either way);
+    Windows already forced to borderless unconditionally since beta.125 —
+    no further change needed.
+  - **`[render] fps_limit`**: traces to 2026-08-08 (`ea964f7`, core
+    beta.60) — the *first* time this app ever called
+    `SDL_GL_SetSwapInterval` at all, defaulted to a locked 30 to steady a
+    ~35 ms/frame measurement under mirror+webcam load on an integrated
+    GPU. Owner call: revert the default to `0` (follow vsync) everywhere,
+    not just Windows — core beta.152. The setting and the Windows interval
+    clamp both stay (defense in depth for anyone who opts back into a
+    non-zero cap); it just is not the default on any platform any more.
+    Two tests added.
+  - **Not yet resolved, lower priority**: the secondary-window present-
+    guard's per-frame `SDL_GL_MakeCurrent` rebind (mechanism predates the
+    break, May/July; its skip threshold was retuned in it, Aug 8) is
+    Wayland-motivated per its own docstring and has never been checked on
+    Windows WGL. Test plan if flashing persists after this: `stall_dump_s
+    = 1.0` + `perf_frames = true` on the *current* build (every earlier
+    dump predates both fixes), with the mixer/control-room window open vs.
+    fully closed to isolate this path.
+  - Owner: "repository at rest and everything else running super smooth,
+    after we fix this and test, our RC1 is just about ready."
 - **2026-09-18 — Windows DJ pack drops `midi-controllers-01`, swaps
   `effects-retro` for `effects-ukiyo-e`; both packs repackaged from
   current code.** Owner call: 17 drop-ins now (was 18; correcting this

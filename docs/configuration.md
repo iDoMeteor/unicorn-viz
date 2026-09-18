@@ -215,7 +215,7 @@ unicorn-viz --dj-mixer-source --dj-mixer-autoplay-mode smart \
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `internal_scale` | float | `1.0` | Internal effect render scale before upscaling to screen. Use `0.5`-`1.0` for extra headroom on heavy scenes. |
-| `fps_limit` | int | `30` | Render frame cap. `0` follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank). Also on the config editor's Performance tab. |
+| `fps_limit` | int | `0` | Render frame cap. `0` (default since 2026-09-18) follows the display's own vsync; a positive value locks to the nearest whole division of the refresh rate (30 on a 60 Hz display = every second vblank) — on Windows a non-zero cap is clamped to interval 1 regardless, since interval ≥2 stalls for seconds under desktop composition on at least one Intel driver. Also on the config editor's Performance tab. |
 
 **Why the default is 30, not 60.** A loop that cannot finish inside one
 vblank misses it and lands on the next one regardless, so the effective rate

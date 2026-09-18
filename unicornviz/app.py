@@ -4200,7 +4200,7 @@ void main() {
         to remove.  A cap that does not divide the refresh rate evenly is
         rounded to the nearest interval that does, and reported.
         """
-        target = int(self.cfg.get('render', 'fps_limit', default=30))
+        target = int(self.cfg.get('render', 'fps_limit', default=0))
         if target <= 0:
             sdl2.SDL_GL_SetSwapInterval(1)
             log.info('Frame limit: following display vsync')
@@ -4230,7 +4230,7 @@ void main() {
 
     def _frame_limit_index(self) -> int:
         """Current render frame cap as a slider index."""
-        current = int(self.cfg.get('render', 'fps_limit', default=30))
+        current = int(self.cfg.get('render', 'fps_limit', default=0))
         if current in self._FRAME_LIMIT_CHOICES:
             return self._FRAME_LIMIT_CHOICES.index(current)
         return min(
