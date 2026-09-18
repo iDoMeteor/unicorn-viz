@@ -1277,9 +1277,11 @@ constraints, stated plainly:
 
 - **2026-09-18 — Windows DJ pack drops `midi-controllers-01`, swaps
   `effects-retro` for `effects-ukiyo-e`; both packs repackaged from
-  current code.** Owner call: 16 drop-ins now (was 18). Confirmed
-  `effects-ukiyo-e` has no extra dependencies (four effects, no
-  requirements.txt) before adding it. `windows-general.txt` is unchanged.
+  current code.** Owner call: 17 drop-ins now (was 18; correcting this
+  entry's earlier "16" — one dropped, one swapped 1-for-1 is a net change
+  of one, not two). Confirmed `effects-ukiyo-e` has no extra dependencies
+  (four effects, no requirements.txt) before adding it. `windows-general.txt`
+  is unchanged.
 - **2026-09-16 — Windows DJ pack drops `webcam-01` and `multi-head-01`;
   both packs repackaged from current code (core beta.149).** Owner call:
   the DJ testers don't need the camera overlay or the second-screen
