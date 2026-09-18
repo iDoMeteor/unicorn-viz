@@ -1,5 +1,5 @@
 [logging]
-level = "none"
+level = "info"
 perf_frames = false # requires log level debug on
 
 [window]
@@ -184,7 +184,7 @@ drop_sustain_fizzle_floor = 0.25     # absolute fizzle floor under the peak-rela
 # genre_matcher_enabled = true
 # genre_matcher_endorse_sigma = 0.06   # log2 sigma of the endorsement (tight: it backs one specific ACF hypothesis)
 postfx_cruise_slots = [1,2,3,4,5,6]
-log_decisions = false
+log_decisions = true
 live_training_enabled = false
 sequence_training_enabled = false
 live_training_corpus_path = "assets/training/corpus/live-corpus.jsonl"
@@ -413,8 +413,45 @@ preset_warmup_frames = 8
 enabled = true               # load the drop-in (idle until Shift+D)
 start_enabled = false   # open the mixer (window + REV1 + audio) at boot
 rev1_device = "rev1"         # MIDI port-name substring for the DDJ-REV1
+# controller: which hardware controller to load. "rev1" (default, shipped),
+# "rev1000" -- SPECULATIVE, a 1:1 port of the REV1 decode tables added
+# 2026-09-16 with no hardware validated against it yet (see
+# drop-ins/dj-mixer-01/rev1000_map.py) -- "s4mk3" -- also SPECULATIVE,
+# Traktor Kontrol S4 MK3 over USB HID (not MIDI), sourced from a
+# community-mapping research pass (see drop-ins/dj-mixer-01/s4mk3_input.py)
+# -- or "xdjxz" -- also SPECULATIVE, Pioneer XDJ-XZ over MIDI, transcribed
+# from Pioneer/AlphaTheta's own official MIDI Message List (see
+# drop-ins/dj-mixer-01/xdjxz_input.py). None of the three has hardware
+# validated against it yet. Uncomment the matching pair to try one.
+#controller = "rev1000"
+#rev1000_device = "rev1000"   # MIDI port-name substring for the DDJ-REV1000
+#controller = "s4mk3"         # no device-name key needed; matched by USB VID/PID
+#controller = "xdjxz"
+#xdjxz_device = "xdj-xz"      # MIDI port-name substring for the Pioneer XDJ-XZ
+#audio_diag_interval_s = 1    # Toggleable live in ⚙ SETTINGS -> PERFORMANCE (AUDIO DIAG INTERVAL).
+# ui_diag_interval_s: periodic render-time summary for the mixer's own PIL
+# raster thread (mean/p95/max ms per frame vs. the render_interval budget),
+# logged the same way the audio diag above is.  Added 2026-09-16 to chase a
+# report of "the mixer's own fps drops to ~1 while the visualiser stays
+# smooth" -- a stall localized to this one thread, not general CPU/GIL
+# contention (which would drag the visualiser's frame rate down too).  On
+# by default (10s); 0 disables the log line, the timing itself always runs.
+# Toggleable live in ⚙ SETTINGS -> PERFORMANCE (UI DIAG INTERVAL).
+#ui_diag_interval_s = 10
+# render_interval: seconds between mixer-window redraws (default 1/30, ~33ms
+# -- deliberately below the visualiser's own target so the two never compete
+# for the same core).  Toggleable live in ⚙ SETTINGS -> PERFORMANCE
+# (RENDER RATE, shown as fps).
+#render_interval = 0.0333
+# stems_cpu_fraction: fraction (0-1] of logical cores a demucs/torch stem-
+# extraction subprocess may use; half by default, floored at one thread.
+# Demucs pegs every core otherwise, starving whatever else is running
+# alongside it (2026-09-13).  Applies to the *next* extraction job, not one
+# already running.  Toggleable live in ⚙ SETTINGS -> PERFORMANCE
+# (DEMUCS CPU FRACTION).
+#stems_cpu_fraction = 0.5
 music_dir = "~/Music/crates" # crate folder browsed by the REV1 rotary + LOAD
-display_index = 4            # display the mixer window opens on
+display_index = 3            # display the mixer window opens on
 fullscreen = true           # borderless full-display window when true
 #blocksize=2048
 prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`); ~10.7 ms each at 48k/512.
@@ -436,14 +473,29 @@ prebuffer_blocks = 24   # PortAudio output buffer depth (blocks of `blocksize`);
 # Toggleable live in the GENERAL settings tab.  Default true.
 # dial_reset_on_load = true
 # pad_face_cache: render each distinct pad face once and paste it, instead of
-# drawing all 32 pads x 4 decks every frame.  Measured ~25-49% off a mixer
-# frame depending on scene.  OFF by default because it is not purely a
-# performance change: the raster path overwrites rather than blends, so drawn
-# directly the pads' glow and top-light land as literal translucent values,
-# while a cached tile composites them -- lit pads come out calmer, and the
-# frame stops going semi-transparent where a highlight sits.  Turn it on if
-# you prefer that look and want the frame time back.
-# pad_face_cache = true
+# drawing all 32 pads x 4 decks every frame.  Measured as the single biggest
+# line item in a mixer frame (~25-49% off, depending on scene) -- see
+# drop-ins/dj-mixer-01/docs/upcoming-work.md section J.  ON by default since
+# 2026-09-16 (was off from 0.137.0 through 0.206.0): it is not *purely* a
+# performance change -- the raster path overwrites rather than blends, so
+# drawn directly the pads' glow and top-light land as literal translucent
+# values, while a cached tile composites them -- but the cached result is
+# arguably more correct too (lit pads come out calmer, the frame stops going
+# semi-transparent where a highlight sits), so it is no longer opt-in.  Set
+# false to go back to the old look.
+# pad_face_cache = false
+# stem_split_engine: per-stem FX/color-filter routing (the stem-FX mask --
+# check a stem to feed it to the channel FX and, since 0.201.0, the color
+# filter/DIRTY too, leaving the rest dry).  Off is a one-shot performance
+# escape hatch: forces every deck straight to the single whole-deck DSP
+# chain regardless of any mask set, instead of the masked/dry split (which
+# runs EQ/filter/pitch twice per audio block).  Found live 2026-09-15: that
+# doubled cost is what tipped the audio engine's real-time budget over when
+# the mixer window sat on a CPU-constrained display output (a DisplayLink
+# adapter) -- hundreds of over-budget blocks per 10s vs a handful without
+# it.  Your stem-FX selections are remembered either way; this only
+# disables acting on them.  Default true.
+# stem_split_engine = true
 # tooltips: hover tooltips across the whole mixer.  A learning aid; once you
 # know the surface they are in the way.  Toggleable live in the GENERAL
 # settings tab (which remembers your choice and wins over this seed), and off
@@ -564,3 +616,4 @@ fps_cap = 30              # 0 = every rendered frame
 # cache_window_s = 4.0        # seconds of decoded frames kept per deck (scratch/loop hits stay in cache)
 # cache_long_edge = 720       # cached frame long edge in pixels (960 for sharper, at more GPU upload)
 # swap_hold_opacity = 0.9     # auto-vj: hold scene swaps while the video layer is above this
+
