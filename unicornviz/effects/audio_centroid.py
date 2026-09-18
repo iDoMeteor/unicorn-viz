@@ -38,7 +38,6 @@ from unicornviz.effects.base import AudioData, BaseEffect
 log = logging.getLogger(__name__)
 
 _NYQUIST_HZ       = 22050.0
-_FFT_BINS         = 512
 
 # Centroid normalization: 8 000 Hz covers ambient (≈800 Hz) through metal / psytrance
 # (3 500–5 000 Hz) with comfortable headroom; values above that clamp to 1.0.
@@ -60,7 +59,7 @@ _FRAG = """
 #version 330
 // Fragment — Audio Centroid spectral iris.
 // Uniforms: iTime, iResolution, iBass, iMid, iTreble, iBeat, iCentroid,
-//           iFFT (sampler2D 512×1, R = FFT magnitude 0–1),
+//           iFFT (sampler2D Nx1, R = FFT magnitude 0–1, N = fft_bands),
 //           iBrightness, iSpeed, iColorShift, iRings (int).
 // Output: fragColor (RGBA, premultiplied alpha not used).
 
@@ -71,7 +70,7 @@ uniform float     iMid;
 uniform float     iTreble;
 uniform float     iBeat;
 uniform float     iCentroid;    // normalized centroid [0 = bass … 1 = treble]
-uniform sampler2D iFFT;         // 512×1 texture, R = FFT magnitude 0–1
+uniform sampler2D iFFT;         // Nx1 texture, R = FFT magnitude 0–1
 uniform float     iBrightness;
 uniform float     iSpeed;
 uniform float     iColorShift;
@@ -208,7 +207,7 @@ class AudioCentroid(BaseEffect):
         _prog     — single GLSL program (fullscreen quad)
         _vao      — fullscreen quad VAO
         _vbo      — fullscreen quad VBO
-        _fft_tex  — 512×1 R32F texture updated each frame from audio.fft
+        _fft_tex  — Nx1 R32F texture updated each frame from audio.fft
 
     Thread safety: all GL operations happen on the main thread; audio.fft
     is read-only access to a snapshot owned by the audio thread.
@@ -230,15 +229,18 @@ class AudioCentroid(BaseEffect):
         self._prog = self._make_program(_VERT, _FRAG)
         self._vao, self._vbo = self._fullscreen_quad()
 
-        # 512×1 single-channel float32 texture for FFT data (updated each frame).
-        self._fft_tex = self.ctx.texture((_FFT_BINS, 1), 1, dtype='f4')
+        # Nx1 single-channel float32 texture for FFT data (updated each frame).
+        # N tracks AudioData.fft_bins() (== [audio] fft_bands) so the upload
+        # in update() always matches this texture's shape.
+        self._fft_bins = AudioData.fft_bins()
+        self._fft_tex = self.ctx.texture((self._fft_bins, 1), 1, dtype='f4')
         self._fft_tex.filter   = moderngl.LINEAR, moderngl.LINEAR
         self._fft_tex.repeat_x = False
         self._fft_tex.repeat_y = False
 
         # Pre-allocated arrays — no hot-path allocation.
-        self._fft_buf      = np.zeros(_FFT_BINS, dtype=np.float32)
-        self._freq_weights = np.linspace(0.0, _NYQUIST_HZ, _FFT_BINS,
+        self._fft_buf      = np.zeros(self._fft_bins, dtype=np.float32)
+        self._freq_weights = np.linspace(0.0, _NYQUIST_HZ, self._fft_bins,
                                          endpoint=False, dtype=np.float32)
 
         # Smoothed audio state
@@ -264,7 +266,7 @@ class AudioCentroid(BaseEffect):
         self._beat = max(0.0, self._beat - dt * 3.8)
 
         # Spectral centroid from FFT magnitude spectrum
-        fft = audio.fft          # float32[512], 0–1 magnitudes
+        fft = audio.fft          # float32[N], 0–1 magnitudes
         fft_sum = float(fft.sum())
         if fft_sum > 1e-5:
             centroid_hz = float(np.dot(self._freq_weights, fft)) / fft_sum

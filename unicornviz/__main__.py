@@ -7,10 +7,22 @@ SDL2 driver selection (Wayland vs X11) happens in app.py before
 """
 from __future__ import annotations
 
+import os
+
+# OpenBLAS starts one worker per logical core the moment numpy loads, and
+# those workers busy-wait for a while after every BLAS call.  Nothing in
+# this process does a matrix product big enough to need them; what they
+# do is steal cores from the audio, render and mixer-analysis threads
+# (found by the mixer seat, 2026-09-16, as CPU held by idle BLAS threads).
+# One thread each, set before the first numpy import anywhere in the
+# process.  setdefault: an operator who exports their own value keeps it.
+# The Demucs subprocess in dj-mixer-01 sets its own thread counts and is
+# not affected.
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+
 import argparse
 import faulthandler
 import logging
-import os
 import shutil
 import sys
 from datetime import datetime

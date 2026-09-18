@@ -48,7 +48,9 @@ Helper methods provided by BaseEffect
 
 AudioData slots
 ---------------
-``fft``       np.float32[512]  Smoothed FFT magnitude spectrum (0–1 each band)
+``fft``       np.float32[N]    Smoothed FFT magnitude spectrum (0–1 each band); N
+                               tracks ``[audio] fft_bands`` (see
+                               ``AudioData.configure_fft_bins``), 512 by default
 ``waveform``  np.float32[512]  Normalised PCM waveform snapshot
 ``bass``      float            Averaged low-band energy  (0–1, may exceed 1)
 ``mid``       float            Averaged mid-band energy
@@ -91,8 +93,30 @@ class AudioData:
                  "vocal_mid_ratio", "vocal_syl", "vocal_ms_valid",
                  "spectral_contrast", "zcr", "complex_onset_flux")
 
+    # Length of every instance's ``fft`` array from now on. A class
+    # attribute, not a per-instance one, because every consumer that
+    # pre-sizes its own array against "the same length as AudioData.fft"
+    # (audio_centroid.py's GL texture, audio_chromogram.py's weight
+    # matrices, audio_spectrogram.py's log-frequency LUT) needs the same
+    # answer, and ``[audio] fft_bands`` is a restart-only setting -- one
+    # value for the whole process lifetime, not something that varies per
+    # instance. Set once, before startup, via ``configure_fft_bins()``
+    # (``AudioManager.__init__`` and ``App.__init__`` both call it from the
+    # same config value, so it is correct however the process was entered).
+    _fft_bins: int = 512
+
+    @classmethod
+    def configure_fft_bins(cls, n: int) -> None:
+        """Set the ``fft`` length for every ``AudioData`` constructed after this call."""
+        cls._fft_bins = int(n)
+
+    @classmethod
+    def fft_bins(cls) -> int:
+        """The currently configured ``fft`` length (see ``configure_fft_bins``)."""
+        return cls._fft_bins
+
     def __init__(self) -> None:
-        self.fft: np.ndarray = np.zeros(512, dtype=np.float32)
+        self.fft: np.ndarray = np.zeros(AudioData._fft_bins, dtype=np.float32)
         self.waveform: np.ndarray = np.zeros(512, dtype=np.float32)
         self.bass: float = 0.0
         self.mid: float = 0.0
