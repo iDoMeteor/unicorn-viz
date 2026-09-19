@@ -1275,6 +1275,36 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-19 — the "video game mode reset" survived beta.152's fixes;
+  actual fix landed (core beta.153).** Field report: beta.152 (fps_limit
+  reverted to 0, borderless-fullscreen from beta.125) still showed the
+  exact symptom. Checked every `SDL_WINDOW_FULLSCREEN_DESKTOP` call site
+  in `app.py` — all four are correctly gated behind
+  `_prefer_borderless_fullscreen()`, which returns `True` unconditionally
+  on Windows, so beta.125's fix has no gap. The real problem is one level
+  up: Windows' **Fullscreen Optimizations** heuristic (the thing behind
+  the Properties > Compatibility "Disable fullscreen optimizations"
+  checkbox) classifies *any* borderless top-level window that exactly
+  covers a monitor as a fullscreen game — it doesn't look at which SDL
+  flag was used to get there, so swapping the flag for a plain borderless
+  window never had a chance of escaping it. There is no SDL hint for
+  this (checked; confirmed via search — see sources in that turn).
+  - **Fix**: `App._disable_windows_fullscreen_optimizations()`, called
+    from `_init_sdl()` alongside the DPI hint. Writes the same
+    `AppCompatFlags\Layers` registry value the Compatibility checkbox
+    writes (`HKEY_CURRENT_USER`, no admin needed), keyed to
+    `sys.executable` — the bundled `python.exe` or `pythonw.exe` actually
+    running — merging into any existing flag string rather than
+    overwriting it. Six tests (fake in-memory `winreg`): sets the flag,
+    merges with an existing one, is idempotent, no-ops on Linux, and
+    never raises if the registry call fails.
+  - **Important caveat for the next test**: Windows reads compatibility
+    flags from its database at **process creation**, not live — this
+    only takes effect on the *next* launch of that exact exe path, not
+    the run that sets it. The tester needs to quit and relaunch once
+    after upgrading to beta.153 before judging whether it worked; a
+    "still happening" report from the very first launch on the new build
+    would not mean the fix failed.
 - **2026-09-18 (II) — root-caused and reversed against the whole
   installer-break window (core beta.152).** Owner asked for an outline of
   every rendering-pipeline change made during their August break, since the

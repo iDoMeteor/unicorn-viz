@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.152**
+**Version 1.0.0-beta.153**
 
 ## Contact Me!
 
@@ -513,6 +513,17 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.153** — Actually fixes the Windows fullscreen "video game
+  mode reset" (still happening on beta.152 despite beta.125's borderless
+  window). Root cause: Windows' Fullscreen Optimizations heuristic
+  classifies *any* borderless window that exactly covers a monitor as a
+  fullscreen game, independent of which SDL flag was used — there is no
+  SDL-level opt-out. The app now writes the same per-executable
+  compatibility flag the exe's own Properties > Compatibility checkbox
+  would ("Disable fullscreen optimizations"), keyed to `sys.executable`,
+  merged into any existing flag rather than overwritten. Windows reads
+  this from its compatibility database at process creation, so it takes
+  effect on the *next* launch, not the one that sets it.
 - **1.0.0-beta.152** — `[render] fps_limit` defaults to `0` (follow display
   vsync) again, not `30`. The 30 default (beta.60, 2026-08-08) was tuned
   against one Linux box under 4K mirror + webcam load and requested
