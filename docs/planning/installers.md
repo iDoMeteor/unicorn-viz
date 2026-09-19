@@ -1275,36 +1275,66 @@ constraints, stated plainly:
 
 ### Progress log
 
-- **2026-09-19 — the "video game mode reset" survived beta.152's fixes;
-  actual fix landed (core beta.153).** Field report: beta.152 (fps_limit
-  reverted to 0, borderless-fullscreen from beta.125) still showed the
-  exact symptom. Checked every `SDL_WINDOW_FULLSCREEN_DESKTOP` call site
-  in `app.py` — all four are correctly gated behind
-  `_prefer_borderless_fullscreen()`, which returns `True` unconditionally
-  on Windows, so beta.125's fix has no gap. The real problem is one level
-  up: Windows' **Fullscreen Optimizations** heuristic (the thing behind
-  the Properties > Compatibility "Disable fullscreen optimizations"
-  checkbox) classifies *any* borderless top-level window that exactly
-  covers a monitor as a fullscreen game — it doesn't look at which SDL
-  flag was used to get there, so swapping the flag for a plain borderless
-  window never had a chance of escaping it. There is no SDL hint for
-  this (checked; confirmed via search — see sources in that turn).
-  - **Fix**: `App._disable_windows_fullscreen_optimizations()`, called
-    from `_init_sdl()` alongside the DPI hint. Writes the same
-    `AppCompatFlags\Layers` registry value the Compatibility checkbox
-    writes (`HKEY_CURRENT_USER`, no admin needed), keyed to
-    `sys.executable` — the bundled `python.exe` or `pythonw.exe` actually
-    running — merging into any existing flag string rather than
-    overwriting it. Six tests (fake in-memory `winreg`): sets the flag,
-    merges with an existing one, is idempotent, no-ops on Linux, and
-    never raises if the registry call fails.
-  - **Important caveat for the next test**: Windows reads compatibility
-    flags from its database at **process creation**, not live — this
-    only takes effect on the *next* launch of that exact exe path, not
-    the run that sets it. The tester needs to quit and relaunch once
-    after upgrading to beta.153 before judging whether it worked; a
-    "still happening" report from the very first launch on the new build
-    would not mean the fix failed.
+- **2026-09-19 (II) — Fullscreen Optimizations diagnosis disproven by the
+  owner's own test; reverted (core beta.154). New lead: the launch chain
+  itself, never examined until now.** Owner manually disabled "Fullscreen
+  optimizations" for `pythonw.exe` via Explorer Properties > Compatibility
+  on beta.152, rebooted, relaunched — no change at all. That's the exact
+  mechanism beta.153's registry write was going to flip automatically, so
+  the whole diagnosis was wrong; beta.154 reverts it outright (`git revert
+  efd1d50`, not a rewrite) rather than leave dead-weight code behind.
+  Lesson for next time: do the free 30-second manual UI test *before*
+  writing the automated version, not after — this time it happened to be
+  offered first and the owner ran it, which is exactly why this got
+  caught before another round of "ship and wait."
+  - **Owner's own lead, unexamined until now: the launch/install process
+    itself changed.** Direct answer to "is this version even installing
+    anything": no. Every flashing report to date — every log path across
+    every beta — is under a Desktop-unzipped `UnicornViz-Portable-*\`
+    folder, i.e. the **portable zip**, which is not an installer at all
+    (no registry, no Program Files, no Start Menu, no uninstaller — a
+    self-contained folder, delete it and it's gone). The separate Inno
+    Setup `.exe` (real install: Program Files or per-user via
+    `PrivilegesRequired=lowest`, Start Menu/Desktop shortcuts, PATH task,
+    a real uninstaller) has never actually been the thing under test.
+    Both paths, though, end up running the bundled interpreter the same
+    detached way (see below), so this isn't "test the installer instead"
+    — it's specifically about how the process gets spawned, which is
+    shared by both.
+  - **Timeline, checked precisely via git, not memory:** `unicorn-viz.cmd`
+    started handing a no-argument double-click off to `pythonw.exe` via
+    `start ""` in **beta.120** (`20e747b`, 2026-09-09 — the "terminal
+    background" tester-note fix). Before that, beta.118/119 ran
+    `python.exe` directly, console attached. Cross-referencing this doc's
+    own contemporaneous entries: beta.118/119's documented issues were
+    both **boot-time-only** (webcam camera probe, hw-encoder probe) — no
+    focus/Alt+Tab pattern was ever reported against them. The "fine until
+    I do something else, Alt+Tab / Win key" framing first appears against
+    **beta.124** — after the `pythonw.exe`-via-`start` change. Not proof
+    (nobody may have specifically tried Alt+Tab before beta.124 either),
+    but a real, checkable correlation, and the two mechanisms already
+    tried (swap interval, Fullscreen Optimizations) both predate or are
+    unrelated to this change and neither fixed anything.
+  - **Why this is plausible, not just a coincidence of timing:** Windows'
+    `SetForegroundWindow` is deliberately restricted — a process only
+    keeps foreground-activation rights in a specific set of cases,
+    including "was started by the current foreground process"
+    (`learn.microsoft.com/.../nf-winuser-setforegroundwindow`). `start`
+    (cmd) and `Start-Process` (PowerShell, used by the installer's
+    `tools\unicorn-viz-gui.ps1`) both detach the child; whether that
+    detachment preserves foreground-activation rights for the grandchild
+    (`pythonw.exe`) is exactly the kind of thing that silently breaks.
+    SDL itself has a documented Windows bug in the same family:
+    "Fullscreen windows stuck on top after Alt+Tab focus loss"
+    (github.com/libsdl-org/SDL/issues/5509). This would explain a
+    focus-triggered repeated mode-reset independent of DWM Fullscreen
+    Optimizations, matching the owner's disconfirming test.
+  - **Not shipped as a fix — proposed as the next cheap isolation test**,
+    learning from the beta.153 mistake: a debug launcher variant that
+    runs the interpreter directly with no `start`/`Start-Process`
+    detachment hop (console visible again, temporarily) to test whether
+    removing that hop alone changes the behavior, before writing any
+    "fix" claiming to address it.
 - **2026-09-18 (II) — root-caused and reversed against the whole
   installer-break window (core beta.152).** Owner asked for an outline of
   every rendering-pipeline change made during their August break, since the

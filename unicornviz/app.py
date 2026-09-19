@@ -1326,59 +1326,6 @@ class App:
             sdl2.SDL_SetHint(b'SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS', b'0')
         except Exception as exc:
             log.warning('Failed to set the focus-loss hint: %s', exc)
-        self._disable_windows_fullscreen_optimizations()
-
-    def _disable_windows_fullscreen_optimizations(self) -> None:
-        """Opt this interpreter out of Windows' Fullscreen Optimizations.
-
-        beta.125 made the window a plain borderless window instead of
-        requesting ``SDL_WINDOW_FULLSCREEN_DESKTOP`` (the flag itself was
-        making Windows treat every focus change as a fullscreen-game mode
-        switch — TV signal loss, multi-second stalls). That did not fix it:
-        Windows' Fullscreen Optimizations / Game Bar heuristic classifies
-        *any* borderless top-level window that exactly covers a monitor as
-        a fullscreen game, independent of which SDL flag was used to get
-        there (2026-09-19 field report on beta.152, still "the video game
-        mode reset" on every focus change). There is no SDL hint for this;
-        the only opt-out is the same one exposed by the exe's own
-        Properties > Compatibility > "Disable fullscreen optimizations"
-        checkbox, which is backed by a per-executable-path registry value.
-
-        Written to ``HKEY_CURRENT_USER`` (no admin needed), keyed to
-        ``sys.executable`` -- the exact interpreter binary running right
-        now (``python.exe`` from a console launch, ``pythonw.exe`` from the
-        normal double-click path; each gets flagged on its own first use).
-        An existing value is merged, never overwritten, in case something
-        else already set a different compatibility flag for this same
-        path. Windows reads these flags from its compatibility database at
-        **process creation**, not live, so this only takes effect on the
-        *next* launch of that binary -- not the run that sets it.
-        """
-        if sys.platform != 'win32':
-            return
-        flag = 'DISABLEDXMAXIMIZEDWINDOWEDMODE'
-        try:
-            import winreg  # noqa: PLC0415 - Windows-only stdlib module
-
-            exe = os.path.normpath(sys.executable)
-            key_path = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers'
-            with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path) as key:
-                try:
-                    existing, _ = winreg.QueryValueEx(key, exe)
-                except FileNotFoundError:
-                    existing = ''
-                tokens = [t for t in existing.split() if t != '~']
-                if flag in tokens:
-                    return
-                tokens.append(flag)
-                winreg.SetValueEx(key, exe, 0, winreg.REG_SZ, '~ ' + ' '.join(tokens))
-            log.info(
-                'Disabled Windows Fullscreen Optimizations for %s '
-                '(takes effect next launch of this exe)', exe,
-            )
-        except Exception as exc:
-            log.warning('Could not set the fullscreen-optimizations '
-                        'compatibility flag: %s', exc)
 
     def rebind_main_gl_context(self) -> bool:
         """Re-bind the main audience window's GL context as current.
