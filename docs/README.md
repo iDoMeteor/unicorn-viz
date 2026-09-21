@@ -29,6 +29,7 @@ This is the canonical map for project documentation.
 
 - Planning: [docs/planning](planning)
 - **Ideas to experiment with later — a living backlog of technically-verified-but-unscheduled ideas (2026-09-18, ongoing):** [docs/planning/experiment-later-backlog.md](planning/experiment-later-backlog.md)
+- **Multi-head Control Room surface — include/exclude toggle audit + monitor-assignment proposal for the mixer/Control Room windows (2026-09-21, findings, awaiting consensus):** [docs/planning/multihead-control-room-surface-2026-09-21.md](planning/multihead-control-room-surface-2026-09-21.md)
 - **auto-vj-01 Performance rows for the config editor — handoff to the VJ seat (2026-09-16, proposed, owner-gated):** [docs/planning/auto-vj-config-editor-performance-rows-2026-09-16.md](planning/auto-vj-config-editor-performance-rows-2026-09-16.md)
 - **Music video decks — video files as DJ tracks, deck-clocked video layer, fader-driven fade (2026-09-13, consensus reached, tickets issued):** [docs/planning/music-video-decks-plan-2026-09-13.md](planning/music-video-decks-plan-2026-09-13.md)
 - **Control Room drop-in integration & uplift plan — every non-visual drop-in registers a panel/page, CR built-ins (POST FX, OUTPUT, STREAM) retire into their owners (2026-09-05, proposed, awaiting owner decisions §7):** [docs/planning/control-room-drop-in-integration-plan-2026-09-05.md](planning/control-room-drop-in-integration-plan-2026-09-05.md)
