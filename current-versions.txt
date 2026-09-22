@@ -4,12 +4,12 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.154      BETA          module
+  core (unicornviz)             1.0.0-beta.155      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.214.11            alpha ▲       module
+  dj-mixer-01                   0.215.0             alpha ▲       module
   media-01                      0.30.0              alpha ▲       module
-  control-room-01               0.20.0              alpha ▲       module
+  control-room-01               0.21.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
   banner-01                     0.14.0              alpha ▲       module
   projectm-01                   0.12.8              alpha ▲       module
@@ -35,7 +35,7 @@
   effects-vector                0.10.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  multi-head-01                 1.1.0-rc.2          RC            module
+  multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
   spotify-01                    1.0.0-rc.8          RC            module
   unicorn-tears-01              1.0.0-rc.3          RC            module

@@ -1868,6 +1868,28 @@ class VJApi:
         """Toggle the operator control-room window."""
         return self._app.toggle_control_room()
 
+    def set_control_room_display(self, index: int) -> tuple[bool, str]:
+        """Move the Control Room operator window to ``index``.
+
+        Live if the window is currently open (closes and reopens it on the
+        new display at once); otherwise the choice is remembered for its
+        next open. See multi-head-01's Displays page, 2026-09-22.
+        """
+        return self._app.set_control_room_display(int(index))
+
+    def control_room_display_index(self) -> 'int | None':
+        """Display the Control Room window is currently on, or None if closed."""
+        return self._app.control_room_display_index()
+
+    def set_mixer_display(self, index: int) -> tuple[bool, str]:
+        """Move the DJ mixer operator window to ``index``. Same live-if-open
+        contract as ``set_control_room_display``."""
+        return self._app.set_mixer_display(int(index))
+
+    def mixer_display_index(self) -> 'int | None':
+        """Display the mixer window is currently on, or None if closed."""
+        return self._app.mixer_display_index()
+
     def set_display_mode(self, mode: str | None = None, reset_to_config: bool = False) -> str:
         """Set the main audience display mode."""
         return self._app.set_display_mode(mode, reset_to_config=reset_to_config)

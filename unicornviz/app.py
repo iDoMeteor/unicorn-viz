@@ -1643,6 +1643,56 @@ class App:
             return self._destroy_control_room()
         return self._create_control_room()
 
+    def set_control_room_display(self, index: int) -> tuple[bool, str]:
+        """Move the Control Room operator window to ``index``.
+
+        Both drop-ins already destroy and recreate their whole controller
+        object on every open/close toggle (Shift+M here reuses that exact
+        path), so applying a new display needs no dedicated "move" plumbing
+        of its own -- just persist the choice and, if the window is
+        currently open, close and reopen it. Persisting through the
+        runtime store (not config.toml) matches ui_scale/theme's existing
+        pattern; ControlRoomController._initial_display_index() reads the
+        same key back at construction. See multi-head-01's Displays page,
+        2026-09-22.
+        """
+        index = max(0, int(index))
+        self.set_runtime_state('control_room.display_index', index)
+        if self._control_room is not None and bool(getattr(self._control_room, 'is_open', False)):
+            self._destroy_control_room()
+            opened, message = self._create_control_room()
+            if opened:
+                return True, f'Control Room moved to display {index}'
+            return False, message
+        return True, f'Control Room will open on display {index}'
+
+    def control_room_display_index(self) -> 'int | None':
+        """Display the Control Room window is currently on, or None if closed."""
+        if self._control_room is None or not bool(getattr(self._control_room, 'is_open', False)):
+            return None
+        return getattr(self._control_room, 'display_index', None)
+
+    def set_mixer_display(self, index: int) -> tuple[bool, str]:
+        """Move the DJ mixer operator window to ``index``.
+
+        Delegates to DjMixerController.set_display_index(), which owns its
+        own window-lifecycle (open_window()/close_window()) the way this
+        method owns Control Room's -- see multi-head-01's Displays page,
+        2026-09-22.
+        """
+        if self._dj_mixer is None:
+            return False, 'Mixer unavailable'
+        setter = getattr(self._dj_mixer, 'set_display_index', None)
+        if not callable(setter):
+            return False, 'Mixer unavailable'
+        return setter(int(index))
+
+    def mixer_display_index(self) -> 'int | None':
+        """Display the mixer window is currently on, or None if closed."""
+        if self._dj_mixer is None:
+            return None
+        return getattr(self._dj_mixer, 'display_index', None)
+
     def control_room_flash_gate_active(self) -> bool:
         """Return True when flash notifications should route to control room."""
         control_room_cfg = self.cfg.get('control_room', default={}) or {}

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.154**
+**Version 1.0.0-beta.155**
 
 ## Contact Me!
 
@@ -513,6 +513,21 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.155** — **`App` gains per-window monitor assignment for the
+  two operator windows**, driving multi-head-01's new Displays-page "MOVE
+  MIXER HERE" / "MOVE CONTROL ROOM HERE" buttons:
+  `set_control_room_display()`/`control_room_display_index()` (persists
+  through the runtime store, closes and reopens the window if it's
+  currently open — control-room-01 0.21.0 reads the store key back at
+  construction) and `set_mixer_display()`/`mixer_display_index()`
+  (delegates to `DjMixerController.set_display_index()`, dj-mixer-01
+  0.215.0, which owns its own window lifecycle). Both exposed through
+  `VJApi` as thin pass-throughs, per the Public Runtime Surface Rules.
+  Also fixes multi-head-01's Displays page RESET reverting to stale
+  `config.toml` instead of the active exclude set, and makes SAVE apply
+  excludes to the live window immediately instead of requiring a restart
+  (multi-head-01 1.1.0-rc.3). Closes out
+  `docs/planning/multihead-control-room-surface-2026-09-21.md`.
 - **1.0.0-beta.154** — Reverts beta.153's Windows registry write
   (`AppCompatFlags\Layers` / "Disable fullscreen optimizations"). Owner
   tested that exact setting by hand on beta.152 (Properties > Compatibility

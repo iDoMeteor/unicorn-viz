@@ -1,7 +1,8 @@
 # Multi-head Control Room surface — audit & monitor-assignment proposal
 
 Owner: overlays / core manager seat
-Status: Consensus reached 2026-09-22; ready to implement
+Status: Shipped 2026-09-22 — multi-head-01 1.1.0-rc.3, control-room-01
+0.21.0, dj-mixer-01 0.215.0, core 1.0.0-beta.155
 Last updated: 2026-09-22
 
 Two asks: (A) the Displays page's include/exclude toggle "seems a little
@@ -160,7 +161,10 @@ avoid touching this window-lifecycle code twice.
 
 ## Consensus (2026-09-22)
 
-1. **(A) Excludes go live-apply.** SAVE writes straight into
+All four items below shipped the same day: multi-head-01 1.1.0-rc.3,
+control-room-01 0.21.0, dj-mixer-01 0.215.0, core 1.0.0-beta.155.
+
+1. **(A) Excludes go live-apply.** → Done. SAVE writes straight into
    `self._excluded_display_indices` (not only the staged copy),
    recomputes `_refresh_active_layouts()`, and re-invokes
    `set_display_mode(self._display_mode)` to relayout the live window
@@ -169,17 +173,17 @@ avoid touching this window-lifecycle code twice.
    launch" footer text goes away; if a save can't apply cleanly for some
    reason, flash the failure instead of silently falling back to
    restart-required.
-2. **(A) Fix the RESET bug.** `reset_pending_excludes()` reverts to
+2. **(A) Fix the RESET bug.** → Done. `reset_pending_excludes()` reverts to
    `self._excluded_display_indices` (the actually-active set) instead of
    unconditionally re-reading `config.toml`.
-3. **(B) Displays page gets MOVE MIXER HERE / MOVE CONTROL ROOM HERE.**
+3. **(B) Displays page gets MOVE MIXER HERE / MOVE CONTROL ROOM HERE.** → Done.
    Primary and only surface for now — no duplicate config-editor rows.
    Needs the two narrow `vj_api` setters described in part B
    (`set_control_room_display(index)` / `set_mixer_display(index)`) for
    the page to reach the other two windows' live `_display_index`
    without a private cross-drop-in reach-in.
 4. **(B) Mixer gets Control Room's collision-avoidance parity, no
-   auto-bump.** Port `_resolve_target_display_index()`'s fallback
+   auto-bump.** → Done. Port `_resolve_target_display_index()`'s fallback
    (`(requested + 1) % count` when it would land on the audience output
    in single-display mode) to the mixer so both operator windows default
    away from the audience monitor the same way. If an operator explicitly
