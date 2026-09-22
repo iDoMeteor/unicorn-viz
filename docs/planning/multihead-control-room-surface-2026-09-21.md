@@ -1,8 +1,8 @@
 # Multi-head Control Room surface — audit & monitor-assignment proposal
 
 Owner: overlays / core manager seat
-Status: Findings; awaiting consensus before implementation
-Last updated: 2026-09-21
+Status: Consensus reached 2026-09-22; ready to implement
+Last updated: 2026-09-22
 
 Two asks: (A) the Displays page's include/exclude toggle "seems a little
 buggy" — diagnose it; (B) let the operator assign which monitor the mixer
@@ -158,20 +158,47 @@ same shape (mutate live state, call the existing reposition/relayout
 path, persist to the runtime store), so doing them in the same pass would
 avoid touching this window-lifecycle code twice.
 
-## Open questions for consensus
+## Consensus (2026-09-22)
 
-1. **(A) Live-apply or keep restart-required for excludes**, and if kept,
-   should the "applies on next launch" warning be louder / closer to the
-   SAVE button so it can't be missed mid-action?
-2. **(A) Fix RESET's source bug** regardless of the live-apply decision —
-   assume yes unless told otherwise, it's small and unambiguous.
-3. **(B) Displays-page buttons vs. per-drop-in config-editor rows** — or
-   both, sequenced.
-4. **(B) Mixer needs `_resolve_target_display_index()`-style collision
-   avoidance too?** Right now only Control Room avoids landing on the
-   audience display; worth the same treatment, or leave it operator-error
-   since the Displays page would make the collision visible on the map.
-5. **(B) What happens if two operator windows are assigned the same
-   display** — first-come-first-served with a flash warning, or should
-   assigning one to a monitor another already occupies auto-bump the
-   other, mirroring the existing audience-collision fallback?
+1. **(A) Excludes go live-apply.** SAVE writes straight into
+   `self._excluded_display_indices` (not only the staged copy),
+   recomputes `_refresh_active_layouts()`, and re-invokes
+   `set_display_mode(self._display_mode)` to relayout the live window
+   immediately when in a `*_included` mode — reusing exactly the path a
+   mode hotkey already exercises. No restart. The "applies on next
+   launch" footer text goes away; if a save can't apply cleanly for some
+   reason, flash the failure instead of silently falling back to
+   restart-required.
+2. **(A) Fix the RESET bug.** `reset_pending_excludes()` reverts to
+   `self._excluded_display_indices` (the actually-active set) instead of
+   unconditionally re-reading `config.toml`.
+3. **(B) Displays page gets MOVE MIXER HERE / MOVE CONTROL ROOM HERE.**
+   Primary and only surface for now — no duplicate config-editor rows.
+   Needs the two narrow `vj_api` setters described in part B
+   (`set_control_room_display(index)` / `set_mixer_display(index)`) for
+   the page to reach the other two windows' live `_display_index`
+   without a private cross-drop-in reach-in.
+4. **(B) Mixer gets Control Room's collision-avoidance parity, no
+   auto-bump.** Port `_resolve_target_display_index()`'s fallback
+   (`(requested + 1) % count` when it would land on the audience output
+   in single-display mode) to the mixer so both operator windows default
+   away from the audience monitor the same way. If an operator explicitly
+   assigns two windows to the same display via the new buttons, that's
+   their deliberate choice — flash a warning, don't silently move either
+   window.
+
+## Implementation notes carried forward from the audit
+
+- Excludes live-apply and monitor reassignment are the same shape
+  (mutate live state → re-invoke the existing relayout path → persist to
+  the runtime store the way `ui_scale`/`theme` already do) — worth
+  landing together rather than touching this window-lifecycle code
+  twice.
+- `display_index` becomes a `<drop-in>.display_index` runtime-store key
+  for both control-room-01 and dj-mixer-01, read the same
+  override-else-config way `_initial_ui_scale()` / `_initial_theme_name()`
+  already do, so a reassignment picked up on next window open also
+  survives a real app restart.
+- `MultiHeadController` doesn't currently hold references to the other
+  two windows — the two `vj_api` setters above are the only new
+  cross-drop-in surface this needs.
