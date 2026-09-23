@@ -6315,7 +6315,20 @@ void main() {
             if self._perf_frames_enabled:
                 perf_after_auto_advance = time.perf_counter()
 
-            # Update audio
+            # Update audio.  Refreshed every frame, not only when the
+            # selector UI is opened (2026-09-22 lockup): get_audio_data()
+            # below runs the *automatic* silence fallback on every call, and
+            # that path used to run against whatever claimed-device list was
+            # last pushed -- empty for an entire session if the operator
+            # never opened the manual selector. With nothing claimed,
+            # _device_is_claimed() is a no-op, so the fallback happily
+            # switched onto hardware the DJ mixer already had open at
+            # real-time priority, and the native stream-open call hung the
+            # main thread indefinitely (faulthandler caught it stuck in
+            # sounddevice's blocking start()). The refresh itself is cheap
+            # (in-memory attribute reads on a handful of controllers, no
+            # device I/O), so there is no reason to gate or throttle it.
+            self._refresh_claimed_audio_devices()
             self._audio = audio_manager.get_audio_data()
             self._audio_raw = audio_manager.get_audio_data_raw()
             if self._perf_frames_enabled:

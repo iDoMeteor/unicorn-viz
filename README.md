@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.155**
+**Version 1.0.0-beta.156**
 
 ## Contact Me!
 
@@ -513,6 +513,20 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.156** — **Fix a main-thread lockup in the audio-capture
+  silence fallback.** `App.run()` now calls
+  `_refresh_claimed_audio_devices()` every frame, right before
+  `audio_manager.get_audio_data()` — previously that refresh only ran when
+  the operator opened the manual audio-source selector, so a session that
+  never opened it left the claimed-device list permanently empty. With
+  nothing claimed, `capture.py`'s `_device_is_claimed()` guard (built for
+  exactly this collision) was a no-op: the automatic silence-based
+  fallback switched onto the DJ mixer's own hardware
+  (`DDJ-REV1: USB Audio` / `DDJ-REV1 Analog Surround 4.0`), and the
+  underlying blocking `sounddevice` stream-open call hung the render
+  thread indefinitely (2026-09-22, diagnosed from a faulthandler dump
+  after a force-quit). The refresh itself does no device I/O, so calling
+  it every frame is cheap.
 - **1.0.0-beta.155** — **`App` gains per-window monitor assignment for the
   two operator windows**, driving multi-head-01's new Displays-page "MOVE
   MIXER HERE" / "MOVE CONTROL ROOM HERE" buttons:
