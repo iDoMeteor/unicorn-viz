@@ -179,7 +179,8 @@ _PERF_ROWS = {
     'Render scale': 'slider', 'Frame limit': 'choice', 'Present guard': 'slider',
     'Preview capture': 'toggle', 'Preview fps ceiling': 'slider',
     'Preview width': 'choice', 'Capture latency': 'choice', 'FFT bands': 'choice',
-    'Capture block size': 'choice', 'System monitor sampling': 'slider',
+    'Capture block size': 'choice', 'Audio process': 'toggle',
+    'Audio process Python': 'choice', 'System monitor sampling': 'slider',
     'Tooltips': 'toggle', 'Video deck layer': 'toggle', 'Video cache edge': 'choice',
     'Per-frame perf logging': 'toggle',
 }
@@ -193,6 +194,7 @@ def test_performance_rows_cover_every_core_knob(tmp_path: Path) -> None:
     # Restart-only rows say so; live rows do not.
     restart = {n for n, r in rows.items() if r['badge'] == 'RESTART'}
     assert restart == {'Capture latency', 'FFT bands', 'Capture block size',
+                       'Audio process', 'Audio process Python',
                        'Video deck layer', 'Video cache edge'}
     # Choices carry their labels; toggles/choices step by one.
     assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
@@ -541,3 +543,81 @@ def test_set_override_creates_a_missing_section() -> None:
     cfg.set_override('webcam', 'fps', 60)
     assert cfg.get('webcam', 'fps') == 60
     assert cfg.get('webcam', default={}) == {'fps': 60}
+
+
+# --- [audio] process / process_python (beta.162 settings, menu rows) -------- #
+
+def _fake_free_threaded_python(data_home: Path) -> str:
+    py = data_home / 'unicorn-viz' / 'venv-ft' / 'bin' / 'python'
+    py.parent.mkdir(parents=True)
+    py.write_text('#!/bin/sh\n')
+    py.chmod(0o755)
+    return str(py)
+
+
+def test_audio_process_rows_default_to_in_app_python(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'no-ft-here'))
+    app = _app(tmp_path)
+    rows = _rows(app, 'Performance')
+    assert rows['Audio process']['display'] == 'ON'
+    assert rows['Audio process']['badge'] == 'RESTART'
+    py = rows['Audio process Python']
+    assert py['badge'] == 'RESTART'
+    assert py['choices'] == ('APP PYTHON',)          # nothing free-threaded installed
+    assert py['display'] == 'APP PYTHON'
+
+
+def test_free_threaded_is_offered_but_never_chosen_by_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
+    _fake_free_threaded_python(tmp_path / 'data')
+    app = _app(tmp_path)
+    py = _rows(app, 'Performance')['Audio process Python']
+    assert py['choices'] == ('APP PYTHON', 'FREE-THREADED')
+    assert py['display'] == 'APP PYTHON'
+    assert app.get_runtime_state('audio_process_python') is None   # opening the menu writes nothing
+
+
+def test_choosing_free_threaded_applies_on_the_next_launch(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
+    ft = _fake_free_threaded_python(tmp_path / 'data')
+    app = _app(tmp_path)
+    _specs(app, 'Performance')['Audio process Python']['set'](1.0)
+    assert app.get_runtime_state('audio_process_python') == ft
+    assert _rows(app, 'Performance')['Audio process Python']['display'] == 'FREE-THREADED'
+    assert any('restart' in m for m in app._overlays.messages)
+    fresh = _app(tmp_path)
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('audio', 'process_python') == ft
+
+
+def test_app_python_choice_overrides_a_hand_set_path(tmp_path: Path, monkeypatch) -> None:
+    """An empty interpreter is a real choice (the app's own), so it must win
+    over a path set by hand in config.toml at the next launch."""
+    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'no-ft-here'))
+    hand = {('audio', 'process_python'): '/opt/py/bin/python3.14t'}
+    app = _app(tmp_path, cfg=_StubCfg(dict(hand)))
+    py = _rows(app, 'Performance')['Audio process Python']
+    assert py['choices'] == ('APP PYTHON', 'CUSTOM')      # the hand-set path is kept visible
+    assert py['display'] == 'CUSTOM'
+    _specs(app, 'Performance')['Audio process Python']['set'](0.0)
+    assert app.get_runtime_state('audio_process_python') == ''
+    fresh = _app(tmp_path, cfg=_StubCfg(dict(hand)))
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('audio', 'process_python') == ''
+
+
+def test_audio_process_toggle_persists_for_the_next_launch(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    _specs(app, 'Performance')['Audio process']['set'](0.0)
+    assert app.get_runtime_state('audio_process') is False
+    assert _rows(app, 'Performance')['Audio process']['display'] == 'OFF'
+    fresh = _app(tmp_path)
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('audio', 'process') is False
+
+
+def test_empty_string_still_skipped_for_other_string_overrides(tmp_path: Path) -> None:
+    app = _app(tmp_path, cfg=_StubCfg({('audio', 'latency'): 'low'}))
+    app._runtime_state.set('audio_latency', '')
+    app._apply_runtime_config_overrides()
+    assert app.cfg.get('audio', 'latency') == 'low'

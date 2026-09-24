@@ -4003,6 +4003,20 @@ void main() {
             hint='Samples per capture read; larger = fewer wakeups, more lag',
             section='Audio',
         ))
+        specs.append(_ce_toggle(
+            'perf.audio_process', 'Audio process',
+            bool(self.cfg.get('audio', 'process', default=True)),
+            self._set_audio_process_enabled, badge='RESTART',
+            hint='Capture and analysis in a helper process (the mixer engine too)',
+            section='Audio',
+        ))
+        py_labels, py_index = self._audio_process_python_choices()
+        specs.append(_ce_choice(
+            'perf.audio_process_python', 'Audio process Python', py_index, py_labels,
+            self._set_audio_process_python_index, badge='RESTART',
+            hint='Free-threaded interpreter for the audio process; soak before live use',
+            section='Audio',
+        ))
         # -- Overlays ---------------------------------------------------------
         ov = self._overlays
         if ov is not None:
@@ -4112,6 +4126,51 @@ void main() {
         self._remember_runtime('video_decks_enabled', enabled)
         self._flash('Video deck layer: ' + ('on' if enabled else 'off') + ' (applies on restart)')
 
+    def _set_audio_process_enabled(self, value: float) -> None:
+        """Persist ``[audio] process``; read once at startup, so next launch."""
+        enabled = float(value) >= 0.5
+        self.cfg.set_override('audio', 'process', enabled)
+        self._remember_runtime('audio_process', enabled)
+        self._flash('Audio process: ' + ('on' if enabled else 'off') + ' (applies on restart)')
+
+    @staticmethod
+    def _free_threaded_audio_python() -> str:
+        """The free-threaded helper interpreter, if installed where the
+        installer puts it (``<XDG data>/unicorn-viz/venv-ft``), else ''."""
+        data_home = os.environ.get('XDG_DATA_HOME') or os.path.join(os.path.expanduser('~'), '.local', 'share')
+        candidate = os.path.join(data_home, 'unicorn-viz', 'venv-ft', 'bin', 'python')
+        return candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else ''
+
+    def _audio_process_python_options(self) -> list[tuple[str, str]]:
+        """``(label, path)`` choices for the audio process interpreter.
+
+        The app's own Python always; the free-threaded one only when it is
+        installed; and a path set by hand in config.toml as CUSTOM, so
+        opening the menu never loses it.
+        """
+        options = [('APP PYTHON', '')]
+        free_threaded = self._free_threaded_audio_python()
+        if free_threaded:
+            options.append(('FREE-THREADED', free_threaded))
+        current = str(self.cfg.get('audio', 'process_python', default='') or '').strip()
+        if current and current not in (path for _label, path in options):
+            options.append(('CUSTOM', current))
+        return options
+
+    def _audio_process_python_choices(self) -> tuple[tuple[str, ...], int]:
+        options = self._audio_process_python_options()
+        current = str(self.cfg.get('audio', 'process_python', default='') or '').strip()
+        index = next((i for i, (_label, path) in enumerate(options) if path == current), 0)
+        return tuple(label for label, _path in options), index
+
+    def _set_audio_process_python_index(self, value: float) -> None:
+        """Persist ``[audio] process_python``; the helper starts at launch."""
+        options = self._audio_process_python_options()
+        label, path = options[max(0, min(len(options) - 1, int(round(float(value)))))]
+        self.cfg.set_override('audio', 'process_python', path)
+        self._remember_runtime('audio_process_python', path)
+        self._flash(f'Audio process Python: {label.lower()} (applies on restart)')
+
     def _set_video_cache_edge_index(self, value: float) -> None:
         """Persist the video-deck cache resolution; applies on next launch."""
         idx = max(0, min(len(self._VIDEO_CACHE_EDGE_CHOICES) - 1, int(round(float(value)))))
@@ -4134,7 +4193,13 @@ void main() {
         ('audio_blocksize', 'audio', 'blocksize', int),
         ('video_decks_enabled', 'video_decks', 'enabled', bool),
         ('video_decks_cache_long_edge', 'video_decks', 'cache_long_edge', int),
+        ('audio_process', 'audio', 'process', bool),
+        ('audio_process_python', 'audio', 'process_python', str),
     )
+    # String overrides whose empty value is a real choice, not "unset":
+    # an empty process_python means "the app's own interpreter", and must be
+    # able to override a path someone set by hand in config.toml.
+    _EMPTY_STRING_OVERRIDES = frozenset({'audio_process_python'})
 
     def _apply_runtime_config_overrides(self) -> None:
         """Apply remembered RESTART choices on top of the loaded config."""
@@ -4143,7 +4208,9 @@ void main() {
             if stored is None:
                 continue
             if caster is str:
-                if not (isinstance(stored, str) and stored.strip()):
+                if not isinstance(stored, str):
+                    continue
+                if not stored.strip() and state_key not in self._EMPTY_STRING_OVERRIDES:
                     continue
                 value: object = stored.strip()
             elif caster is bool:
