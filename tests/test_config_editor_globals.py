@@ -78,10 +78,13 @@ def test_visuals_global_rows(tmp_path: Path) -> None:
     assert [r['name'] for r in rows] == [
         'Effect duration', 'Transition length', 'Now Playing banner',
         'Now Spinning platter', 'HUD auto-hide', 'HUD timeout', 'Flash messages',
+        'Detector BPM', 'Profile score', 'Recommended profile',
+        'Speed min', 'Speed max', 'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
     ]
     assert (rows[0]['min'], rows[0]['max']) == (10.0, 120.0)
     assert [r['kind'] for r in rows] == [
-        'slider', 'slider', 'toggle', 'toggle', 'toggle', 'slider', 'toggle']
+        'slider', 'slider', 'toggle', 'toggle', 'toggle', 'slider', 'toggle',
+        'toggle', 'toggle', 'toggle'] + ['slider'] * 6
 
 
 def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:

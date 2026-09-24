@@ -2346,7 +2346,12 @@ void main() {
         """Set the tab list (App-driven so tabs like 'Auto VJ' can be conditional)."""
         names = [str(n) for n in names] or ['Effects']
         if names != self._config_editor_tabs:
+            # Keep the open tab by name, not position: a tab added or
+            # removed earlier in the list must not switch what's showing.
+            current = self.config_editor_tab_name
             self._config_editor_tabs = names
+            if current in names:
+                self._config_editor_tab = names.index(current)
         if self._config_editor_tab >= len(self._config_editor_tabs):
             self._config_editor_tab = len(self._config_editor_tabs) - 1
 
@@ -3032,7 +3037,7 @@ void main() {
 
         # Saved-profile chips (single row; overflow is clipped).
         self._draw_text('PROFILES', px + 22, fy, scale=1.7 * u, color=(0.55, 0.75, 1.0, 0.85))
-        if self.config_editor_tab_name in ('Performance', 'Recording'):
+        if self.config_editor_tab_name in ('Drop-ins', 'Performance', 'Recording'):
             note = 'this tab follows the machine, not the profile'
             self._draw_text(note, px + 140 * u, fy + 1, scale=1.4 * u, color=(0.5, 0.6, 0.72, 0.7))
         chip_y = fy + 24.0 * u
@@ -6949,6 +6954,13 @@ void main() {
         """Toggle flash-message notifications on/off; returns new state."""
         self._flash_enabled = not self._flash_enabled
         return self._flash_enabled
+
+    def set_hud_detector_visibility(self, bpm: bool, profile_score: bool,
+                                    reco_profile: bool) -> None:
+        """Show/hide the three detector-internals HUD lines live."""
+        self._hud_show_detector_bpm = bool(bpm)
+        self._hud_show_profile_score = bool(profile_score)
+        self._hud_show_reco_profile = bool(reco_profile)
 
     def set_flash_messages_enabled(self, enabled: bool) -> None:
         """Set flash-message notification state explicitly."""

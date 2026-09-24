@@ -3669,6 +3669,14 @@ void main() {
                 continue
             self._remember_runtime(state_key, value)
             moved.append(f'[{section}] {key}')
+        for section, key, _label, _default, _hint in self._DROPIN_SWITCHES:
+            state_key = f'config_overrides.{section}.{key}'
+            if self.get_runtime_state(state_key, default=None) is not None:
+                continue
+            raw = file_value(section, *key.split('.'), default=missing)
+            if raw is not missing:
+                self._remember_runtime(state_key, bool(raw))
+                moved.append(f'[{section}] {key}')
         for prefix, ctrl in self._config_editor_contributors():
             try:
                 rows = ctrl.config_editor_settings()
@@ -3786,7 +3794,7 @@ void main() {
             except Exception:
                 log.debug('Config editor set failed: %r', req, exc_info=True)
         tabs = ['Effects'] + sorted(
-            ['Audio', 'Hotkeys', 'Performance', 'Recording', 'Visuals'])
+            ['Audio', 'Drop-ins', 'Hotkeys', 'Performance', 'Recording', 'Visuals'])
         overlays.set_config_editor_tabs(tabs)
 
         current = self.current_effect_class_name()
@@ -4052,8 +4060,31 @@ void main() {
                     ov.flash_messages_enabled, ov.set_flash_messages_enabled,
                     hint='Toast notifications for hotkey actions', section='Overlays',
                 ))
+            if ov is not None and callable(getattr(ov, 'set_hud_detector_visibility', None)):
+                production = bool(self.cfg.get('auto_vj', 'hud_production_mode', default=False))
+                for key, label in self._HUD_DETAIL_ROWS:
+                    specs.append(_ce_toggle(
+                        f'visuals.{key}', label,
+                        bool(self.cfg.get('overlays', key, default=False)),
+                        lambda v, k=key: self._set_hud_detail(k, float(v) >= 0.5),
+                        hint=('Hidden while Auto VJ production mode is on' if production
+                              else 'Detector internals on the HUD'),
+                        section='HUD detail',
+                    ))
+            for name, label, lo, hi, dmin, dmax in self._RANDOM_LOOK_ROWS:
+                for end, default in (('min', dmin), ('max', dmax)):
+                    key = f'random_{name}_{end}'
+                    specs.append(_ce_slider(
+                        f'visuals.{key}', f'{label} {end}',
+                        float(self.cfg.get('hotkeys', key, default=default)), lo, hi,
+                        lambda v, k=key: self.cfg.set_override('hotkeys', k, float(v)),
+                        fmt='{:.2f}', hint=f'Range the random-{name} hotkey picks from',
+                        section='Random look',
+                    ))
         elif tab == 'Performance':
             specs.extend(self._config_editor_performance_specs())
+        elif tab == 'Drop-ins':
+            specs.extend(self._config_editor_dropin_switch_specs())
         elif tab == 'Recording':
             specs.extend(self._config_editor_recording_specs())
         specs.extend(self._config_editor_dropin_specs(tab))
@@ -4397,9 +4428,22 @@ void main() {
             for section, keys in stored.items():
                 if not isinstance(keys, dict):
                     continue
-                for key, value in keys.items():
-                    self.cfg.set_override(str(section), str(key), value)
+                for key, value in self._flatten_overrides(keys):
+                    self.cfg.set_override(str(section), key, value)
                     log.info('Runtime override: [%s] %s = %r', section, key, value)
+
+    @staticmethod
+    def _flatten_overrides(node: dict, prefix: str = '') -> list[tuple[str, object]]:
+        """``{'web_api': {'enabled': True}}`` -> ``[('web_api.enabled', True)]``:
+        a nested table's overrides stay leaf-level, never replacing the table."""
+        out: list[tuple[str, object]] = []
+        for key, value in node.items():
+            path = f'{prefix}{key}'
+            if isinstance(value, dict):
+                out.extend(App._flatten_overrides(value, f'{path}.'))
+            else:
+                out.append((path, value))
+        return out
 
     def _restore_performance_settings(self) -> None:
         """Lay the config editor's live performance choices over a fresh app.
@@ -4887,6 +4931,67 @@ void main() {
         return specs
 
     _PROFILE_TABS = ('Audio', 'Visuals')
+
+    _HUD_DETAIL_ROWS = (
+        ('hud_show_detector_bpm', 'Detector BPM'),
+        ('hud_show_profile_score', 'Profile score'),
+        ('hud_show_reco_profile', 'Recommended profile'),
+    )
+    # (hotkey name, row label, slider lo, hi, default min, default max) --
+    # defaults match _apply_random_speed / _reactivity / _zoom.
+    _RANDOM_LOOK_ROWS = (
+        ('speed', 'Speed', 0.1, 5.0, 0.25, 2.50),
+        ('reactivity', 'Reactivity', 0.1, 5.0, 0.40, 2.00),
+        ('zoom', 'Zoom', 0.1, 3.0, 0.30, 1.80),
+    )
+
+    def _set_hud_detail(self, key: str, on: bool) -> None:
+        """Set one [overlays] hud_show_* flag and re-resolve the HUD live
+        (Auto VJ production mode still forces all three off)."""
+        self.cfg.set_override('overlays', key, bool(on))
+        ov = self._overlays
+        if ov is not None:
+            ov.set_hud_detector_visibility(*_resolve_hud_detector_visibility(self.cfg))
+
+    # Drop-ins tab: load / start switches, applied at the next launch.
+    # (section, dotted key, label, default when unset, hint).  Defaults
+    # match what each loader reads today.
+    _DROPIN_SWITCHES: tuple[tuple[str, str, str, bool, str], ...] = (
+        ('candy_frame', 'enabled', 'Candy Frame', True, 'Animated screen-edge frame'),
+        ('chat', 'enabled', 'Chat overlay', False, 'Stream chat on screen'),
+        ('color_grade', 'enabled', 'Color grade', True, 'Load the color-grade pass'),
+        ('color_grade', 'start_enabled', 'Color grade on at start', False,
+         'Start with the grade applied'),
+        ('control_room', 'enabled', 'Control Room', False, 'Operator window at startup'),
+        ('keystrokes', 'enabled', 'Keystroke log', False, 'Log key presses for training sessions'),
+        ('lyrics', 'enabled', 'Lyrics', True, 'Synced lyrics overlay'),
+        ('media', 'enabled', 'Media player', False, 'Media library and player'),
+        ('spotify', 'enabled', 'Spotify (local player)', False, 'Now playing from the desktop client'),
+        ('spotify', 'web_api.enabled', 'Spotify Web API', False, 'Now playing via the Web API'),
+        ('streaming', 'enabled', 'Streaming (RTMP)', False, 'RTMP streaming output'),
+        ('video_out', 'enabled', 'Video out', True, 'Virtual camera / video outputs'),
+        ('video_out', 'start_enabled', 'Video out on at start', False, 'Start publishing at boot'),
+        ('video_out', 'v4l2.enabled', 'V4L2 virtual camera', False, 'Publish to a v4l2loopback device'),
+        ('video_postfx', 'enabled', 'Video post-FX', True, 'Post-FX over video decks'),
+    )
+
+    def _config_editor_dropin_switch_specs(self) -> list[dict]:
+        specs: list[dict] = []
+        for section, key, label, default, hint in self._DROPIN_SWITCHES:
+            specs.append(_ce_toggle(
+                f'dropins.{section}.{key}', label,
+                bool(self.cfg.get(section, *key.split('.'), default=default)),
+                lambda v, s=section, k=key, n=label: self._set_dropin_switch(s, k, n, float(v) >= 0.5),
+                hint=hint, badge='RESTART',
+                section='Start on' if 'start_' in key else 'Load at startup',
+            ))
+        return specs
+
+    def _set_dropin_switch(self, section: str, key: str, label: str, on: bool) -> None:
+        """Persist a load/start switch; laid over config at the next launch."""
+        self.cfg.set_override(section, key, bool(on))
+        self._remember_runtime(f'config_overrides.{section}.{key}', bool(on))
+        self._flash(f'{label}: ' + ('on' if on else 'off') + ' (applies on restart)')
 
     _CE_ROW_PASSTHROUGH = ('name', 'value', 'min', 'max', 'kind', 'choices',
                            'display', 'hint', 'badge', 'section', 'step')

@@ -482,7 +482,17 @@ class Config:
             # drop-in's ``cfg.get(section, default={})`` sees the override.
             bucket = {}
             self._data[section] = bucket
-        bucket[key] = value
+        # A dotted key is a nested table (``web_api.enabled`` is
+        # [spotify.web_api] enabled): set just that leaf, never replace
+        # the table and lose its sibling keys.
+        *parents, leaf = str(key).split('.')
+        for part in parents:
+            child = bucket.get(part)
+            if not isinstance(child, dict):
+                child = {}
+                bucket[part] = child
+            bucket = child
+        bucket[leaf] = value
 
     def file_value(self, *keys: str, default: Any = None) -> Any:
         """The value config.toml itself sets at ``keys`` -- not a built-in
