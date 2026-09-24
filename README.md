@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.162**
+**Version 1.0.0-beta.163**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.163** — Audio process tuning from a live profile: a waited call publishes only its own object (the helper's command thread spent 62% re-publishing everything, device lists included); device lists refresh about once a second (`Policy.cold_derive`); reactivity is set main-side (auto-vj drifts it every frame and the helper never reads it); the claimed-device list is pushed only when it changes.
 - **1.0.0-beta.162** — **Capture and analysis run in the audio process** (`[audio] process`, default on; `unicornviz/audio/process.py`): a real `AudioManager` in the helper, the app's one a shadow reading the analysis frame the helper publishes every tick; onsets stream as a sequence-numbered log; capture state reaches the runtime store through a relay (one writer); dj-mixer-01 0.218.0 joins the same process via `vj_api.audio_process_host()`; helper death restarts capture in-process on the next frame. `AudioManager` itself: the silence fallback now ticks on the analysis thread, never the render thread (the 2026-09-22 lockup path), onsets are a cursor-read log, and `audio_snapshot()` is the one locked read. `remote_objects` gains value objects, event streams, per-tick derived values, factories loaded into a running helper, resync on attach, and tolerant unpickling.
 - **1.0.0-beta.161** — **Gen-2 GC pauses cut from 100-200 ms to ~1 ms.** `unicornviz.gc_tuning.freeze_heap()` moves the long-lived heap out of the cyclic collector's reach; the app calls it once after startup (one collection first, before the first frame) and dj-mixer-01 0.217.1 again after its library prewarm. Measured on 3.14.6 with a 2M-object heap: 124 ms -> 1 ms.
 - **1.0.0-beta.160** — **`unicornviz.remote_objects`: run an object graph in a helper process, drive it through shadows.** The helper (`python -m unicornviz.remote_objects`, interpreter selectable, never imports moderngl) builds the real objects and publishes their state as deltas; the main process swaps its own instances to shadow subclasses (declared read-only calls local, everything else forwarded, writes sequence-acknowledged so faders never flick back). Objects and bound methods cross as references, large arrays through shared memory, host-only facts as derived values; slow calls run off the command thread; helper death is reported, not hung. First user: dj-mixer-01 0.217.0 (audio engine process).

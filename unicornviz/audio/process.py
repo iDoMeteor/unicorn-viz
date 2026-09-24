@@ -72,20 +72,27 @@ _ZERO_PROBE = frozenset({
 # local: runs on the shadow.  derive / hot_derive: helper-only facts, published.
 # wait: forwarded, answer used.  slow: off the helper's command thread.
 # fire: forwarded, answer unused (listed for the drift test).
+# Reactivity is applied main-side only (get_audio_data scales the helper's
+# frame), so setting it is local: auto-vj drifts it every frame, and a round
+# trip per frame for a value the helper never reads was pure waste.
 MANAGER_LOCAL = frozenset({
+    'set_reactivity', 'reset_reactivity',
     'get_audio_data', 'get_audio_data_raw', 'get_reactivity', 'get_profile_name',
     'get_profile_key', 'get_audio_time', 'log_zero_frame_summary',
     'drain_onsets', 'list_profiles', 'get_profile_bpm_range',
     'get_profile_hud_label', 'get_profile',
 })
 MANAGER_DERIVE = frozenset({
-    'get_source_label', 'sample_rate', 'source_is_output_flags', 'list_sources',
-    'get_source_index', 'source_viable_flags', 'get_raw_input_rms',
+    'get_source_label', 'sample_rate', 'get_source_index', 'get_raw_input_rms',
     'get_xrun_count',
 })
+# Device enumeration (sounddevice queries, PulseAudio sink descriptions):
+# refreshed about once a second, not twenty times.
+MANAGER_COLD = frozenset({'source_is_output_flags', 'list_sources',
+                          'source_viable_flags'})
 MANAGER_HOT = frozenset({'audio_snapshot'})
 MANAGER_WAIT = frozenset({
-    'start', 'stop', 'set_reactivity', 'reset_reactivity', 'set_profile',
+    'start', 'stop', 'set_profile',
     'select_source', 'cycle_source', 'toggle_source_viable',
     'get_recent_pcm_window',
 })
@@ -96,17 +103,19 @@ MANAGER_SKIP = frozenset({
     '_capture', '_analyzer', '_front_buf', '_back_buf', '_snap_buf',
     '_analysis_lock', '_analysis_stop', '_analysis_thread', '_start_worker',
     '_last_data', '_last_data_raw', '_onset_cursor',
+    '_reactivity',              # main-side state (see MANAGER_LOCAL)
 }) | _ZERO_PROBE
 
 MANAGER_POLICY = Policy(local=MANAGER_LOCAL, wait=MANAGER_WAIT, slow=MANAGER_SLOW,
                         skip=MANAGER_SKIP, derive=MANAGER_DERIVE,
+                        cold_derive=MANAGER_COLD,
                         hot_derive=MANAGER_HOT, values=frozenset({'_profile'}),
                         streams=frozenset({'_onset_log'}))
 RELAY_POLICY = Policy(local=frozenset({'get'}), wait=frozenset({'set'}))
 
 #: Every public AudioManager name, classified (drift test).
 MANAGER_CLASSIFIED = (MANAGER_LOCAL | MANAGER_DERIVE | MANAGER_HOT | MANAGER_WAIT
-                      | MANAGER_FIRE)
+                      | MANAGER_FIRE | MANAGER_COLD)
 POLICIES: dict[type, Policy] = {AudioManager: MANAGER_POLICY, StateRelay: RELAY_POLICY}
 
 

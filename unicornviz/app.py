@@ -8259,6 +8259,7 @@ void main() {
         self._audio_host_died = False
         from unicornviz.remote_objects import detach_shadows  # noqa: PLC0415
         detach_shadows(host, prefix='audio/')
+        self._claimed_pushed = None     # the in-process capture has none yet
         log.error('Audio process died; capture and analysis restarted in-process')
         if self._audio_manager is None or self._boot_profile == PROFILE_MIXER:
             return
@@ -8291,8 +8292,15 @@ void main() {
                 claimed.update(str(n) for n in getter() if n)
             except Exception as exc:
                 log.debug('Audio device claim from %s skipped: %s', attr, exc)
+        # Pushed only when it changes: with capture in the audio process each
+        # push is a message, and the set is almost always the same frame to
+        # frame.  Cleared whenever the manager is rebuilt or recovered.
+        frozen = frozenset(claimed)
+        if frozen == getattr(self, '_claimed_pushed', None):
+            return
         try:
             self._audio_manager.set_claimed_device_names(claimed)
+            self._claimed_pushed = frozen
         except Exception as exc:
             log.debug('Could not publish claimed audio devices: %s', exc)
 

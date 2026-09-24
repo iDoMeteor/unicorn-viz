@@ -121,6 +121,9 @@ class Policy:
     skip: frozenset[str] = frozenset()
     derive: frozenset[str] = frozenset()
     hot_derive: frozenset[str] = frozenset()
+    #: Derived values that are costly to compute (device enumeration,
+    #: percentile summaries) and change rarely: evaluated about once a second.
+    cold_derive: frozenset[str] = frozenset()
     values: frozenset[str] = frozenset()
     streams: frozenset[str] = frozenset()
     #: Publish scalars and object references only -- no arrays, no
@@ -129,7 +132,8 @@ class Policy:
 
     def classified(self) -> frozenset[str]:
         """Every public name this policy says something about."""
-        return self.local | self.wait | self.slow | self.derive | self.hot_derive
+        return (self.local | self.wait | self.slow | self.derive | self.hot_derive
+                | self.cold_derive)
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +462,9 @@ class _Host:
             if req:
                 # State first, then the answer: a caller that reads the object
                 # right after a waited call (load, then bpm) sees the result.
-                self.publish_now()
+                # Only that object, and no derived values: some are costly
+                # (device lists), and the publisher sends them on its own.
+                self.publish_now(paths=[path], derived=False)
                 self.emit(('reply', req, True, result))
         except Exception as exc:
             if req:
@@ -494,7 +500,8 @@ class _Host:
 
     # -- state publication -----------------------------------------------------
 
-    def _delta(self, path: str, obj: Any, slow_tick: bool, in_use: set[int]) -> dict:
+    def _delta(self, path: str, obj: Any, slow_tick: bool, in_use: set[int],
+               cold_tick: bool = False, derived: bool = True) -> dict:
         last = self._last.setdefault(path, {})
         policy = self._policy(obj)
         skip = policy.skip | policy.streams | policy.values
@@ -546,8 +553,14 @@ class _Host:
             if fresh:
                 out[name] = _StreamChunk(fresh)
                 last[mark] = fresh[-1][0]
-        derived = (policy.hot_derive | policy.derive) if slow_tick else policy.hot_derive
-        for name in derived:
+        names: frozenset[str] = frozenset()
+        if derived:
+            names = policy.hot_derive
+            if slow_tick:
+                names = names | policy.derive
+            if cold_tick:
+                names = names | policy.cold_derive
+        for name in names:
             try:
                 val = getattr(obj, name)
                 if callable(val):
@@ -577,15 +590,20 @@ class _Host:
                     last[name] = val
         return out
 
-    def publish_now(self, slow_tick: bool = True) -> None:
-        """Collect and send one state delta for every registered object."""
+    def publish_now(self, slow_tick: bool = True, paths: list[str] | None = None,
+                    derived: bool = True, cold_tick: bool = False) -> None:
+        """Collect and send one state delta for every registered object (or
+        just ``paths``; ``derived=False`` skips derived values)."""
         with self._publish_lock:
             applied = self._applied        # read before the state it vouches for
             in_use: set[int] = set()
             deltas = {}
-            for path, obj in self.registry.items():
+            items = (self.registry.items() if paths is None else
+                     [(p, self.registry._by_path[p]) for p in paths
+                      if p in self.registry._by_path])
+            for path, obj in items:
                 try:
-                    d = self._delta(path, obj, slow_tick, in_use)
+                    d = self._delta(path, obj, slow_tick, in_use, cold_tick, derived)
                 except Exception as exc:        # pragma: no cover - defensive
                     log.warning('remote: publishing %s failed: %s', path, exc)
                     continue
@@ -593,14 +611,14 @@ class _Host:
                     deltas[path] = d
             if deltas:
                 self.emit(('state', deltas, applied))
-            if slow_tick:
+            if slow_tick and paths is None:
                 self.exporter.retire_unused(in_use)
 
     def publish_forever(self) -> None:
         while not self._stop.wait(self.period_s):
             self._tick += 1
             try:
-                self.publish_now(self._tick % 5 == 0)
+                self.publish_now(self._tick % 5 == 0, cold_tick=self._tick % 100 == 0)
             except (OSError, EOFError):
                 self._stop.set()
                 break
@@ -1032,7 +1050,7 @@ def shadow_class(cls: type, policy: Policy) -> type:
         if name.startswith('_'):
             continue
         raw = inspect.getattr_static(cls, name)
-        if name in policy.derive or name in policy.hot_derive:
+        if name in policy.derive or name in policy.hot_derive or name in policy.cold_derive:
             ns[name] = _derived(name, raw)
             continue
         if isinstance(raw, property):

@@ -200,3 +200,42 @@ def test_app_recovers_audio_in_process_when_the_helper_dies(audio) -> None:
     assert app._audio_host is None
     assert type(manager) is AudioManager                  # plain, in-process again
     assert started == [1]
+
+
+def test_reactivity_stays_main_side_without_a_round_trip(audio) -> None:
+    """auto-vj drifts reactivity every frame; the helper never reads it."""
+    host, manager, _ = audio
+    helper_before = host.call(audio_process.MANAGER_PATH, '__getattribute__',
+                              ('_reactivity',), {}, wait=True)
+    assert manager.set_reactivity(2.5) == pytest.approx(2.5)
+    assert manager.get_reactivity() == pytest.approx(2.5)
+    assert host.call(audio_process.MANAGER_PATH, '__getattribute__',
+                     ('_reactivity',), {}, wait=True) == helper_before
+    time.sleep(0.1)                                   # publishes don't clobber it
+    assert manager.get_reactivity() == pytest.approx(2.5)
+
+
+def test_claimed_devices_are_pushed_only_when_they_change() -> None:
+    app = _bare_app()
+    pushes: list = []
+
+    class _Mgr:
+        def set_claimed_device_names(self, names):
+            pushes.append(set(names))
+
+    class _Mixer:
+        names = ['DDJ-REV1']
+        def owned_audio_device_names(self):
+            return set(self.names)
+
+    app._audio_manager = _Mgr()
+    app._dj_mixer = _Mixer()
+    for _ in range(5):
+        app._refresh_claimed_audio_devices()
+    assert pushes == [{'DDJ-REV1'}]
+    app._dj_mixer.names = ['DDJ-REV1', 'Headphones']
+    app._refresh_claimed_audio_devices()
+    assert pushes[-1] == {'DDJ-REV1', 'Headphones'} and len(pushes) == 2
+    app._claimed_pushed = None                        # what recovery does
+    app._refresh_claimed_audio_devices()
+    assert len(pushes) == 3
