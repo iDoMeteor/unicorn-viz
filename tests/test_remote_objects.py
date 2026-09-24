@@ -6,16 +6,21 @@ the way dj-mixer-01's audio process is driven.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
+import sys
 import time
 from pathlib import Path
 
 import pytest
 
-from tests.fixtures import remote_toy
 from unicornviz import remote_objects as ro
 
-_FACTORY = Path(remote_toy.__file__)
+_FACTORY = Path(__file__).resolve().parent / 'fixtures' / 'remote_toy.py'
+_spec = importlib.util.spec_from_file_location('_remote_toy_fixture', _FACTORY)
+remote_toy = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = remote_toy
+_spec.loader.exec_module(remote_toy)
 
 
 def _until(pred, timeout: float = 3.0) -> bool:
