@@ -221,3 +221,48 @@ Whichever way it goes, suggested first steps:
 - [python-rtmidi upstream](https://github.com/SpotlightKid/python-rtmidi) and [unofficial 3.14t wheels](https://github.com/paperisiili/python-rtmidi-wheels)
 - [opencv-python free-threading discussion](https://github.com/opencv/opencv-python/issues/1029)
 - PyPI JSON API (`https://pypi.org/pypi/<name>/<version>/json`), queried 2026-09-22 and 2026-09-24 for the wheel tags above
+
+
+
+
+
+
+
+
+===========
+addendum pasted from perf team re: mixer
+
+The root problem is structural, not any one function. The mixer runs three CPU-heavy loops inside one Python process: an audio DSP loop with a 10.7 ms deadline per 512-frame block, a console renderer that paints a full 1920x1080 frame with Pillow 30 times a second, and the visualizer's own 33 ms GL loop. Python has one GIL, so at any instant only one of them runs Python code. Making the audio thread SCHED_RR does not fix that; it inverts it. The realtime thread preempts, then blocks on a GIL the Pillow thread holds, then holds it while the main loop starves. That is the 2x tax I measured on every main-loop bucket while a deck played. Add the dozen other threads the mixer spawns (loader, analyzer, stems, store writer, prewarm, scan, restore, recording flush, controller reader) and every one of them takes turns owning the interpreter.
+
+Real DJ software separates these by hard boundaries. Here is the shape it should take.
+
+Audio: its own process, shared memory, no locks
+The audio engine belongs in a separate process, not a thread. That is the only way in Python to give the DSP loop a CPU it never shares with the interpreter running the UI.
+
+Decoded audio lives in shared memory. Each deck's master and four stems are numpy views over multiprocessing.shared_memory blocks. Decode and resample happen in a worker process that writes into the block and hands over a name and a length. The UI process never holds sample arrays; today a loaded deck with stems is about 576 MB of Python-owned memory and every load spikes higher.
+Control goes one way, state comes back the other, both lock-free. Fader, EQ, play, cue, loop, stem gains, FX are small fixed-size records on a ring the UI writes and the audio process drains once per block. Position, level, BPM, beat phase, sync state come back as one struct written per block, read by anyone without a lock. Every deck.snapshot() call in the UI, the LED feedback, auto-play, and the section publisher becomes a memory read.
+The block loop allocates nothing. Preallocated buffers, no Python objects created per block, no logging, no dict lookups in the hot path. With the GIL contention gone, the existing numpy DSP is fast enough; the plan does not require rewriting the DSP, only relocating it.
+Stems stored at engine rate. Write them at 48 kHz at extraction time. Today each load resamples four 44.1 kHz stems with linear interpolation, which I measured at 0.5 s and 715 MB of transient memory per stem.
+Console: retained mode on the GPU, no full-frame repaint
+Today's console is 12,126 lines with 49 draw helpers, all immediate-mode: every 33 ms it allocates a new 1080p RGBA image, redraws everything, calls tobytes, and uploads 8.3 MB. That is a quarter gigabyte per second through the CPU for a picture that is mostly unchanged frame to frame.
+
+It should be layers with independent refresh reasons, composited by a handful of GL draws on the main thread:
+
+Layer	Rebuilt when	How
+Chrome, labels, panel frames	layout or theme change	cached texture, drawn as one quad
+Browser rows	scroll, selection, filter, library change	glyph atlas, one texture per visible page
+Waveform overview and zoom	track load only	peak envelope uploaded once as a 1D texture, drawn by a shader; playhead and zoom are uniforms, zero CPU per frame
+Meters, playheads, beat flash, set clock	every frame	a few quads driven by the audio state struct
+That removes the render thread entirely, the frame lock, the tobytes copy, and the upload. Per-frame CPU for the console drops from a full raster to building a few dozen vertices.
+
+If a full rewrite is too much at once, the honest intermediate step is dirty regions in the current Pillow code: track which inputs changed, repaint only those rectangles, upload only those rectangles with glTexSubImage2D, and let the browser and chrome refresh at 10 to 15 fps while meters stay at 30. That alone cuts most of the CPU and all of the full-frame uploads, and it is contained within ui.py.
+
+The contract with the main loop, and the data layer
+update() is O(1) and under 1 ms, always. It drains queues and reads the state struct. Nothing in it walks the library, stats a file, serializes anything, or touches a lock another thread holds across a draw. Anything proportional to library size runs on an event or a timer, never per frame. Last week's 30 ms playlist walk was exactly this rule being broken.
+No filesystem or JSON on any hot path. The SQLite store you already have planned closes this: point reads by hash, reconcile instead of rescan, tags and facets in the database, no per-row stat, and no 16 MB rewrite. The writer becomes one connection, which also ends the shutdown-order leak.
+Loads never run on the UI or main process. Decode, analyze, extract stems, and restore all happen in worker processes that write to shared memory. The startup restore-versus-arm race goes away when arming waits on the restore's completion message.
+What to measure so it stays fixed. The perf line now splits core controllers; the mixer should expose its own three numbers on it: audio block CPU as a percent of the 10.7 ms budget, console frame build time, and main-thread update() time. Targets: audio under 30 percent of budget, console under 5 ms per rebuilt frame and near zero on unchanged frames, update() under 1 ms. If a change moves one of those, the perf tool shows it the same day.
+
+Order I would do it in. Waveforms and dirty regions on the console first, since it is contained and visibly big. Then the audio process split, which is the biggest structural win and the riskiest, so it wants its own soak. SQLite lands independently on the already-agreed plan. The mixer grew into a real DJ engine; this is just giving it the process boundaries a real DJ engine has.
+
+

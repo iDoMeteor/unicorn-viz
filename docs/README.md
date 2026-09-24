@@ -28,6 +28,7 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **GPU mixer console + audio process split + multithreading — the combined mission (2026-09-24, active, executing):** [docs/planning/gpu-console-and-audio-process-2026-09-24.md](planning/gpu-console-and-audio-process-2026-09-24.md)
 - **Free-threaded Python (no-GIL) — findings, dependency audit and starting point for the free-threading team (2026-09-24, research handoff):** [docs/planning/free-threaded-python-2026-09-24.md](planning/free-threaded-python-2026-09-24.md)
 - **Ideas to experiment with later — a living backlog of technically-verified-but-unscheduled ideas (2026-09-18, ongoing):** [docs/planning/experiment-later-backlog.md](planning/experiment-later-backlog.md)
 - **Multi-head Control Room surface — include/exclude toggle audit + monitor-assignment proposal for the mixer/Control Room windows (2026-09-21, shipped 2026-09-22):** [docs/planning/multihead-control-room-surface-2026-09-21.md](planning/multihead-control-room-surface-2026-09-21.md)
