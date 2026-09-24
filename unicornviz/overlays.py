@@ -691,6 +691,7 @@ class Overlays:
         # Profile footer (Increment 4): save/load/delete/revert + name entry.
         self._ce_profiles: list[str] = []
         self._ce_profile_idx = -1
+        self._ce_active_profile = ''
         self._ce_dirty = False
         self._ce_name_mode = False
         self._ce_name_text = ''
@@ -2555,8 +2556,8 @@ void main() {
                     text=f'Edit {self._config_editor_tabs[i]} settings',
                 ))
         button_tips = {
-            'save': 'Save the current Audio/Visuals/effect settings as a named profile',
-            'load': 'Load the selected profile (applies live)',
+            'save': 'Save to the active profile (type a new name to create one); changes also save as you go',
+            'load': 'Load the selected profile and make it the active one',
             'delete': 'Delete the selected profile',
             'revert': 'Drop the selected effect\'s pinned parameters (re-randomize)',
         }
@@ -2755,11 +2756,31 @@ void main() {
 
     # -- Profile footer (save/load/delete/revert + name entry) ----------------
 
-    def set_config_editor_profiles(self, names: list[str]) -> None:
-        """Set the saved-profile name list."""
+    def set_config_editor_profiles(self, names: list[str], active: str = '') -> None:
+        """Set the saved-profile names and which one is active.
+
+        The selection follows the active profile until the operator clicks
+        another chip; that pick then stays put (purple, pulsing, with a
+        pulsing LOAD) until it is loaded and becomes the active one.
+        """
+        changed_active = str(active) != self._ce_active_profile
         self._ce_profiles = list(names)
-        if self._ce_profile_idx >= len(self._ce_profiles):
+        self._ce_active_profile = str(active)
+        if (changed_active or not (0 <= self._ce_profile_idx < len(self._ce_profiles))) \
+                and self._ce_active_profile in self._ce_profiles:
+            self._ce_profile_idx = self._ce_profiles.index(self._ce_active_profile)
+        elif self._ce_profile_idx >= len(self._ce_profiles):
             self._ce_profile_idx = -1
+
+    @property
+    def config_editor_pending_profile(self) -> str:
+        """The selected profile when it differs from the active one (a switch
+        that has not been loaded yet), else ''."""
+        if 0 <= self._ce_profile_idx < len(self._ce_profiles):
+            name = self._ce_profiles[self._ce_profile_idx]
+            if name != self._ce_active_profile:
+                return name
+        return ''
 
     def set_config_editor_dirty(self, dirty: bool) -> None:
         """Mark whether there are unsaved parameter overrides."""
@@ -2980,6 +3001,21 @@ void main() {
 
         self._render_config_editor_footer(px, py, pw, ph, t)
 
+    _CE_ACTIVE_PROFILE_BG = (1.0, 0.55, 0.10, 0.95)     # orange: the active profile
+    _CE_PENDING_PROFILE_BG = (0.45, 0.20, 0.75, 0.95)   # purple: picked, not loaded
+
+    @staticmethod
+    def _ce_pending_pulse_color(t: float) -> tuple[float, float, float, float]:
+        """Cyan border pulse for a profile switch that hasn't been loaded."""
+        return (0.30, 0.95, 1.0, 0.45 + 0.55 * (0.5 + 0.5 * math.sin(t * 5.0)))
+
+    def _ce_outline(self, x: float, y: float, w: float, h: float,
+                    color: tuple[float, float, float, float], th: float) -> None:
+        self._draw_rect(x, y, w, th, color)
+        self._draw_rect(x, y + h - th, w, th, color)
+        self._draw_rect(x, y, th, h, color)
+        self._draw_rect(x + w - th, y, th, h, color)
+
     def _render_config_editor_footer(
         self, px: float, py: float, pw: float, ph: float, t: float
     ) -> None:
@@ -3002,20 +3038,28 @@ void main() {
         chip_y = fy + 24.0 * u
         chip_h = 28.0 * u
         cx = px + 22.0
+        pending = self.config_editor_pending_profile
+        pulse = self._ce_pending_pulse_color(t)
         for i, name in enumerate(self._ce_profiles):
             w = len(name) * char_w + 20.0 * u
             if cx + w > px + pw - 22.0:
                 break
-            selected = i == self._ce_profile_idx
-            if selected:
-                self._draw_rect(cx, chip_y, w, chip_h, (0.12, 0.30, 0.62, 0.9))
-                self._draw_rect(cx, chip_y, w, chip_h * 0.4, (0.35, 0.7, 1.0, 0.14))
+            if name == self._ce_active_profile:
+                # Active: every change writes through to this one.
+                self._draw_rect(cx, chip_y, w, chip_h, self._CE_ACTIVE_PROFILE_BG)
+                text_col = (0.08, 0.05, 0.02, 1.0)
+            elif name == pending:
+                # Selected but not loaded: nothing switched yet.
+                self._draw_rect(cx, chip_y, w, chip_h, self._CE_PENDING_PROFILE_BG)
+                self._ce_outline(cx, chip_y, w, chip_h, pulse, 2.0 * u)
+                text_col = (1.0, 0.96, 1.0, 1.0)
             elif hover == f'profile:{i}':
                 self._context_menu_hover_glow(cx, chip_y, w, chip_h, t)
+                text_col = (0.75, 0.85, 1.0, 0.9)
             else:
                 self._draw_rect(cx, chip_y, w, chip_h, (0.06, 0.10, 0.22, 0.75))
-            self._draw_text(name, cx + 10 * u, chip_y + 6 * u, scale=1.7 * u,
-                            color=(1.0, 0.95, 0.55, 1.0) if selected else (0.75, 0.85, 1.0, 0.9))
+                text_col = (0.75, 0.85, 1.0, 0.9)
+            self._draw_text(name, cx + 10 * u, chip_y + 6 * u, scale=1.7 * u, color=text_col)
             self._ce_profile_chip_rects.append((cx, chip_y, w, chip_h, i))
             cx += w + 8.0
         if not self._ce_profiles:
@@ -3049,6 +3093,8 @@ void main() {
                 self._draw_rect(bxx, name_y, w, 32.0 * u, (0.10, 0.24, 0.50, 0.85))
                 self._draw_rect(bxx, name_y, w, 11.0 * u, (0.35, 0.7, 1.0, 0.12))
             self._draw_rect(bxx, name_y + 29.0 * u, w, 2.0, (0.4, 0.9, 1.0, 0.8))
+            if action == 'load' and pending:
+                self._ce_outline(bxx, name_y, w, 32.0 * u, pulse, 2.0 * u)
             self._draw_text(label, bxx + 13, name_y + 7 * u, scale=2.0 * u, color=(0.9, 0.96, 1.0, 0.95))
             self._ce_footer_button_rects.append((bxx, name_y, w, 32.0 * u, action))
             bx = bxx - 10.0

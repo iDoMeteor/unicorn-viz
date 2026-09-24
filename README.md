@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.168**
+**Version 1.0.0-beta.169**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.169** — **Config editor profiles save as you go.** There is always an active profile ("default" on first run, shown orange), every Audio/Visuals row and per-effect parameter change writes through to it (debounced, flushed at shutdown), and it loads at the end of startup, so menu settings survive a restart with no explicit save. Save writes to the active profile; a new name in NAME creates and activates one. Clicking another profile marks it purple, with its border and LOAD pulsing cyan until loaded. LOAD applies the selected profile. Deleting the active profile loads the next one instead of overwriting it. First step of moving settings out of config.toml into the menu (docs/audits/2026-09-24-config-menu-coverage-audit.md).
 - **1.0.0-beta.168** — **Performance tab rows for the audio process.** *Audio process* toggles `[audio] process` and *Audio process Python* picks `[audio] process_python`: APP PYTHON, FREE-THREADED (only when the helper interpreter is installed at `<XDG data>/unicorn-viz/venv-ft`), or CUSTOM for a hand-set path, which opening the menu never overwrites. Both are RESTART rows, remembered and laid over config.toml at the next launch; the free-threaded interpreter is never chosen by default. An empty interpreter (APP PYTHON) now counts as a real override, so it can win over a hand-set path.
 - **1.0.0-beta.167** — `unicornviz.workers`: a spawn-context process pool for pure batch jobs from path-loaded drop-in modules (`WorkerPool.submit(module_path, func, *args)`), workers at +10 niceness; `UNICORNVIZ_WORKERS` overrides the default (tests use 0 = in-thread). First user: dj-mixer-01 0.219.0's ANLZ runs.
 - **1.0.0-beta.166** — `remote_objects.adopt_array()`: in a helper process, owners move big buffers into shared memory as they adopt them, so publishing them to the main process costs no second copy (the helper was holding every track and stem twice). Retired segments are unmapped after 2 s instead of 10.

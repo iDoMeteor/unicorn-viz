@@ -87,6 +87,7 @@ class _Overlays(Overlays):
         self._ce_param_idx = 0
         self._ce_profiles = []
         self._ce_profile_idx = -1
+        self._ce_active_profile = ''
         self._ce_value_request = None
         self._sysmon_sample_interval = 0.45
         self._tooltips_enabled = True
@@ -148,7 +149,7 @@ def test_tabs_are_effects_then_alphabetical_and_info_tabs_are_gone(monkeypatch) 
     ov.set_config_editor_effects = lambda effects: None
     ov.set_config_editor_effect_index = lambda i: None
     ov.set_config_editor_params = lambda rows: None
-    ov.set_config_editor_profiles = lambda names: None
+    ov.set_config_editor_profiles = lambda names, active='': None
     ov.set_config_editor_dirty = lambda d: None
     app = object.__new__(App)
     app._overlays = ov
@@ -621,3 +622,151 @@ def test_empty_string_still_skipped_for_other_string_overrides(tmp_path: Path) -
     app._runtime_state.set('audio_latency', '')
     app._apply_runtime_config_overrides()
     assert app.cfg.get('audio', 'latency') == 'low'
+
+
+# --- profiles: always one active, write-through, boot load (2026-09-24) ---- #
+
+def _profile(app: App, name: str) -> dict:
+    payload = app._config_profile_store.get(name)
+    assert payload is not None, name
+    return payload
+
+
+def _visuals_index(app: App, name: str) -> int:
+    return [s['name'] for s in app._config_editor_settings_specs('Visuals')].index(name)
+
+
+def test_first_boot_saves_the_current_settings_as_an_active_default(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._activate_boot_profile()
+    assert app.config_profile_names() == ['default']
+    assert app.active_config_profile == 'default'
+    assert app.get_runtime_state('config_profile_active') == 'default'
+    assert 'settings' in _profile(app, 'default')
+
+
+def test_boot_loads_the_remembered_active_profile(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._effect_duration = 45.0
+    app.save_config_profile('club')
+    app._effect_duration = 90.0
+    app.save_config_profile('chill')              # now active
+    app._runtime_state.set('config_profile_active', 'club')
+    fresh = _app(tmp_path)
+    fresh._activate_boot_profile()
+    assert fresh.active_config_profile == 'club'
+    assert fresh._effect_duration == 45.0
+
+
+def test_boot_falls_back_to_the_first_profile_when_the_active_one_is_gone(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app.save_config_profile('alpha')
+    app._runtime_state.set('config_profile_active', 'deleted-long-ago')
+    fresh = _app(tmp_path)
+    fresh._activate_boot_profile()
+    assert fresh.active_config_profile == 'alpha'
+
+
+def test_menu_changes_write_through_to_the_active_profile(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    app._activate_boot_profile()
+    app._config_editor_set_value(_visuals_index(app, 'Effect duration'), 75.0)
+    app._flush_profile_autosave(force=True)
+    saved = _profile(app, 'default')['settings']
+    assert saved['audio.advance_interval_s'] == 75.0
+
+
+def test_effect_parameter_edits_write_through_too(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._activate_boot_profile()
+    app.set_effect_parameter('Plasma', 'speed', 2.5)
+    app._flush_profile_autosave(force=True)
+    assert _profile(app, 'default')['effects'] == {'Plasma': {'speed': 2.5}}
+
+
+def test_performance_tab_changes_do_not_touch_the_profile(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Performance')
+    app._activate_boot_profile()
+    app._config_editor_set_value(0, 0.7)          # render scale: machine, not show
+    assert app._profile_autosave_due == 0.0
+
+
+def test_writes_are_debounced(tmp_path: Path, monkeypatch) -> None:
+    import unicornviz.app as app_mod
+    now = [100.0]
+    monkeypatch.setattr(app_mod.time, 'monotonic', lambda: now[0])
+    app = _app(tmp_path)
+    app._activate_boot_profile()
+    app.set_effect_parameter('Plasma', 'speed', 3.0)
+    app._flush_profile_autosave()                 # still inside the delay
+    assert _profile(app, 'default')['effects'] == {}
+    now[0] += 1.0
+    app._flush_profile_autosave()
+    assert _profile(app, 'default')['effects'] == {'Plasma': {'speed': 3.0}}
+
+
+def test_save_writes_to_active_and_a_new_name_creates_and_activates(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._activate_boot_profile()
+    app._overlays.set_config_editor_name_text('')         # nothing typed
+    app._overlays._ce_pending_action = 'save'
+    app._effect_duration = 50.0
+    app._apply_config_editor_action()
+    assert app.config_profile_names() == ['default']
+    assert _profile(app, 'default')['settings']['audio.advance_interval_s'] == 50.0
+    app._overlays.set_config_editor_name_text('warehouse')
+    app._overlays._ce_pending_action = 'save'
+    app._apply_config_editor_action()
+    assert sorted(app.config_profile_names()) == ['default', 'warehouse']
+    assert app.active_config_profile == 'warehouse'
+
+
+def test_load_activates_and_pending_changes_stay_with_the_old_profile(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._effect_duration = 40.0
+    app.save_config_profile('a')
+    app._effect_duration = 80.0
+    app.save_config_profile('b')                  # active: b
+    app.set_effect_parameter('Plasma', 'speed', 4.0)   # pending write for b
+    assert app.load_config_profile('a')
+    assert app.active_config_profile == 'a'
+    assert _profile(app, 'b')['effects'] == {'Plasma': {'speed': 4.0}}
+    assert _profile(app, 'a')['effects'] == {}
+    assert app._effect_duration == 40.0
+
+
+def test_deleting_the_active_profile_loads_the_next_without_overwriting_it(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._effect_duration = 40.0
+    app.save_config_profile('a')
+    app._effect_duration = 80.0
+    app.save_config_profile('b')
+    assert app.delete_config_profile('b')
+    assert app.active_config_profile == 'a'
+    assert _profile(app, 'a')['settings']['audio.advance_interval_s'] == 40.0
+    assert app._effect_duration == 40.0
+    assert app.delete_config_profile('a')
+    assert app.config_profile_names() == ['default']
+    assert app.active_config_profile == 'default'
+
+
+# --- overlay: active orange, pending purple + pulsing LOAD ------------------- #
+
+def test_selection_follows_the_active_profile_until_another_is_picked() -> None:
+    ov = _Overlays('Visuals')
+    ov.set_config_editor_profiles(['a', 'b', 'c'], active='b')
+    assert ov.config_editor_selected_profile() == 'b'
+    assert ov.config_editor_pending_profile == ''
+    ov._ce_profile_idx = 2                        # operator clicks 'c'
+    ov.set_config_editor_profiles(['a', 'b', 'c'], active='b')   # next frame's push
+    assert ov.config_editor_pending_profile == 'c'
+    ov.set_config_editor_profiles(['a', 'b', 'c'], active='c')   # after LOAD
+    assert ov.config_editor_pending_profile == ''
+    assert ov.config_editor_selected_profile() == 'c'
+
+
+def test_pending_pulse_stays_visible_and_cyan() -> None:
+    alphas = [_Overlays._ce_pending_pulse_color(t / 10)[3] for t in range(40)]
+    assert min(alphas) >= 0.45 and max(alphas) <= 1.0 and max(alphas) - min(alphas) > 0.4
+    r, g, b, _a = _Overlays._ce_pending_pulse_color(0.0)
+    assert g > 0.9 and b > 0.9 and r < 0.5

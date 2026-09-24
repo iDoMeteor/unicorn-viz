@@ -891,6 +891,13 @@ class App:
             'config_profiles', 'path', default='runtime/config_profiles.json'
         )
         self._config_profile_store = ConfigProfileStore(str(profile_path))
+        # The profile every Audio/Visuals/effect-parameter change writes
+        # through to (owner, 2026-09-24): there is always one ("default" at
+        # first), it loads at boot, and Save writes to it.  Remembered as
+        # runtime key config_profile_active.  Writes are debounced so a
+        # slider drag isn't a disk write per notch.
+        self._active_profile: str = ''
+        self._profile_autosave_due: float = 0.0
         # Live per-effect parameter overrides merged over config.toml at
         # instantiation: {ClassName: {param: value}}.
         self._effect_config_overrides: dict[str, dict[str, float]] = {}
@@ -3523,10 +3530,12 @@ void main() {
         eff = self._current_effect
         if eff is not None and type(eff).__name__ == class_name and str(name) in eff.parameters:
             eff.parameters[str(name)] = float(value)
+        self._profile_touched()
 
     def clear_effect_overrides(self, class_name: str) -> None:
         """Drop overrides for one effect and restore the active instance live."""
         self._effect_config_overrides.pop(str(class_name), None)
+        self._profile_touched()
         eff = self._current_effect
         if eff is not None and type(eff).__name__ == class_name:
             initial = getattr(eff, '_initial_parameters', None)
@@ -3540,6 +3549,11 @@ void main() {
         return {k: dict(v) for k, v in self._effect_config_overrides.items()}
 
     def save_config_profile(self, name: str) -> None:
+        """Save the current settings as ``name`` and make it the active profile."""
+        self._write_profile(name)
+        self._set_active_profile(name)
+
+    def _write_profile(self, name: str) -> None:
         """Persist effect overrides + global/drop-in settings as a named profile."""
         settings = {s['key']: float(s['value']) for s in self._config_editor_all_specs()}
         self._config_profile_store.save(name, {
@@ -3547,11 +3561,62 @@ void main() {
             'settings': settings,
         })
 
+    @property
+    def active_config_profile(self) -> str:
+        """The profile every Audio/Visuals/effect change writes through to."""
+        return getattr(self, '_active_profile', '')
+
+    def _set_active_profile(self, name: str) -> None:
+        self._active_profile = str(name)
+        self._profile_autosave_due = 0.0
+        self._remember_runtime('config_profile_active', self._active_profile)
+
+    def _profile_touched(self) -> None:
+        """A profile-backed setting changed: write it through (debounced)."""
+        if getattr(self, '_active_profile', ''):
+            self._profile_autosave_due = time.monotonic() + self._PROFILE_AUTOSAVE_DELAY_S
+
+    _PROFILE_AUTOSAVE_DELAY_S = 0.4
+
+    def _flush_profile_autosave(self, force: bool = False) -> None:
+        """Write the active profile if a change is pending (and due)."""
+        due = getattr(self, '_profile_autosave_due', 0.0)
+        if not due or (not force and time.monotonic() < due):
+            return
+        self._profile_autosave_due = 0.0
+        name = getattr(self, '_active_profile', '')
+        if name:
+            try:
+                self._write_profile(name)
+            except Exception as exc:
+                log.warning('Profile autosave to %r failed: %s', name, exc)
+
+    def _activate_boot_profile(self) -> None:
+        """Make sure an active profile exists, then load it (end of startup).
+
+        First run: the current settings (config.toml plus anything already
+        remembered) become the "default" profile.  A remembered active
+        profile that no longer exists falls back to the first saved one.
+        """
+        names = self.config_profile_names()
+        active = self.get_runtime_state('config_profile_active', default='')
+        if not names:
+            self.save_config_profile(self._DEFAULT_PROFILE_NAME)
+            return
+        if not isinstance(active, str) or active not in names:
+            active = names[0]
+        self.load_config_profile(active)
+
+    _DEFAULT_PROFILE_NAME = 'default'
+
     def load_config_profile(self, name: str) -> bool:
-        """Load a profile: apply effect overrides + global/drop-in settings live."""
+        """Load a profile: apply effect overrides + global/drop-in settings
+        live, and make it the active profile."""
         payload = self._config_profile_store.get(name)
         if payload is None:
             return False
+        # Anything pending belongs to the profile being left, not this one.
+        self._flush_profile_autosave(force=True)
         effects = payload.get('effects', {}) if isinstance(payload, dict) else {}
         new_overrides: dict[str, dict[str, float]] = {}
         if isinstance(effects, dict):
@@ -3579,11 +3644,23 @@ void main() {
                         spec['set'](float(value))
                     except Exception:
                         log.debug('Profile setting apply failed: %s', key, exc_info=True)
+        self._set_active_profile(name)
         return True
 
     def delete_config_profile(self, name: str) -> bool:
-        """Delete a named configuration profile."""
-        return self._config_profile_store.delete(name)
+        """Delete a named configuration profile.  Deleting the active one
+        loads the first remaining profile, or saves the current settings as
+        a fresh "default" when none remain -- never overwriting another."""
+        if name == self.active_config_profile:
+            self._profile_autosave_due = 0.0          # don't resurrect it on the next flush
+        deleted = self._config_profile_store.delete(name)
+        if deleted and name == self.active_config_profile:
+            remaining = self.config_profile_names()
+            if remaining:
+                self.load_config_profile(remaining[0])
+            else:
+                self.save_config_profile(self._DEFAULT_PROFILE_NAME)
+        return deleted
 
     def config_editor_param_rows(self, class_name: str) -> list[dict[str, float | str]]:
         """Return ``[{'name','value','min','max'}]`` for an effect's parameters.
@@ -3649,8 +3726,10 @@ void main() {
             overlays.set_config_editor_params(self.config_editor_hotkey_rows())
         else:
             overlays.set_config_editor_params(self.config_editor_global_rows(tab))
-        overlays.set_config_editor_profiles(self.config_profile_names())
-        overlays.set_config_editor_dirty(bool(self._effect_config_overrides))
+        overlays.set_config_editor_profiles(self.config_profile_names(),
+                                            active=self.active_config_profile)
+        # Every change writes through to the active profile: never "unsaved".
+        overlays.set_config_editor_dirty(False)
 
     # -- Hotkeys tab (rebind global actions) ----------------------------------
     # Hand-authored labels for the rebindable actions in hotkeys.action_names()
@@ -4714,9 +4793,11 @@ void main() {
         silently repoint them.  They persist on their own via runtime state.
         """
         specs: list[dict] = []
-        for tab in ('Audio', 'Visuals'):
+        for tab in self._PROFILE_TABS:
             specs.extend(self._config_editor_settings_specs(tab))
         return specs
+
+    _PROFILE_TABS = ('Audio', 'Visuals')
 
     _CE_ROW_PASSTHROUGH = ('name', 'value', 'min', 'max', 'kind', 'choices',
                            'display', 'hint', 'badge', 'section', 'step')
@@ -4735,7 +4816,9 @@ void main() {
         if action is None:
             return
         if action == 'save':
-            name = overlays.config_editor_name_text.strip()
+            # Save writes to the active profile; a new name in the NAME field
+            # creates that profile from the current settings and activates it.
+            name = overlays.config_editor_name_text.strip() or self.active_config_profile
             if name:
                 self.save_config_profile(name)
                 overlays.flash_message(f'Profile saved: {name}', 1.6)
@@ -4781,6 +4864,8 @@ void main() {
         specs = self._config_editor_settings_specs(tab)
         if not (0 <= i < len(specs)):
             return
+        if tab in self._PROFILE_TABS:
+            self._profile_touched()
         spec = specs[i]
         kind = str(spec.get('kind') or 'slider')
         lo, hi = float(spec['min']), float(spec['max'])
@@ -4817,6 +4902,8 @@ void main() {
         specs = self._config_editor_settings_specs(tab)
         if not (0 <= index < len(specs)):
             return
+        if tab in self._PROFILE_TABS:
+            self._profile_touched()
         spec = specs[index]
         lo, hi = float(spec['min']), float(spec['max'])
         clamped = min(hi, max(lo, float(value)))
@@ -5914,6 +6001,7 @@ void main() {
             if started:
                 log.info('Auto-record enabled')
         self._restore_performance_settings()
+        self._activate_boot_profile()
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
         # Everything built so far lives for the session: take it out of the
@@ -6886,6 +6974,7 @@ void main() {
                 self._push_config_editor_model()
             else:
                 self._config_editor_was_open = False
+            self._flush_profile_autosave()
 
             # Render
             if self._video_deck_layer is not None:
@@ -7264,6 +7353,10 @@ void main() {
         if self._shutdown_complete:
             return
         self._shutdown_complete = True
+        try:
+            self._flush_profile_autosave(force=True)   # a change made just before quitting
+        except Exception as exc:
+            log.warning('Profile autosave at shutdown failed: %s', exc)
         if self._recorder:
             self._recorder.stop()
         if self._streamer is not None:

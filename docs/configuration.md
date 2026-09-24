@@ -461,6 +461,12 @@ Notes:
     the loaded config (in memory only) before the subsystem that reads them
     is built. Delete a key to fall back to `config.toml`. None of these are
     part of a configuration profile.
+- The config editor's **active profile** is remembered as
+    `config_profile_active`. Audio/Visuals rows and per-effect parameter
+    edits write through to it in `runtime/config_profiles.json` as they
+    change, and it is loaded at the end of startup (first run saves the
+    current settings as "default"). Save writes to it; a new name creates
+    and activates a profile; Load switches to the selected one.
 - Drop-in rows on the Performance tab persist the same way:
     `perf_dropin.<KEY>.<name>` for live rows (replayed through the drop-in's
     `set_config_setting` at startup) and `config_overrides.<section>.<key>`

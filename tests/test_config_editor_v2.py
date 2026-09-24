@@ -31,6 +31,7 @@ def _ov(tab: str = 'Performance', params: list[dict] | None = None) -> Overlays:
     ov._ce_profile_chip_rects = []
     ov._ce_profiles = []
     ov._ce_profile_idx = -1
+    ov._ce_active_profile = ''
     ov._ce_dirty = False
     ov._ce_name_mode = False
     ov._ce_name_text = ''
@@ -230,7 +231,9 @@ def test_full_render_smoke_on_every_tab() -> None:
             {'name': 'Help', 'kind': 'bind', 'action': 'help', 'chord': 'H',
              'is_override': False}])
         ov._ce_effects = [{'class_name': 'Plasma', 'display_name': 'Plasma', 'active': True}]
-        ov._ce_profiles = ['Look A']
+        # Active (orange) + a picked-but-not-loaded one (purple, pulsing LOAD).
+        ov.set_config_editor_profiles(['Look A', 'Look B'], active='Look A')
+        ov._ce_profile_idx = 1
         ov._render_config_editor()
         assert ov._ce_footer_button_rects, tab
         assert ov._ce_sparkles, 'sparkle anchors were not seeded'
