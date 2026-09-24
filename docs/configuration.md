@@ -97,6 +97,8 @@ Aliases:
 | `prefer_default_input` | bool | `true` | When true, startup prioritizes the current OS default input among candidates; when false, ranked monitor/app sources are preferred first. |
 | `require_startup` | bool | `false` | If true, Unicorn Viz exits when audio startup fails after retries. If false, startup continues without active audio and the visualizer runs in degraded mode. |
 | `start_timeout_s` | float | `4.0` | Per-attempt timeout for audio startup during app launch. |
+| `process` | bool | `true` | Run capture and analysis in the **audio process**, a helper next to the visualizer (1.0.0-beta.162). The visualizer's process owns GL and stays on one GIL; in the helper, capture and the analyzer never wait on a frame, a console raster or a gen-2 collection, and a hanging device open stalls the helper instead of the picture. dj-mixer-01 loads its engine into the same process. The main process reads each analysis frame the helper publishes every 10 ms; onsets arrive as a stream. If the helper cannot start, audio stays in-process; if it dies, the next frame restarts capture in-process. `false` keeps everything in-process. See `unicornviz/audio/process.py`. |
+| `process_python` | str | `""` | Interpreter for the audio process (empty = the app's own). The hook for a free-threaded Python: the helper never imports moderngl and logs whether the GIL is really off. |
 | `start_retries` | int | `2` | Number of additional launch-time audio startup retries after the initial attempt. |
 | `start_retry_backoff_s` | float | `0.5` | Delay between launch-time audio startup retries. |
 | `auto_fallback_enabled` | bool | `true` | Enable/disable mid-session automatic source fallback when capture appears silent. |

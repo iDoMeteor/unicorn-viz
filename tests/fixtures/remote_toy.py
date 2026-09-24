@@ -5,10 +5,20 @@ from __future__ import annotations
 import os
 import threading
 import time
+from collections import deque
+from dataclasses import dataclass
 
 import numpy as np
 
 from unicornviz.remote_objects import Policy
+
+
+@dataclass(frozen=True)
+class Mood:
+    """A value object (like an AudioProfile)."""
+
+    name: str
+    energy: float
 
 
 class Player:
@@ -22,6 +32,10 @@ class Player:
         self.samples = np.zeros(4, dtype=np.float32)
         self.partner: Player | None = None
         self.bank: list = []                      # sampler-style list of arrays
+        self.events: deque = deque(maxlen=64)     # (seq, item) event stream
+        self.event_total = 0
+        self.mood = Mood('calm', 0.1)
+        self.ticks = 0
         self._lock = threading.Lock()
 
     @property
@@ -65,6 +79,20 @@ class Player:
     def die(self) -> None:
         os._exit(3)
 
+    def emit_events(self, n: int) -> int:
+        for _ in range(n):
+            self.event_total += 1
+            self.events.append((self.event_total, f'onset{self.event_total}'))
+        return self.event_total
+
+    def set_mood(self, name: str, energy: float) -> None:
+        self.mood = Mood(name, energy)
+
+    def snap(self) -> tuple:
+        """Hot derived: a per-tick snapshot only the host can take."""
+        self.ticks += 1
+        return (self.ticks, os.getpid())
+
     def where(self) -> int:
         """Host-only fact (derived): which process this object lives in."""
         return os.getpid()
@@ -75,13 +103,24 @@ class Player:
 
 
 POLICY = Policy(local=frozenset({'describe'}),
-                wait=frozenset({'add_cue', 'load', 'link', 'run_later', 'pid', 'stash'}),
+                wait=frozenset({'add_cue', 'load', 'link', 'run_later', 'pid', 'stash',
+                                'emit_events'}),
                 slow=frozenset({'load'}),
-                skip=frozenset({'_lock'}),
-                derive=frozenset({'where'}))
+                skip=frozenset({'_lock', 'ticks'}),
+                derive=frozenset({'where'}),
+                hot_derive=frozenset({'snap'}),
+                values=frozenset({'mood'}),
+                streams=frozenset({'events'}))
 
 
 def build(args: dict) -> dict:
     a, b = Player(), Player()
     return {'roots': {'a': a, 'b': b}, 'policies': {Player: POLICY},
             'period_s': 0.005}
+
+
+def build_more(args: dict) -> dict:
+    """A second graph, loaded into an already-running helper."""
+    extra = Player()
+    extra.gain = float(args.get('gain', 0.7))
+    return {'roots': {'extra': extra}, 'policies': {Player: POLICY}}

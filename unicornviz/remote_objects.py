@@ -80,6 +80,13 @@ _MISSING = object()
 _DERIVED = '_rc_d_'          # shadow __dict__ prefix for host-derived values
 
 
+@dataclass
+class _StreamChunk:
+    """New ``(seq, item)`` entries of a stream attribute (see Policy.streams)."""
+
+    items: list
+
+
 class RemoteError(RuntimeError):
     """A forwarded call failed in the helper process (message carries its repr)."""
 
@@ -100,7 +107,12 @@ class Policy:
     locks, render-only buffers); ``derive`` names zero-argument methods or
     properties that depend on host-only resources (an open file, the audio
     stream): the host evaluates them every few ticks and the shadow returns
-    the latest value without a round trip.
+    the latest value without a round trip; ``hot_derive`` the same, every
+    tick (a per-frame snapshot).  ``values`` names attributes holding
+    picklable value objects (a frozen profile dataclass), republished when
+    they compare unequal.  ``streams`` names append-only deques of
+    ``(seq, item)`` with increasing ``seq``: only new items cross, and the
+    shadow's deque is extended rather than replaced (an event log).
     """
 
     local: frozenset[str] = frozenset()
@@ -108,13 +120,16 @@ class Policy:
     slow: frozenset[str] = frozenset()
     skip: frozenset[str] = frozenset()
     derive: frozenset[str] = frozenset()
+    hot_derive: frozenset[str] = frozenset()
+    values: frozenset[str] = frozenset()
+    streams: frozenset[str] = frozenset()
     #: Publish scalars and object references only -- no arrays, no
     #: containers (DSP objects whose buffers are nobody else's business).
     plain_only: bool = False
 
     def classified(self) -> frozenset[str]:
         """Every public name this policy says something about."""
-        return self.local | self.wait | self.slow | self.derive
+        return self.local | self.wait | self.slow | self.derive | self.hot_derive
 
 
 # ---------------------------------------------------------------------------
@@ -167,12 +182,39 @@ class _RefPickler(pickle.Pickler):
         return ('obj', path) if path is not None else None
 
 
+_UNRESOLVED: set[str] = set()
+
+
+class _Unresolved:
+    """Stands in for an instance whose class could not be imported here."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def __setstate__(self, state: Any) -> None:
+        pass
+
+
 class _RefUnpickler(pickle.Unpickler):
     def __init__(self, f: io.BytesIO, registry: Registry,
                  attach: Callable[..., np.ndarray] | None) -> None:
         super().__init__(f)
         self._registry = registry
         self._attach = attach
+
+    def find_class(self, module: str, name: str) -> Any:
+        try:
+            return super().find_class(module, name)
+        except (ImportError, AttributeError):
+            # A class the other side has under a module name we cannot
+            # import: keep the rest of the message instead of losing it all.
+            key = f'{module}.{name}'
+            if key not in _UNRESOLVED:
+                _UNRESOLVED.add(key)
+                log.warning('remote: cannot resolve %s here; its values arrive as '
+                            'placeholders (load that module under the same name '
+                            'on both sides)', key)
+            return _Unresolved
 
     def persistent_load(self, pid: Any) -> Any:
         kind = pid[0]
@@ -347,6 +389,46 @@ class _Host:
         self._applied = 0
         self._publish_lock = threading.Lock()
         self._tick = 0
+        self.on_exit: list[Callable[[], None]] = []
+        self.registry.add('__host__', _HostControl(self))
+        self.policies[_HostControl] = _HOST_CONTROL_POLICY
+        self._last['__host__'] = {}
+
+    def load_factory(self, factory_path: str, factory_name: str, args: dict,
+                     namespace: str = '', module_name: str = '') -> list[str]:
+        """Build another object graph into this helper; returns its paths.
+
+        Paths are prefixed ``namespace/`` so graphs from different owners
+        (core audio, the mixer) never collide.  ``module_name`` is the name
+        the main process loaded the same factory module under: classes
+        defined there then pickle to a name both sides can resolve.
+        """
+        mod_name = module_name or f'_remote_factory_{namespace or "root"}'
+        mod = sys.modules.get(mod_name)
+        if mod is None or os.path.abspath(getattr(mod, '__file__', '') or '') \
+                != os.path.abspath(factory_path):
+            spec = importlib.util.spec_from_file_location(mod_name, factory_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(factory_path)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[mod_name] = mod
+            spec.loader.exec_module(mod)
+        built = getattr(mod, factory_name)(args or {})
+        prefix = f'{namespace}/' if namespace else ''
+        paths = []
+        with self._publish_lock:
+            self.policies.update(built.get('policies', {}))
+            for path, obj in built['roots'].items():
+                full = prefix + path
+                self.registry.add(full, obj)
+                self._last[full] = {}
+                paths.append(full)
+        if 'period_s' in built:
+            self.period_s = min(self.period_s, float(built['period_s']))
+        on_exit = built.get('on_exit')
+        if callable(on_exit):
+            self.on_exit.append(on_exit)
+        return sorted(paths)
 
     def _policy(self, obj: Any) -> Policy:
         for cls in type(obj).__mro__:
@@ -413,9 +495,9 @@ class _Host:
     # -- state publication -----------------------------------------------------
 
     def _delta(self, path: str, obj: Any, slow_tick: bool, in_use: set[int]) -> dict:
-        last = self._last[path]
+        last = self._last.setdefault(path, {})
         policy = self._policy(obj)
-        skip = policy.skip
+        skip = policy.skip | policy.streams | policy.values
         plain_only = policy.plain_only
         out: dict[str, Any] = {}
         try:
@@ -453,18 +535,46 @@ class _Host:
                 if last.get(key, _MISSING) is not val:
                     out[key] = val
                     last[key] = val
+        for name in policy.streams:
+            try:
+                entries = list(getattr(obj, name))
+            except Exception:
+                continue
+            mark = name + '#'
+            sent = last.get(mark, -1)
+            fresh = [e for e in entries if e[0] > sent]
+            if fresh:
+                out[name] = _StreamChunk(fresh)
+                last[mark] = fresh[-1][0]
+        derived = (policy.hot_derive | policy.derive) if slow_tick else policy.hot_derive
+        for name in derived:
+            try:
+                val = getattr(obj, name)
+                if callable(val):
+                    val = val()
+            except Exception:
+                continue
+            key = _DERIVED + name
+            try:
+                same = last.get(key, _MISSING) == val
+            except Exception:           # e.g. arrays inside: treat as changed
+                same = False
+            if not same:
+                out[key] = val
+                last[key] = val
         if slow_tick:
-            for name in policy.derive:
-                try:
-                    val = getattr(obj, name)
-                    if callable(val):
-                        val = val()
-                except Exception:
+            state = vars(obj)
+            for name in policy.values:
+                val = state.get(name, _MISSING)
+                if val is _MISSING:
                     continue
-                key = _DERIVED + name
-                if last.get(key, _MISSING) != val:
-                    out[key] = val
-                    last[key] = val
+                try:
+                    same = last.get(name, _MISSING) == val
+                except Exception:
+                    same = False
+                if not same:
+                    out[name] = val
+                    last[name] = val
         return out
 
     def publish_now(self, slow_tick: bool = True) -> None:
@@ -503,6 +613,32 @@ class _Host:
         self.exporter.close()
 
 
+class _HostControl:
+    """The helper's own control surface, served at path ``__host__``."""
+
+    def __init__(self, host: _Host) -> None:
+        self._host = host
+
+    def load_factory(self, factory_path: str, factory_name: str, args: dict,
+                     namespace: str = '', module_name: str = '') -> list[str]:
+        return self._host.load_factory(factory_path, factory_name, args, namespace,
+                                       module_name)
+
+    def resync(self, paths: list[str]) -> None:
+        """Forget what was sent for ``paths``: the reply to this (waited) call
+        is preceded by their full state.  Called when the client attaches
+        shadows, since anything published before that had nowhere to land."""
+        host = self._host
+        with host._publish_lock:
+            for path in paths:
+                host._last[path] = {}
+
+
+_HOST_CONTROL_POLICY = Policy(wait=frozenset({'load_factory', 'resync'}),
+                              slow=frozenset({'load_factory'}),
+                              skip=frozenset({'_host'}))
+
+
 class _EventLogHandler(logging.Handler):
     """Forwards the host's log records to the main process's log."""
 
@@ -538,27 +674,20 @@ def _host_main(argv: list[str]) -> int:
     # (popped above) -- the same trust model multiprocessing itself pickles on.
     init = pickle.loads(cmd.recv())  # nosec B301
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
-    spec = importlib.util.spec_from_file_location('_remote_factory', factory_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(factory_path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules['_remote_factory'] = mod
-    spec.loader.exec_module(mod)
-    built = getattr(mod, factory_name)(init.get('args') or {})
-    host = _Host(cmd, evt, built['roots'], built.get('policies', {}),
-                 float(built.get('period_s', 0.01)))
+    host = _Host(cmd, evt, {}, {}, 0.01)
     logging.getLogger().addHandler(_EventLogHandler(host))
+    paths = host.load_factory(factory_path, factory_name, init.get('args') or {},
+                              init.get('namespace', ''), init.get('module_name', ''))
     gil = _gil_report()
     if gil:
         log.info('remote host interpreter: %s', gil)
-    host.emit(('ready', sorted(built['roots']), os.getpid(), gil))
+    host.emit(('ready', paths, os.getpid(), gil))
     pub = threading.Thread(target=host.publish_forever, name='remote-publish', daemon=True)
     pub.start()
     try:
         host.serve_commands()
     finally:
-        on_exit = built.get('on_exit')
-        if callable(on_exit):
+        for on_exit in reversed(host.on_exit):
             try:
                 on_exit()
             except Exception as exc:
@@ -606,13 +735,15 @@ class RemoteHost:
         self._ready = threading.Event()
         self._closing = False
         self.on_state: Callable[[dict], None] | None = None
-        #: Called (on the receiver thread) if the helper dies unasked.
-        self.on_exit: Callable[[], None] | None = None
+        # Called (on the receiver thread) if the helper dies unasked; one per
+        # owner sharing this helper (core audio, the mixer).
+        self._exit_handlers: list[Callable[[], None]] = []
         self._rx = threading.Thread(target=self._receive, name='remote-rx', daemon=True)
 
     @classmethod
     def spawn(cls, factory_path: str, factory_name: str, args: dict | None = None,
-              python: str | None = None, timeout_s: float = 20.0) -> RemoteHost:
+              python: str | None = None, timeout_s: float = 20.0,
+              namespace: str = '', module_name: str = '') -> RemoteHost:
         """Start a helper process running ``factory_path:factory_name(args)``.
 
         ``python`` selects the interpreter (default: this one) -- the hook
@@ -650,7 +781,8 @@ class RemoteHost:
             raise HostGone(f'helper did not connect ({accept_err or "timeout"})')
         listener.close()
         host = cls(proc, _Channel(conns[0]), _Channel(conns[1]))
-        host.cmd.send(pickle.dumps({'args': args or {}}))
+        host.cmd.send(pickle.dumps({'args': args or {}, 'namespace': namespace,
+                                    'module_name': module_name}))
         host._rx.start()
         if not host._ready.wait(timeout_s):
             host.close(kill=True)
@@ -699,8 +831,7 @@ class RemoteHost:
         else:
             log.error('remote: helper process exited unexpectedly (code %s)',
                       self.proc.returncode)
-            cb = self.on_exit
-            if cb is not None:
+            for cb in list(self._exit_handlers):
                 try:
                     cb()
                 except Exception as exc:
@@ -713,6 +844,11 @@ class RemoteHost:
                 obj = self.registry.resolve(path)
             except KeyError:
                 continue
+            for key in [k for k, v in delta.items() if type(v) is _StreamChunk]:
+                chunk = delta.pop(key)
+                target = obj.__dict__.get(key)
+                if target is not None:
+                    target.extend(chunk.items)
             if shield:
                 # A value published before the host applied our latest write
                 # to that key is older than what we already show: drop it.
@@ -765,6 +901,19 @@ class RemoteHost:
                 raise HostGone(str(pend.value))
             raise RemoteError(str(pend.value))
         return pend.value
+
+    def add_exit_handler(self, fn: Callable[[], None]) -> None:
+        """Run ``fn`` (receiver thread) if the helper dies without being asked."""
+        self._exit_handlers.append(fn)
+
+    def load_factory(self, factory_path: str, factory_name: str, args: dict | None = None,
+                     namespace: str = '', module_name: str = '') -> list[str]:
+        """Build another object graph inside this running helper (see
+        :meth:`_Host.load_factory`); returns the new objects' paths."""
+        return self.call('__host__', 'load_factory',
+                         (os.path.abspath(factory_path), factory_name, args or {},
+                          namespace, module_name),
+                         {}, wait=True, timeout_s=SLOW_TIMEOUT_S)
 
     def set(self, path: str, name: str, value: Any) -> None:
         """Forward ``path.name = value``; until the host has applied it, older
@@ -883,7 +1032,7 @@ def shadow_class(cls: type, policy: Policy) -> type:
         if name.startswith('_'):
             continue
         raw = inspect.getattr_static(cls, name)
-        if name in policy.derive:
+        if name in policy.derive or name in policy.hot_derive:
             ns[name] = _derived(name, raw)
             continue
         if isinstance(raw, property):
@@ -917,11 +1066,20 @@ def attach_shadows(host: RemoteHost, roots: dict[str, Any],
         obj.__dict__['_rc_host'] = host
         obj.__dict__['_rc_path'] = path
         host.registry.add(path, obj)
+    # Whatever the helper published for these paths before they were
+    # registered here was dropped: have it send their full state again.
+    if host.alive and roots:
+        host.call('__host__', 'resync', (list(roots),), {}, wait=True)
 
 
-def detach_shadows(host: RemoteHost) -> None:
-    """Undo :func:`attach_shadows` (objects become plain local instances)."""
-    for _path, obj in host.registry.items():
+def detach_shadows(host: RemoteHost, prefix: str = '') -> None:
+    """Undo :func:`attach_shadows` (objects become plain local instances),
+    for every object or just those whose path starts with ``prefix``."""
+    for path, obj in host.registry.items():
+        if prefix and not path.startswith(prefix):
+            continue
+        if '_rc_host' not in obj.__dict__:
+            continue
         base = type(obj).__mro__[1]
         obj.__dict__.pop('_rc_host', None)
         obj.__dict__.pop('_rc_path', None)
@@ -929,4 +1087,7 @@ def detach_shadows(host: RemoteHost) -> None:
 
 
 if __name__ == '__main__':
-    sys.exit(_host_main(sys.argv[1:]))
+    # Run from the properly named module, not __main__: classes defined here
+    # (stream chunks, placeholders) must pickle to a name the client imports.
+    from unicornviz import remote_objects as _self  # noqa: PLW0406 - see above
+    sys.exit(_self._host_main(sys.argv[1:]))

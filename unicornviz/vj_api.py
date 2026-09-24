@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from unicornviz.deck_sim import DeckSimLayout
 from unicornviz.operator_panels import MAIN_PAGE, OperatorPage, OperatorPanel, sort_pages
@@ -452,6 +452,17 @@ class VJApi:
     def claim_window_events(self, window_id: int, handler) -> bool:
         """Claim SDL events for a subsystem-owned window id."""
         return self._app.claim_window_events(window_id, handler)
+
+    def audio_process_host(self) -> Any:
+        """The shared audio process (a ``remote_objects.RemoteHost``), or None.
+
+        Drop-ins with real-time audio work load it into this process instead
+        of running it next to the renderer -- dj-mixer-01 puts its engine
+        there with ``host.load_factory(...)``.  None when audio runs in-process
+        (``[audio] process = false``, or the helper failed / died).
+        """
+        getter = getattr(self._app, 'audio_process_host', None)
+        return getter() if callable(getter) else None
 
     def main_window_id(self) -> int:
         """SDL window id of the main (audience) window, or -1.

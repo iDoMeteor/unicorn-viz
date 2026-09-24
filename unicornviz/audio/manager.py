@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import deque
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -21,6 +22,10 @@ if TYPE_CHECKING:
     from unicornviz.runtime_state import RuntimeStateStore
 
 log = logging.getLogger(__name__)
+
+#: Onset events kept for a consumer that has fallen behind (~10 s of dense
+#: onsets); older ones are dropped rather than queued without bound.
+_ONSET_LOG_LEN = 512
 
 
 class AudioManager:
@@ -121,8 +126,15 @@ class AudioManager:
         # in flight after start() gave up waiting on it.  stop() must not
         # tear PortAudio down underneath it (see stop()).
         self._start_worker: threading.Thread | None = None
-        # Onset events published by the analysis thread, drained by main thread.
-        self._onset_pending: list[OnsetEvent] = []
+        # Onset events as an append-only log of (seq, event): the analysis
+        # thread appends, drain_onsets() returns what its cursor has not seen
+        # yet.  A log rather than a drained list so the same state can be
+        # streamed to a consumer in another process (see audio/process.py).
+        self._onset_log: deque[tuple[int, OnsetEvent]] = deque(maxlen=_ONSET_LOG_LEN)
+        self._onset_total: int = 0
+        self._onset_cursor: int = 0
+        # Staging buffer for audio_snapshot() (preallocated, reused).
+        self._snap_buf: AudioData = AudioData()
         # Audio timestamp of the last published block.  Written under
         # _analysis_lock by the analysis thread; read by get_audio_time() on the
         # main thread.  Keeping it here avoids reading analyzer internal state
@@ -338,6 +350,11 @@ class AudioManager:
         last_seq: int = -1
         log.debug('AudioManager: analysis thread running')
         while not self._analysis_stop.is_set():
+            # The silence fallback prober ticks here, on this thread, not on
+            # the render thread: a device switch that stalls (2026-09-22) now
+            # stalls analysis for a moment instead of freezing the frame.
+            # Cheap when idle -- the probe itself runs on a worker thread.
+            self._capture.maybe_fallback()
             # Wait for a new block; releases the GIL for up to timeout_s.
             if not self._capture.wait_for_new_block(timeout_s=0.5):
                 continue  # timeout — check stop flag and loop
@@ -367,8 +384,9 @@ class AudioManager:
                 self._publish_seq += 1
                 self._publish_block_seq = new_seq
                 self._publish_rms = block_rms
-                if onsets:
-                    self._onset_pending.extend(onsets)
+                for event in onsets:
+                    self._onset_total += 1
+                    self._onset_log.append((self._onset_total, event))
         log.debug('AudioManager: analysis thread exited')
 
     def get_reactivity(self) -> float:
@@ -511,15 +529,9 @@ class AudioManager:
         read a fully-written buffer; the lock is released before any arithmetic.
         No FFT or numpy work happens on the main thread.
         """
-        if self._started:
-            self._capture.maybe_fallback()
-        # Copy latest published snapshot under the lock (only held for ~2 KB copy).
-        with self._analysis_lock:
-            self._copy_audio_into(self._front_buf, self._last_data_raw)
-            self._copy_audio_into(self._front_buf, self._last_data)
-            publish_seq = self._publish_seq
-            publish_block_seq = self._publish_block_seq
-            publish_rms = self._publish_rms
+        snap, publish_seq, publish_block_seq, publish_rms = self.audio_snapshot()
+        self._copy_audio_into(snap, self._last_data_raw)
+        self._copy_audio_into(snap, self._last_data)
         self._observe_zero_frame(publish_seq, publish_block_seq, publish_rms)
         # Apply reactivity outside the lock — no shared state involved.
         if self._reactivity != 1.0:
@@ -530,6 +542,20 @@ class AudioManager:
             np.multiply(self._last_data.fft, r, out=self._last_data.fft)
             np.clip(self._last_data.fft, 0.0, 1.0, out=self._last_data.fft)
         return self._last_data
+
+    def audio_snapshot(self) -> tuple[AudioData, int, int, float]:
+        """The latest published analysis frame and its publish bookkeeping:
+        ``(data, publish_seq, block_seq, block_rms)``.
+
+        Copied under the analysis lock (~2 KB) into a reused staging buffer,
+        so the counters and the buffer they describe are always the same
+        generation.  When the analysis runs in the audio process this is what
+        that process publishes every tick (see audio/process.py).
+        """
+        with self._analysis_lock:
+            self._copy_audio_into(self._front_buf, self._snap_buf)
+            return (self._snap_buf, self._publish_seq, self._publish_block_seq,
+                    self._publish_rms)
 
     def _observe_zero_frame(
         self,
@@ -678,15 +704,20 @@ class AudioManager:
     # ------------------------------------------------------------------
 
     def drain_onsets(self) -> list[OnsetEvent]:
-        """Return and clear all onset events queued in the analyzer.
+        """Return the onset events this consumer has not seen yet, in order.
 
-        Thread-safe: called from the main thread; the analysis thread publishes
-        onsets under the same ``_analysis_lock``.
+        Thread-safe: the log is copied in one step (the analysis thread, or
+        the audio process's state stream, may be appending), and the cursor
+        advances to the newest event returned.  Events older than the log's
+        length are gone if the consumer fell that far behind.
         """
         with self._analysis_lock:
-            onsets = list(self._onset_pending)
-            self._onset_pending.clear()
-        return onsets
+            entries = list(self._onset_log)
+            cursor = self._onset_cursor
+            fresh = [(seq, ev) for seq, ev in entries if seq > cursor]
+            if fresh:
+                self._onset_cursor = fresh[-1][0]
+        return [ev for _, ev in fresh]
 
     def set_expected_bpm(self, bpm: float, confidence: float) -> None:
         """Forward a BPM estimate to the analyzer to tune its refractory gate.

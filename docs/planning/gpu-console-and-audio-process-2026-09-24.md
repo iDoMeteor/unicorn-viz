@@ -1,6 +1,6 @@
 # GPU mixer console + audio process split + multithreading
 
-Owner: perf seat (with the owner, live) · Status: **active — phase 1 landed, phase 2 landing** ·
+Owner: perf seat (with the owner, live) · Status: **active — phases 1, 2a landed; 2b landing** ·
 Last updated: 2026-09-24
 
 Rollback point: tag `checkpoint/pre-gpu-mixer-audio-split-2026-09-24`
@@ -161,9 +161,10 @@ them can be reverted on its own.
 | Step | State | Where |
 |---|---|---|
 | 1a GPU console (draw list, atlas, instanced SDF renderer, mixer on it) | **landed** | core beta.159 `unicornviz/gpu2d.py`; dj-mixer-01 0.216.0 `gpu_console` |
-| 2a Engine in its own process (shadows, shared-memory tracks, crash recovery) | **landing** | core beta.160 `unicornviz/remote_objects.py`; dj-mixer-01 0.217.0 `audio_process` |
+| 2a Engine in its own process (shadows, shared-memory tracks, crash recovery) | **landed** | core beta.160 `unicornviz/remote_objects.py`; dj-mixer-01 0.217.0 `audio_process` |
 | 1b Skip recording unchanged console sections; waveform shader | next | |
-| 2b Capture + analyzer into the audio process (value objects, onset log) | next | |
+| GC: freeze the long-lived heap (gen-2 124 ms -> 1 ms) | **landed** | core beta.161 `gc_tuning`; dj-mixer-01 0.217.1 |
+| 2b Capture + analyzer into the audio process, mixer engine shares it (streams, values, hot snapshots, factories) | **landing** | core beta.162 `unicornviz/audio/process.py`; dj-mixer-01 0.218.0 |
 | 2c Decode worker writes straight into shared memory; stems at 48 kHz | next | |
 | 3 Worker processes for analysis/stems; `update()` audit | next | |
 | 4 GIL guard + per-process import map for a free-threaded helper | partly: helper reports its GIL state | |

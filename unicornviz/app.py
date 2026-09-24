@@ -725,6 +725,11 @@ class App:
         self._preview_max_width: int = _PREVIEW_MAX_WIDTH
         self._perf_frames_enabled: bool = False
         self._audio_manager: AudioManager | None = None
+        # The audio process (unicornviz/audio/process.py): its RemoteHost, or
+        # None when audio runs in-process; the flag its receiver thread raises
+        # if it dies, which the frame loop turns into an in-process restart.
+        self._audio_host: Any = None
+        self._audio_host_died = False
         # Selector row -> candidate index, and which rows are dividers.
         # Rebuilt whenever get_audio_sources() runs.
         self._audio_source_rows: list[int] = []
@@ -5223,6 +5228,11 @@ void main() {
         # __init__'s earlier call isn't enough on its own).
         self._configure_audio_data_fft_bins()
         audio_manager = AudioManager(self.cfg, state_store=self._runtime_state)
+        # Capture + analysis (and, once it loads, the DJ mixer's engine) run
+        # in the audio process; audio_manager becomes its shadow and every
+        # call below works unchanged.  Any failure keeps it in-process.
+        self._audio_host = (self._start_audio_process(audio_manager)
+                            if self._audio_process_wanted() else None)
         mixer_profile = self._boot_profile == PROFILE_MIXER
         if mixer_profile:
             # Mixer profile: capture is never started — the mixer owns its own
@@ -6335,6 +6345,7 @@ void main() {
             # (in-memory attribute reads on a handful of controllers, no
             # device I/O), so there is no reason to gate or throttle it.
             self._refresh_claimed_audio_devices()
+            self._tick_audio_process()
             self._audio = audio_manager.get_audio_data()
             self._audio_raw = audio_manager.get_audio_data_raw()
             if self._perf_frames_enabled:
@@ -7221,6 +7232,18 @@ void main() {
         self._log_deleted_effects_summary()
         if self._audio_manager is not None:
             self._audio_manager.stop()
+        # The audio process is shared (the mixer's engine lives there too, and
+        # its subsystem shut down above): close it only now, after one last
+        # copy of the capture state it may have changed.
+        audio_host = getattr(self, '_audio_host', None)
+        if audio_host is not None:
+            self._audio_host = None
+            try:
+                from unicornviz.audio import process as audio_process  # noqa: PLC0415
+                audio_process.persist_relay_state(audio_host, self._runtime_state)
+            except Exception as exc:
+                log.debug('Audio process state not persisted at shutdown: %s', exc)
+            audio_host.close()
         if self._midi_manager is not None:
             self._midi_manager.stop()
         # getattr: ensure_shutdown() must work on a cold App (see the crash-
@@ -8178,6 +8201,72 @@ void main() {
     #: Non-selectable divider shown between outputs and inputs in the
     #: audio selector.  Reaching a microphone should feel deliberate.
     AUDIO_SELECTOR_DIVIDER = '--- INPUTS (mics / line-in) ---'
+
+    # -- audio process -----------------------------------------------------
+
+    def _audio_process_wanted(self) -> bool:
+        """``[audio] process`` (default on) unless the environment opts out
+        (the test suite does: an App per test would mean a helper per test)."""
+        if os.environ.get('UNICORNVIZ_NO_AUDIO_PROCESS'):
+            return False
+        return bool(self.cfg.get('audio', 'process', default=True))
+
+    def _start_audio_process(self, manager: AudioManager) -> Any:
+        """Start the audio process around ``manager``; None keeps it in-process."""
+        try:
+            from unicornviz.audio import process as audio_process  # noqa: PLC0415
+            python = str(self.cfg.get('audio', 'process_python', default='') or '') or None
+            host = audio_process.start_audio_process(manager, self.cfg,
+                                                     self._runtime_state, python=python)
+        except Exception as exc:
+            log.warning('Audio process unavailable; capture and analysis stay '
+                        'in-process: %s', exc)
+            return None
+        self._audio_host_died = False
+        host.add_exit_handler(self._on_audio_host_exit)
+        return host
+
+    def audio_process_host(self) -> Any:
+        """The running audio process (a ``RemoteHost``), or None.
+
+        Other owners load their audio work into it -- dj-mixer-01 puts its
+        engine there -- so all audio shares one process.  Reach it through
+        ``vj_api.audio_process_host()``.
+        """
+        host = getattr(self, '_audio_host', None)
+        return host if host is not None and host.alive else None
+
+    def _on_audio_host_exit(self) -> None:
+        # Receiver thread: only flag it; the frame loop recovers.
+        self._audio_host_died = True
+
+    def _tick_audio_process(self) -> None:
+        """Per frame: persist capture state the helper changed, or recover
+        in-process if it died."""
+        host = getattr(self, '_audio_host', None)
+        if host is None:
+            return
+        if getattr(self, '_audio_host_died', False):
+            self._recover_audio_in_process()
+            return
+        from unicornviz.audio import process as audio_process  # noqa: PLC0415
+        audio_process.persist_relay_state(host, self._runtime_state)
+
+    def _recover_audio_in_process(self) -> None:
+        """The audio process died: the manager becomes a plain in-process one
+        (its own capture, never opened) and is started here."""
+        host, self._audio_host = self._audio_host, None
+        self._audio_host_died = False
+        from unicornviz.remote_objects import detach_shadows  # noqa: PLC0415
+        detach_shadows(host, prefix='audio/')
+        log.error('Audio process died; capture and analysis restarted in-process')
+        if self._audio_manager is None or self._boot_profile == PROFILE_MIXER:
+            return
+        try:
+            self._audio_manager.start(
+                timeout_s=float(self.cfg.get('audio', 'start_timeout_s', default=4.0)))
+        except Exception as exc:
+            log.error('In-process audio restart failed: %s', exc)
 
     def _refresh_claimed_audio_devices(self) -> None:
         """Tell the capture layer which audio devices are already spoken for.

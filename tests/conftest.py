@@ -27,6 +27,11 @@ import pytest
 _REPO = Path(__file__).resolve().parent.parent
 _GUARDED = ('logs', 'runtime')
 
+# An App (or a mixer controller) built by a test keeps its audio in-process:
+# the audio process would otherwise cost a helper per test.  The tests of the
+# audio process itself spawn helpers explicitly.
+os.environ.setdefault('UNICORNVIZ_NO_AUDIO_PROCESS', '1')
+
 
 def _snapshot() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}

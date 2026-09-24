@@ -34,7 +34,7 @@ def _until(pred, timeout: float = 3.0) -> bool:
 
 @pytest.fixture
 def pair():
-    host = ro.RemoteHost.spawn(str(_FACTORY), 'build')
+    host = ro.RemoteHost.spawn(str(_FACTORY), 'build', module_name=_spec.name)
     a, b = remote_toy.Player(), remote_toy.Player()
     ro.attach_shadows(host, {'a': a, 'b': b}, {remote_toy.Player: remote_toy.POLICY})
     yield host, a, b
@@ -146,3 +146,59 @@ def test_derived_values_come_from_the_host_without_a_round_trip(pair) -> None:
     host, a, _ = pair
     assert _until(lambda: a.where() == host.ready[1])   # host pid, not ours
     assert a.where() != os.getpid()
+
+
+def test_streams_deliver_each_event_once_in_order(pair) -> None:
+    _, a, _ = pair
+    a.emit_events(3)
+    assert _until(lambda: len(a.events) == 3)
+    a.emit_events(2)
+    assert _until(lambda: len(a.events) == 5)
+    time.sleep(0.1)                               # several more ticks: no repeats
+    assert [seq for seq, _ in a.events] == [1, 2, 3, 4, 5]
+    assert a.events[-1][1] == 'onset5'
+
+
+def test_value_objects_follow_the_host(pair) -> None:
+    _, a, _ = pair
+    a.set_mood('peak', 0.9)
+    assert _until(lambda: a.mood == remote_toy.Mood('peak', 0.9))
+
+
+def test_hot_derived_values_refresh_every_tick(pair) -> None:
+    host, a, _ = pair
+    assert _until(lambda: a.snap()[1] == host.ready[1])
+    first = a.snap()[0]
+    assert _until(lambda: a.snap()[0] >= first + 5, timeout=1.0)   # ~5 ms ticks
+
+
+def test_a_second_graph_joins_the_running_helper(pair) -> None:
+    host, a, _ = pair
+    paths = host.load_factory(str(_FACTORY), 'build_more', {'gain': 0.3},
+                              namespace='more', module_name=_spec.name)
+    assert paths == ['more/extra']
+    extra = remote_toy.Player()
+    ro.attach_shadows(host, {'more/extra': extra}, {remote_toy.Player: remote_toy.POLICY})
+    assert _until(lambda: abs(extra.gain - 0.3) < 1e-9)   # seeded by its factory
+    assert extra.pid() == a.pid() == host.ready[1]        # same helper process
+    extra.play()
+    assert _until(lambda: extra.playing is True)
+    assert a.playing is False                              # separate objects
+    ro.detach_shadows(host, prefix='more/')
+    assert type(extra) is remote_toy.Player
+    assert type(a).__name__ == 'ShadowPlayer'              # the rest stay attached
+
+
+def test_an_unresolvable_class_does_not_lose_the_rest_of_the_state() -> None:
+    """Without matching module names the value arrives as a placeholder --
+    and every other attribute in the same message still lands."""
+    host = ro.RemoteHost.spawn(str(_FACTORY), 'build')        # no module_name
+    a = remote_toy.Player()
+    ro.attach_shadows(host, {'a': a}, {remote_toy.Player: remote_toy.POLICY})
+    try:
+        a.set_mood('peak', 0.9)
+        a.play()
+        assert _until(lambda: a.playing is True)
+        assert type(a.mood).__name__ in ('Mood', '_Unresolved')
+    finally:
+        host.close()

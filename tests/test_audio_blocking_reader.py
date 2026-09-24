@@ -341,9 +341,12 @@ class TestFFTDedup:
         mgr, _, _ = self._make_manager_with_mock_capture()
         from unicornviz.audio.analyzer import OnsetEvent
 
+        # The analysis thread's publish step (an append-only (seq, event) log
+        # since 2026-09-24, so it can also be streamed to another process).
         with mgr._analysis_lock:
-            mgr._onset_pending.append(OnsetEvent(t=1.0, strength=1.5))
-            mgr._onset_pending.append(OnsetEvent(t=2.0, strength=2.0))
+            for ev in (OnsetEvent(t=1.0, strength=1.5), OnsetEvent(t=2.0, strength=2.0)):
+                mgr._onset_total += 1
+                mgr._onset_log.append((mgr._onset_total, ev))
 
         onsets = mgr.drain_onsets()
         assert len(onsets) == 2
@@ -352,3 +355,58 @@ class TestFFTDedup:
         # Second drain should be empty.
         onsets2 = mgr.drain_onsets()
         assert len(onsets2) == 0
+
+    def test_drain_onsets_returns_only_new_events_and_survives_a_full_log(self):
+        """The cursor hands out each event once, in order, and a consumer that
+        fell further behind than the log's length gets the newest events."""
+        mgr, _, _ = self._make_manager_with_mock_capture()
+        from unicornviz.audio import manager as manager_mod
+        from unicornviz.audio.analyzer import OnsetEvent
+
+        def publish(n):
+            with mgr._analysis_lock:
+                for _ in range(n):
+                    mgr._onset_total += 1
+                    mgr._onset_log.append(
+                        (mgr._onset_total, OnsetEvent(t=float(mgr._onset_total), strength=1.0)))
+
+        publish(3)
+        assert [e.t for e in mgr.drain_onsets()] == [1.0, 2.0, 3.0]
+        publish(2)
+        assert [e.t for e in mgr.drain_onsets()] == [4.0, 5.0]
+        publish(manager_mod._ONSET_LOG_LEN + 10)
+        got = mgr.drain_onsets()
+        assert len(got) == manager_mod._ONSET_LOG_LEN
+        assert got[-1].t == float(mgr._onset_total)
+        assert mgr.drain_onsets() == []
+
+    def test_the_analysis_thread_ticks_the_fallback_prober(self):
+        """...and the analysis thread does, including while the source is
+        silent and no blocks arrive -- the case the fallback exists for."""
+        import time as _time
+        mgr, mock_cap, _ = self._make_manager_with_mock_capture()
+
+        def no_block(timeout_s=0.5):
+            _time.sleep(0.005)
+            return False
+        mock_cap.wait_for_new_block.side_effect = no_block
+        worker = threading.Thread(target=mgr._analysis_worker, daemon=True)
+        worker.start()
+        deadline = _time.monotonic() + 2.0
+        while mock_cap.maybe_fallback.call_count < 3 and _time.monotonic() < deadline:
+            _time.sleep(0.005)
+        mgr._analysis_stop.set()
+        worker.join(timeout=2.0)
+        assert mock_cap.maybe_fallback.call_count >= 3
+
+    def test_get_audio_data_does_not_run_the_fallback_prober(self):
+        """The silence fallback ticks on the analysis thread now; the render
+        thread's per-frame read must never reach device probing (the
+        2026-09-22 lockup was a device open under exactly this call)."""
+        mgr, _, _ = self._make_manager_with_mock_capture()
+        calls = []
+        mgr._capture.maybe_fallback = lambda: calls.append(1)
+        mgr._started = True
+        for _ in range(5):
+            mgr.get_audio_data()
+        assert calls == []
