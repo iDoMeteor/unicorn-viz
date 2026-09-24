@@ -1,7 +1,7 @@
 # Auto VJ per-frame cost — plan
 
 Owner: perf seat (proposal)
-Status: **proposed — owner paused it for a conversation; no code changes until then**
+Status: **Phase A landed (auto-vj-01 rc.150); Phase B deferred until after a week-long soak**
 Last updated: 2026-09-24
 
 After the GPU console, the audio process and today's tuning, Auto VJ is the
@@ -74,10 +74,41 @@ detector change with replay and soak validation, ADR and weights-doc
 updates.  The replay harness drives the tracker directly and must keep
 working.  This is weeks of careful work, not an afternoon.
 
-## 5. Questions for the owner
+## 5. Owner decisions (2026-09-24)
 
-1. A1: is per-frame live-training capture deliberate (the corpus design),
-   or would a fixed rate serve the training program as well?
-2. Phase A only, or is Phase B (detector beside the analyzer) on the table?
-3. Should the auto-vj seat own this, with the perf seat supplying profiles
-   and review?
+* **Phase A: go** — done by the perf seat.
+* **A1 not taken:** live training rows stay per-frame (the corpus is
+  unchanged).
+* **Phase B: deferred** until the current build has had a thorough
+  week-long soak.
+
+## 6. Phase A results (rc.150)
+
+Proof method: a seeded replay (4 house tracks, 120 s each, 27,114 ticks;
+every unseeded `random.Random()` pinned by the runner, since the director's
+own `self._rng` ignores `session_replay --seed`) hashing each tick's
+detector and director outputs exactly — BPM, confidence, phase, downbeat
+confidence, beat index, fold-suspect mass, the **v3 posterior bytes**,
+mode, effect, reactivity/param targets, kick regularity, sub level,
+recommender centroid.  rc.149 and rc.150 hash identically; a 1e-12 nudge
+to the observation changes the hash (the instrument can see a change).
+
+| Change | Where | Why it is exact |
+|---|---|---|
+| v3 template observation memoized per observation (tick mode ran it on every tick; its input changes once per ACF cycle) | `beat_grid.py` `_v3_template_likelihood` | keyed on the observation tuple's identity + settings; the per-tick prior/genre/density still apply every tick, on a copy |
+| ACF comb reuses each lag's dot product within a call | `_BeatTrackerV3Base._estimate_tempo_acf` | same `np.dot` on the same slices (v2's protected copy untouched) |
+| Fold-lane masks built once per MAP lane | `_v3_compute_fold_suspect_mass` | live lattice only; masks are pure functions of the lane |
+| Kick regularity / sub level memoized on their 16-sample windows (read 3x a frame) | `auto_vj.py` | keyed on exact contents |
+| Recommender FFT frequency axis kept | `_update_profile_recommendation` | rebuilt when rate or FFT size changes |
+
+Measured (thread CPU per `update()`, replay, machine under load ~47, so
+absolute numbers are inflated): median **~2.4 ms → ~1.1-1.2 ms**, p90
+~4.1-4.3 → ~2.4-2.9 ms, two alternating pairs agreeing.
+
+Left alone on purpose: vectorizing the ACF lag loop (changes dot-product
+summation order → last-bit differences → a versioned detector change);
+the training-row builder (A1 territory); `_phrase_bias` (~2% — not worth
+the risk).  Replay-only finding: `random_pingpong_pair` pays the effect
+registry's one-time discovery (~0.9 s) in headless replays, where the
+registry is never pre-populated; the live visual profile discovers
+effects at startup (the mixer-only profile has no effects to pick).
