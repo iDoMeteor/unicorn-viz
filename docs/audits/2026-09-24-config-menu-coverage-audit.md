@@ -225,7 +225,7 @@ a toggle to show.
 | 4 | core 1.0.0-beta.172-173, spotify-01 rc.9-10, streaming-01 0.8.0, auto-vj-01 rc.152 | **Logging** tab (owner request, 2026-09-24): log level, log folder, per-frame perf logging, crash dump file, stall dump; Auto VJ decision log / log folder / training logs and corpus files / detector log; Spotify corpus file. New **text** and **secret** row kinds (decision C): Spotify client ID and streaming endpoint masked with SHOW |
 
 In-scope status after batch 3: of the 35 NONE keys, **24 now have rows**.
-After batch 4, `[logging] level`, `[streaming] endpoint` and
+core 1.0.0-beta.174 adds `[dj_mixer] enabled` to the Drop-ins tab (the rest of the mixer's keys live in its own ⚙ SETTINGS, per the UV Mixer Team and the owner). After batch 4, `[logging] level`, `[streaming] endpoint` and
 `[spotify] web_api.client_id` are covered too. Still open: text rows
 for `[recording] directory`, `[media] media_dir`, `[ansi] ansi_dir_auto`,
 `[video_out] v4l2.device`, `[chat] username` (the row kind now exists);

@@ -1121,3 +1121,22 @@ def test_live_rows_on_the_logging_tab_are_remembered_like_performance(tmp_path: 
     app._config_editor_contributors = lambda: [('auto_vj', ctrl)]
     _specs(app, 'Logging')['detector_log_interval_s']['set'](4.0)
     assert app.get_runtime_state('perf_dropin.auto_vj.detector_log_interval_s') == 4.0
+
+
+
+def test_dj_mixer_switch_is_on_the_dropins_tab_and_applied_before_the_app(tmp_path: Path) -> None:
+    import argparse
+
+    from unicornviz import __main__ as main_mod
+    from unicornviz.config import Config
+    app = _app(tmp_path, tab='Drop-ins')
+    row = _rows(app, 'Drop-ins')['DJ mixer']
+    assert row['display'] == 'ON' and row['badge'] == 'RESTART'
+    state = tmp_path / 'state.json'
+    RuntimeStateStore(state).set('config_overrides.dj_mixer.enabled', False)
+    path = tmp_path / 'config.toml'
+    path.write_text(f'[runtime_state]\npath = "{state}"\n[dj_mixer]\nenabled = true\n',
+                    encoding='utf-8')
+    cfg = Config(path)
+    main_mod._apply_menu_logging(cfg, argparse.Namespace(log_level=None))
+    assert cfg.get('dj_mixer', 'enabled') is False     # the boot profile sees the menu's choice

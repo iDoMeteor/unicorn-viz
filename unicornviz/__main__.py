@@ -288,11 +288,13 @@ def _build_overrides(args: argparse.Namespace) -> dict:
 
 
 def _apply_menu_logging(cfg: Config, args: argparse.Namespace) -> None:
-    """Lay the config menu's Logging-tab choices over config.toml.
+    """Lay config-menu choices that are read before App exists over config.toml.
 
-    Logging starts here, before App and its runtime store exist, so the
-    remembered choices (App._RUNTIME_CONFIG_OVERRIDES, logging_*) are read
-    directly.  A ``--log-level`` flag still wins for its run.
+    Logging starts here, and App.__init__ resolves the boot profile (which
+    reads ``[dj_mixer] enabled``), both before App's runtime store exists,
+    so the remembered choices are read directly: the Logging tab's
+    ``logging_*`` keys and the Drop-ins tab's DJ mixer switch.  A
+    ``--log-level`` flag still wins for its run.
     """
     try:
         from unicornviz.runtime_state import RuntimeStateStore  # noqa: PLC0415
@@ -313,6 +315,9 @@ def _apply_menu_logging(cfg: Config, args: argparse.Namespace) -> None:
             cfg.set_override('logging', key, caster(stored.strip() if caster is str else stored))
         except (TypeError, ValueError):
             continue
+    mixer = store.get('config_overrides.dj_mixer.enabled', None)
+    if isinstance(mixer, bool):
+        cfg.set_override('dj_mixer', 'enabled', mixer)
 
 
 def _setup_logging(cfg: Config) -> None:
