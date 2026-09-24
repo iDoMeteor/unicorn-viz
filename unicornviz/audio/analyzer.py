@@ -448,8 +448,7 @@ class Analyzer:
         2026-08-11: this is the copy that produces AudioData.bass_n/mid_n/
         treble_n -- consumed by several effects (audio_spectrogram.py,
         audio_waveforms.py, audio_sine.py, audio_chromogram.py,
-        audio_centroid.py, audio_tracks.py) and the live-corpus telemetry
-        sample (app.py's build_live_corpus_sample()), NOT by the Auto VJ
+        audio_centroid.py, audio_tracks.py), NOT by the Auto VJ
         drop_score/band_blend computation. drop-ins/auto-vj-01/beat_grid.py
         runs the identical formula (same math, same default alpha) as two
         further independent copies with their own mean/var state -- one in
