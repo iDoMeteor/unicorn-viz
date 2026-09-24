@@ -34,6 +34,7 @@ under the GIL are sufficient here.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Callable
 
 log = logging.getLogger(__name__)
@@ -42,9 +43,16 @@ log = logging.getLogger(__name__)
 class NowPlayingHub:
     """Registry of now-playing snapshot sources + active-source selection."""
 
+    #: How long one evaluation of every source serves further callers (s).
+    #: Several consumers ask each frame (the Now Spinning overlay, auto-vj, the
+    #: Control Room); this keeps it to about one evaluation per frame.
+    ACTIVE_TTL_S = 0.010
+
     def __init__(self) -> None:
         # name -> (priority, ambient, snapshot_fn)
         self._sources: dict[str, tuple[int, bool, Callable[[], dict]]] = {}
+        # (expiry, result) of the last active() evaluation.
+        self._active_memo: tuple[float, tuple[str, dict] | None] | None = None
 
     def register(self, name: str, snapshot_fn: Callable[[], dict],
                  priority: int = 0, ambient: bool = False) -> None:
@@ -57,11 +65,13 @@ class NowPlayingHub:
         if not name or not callable(snapshot_fn):
             return
         self._sources[name] = (int(priority), bool(ambient), snapshot_fn)
+        self._active_memo = None
         log.info('now-playing: registered source %r (priority %d%s)',
                  name, priority, ', ambient' if ambient else '')
 
     def unregister(self, name: str) -> None:
         if self._sources.pop(name, None) is not None:
+            self._active_memo = None
             log.info('now-playing: unregistered source %r', name)
 
     def names(self) -> list[str]:
@@ -72,7 +82,21 @@ class NowPlayingHub:
 
         Playing sources first (by priority), then ambient available ones.
         A source whose snapshot callable raises is skipped for this frame.
+
+        One evaluation of every source serves every caller for
+        ``ACTIVE_TTL_S`` (about a frame); each caller gets its own copy of
+        the snapshot dict.  Evaluating them all per caller was ~6% of the
+        main thread live (perf, 2026-09-24).
         """
+        now = time.monotonic()
+        memo = self._active_memo
+        if memo is None or memo[0] <= now:
+            memo = (now + self.ACTIVE_TTL_S, self._evaluate_active())
+            self._active_memo = memo
+        result = memo[1]
+        return None if result is None else (result[0], dict(result[1]))
+
+    def _evaluate_active(self) -> tuple[str, dict] | None:
         snaps: list[tuple[int, bool, str, dict]] = []
         for name, (prio, ambient, fn) in self._sources.items():
             try:

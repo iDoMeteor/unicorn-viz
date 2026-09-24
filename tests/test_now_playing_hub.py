@@ -79,3 +79,30 @@ def test_unidentified_track_suppresses_banner_and_platter_gate() -> None:
              'now_playing_banner_enabled': True}
     assert NowPlayingHub.is_identified(named) is True
     assert NowPlayingHub.banner_args(named, True, 'PLAYING')[0] is True
+
+
+def test_active_evaluates_sources_once_per_frame_and_copies_per_caller(monkeypatch) -> None:
+    """Several consumers ask every frame; one evaluation serves them all
+    for ~a frame, and nobody can mutate another caller's snapshot."""
+    from unicornviz import now_playing as np_mod  # noqa: PLC0415
+    hub = np_mod.NowPlayingHub()
+    calls = []
+
+    def snap():
+        calls.append(1)
+        return {'is_playing': True, 'title': 'T'}
+
+    hub.register('mixer', snap, priority=30)
+    clock = [100.0]
+    monkeypatch.setattr(np_mod.time, 'monotonic', lambda: clock[0])
+    first = hub.active()
+    second = hub.active()
+    assert len(calls) == 1
+    assert first == second and first[1] is not second[1]
+    first[1]['title'] = 'mutated'
+    assert hub.active()[1]['title'] == 'T'
+    clock[0] += hub.ACTIVE_TTL_S + 0.001                # next frame: fresh
+    hub.active()
+    assert len(calls) == 2
+    hub.register('media', lambda: {'is_playing': True, 'title': 'M'}, priority=40)
+    assert hub.active()[0] == 'media'                   # a new source is seen at once
