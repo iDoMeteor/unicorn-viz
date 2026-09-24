@@ -29,6 +29,28 @@ def _join_stray_probe_threads(timeout: float = 5.0) -> None:
             th.join(timeout=timeout)
 
 
+#: The probe's own test encode -- the only subprocess.run these tests count.
+_PROBE_SOURCE = 'testsrc=size=320x240:rate=30:duration=1'
+_REAL_RUN = rec.subprocess.run
+
+
+def _probe_only(fake):
+    """Wrap *fake* so it sees only the probe's encode commands.
+
+    ``rec.subprocess`` is the global ``subprocess`` module, so patching its
+    ``run`` intercepts every caller in the process -- a background thread
+    from another test (a device listing, a ``pactl`` query) that ran during
+    the window was counted as a second probe spawn and read ``stdout`` off
+    the fake (the 2026-09-24 ``spawns == 2`` flake).  Everything that is not
+    the probe goes to the real ``subprocess.run``.
+    """
+    def run(cmd, *a, **k):
+        if isinstance(cmd, (list, tuple)) and _PROBE_SOURCE in cmd:
+            return fake(cmd, *a, **k)
+        return _REAL_RUN(cmd, *a, **k)
+    return run
+
+
 @pytest.fixture(autouse=True)
 def _reset_cache(monkeypatch):
     _join_stray_probe_threads()
@@ -44,7 +66,7 @@ def test_prewarm_runs_the_probe_on_a_worker_and_caches(monkeypatch):
         threads.append(threading.current_thread().name)
         time.sleep(0.05)
         return type('P', (), {'returncode': 0, 'stderr': b''})()
-    monkeypatch.setattr(rec.subprocess, 'run', fake_run)
+    monkeypatch.setattr(rec.subprocess, 'run', _probe_only(fake_run))
     monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
     t = rec.prewarm_hw_encoder_probe('ffmpeg')
     t.join(timeout=2.0)
@@ -66,7 +88,7 @@ def test_sync_probe_waits_for_the_in_flight_prewarm(monkeypatch):
         probing.set()
         time.sleep(0.2)
         return type('P', (), {'returncode': 0, 'stderr': b''})()
-    monkeypatch.setattr(rec.subprocess, 'run', fake_run)
+    monkeypatch.setattr(rec.subprocess, 'run', _probe_only(fake_run))
     monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
     t = rec.prewarm_hw_encoder_probe('ffmpeg')
     # Wait for the worker to be mid-probe rather than sleeping a fixed 50 ms:
@@ -80,8 +102,8 @@ def test_sync_probe_waits_for_the_in_flight_prewarm(monkeypatch):
 
 
 def test_no_hardware_encoder_caches_false_and_returns_none(monkeypatch):
-    monkeypatch.setattr(rec.subprocess, 'run',
-                        lambda cmd, **k: type('P', (), {'returncode': 1, 'stderr': b'no'})())
+    monkeypatch.setattr(rec.subprocess, 'run', _probe_only(
+        lambda cmd, **k: type('P', (), {'returncode': 1, 'stderr': b'no'})()))
     monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
     assert rec._probe_hw_encoder('ffmpeg') is None
     assert rec._hw_encoder_cache is False
@@ -109,3 +131,30 @@ def test_startup_prewarm_is_gated_on_auto_record():
     call = src.index('prewarm_hw_encoder_probe(str(self.cfg')
     gate = src[call - 600:call]
     assert "'auto_record'" in gate
+
+
+def test_other_threads_running_subprocesses_are_not_counted_as_probes(monkeypatch):
+    """The 2026-09-24 flake, made deliberate: a foreign thread runs its own
+    subprocess while the probe is in flight -- it must reach the real
+    ``subprocess.run`` and not count as a second probe."""
+    spawns = 0
+    probing = threading.Event()
+
+    def fake_run(cmd, **k):
+        nonlocal spawns
+        spawns += 1
+        probing.set()
+        time.sleep(0.2)
+        return type('P', (), {'returncode': 0, 'stderr': b''})()
+    monkeypatch.setattr(rec.subprocess, 'run', _probe_only(fake_run))
+    monkeypatch.setattr(rec, '_render_device', lambda: '/dev/dri/renderD128')
+    t = rec.prewarm_hw_encoder_probe('ffmpeg')
+    assert probing.wait(timeout=2.0)
+    out: list = []
+    stray = threading.Thread(target=lambda: out.append(
+        rec.subprocess.run(['true'], capture_output=True)))
+    stray.start()
+    stray.join(timeout=5.0)
+    t.join(timeout=2.0)
+    assert out and out[0].returncode == 0 and hasattr(out[0], 'stdout')   # real run
+    assert spawns == 1
