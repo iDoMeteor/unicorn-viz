@@ -482,7 +482,8 @@ def test_build_live_training_row_falls_back_when_normalized_bands_missing() -> N
 
 
 class _FakeLiveCorpusWriter:
-    def __init__(self) -> None:
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled   # rc.151: rows are only built while capture is on
         self.calls: list[tuple[dict, bool]] = []
 
     def upsert(self, row: dict, *, force_flush: bool = False) -> bool:
@@ -541,6 +542,32 @@ def test_record_live_training_row_skips_when_no_real_bpm() -> None:
     assert stub._live_corpus_writer.calls == []
 
 
+def test_record_live_training_row_builds_nothing_while_capture_is_off(monkeypatch) -> None:
+    """rc.151: with live capture off (the default) the writer would discard
+    the row, so it is not built at all -- it cost ~3% of the main thread
+    every frame.  The track bookkeeping still runs, so turning capture on
+    mid-session force-flushes on the next real track change as before."""
+    built: list[int] = []
+    monkeypatch.setattr(_AUTO_VJ_MODULE, '_build_live_training_row',
+                        lambda *a, **k: built.append(1) or {})
+    writer = _FakeLiveCorpusWriter(enabled=False)
+    stub = _make_record_live_training_row_stub(writer=writer)
+    state = SimpleNamespace(audio_source='Line In', playlist_mode='auto')
+
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(
+        stub, state, SimpleNamespace(), {'change_counter': 3, 'track_id': 'abc'})
+
+    assert built == [] and writer.calls == []
+    assert stub._live_training_last_change_counter == 3
+    assert stub._live_training_last_track_id == 'abc'
+
+    writer.enabled = True
+    _AUTO_VJ_MODULE.AutoVJController._record_live_training_row(
+        stub, state, SimpleNamespace(), {'change_counter': 3, 'track_id': 'abc'})
+    assert built == [1]
+    assert writer.calls[0][1] is False       # same track: no spurious flush
+
+
 def test_record_live_training_row_change_counter_zero_force_flushes() -> None:
     """2026-08-15: `now_playing.get('change_counter', -1) or -1` collapsed a
     legitimate change_counter of 0 into -1 (falsy-0 triggers `or`), which
@@ -568,6 +595,8 @@ def test_record_live_training_row_logs_a_warning_on_capture_failure(caplog: pyte
     without DEBUG-level logging) is what made the zero-live-corpus-rows
     session that found this bug so hard to diagnose after the fact."""
     class _RaisingWriter:
+        enabled = True
+
         def upsert(self, row: dict, *, force_flush: bool = False) -> bool:
             raise RuntimeError('disk full')
 
