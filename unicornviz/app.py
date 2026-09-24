@@ -5104,8 +5104,6 @@ void main() {
         ('color_grade', 'start_enabled', 'Color grade on at start', False,
          'Start with the grade applied'),
         ('control_room', 'enabled', 'Control Room', False, 'Operator window at startup'),
-        ('dj_mixer', 'enabled', 'DJ mixer', True,
-         'The mixer window and engine (its own settings live in the mixer)'),
         ('keystrokes', 'enabled', 'Keystroke log', False, 'Log key presses for training sessions'),
         ('lyrics', 'enabled', 'Lyrics', True, 'Synced lyrics overlay'),
         ('media', 'enabled', 'Media player', False, 'Media library and player'),

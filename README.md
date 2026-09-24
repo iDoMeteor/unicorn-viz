@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.174**
+**Version 1.0.0-beta.175**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.175** — Reverts beta.174's **DJ mixer** Drop-ins switch and its early startup read: per the owner, `[dj_mixer] enabled` stays config.toml / boot-level only. Nothing had migrated (beta.174 was never run).
 - **1.0.0-beta.174** — **DJ mixer** joins the config editor's Drop-ins tab (RESTART; the mixer's own settings stay in its ⚙ SETTINGS). It is applied before the app resolves its boot profile, like the Logging tab, so `--mixer` sees the menu's choice.
 - **1.0.0-beta.173** — Drop-in rows on the **Logging** tab are remembered and replayed like Performance rows, and migrate from config.toml the same way, so every logging option can live on one tab: Auto VJ's decision log, log folder, training logs and corpus files and detector log (auto-vj-01 rc.152), and Spotify's corpus file (spotify-01 rc.10) join core's own.
 - **1.0.0-beta.172** — **Logging tab and text rows in the config menu.** A new **Logging** tab holds log level, log folder, per-frame perf logging (moved from Performance), crash dump file and stall dump; logging is set up before the app, so `__main__` lays these over config.toml itself (a `--log-level` flag still wins). New **text** and **secret** row kinds: click or Enter to type (real text input, on only while a field is open), Enter or click-away to save, Escape to cancel; secrets show SET / NOT SET with a SHOW toggle and never pre-fill a hidden value. Drop-in rows can be text or secret (Spotify client ID and corpus file, streaming endpoint). Secret-looking keys are masked in the startup override log.

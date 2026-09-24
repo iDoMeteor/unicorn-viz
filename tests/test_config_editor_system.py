@@ -1124,19 +1124,9 @@ def test_live_rows_on_the_logging_tab_are_remembered_like_performance(tmp_path: 
 
 
 
-def test_dj_mixer_switch_is_on_the_dropins_tab_and_applied_before_the_app(tmp_path: Path) -> None:
-    import argparse
-
-    from unicornviz import __main__ as main_mod
-    from unicornviz.config import Config
+def test_dj_mixer_enabled_stays_out_of_the_menu(tmp_path: Path) -> None:
+    """Owner, 2026-09-24: [dj_mixer] enabled is config.toml / boot-level only
+    (the mixer's other settings live in its own SETTINGS)."""
     app = _app(tmp_path, tab='Drop-ins')
-    row = _rows(app, 'Drop-ins')['DJ mixer']
-    assert row['display'] == 'ON' and row['badge'] == 'RESTART'
-    state = tmp_path / 'state.json'
-    RuntimeStateStore(state).set('config_overrides.dj_mixer.enabled', False)
-    path = tmp_path / 'config.toml'
-    path.write_text(f'[runtime_state]\npath = "{state}"\n[dj_mixer]\nenabled = true\n',
-                    encoding='utf-8')
-    cfg = Config(path)
-    main_mod._apply_menu_logging(cfg, argparse.Namespace(log_level=None))
-    assert cfg.get('dj_mixer', 'enabled') is False     # the boot profile sees the menu's choice
+    assert 'DJ mixer' not in _rows(app, 'Drop-ins')
+    assert all(section != 'dj_mixer' for section, *_rest in App._DROPIN_SWITCHES)
