@@ -1,6 +1,6 @@
 # GPU mixer console + audio process split + multithreading
 
-Owner: perf seat (with the owner, live) · Status: **active — phases 1, 2a landed; 2b landing** ·
+Owner: perf seat (with the owner, live) · Status: **active — phases 1, 2a, 2b landed; live-profile tuning landed** ·
 Last updated: 2026-09-24
 
 Rollback point: tag `checkpoint/pre-gpu-mixer-audio-split-2026-09-24`
@@ -162,16 +162,38 @@ them can be reverted on its own.
 |---|---|---|
 | 1a GPU console (draw list, atlas, instanced SDF renderer, mixer on it) | **landed** | core beta.159 `unicornviz/gpu2d.py`; dj-mixer-01 0.216.0 `gpu_console` |
 | 2a Engine in its own process (shadows, shared-memory tracks, crash recovery) | **landed** | core beta.160 `unicornviz/remote_objects.py`; dj-mixer-01 0.217.0 `audio_process` |
+| Live-profile tuning (console tooltips/list stats/paths, helper publish scope, cold device lists, local reactivity, now-playing memo) | **landed** | core beta.163-164; dj-mixer-01 0.218.1-0.218.3 |
+| Control Room on the GPU draw list | handed to the Control Room seat (unicorn-viz-15) | |
 | 1b Skip recording unchanged console sections; waveform shader | next | |
 | GC: freeze the long-lived heap (gen-2 124 ms -> 1 ms) | **landed** | core beta.161 `gc_tuning`; dj-mixer-01 0.217.1 |
-| 2b Capture + analyzer into the audio process, mixer engine shares it (streams, values, hot snapshots, factories) | **landing** | core beta.162 `unicornviz/audio/process.py`; dj-mixer-01 0.218.0 |
+| 2b Capture + analyzer into the audio process, mixer engine shares it (streams, values, hot snapshots, factories) | **landed** | core beta.162 `unicornviz/audio/process.py`; dj-mixer-01 0.218.0 |
 | 2c Decode worker writes straight into shared memory; stems at 48 kHz | next | |
 | 3 Worker processes for analysis/stems; `update()` audit | next | |
-| 4 GIL guard + per-process import map for a free-threaded helper | partly: helper reports its GIL state | |
+| 4 GIL guard + per-process import map for a free-threaded helper | **import map done**; helper logs its GIL state | see 4b |
 
 Measured so far: a 1920x1080 console frame builds in 7.1 ms instead of
 22.9 ms and uploads 67 KB instead of 7.9 MB (harness); the engine's
 `render_block()` no longer shares a GIL with anything in the main process.
+
+### 4b. The audio helper's import map (2026-09-24)
+
+What the helper (core audio process + dj-mixer-01's engine) actually loads,
+by replaying its factories' imports and listing compiled extensions:
+
+* **No** moderngl, glcontext, SDL2, Pillow, OpenCV or rtmidi -- none of the
+  free-threading blockers.
+* Third-party compiled packages: **PyAV, numpy, scipy, cffi** (sounddevice /
+  soundfile's backend) -- all with official `cp314t` wheels -- plus
+  **charset_normalizer**, pulled in only by `numpy.f2py`'s optional import
+  when scipy's array-API layer touches it (`deck.py` -> `scipy.signal`);
+  it also ships `cp314t` wheels (3.5.1).
+* Everything else is stdlib.
+
+So the helper can run GIL-free as soon as a free-threaded interpreter with
+those wheels exists: point `[audio] process_python` (core) and
+`[dj_mixer] audio_process_python` at it, and the helper's startup log line
+says whether the GIL really stayed off.  Not done here: installing
+`python3.14-freethreading` and building that environment is an owner call.
 
 ## 5. How we know it worked
 
