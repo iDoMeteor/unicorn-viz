@@ -31,6 +31,7 @@ _GUARDED = ('logs', 'runtime')
 # the audio process would otherwise cost a helper per test.  The tests of the
 # audio process itself spawn helpers explicitly.
 os.environ.setdefault('UNICORNVIZ_NO_AUDIO_PROCESS', '1')
+os.environ.setdefault('UNICORNVIZ_WORKERS', '0')   # batch jobs in-thread in tests
 
 
 def _snapshot() -> dict[str, set[str]]:

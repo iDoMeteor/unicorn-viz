@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.166**
+**Version 1.0.0-beta.167**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.167** — `unicornviz.workers`: a spawn-context process pool for pure batch jobs from path-loaded drop-in modules (`WorkerPool.submit(module_path, func, *args)`), workers at +10 niceness; `UNICORNVIZ_WORKERS` overrides the default (tests use 0 = in-thread). First user: dj-mixer-01 0.219.0's ANLZ runs.
 - **1.0.0-beta.166** — `remote_objects.adopt_array()`: in a helper process, owners move big buffers into shared memory as they adopt them, so publishing them to the main process costs no second copy (the helper was holding every track and stem twice). Retired segments are unmapped after 2 s instead of 10.
 - **1.0.0-beta.165** — `gpu2d` streamed rasters: `TextureAtlas.stream_entry(key, image)` / `DrawList.stream_image(key, image, x, y)` redraw a live preview through one reused atlas region instead of a new entry per refresh (which filled the atlas in ~25 frames); only the newest pixels per region are uploaded. For the Control Room's program preview.
 - **1.0.0-beta.164** — `NowPlayingHub.active()` evaluates its sources once per ~frame and hands each caller its own copy (the overlay, auto-vj and the Control Room each re-ran every source snapshot: ~6% of the main thread live).
