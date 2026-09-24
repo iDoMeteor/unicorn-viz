@@ -230,7 +230,6 @@ hud_production_mode = false
 enabled = false
 fullscreen = true       # borderless fullscreen on the chosen display (default true)
 display_index = 3
-render_interval = 0.5
 
 [keystrokes]
 enabled = true
