@@ -467,6 +467,9 @@ Notes:
     menu's value wins from then on; the startup log lists what moved.
     Built-in defaults are never copied, and this file is never written.
     Coverage and gaps: `docs/audits/2026-09-24-config-menu-coverage-audit.md`.
+- The config editor's **Drop-ins** tab holds load/start switches (RESTART),
+    remembered as `config_overrides.<section>.<key>`; a nested key such as
+    `[spotify.web_api] enabled` overrides only that leaf.
 - The config editor's **active profile** is remembered as
     `config_profile_active`. Audio/Visuals rows and per-effect parameter
     edits write through to it in `runtime/config_profiles.json` as they

@@ -78,8 +78,8 @@ class _Overlays(Overlays):
     """Bare overlay shell with the state the settings rows read and write."""
 
     def __init__(self, tab: str) -> None:  # noqa: D107 - test shell, no super()
-        self._config_editor_tabs = ['Effects', 'Audio', 'Hotkeys', 'Performance',
-                                    'Recording', 'Visuals']
+        self._config_editor_tabs = ['Effects', 'Audio', 'Drop-ins', 'Hotkeys',
+                                    'Performance', 'Recording', 'Visuals']
         self._config_editor_tab = self._config_editor_tabs.index(tab)
         self._ce_effects = []
         self._ce_effect_idx = 0
@@ -160,7 +160,8 @@ def test_tabs_are_effects_then_alphabetical_and_info_tabs_are_gone(monkeypatch) 
     app.config_profile_names = lambda: []
     app._push_config_editor_model()
     assert ov._config_editor_tabs == [
-        'Effects', 'Audio', 'Hotkeys', 'Performance', 'Recording', 'Visuals']
+        'Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Performance', 'Recording', 'Visuals']
+    assert ov.config_editor_tab_name == 'Performance'     # kept by name, not position
     assert 'System' not in ov._config_editor_tabs
     assert 'Auto VJ' not in ov._config_editor_tabs
     assert not hasattr(app, 'config_editor_info_rows')
@@ -366,7 +367,9 @@ def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
     rows = _rows(app, 'Visuals')
     assert set(rows) == {'Effect duration', 'Transition length', 'Now Playing banner',
                          'Now Spinning platter', 'HUD auto-hide', 'HUD timeout',
-                         'Flash messages'}
+                         'Flash messages', 'Detector BPM', 'Profile score',
+                         'Recommended profile', 'Speed min', 'Speed max',
+                         'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max'}
     specs = _specs(app, 'Visuals')
     specs['Now Playing banner']['set'](0.0)
     assert app.now_playing_banner_enabled is False
@@ -865,3 +868,77 @@ def test_config_file_value_ignores_defaults_and_overrides(tmp_path: Path) -> Non
     assert cfg.file_value('control_room', 'render_interval') == 0.5
     assert cfg.file_value('logging', 'level', default='x') == 'x'     # a CLI flag, not the file
     assert cfg.file_value('ansi', 'ansi_dir_auto', default='x') == 'x'  # a built-in default
+
+
+# --- Drop-ins tab, HUD detail, random look (2026-09-24 coverage batch) -------- #
+
+def test_dropins_tab_lists_restart_switches(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Drop-ins')
+    rows = _rows(app, 'Drop-ins')
+    assert {'Streaming (RTMP)', 'Spotify Web API', 'Control Room', 'Keystroke log',
+            'Video out on at start', 'V4L2 virtual camera'} <= set(rows)
+    assert all(r['kind'] == 'toggle' and r['badge'] == 'RESTART' for r in rows.values())
+    assert rows['Candy Frame']['display'] == 'ON'          # its loader's default
+    assert rows['Streaming (RTMP)']['display'] == 'OFF'
+
+
+def test_nested_switch_keeps_its_sibling_keys(tmp_path: Path) -> None:
+    """[spotify.web_api] enabled must not replace the whole web_api table."""
+    from unicornviz.config import Config
+    path = tmp_path / 'config.toml'
+    path.write_text('[spotify.web_api]\nclient_id = "abc"\nenabled = false\n', encoding='utf-8')
+    app = _app(tmp_path, tab='Drop-ins', cfg=Config(path))
+    _specs(app, 'Drop-ins')['Spotify Web API']['set'](1.0)
+    assert app.get_runtime_state('config_overrides.spotify.web_api.enabled') is True
+    fresh = _app(tmp_path, cfg=Config(path))
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('spotify', 'web_api', 'enabled') is True
+    assert fresh.cfg.get('spotify', 'web_api', 'client_id') == 'abc'
+
+
+def test_switches_migrate_from_the_file(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('keystrokes', 'enabled'): True, ('spotify', 'web_api', 'enabled'): True})
+    app = _app(tmp_path, cfg=cfg)
+    app._config_editor_contributors = lambda: []
+    app._migrate_config_to_menu()
+    assert app.get_runtime_state('config_overrides.keystrokes.enabled') is True
+    assert app.get_runtime_state('config_overrides.spotify.web_api.enabled') is True
+    assert app.get_runtime_state('config_overrides.chat.enabled') is None
+
+
+def test_hud_detail_rows_apply_live_and_respect_production_mode(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    seen: list[tuple] = []
+    app._overlays.set_hud_detector_visibility = lambda *flags: seen.append(flags)
+    _specs(app, 'Visuals')['Detector BPM']['set'](1.0)
+    assert seen[-1] == (True, False, False)
+    app.cfg.set_override('auto_vj', 'hud_production_mode', True)
+    _specs(app, 'Visuals')['Profile score']['set'](1.0)
+    assert seen[-1] == (False, False, False)                # production mode wins
+    assert app.cfg.get('overlays', 'hud_show_profile_score') is True   # but the choice is kept
+
+
+def test_random_look_rows_reach_the_hotkey_ranges(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    app._current_effect = None
+    specs = _specs(app, 'Visuals')
+    specs['Zoom min']['set'](0.8)
+    specs['Zoom max']['set'](1.2)
+    assert app._random_range_for('zoom', 0.30, 1.80) == (0.8, 1.2)
+
+
+def test_config_set_override_nests_dotted_keys(tmp_path: Path) -> None:
+    from unicornviz.config import Config
+    path = tmp_path / 'config.toml'
+    path.write_text('[video_out.v4l2]\ndevice = "/dev/video10"\n', encoding='utf-8')
+    cfg = Config(path)
+    cfg.set_override('video_out', 'v4l2.enabled', True)
+    assert cfg.get('video_out', 'v4l2') == {'device': '/dev/video10', 'enabled': True}
+
+
+def test_adding_a_tab_keeps_the_open_tab_by_name() -> None:
+    ov = Overlays.__new__(Overlays)
+    ov._config_editor_tabs = ['Effects', 'Audio', 'Hotkeys', 'Performance']
+    ov._config_editor_tab = 3                                   # Performance
+    ov.set_config_editor_tabs(['Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Performance'])
+    assert ov.config_editor_tab_name == 'Performance'

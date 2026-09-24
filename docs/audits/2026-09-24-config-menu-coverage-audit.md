@@ -1,7 +1,7 @@
 # Config menu coverage audit — config.toml keys vs. menu rows
 
 Owner: overlays / core manager seat (config menu)
-Status: Findings — row work in progress; value migration awaiting owner go-ahead
+Status: In progress — owner decisions made (§5); batches 1-3 shipped (§6)
 Last updated: 2026-09-24
 
 **Direction (relayed by the perf seat, 2026-09-24):** every setting the app
@@ -206,3 +206,27 @@ routing these.
   value automatically, and keep profiles as named snapshots layered on top.
 - **C. Sensitive values** (`streaming.endpoint`, `spotify.web_api.client_id`):
   masked write-only fields, or keep them file-only?
+
+## 6. Progress
+
+Owner answers (2026-09-24, direct): **A** migrate each key as its row lands
+(never writing config.toml); **B** always save automatically, into the
+*active profile* itself: there is always one, it loads at boot, it shows
+orange, Save writes to it, and a picked-but-unloaded profile shows purple
+with its border and LOAD pulsing cyan; **C** sensitive values masked, with
+a toggle to show.
+
+| Batch | Shipped | What |
+|---|---|---|
+| 1 | core 1.0.0-beta.169 | Profiles write through and load at boot: Visuals rows and effect-parameter edits now persist (finding 1 resolved) |
+| 2 | core 1.0.0-beta.170, control-room-01 0.24.0 | Migration: `Config.file_value()`; file-set values copied into the menu once at startup (core restart and live rows, drop-in rows declaring `config`, profile rows via the active profile). Window refresh gains 2/5 fps (`render_interval = 0.5` is now a menu value); Control Room Fullscreen row |
+| 3 | core 1.0.0-beta.171, webcam-01 1.9.0 | **Drop-ins** tab: RESTART load/start switches for candy_frame, chat, color_grade (+ start), control_room, keystrokes, lyrics, media, spotify (+ web_api), streaming, video_out (+ start, v4l2). Visuals: HUD detail ×3, Random look ranges ×6. Webcam border thickness. Nested keys (`web_api.enabled`) override just their leaf |
+
+In-scope status after batch 3: of the 35 NONE keys, **24 now have rows**.
+Still open: the text/path/secret keys (`[recording] directory`,
+`[media] media_dir`, `[ansi] ansi_dir_auto`, `[video_out] v4l2.device`,
+`[chat] username`, `[streaming] endpoint`, `[spotify] web_api.client_id`;
+`web_api.scopes` recommended to stay out), `[window] display_mode` /
+`display_index`, `[midi] device` / `preset`, `[chat] position`,
+`[logging] level`. Next: a `text` row kind with masking (C), then the
+choice rows over detected displays, MIDI devices and presets.
