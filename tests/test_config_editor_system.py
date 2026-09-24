@@ -78,7 +78,7 @@ class _Overlays(Overlays):
     """Bare overlay shell with the state the settings rows read and write."""
 
     def __init__(self, tab: str) -> None:  # noqa: D107 - test shell, no super()
-        self._config_editor_tabs = ['Effects', 'Audio', 'Drop-ins', 'Hotkeys',
+        self._config_editor_tabs = ['Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Logging',
                                     'Performance', 'Recording', 'Visuals']
         self._config_editor_tab = self._config_editor_tabs.index(tab)
         self._ce_effects = []
@@ -160,7 +160,8 @@ def test_tabs_are_effects_then_alphabetical_and_info_tabs_are_gone(monkeypatch) 
     app.config_profile_names = lambda: []
     app._push_config_editor_model()
     assert ov._config_editor_tabs == [
-        'Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Performance', 'Recording', 'Visuals']
+        'Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Logging', 'Performance', 'Recording',
+        'Visuals']
     assert ov.config_editor_tab_name == 'Performance'     # kept by name, not position
     assert 'System' not in ov._config_editor_tabs
     assert 'Auto VJ' not in ov._config_editor_tabs
@@ -184,7 +185,6 @@ _PERF_ROWS = {
     'Capture block size': 'choice', 'Audio process': 'toggle',
     'Audio process Python': 'choice', 'System monitor sampling': 'slider',
     'Tooltips': 'toggle', 'Video deck layer': 'toggle', 'Video cache edge': 'choice',
-    'Per-frame perf logging': 'toggle',
 }
 
 
@@ -235,7 +235,7 @@ def test_performance_live_rows_apply_and_persist(tmp_path: Path) -> None:
     assert app._overlays.tooltips_enabled is False
     assert app.get_runtime_state('perf_tooltips') is False
 
-    specs['Per-frame perf logging']['set'](1.0)
+    _specs(app, 'Logging')['Per-frame perf logging']['set'](1.0)   # moved to Logging
     assert app._perf_frames_enabled is True
     assert app.get_runtime_state('perf_perf_frames') is True
 
@@ -290,7 +290,7 @@ def test_restore_performance_settings_lays_live_choices_back(tmp_path: Path) -> 
     specs['Preview width']['set'](3.0)
     specs['System monitor sampling']['set'](0.8)
     specs['Tooltips']['set'](0.0)
-    specs['Per-frame perf logging']['set'](1.0)
+    _specs(app, 'Logging')['Per-frame perf logging']['set'](1.0)   # moved to Logging
     specs['Render scale']['set'](0.75)
 
     fresh = _app(tmp_path)
@@ -942,3 +942,159 @@ def test_adding_a_tab_keeps_the_open_tab_by_name() -> None:
     ov._config_editor_tab = 3                                   # Performance
     ov.set_config_editor_tabs(['Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Performance'])
     assert ov.config_editor_tab_name == 'Performance'
+
+
+
+# --- Logging tab + text/secret rows (2026-09-24) ------------------------------ #
+
+def test_logging_tab_rows(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Logging')
+    rows = _rows(app, 'Logging')
+    assert list(rows) == ['Log level', 'Log folder', 'Per-frame perf logging',
+                          'Crash dump file', 'Stall dump after']
+    assert rows['Log level']['choices'] == ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'NONE')
+    assert rows['Log folder']['kind'] == 'text' and rows['Log folder']['value'] == 'logs'
+    restart = {n for n, r in rows.items() if r['badge'] == 'RESTART'}
+    assert restart == {'Log level', 'Log folder', 'Crash dump file', 'Stall dump after'}
+
+
+def test_logging_choices_persist_and_apply_next_launch(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Logging')
+    specs = _specs(app, 'Logging')
+    specs['Log level']['set'](0.0)
+    specs['Log folder']['set']('/var/tmp/uv-logs')
+    specs['Crash dump file']['set'](0.0)
+    specs['Stall dump after']['set'](12.4)
+    assert app.get_runtime_state('logging_level') == 'DEBUG'
+    assert app.get_runtime_state('logging_directory') == '/var/tmp/uv-logs'
+    assert app.get_runtime_state('logging_faulthandler') is False
+    assert app.get_runtime_state('logging_stall_dump_s') == 12.0
+    fresh = _app(tmp_path)
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('logging', 'level') == 'DEBUG'
+    assert fresh.cfg.get('logging', 'directory') == '/var/tmp/uv-logs'
+
+
+def test_main_lays_menu_logging_over_config_but_a_flag_wins(tmp_path: Path) -> None:
+    import argparse
+
+    from unicornviz import __main__ as main_mod
+    from unicornviz.config import Config
+    state = tmp_path / 'state.json'
+    RuntimeStateStore(state).set('logging_level', 'DEBUG')
+    RuntimeStateStore(state).set('logging_directory', '/var/tmp/uv-logs')
+    path = tmp_path / 'config.toml'
+    path.write_text(f'[runtime_state]\npath = "{state}"\n[logging]\nlevel = "INFO"\n',
+                    encoding='utf-8')
+    cfg = Config(path)
+    main_mod._apply_menu_logging(cfg, argparse.Namespace(log_level=None))
+    assert cfg.get('logging', 'level') == 'DEBUG'
+    assert cfg.get('logging', 'directory') == '/var/tmp/uv-logs'
+    flagged = Config(path, overrides={'logging': {'level': 'ERROR'}})
+    main_mod._apply_menu_logging(flagged, argparse.Namespace(log_level='ERROR'))
+    assert flagged.get('logging', 'level') == 'ERROR'
+
+
+def test_logging_values_migrate_from_the_file(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('logging', 'level'): 'WARNING', ('logging', 'stall_dump_s'): 8})
+    app = _app(tmp_path, cfg=cfg)
+    app._config_editor_contributors = lambda: []
+    app._migrate_config_to_menu()
+    assert app.get_runtime_state('logging_level') == 'WARNING'
+    assert app.get_runtime_state('logging_stall_dump_s') == 8.0
+
+
+def test_secret_values_are_masked_in_override_log_lines() -> None:
+    from unicornviz.app import _loggable
+    assert _loggable('endpoint', 'rtmp://x/live/KEY') == '<set>'
+    assert _loggable('web_api.client_id', '') == '<empty>'
+    assert _loggable('level', 'DEBUG') == 'DEBUG'
+
+
+def test_text_rows_apply_committed_text_and_toggle_sdl_text_input(tmp_path: Path, monkeypatch) -> None:
+    import unicornviz.app as app_mod
+    calls: list[str] = []
+    monkeypatch.setattr(app_mod.sdl2, 'SDL_StartTextInput', lambda: calls.append('start'))
+    monkeypatch.setattr(app_mod.sdl2, 'SDL_StopTextInput', lambda: calls.append('stop'))
+    app = _app(tmp_path, tab='Logging')
+    app._text_input_handlers = {}
+    idx = list(_specs(app, 'Logging')).index('Log folder')
+    app._config_editor_set_text(idx, 'mylogs')
+    assert app.get_runtime_state('logging_directory') == 'mylogs'
+    app._config_editor_set_value(idx, 0.5)       # numeric paths ignore text rows
+    assert app.get_runtime_state('logging_directory') == 'mylogs'
+    app._sync_config_editor_text_input(True)
+    assert 'config_editor_text' in app._text_input_handlers
+    app._sync_config_editor_text_input(True)      # idempotent
+    app._sync_config_editor_text_input(False)
+    assert calls == ['start', 'stop'] and 'config_editor_text' not in app._text_input_handlers
+
+
+def test_dropin_secret_row_persists_a_nested_restart_override(tmp_path: Path) -> None:
+    from unicornviz.config import Config
+    path = tmp_path / 'config.toml'
+    path.write_text('[spotify.web_api]\nscopes = ["user-read-playback-state"]\n', encoding='utf-8')
+    app = _app(tmp_path, tab='Performance', cfg=Config(path))
+
+    class _Spotify:
+        CONFIG_EDITOR_CATEGORY = 'Performance'
+
+        def config_editor_settings(self):
+            return [{'name': 'client_id', 'kind': 'secret', 'value': '', 'restart': 'spotify'}]
+
+        def set_config_setting(self, name, value):
+            return {'web_api.client_id': value}
+
+    app._config_editor_contributors = lambda: [('spotify', _Spotify())]
+    spec = _specs(app, 'Performance')['client_id']
+    assert spec['kind'] == 'secret' and spec['badge'] == 'RESTART'
+    spec['set']('abc123')
+    fresh = _app(tmp_path, cfg=Config(path))
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('spotify', 'web_api', 'client_id') == 'abc123'
+    assert fresh.cfg.get('spotify', 'web_api', 'scopes') == ['user-read-playback-state']
+
+
+# --- overlay text editing ------------------------------------------------------ #
+
+def _text_ov(kind: str = 'text', value: str = 'logs') -> Overlays:
+    ov = _Overlays('Logging')
+    ov._ce_params = [{'name': 'Log folder', 'kind': kind, 'value': value}]
+    ov._ce_text_edit_idx = -1
+    ov._ce_text_buffer = ''
+    ov._ce_text_request = None
+    ov._ce_revealed = set()
+    return ov
+
+
+def test_overlay_text_edit_commit_and_cancel() -> None:
+    ov = _text_ov()
+    ov.begin_config_editor_text(0)
+    assert ov.config_editor_text_editing and ov._ce_text_buffer == 'logs'
+    ov.append_config_editor_text('/x\t')             # control chars dropped
+    ov.backspace_config_editor_text()
+    ov.commit_config_editor_text()
+    assert ov.take_config_editor_text_request() == (0, 'logs/')
+    assert not ov.config_editor_text_editing
+    ov.begin_config_editor_text(0)
+    ov.append_config_editor_text('zzz')
+    ov.cancel_config_editor_text()
+    assert ov.take_config_editor_text_request() is None
+
+
+def test_overlay_secret_never_seeds_the_hidden_value() -> None:
+    ov = _text_ov('secret', 'rtmp://host/live/KEY')
+    ov.begin_config_editor_text(0)
+    assert ov._ce_text_buffer == ''                   # masked: not put on screen
+    ov.commit_config_editor_text()                    # empty Enter keeps it
+    assert ov.take_config_editor_text_request() is None
+    ov.toggle_config_editor_reveal(0)
+    ov.begin_config_editor_text(0)
+    assert ov._ce_text_buffer == 'rtmp://host/live/KEY'
+
+
+def test_enter_on_a_text_row_starts_editing() -> None:
+    ov = _text_ov()
+    ov._ce_param_idx = 0
+    assert ov.activate_config_editor_row() is False
+    assert ov.config_editor_text_editing

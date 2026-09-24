@@ -467,6 +467,11 @@ Notes:
     menu's value wins from then on; the startup log lists what moved.
     Built-in defaults are never copied, and this file is never written.
     Coverage and gaps: `docs/audits/2026-09-24-config-menu-coverage-audit.md`.
+- The config editor's **Logging** tab (level, folder, crash dump file, stall
+    dump) is remembered as `logging_level`, `logging_directory`,
+    `logging_faulthandler` and `logging_stall_dump_s`. Logging starts before
+    the app, so `unicornviz/__main__.py` applies these itself; `--log-level`
+    still wins for its run.
 - The config editor's **Drop-ins** tab holds load/start switches (RESTART),
     remembered as `config_overrides.<section>.<key>`; a nested key such as
     `[spotify.web_api] enabled` overrides only that leaf.

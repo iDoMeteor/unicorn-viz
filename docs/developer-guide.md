@@ -610,6 +610,11 @@ optionally `tab`, `kind` (`slider` | `toggle` | `choice`), `choices`,
 `label`, `display`, `hint` (tooltip + inline on the selected row),
 `badge`, `section`, `step`, `restart`, `config`.
 
+`kind` may also be `'text'` or `'secret'` (a string `value`; the setter
+receives the typed string; add `placeholder` for an empty field). A secret
+is masked with a SHOW toggle and never pre-filled while hidden. Give text
+rows `restart` (or put them on the Performance tab) so they persist.
+
 `config` (`'<section>.<key>'`) names the config.toml line the row replaces.
 config.toml is being retired in favor of the menu (owner, 2026-09-24): at
 the end of startup core copies a value the file actually sets (never a

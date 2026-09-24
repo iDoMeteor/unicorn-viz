@@ -706,6 +706,15 @@ class Overlays:
         self._ce_hover_control = ''
         self._ce_drag_row = -1
         self._ce_value_request = None
+        # Text / secret rows: which row is being typed into, the buffer, the
+        # committed (row, text) awaiting the app, and which secret rows the
+        # operator has asked to show (by row name; masked otherwise).
+        self._ce_text_edit_idx = -1
+        self._ce_text_buffer = ''
+        self._ce_text_request: tuple[int, str] | None = None
+        self._ce_revealed: set[str] = set()
+        self._ce_text_rects: list[tuple[float, float, float, float, int]] = []
+        self._ce_reveal_rects: list[tuple[float, float, float, float, int]] = []
         self._ce_slider_rects: list[tuple[float, float, float, float, int]] = []
         self._ce_chip_rects: list[tuple[float, float, float, float, int, int]] = []
         self._ce_toggle_rects: list[tuple[float, float, float, float, int]] = []
@@ -2337,6 +2346,7 @@ void main() {
 
     def close_config_editor(self) -> None:
         """Close the editor (animates closed, then stops rendering)."""
+        self.cancel_config_editor_text()
         if self._show_config_editor:
             self._config_editor_fading = True
         self._show_config_editor = False
@@ -2359,6 +2369,7 @@ void main() {
         """Select a tab by index (clamped)."""
         n = len(self._config_editor_tabs)
         if n:
+            self.cancel_config_editor_text()
             self._config_editor_tab = max(0, min(int(index), n - 1))
 
     def move_config_editor_tab(self, delta: int) -> None:
@@ -2624,6 +2635,19 @@ void main() {
                 if 0 <= idx < len(self._ce_profiles):
                     self._ce_name_text = self._ce_profiles[idx]
                 return True
+        # Text / secret rows: the SHOW chip, then the field itself.
+        for rx, ry, rw, rh, idx in getattr(self, '_ce_reveal_rects', ()):
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                self.toggle_config_editor_reveal(idx)
+                return True
+        for rx, ry, rw, rh, idx in getattr(self, '_ce_text_rects', ()):
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                if idx != self._ce_text_edit_idx:
+                    self.commit_config_editor_text()
+                    self.begin_config_editor_text(idx)
+                return True
+        if self.config_editor_text_editing:
+            self.commit_config_editor_text()      # click-away saves, then the click lands
         # Row controls.
         for rx, ry, rw, rh, idx, choice in self._ce_chip_rects:
             if rx <= x <= rx + rw and ry <= y <= ry + rh:
@@ -2687,7 +2711,77 @@ void main() {
                 cur = int(round(float(row.get('value', 0.0))))
                 self._ce_value_request = (idx, float((cur + 1) % n))
                 return True
+        if kind in self._CE_TEXT_KINDS:
+            self.begin_config_editor_text(idx)
         return False
+
+    # -- Text / secret rows ----------------------------------------------------
+
+    _CE_TEXT_KINDS = ('text', 'secret')
+    _CE_TEXT_MAX = 512
+
+    @property
+    def config_editor_text_editing(self) -> bool:
+        """True while a text/secret row is capturing typing."""
+        return getattr(self, '_ce_text_edit_idx', -1) >= 0
+
+    def begin_config_editor_text(self, idx: int) -> None:
+        """Start typing into row ``idx``.  A text row starts from its value;
+        a secret starts empty unless shown (typing replaces it; an empty
+        Enter keeps it), so a masked value is never put on screen."""
+        if not (0 <= idx < len(self._ce_params)):
+            return
+        row = self._ce_params[idx]
+        kind = str(row.get('kind') or '')
+        if kind not in self._CE_TEXT_KINDS:
+            return
+        shown = kind == 'text' or str(row.get('name', '')) in self._ce_revealed
+        self._ce_param_idx = idx
+        self._ce_focus = 1
+        self._ce_text_edit_idx = idx
+        self._ce_text_buffer = str(row.get('value') or '') if shown else ''
+
+    def append_config_editor_text(self, text: str) -> None:
+        if self.config_editor_text_editing:
+            typed = ''.join(ch for ch in str(text) if ch.isprintable())
+            self._ce_text_buffer = (self._ce_text_buffer + typed)[:self._CE_TEXT_MAX]
+
+    def backspace_config_editor_text(self) -> None:
+        if self.config_editor_text_editing:
+            self._ce_text_buffer = self._ce_text_buffer[:-1]
+
+    def commit_config_editor_text(self) -> None:
+        """Queue the typed text for the app and stop editing.  An empty secret
+        is "keep what's stored", not "clear it"."""
+        idx = self._ce_text_edit_idx
+        if idx < 0:
+            return
+        row = self._ce_params[idx] if idx < len(self._ce_params) else {}
+        text = self._ce_text_buffer.strip()
+        secret = str(row.get('kind') or '') == 'secret'
+        if not (secret and not text):
+            self._ce_text_request = (idx, text)
+        self._ce_text_edit_idx = -1
+        self._ce_text_buffer = ''
+
+    def cancel_config_editor_text(self) -> None:
+        self._ce_text_edit_idx = -1
+        self._ce_text_buffer = ''
+
+    def take_config_editor_text_request(self) -> tuple[int, str] | None:
+        """Pop the committed ``(row_index, text)``, if any."""
+        req = getattr(self, '_ce_text_request', None)
+        self._ce_text_request = None
+        return req
+
+    def toggle_config_editor_reveal(self, idx: int) -> None:
+        """Show / hide one secret row's value."""
+        if 0 <= idx < len(self._ce_params):
+            name = str(self._ce_params[idx].get('name', ''))
+            if name in self._ce_revealed:
+                self._ce_revealed.discard(name)
+            else:
+                self._ce_revealed.add(name)
 
     def take_config_editor_value_request(self) -> tuple[int, float] | None:
         """Pop the pending ``(row_index, value)`` set request, if any."""
@@ -3037,7 +3131,7 @@ void main() {
 
         # Saved-profile chips (single row; overflow is clipped).
         self._draw_text('PROFILES', px + 22, fy, scale=1.7 * u, color=(0.55, 0.75, 1.0, 0.85))
-        if self.config_editor_tab_name in ('Drop-ins', 'Performance', 'Recording'):
+        if self.config_editor_tab_name in ('Drop-ins', 'Logging', 'Performance', 'Recording'):
             note = 'this tab follows the machine, not the profile'
             self._draw_text(note, px + 140 * u, fy + 1, scale=1.4 * u, color=(0.5, 0.6, 0.72, 0.7))
         chip_y = fy + 24.0 * u
@@ -3182,6 +3276,8 @@ void main() {
         self._ce_slider_rects = []
         self._ce_chip_rects = []
         self._ce_toggle_rects = []
+        self._ce_text_rects = []
+        self._ce_reveal_rects = []
         t = getattr(self, '_hud_t', 0.0)
         u = self._ce_u()
         self._draw_rect(right_x, body_y, right_w, body_h, (0.05, 0.08, 0.16, 0.85))
@@ -3328,6 +3424,10 @@ void main() {
 
         cx0 = rx + rw * 0.44
         cx1 = rx + rw - 118.0 * u
+        if kind in self._CE_TEXT_KINDS:
+            self._ce_draw_text_field(i, p, cx0, rx + rw - 18.0 * u, ry + 6.0 * u, t)
+            self._ce_param_row_rects.append((rx + 6, ry, rw - 12, row_h, i))
+            return
         val = float(p.get('value', 0.0))
         display = str(p.get('display') or f'{val:.3f}')
         if kind == 'toggle':
@@ -3404,6 +3504,47 @@ void main() {
         self._draw_rect(kx - 3.0 * u, ry + 12.0 * u, 6.0 * u, 20.0 * u, (1.0, 1.0, 1.0, 0.85 + 0.15 * glow))
         # Generous hit box so the track is easy to grab.
         self._ce_slider_rects.append((x0, ry + 6.0 * u, track_w, 32.0 * u, i))
+
+    def _ce_draw_text_field(self, i: int, p: dict, x0: float, x_max: float, y: float,
+                            t: float) -> None:
+        """A text box.  Secrets show asterisks (or SET / NOT SET) unless shown,
+        with a SHOW/HIDE chip; long values keep their tail in view, which
+        for a path is the part that matters.  ASCII only: the overlay font
+        atlas covers 32-126."""
+        u = self._ce_u()
+        scale = 1.7 * u
+        secret = str(p.get('kind')) == 'secret'
+        shown = not secret or str(p.get('name', '')) in self._ce_revealed
+        chip_w = 60.0 * u if secret else 0.0
+        w = max(60.0, x_max - x0 - (chip_w + 8.0 * u if secret else 0.0))
+        h = 26.0 * u
+        editing = i == self._ce_text_edit_idx
+        if editing:
+            body = self._ce_text_buffer if shown else '*' * len(self._ce_text_buffer)
+            caret = '_' if int(t * 2.0) % 2 == 0 else ' '
+            text, col = body + caret, (0.95, 1.0, 1.0, 1.0)
+        else:
+            value = str(p.get('value') or '')
+            if shown:
+                text = value or str(p.get('placeholder') or '(not set)')
+            else:
+                text = '********  SET' if value else 'NOT SET'
+            col = (0.85, 0.95, 0.7, 0.95) if value else (0.55, 0.6, 0.7, 0.8)
+        self._draw_rect(x0, y, w, h, (0.10, 0.18, 0.34, 0.92) if editing else (0.05, 0.09, 0.19, 0.85))
+        self._ce_outline(x0, y, w, h, (0.4, 0.9, 1.0, 0.9) if editing else (0.2, 0.35, 0.6, 0.6),
+                         2.0 if editing else 1.0)
+        max_chars = max(4, int((w - 14.0 * u) / max(1.0, self._ce_text_w('M', scale))))
+        if len(text) > max_chars:
+            text = '...' + text[-(max_chars - 3):]
+        self._draw_text(text, x0 + 7 * u, y + 5 * u, scale=scale, color=col)
+        self._ce_text_rects.append((x0, y, w, h, i))
+        if secret:
+            cx = x0 + w + 8.0 * u
+            self._draw_rect(cx, y, chip_w, h, (0.32, 0.16, 0.55, 0.85) if shown else (0.10, 0.24, 0.50, 0.85))
+            label = 'HIDE' if shown else 'SHOW'
+            self._draw_text(label, cx + (chip_w - self._ce_text_w(label, 1.4 * u)) / 2, y + 6 * u,
+                            scale=1.4 * u, color=(0.9, 0.96, 1.0, 0.95))
+            self._ce_reveal_rects.append((cx, y, chip_w, h, i))
 
     def _ce_draw_toggle(self, i: int, x: float, y: float, on: bool, t: float) -> None:
         """ON/OFF pill: lit teal with the knob right, dim with the knob left."""

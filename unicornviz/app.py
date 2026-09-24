@@ -287,6 +287,36 @@ def _ce_choice(
     }
 
 
+def _ce_text(
+    key: str, name: str, value: str, setter: Callable[[str], object], *,
+    secret: bool = False, hint: str = '', badge: str = '', section: str = '',
+    placeholder: str = '',
+) -> dict:
+    """Config-editor text spec (paths, names); ``secret`` masks it behind a
+    SHOW toggle.  The setter receives the committed string."""
+    return {
+        'key': key, 'name': name, 'kind': 'secret' if secret else 'text',
+        'value': str(value or ''), 'min': 0.0, 'max': 1.0, 'set': setter,
+        'display': '', 'hint': hint, 'badge': badge, 'section': section,
+        'placeholder': placeholder,
+    }
+
+
+_CE_TEXT_KINDS = ('text', 'secret')
+
+# Setting names whose values must never reach a log line (the RTMP endpoint
+# carries the stream key; the Spotify client id is an app credential).
+_SECRET_KEY_MARKERS = ('endpoint', 'client_id', 'secret', 'token', 'password', 'stream_key')
+
+
+def _loggable(key: str, value: object) -> object:
+    """``value`` for a log line, or a mask when ``key`` names a secret."""
+    name = str(key).lower()
+    if any(marker in name for marker in _SECRET_KEY_MARKERS):
+        return '<set>' if value not in (None, '') else '<empty>'
+    return value
+
+
 def _infer_param_range(value: float) -> tuple[float, float]:
     """Infer a sensible (min, max) slider range for a bare float parameter.
 
@@ -3555,7 +3585,8 @@ void main() {
 
     def _write_profile(self, name: str) -> None:
         """Persist effect overrides + global/drop-in settings as a named profile."""
-        settings = {s['key']: float(s['value']) for s in self._config_editor_all_specs()}
+        settings = {s['key']: float(s['value']) for s in self._config_editor_all_specs()
+                    if str(s.get('kind')) not in _CE_TEXT_KINDS}
         self._config_profile_store.save(name, {
             'effects': self.config_overrides_snapshot(),
             'settings': settings,
@@ -3625,7 +3656,8 @@ void main() {
         payload = self._config_profile_store.get(name) or {}
         saved = payload.get('settings') if isinstance(payload, dict) else None
         saved_keys = set(saved) if isinstance(saved, dict) else set()
-        if any(s['key'] not in saved_keys for s in self._config_editor_all_specs()):
+        if any(s['key'] not in saved_keys for s in self._config_editor_all_specs()
+               if str(s.get('kind')) not in _CE_TEXT_KINDS):
             self._write_profile(name)
 
     _DEFAULT_PROFILE_NAME = 'default'
@@ -3700,7 +3732,9 @@ void main() {
                 elif str(row.get('tab') or default_tab) == 'Performance':
                     state_key = f'perf_dropin.{prefix}.{row["name"]}'
                     if self.get_runtime_state(state_key, default=None) is None:
-                        self._remember_runtime(state_key, float(row.get('value', 0.0)))
+                        current = row.get('value', 0.0)
+                        self._remember_runtime(state_key, str(current) if str(row.get('kind')) in
+                                               _CE_TEXT_KINDS else float(current))
                         moved.append(f'[{section}] {key}')
         if moved:
             log.info('Config menu now holds %d setting(s) copied from config.toml '
@@ -3793,8 +3827,17 @@ void main() {
                 self._config_editor_set_value(*req)
             except Exception:
                 log.debug('Config editor set failed: %r', req, exc_info=True)
+        take_text = getattr(overlays, 'take_config_editor_text_request', None)
+        text_req = take_text() if callable(take_text) else None
+        if text_req is not None:
+            try:
+                self._config_editor_set_text(*text_req)
+            except Exception:
+                log.debug('Config editor text set failed: row %r', text_req[0], exc_info=True)
+        self._sync_config_editor_text_input(
+            bool(getattr(overlays, 'config_editor_text_editing', False)))
         tabs = ['Effects'] + sorted(
-            ['Audio', 'Drop-ins', 'Hotkeys', 'Performance', 'Recording', 'Visuals'])
+            ['Audio', 'Drop-ins', 'Hotkeys', 'Logging', 'Performance', 'Recording', 'Visuals'])
         overlays.set_config_editor_tabs(tabs)
 
         current = self.current_effect_class_name()
@@ -4085,6 +4128,8 @@ void main() {
             specs.extend(self._config_editor_performance_specs())
         elif tab == 'Drop-ins':
             specs.extend(self._config_editor_dropin_switch_specs())
+        elif tab == 'Logging':
+            specs.extend(self._config_editor_logging_specs())
         elif tab == 'Recording':
             specs.extend(self._config_editor_recording_specs())
         specs.extend(self._config_editor_dropin_specs(tab))
@@ -4245,13 +4290,70 @@ void main() {
             self._set_video_cache_edge_index, badge='RESTART',
             hint='Decoded-frame cache resolution (long edge, px)', section='Video decks',
         ))
-        # -- Diagnostics ------------------------------------------------------
-        specs.append(_ce_toggle(
-            'perf.perf_frames', 'Per-frame perf logging', self._perf_frames_enabled,
-            self._set_perf_frames_enabled,
-            hint='Log slow frames and periodic timing samples', section='Diagnostics',
-        ))
         return specs
+
+    # -- Logging tab -----------------------------------------------------------
+    # Logging is set up in __main__ before the app exists, so these are
+    # RESTART rows: remembered, then laid over config.toml by __main__
+    # (_apply_menu_logging) as well as by _apply_runtime_config_overrides.
+
+    _LOG_LEVEL_CHOICES = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'NONE')
+
+    def _config_editor_logging_specs(self) -> list[dict]:
+        level = str(self.cfg.get('logging', 'level', default='INFO') or 'INFO').upper()
+        level = 'WARNING' if level == 'WARN' else level
+        specs = [
+            _ce_choice(
+                'logging.level', 'Log level', self._choice_index(self._LOG_LEVEL_CHOICES, level),
+                self._LOG_LEVEL_CHOICES, self._set_log_level_index, badge='RESTART',
+                hint='How much goes to the console and log file (NONE = no log file)',
+                section='Logs',
+            ),
+            _ce_text(
+                'logging.directory', 'Log folder',
+                str(self.cfg.get('logging', 'directory', default='logs') or 'logs'),
+                self._set_log_directory, badge='RESTART', placeholder='logs',
+                hint='Folder for log, crash and stall files (relative to the app)',
+                section='Logs',
+            ),
+            _ce_toggle(
+                'perf.perf_frames', 'Per-frame perf logging', self._perf_frames_enabled,
+                self._set_perf_frames_enabled,
+                hint='Log slow frames and periodic timing samples', section='Logs',
+            ),
+            _ce_toggle(
+                'logging.faulthandler', 'Crash dump file',
+                bool(self.cfg.get('logging', 'faulthandler', default=True)),
+                lambda v: self._set_logging_restart('faulthandler', float(v) >= 0.5,
+                                                    'Crash dump file'),
+                badge='RESTART', hint='Write Python crash tracebacks to a file in the log folder',
+                section='Crashes and stalls',
+            ),
+            _ce_slider(
+                'logging.stall_dump_s', 'Stall dump after',
+                float(self.cfg.get('logging', 'stall_dump_s', default=5.0) or 0.0), 0.0, 30.0,
+                lambda v: self._set_logging_restart('stall_dump_s', float(round(v)),
+                                                    'Stall dump'),
+                step=1.0, badge='RESTART', fmt='{:.0f} s',
+                hint='Dump every thread if the render loop freezes this long (0 = off)',
+                section='Crashes and stalls',
+            ),
+        ]
+        return specs
+
+    def _set_log_level_index(self, value: float) -> None:
+        idx = max(0, min(len(self._LOG_LEVEL_CHOICES) - 1, int(round(float(value)))))
+        self._set_logging_restart('level', self._LOG_LEVEL_CHOICES[idx], 'Log level')
+
+    def _set_log_directory(self, text: str) -> None:
+        self._set_logging_restart('directory', str(text).strip() or 'logs', 'Log folder')
+
+    def _set_logging_restart(self, key: str, value: object, label: str) -> None:
+        """Remember a [logging] choice; logging is built before the app, so
+        it applies at the next launch."""
+        self.cfg.set_override('logging', key, value)
+        self._remember_runtime(f'logging_{key}', value)
+        self._flash(f'{label}: {value} (applies on restart)')
 
     def _remember_runtime(self, key: str, value: object) -> None:
         """Persist a config-editor choice to runtime state (no-op without a store)."""
@@ -4394,6 +4496,10 @@ void main() {
         ('video_decks_cache_long_edge', 'video_decks', 'cache_long_edge', int),
         ('audio_process', 'audio', 'process', bool),
         ('audio_process_python', 'audio', 'process_python', str),
+        ('logging_level', 'logging', 'level', str),
+        ('logging_directory', 'logging', 'directory', str),
+        ('logging_faulthandler', 'logging', 'faulthandler', bool),
+        ('logging_stall_dump_s', 'logging', 'stall_dump_s', float),
     )
     # String overrides whose empty value is a real choice, not "unset":
     # an empty process_python means "the app's own interpreter", and must be
@@ -4421,7 +4527,7 @@ void main() {
                     continue
                 value = caster(stored)
             self.cfg.set_override(section, key, value)
-            log.info('Runtime override: [%s] %s = %r', section, key, value)
+            log.info('Runtime override: [%s] %s = %r', section, key, _loggable(key, value))
         # Drop-in RESTART rows (see _persist_dropin_restart): whole sections.
         stored = self.get_runtime_state('config_overrides', default=None)
         if isinstance(stored, dict):
@@ -4430,7 +4536,7 @@ void main() {
                     continue
                 for key, value in self._flatten_overrides(keys):
                     self.cfg.set_override(str(section), key, value)
-                    log.info('Runtime override: [%s] %s = %r', section, key, value)
+                    log.info('Runtime override: [%s] %s = %r', section, key, _loggable(key, value))
 
     @staticmethod
     def _flatten_overrides(node: dict, prefix: str = '') -> list[tuple[str, object]]:
@@ -4494,6 +4600,13 @@ void main() {
                 if not isinstance(values, dict):
                     continue
                 for name, value in values.items():
+                    if isinstance(value, str):          # a text row
+                        try:
+                            ctrl.set_config_setting(str(name), value)
+                        except Exception:
+                            log.debug('Performance restore failed: %s.%s', prefix, name,
+                                      exc_info=True)
+                        continue
                     if isinstance(value, bool) or not isinstance(value, (int, float)):
                         continue
                     try:
@@ -4859,11 +4972,36 @@ void main() {
                 specs.append(self._dropin_row_spec(prefix, ctrl, title, tab, row))
         return specs
 
+    def _dropin_text_row_spec(self, prefix: str, ctrl: object, title: str, tab: str,
+                              row: dict) -> dict:
+        """A drop-in text/secret row: the setter gets the string; restart rows
+        persist as config_overrides, live Performance rows as perf_dropin."""
+        name = str(row['name'])
+        restart = str(row.get('restart') or '')
+        setter = ctrl.set_config_setting
+
+        def _set(v: str, s=setter, n=name, p=prefix, t=tab, r=restart) -> None:
+            result = s(n, str(v))
+            if r:
+                self._persist_dropin_restart(r, n, str(v), result)
+            elif t == 'Performance':
+                self._remember_runtime(f'perf_dropin.{p}.{n}', str(v))
+
+        spec = _ce_text(
+            f'dropin.{prefix}.{name}', str(row.get('label') or name), str(row.get('value') or ''),
+            _set, secret=str(row.get('kind')) == 'secret', hint=str(row.get('hint') or ''),
+            badge=str(row.get('badge') or ('RESTART' if restart else '')),
+            section=str(row.get('section') or title), placeholder=str(row.get('placeholder') or ''),
+        )
+        return spec
+
     def _dropin_row_spec(self, prefix: str, ctrl: object, title: str, tab: str,
                          row: dict) -> dict:
         """Turn one contributor row into an editor spec with a persisting setter."""
         name = str(row['name'])
         kind = str(row.get('kind') or 'slider')
+        if kind in _CE_TEXT_KINDS:
+            return self._dropin_text_row_spec(prefix, ctrl, title, tab, row)
         choices = tuple(str(c) for c in (row.get('choices') or ()))
         value = float(row.get('value', 0.0))
         step: float | None
@@ -4994,7 +5132,7 @@ void main() {
         self._flash(f'{label}: ' + ('on' if on else 'off') + ' (applies on restart)')
 
     _CE_ROW_PASSTHROUGH = ('name', 'value', 'min', 'max', 'kind', 'choices',
-                           'display', 'hint', 'badge', 'section', 'step')
+                           'display', 'hint', 'badge', 'section', 'step', 'placeholder')
 
     def config_editor_global_rows(self, tab: str) -> list[dict[str, object]]:
         """Return the editor's row dicts for a settings tab (no setters)."""
@@ -5058,10 +5196,12 @@ void main() {
         specs = self._config_editor_settings_specs(tab)
         if not (0 <= i < len(specs)):
             return
-        if tab in self._PROFILE_TABS:
-            self._profile_touched()
         spec = specs[i]
         kind = str(spec.get('kind') or 'slider')
+        if kind in _CE_TEXT_KINDS:
+            return                      # typed, not nudged
+        if tab in self._PROFILE_TABS:
+            self._profile_touched()
         lo, hi = float(spec['min']), float(spec['max'])
         if kind == 'toggle':
             spec['set'](1.0 if notches > 0 else 0.0)
@@ -5072,6 +5212,30 @@ void main() {
             return
         step = float(spec.get('step', 0.0)) or ((hi - lo) / 40.0 if hi > lo else 0.01)
         spec['set'](min(hi, max(lo, float(spec['value']) + notches * step)))
+
+    def _config_editor_set_text(self, index: int, text: str) -> None:
+        """Apply a committed text/secret row (the overlay only queues it)."""
+        tab = self._overlays.config_editor_tab_name
+        specs = self._config_editor_settings_specs(tab)
+        if not (0 <= index < len(specs)):
+            return
+        spec = specs[index]
+        if str(spec.get('kind')) in _CE_TEXT_KINDS:
+            spec['set'](str(text))
+
+    def _sync_config_editor_text_input(self, editing: bool) -> None:
+        """SDL text input (process-wide) is on only while a text row is being
+        typed into; its characters arrive as SDL_TEXTINPUT and go to the row."""
+        if editing == getattr(self, '_ce_text_input_on', False):
+            return
+        self._ce_text_input_on = editing
+        if editing:
+            self.register_text_input_handler(
+                'config_editor_text', self._overlays.append_config_editor_text)
+            sdl2.SDL_StartTextInput()
+        else:
+            self.unregister_text_input_handler('config_editor_text')
+            sdl2.SDL_StopTextInput()
 
     def _config_editor_set_value(self, index: int, value: float) -> None:
         """Set row ``index`` on the active tab to an absolute ``value``.
@@ -5096,9 +5260,11 @@ void main() {
         specs = self._config_editor_settings_specs(tab)
         if not (0 <= index < len(specs)):
             return
+        spec = specs[index]
+        if str(spec.get('kind')) in _CE_TEXT_KINDS:
+            return
         if tab in self._PROFILE_TABS:
             self._profile_touched()
-        spec = specs[index]
         lo, hi = float(spec['min']), float(spec['max'])
         clamped = min(hi, max(lo, float(value)))
         step = float(spec.get('step', 0.0))
@@ -6275,6 +6441,17 @@ void main() {
                         # Editor captures navigation/close; other keys swallowed.
                         self._update_ctrl_state(event.key.keysym.sym, True)
                         _sym = event.key.keysym.sym
+                        if getattr(self._overlays, 'config_editor_text_editing', False):
+                            # A text/secret row: characters arrive as
+                            # SDL_TEXTINPUT (see _sync_config_editor_text_input);
+                            # these keys edit, everything else is swallowed.
+                            if _sym == sdl2.SDLK_ESCAPE:
+                                self._overlays.cancel_config_editor_text()
+                            elif _sym in (sdl2.SDLK_RETURN, sdl2.SDLK_KP_ENTER):
+                                self._overlays.commit_config_editor_text()
+                            elif _sym == sdl2.SDLK_BACKSPACE:
+                                self._overlays.backspace_config_editor_text()
+                            continue
                         if self._overlays.config_editor_name_mode:
                             # Profile-name text entry captures typing.
                             if _sym == sdl2.SDLK_ESCAPE:
@@ -7169,6 +7346,8 @@ void main() {
                 self._push_config_editor_model()
             else:
                 self._config_editor_was_open = False
+                if getattr(self, '_ce_text_input_on', False):
+                    self._sync_config_editor_text_input(False)
             self._flush_profile_autosave()
 
             # Render

@@ -287,6 +287,34 @@ def _build_overrides(args: argparse.Namespace) -> dict:
     return overrides
 
 
+def _apply_menu_logging(cfg: Config, args: argparse.Namespace) -> None:
+    """Lay the config menu's Logging-tab choices over config.toml.
+
+    Logging starts here, before App and its runtime store exist, so the
+    remembered choices (App._RUNTIME_CONFIG_OVERRIDES, logging_*) are read
+    directly.  A ``--log-level`` flag still wins for its run.
+    """
+    try:
+        from unicornviz.runtime_state import RuntimeStateStore  # noqa: PLC0415
+        store = RuntimeStateStore(str(cfg.get('runtime_state', 'path',
+                                              default='runtime/global_state.json')))
+    except Exception:
+        return
+    for key, caster in (('level', str), ('directory', str), ('faulthandler', bool),
+                        ('stall_dump_s', float)):
+        if key == 'level' and getattr(args, 'log_level', None):
+            continue
+        stored = store.get(f'logging_{key}', None)
+        if stored is None or (caster is str and not str(stored).strip()):
+            continue
+        if caster is not str and isinstance(stored, str):
+            continue
+        try:
+            cfg.set_override('logging', key, caster(stored.strip() if caster is str else stored))
+        except (TypeError, ValueError):
+            continue
+
+
 def _setup_logging(cfg: Config) -> None:
     level_name = str(cfg.get('logging', 'level', default='INFO')).upper()
     if level_name == 'WARNING':
@@ -589,6 +617,7 @@ def main() -> None:
     except ConfigValidationError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2) from exc
+    _apply_menu_logging(cfg, args)
     _setup_logging(cfg)
     _install_gl_debug_env(cfg)
     _install_faulthandler(cfg)

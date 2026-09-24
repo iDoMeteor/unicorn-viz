@@ -38,6 +38,10 @@ def _ov(tab: str = 'Performance', params: list[dict] | None = None) -> Overlays:
     ov._ce_pending_action = None
     ov._ce_capture_mode = False
     ov._ce_capture_action = ''
+    ov._ce_text_edit_idx = -1
+    ov._ce_text_buffer = ''
+    ov._ce_text_request = None
+    ov._ce_revealed = set()
     ov._glyph_w = 13
     ov._glyph_h = 18
     ov._font_scale_norm = 8.0 / 18.0
@@ -240,3 +244,32 @@ def test_full_render_smoke_on_every_tab() -> None:
         assert len(ov._ce_sparkles) == ov._CE_SPARKLE_COUNT
         if tab == 'Effects':
             assert ov._ce_effect_row_rects
+
+
+
+def test_text_and_secret_rows_render_and_never_show_a_hidden_secret() -> None:
+    secret_value = 'rtmp://live.example/app/SUPERSECRETKEY'
+    ov = _ov(tab='Performance', params=[
+        {'name': 'Log folder', 'kind': 'text', 'value': '/var/tmp/uv-logs', 'section': 'Logs'},
+        {'name': 'Stream endpoint', 'kind': 'secret', 'value': secret_value, 'section': 'Stream'},
+        {'name': 'Client ID', 'kind': 'secret', 'value': '', 'section': 'Stream'},
+    ])
+    ov._render_config_editor()
+    drawn = ' '.join(str(c[1][0]) for c in ov.calls if c[0] == 'text')
+    assert '/var/tmp/uv-logs' in drawn
+    assert 'SUPERSECRETKEY' not in drawn and 'SET' in drawn and 'NOT SET' in drawn
+    assert len(ov._ce_text_rects) == 3 and len(ov._ce_reveal_rects) == 2
+    # Typing into a hidden secret shows asterisks, never the characters.
+    ov.calls.clear()
+    ov.begin_config_editor_text(1)
+    ov.append_config_editor_text('NEWKEY')
+    ov._render_config_editor()
+    drawn = ' '.join(str(c[1][0]) for c in ov.calls if c[0] == 'text')
+    assert 'NEWKEY' not in drawn and '******' in drawn
+    # SHOW reveals it.
+    ov.cancel_config_editor_text()
+    ov.toggle_config_editor_reveal(1)
+    ov.calls.clear()
+    ov._render_config_editor()
+    drawn = ' '.join(str(c[1][0]) for c in ov.calls if c[0] == 'text')
+    assert 'SUPERSECRETKEY' in drawn
