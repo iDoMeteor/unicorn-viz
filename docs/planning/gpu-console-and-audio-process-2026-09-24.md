@@ -1,6 +1,6 @@
 # GPU mixer console + audio process split + multithreading
 
-Owner: perf seat (with the owner, live) · Status: **active — executing** ·
+Owner: perf seat (with the owner, live) · Status: **active — phase 1 landed, phase 2 landing** ·
 Last updated: 2026-09-24
 
 Rollback point: tag `checkpoint/pre-gpu-mixer-audio-split-2026-09-24`
@@ -155,6 +155,22 @@ them can be reverted on its own.
    `update()` audit; the deck thread pool behind its flag.
 4. **Free-thread readiness.** The GIL guard test; the interpreter setting;
    an import map per process.
+
+## 4a. Progress
+
+| Step | State | Where |
+|---|---|---|
+| 1a GPU console (draw list, atlas, instanced SDF renderer, mixer on it) | **landed** | core beta.159 `unicornviz/gpu2d.py`; dj-mixer-01 0.216.0 `gpu_console` |
+| 2a Engine in its own process (shadows, shared-memory tracks, crash recovery) | **landing** | core beta.160 `unicornviz/remote_objects.py`; dj-mixer-01 0.217.0 `audio_process` |
+| 1b Skip recording unchanged console sections; waveform shader | next | |
+| 2b Capture + analyzer into the audio process (value objects, onset log) | next | |
+| 2c Decode worker writes straight into shared memory; stems at 48 kHz | next | |
+| 3 Worker processes for analysis/stems; `update()` audit | next | |
+| 4 GIL guard + per-process import map for a free-threaded helper | partly: helper reports its GIL state | |
+
+Measured so far: a 1920x1080 console frame builds in 7.1 ms instead of
+22.9 ms and uploads 67 KB instead of 7.9 MB (harness); the engine's
+`render_block()` no longer shares a GIL with anything in the main process.
 
 ## 5. How we know it worked
 
