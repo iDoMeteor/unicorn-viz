@@ -241,3 +241,55 @@ def test_curves_differ_only_by_edge_antialiasing(gl) -> None:
     # Interiors are exact: only pixels next to an edge may differ.
     assert np.array_equal(got[27, 32], ref[27, 32])
     assert np.array_equal(got[27, 110], ref[27, 110])
+
+
+# -- streamed rasters (a live preview) ---------------------------------------------
+
+def _solid(w, h, rgba):
+    return Image.new('RGBA', (w, h), rgba)
+
+
+def test_stream_entry_reuses_its_region_and_uploads_only_the_newest() -> None:
+    atlas = gpu2d.TextureAtlas(512, 256)
+    first = atlas.stream_entry('preview', _solid(40, 20, (255, 0, 0, 255)))
+    atlas.take_patches()
+    for rgba in ((0, 255, 0, 255), (0, 0, 255, 255)):      # two refreshes...
+        again = atlas.stream_entry('preview', _solid(40, 20, rgba))
+        assert again is first                              # same region
+    patches = atlas.take_patches()                         # ...one upload
+    assert len(patches) == 1 and patches[0][0] == 'put'
+    _, x, y, w, h, data = patches[0]
+    assert (w, h) == (40, 20) and data[:4] == bytes((0, 0, 255, 255))
+    assert atlas.take_patches() == []
+
+
+def test_stream_entry_takes_arrays_and_a_new_size_gets_a_new_region() -> None:
+    atlas = gpu2d.TextureAtlas(512, 256)
+    a = atlas.stream_entry('p', np.zeros((20, 40, 4), np.uint8))
+    b = atlas.stream_entry('p', np.zeros((30, 50, 4), np.uint8))
+    assert (b.width, b.height) == (50, 30) and b is not a
+
+
+def test_stream_entry_survives_an_atlas_reset() -> None:
+    atlas = gpu2d.TextureAtlas(128, 64)
+    atlas.stream_entry('p', _solid(40, 20, (1, 2, 3, 255)))
+    atlas.image_entry(_solid(120, 50, (9, 9, 9, 255)))      # forces a reset
+    assert atlas.generation == 1
+    entry = atlas.stream_entry('p', _solid(40, 20, (4, 5, 6, 255)))
+    patches = atlas.take_patches()
+    assert patches[0][0] == 'reset' and entry is not None
+    assert any(p[0] == 'put' and p[3:5] == (40, 20) for p in patches)
+
+
+def test_streamed_pixels_change_on_screen_between_frames(gl) -> None:
+    atlas = gpu2d.TextureAtlas(512, 256)
+    dl = gpu2d.DrawList(atlas)
+    gl._atlas_gen = -1
+    shown = []
+    for rgba in ((255, 0, 0, 255), (0, 200, 0, 255)):
+        dl.begin(64, 32, (0, 0, 0, 255))
+        dl.stream_image('preview', _solid(40, 20, rgba), 4, 4)
+        frame = dl.finish()
+        assert gl.draw(frame, atlas.take_patches(), 64, 32)
+        shown.append(tuple(gl.read_pixels(64, 32)[10, 10, :3]))
+    assert shown == [(255, 0, 0), (0, 200, 0)]

@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.164**
+**Version 1.0.0-beta.165**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.165** — `gpu2d` streamed rasters: `TextureAtlas.stream_entry(key, image)` / `DrawList.stream_image(key, image, x, y)` redraw a live preview through one reused atlas region instead of a new entry per refresh (which filled the atlas in ~25 frames); only the newest pixels per region are uploaded. For the Control Room's program preview.
 - **1.0.0-beta.164** — `NowPlayingHub.active()` evaluates its sources once per ~frame and hands each caller its own copy (the overlay, auto-vj and the Control Room each re-ran every source snapshot: ~6% of the main thread live).
 - **1.0.0-beta.163** — Audio process tuning from a live profile: a waited call publishes only its own object (the helper's command thread spent 62% re-publishing everything, device lists included); device lists refresh about once a second (`Policy.cold_derive`); reactivity is set main-side (auto-vj drifts it every frame and the helper never reads it); the claimed-device list is pushed only when it changes.
 - **1.0.0-beta.162** — **Capture and analysis run in the audio process** (`[audio] process`, default on; `unicornviz/audio/process.py`): a real `AudioManager` in the helper, the app's one a shadow reading the analysis frame the helper publishes every tick; onsets stream as a sequence-numbered log; capture state reaches the runtime store through a relay (one writer); dj-mixer-01 0.218.0 joins the same process via `vj_api.audio_process_host()`; helper death restarts capture in-process on the next frame. `AudioManager` itself: the silence fallback now ticks on the analysis thread, never the render thread (the 2026-09-22 lockup path), onsets are a cursor-read log, and `audio_snapshot()` is the one locked read. `remote_objects` gains value objects, event streams, per-tick derived values, factories loaded into a running helper, resync on attach, and tolerant unpickling.

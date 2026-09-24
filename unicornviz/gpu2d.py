@@ -178,6 +178,10 @@ class TextureAtlas:
         self._measure = ImageDraw.Draw(Image.new('L', (1, 1)))
         self._warned_oversize = False
         self._invalidate_requested = False
+        # Streamed rasters (stream_entry): the newest pixels per region,
+        # uploaded after the ordinary patches -- a preview refreshed faster
+        # than frames are presented uploads once, not once per refresh.
+        self._stream_patches: dict[tuple, tuple] = {}
 
     # -- packing -------------------------------------------------------------
 
@@ -204,6 +208,7 @@ class TextureAtlas:
         self.generation += 1
         with self._lock:
             self._patches = [('reset', self.generation)]
+            self._stream_patches = {}
 
     def _put(self, key: Any, rgba: bytes, w: int, h: int, ox: int, oy: int,
              pin: Any = None) -> AtlasEntry | None:
@@ -271,6 +276,33 @@ class TextureAtlas:
         w, h = img.size
         return self._put(key, img.tobytes(), w, h, ox, oy)
 
+    def stream_entry(self, key: Any, image: Any) -> AtlasEntry | None:
+        """A region whose pixels change every call (a live preview).
+
+        The first call for ``key`` allocates a region; later calls with the
+        same size reuse it and just queue the new pixels (only the newest
+        per region is uploaded -- see :meth:`take_patches`).  A new size gets
+        a new region (the old one is simply orphaned until the next reset).
+        ``image`` is a PIL image (converted to RGBA) or an ``(h, w, 4)``
+        uint8 array.
+        """
+        if isinstance(image, np.ndarray):
+            h, w = int(image.shape[0]), int(image.shape[1])
+            data = np.ascontiguousarray(image, dtype=np.uint8).tobytes()
+        else:
+            img = image if image.mode == 'RGBA' else image.convert('RGBA')
+            w, h = img.size
+            data = img.tobytes()
+        skey = ('stream', key)
+        entry = self._entries.get(skey)
+        if entry is not None and (entry.width, entry.height) == (w, h):
+            x = int(round(entry.u0 * self.width))
+            y = int(round(entry.v0 * self.height))
+            with self._lock:
+                self._stream_patches[(x, y, w, h)] = ('put', x, y, w, h, data)
+            return entry
+        return self._put(skey, data, w, h, 0, 0)
+
     def invalidate(self) -> None:
         """Ask for a full reset from any thread (e.g. the GL texture was
         recreated, so nothing uploaded so far exists any more).  Applied by
@@ -289,6 +321,9 @@ class TextureAtlas:
         ``('put', x, y, w, h, rgba_bytes)``, in order."""
         with self._lock:
             patches, self._patches = self._patches, []
+            if self._stream_patches:
+                patches.extend(self._stream_patches.values())
+                self._stream_patches = {}
         return patches
 
     def textlength(self, text: str, font: Any = None) -> float:
@@ -501,6 +536,14 @@ class DrawList:
     def image(self, image: Any, x: float, y: float) -> None:
         """Paste an RGBA image with its alpha (``Image.paste(im, xy, im)``)."""
         entry = self.atlas.image_entry(image)
+        if entry is not None:
+            self._quad(entry, x, y, _WHITE)
+
+    def stream_image(self, key: Any, image: Any, x: float, y: float) -> None:
+        """Draw a raster that changes every frame (a live preview) through
+        one reused atlas region (:meth:`TextureAtlas.stream_entry`) instead
+        of a new entry per frame."""
+        entry = self.atlas.stream_entry(key, image)
         if entry is not None:
             self._quad(entry, x, y, _WHITE)
 
