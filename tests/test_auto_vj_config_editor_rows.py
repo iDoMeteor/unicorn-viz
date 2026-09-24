@@ -51,6 +51,7 @@ def _ctrl(**overrides) -> AutoVJController:
     c._profile_auto_reco_eval_interval_s = 8.0
     c._detector_log_interval_s = 1.0
     c._wide_bpm_sample_interval_s = 2.0
+    c._cfg = {}
     for key, value in overrides.items():
         setattr(c, key, value)
     return c
@@ -67,6 +68,10 @@ def test_row_names_and_shapes() -> None:
         'sequence_training_enabled',
         'profile_auto_reco_eval_interval_s',
         'detector_log_interval_s',
+        'log_decisions',
+        'log_dir',
+        'live_training_corpus_path',
+        'sequence_training_corpus_path',
         'wide_bpm_sample_interval_s',
     ]
     assert all(r.get('hint') for r in rows.values())
@@ -134,3 +139,26 @@ def test_cadence_sliders_clamp() -> None:
 def test_unknown_setting_is_ignored() -> None:
     c = _ctrl()
     assert c.set_config_setting('not_a_real_row', 1.0) is None
+
+
+
+def test_logging_rows_sit_on_the_logging_tab_and_name_their_config_lines() -> None:
+    c = _ctrl(_cfg={'log_decisions': True, 'log_dir': '/var/tmp/avj'})
+    rows = {r['name']: r for r in c.config_editor_settings()}
+    logging_rows = ('live_training_enabled', 'sequence_training_enabled', 'detector_log_interval_s',
+                    'log_decisions', 'log_dir', 'live_training_corpus_path',
+                    'sequence_training_corpus_path')
+    for name in logging_rows:
+        assert rows[name]['tab'] == 'Logging', name
+        assert rows[name]['config'] == f'auto_vj.{name}', name
+    assert rows['log_decisions']['value'] == 1.0 and rows['log_decisions']['restart'] == 'auto_vj'
+    assert rows['log_dir']['kind'] == 'text' and rows['log_dir']['value'] == '/var/tmp/avj'
+    assert 'tab' not in rows['wide_bpm_sample_interval_s']        # a performance knob stays put
+
+
+def test_logging_restart_rows_return_overrides() -> None:
+    c = _ctrl()
+    assert c.set_config_setting('log_decisions', 0.0) == {'log_decisions': False}
+    assert c.set_config_setting('log_dir', ' /tmp/x ') == {'log_dir': '/tmp/x'}
+    assert c.set_config_setting('live_training_corpus_path', 'a.jsonl') == {
+        'live_training_corpus_path': 'a.jsonl'}

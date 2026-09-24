@@ -1098,3 +1098,26 @@ def test_enter_on_a_text_row_starts_editing() -> None:
     ov._ce_param_idx = 0
     assert ov.activate_config_editor_row() is False
     assert ov.config_editor_text_editing
+
+
+
+def test_live_rows_on_the_logging_tab_are_remembered_like_performance(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Logging')
+
+    class _AutoVJ:
+        CONFIG_EDITOR_CATEGORY = 'Performance'
+
+        def __init__(self) -> None:
+            self.interval = 1.0
+
+        def config_editor_settings(self):
+            return [{'name': 'detector_log_interval_s', 'value': self.interval, 'min': 0.0,
+                     'max': 10.0, 'tab': 'Logging'}]
+
+        def set_config_setting(self, name, value):
+            self.interval = float(value)
+
+    ctrl = _AutoVJ()
+    app._config_editor_contributors = lambda: [('auto_vj', ctrl)]
+    _specs(app, 'Logging')['detector_log_interval_s']['set'](4.0)
+    assert app.get_runtime_state('perf_dropin.auto_vj.detector_log_interval_s') == 4.0

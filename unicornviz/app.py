@@ -3729,7 +3729,7 @@ void main() {
                     if self.get_runtime_state(state_key, default=None) is None:
                         self._remember_runtime(state_key, raw)
                         moved.append(f'[{section}] {key}')
-                elif str(row.get('tab') or default_tab) == 'Performance':
+                elif str(row.get('tab') or default_tab) in self._MACHINE_LIVE_TABS:
                     state_key = f'perf_dropin.{prefix}.{row["name"]}'
                     if self.get_runtime_state(state_key, default=None) is None:
                         current = row.get('value', 0.0)
@@ -4984,7 +4984,7 @@ void main() {
             result = s(n, str(v))
             if r:
                 self._persist_dropin_restart(r, n, str(v), result)
-            elif t == 'Performance':
+            elif t in self._MACHINE_LIVE_TABS:
                 self._remember_runtime(f'perf_dropin.{p}.{n}', str(v))
 
         spec = _ce_text(
@@ -5030,7 +5030,7 @@ void main() {
             result = s(n, v)
             if r:
                 self._persist_dropin_restart(r, n, v, result)
-            elif t == 'Performance':
+            elif t in self._MACHINE_LIVE_TABS:
                 self._remember_runtime(f'perf_dropin.{p}.{n}', float(v))
 
         spec: dict = {
@@ -5069,6 +5069,9 @@ void main() {
         return specs
 
     _PROFILE_TABS = ('Audio', 'Visuals')
+    # Tabs whose live drop-in rows describe the machine: remembered as
+    # perf_dropin.<KEY>.<name> and replayed at startup (not in profiles).
+    _MACHINE_LIVE_TABS = ('Performance', 'Logging')
 
     _HUD_DETAIL_ROWS = (
         ('hud_show_detector_bpm', 'Detector BPM'),

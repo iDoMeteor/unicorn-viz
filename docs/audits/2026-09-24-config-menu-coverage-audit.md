@@ -1,7 +1,7 @@
 # Config menu coverage audit — config.toml keys vs. menu rows
 
 Owner: overlays / core manager seat (config menu)
-Status: In progress — owner decisions made (§5); batches 1-3 shipped (§6)
+Status: In progress — owner decisions made (§5); batches 1-4 shipped (§6)
 Last updated: 2026-09-24
 
 **Direction (relayed by the perf seat, 2026-09-24):** every setting the app
@@ -222,11 +222,13 @@ a toggle to show.
 | 2 | core 1.0.0-beta.170, control-room-01 0.24.0 | Migration: `Config.file_value()`; file-set values copied into the menu once at startup (core restart and live rows, drop-in rows declaring `config`, profile rows via the active profile). Window refresh gains 2/5 fps (`render_interval = 0.5` is now a menu value); Control Room Fullscreen row |
 | 3 | core 1.0.0-beta.171, webcam-01 1.9.0 | **Drop-ins** tab: RESTART load/start switches for candy_frame, chat, color_grade (+ start), control_room, keystrokes, lyrics, media, spotify (+ web_api), streaming, video_out (+ start, v4l2). Visuals: HUD detail ×3, Random look ranges ×6. Webcam border thickness. Nested keys (`web_api.enabled`) override just their leaf |
 
+| 4 | core 1.0.0-beta.172-173, spotify-01 rc.9-10, streaming-01 0.8.0, auto-vj-01 rc.152 | **Logging** tab (owner request, 2026-09-24): log level, log folder, per-frame perf logging, crash dump file, stall dump; Auto VJ decision log / log folder / training logs and corpus files / detector log; Spotify corpus file. New **text** and **secret** row kinds (decision C): Spotify client ID and streaming endpoint masked with SHOW |
+
 In-scope status after batch 3: of the 35 NONE keys, **24 now have rows**.
-Still open: the text/path/secret keys (`[recording] directory`,
-`[media] media_dir`, `[ansi] ansi_dir_auto`, `[video_out] v4l2.device`,
-`[chat] username`, `[streaming] endpoint`, `[spotify] web_api.client_id`;
-`web_api.scopes` recommended to stay out), `[window] display_mode` /
-`display_index`, `[midi] device` / `preset`, `[chat] position`,
-`[logging] level`. Next: a `text` row kind with masking (C), then the
-choice rows over detected displays, MIDI devices and presets.
+After batch 4, `[logging] level`, `[streaming] endpoint` and
+`[spotify] web_api.client_id` are covered too. Still open: text rows
+for `[recording] directory`, `[media] media_dir`, `[ansi] ansi_dir_auto`,
+`[video_out] v4l2.device`, `[chat] username` (the row kind now exists);
+choice rows for `[window] display_mode` / `display_index`, `[midi]
+device` / `preset`, `[chat] position`. `web_api.scopes` recommended to
+stay out.

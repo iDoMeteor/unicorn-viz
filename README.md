@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.172**
+**Version 1.0.0-beta.173**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.173** — Drop-in rows on the **Logging** tab are remembered and replayed like Performance rows, and migrate from config.toml the same way, so every logging option can live on one tab: Auto VJ's decision log, log folder, training logs and corpus files and detector log (auto-vj-01 rc.152), and Spotify's corpus file (spotify-01 rc.10) join core's own.
 - **1.0.0-beta.172** — **Logging tab and text rows in the config menu.** A new **Logging** tab holds log level, log folder, per-frame perf logging (moved from Performance), crash dump file and stall dump; logging is set up before the app, so `__main__` lays these over config.toml itself (a `--log-level` flag still wins). New **text** and **secret** row kinds: click or Enter to type (real text input, on only while a field is open), Enter or click-away to save, Escape to cancel; secrets show SET / NOT SET with a SHOW toggle and never pre-fill a hidden value. Drop-in rows can be text or secret (Spotify client ID and corpus file, streaming endpoint). Secret-looking keys are masked in the startup override log.
 - **1.0.0-beta.171** — **More settings move into the config menu.** New **Drop-ins** tab of load/start switches (RESTART): Candy Frame, chat, color grade (+ on at start), Control Room, keystroke log, lyrics, media, Spotify (+ Web API), streaming, video out (+ on at start, V4L2). Visuals gains **HUD detail** (detector BPM, profile score, recommended profile; still hidden in Auto VJ production mode) and **Random look** min/max ranges for the speed/reactivity/zoom hotkeys. Values set in config.toml move over on the next start. A dotted key like `[spotify.web_api] enabled` now overrides only its leaf, never the whole table. Adding a tab no longer switches which tab is open.
 - **1.0.0-beta.170** — **config.toml values move into the menu.** At the end of startup, every menu row whose setting config.toml actually sets (never a built-in default) gets that value copied into its saved setting once, if nothing is saved yet; the menu wins from then on and the startup log lists what moved. Core restart rows and live rows with a config twin migrate; drop-in rows opt in with `'config': '<section>.<key>'`. New `Config.file_value()`. Also fixes beta.169's first boot: with profiles saved but none remembered as active, the running settings become "default" instead of an arbitrary saved profile being loaded; rows added since a profile was written are caught up into it.

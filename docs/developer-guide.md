@@ -632,7 +632,7 @@ Persistence is core's job:
   writes through to it (debounced ~0.4 s, flushed at shutdown), and it is
   loaded at the end of startup, so a row persists with no explicit save.
   Per-effect parameter edits on the Effects tab ride along the same way.
-- **Performance rows** (live) are remembered in runtime state as
+- **Performance and Logging rows** (live) are remembered in runtime state as
   `perf_dropin.<KEY>.<name>` and replayed through `set_config_setting`
   at the end of the next startup.
 - **`restart` rows** call the setter, take its return value (a
