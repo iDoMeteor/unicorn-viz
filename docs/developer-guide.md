@@ -608,7 +608,16 @@ class MyController:
 Row keys: `name` (setter key), `value`, `min`/`max` (sliders), and
 optionally `tab`, `kind` (`slider` | `toggle` | `choice`), `choices`,
 `label`, `display`, `hint` (tooltip + inline on the selected row),
-`badge`, `section`, `step`, `restart`.
+`badge`, `section`, `step`, `restart`, `config`.
+
+`config` (`'<section>.<key>'`) names the config.toml line the row replaces.
+config.toml is being retired in favor of the menu (owner, 2026-09-24): at
+the end of startup core copies a value the file actually sets (never a
+built-in default) into the row's saved setting, once, if nothing is saved
+yet (`config_overrides.<section>.<key>` for `restart` rows, the row's
+current value as `perf_dropin.<KEY>.<name>` for live Performance rows).
+From then on the menu wins and edits to that line do nothing. Every new
+row for a setting that exists in config.toml should declare it.
 
 Persistence is core's job:
 

@@ -419,11 +419,16 @@ def _deep_merge(base: dict, override: dict) -> dict:
 class Config:
     def __init__(self, path: str | Path = APP_ROOT / 'config.toml', overrides: dict[str, Any] | None = None) -> None:
         self._data = dict(_DEFAULTS)
+        # What config.toml itself sets, apart from built-in defaults and CLI
+        # overrides: the config menu copies these (and only these) into its
+        # saved settings as the file is phased out (see file_value()).
+        self._file_data: dict[str, Any] = {}
         p = Path(path)
         if p.exists():
             with p.open("rb") as f:
                 user = tomllib.load(f)
             self._data = _deep_merge(self._data, user)
+            self._file_data = user
         if overrides:
             self._data = _deep_merge(self._data, overrides)
 
@@ -478,6 +483,16 @@ class Config:
             bucket = {}
             self._data[section] = bucket
         bucket[key] = value
+
+    def file_value(self, *keys: str, default: Any = None) -> Any:
+        """The value config.toml itself sets at ``keys`` -- not a built-in
+        default, CLI flag or in-memory override -- else ``default``."""
+        node: Any = self._file_data
+        for k in keys:
+            if not isinstance(node, dict) or k not in node:
+                return default
+            node = node[k]
+        return node
 
     def get(self, *keys: str, default: Any = None) -> Any:
         node = self._data

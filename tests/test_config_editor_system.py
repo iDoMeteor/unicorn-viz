@@ -667,6 +667,29 @@ def test_boot_falls_back_to_the_first_profile_when_the_active_one_is_gone(tmp_pa
     assert fresh.active_config_profile == 'alpha'
 
 
+def test_first_write_through_boot_keeps_the_running_settings_as_default(tmp_path: Path) -> None:
+    """Profiles saved before write-through existed, but none remembered as
+    active: boot must not pick one arbitrarily and swap the running look."""
+    app = _app(tmp_path)
+    app._effect_duration = 90.0
+    app._write_profile('perf-tweaked')            # pre-existing, never "active"
+    fresh = _app(tmp_path)
+    fresh._effect_duration = 30.0                 # what config.toml gives today
+    fresh._activate_boot_profile()
+    assert fresh.active_config_profile == 'default'
+    assert fresh._effect_duration == 30.0
+    assert sorted(fresh.config_profile_names()) == ['default', 'perf-tweaked']
+
+
+def test_new_rows_are_caught_up_into_the_active_profile(tmp_path: Path) -> None:
+    app = _app(tmp_path)
+    app._config_profile_store.save('old', {'effects': {}, 'settings': {'audio.reactivity': 1.0}})
+    app._runtime_state.set('config_profile_active', 'old')
+    app._activate_boot_profile()
+    saved = _profile(app, 'old')['settings']
+    assert {s['key'] for s in app._config_editor_all_specs()} <= set(saved)
+
+
 def test_menu_changes_write_through_to_the_active_profile(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
     app._activate_boot_profile()
@@ -770,3 +793,75 @@ def test_pending_pulse_stays_visible_and_cyan() -> None:
     assert min(alphas) >= 0.45 and max(alphas) <= 1.0 and max(alphas) - min(alphas) > 0.4
     r, g, b, _a = _Overlays._ce_pending_pulse_color(0.0)
     assert g > 0.9 and b > 0.9 and r < 0.5
+
+
+# --- config.toml -> menu migration (owner 2026-09-24) ------------------------ #
+
+class _FileCfg(_StubCfg):
+    """_StubCfg plus the config.toml-only view migration reads."""
+
+    def __init__(self, values: dict | None = None, file: dict | None = None) -> None:
+        super().__init__(values)
+        self._file = dict(file or {})
+
+    def file_value(self, *keys, default=None):
+        return self._file.get(tuple(keys), default)
+
+
+class _Contributor:
+    CONFIG_EDITOR_CATEGORY = 'Performance'
+
+    def __init__(self, rows) -> None:
+        self._rows = rows
+
+    def config_editor_settings(self):
+        return list(self._rows)
+
+
+def test_file_set_core_values_move_into_the_menu_once(tmp_path: Path) -> None:
+    cfg = _FileCfg({('audio', 'latency'): 'high'},
+                   file={('audio', 'latency'): 'high', ('logging', 'perf_frames'): True})
+    app = _app(tmp_path, cfg=cfg)
+    app._config_editor_contributors = lambda: []
+    app._migrate_config_to_menu()
+    assert app.get_runtime_state('audio_latency') == 'high'          # restart row
+    assert app.get_runtime_state('perf_perf_frames') is True         # live row twin
+    assert app.get_runtime_state('audio_fft_bands') is None          # default only: not pinned
+
+
+def test_migration_never_overwrites_a_menu_choice(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('audio', 'latency'): 'high'})
+    app = _app(tmp_path, cfg=cfg)
+    app._config_editor_contributors = lambda: []
+    app._runtime_state.set('audio_latency', 'low')
+    app._migrate_config_to_menu()
+    assert app.get_runtime_state('audio_latency') == 'low'
+
+
+def test_dropin_rows_that_declare_their_config_line_migrate(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('control_room', 'render_interval'): 0.5,
+                         ('control_room', 'fullscreen'): False})
+    app = _app(tmp_path, cfg=cfg)
+    ctrl = _Contributor([
+        {'name': 'render_fps', 'kind': 'choice', 'value': 0.0,          # index of 2 fps
+         'config': 'control_room.render_interval'},
+        {'name': 'fullscreen', 'kind': 'toggle', 'value': 0.0, 'restart': 'control_room',
+         'config': 'control_room.fullscreen'},
+        {'name': 'gpu_ui', 'kind': 'toggle', 'value': 1.0, 'restart': 'control_room',
+         'config': 'control_room.gpu_ui'},                              # not in the file
+    ])
+    app._config_editor_contributors = lambda: [('control_room', ctrl)]
+    app._migrate_config_to_menu()
+    assert app.get_runtime_state('perf_dropin.control_room.render_fps') == 0.0
+    assert app.get_runtime_state('config_overrides.control_room.fullscreen') is False
+    assert app.get_runtime_state('config_overrides.control_room.gpu_ui') is None
+
+
+def test_config_file_value_ignores_defaults_and_overrides(tmp_path: Path) -> None:
+    from unicornviz.config import Config
+    path = tmp_path / 'config.toml'
+    path.write_text('[control_room]\nrender_interval = 0.5\n', encoding='utf-8')
+    cfg = Config(path, overrides={'logging': {'level': 'DEBUG'}})
+    assert cfg.file_value('control_room', 'render_interval') == 0.5
+    assert cfg.file_value('logging', 'level', default='x') == 'x'     # a CLI flag, not the file
+    assert cfg.file_value('ansi', 'ansi_dir_auto', default='x') == 'x'  # a built-in default

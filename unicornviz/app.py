@@ -3594,20 +3594,109 @@ void main() {
     def _activate_boot_profile(self) -> None:
         """Make sure an active profile exists, then load it (end of startup).
 
-        First run: the current settings (config.toml plus anything already
-        remembered) become the "default" profile.  A remembered active
-        profile that no longer exists falls back to the first saved one.
+        No active profile remembered yet (first run, or the first boot after
+        profiles became write-through): the current settings -- config.toml
+        plus anything already remembered -- become "default", so nothing the
+        app was running on changes; profiles saved earlier stay one LOAD
+        away rather than one being picked arbitrarily.  A remembered active
+        profile that has since been deleted falls back to the first saved one.
         """
         names = self.config_profile_names()
-        active = self.get_runtime_state('config_profile_active', default='')
-        if not names:
-            self.save_config_profile(self._DEFAULT_PROFILE_NAME)
+        active = self.get_runtime_state('config_profile_active', default=None)
+        if not isinstance(active, str) or not active:
+            if self._DEFAULT_PROFILE_NAME in names:
+                self.load_config_profile(self._DEFAULT_PROFILE_NAME)
+            else:
+                self.save_config_profile(self._DEFAULT_PROFILE_NAME)
             return
-        if not isinstance(active, str) or active not in names:
+        if active not in names:
+            if not names:
+                self.save_config_profile(self._DEFAULT_PROFILE_NAME)
+                return
             active = names[0]
         self.load_config_profile(active)
+        self._catch_up_profile(active)
+
+    def _catch_up_profile(self, name: str) -> None:
+        """Rows added since ``name`` was last written (new menu rows for
+        settings that used to be config-only) are written into it once,
+        from their current values -- which is how their config.toml values
+        move into the menu."""
+        payload = self._config_profile_store.get(name) or {}
+        saved = payload.get('settings') if isinstance(payload, dict) else None
+        saved_keys = set(saved) if isinstance(saved, dict) else set()
+        if any(s['key'] not in saved_keys for s in self._config_editor_all_specs()):
+            self._write_profile(name)
 
     _DEFAULT_PROFILE_NAME = 'default'
+
+    # Live core rows whose remembered runtime value has a config.toml twin:
+    # (runtime key, section, dotted key, caster).  Restart rows are listed in
+    # _RUNTIME_CONFIG_OVERRIDES; profile-backed rows migrate by being written
+    # into the active profile (_catch_up_profile).
+    _LIVE_CONFIG_TWINS: tuple[tuple[str, str, str, type], ...] = (
+        ('perf_perf_frames', 'logging', 'perf_frames', bool),
+        ('recording_fps', 'recording', 'fps', float),
+    )
+
+    def _migrate_config_to_menu(self) -> None:
+        """Copy config.toml values into the menu's saved settings, once each.
+
+        The owner is retiring config.toml (2026-09-24): once a setting has a
+        menu row, the menu is its source of truth.  For every row whose
+        setting the file actually sets (never a built-in default, so code
+        defaults can still improve) and that has nothing remembered yet, the
+        file's value is remembered now; from the next launch on it is laid
+        over the file, so later edits to the file no longer apply.  Never
+        writes config.toml.  Drop-in rows opt in with ``'config':
+        '<section>.<key>'``.
+        """
+        file_value = getattr(self.cfg, 'file_value', None)
+        if not callable(file_value):
+            return
+        missing = object()
+        moved: list[str] = []
+        for state_key, section, key, caster in (
+                self._RUNTIME_CONFIG_OVERRIDES + self._LIVE_CONFIG_TWINS):
+            if self.get_runtime_state(state_key, default=None) is not None:
+                continue
+            raw = file_value(section, *key.split('.'), default=missing)
+            if raw is missing:
+                continue
+            try:
+                value = str(raw).strip() if caster is str else caster(raw)
+            except (TypeError, ValueError):
+                continue
+            self._remember_runtime(state_key, value)
+            moved.append(f'[{section}] {key}')
+        for prefix, ctrl in self._config_editor_contributors():
+            try:
+                rows = ctrl.config_editor_settings()
+            except Exception:
+                continue
+            default_tab = str(getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', '') or '')
+            for row in rows:
+                path = str(row.get('config') or '') if isinstance(row, dict) else ''
+                if '.' not in path:
+                    continue
+                section, key = path.split('.', 1)
+                raw = file_value(section, *key.split('.'), default=missing)
+                if raw is missing:
+                    continue
+                restart = str(row.get('restart') or '')
+                if restart:
+                    state_key = f'config_overrides.{restart}.{key}'
+                    if self.get_runtime_state(state_key, default=None) is None:
+                        self._remember_runtime(state_key, raw)
+                        moved.append(f'[{section}] {key}')
+                elif str(row.get('tab') or default_tab) == 'Performance':
+                    state_key = f'perf_dropin.{prefix}.{row["name"]}'
+                    if self.get_runtime_state(state_key, default=None) is None:
+                        self._remember_runtime(state_key, float(row.get('value', 0.0)))
+                        moved.append(f'[{section}] {key}')
+        if moved:
+            log.info('Config menu now holds %d setting(s) copied from config.toml '
+                     '(edits to those lines no longer apply): %s', len(moved), ', '.join(moved))
 
     def load_config_profile(self, name: str) -> bool:
         """Load a profile: apply effect overrides + global/drop-in settings
@@ -6002,6 +6091,7 @@ void main() {
                 log.info('Auto-record enabled')
         self._restore_performance_settings()
         self._activate_boot_profile()
+        self._migrate_config_to_menu()
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
         # Everything built so far lives for the session: take it out of the

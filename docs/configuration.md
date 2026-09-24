@@ -461,6 +461,12 @@ Notes:
     the loaded config (in memory only) before the subsystem that reads them
     is built. Delete a key to fall back to `config.toml`. None of these are
     part of a configuration profile.
+- **config.toml is being phased out in favor of the config menu** (2026-09-24).
+    When a setting gets a menu row, the value this file sets for it is
+    copied into the runtime store once, at the end of startup, and the
+    menu's value wins from then on; the startup log lists what moved.
+    Built-in defaults are never copied, and this file is never written.
+    Coverage and gaps: `docs/audits/2026-09-24-config-menu-coverage-audit.md`.
 - The config editor's **active profile** is remembered as
     `config_profile_active`. Audio/Visuals rows and per-effect parameter
     edits write through to it in `runtime/config_profiles.json` as they
