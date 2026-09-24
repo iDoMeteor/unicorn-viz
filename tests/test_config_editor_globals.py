@@ -7,11 +7,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from unicornviz.app import App
 from unicornviz.config_profiles import ConfigProfileStore
 from unicornviz.overlays import Overlays
 
 _TABS = ['Effects', 'Audio', 'Hotkeys', 'Performance', 'Recording', 'Visuals']
+
+
+@pytest.fixture(autouse=True)
+def _no_midi_hardware(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The MIDI device row lists input ports; keep tests off real hardware."""
+    import unicornviz.midi as midi_mod
+    monkeypatch.setattr(midi_mod, 'list_ports', lambda: [])
+
 
 
 class _StubCfg:
@@ -37,6 +47,9 @@ class _AudioManager:
 def _app(tmp_path: Path, tab='Audio', audio=True) -> App:
     app = object.__new__(App)
     app.cfg = _StubCfg()
+    app._multihead = None
+    app._display_mode = 'single'
+    app._display_index = 0
     app._config_profile_store = ConfigProfileStore(tmp_path / 'cp.json')
     app._effect_config_overrides = {}
     app._current_effect = None
@@ -80,11 +93,12 @@ def test_visuals_global_rows(tmp_path: Path) -> None:
         'Now Spinning platter', 'HUD auto-hide', 'HUD timeout', 'Flash messages',
         'Detector BPM', 'Profile score', 'Recommended profile',
         'Speed min', 'Speed max', 'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
+        'ANSI art folder',
     ]
     assert (rows[0]['min'], rows[0]['max']) == (10.0, 120.0)
     assert [r['kind'] for r in rows] == [
         'slider', 'slider', 'toggle', 'toggle', 'toggle', 'slider', 'toggle',
-        'toggle', 'toggle', 'toggle'] + ['slider'] * 6
+        'toggle', 'toggle', 'toggle'] + ['slider'] * 6 + ['text']
 
 
 def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:

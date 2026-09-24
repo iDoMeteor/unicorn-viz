@@ -10,10 +10,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from unicornviz.app import App
 from unicornviz.config_profiles import ConfigProfileStore
 from unicornviz.overlays import Overlays
 from unicornviz.runtime_state import RuntimeStateStore
+
+
+@pytest.fixture(autouse=True)
+def _no_midi_hardware(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The MIDI device row lists input ports; keep tests off real hardware."""
+    import unicornviz.midi as midi_mod
+    monkeypatch.setattr(midi_mod, 'list_ports', lambda: [])
+
 
 
 class _StubCfg:
@@ -106,6 +116,9 @@ def _app(tmp_path: Path, *, tab='Performance', color_grade=None, audio_out=None,
          audio=True, cfg=None) -> App:
     app = object.__new__(App)
     app.cfg = cfg if cfg is not None else _StubCfg()
+    app._multihead = None
+    app._display_mode = 'single'
+    app._display_index = 0
     app._runtime_state = RuntimeStateStore(tmp_path / 'state.json')
     app._config_profile_store = ConfigProfileStore(tmp_path / 'cp.json')
     app._effect_config_overrides = {}
@@ -183,6 +196,7 @@ _PERF_ROWS = {
     'Preview capture': 'toggle', 'Preview fps ceiling': 'slider',
     'Preview width': 'choice', 'Capture latency': 'choice', 'FFT bands': 'choice',
     'Capture block size': 'choice', 'Audio process': 'toggle',
+    'Display mode': 'choice', 'MIDI device': 'choice', 'MIDI preset': 'choice',
     'Audio process Python': 'choice', 'System monitor sampling': 'slider',
     'Tooltips': 'toggle', 'Video deck layer': 'toggle', 'Video cache edge': 'choice',
 }
@@ -197,6 +211,7 @@ def test_performance_rows_cover_every_core_knob(tmp_path: Path) -> None:
     restart = {n for n, r in rows.items() if r['badge'] == 'RESTART'}
     assert restart == {'Capture latency', 'FFT bands', 'Capture block size',
                        'Audio process', 'Audio process Python',
+                       'MIDI device', 'MIDI preset',
                        'Video deck layer', 'Video cache edge'}
     # Choices carry their labels; toggles/choices step by one.
     assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
@@ -369,7 +384,8 @@ def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
                          'Now Spinning platter', 'HUD auto-hide', 'HUD timeout',
                          'Flash messages', 'Detector BPM', 'Profile score',
                          'Recommended profile', 'Speed min', 'Speed max',
-                         'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max'}
+                         'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
+                         'ANSI art folder'}
     specs = _specs(app, 'Visuals')
     specs['Now Playing banner']['set'](0.0)
     assert app.now_playing_banner_enabled is False
@@ -690,7 +706,8 @@ def test_new_rows_are_caught_up_into_the_active_profile(tmp_path: Path) -> None:
     app._runtime_state.set('config_profile_active', 'old')
     app._activate_boot_profile()
     saved = _profile(app, 'old')['settings']
-    assert {s['key'] for s in app._config_editor_all_specs()} <= set(saved)
+    numeric = {s['key'] for s in app._config_editor_all_specs() if s['kind'] not in ('text', 'secret')}
+    assert numeric <= set(saved)                     # text rows persist on their own, not in profiles
 
 
 def test_menu_changes_write_through_to_the_active_profile(tmp_path: Path) -> None:
@@ -1130,3 +1147,112 @@ def test_dj_mixer_enabled_stays_out_of_the_menu(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Drop-ins')
     assert 'DJ mixer' not in _rows(app, 'Drop-ins')
     assert all(section != 'dj_mixer' for section, *_rest in App._DROPIN_SWITCHES)
+
+
+# --- paths, display and MIDI rows (2026-09-24, final coverage batch) --------- #
+
+class _FakeRecorder:
+    TWEAKABLES: dict = {}
+
+    def __init__(self) -> None:
+        self.folder = ''
+        self._crf, self._capture_audio, self._preset = 18, True, 'veryfast'
+        self.auto_record, self.show_indicator = False, True
+
+    def set_directory(self, path: str) -> None:
+        self.folder = path
+
+    def apply_setting(self, key, value) -> None:
+        pass
+
+    def set_pulse_source_name(self, name) -> None:
+        pass
+
+
+def test_recording_folder_row_applies_next_rec_and_survives_a_rebuild(tmp_path: Path, monkeypatch) -> None:
+    import unicornviz.app as app_mod
+    monkeypatch.setattr(app_mod.Recorder, 'TWEAKABLES', {})
+    app = _app(tmp_path, tab='Recording')
+    app._recorder = _FakeRecorder()
+    app._set_recording_directory('/var/tmp/shows')
+    assert app._recorder.folder == '/var/tmp/shows'
+    assert app.get_runtime_state('recording_directory') == '/var/tmp/shows'
+    app._recorder = _FakeRecorder()                 # e.g. rebuilt after a resize
+    app._apply_persisted_recording_settings()
+    assert app._recorder.folder == '/var/tmp/shows'
+
+
+def test_ansi_folder_row_persists_and_migrates(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    _specs(app, 'Visuals')['ANSI art folder']['set']('~/art/ansi')
+    assert app.cfg.get('ansi', 'ansi_dir_auto') == '~/art/ansi'
+    assert app.get_runtime_state('ansi_dir_auto') == '~/art/ansi'
+    fresh = _app(tmp_path / 'b', cfg=_FileCfg(file={('ansi', 'ansi_dir_auto'): 'assets/ansi/acid'}))
+    fresh._config_editor_contributors = lambda: []
+    fresh._migrate_config_to_menu()
+    assert fresh.get_runtime_state('ansi_dir_auto') == 'assets/ansi/acid'
+
+
+class _FakeMultiHead:
+    def supported_display_modes(self):
+        return ('single', 'span_included', 'mirror_all')
+
+    def all_detected_displays(self):
+        return [(0, 0, 0, 1920, 1080), (2, 1920, 0, 2560, 1440)]
+
+
+def test_display_rows_apply_live_and_persist(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Performance')
+    app._multihead = _FakeMultiHead()
+    modes_set: list[str] = []
+    app.set_display_mode = lambda mode=None, reset_to_config=False: modes_set.append(mode) or mode
+    rows = _rows(app, 'Performance')
+    assert rows['Display mode']['choices'] == ('SINGLE', 'SPAN INCLUDED', 'MIRROR ALL')
+    assert rows['Display']['choices'] == ('0: 1920x1080', '2: 2560x1440')
+    specs = _specs(app, 'Performance')
+    specs['Display mode']['set'](2.0)
+    assert modes_set[-1] == 'mirror_all'
+    assert app.get_runtime_state('window_display_mode') == 'mirror_all'
+    specs['Display']['set'](1.0)
+    assert app._display_index == 2
+    assert app.get_runtime_state('window_display_index') == 2
+
+
+def test_display_row_hidden_with_one_display(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Performance')
+    assert 'Display' not in _rows(app, 'Performance')      # no multi-head, one display
+
+
+def test_window_overrides_apply_early_and_alone(tmp_path: Path) -> None:
+    """__init__ lays [window] choices over config before multi-head is built;
+    the rest waits for run() (the audio stream isn't open yet there either)."""
+    app = _app(tmp_path)
+    app._runtime_state.set('window_display_mode', 'span_included')
+    app._runtime_state.set('audio_latency', 'high')
+    app._apply_runtime_config_overrides(sections=('window',))
+    assert app.cfg.get('window', 'display_mode') == 'span_included'
+    assert app.cfg.get('audio', 'latency') is None
+
+
+def test_midi_rows_list_ports_and_presets_and_auto_can_override_the_file(tmp_path: Path, monkeypatch) -> None:
+    import unicornviz.midi as midi_mod
+    monkeypatch.setattr(midi_mod, 'list_ports', lambda: ['APC mini mk2 0', 'DDJ-REV1 1'])
+    cfg = _StubCfg({('midi', 'device'): 'APC'})
+    app = _app(tmp_path, tab='Performance', cfg=cfg)
+    rows = _rows(app, 'Performance')
+    assert rows['MIDI device']['choices'] == ('AUTO', 'APC mini mk2 0', 'DDJ-REV1 1')
+    assert rows['MIDI device']['display'] == 'APC mini mk2 0'     # the hint matches a port
+    assert rows['MIDI preset']['choices'][0] == 'NONE'
+    _specs(app, 'Performance')['MIDI device']['set'](0.0)          # AUTO
+    assert app.get_runtime_state('midi_device') == ''
+    fresh = _app(tmp_path, cfg=_StubCfg({('midi', 'device'): 'APC'}))
+    fresh._apply_runtime_config_overrides()
+    assert fresh.cfg.get('midi', 'device') == ''                   # empty is a real choice
+
+
+def test_unplugged_midi_device_stays_selectable(tmp_path: Path, monkeypatch) -> None:
+    import unicornviz.midi as midi_mod
+    monkeypatch.setattr(midi_mod, 'list_ports', lambda: [])
+    app = _app(tmp_path, tab='Performance', cfg=_StubCfg({('midi', 'device'): 'DDJ-REV1'}))
+    row = _rows(app, 'Performance')['MIDI device']
+    assert row['choices'] == ('AUTO', 'DDJ-REV1') and row['display'] == 'DDJ-REV1'

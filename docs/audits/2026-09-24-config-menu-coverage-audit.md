@@ -1,7 +1,7 @@
 # Config menu coverage audit — config.toml keys vs. menu rows
 
 Owner: overlays / core manager seat (config menu)
-Status: In progress — owner decisions made (§5); batches 1-4 shipped (§6)
+Status: In-scope coverage complete (§6); auto_vj / effects gaps listed for their seats (§3)
 Last updated: 2026-09-24
 
 **Direction (relayed by the perf seat, 2026-09-24):** every setting the app
@@ -223,6 +223,10 @@ a toggle to show.
 | 3 | core 1.0.0-beta.171, webcam-01 1.9.0 | **Drop-ins** tab: RESTART load/start switches for candy_frame, chat, color_grade (+ start), control_room, keystrokes, lyrics, media, spotify (+ web_api), streaming, video_out (+ start, v4l2). Visuals: HUD detail ×3, Random look ranges ×6. Webcam border thickness. Nested keys (`web_api.enabled`) override just their leaf |
 
 | 4 | core 1.0.0-beta.172-173, spotify-01 rc.9-10, streaming-01 0.8.0, auto-vj-01 rc.152 | **Logging** tab (owner request, 2026-09-24): log level, log folder, per-frame perf logging, crash dump file, stall dump; Auto VJ decision log / log folder / training logs and corpus files / detector log; Spotify corpus file. New **text** and **secret** row kinds (decision C): Spotify client ID and streaming endpoint masked with SHOW |
+
+| 5 | core 1.0.0-beta.176, media-01 0.31.0, video-out-01 0.7.0, chat-01 0.7.0 | Recording save folder, ANSI art folder, display mode and display (live; applied before multi-head is built), MIDI device and preset; media folder, V4L2 device, chat position and username |
+
+**All 53 in-scope keys now have menu rows**, except `[spotify] web_api.scopes` (left out by recommendation: developer-level) and `[dj_mixer] enabled` (owner: config.toml / boot-level only). Rows added after the file value was set migrate it on the next start.
 
 In-scope status after batch 3: of the 35 NONE keys, **24 now have rows**.
 `[dj_mixer] enabled` stays out of the menu by the owner's decision (config.toml / boot-level only; beta.174 added it, beta.175 removed it); the mixer's other keys live in its own ⚙ SETTINGS. After batch 4, `[logging] level`, `[streaming] endpoint` and

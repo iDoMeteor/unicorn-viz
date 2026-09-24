@@ -386,6 +386,10 @@ class Recorder:
         if key == 'fps':
             self._max_catch_up_frames = max(1, self._fps)
 
+    def set_directory(self, path: str) -> None:
+        """Folder the *next* recording is written to (config editor)."""
+        self._directory = resolve_path(str(path).strip() or 'recordings')
+
     def set_pulse_source_name(self, name: str) -> None:
         """Pin the ffmpeg audio device, or clear it to resume auto-detection."""
         self._audio_input_device = (name or '').strip()

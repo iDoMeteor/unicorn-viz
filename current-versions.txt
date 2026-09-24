@@ -4,11 +4,11 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.175      BETA          module
+  core (unicornviz)             1.0.0-beta.176      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.221.0             alpha ▲       module
-  media-01                      0.30.0              alpha ▲       module
+  media-01                      0.31.0              alpha ▲       module
   control-room-01               0.24.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
   banner-01                     0.14.0              alpha ▲       module
@@ -57,12 +57,12 @@
   sims-01                       0.7.2               alpha         module
   streaming-01                  0.8.0               alpha         module
   training-kit-01               0.7.1               alpha         module
+  chat-01                       0.7.0               alpha         module
+  video-out-01                  0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   audio-out-01                  0.6.0               alpha ▼       module
-  chat-01                       0.6.0               alpha ▼       module
   effects-holiday               0.5.1               alpha ▼       module
-  video-out-01                  0.6.0               alpha ▼       module
   effects-rollercoast           0.5.0               alpha ▼       module
   lyrics-01                     0.5.0               alpha ▼       module
   video-clips-01                0.5.0               alpha ▼       module

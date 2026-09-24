@@ -853,6 +853,8 @@ class App:
             default='runtime/global_state.json',
         )
         self._runtime_state = RuntimeStateStore(str(runtime_state_path))
+        # The config menu's display choices must reach multi-head's constructor.
+        self._apply_runtime_config_overrides(sections=('window',))
         multihead_cls = (
             _NullMultiHeadController
             if self._safe_mode or not self._profile_allows('multi_head')
@@ -4124,6 +4126,13 @@ void main() {
                         fmt='{:.2f}', hint=f'Range the random-{name} hotkey picks from',
                         section='Random look',
                     ))
+            specs.append(_ce_text(
+                'visuals.ansi_dir_auto', 'ANSI art folder',
+                str(self.cfg.get('ansi', 'ansi_dir_auto', default='assets/ansi') or 'assets/ansi'),
+                self._set_ansi_dir, placeholder='assets/ansi',
+                hint='Art the ANSI viewer plays; applies the next time it starts',
+                section='Content',
+            ))
         elif tab == 'Performance':
             specs.extend(self._config_editor_performance_specs())
         elif tab == 'Drop-ins':
@@ -4261,6 +4270,8 @@ void main() {
             hint='Free-threaded interpreter for the audio process; soak before live use',
             section='Audio',
         ))
+        specs.extend(self._config_editor_display_specs())
+        specs.extend(self._config_editor_midi_specs())
         # -- Overlays ---------------------------------------------------------
         ov = self._overlays
         if ov is not None:
@@ -4354,6 +4365,100 @@ void main() {
         self.cfg.set_override('logging', key, value)
         self._remember_runtime(f'logging_{key}', value)
         self._flash(f'{label}: {value} (applies on restart)')
+
+    # -- Display and MIDI rows (Performance tab) ---------------------------------
+
+    def _config_editor_display_specs(self) -> list[dict]:
+        """Display mode (live) and the audience display (live)."""
+        specs: list[dict] = []
+        modes = tuple(self.supported_display_modes())
+        if modes:
+            current = self._display_mode if self._display_mode in modes else modes[0]
+            specs.append(_ce_choice(
+                'perf.display_mode', 'Display mode', modes.index(current),
+                tuple(m.replace('_', ' ').upper() for m in modes),
+                lambda v, ms=modes: self._set_display_mode_row(ms, v),
+                hint='The mode the app uses now and starts in', section='Display',
+            ))
+        displays = self._detected_displays()
+        if len(displays) > 1:
+            ids = [d[0] for d in displays]
+            current_id = self._display_index if self._display_index in ids else ids[0]
+            specs.append(_ce_choice(
+                'perf.display_index', 'Display', ids.index(current_id),
+                tuple(f'{d[0]}: {d[3]}x{d[4]}' for d in displays),
+                lambda v, ds=ids: self._set_display_index_row(ds, v),
+                hint='Which monitor single mode uses (the app starts on it too)',
+                section='Display',
+            ))
+        return specs
+
+    def _detected_displays(self) -> list[tuple[int, int, int, int, int]]:
+        getter = getattr(self._multihead, 'all_detected_displays', None)
+        if not callable(getter):
+            return []
+        try:
+            return [tuple(int(v) for v in d) for d in getter()]
+        except Exception:
+            return []
+
+    def _set_display_mode_row(self, modes: tuple[str, ...], value: float) -> None:
+        mode = modes[max(0, min(len(modes) - 1, int(round(float(value)))))]
+        self.set_display_mode(mode)
+        self.cfg.set_override('window', 'display_mode', mode)
+        self._remember_runtime('window_display_mode', mode)
+
+    def _set_display_index_row(self, ids: list[int], value: float) -> None:
+        index = ids[max(0, min(len(ids) - 1, int(round(float(value)))))]
+        self._display_index = index
+        self.set_display_mode(self._display_mode)          # relayout onto it
+        self.cfg.set_override('window', 'display_index', index)
+        self._remember_runtime('window_display_index', index)
+
+    def _config_editor_midi_specs(self) -> list[dict]:
+        """MIDI input device and controller preset; read at startup (RESTART)."""
+        from unicornviz.midi import BUILTIN_PRESETS, list_ports  # noqa: PLC0415
+        specs: list[dict] = []
+        device = str(self.cfg.get('midi', 'device', default='') or '')
+        try:
+            ports = list(list_ports())
+        except Exception:
+            ports = []
+        dev_opts = [''] + ports
+        if device and not any(device.lower() in p.lower() for p in ports):
+            dev_opts.append(device)                 # configured, not plugged in now
+        dev_idx = next((i for i, o in enumerate(dev_opts) if o and device and
+                        device.lower() in o.lower()), 0)
+        specs.append(_ce_choice(
+            'perf.midi_device', 'MIDI device', dev_idx,
+            tuple(o or 'AUTO' for o in dev_opts),
+            lambda v, os_=tuple(dev_opts): self._set_midi_restart(
+                'device', os_[max(0, min(len(os_) - 1, int(round(float(v)))))], 'MIDI device'),
+            badge='RESTART', hint='Input port to open (AUTO = first controller found)',
+            section='MIDI',
+        ))
+        preset = str(self.cfg.get('midi', 'preset', default='') or '')
+        pre_opts = [''] + sorted(BUILTIN_PRESETS)
+        if preset and preset not in pre_opts:
+            pre_opts.append(preset)
+        specs.append(_ce_choice(
+            'perf.midi_preset', 'MIDI preset', pre_opts.index(preset) if preset in pre_opts else 0,
+            tuple(o.upper() if o else 'NONE' for o in pre_opts),
+            lambda v, os_=tuple(pre_opts): self._set_midi_restart(
+                'preset', os_[max(0, min(len(os_) - 1, int(round(float(v)))))], 'MIDI preset'),
+            badge='RESTART', hint='Controller mapping to load', section='MIDI',
+        ))
+        return specs
+
+    def _set_midi_restart(self, key: str, value: str, label: str) -> None:
+        self.cfg.set_override('midi', key, value)
+        self._remember_runtime(f'midi_{key}', value)
+        self._flash(f'{label}: {value or "auto"} (applies on restart)')
+
+    def _set_ansi_dir(self, text: str) -> None:
+        folder = str(text).strip() or 'assets/ansi'
+        self.cfg.set_override('ansi', 'ansi_dir_auto', folder)
+        self._remember_runtime('ansi_dir_auto', folder)
 
     def _remember_runtime(self, key: str, value: object) -> None:
         """Persist a config-editor choice to runtime state (no-op without a store)."""
@@ -4500,15 +4605,28 @@ void main() {
         ('logging_directory', 'logging', 'directory', str),
         ('logging_faulthandler', 'logging', 'faulthandler', bool),
         ('logging_stall_dump_s', 'logging', 'stall_dump_s', float),
+        ('recording_directory', 'recording', 'directory', str),
+        ('ansi_dir_auto', 'ansi', 'ansi_dir_auto', str),
+        ('window_display_mode', 'window', 'display_mode', str),
+        ('window_display_index', 'window', 'display_index', int),
+        ('midi_device', 'midi', 'device', str),
+        ('midi_preset', 'midi', 'preset', str),
     )
     # String overrides whose empty value is a real choice, not "unset":
     # an empty process_python means "the app's own interpreter", and must be
     # able to override a path someone set by hand in config.toml.
-    _EMPTY_STRING_OVERRIDES = frozenset({'audio_process_python'})
+    _EMPTY_STRING_OVERRIDES = frozenset({'audio_process_python', 'midi_device', 'midi_preset'})
 
-    def _apply_runtime_config_overrides(self) -> None:
-        """Apply remembered RESTART choices on top of the loaded config."""
+    def _apply_runtime_config_overrides(self, sections: tuple[str, ...] | None = None) -> None:
+        """Apply remembered RESTART choices on top of the loaded config.
+
+        ``sections`` limits it to those config sections (and skips drop-in
+        overrides): __init__ applies ``window`` early, because multi-head
+        reads the display settings before run() applies the rest.
+        """
         for state_key, section, key, caster in self._RUNTIME_CONFIG_OVERRIDES:
+            if sections is not None and section not in sections:
+                continue
             stored = self.get_runtime_state(state_key, default=None)
             if stored is None:
                 continue
@@ -4528,6 +4646,8 @@ void main() {
                 value = caster(stored)
             self.cfg.set_override(section, key, value)
             log.info('Runtime override: [%s] %s = %r', section, key, _loggable(key, value))
+        if sections is not None:
+            return
         # Drop-in RESTART rows (see _persist_dropin_restart): whole sections.
         stored = self.get_runtime_state('config_overrides', default=None)
         if isinstance(stored, dict):
@@ -4844,7 +4964,21 @@ void main() {
             _setter('show_indicator'), hint='Show the on-screen REC badge while recording',
             section='Behavior',
         ))
+        specs.append(_ce_text(
+            'recording.directory', 'Save folder',
+            str(self.cfg.get('recording', 'directory', default='recordings') or 'recordings'),
+            self._set_recording_directory, badge='NEXT REC', placeholder='recordings',
+            hint='Where recordings are written (relative to the app, or absolute)',
+            section='Files',
+        ))
         return specs
+
+    def _set_recording_directory(self, text: str) -> None:
+        folder = str(text).strip() or 'recordings'
+        if self._recorder is not None:
+            self._recorder.set_directory(folder)
+        self.cfg.set_override('recording', 'directory', folder)
+        self.set_runtime_state('recording_directory', folder)
 
     def _apply_persisted_recording_settings(self) -> None:
         """Re-apply config-editor recording choices to a fresh Recorder.
@@ -4856,6 +4990,9 @@ void main() {
         rec = self._recorder
         if rec is None:
             return
+        folder = self.get_runtime_state('recording_directory', default=None)
+        if isinstance(folder, str) and folder.strip():
+            rec.set_directory(folder)
         for key in Recorder.TWEAKABLES:
             stored = self.get_runtime_state(f'recording_{key}', default=None)
             if isinstance(stored, (int, float)):
