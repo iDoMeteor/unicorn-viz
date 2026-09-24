@@ -711,6 +711,28 @@ class Analyzer:
         self._low_band_replace_n: int = int(
             np.sum(self._perc_edges[1:] <= self._perc_edges[:-1])
         )
+        # Band-mean index tables for process(): band i averages bins
+        # [lo, hi] inclusive, or just bin lo when the edges collapse
+        # (hi <= lo).  Read as a difference of a float64 running sum, so the
+        # 64 + low-band means are two numpy calls instead of ~80 tiny
+        # .mean()s -- those were ~46% of process() (2026-09-24), all under
+        # the GIL on the analysis thread.
+        self._perc_lo, self._perc_hi1, self._perc_cnt = self._band_mean_tables(
+            self._perc_edges)
+        n = self._low_band_replace_n
+        self._low_lo, self._low_hi1, self._low_cnt = (
+            a[:n] for a in self._band_mean_tables(self._low_band_edges))
+        self._perc_csum = np.zeros(self._bands + 1, dtype=np.float64)
+        self._low_csum = np.zeros(_LOW_BAND_N_FFT // 2 + 2, dtype=np.float64)
+
+    @staticmethod
+    def _band_mean_tables(
+        edges: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """``(lo, hi + 1, count)`` per band for running-sum band means."""
+        lo = edges[:-1].astype(np.intp)
+        hi1 = np.maximum(edges[1:], edges[:-1]).astype(np.intp) + 1
+        return lo, hi1, (hi1 - lo).astype(np.float64)
 
     def _window_for(self, n: int) -> np.ndarray:
         """Return a cached Hann window for the given block length."""
@@ -969,10 +991,12 @@ class Analyzer:
 
         # 64-band perceptual spectrum (raw, no visual gain) — bucket smoothed
         # FFT bins into log-spaced bands and normalize to [0, 1].
-        edges = self._perc_edges
-        for i in range(_PERC_N_BANDS):
-            lo, hi = int(edges[i]), int(edges[i + 1])
-            self._perc_work[i] = self._smoothed[lo:hi + 1].mean() if hi > lo else self._smoothed[lo]
+        # Per band: mean of bins [lo, hi], or bin lo alone when the edges
+        # collapse -- via running sums (see _recompute_band_edges).
+        cs = self._perc_csum
+        np.cumsum(self._smoothed, dtype=np.float64, out=cs[1:])
+        np.divide(cs[self._perc_hi1] - cs[self._perc_lo], self._perc_cnt,
+                  out=self._perc_work, casting='unsafe')
 
         # Low-band resolution fix, continued: replace the bottom
         # self._low_band_replace_n bands (the ones the short FFT above
@@ -1007,11 +1031,12 @@ class Analyzer:
             if low_max > 1e-6:
                 low_mag /= low_max
                 low_mag *= np.sqrt(energy)
-                low_edges = self._low_band_edges
-                for i in range(self._low_band_replace_n):
-                    lo, hi = int(low_edges[i]), int(low_edges[i + 1])
-                    val = low_mag[lo:hi + 1].mean() if hi > lo else low_mag[lo]
-                    self._perc_work[i] = val
+                n = self._low_band_replace_n
+                if n:
+                    cs = self._low_csum
+                    np.cumsum(low_mag, dtype=np.float64, out=cs[1:low_mag.size + 1])
+                    np.divide(cs[self._low_hi1] - cs[self._low_lo], self._low_cnt,
+                              out=self._perc_work[:n], casting='unsafe')
 
         peak_perc = self._perc_work.max()
         if peak_perc > 1e-6:

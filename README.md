@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.157**
+**Version 1.0.0-beta.158**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.158** — **Audio analysis ~35% cheaper per block.** `Analyzer.process()` computed the 64 perceptual band means (and the low-band replacements) as ~80 tiny `.mean()` calls, ~46% of the analysis thread under the GIL; they are now two running-sum reads. Beats, onsets and every detector-facing field are bit-identical on three real tracks (34k blocks); `bands` differs by <= 2.4e-7 (float32 rounding).
 - **1.0.0-beta.157** — **Operator panels gain hot pads and in-place rename.** `PanelContent.pads` is a row of equal-width tiles above a panel's buttons for picking one of several things; `PanelButton.rename_action` makes a pad or button renamable by double-click (Enter sends `on_action(rename_action, {'payload': ..., 'text': ...})`). Both are optional fields, so existing panels are unchanged. First user: webcam-01 1.8.0's per-camera pads (drawn by control-room-01 0.22.0).
 - **1.0.0-beta.156** — **Fix a main-thread lockup in the audio-capture
   silence fallback.** `App.run()` now calls
