@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.156**
+**Version 1.0.0-beta.157**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.157** — **Operator panels gain hot pads and in-place rename.** `PanelContent.pads` is a row of equal-width tiles above a panel's buttons for picking one of several things; `PanelButton.rename_action` makes a pad or button renamable by double-click (Enter sends `on_action(rename_action, {'payload': ..., 'text': ...})`). Both are optional fields, so existing panels are unchanged. First user: webcam-01 1.8.0's per-camera pads (drawn by control-room-01 0.22.0).
 - **1.0.0-beta.156** — **Fix a main-thread lockup in the audio-capture
   silence fallback.** `App.run()` now calls
   `_refresh_claimed_audio_devices()` every frame, right before

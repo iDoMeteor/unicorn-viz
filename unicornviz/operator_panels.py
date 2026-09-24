@@ -107,6 +107,12 @@ class PanelButton:
     accent: str = ''
     """Theme token (``'accent'``, ``'accent_2'``, ``'warn'``, ...); empty = default."""
     payload: Any = None
+    rename_action: str = ''
+    """Non-empty makes the button renamable in place: a double-click opens a
+    text field seeded with ``label``, and Enter calls ``on_action(
+    rename_action, {'payload': payload, 'text': typed})`` -- ``typed`` is
+    stripped, and empty means "back to the default name". Escape cancels.
+    The first click of the double-click still fires ``action`` as usual."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +135,10 @@ class PanelContent:
     """Rows are split evenly across this many text columns (1 or 2)."""
     status: str = ''
     """One short word/phrase drawn at the panel's header right (e.g. ``'LIVE'``)."""
+    pads: tuple[PanelButton, ...] = ()
+    """Hot pads: a row of equal-width tiles above ``buttons`` for picking one
+    of several things (cameras, scenes); ``active`` marks the current pick.
+    Empty draws no row, so a single choice needs no pad at all."""
 
 
 @dataclass(frozen=True, slots=True)
