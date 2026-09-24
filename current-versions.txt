@@ -7,7 +7,7 @@
   core (unicornviz)             1.0.0-beta.172      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.220.0             alpha ▲       module
+  dj-mixer-01                   0.221.0             alpha ▲       module
   media-01                      0.30.0              alpha ▲       module
   control-room-01               0.24.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
@@ -37,7 +37,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
-  spotify-01                    1.0.0-rc.9          RC            module
+  spotify-01                    1.0.0-rc.8          RC            module
   unicorn-tears-01              1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -55,8 +55,8 @@
 
   ── alpha ─────────────────────────────────────────────────────────────────
   sims-01                       0.7.2               alpha         module
-  streaming-01                  0.8.0               alpha         module
   training-kit-01               0.7.1               alpha         module
+  streaming-01                  0.7.0               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   audio-out-01                  0.6.0               alpha ▼       module
