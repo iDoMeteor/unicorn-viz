@@ -7,7 +7,7 @@
   core (unicornviz)             1.0.0-beta.168      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.219.0             alpha ▲       module
+  dj-mixer-01                   0.220.0             alpha ▲       module
   media-01                      0.30.0              alpha ▲       module
   control-room-01               0.23.1              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
@@ -19,7 +19,7 @@
   midi-controllers-01           0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.149        RC            module
+  auto-vj-01                    1.0.0-rc.150        RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   beat-flash-01                 0.10.0              alpha ▲       module
