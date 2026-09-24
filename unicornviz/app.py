@@ -29,6 +29,7 @@ from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
+from unicornviz.gc_tuning import freeze_heap
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
@@ -5838,6 +5839,11 @@ void main() {
         self._restore_performance_settings()
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
+        # Everything built so far lives for the session: take it out of the
+        # cyclic GC's reach so gen-2 passes stop costing 100-200 ms of frozen
+        # frames (see gc_tuning).  The one collection here runs before the
+        # first frame, where a pause is harmless.
+        freeze_heap('startup', collect=True)
         self._running = True
         # First-run tour: offered on the first-ever launch (missing state key)
         # and on every startup until its show-on-startup toggle is unchecked.

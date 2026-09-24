@@ -4,10 +4,10 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.160      BETA          module
+  core (unicornviz)             1.0.0-beta.161      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.217.0             alpha ▲       module
+  dj-mixer-01                   0.217.1             alpha ▲       module
   media-01                      0.30.0              alpha ▲       module
   control-room-01               0.22.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module

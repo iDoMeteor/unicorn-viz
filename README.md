@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.160**
+**Version 1.0.0-beta.161**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.161** — **Gen-2 GC pauses cut from 100-200 ms to ~1 ms.** `unicornviz.gc_tuning.freeze_heap()` moves the long-lived heap out of the cyclic collector's reach; the app calls it once after startup (one collection first, before the first frame) and dj-mixer-01 0.217.1 again after its library prewarm. Measured on 3.14.6 with a 2M-object heap: 124 ms -> 1 ms.
 - **1.0.0-beta.160** — **`unicornviz.remote_objects`: run an object graph in a helper process, drive it through shadows.** The helper (`python -m unicornviz.remote_objects`, interpreter selectable, never imports moderngl) builds the real objects and publishes their state as deltas; the main process swaps its own instances to shadow subclasses (declared read-only calls local, everything else forwarded, writes sequence-acknowledged so faders never flick back). Objects and bound methods cross as references, large arrays through shared memory, host-only facts as derived values; slow calls run off the command thread; helper death is reported, not hung. First user: dj-mixer-01 0.217.0 (audio engine process).
 - **1.0.0-beta.159** — **GPU 2D draw lists for second-window UIs** (`unicornviz.gpu2d`): a Pillow-`ImageDraw`-compatible recorder, a text/image texture atlas and a raw-GL instanced SDF renderer, plus `SecondaryGLWindow.present_gpu_frame()`. Axis-aligned shapes, lines and text are pixel-exact with Pillow; curves are anti-aliased. ~23x cheaper than a Pillow raster at 2,500 calls, ~100x less upload. First user: dj-mixer-01 0.216.0.
 - **1.0.0-beta.158** — **Audio analysis ~35% cheaper per block.** `Analyzer.process()` computed the 64 perceptual band means (and the low-band replacements) as ~80 tiny `.mean()` calls, ~46% of the analysis thread under the GIL; they are now two running-sum reads. Beats, onsets and every detector-facing field are bit-identical on three real tracks (34k blocks); `bands` differs by <= 2.4e-7 (float32 rounding).
