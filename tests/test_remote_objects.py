@@ -202,3 +202,33 @@ def test_an_unresolvable_class_does_not_lose_the_rest_of_the_state() -> None:
         assert type(a.mood).__name__ in ('Mood', '_Unresolved')
     finally:
         host.close()
+
+
+def test_adopt_array_is_the_identity_outside_a_helper() -> None:
+    import numpy as np  # noqa: PLC0415
+    big = np.zeros(ro.SHM_MIN_BYTES // 4 + 10, np.float32)
+    assert ro.adopt_array(big) is big
+    assert ro.adopt_array('not an array') == 'not an array'
+
+
+def test_adopted_arrays_are_published_without_a_second_copy() -> None:
+    """In a helper, an adopted buffer lives in exactly one segment: sharing
+    it for publication reuses that segment instead of copying again."""
+    import numpy as np  # noqa: PLC0415
+    exporter = ro._ShmExporter()
+    prev, ro._ShmExporter.current = ro._ShmExporter.current, exporter
+    try:
+        src = np.arange(ro.SHM_MIN_BYTES // 4 * 2, dtype=np.float32)
+        view = ro.adopt_array(src)
+        assert view is not src and np.array_equal(view, src)
+        view[0] = 42.0                                  # owner may still write
+        segments = len(exporter._live)
+        ref = exporter.share(view)                      # the publish path
+        assert len(exporter._live) == segments == 1     # no new segment
+        mapped = ro._ShmImporter().attach(*ref)         # what the client maps
+        assert float(mapped[0]) == 42.0 and mapped.size == src.size
+        small = np.zeros(8, np.float32)
+        assert ro.adopt_array(small) is small           # below the threshold
+    finally:
+        ro._ShmExporter.current = prev
+        exporter.close()

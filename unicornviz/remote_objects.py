@@ -250,10 +250,15 @@ class _ShmExporter:
 
     One segment per array identity; a replaced array's segment is unlinked
     after a grace period (the client maps it within milliseconds, and an
-    existing mapping outlives the unlink on POSIX).
+    existing mapping outlives the unlink on POSIX).  Arrays *adopted* up
+    front (:func:`adopt_array`) already live in a segment, so publishing
+    them copies nothing.
     """
 
-    GRACE_S = 10.0
+    GRACE_S = 2.0
+    #: The running helper's exporter (set in the helper process only), for
+    #: :func:`adopt_array`.
+    current: _ShmExporter | None = None
 
     def __init__(self) -> None:
         self._live: dict[int, tuple[Any, tuple, Any]] = {}   # id -> (arr, ref, shm)
@@ -277,6 +282,20 @@ class _ShmExporter:
         ref = (shm.name, src.shape, src.dtype.str)
         self._live[id(arr)] = (arr, ref, shm)
         return ref
+
+    def adopt(self, arr: np.ndarray) -> np.ndarray:
+        """Copy ``arr`` into a new segment now and return the segment-backed
+        array (writable here) -- the owner keeps that instead, the original
+        can be freed, and publishing it later costs no second copy."""
+        src = np.ascontiguousarray(arr)
+        shm = shared_memory.SharedMemory(create=True, size=max(1, src.nbytes),
+                                         track=False)
+        view = np.ndarray(src.shape, src.dtype, buffer=shm.buf)
+        view[...] = src
+        with self._lock:
+            self._live[id(view)] = (view, (shm.name, src.shape, src.dtype.str), shm)
+            self._touched.add(id(view))       # not retired before its first publish
+        return view
 
     def retire_unused(self, in_use: set[int]) -> None:
         with self._lock:
@@ -304,6 +323,23 @@ class _ShmExporter:
             _close_shm(shm, unlink=True)
         self._live.clear()
         self._retired.clear()
+
+
+def adopt_array(arr: Any) -> Any:
+    """In a helper process, move a large array into shared memory up front.
+
+    Owners of big buffers (a deck's track and stems, sampler pads) call this
+    on the array they are about to keep.  In the helper it returns a
+    segment-backed copy -- keep *that*, drop the original -- so the buffer
+    exists once instead of twice (the owner's plus the published copy).
+    Anywhere else (the main process, tests, an in-process engine) it returns
+    ``arr`` unchanged.
+    """
+    exporter = _ShmExporter.current
+    if (exporter is None or type(arr) is not np.ndarray
+            or arr.nbytes < SHM_MIN_BYTES):
+        return arr
+    return exporter.adopt(arr)
 
 
 def _close_shm(shm: Any, unlink: bool) -> None:
@@ -693,6 +729,7 @@ def _host_main(argv: list[str]) -> int:
     init = pickle.loads(cmd.recv())  # nosec B301
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
     host = _Host(cmd, evt, {}, {}, 0.01)
+    _ShmExporter.current = host.exporter        # for adopt_array() in factories
     logging.getLogger().addHandler(_EventLogHandler(host))
     paths = host.load_factory(factory_path, factory_name, init.get('args') or {},
                               init.get('namespace', ''), init.get('module_name', ''))
