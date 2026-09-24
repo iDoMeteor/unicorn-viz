@@ -396,6 +396,9 @@ class SecondaryGLWindow:
         # Shape of the last frame rejected as too short, so a resize that
         # produces a run of identical mismatches only warns once.
         self._short_frame_shape: tuple[int, int, int] | None = None
+        # GPU draw-list path (present_gpu_frame), created lazily in this
+        # window's own context on first use.
+        self._batch: Any = None
 
     @property
     def window_id(self) -> int:
@@ -547,6 +550,46 @@ class SecondaryGLWindow:
             self._restore(prev_window, prev_context)
         return ok
 
+    def present_gpu_frame(self, frame: Any, atlas: Any) -> bool:
+        """Draw a :class:`unicornviz.gpu2d.GpuFrame` and present it.
+
+        The GPU counterpart of :meth:`present`: instead of uploading a
+        full RGBA raster, uploads the frame's instance buffer plus any new
+        ``atlas`` patches and draws the whole UI with one instanced call.
+        Same threading and context-restore contract as :meth:`present`.
+        Returns False when nothing was presented (window closed, the frame
+        predates an atlas reset, or GL failed -- logged, not raised).
+        """
+        if self.window is None or self._gl is None:
+            return False
+        prev_window = sdl2.SDL_GL_GetCurrentWindow()
+        prev_context = sdl2.SDL_GL_GetCurrentContext()
+        try:
+            if sdl2.SDL_GL_MakeCurrent(self.window, self._gl_context) != 0:
+                log.warning('SecondaryGLWindow: SDL_GL_MakeCurrent failed: %s',
+                            sdl2.SDL_GetError().decode())
+                return False
+            if self._batch is None:
+                from unicornviz.gpu2d import Batch2DRenderer  # noqa: PLC0415
+                batch = Batch2DRenderer()
+                batch.create(atlas.width, atlas.height)
+                self._batch = batch
+                # A fresh texture holds none of what was uploaded before.
+                atlas.invalidate()
+            w_i, h_i = ctypes.c_int(0), ctypes.c_int(0)
+            sdl2.SDL_GL_GetDrawableSize(self.window, ctypes.byref(w_i), ctypes.byref(h_i))
+            if w_i.value > 0 and h_i.value > 0:
+                self.width, self.height = int(w_i.value), int(h_i.value)
+            if not self._batch.draw(frame, atlas.take_patches(), self.width, self.height):
+                return False
+            sdl2.SDL_GL_SwapWindow(self.window)
+            return True
+        except Exception as exc:
+            log.warning('SecondaryGLWindow: GPU present failed: %s', exc)
+            return False
+        finally:
+            self._restore(prev_window, prev_context)
+
     def _frame_fits(self, raw_rgba: object, width: int, height: int) -> bool:
         """Return True when ``raw_rgba`` holds at least width*height*4 bytes.
 
@@ -611,6 +654,9 @@ class SecondaryGLWindow:
             self._restore(prev_window, prev_context)
 
     def _release_gl_resources(self) -> None:
+        if self._batch is not None:
+            self._batch.release()
+            self._batch = None
         gl = self._gl
         if gl is not None:
             try:
