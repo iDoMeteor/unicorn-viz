@@ -3036,68 +3036,6 @@ void main() {
             'treble_n': treble_n,
         }
 
-    def build_live_corpus_sample(self) -> dict[str, Any]:
-        """Return a compact merged VJ snapshot for the Spotify live corpus sink."""
-
-        src = self._audio_raw if self._audio_raw is not None else self._audio
-        effect_name = self._current_effect.NAME if self._current_effect is not None else '-'
-        effect_label = getattr(self._overlays, '_name_text', effect_name) if self._overlays is not None else effect_name
-        audio_source = self._audio_manager.get_source_label() if self._audio_manager is not None else 'n/a'
-        audio_profile = self._audio_manager.get_profile_name() if self._audio_manager is not None else 'n/a'
-        audio_snapshot = self._system_monitor_audio_snapshot()
-        fft_peak = 0.0
-        fft_mean = 0.0
-        fft_peak_bin = -1
-        waveform_peak = 0.0
-        waveform_rms = 0.0
-        waveform_mean_abs = 0.0
-        if src is not None:
-            fft = np.asarray(src.fft, dtype=np.float32)
-            waveform = np.asarray(src.waveform, dtype=np.float32)
-            if fft.size > 0:
-                fft_peak_bin = int(np.argmax(fft))
-                fft_peak = float(np.max(fft))
-                fft_mean = float(np.mean(fft))
-            if waveform.size > 0:
-                waveform_peak = float(np.max(np.abs(waveform)))
-                waveform_rms = float(np.sqrt(np.mean(np.square(waveform), dtype=np.float64)))
-                waveform_mean_abs = float(np.mean(np.abs(waveform)))
-        return {
-            'vj_effect': effect_name,
-            'vj_effect_label': effect_label,
-            'vj_previous_effect': self._previous_effect_name,
-            'vj_playlist_mode': self._playlist_mode,
-            'vj_playlist_index': self._playlist_index,
-            'vj_playlist_size': self._playlist_size,
-            'vj_fps': self._last_frame_fps,
-            'vj_frame_ms': self._last_frame_ms,
-            'vj_audio_source': audio_source,
-            'vj_audio_profile': audio_profile,
-            'vj_audio_bass': audio_snapshot['bass'],
-            'vj_audio_mid': audio_snapshot['mid'],
-            'vj_audio_treble': audio_snapshot['treble'],
-            'vj_audio_bass_n': audio_snapshot['bass_n'],
-            'vj_audio_mid_n': audio_snapshot['mid_n'],
-            'vj_audio_treble_n': audio_snapshot['treble_n'],
-            'vj_audio_bpm': float(src.bpm) if src is not None else 120.0,
-            'vj_audio_beat': float(src.beat) if src is not None else 0.0,
-            'vj_audio_bass_flux': float(src.bass_flux) if src is not None else 0.0,
-            'vj_audio_mid_flux': float(src.mid_flux) if src is not None else 0.0,
-            'vj_audio_fft_peak': fft_peak,
-            'vj_audio_fft_mean': fft_mean,
-            'vj_audio_fft_peak_bin': fft_peak_bin,
-            'vj_audio_waveform_peak': waveform_peak,
-            'vj_audio_waveform_rms': waveform_rms,
-            'vj_audio_waveform_mean_abs': waveform_mean_abs,
-        }
-
-    def get_live_audio_window(self, duration_s: float = 10.0) -> tuple[np.ndarray, int] | None:
-        """Return a recent mono PCM window for live stream analysis."""
-
-        if self._audio_manager is None:
-            return None
-        return self._audio_manager.get_recent_pcm_window(duration_s=duration_s)
-
     def _system_monitor_tweakables_snapshot(self) -> dict[str, float | None]:
         """Return live tweakable values for the system monitor modal."""
         reactivity = 1.0

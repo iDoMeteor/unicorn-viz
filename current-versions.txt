@@ -37,7 +37,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
-  spotify-01                    1.0.0-rc.10         RC            module
+  spotify-01                    1.0.0-rc.11         RC            module
   unicorn-tears-01              1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
