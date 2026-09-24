@@ -1,7 +1,7 @@
 # GPU mixer console + audio process split + multithreading
 
 Owner: perf seat (with the owner, live)
-Status: **active — phases 1, 2a, 2b landed; live-profile tuning landed**
+Status: **active — phases 1, 2a, 2b, 2c, 3 (analysis) landed; waiting on a live re-profile**
 Last updated: 2026-09-24
 
 Rollback point: tag `checkpoint/pre-gpu-mixer-audio-split-2026-09-24`
@@ -168,8 +168,12 @@ them can be reverted on its own.
 | 1b Skip recording unchanged console sections; waveform shader | next | |
 | GC: freeze the long-lived heap (gen-2 124 ms -> 1 ms) | **landed** | core beta.161 `gc_tuning`; dj-mixer-01 0.217.1 |
 | 2b Capture + analyzer into the audio process, mixer engine shares it (streams, values, hot snapshots, factories) | **landed** | core beta.162 `unicornviz/audio/process.py`; dj-mixer-01 0.218.0 |
-| 2c Decode worker writes straight into shared memory; stems at 48 kHz | next | |
-| 3 Worker processes for analysis/stems; `update()` audit | next | |
+| 2c Stems at 48 kHz | **already done** (2026-09-13 extraction resample + migration; all 1,144 cached stem files verified 48 kHz) | dj-mixer-01 `stems.py` |
+| 2c Each track/stem held once in the audio process (adopted into shared memory as it loads) | **landed** (track + stems 1,346 -> ~770 MB) | core beta.166 `adopt_array`; dj-mixer-01 0.218.5 |
+| 2c Deck loads decoded in a separate worker | deferred: measured harmless in the helper (writer never late during a load) | |
+| 3 ANLZ in worker processes (off the main process, ~2.4x faster, results identical, crash-isolated) | **landed** | core beta.167 `unicornviz/workers.py`; dj-mixer-01 0.219.0 `analysis_job.py` |
+| 3 Main-thread `update()` audit | partly: mixer/core items landed (session publish 10 Hz, now-playing memo); Auto VJ paused for discussion | [auto-vj plan](auto-vj-per-frame-cost-plan-2026-09-24.md) |
+| 3 Deck render thread pool | waits on the free-threaded switch | |
 | 4 GIL guard + per-process import map for a free-threaded helper | **import map done**; helper logs its GIL state | see 4b |
 
 Measured so far: a 1920x1080 console frame builds in 7.1 ms instead of
