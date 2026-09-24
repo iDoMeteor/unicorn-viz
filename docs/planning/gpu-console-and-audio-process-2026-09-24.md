@@ -1,6 +1,7 @@
 # GPU mixer console + audio process split + multithreading
 
-Owner: perf seat (with the owner, live) · Status: **active — phases 1, 2a, 2b landed; live-profile tuning landed** ·
+Owner: perf seat (with the owner, live)
+Status: **active — phases 1, 2a, 2b landed; live-profile tuning landed**
 Last updated: 2026-09-24
 
 Rollback point: tag `checkpoint/pre-gpu-mixer-audio-split-2026-09-24`
@@ -189,11 +190,13 @@ by replaying its factories' imports and listing compiled extensions:
   it also ships `cp314t` wheels (3.5.1).
 * Everything else is stdlib.
 
-So the helper can run GIL-free as soon as a free-threaded interpreter with
-those wheels exists: point `[audio] process_python` (core) and
-`[dj_mixer] audio_process_python` at it, and the helper's startup log line
-says whether the GIL really stayed off.  Not done here: installing
-`python3.14-freethreading` and building that environment is an owner call.
+**Done 2026-09-24 (owner asked):** `python3.14-freethreading` 3.14.7 is
+installed with a helper environment at `~/.local/share/unicorn-viz/venv-ft`
+(cp314t wheels, same versions as the main venv).  Verified end to end: the
+real helper on it reports `free-threaded, GIL disabled`, analysis and
+onsets reach the main process, and the mixer engine plays in the same
+helper.  Switching the app to it (two config lines) and the soak it needs
+first: [streaming-and-audio-runtime-recommendations](streaming-and-audio-runtime-recommendations-2026-09-24.md) §3.
 
 ## 5. How we know it worked
 

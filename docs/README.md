@@ -28,6 +28,8 @@ This is the canonical map for project documentation.
 ## Working Documentation
 
 - Planning: [docs/planning](planning)
+- **Streaming (OBS) + audio-runtime recommendations — OBS settings for a high-quality visualizer stream, display costs, switching the audio process to free-threaded Python (2026-09-24, for owner review):** [docs/planning/streaming-and-audio-runtime-recommendations-2026-09-24.md](planning/streaming-and-audio-runtime-recommendations-2026-09-24.md)
+- **Auto VJ per-frame cost plan — decision-identical cuts, and the detector-in-the-audio-process option (2026-09-24, proposed, paused for owner discussion):** [docs/planning/auto-vj-per-frame-cost-plan-2026-09-24.md](planning/auto-vj-per-frame-cost-plan-2026-09-24.md)
 - **GPU mixer console + audio process split + multithreading — the combined mission (2026-09-24, active, executing):** [docs/planning/gpu-console-and-audio-process-2026-09-24.md](planning/gpu-console-and-audio-process-2026-09-24.md)
 - **Free-threaded Python (no-GIL) — findings, dependency audit and starting point for the free-threading team (2026-09-24, research handoff):** [docs/planning/free-threaded-python-2026-09-24.md](planning/free-threaded-python-2026-09-24.md)
 - **Ideas to experiment with later — a living backlog of technically-verified-but-unscheduled ideas (2026-09-18, ongoing):** [docs/planning/experiment-later-backlog.md](planning/experiment-later-backlog.md)
