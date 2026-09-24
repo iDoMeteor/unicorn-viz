@@ -54,4 +54,7 @@ def test_rescue_is_scoped_to_never_fired_tracks_by_default() -> None:
 
 def test_relative_trigger_uses_rolling_p90_with_floor() -> None:
     assert "trigger_rel = trigger / max(0.15, p90)" in _SRC
-    assert "p90 = vals[int(0.9 * (len(vals) - 1))]" in _SRC
+    # The 0.9 * (n - 1) order statistic over the live [lo:hi) ring rows,
+    # picked by np.partition (same element a full sort would index).
+    assert "k = int(0.9 * (hi - lo - 1))" in _SRC
+    assert "p90 = float(np.partition(vs[lo:hi], k)[k])" in _SRC
