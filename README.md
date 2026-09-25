@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.178**
+**Version 1.0.0-beta.179**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.179** — **Auto VJ settings get menu rows** (auto-vj-01 rc.154): Auto VJ on/off, beat tracker engine, onset envelope, HUD BPM smoothing, the director's snap and phrase-wait rows, and the USER-mood drop thresholds and cruise post-FX slots. Visuals › HUD detail gains **Production HUD**. Values set in config.toml move over as usual.
 - **1.0.0-beta.178** — **projectM and Image Showcase settings get menu rows.** Visuals › projectM: blend between presets, lock preset, start presets clean, opening preset, auto-exclude flat presets, flat-color grace time (apply the next time the effect loads). Performance: preload images at startup, preset warm-up frames, libprojectM path, extra preset folders, preset texture folders. Rows show only when the effect is installed; values set in config.toml move over as usual.
 - **1.0.0-beta.177** — **Effect parameters set in config.toml move into your profile.** The first time each effect loads, its `[effects.<Effect>]` values for the sliders the Effects tab edits (speed, zoom, reactivity, ...) are copied into the active profile once; after that the menu is the source of truth. Values you already changed in the menu are kept.
 - **1.0.0-beta.176** — **The last config.toml settings in the audit get menu rows.** Recording: **Save folder** (next recording). Visuals: **ANSI art folder**. Performance: **Display mode** and **Display** (live, and the app starts in them; applied before multi-head is built) and **MIDI device** / **MIDI preset** (next launch; AUTO/NONE are real choices and an unplugged device stays selectable). Drop-ins: media folder (media-01 0.31.0), V4L2 device (video-out-01 0.7.0), chat position and username (chat-01 0.7.0). Values set in config.toml move over as usual.

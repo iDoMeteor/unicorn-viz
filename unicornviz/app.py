@@ -4060,6 +4060,12 @@ void main() {
                 ))
             if ov is not None and callable(getattr(ov, 'set_hud_detector_visibility', None)):
                 production = bool(self.cfg.get('auto_vj', 'hud_production_mode', default=False))
+                specs.append(_ce_toggle(
+                    'visuals.hud_production_mode', 'Production HUD', production,
+                    lambda v: self._set_hud_production_mode(float(v) >= 0.5),
+                    hint='Hide detector BPM/score/profile HUD bits for a show',
+                    section='HUD detail',
+                ))
                 for key, label in self._HUD_DETAIL_ROWS:
                     specs.append(_ce_toggle(
                         f'visuals.{key}', label,
@@ -5288,6 +5294,13 @@ void main() {
         the effect reads it the next time it is built."""
         self.cfg.set_override('effects', f'{cls_name}.{key}', value)
         self._remember_runtime(f'config_overrides.effects.{cls_name}.{key}', value)
+
+    def _set_hud_production_mode(self, on: bool) -> None:
+        """Set [auto_vj] hud_production_mode and re-resolve the HUD live."""
+        self.cfg.set_override('auto_vj', 'hud_production_mode', bool(on))
+        ov = self._overlays
+        if ov is not None:
+            ov.set_hud_detector_visibility(*_resolve_hud_detector_visibility(self.cfg))
 
     # Drop-ins tab: load / start switches, applied at the next launch.
     # (section, dotted key, label, default when unset, hint).  Defaults

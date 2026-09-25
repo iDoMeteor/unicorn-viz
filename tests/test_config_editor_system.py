@@ -383,7 +383,7 @@ def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
     rows = _rows(app, 'Visuals')
     assert set(rows) == {'Effect duration', 'Transition length', 'Now Playing banner',
                          'Now Spinning platter', 'HUD auto-hide', 'HUD timeout',
-                         'Flash messages', 'Detector BPM', 'Profile score',
+                         'Flash messages', 'Production HUD', 'Detector BPM', 'Profile score',
                          'Recommended profile', 'Speed min', 'Speed max',
                          'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
                          'ANSI art folder'}
@@ -934,6 +934,18 @@ def test_hud_detail_rows_apply_live_and_respect_production_mode(tmp_path: Path) 
     _specs(app, 'Visuals')['Profile score']['set'](1.0)
     assert seen[-1] == (False, False, False)                # production mode wins
     assert app.cfg.get('overlays', 'hud_show_profile_score') is True   # but the choice is kept
+
+
+def test_production_hud_row_hides_detector_bits_live(tmp_path: Path) -> None:
+    app = _app(tmp_path, tab='Visuals')
+    seen: list[tuple] = []
+    app._overlays.set_hud_detector_visibility = lambda *flags: seen.append(flags)
+    app.cfg.set_override('overlays', 'hud_show_detector_bpm', True)
+    _specs(app, 'Visuals')['Production HUD']['set'](1.0)
+    assert app.cfg.get('auto_vj', 'hud_production_mode') is True
+    assert seen[-1] == (False, False, False)
+    _specs(app, 'Visuals')['Production HUD']['set'](0.0)
+    assert seen[-1] == (True, False, False)
 
 
 def test_random_look_rows_reach_the_hotkey_ranges(tmp_path: Path) -> None:

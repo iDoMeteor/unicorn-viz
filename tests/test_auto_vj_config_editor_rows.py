@@ -52,6 +52,19 @@ def _ctrl(**overrides) -> AutoVJController:
     c._detector_log_interval_s = 1.0
     c._wide_bpm_sample_interval_s = 2.0
     c._cfg = {}
+    c._enabled = False
+    c._manual_profile_base = 'normie'
+    c._published_bpm_smoothing_enabled = True
+    c._published_bpm_smoothing_s = 4.0
+    c._mode_snap_unit_build = 'downbeat'
+    c._mode_snap_unit_breakdown = 'off'
+    c._mode_snap_unit_climax = 'phrase'
+    c._mode_phrase_within_bars_breakdown = 0
+    c._mode_phrase_within_bars_climax = 2
+    c._mode_phrase_unit_climax = 4
+    c._explicit_profile_override_keys = set()
+    c._use_user_profile_overrides = False
+    c._apply_profile_settings = lambda: None
     for key, value in overrides.items():
         setattr(c, key, value)
     return c
@@ -61,6 +74,22 @@ def test_row_names_and_shapes() -> None:
     c = _ctrl()
     rows = {r['name']: r for r in c.config_editor_settings()}
     assert list(rows) == [
+        'enabled',
+        'beat_tracker_engine',
+        'env_source',
+        'published_bpm_smoothing_enabled',
+        'published_bpm_smoothing_s',
+        'mode_snap_unit_build',
+        'mode_snap_unit_breakdown',
+        'mode_snap_unit_climax',
+        'mode_phrase_within_bars_breakdown',
+        'mode_phrase_within_bars_climax',
+        'mode_phrase_unit_climax',
+        'drop_trigger_threshold',
+        'drop_trigger_fastlane',
+        'drop_sustain_entry',
+        'drop_sustain_fizzle_floor',
+        'postfx_cruise_slots',
         'shadow_engine',
         'genre_matcher_enabled',
         'genre_candidate_scoring_enabled',
@@ -162,3 +191,56 @@ def test_logging_restart_rows_return_overrides() -> None:
     assert c.set_config_setting('log_dir', ' /tmp/x ') == {'log_dir': '/tmp/x'}
     assert c.set_config_setting('live_training_corpus_path', 'a.jsonl') == {
         'live_training_corpus_path': 'a.jsonl'}
+
+
+# --- remaining [auto_vj] keys (rc.154; hooks landed in rc.153) -------------- #
+
+_PRESETS = _AUTO_VJ_MODULE._PROFILE_PRESETS
+
+
+def _rows(c: AutoVJController) -> dict[str, dict]:
+    return {r['name']: r for r in c.config_editor_settings()}
+
+
+def test_every_new_row_names_its_config_line_and_uses_ascii_sections() -> None:
+    rows = _rows(_ctrl())
+    new = list(rows)[:16]
+    assert all(rows[n]['config'] == f'auto_vj.{n}' for n in new)
+    assert all(str(r.get('section', '')).isascii() for r in rows.values())
+
+
+def test_restart_choice_rows_read_the_config_and_round_trip() -> None:
+    c = _ctrl(_cfg={'beat_tracker_engine': 'legacy', 'env_source': 'dense_complex'})
+    rows = _rows(c)
+    assert rows['beat_tracker_engine']['restart'] == 'auto_vj'
+    assert rows['beat_tracker_engine']['choices'][int(rows['beat_tracker_engine']['value'])] == 'v1'
+    assert rows['env_source']['value'] == 2.0
+    assert c.set_config_setting('env_source', rows['env_source']['value']) == {
+        'env_source': 'dense_complex'}
+
+
+def test_hud_smoothing_rows_sit_on_visuals() -> None:
+    rows = _rows(_ctrl())
+    assert rows['published_bpm_smoothing_enabled']['tab'] == 'Visuals'
+    assert rows['published_bpm_smoothing_s']['value'] == 4.0
+    assert rows['published_bpm_smoothing_s']['step'] == 0.5
+
+
+def test_director_rows_show_the_resolved_state_and_round_trip() -> None:
+    c = _ctrl()
+    rows = _rows(c)
+    snap = rows['mode_snap_unit_climax']
+    assert snap['choices'][int(snap['value'])] == 'phrase'
+    assert rows['mode_phrase_unit_climax']['value'] == 4.0
+    c.set_config_setting('mode_snap_unit_build', rows['mode_snap_unit_build']['value'])
+    assert c._cfg['mode_snap_unit_build'] == 'downbeat'
+
+
+def test_user_mood_rows_fall_back_to_the_base_preset() -> None:
+    c = _ctrl(_cfg={'drop_trigger_threshold': 0.42})
+    rows = _rows(c)
+    assert rows['drop_trigger_threshold']['value'] == 0.42
+    assert rows['drop_sustain_entry']['value'] == float(_PRESETS['normie']['drop_sustain_entry'])
+    assert rows['postfx_cruise_slots']['value'] == ','.join(
+        str(x) for x in _PRESETS['normie']['postfx_cruise_slots'])
+    assert rows['postfx_cruise_slots']['kind'] == 'text'
