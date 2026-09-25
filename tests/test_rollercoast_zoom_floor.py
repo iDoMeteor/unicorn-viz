@@ -86,21 +86,52 @@ def test_zoom_floor_keeps_the_field_of_view_sane(rides, name):
     )
 
 
-@pytest.mark.parametrize('name', sorted(RIDES))
-def test_randomiser_cannot_roll_below_the_floor(rides, config, name):
-    """config.toml bounds the app's zoom randomiser to what the ride can draw.
+@pytest.fixture(scope='module')
+def gl_ctx():
+    moderngl = pytest.importorskip('moderngl')
+    try:
+        c = moderngl.create_standalone_context()
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f'no headless GL context: {exc}')
+    yield c
+    c.release()
 
-    Without this the randomiser's own default range starts at 0.30, well past
-    the point the track stops reading, and no amount of clamping inside the
-    effect would stop the HUD from reporting a zoom the ride never honoured.
+
+@pytest.mark.parametrize('given', [None, 0.30, 5.0])
+@pytest.mark.parametrize('name', sorted(RIDES))
+def test_randomiser_cannot_roll_below_the_floor(rides, gl_ctx, name, given):
+    """The zoom randomiser never rolls a zoom the ride cannot draw.
+
+    The app's randomiser reads ``random_zoom_min`` off the live effect's
+    config, and its own default starts at 0.30 -- well past the point a track
+    stops reading -- so without a floor the HUD reports zooms the ride then
+    clamps and never draws. The ride supplies that floor itself now rather
+    than relying on config.toml (which is being retired) to repeat
+    ``_MIN_ZOOM`` by hand. Checked with no key, a key below the floor, and a
+    key above it, which must be honored as given.
     """
-    section = config['effects'][RIDES[name]]
-    lo = section.get('random_zoom_min')
-    assert lo is not None, f'{name}: config.toml sets no random_zoom_min'
-    assert lo >= rides[name]._MIN_ZOOM, (
-        f'{name}: randomiser may roll {lo}, below the ride floor '
-        f'{rides[name]._MIN_ZOOM}'
-    )
+    cls = rides[name]
+    cfg = {} if given is None else {'random_zoom_min': given}
+    inst = cls(gl_ctx, 64, 36, dict(cfg))
+    try:
+        lo = float(inst.config['random_zoom_min'])
+        assert lo >= cls._MIN_ZOOM, (
+            f'{name}: randomiser may roll {lo}, below the ride floor {cls._MIN_ZOOM}')
+        if given is not None and given > cls._MIN_ZOOM:
+            assert lo == given, f'{name}: a higher configured floor {given} was not honored'
+    finally:
+        inst.destroy()
+
+
+def test_ride_does_not_mutate_the_config_it_was_given(rides, gl_ctx):
+    """self.config may be the loaded config's own table -- never write into it."""
+    cls = rides['First Drop']
+    cfg = {'random_zoom_min': 0.10}
+    inst = cls(gl_ctx, 64, 36, cfg)
+    try:
+        assert cfg == {'random_zoom_min': 0.10}
+    finally:
+        inst.destroy()
 
 
 @pytest.mark.parametrize('name', sorted(RIDES))
