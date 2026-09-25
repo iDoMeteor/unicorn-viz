@@ -150,7 +150,9 @@ entry in its `parameters`), so treat it as approximate:
   `neon_gain`, `torch_gain`, `cam_offset`, `splash_gain`, `layer_churn`,
   `flow_gain`); `ImageShowcase.mix_time`; `ProjectMEffect.speed`,
   `preset_duration`, `beat_sensitivity`. These persist only through a
-  saved profile (finding 1).
+  saved profile (finding 1). *Resolved: beta.169 (write-through) and
+  beta.177 (config.toml values move into the active profile the first time
+  each effect is built).*
 - **NONE, 21:** construction-time settings, not live parameters:
   `ImageShowcase.preload_images`, `scale_when_framed`;
   `SimShowcase.mix_time`, `camera_energy`; `random_zoom_min` on six
@@ -225,6 +227,7 @@ a toggle to show.
 | 4 | core 1.0.0-beta.172-173, spotify-01 rc.9-10, streaming-01 0.8.0, auto-vj-01 rc.152 | **Logging** tab (owner request, 2026-09-24): log level, log folder, per-frame perf logging, crash dump file, stall dump; Auto VJ decision log / log folder / training logs and corpus files / detector log; Spotify corpus file (removed again in spotify-01 rc.11 with the rest of Spotify's training code, by the owner's call). New **text** and **secret** row kinds (decision C): Spotify client ID and streaming endpoint masked with SHOW |
 
 | 5 | core 1.0.0-beta.176, media-01 0.31.0, video-out-01 0.7.0, chat-01 0.7.0 | Recording save folder, ANSI art folder, display mode and display (live; applied before multi-head is built), MIDI device and preset; media folder, V4L2 device, chat position and username |
+| 6 | core 1.0.0-beta.177 | `[effects.<Class>]` values for the live float `parameters` each effect declares move into the active profile once, the first time the effect is built with a profile active (the boot effect right after activation). Construction settings stay in the file pending the effects seat's specs; an operator override is never replaced |
 
 **All 53 in-scope keys now have menu rows**, except `[spotify] web_api.scopes` (left out by recommendation: developer-level) and `[dj_mixer] enabled` (owner: config.toml / boot-level only). Rows added after the file value was set migrate it on the next start.
 
