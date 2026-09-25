@@ -3649,6 +3649,21 @@ void main() {
             if raw is not missing:
                 self._remember_runtime(state_key, bool(raw))
                 moved.append(f'[{section}] {key}')
+        for cls_name, key, kind, _l, _d, _lo, _hi, step, *_rest in self._EFFECT_SETTING_ROWS:
+            state_key = f'config_overrides.effects.{cls_name}.{key}'
+            if self.get_runtime_state(state_key, default=None) is not None:
+                continue
+            raw = file_value('effects', cls_name, key, default=missing)
+            if raw is missing:
+                continue
+            try:
+                value = self._effect_setting_value(kind, raw)
+            except (TypeError, ValueError):
+                continue
+            if kind == 'slider' and float(step).is_integer():
+                value = int(round(float(value)))
+            self._remember_runtime(state_key, value)
+            moved.append(f'[effects.{cls_name}] {key}')
         for prefix, ctrl in self._config_editor_contributors():
             try:
                 rows = ctrl.config_editor_settings()
@@ -4071,8 +4086,10 @@ void main() {
                 hint='Art the ANSI viewer plays; applies the next time it starts',
                 section='Content',
             ))
+            specs.extend(self._config_editor_effect_setting_specs('Visuals'))
         elif tab == 'Performance':
             specs.extend(self._config_editor_performance_specs())
+            specs.extend(self._config_editor_effect_setting_specs('Performance'))
         elif tab == 'Drop-ins':
             specs.extend(self._config_editor_dropin_switch_specs())
         elif tab == 'Logging':
@@ -5168,6 +5185,109 @@ void main() {
         ov = self._overlays
         if ov is not None:
             ov.set_hud_detector_visibility(*_resolve_hud_detector_visibility(self.cfg))
+
+    # Effect construction settings ([effects.<Class>] keys an effect reads
+    # when it is built, not live ``parameters``), specced by the effects seat
+    # 2026-09-24.  (class, key, kind, label, default, lo, hi, step, tab,
+    # badge, hint).  Rows show only when the effect is registered; values
+    # persist as config_overrides.effects.<Class>.<key> and most apply the
+    # next time the effect loads (the effect config is rebuilt on each
+    # activation).  Paths describe the machine, so they sit on Performance.
+    _EFFECT_SETTING_ROWS: tuple[tuple, ...] = (
+        ('ImageShowcase', 'preload_images', 'toggle', 'Preload images at startup', False,
+         0, 1, 1, 'Performance', 'RESTART',
+         'Decode the image library during the splash so Image Showcase opens '
+         'instantly; costs startup time and memory'),
+        ('ProjectMEffect', 'smooth_transition', 'toggle', 'Blend between presets', True,
+         0, 1, 1, 'Visuals', 'NEXT LOAD',
+         'Crossfade into each new preset instead of cutting'),
+        ('ProjectMEffect', 'lock_preset', 'toggle', 'Lock preset', False,
+         0, 1, 1, 'Visuals', 'NEXT LOAD',
+         "Hold the current preset; projectM won't advance on its own timer"),
+        ('ProjectMEffect', 'start_clean', 'toggle', 'Start presets clean', False,
+         0, 1, 1, 'Visuals', 'NEXT LOAD',
+         "Begin each preset on a blank canvas instead of the previous preset's last frame"),
+        ('ProjectMEffect', 'start_preset', 'text', 'Opening preset', '',
+         0, 1, 1, 'Visuals', 'NEXT LOAD',
+         'Preset file name or path to open with; empty starts on the first in the library'),
+        ('ProjectMEffect', 'solid_color_skip_enabled', 'toggle', 'Auto-exclude flat presets',
+         False, 0, 1, 1, 'Visuals', 'NEXT LOAD',
+         'Permanently remove presets that settle on a single flat color from the library'),
+        ('ProjectMEffect', 'solid_color_duration', 'slider', 'Flat-color grace time', 0.2,
+         0.05, 2.0, 0.05, 'Visuals', 'NEXT LOAD',
+         'How long a preset may hold one flat color before it is excluded'),
+        ('ProjectMEffect', 'preset_warmup_frames', 'slider', 'Preset warm-up frames', 0,
+         0, 30, 1, 'Performance', 'NEXT LOAD',
+         'Render this many frames hidden when a preset loads, to hide its first-frame '
+         'flash; costs a hitch per switch'),
+        ('ProjectMEffect', 'projectm_library', 'text', 'libprojectM path', '',
+         0, 1, 1, 'Performance', 'RESTART',
+         'Path to the libprojectM library; empty auto-detects'),
+        ('ProjectMEffect', 'preset_dirs', 'text', 'Extra preset folders', '',
+         0, 1, 1, 'Performance', 'RESTART',
+         'Comma-separated preset folders; the bundled presets are always included'),
+        ('ProjectMEffect', 'texture_dirs', 'text', 'Preset texture folders', '',
+         0, 1, 1, 'Performance', 'NEXT LOAD',
+         'Comma-separated folders presets can load textures from'),
+    )
+    _EFFECT_ROW_SECTIONS = {'ImageShowcase': 'Image Showcase', 'ProjectMEffect': 'projectM'}
+    _EFFECT_ROW_PLACEHOLDERS = {'start_preset': 'any', 'projectm_library': 'auto-detect'}
+
+    @staticmethod
+    def _effect_setting_value(kind: str, raw: object) -> object:
+        """Normalize a stored/file value for an effect setting row (a TOML
+        list of folders becomes the comma string the row edits)."""
+        if kind == 'toggle':
+            return bool(raw)
+        if kind == 'text':
+            if isinstance(raw, (list, tuple)):
+                return ', '.join(str(x) for x in raw)
+            return str(raw or '').strip()
+        return float(raw)
+
+    def _config_editor_effect_setting_specs(self, tab: str) -> list[dict]:
+        """Rows for the registered effects' construction settings on ``tab``."""
+        playlist = getattr(self, '_playlist', None)
+        registered = {cls.__name__ for cls in getattr(playlist, 'effects', ()) or ()}
+        specs: list[dict] = []
+        for (cls_name, key, kind, label, default, lo, hi, step, row_tab, badge,
+             hint) in self._EFFECT_SETTING_ROWS:
+            if row_tab != tab or cls_name not in registered:
+                continue
+            raw = self.cfg.get('effects', cls_name, key, default=default)
+            try:
+                value = self._effect_setting_value(kind, raw)
+            except (TypeError, ValueError):
+                value = self._effect_setting_value(kind, default)
+            spec_key = f'effects_cfg.{cls_name}.{key}'
+            section = self._EFFECT_ROW_SECTIONS.get(cls_name, cls_name)
+            if kind == 'toggle':
+                spec = _ce_toggle(
+                    spec_key, label, bool(value),
+                    lambda v, c=cls_name, k=key: self._set_effect_setting(c, k, float(v) >= 0.5),
+                    hint=hint, badge=badge, section=section)
+            elif kind == 'text':
+                spec = _ce_text(
+                    spec_key, label, str(value),
+                    lambda v, c=cls_name, k=key: self._set_effect_setting(c, k, str(v).strip()),
+                    placeholder=self._EFFECT_ROW_PLACEHOLDERS.get(key, ''),
+                    hint=hint, badge=badge, section=section)
+            else:
+                integral = float(step).is_integer()
+                spec = _ce_slider(
+                    spec_key, label, float(value), float(lo), float(hi),
+                    lambda v, c=cls_name, k=key, i=integral: self._set_effect_setting(
+                        c, k, int(round(float(v))) if i else round(float(v), 4)),
+                    fmt='{:.0f}' if integral else '{:.2f} s',
+                    hint=hint, badge=badge, section=section, step=float(step))
+            specs.append(spec)
+        return specs
+
+    def _set_effect_setting(self, cls_name: str, key: str, value: object) -> None:
+        """Lay one [effects.<Class>] setting over the config and remember it;
+        the effect reads it the next time it is built."""
+        self.cfg.set_override('effects', f'{cls_name}.{key}', value)
+        self._remember_runtime(f'config_overrides.effects.{cls_name}.{key}', value)
 
     # Drop-ins tab: load / start switches, applied at the next launch.
     # (section, dotted key, label, default when unset, hint).  Defaults

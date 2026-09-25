@@ -14,6 +14,7 @@ import pytest
 
 from unicornviz.app import App
 from unicornviz.config_profiles import ConfigProfileStore
+from unicornviz.config import Config
 from unicornviz.overlays import Overlays
 from unicornviz.runtime_state import RuntimeStateStore
 
@@ -1298,3 +1299,74 @@ def test_effect_param_migration_keeps_an_existing_override(tmp_path: Path) -> No
     app.set_effect_parameter('FirstDrop', 'speed', 0.8)
     app._migrate_effect_params('FirstDrop', _FakeEffect())
     assert app._effect_config_overrides['FirstDrop'] == {'speed': 0.8, 'zoom': 3.0}
+
+
+# --- effect construction settings (effects seat spec, 2026-09-24) ------------ #
+
+class _PM:  # stands in for the registered projectM / Image Showcase classes
+    pass
+
+
+_PM.__name__ = 'ProjectMEffect'
+
+
+class _IS:
+    pass
+
+
+_IS.__name__ = 'ImageShowcase'
+
+
+def _with_effects(app: App, *classes) -> App:
+    app._playlist = type('P', (), {'effects': list(classes)})()
+    return app
+
+
+def _spec(app: App, tab: str, key: str) -> dict:
+    return next(s for s in app._config_editor_settings_specs(tab) if s['key'] == key)
+
+
+def test_effect_setting_rows_appear_only_for_registered_effects(tmp_path: Path) -> None:
+    app = _with_effects(_app(tmp_path), _IS)
+    keys = {s['key'] for s in app._config_editor_effect_setting_specs('Performance')}
+    assert keys == {'effects_cfg.ImageShowcase.preload_images'}
+    assert app._config_editor_effect_setting_specs('Visuals') == []
+    _with_effects(app, _IS, _PM)
+    vis = {s['key'] for s in app._config_editor_effect_setting_specs('Visuals')}
+    assert 'effects_cfg.ProjectMEffect.lock_preset' in vis
+    assert 'effects_cfg.ProjectMEffect.projectm_library' not in vis   # machine path
+
+
+def test_effect_setting_rows_write_the_effect_config_and_remember_it(tmp_path: Path) -> None:
+    app = _with_effects(_app(tmp_path), _PM)
+    _spec(app, 'Visuals', 'effects_cfg.ProjectMEffect.lock_preset')['set'](1.0)
+    _spec(app, 'Performance', 'effects_cfg.ProjectMEffect.preset_warmup_frames')['set'](6.4)
+    assert app.cfg.get('effects', 'ProjectMEffect.lock_preset') is True
+    assert app.cfg.get('effects', 'ProjectMEffect.preset_warmup_frames') == 6
+    stored = app.get_runtime_state('config_overrides')['effects']['ProjectMEffect']
+    assert stored == {'lock_preset': True, 'preset_warmup_frames': 6}
+
+
+def test_real_config_hands_the_override_to_the_next_effect_build(tmp_path: Path) -> None:
+    cfg = Config(tmp_path / 'missing.toml')
+    app = _with_effects(_app(tmp_path, cfg=cfg), _PM)
+    _spec(app, 'Visuals', 'effects_cfg.ProjectMEffect.start_clean')['set'](1.0)
+    assert cfg.get('effects', 'ProjectMEffect', default={})['start_clean'] is True
+
+
+def test_effect_settings_migrate_from_config_toml_once(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={
+        ('effects', 'ProjectMEffect', 'texture_dirs'): ['/a', '/b'],
+        ('effects', 'ProjectMEffect', 'preset_warmup_frames'): 3,
+        ('effects', 'ImageShowcase', 'preload_images'): True,
+    })
+    app = _app(tmp_path, cfg=cfg)
+    app._config_editor_contributors = lambda: []
+    app._migrate_config_to_menu()
+    stored = app.get_runtime_state('config_overrides')['effects']
+    assert stored['ProjectMEffect'] == {'texture_dirs': '/a, /b', 'preset_warmup_frames': 3}
+    assert stored['ImageShowcase'] == {'preload_images': True}
+    app._remember_runtime('config_overrides.effects.ImageShowcase.preload_images', False)
+    app._migrate_config_to_menu()                 # a menu edit is never replaced
+    assert app.get_runtime_state(
+        'config_overrides.effects.ImageShowcase.preload_images') is False
