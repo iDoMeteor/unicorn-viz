@@ -7,7 +7,7 @@
   core (unicornviz)             1.0.0-beta.179      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.221.0             alpha ▲       module
+  dj-mixer-01                   0.221.1             alpha ▲       module
   media-01                      0.31.0              alpha ▲       module
   control-room-01               0.24.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
