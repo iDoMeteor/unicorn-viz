@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.176**
+**Version 1.0.0-beta.177**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.177** — **Effect parameters set in config.toml move into your profile.** The first time each effect loads, its `[effects.<Effect>]` values for the sliders the Effects tab edits (speed, zoom, reactivity, ...) are copied into the active profile once; after that the menu is the source of truth. Values you already changed in the menu are kept.
 - **1.0.0-beta.176** — **The last config.toml settings in the audit get menu rows.** Recording: **Save folder** (next recording). Visuals: **ANSI art folder**. Performance: **Display mode** and **Display** (live, and the app starts in them; applied before multi-head is built) and **MIDI device** / **MIDI preset** (next launch; AUTO/NONE are real choices and an unplugged device stays selectable). Drop-ins: media folder (media-01 0.31.0), V4L2 device (video-out-01 0.7.0), chat position and username (chat-01 0.7.0). Values set in config.toml move over as usual.
 - **1.0.0-beta.175** — Reverts beta.174's **DJ mixer** Drop-ins switch and its early startup read: per the owner, `[dj_mixer] enabled` stays config.toml / boot-level only. Nothing had migrated (beta.174 was never run).
 - **1.0.0-beta.174** — **DJ mixer** joins the config editor's Drop-ins tab (RESTART; the mixer's own settings stay in its ⚙ SETTINGS). It is applied before the app resolves its boot profile, like the Logging tab, so `--mixer` sees the menu's choice.
