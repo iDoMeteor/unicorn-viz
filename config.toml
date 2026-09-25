@@ -252,12 +252,6 @@ cycle_interval = 10               # auto-cycle interval in s (0 = 30 s default)
 [effects.ImageShowcase]
 preload_images = true        # true = warm image cache at startup
 mix_time = 5.0              # seconds per image
-scale_when_framed = true
-
-[effects.VideoShowcase]
-preload_videos = true        # true = open/prime clips at startup
-mix_time       = 5.0        # seconds per clip
-scale_when_framed = true
 
 [effects.SimShowcase]
 mix_time = 4.0
