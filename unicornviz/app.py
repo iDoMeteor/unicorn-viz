@@ -5384,7 +5384,44 @@ void main() {
             effect_cfg = {"ansi_dir": str(resolve_path(ansi_dir)), **effect_cfg}
         w = self._width if width is None else int(width)
         h = self._height if height is None else int(height)
-        return cls(self._ctx, w, h, effect_cfg)
+        effect = cls(self._ctx, w, h, effect_cfg)
+        self._migrate_effect_params(cls.__name__, effect)
+        return effect
+
+    def _migrate_effect_params(self, class_name: str, effect: object) -> None:
+        """Move an effect's config.toml parameter values into the active
+        profile, once per effect, the first time it is built with a profile
+        active (config.toml is being retired for the menu, 2026-09-24).
+
+        Only keys the instance declares as float ``parameters`` -- exactly
+        what the Effects tab edits live.  Construction-time settings (dirs,
+        preload flags, integer counts) stay in the file until the effects
+        seat specs rows for them: an int copied into a float override could
+        break code that uses it as a count.  Never replaces an override the
+        operator already set.
+        """
+        if not getattr(self, '_active_profile', ''):
+            return                              # before boot activation: next build
+        marker = f'effects_migrated.{class_name}'
+        if self.get_runtime_state(marker, default=None) is not None:
+            return
+        self._remember_runtime(marker, True)
+        file_value = getattr(self.cfg, 'file_value', None)
+        section = file_value('effects', class_name, default=None) if callable(file_value) else None
+        params = getattr(effect, 'parameters', None)
+        if not isinstance(section, dict) or not isinstance(params, dict):
+            return
+        current = self._effect_config_overrides.get(class_name, {})
+        moved = {
+            str(k): float(v) for k, v in section.items()
+            if k in params and isinstance(params[k], float) and k not in current
+            and isinstance(v, (int, float)) and not isinstance(v, bool)
+        }
+        if moved:
+            self._effect_config_overrides.setdefault(class_name, {}).update(moved)
+            self._profile_touched()
+            log.info('Config menu: %s parameters copied from config.toml into profile %r: %s',
+                     class_name, self._active_profile, ', '.join(sorted(moved)))
 
     def _switch_effect(self, cls: Type[BaseEffect] | None) -> None:
         """Begin transition to a new effect."""
@@ -6441,6 +6478,9 @@ void main() {
         self._restore_performance_settings()
         self._activate_boot_profile()
         self._migrate_config_to_menu()
+        if self._current_effect is not None:     # built before the profile was active
+            self._migrate_effect_params(
+                type(self._current_effect).__name__, self._current_effect)
         boot.mark('finalize (recording/overlay sync)')
         boot.summary()
         # Everything built so far lives for the session: take it out of the

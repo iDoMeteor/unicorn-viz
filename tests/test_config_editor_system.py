@@ -1256,3 +1256,45 @@ def test_unplugged_midi_device_stays_selectable(tmp_path: Path, monkeypatch) -> 
     app = _app(tmp_path, tab='Performance', cfg=_StubCfg({('midi', 'device'): 'DDJ-REV1'}))
     row = _rows(app, 'Performance')['MIDI device']
     assert row['choices'] == ('AUTO', 'DDJ-REV1') and row['display'] == 'DDJ-REV1'
+
+
+
+# --- [effects] parameters move into the active profile (lazy, once) ---------- #
+
+class _FakeEffect:
+    def __init__(self) -> None:
+        self.parameters = {'speed': 1.0, 'zoom': 1.0}
+
+
+def test_effect_params_move_into_the_profile_once_and_only_real_params(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('effects', 'FirstDrop'): {
+        'speed': 1.4, 'zoom': 2, 'random_zoom_min': 0.5, 'preload': True}})
+    app = _app(tmp_path, cfg=cfg)
+    app._activate_boot_profile()
+    app._migrate_effect_params('FirstDrop', _FakeEffect())
+    assert app._effect_config_overrides['FirstDrop'] == {'speed': 1.4, 'zoom': 2.0}
+    app._flush_profile_autosave(force=True)
+    assert _profile(app, 'default')['effects']['FirstDrop'] == {'speed': 1.4, 'zoom': 2.0}
+    app.clear_effect_overrides('FirstDrop')                 # operator reverts it
+    app._migrate_effect_params('FirstDrop', _FakeEffect())  # built again: not re-copied
+    assert 'FirstDrop' not in app._effect_config_overrides
+
+
+def test_effect_param_migration_waits_for_an_active_profile(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('effects', 'FirstDrop'): {'speed': 1.4}})
+    app = _app(tmp_path, cfg=cfg)
+    app._migrate_effect_params('FirstDrop', _FakeEffect())   # startup, no profile yet
+    assert app._effect_config_overrides == {}
+    assert app.get_runtime_state('effects_migrated.FirstDrop') is None
+    app._activate_boot_profile()
+    app._migrate_effect_params('FirstDrop', _FakeEffect())
+    assert app._effect_config_overrides['FirstDrop'] == {'speed': 1.4}
+
+
+def test_effect_param_migration_keeps_an_existing_override(tmp_path: Path) -> None:
+    cfg = _FileCfg(file={('effects', 'FirstDrop'): {'speed': 1.4, 'zoom': 3.0}})
+    app = _app(tmp_path, cfg=cfg)
+    app._activate_boot_profile()
+    app.set_effect_parameter('FirstDrop', 'speed', 0.8)
+    app._migrate_effect_params('FirstDrop', _FakeEffect())
+    assert app._effect_config_overrides['FirstDrop'] == {'speed': 0.8, 'zoom': 3.0}
