@@ -172,14 +172,27 @@ def test_tabs_are_effects_then_alphabetical_and_info_tabs_are_gone(monkeypatch) 
     app.current_effect_class_name = lambda: ''
     app.config_editor_global_rows = lambda tab: []
     app.config_profile_names = lambda: []
+    app._config_editor_contributors = lambda: []
     app._push_config_editor_model()
     assert ov._config_editor_tabs == [
         'Effects', 'Audio', 'Drop-ins', 'Hotkeys', 'Logging', 'Performance', 'Recording',
-        'Visuals']
+        'System', 'Visuals']
     assert ov.config_editor_tab_name == 'Performance'     # kept by name, not position
-    assert 'System' not in ov._config_editor_tabs
-    assert 'Auto VJ' not in ov._config_editor_tabs
+    assert 'Auto VJ' not in ov._config_editor_tabs          # no drop-in, no tab
     assert not hasattr(app, 'config_editor_info_rows')
+
+
+def test_a_drop_in_brings_its_own_tab_and_it_follows_the_machine() -> None:
+    app = object.__new__(App)
+    vj = type('VJ', (), {'CONFIG_EDITOR_CATEGORY': 'Auto VJ'})()
+    rtmp = type('RTMP', (), {'CONFIG_EDITOR_CATEGORY': 'Streaming'})()
+    app._config_editor_contributors = lambda: [('auto_vj', vj), ('streaming', rtmp)]
+    tabs = app._config_editor_tab_names()
+    assert tabs[0] == 'Effects' and tabs[1:] == sorted(tabs[1:])
+    assert {'Auto VJ', 'Streaming', 'System'} <= set(tabs)
+    assert {'Auto VJ', 'Streaming', 'System'} <= set(App._MACHINE_LIVE_TABS)
+    # The overlay's "follows the machine" footer covers every machine tab.
+    assert set(App._MACHINE_LIVE_TABS) <= set(Overlays._CE_MACHINE_TABS)
 
 
 def test_set_tabs_clamps_index() -> None:
@@ -195,12 +208,22 @@ def test_set_tabs_clamps_index() -> None:
 _PERF_ROWS = {
     'Render scale': 'slider', 'Frame limit': 'choice', 'Present guard': 'slider',
     'Preview capture': 'toggle', 'Preview fps ceiling': 'slider',
-    'Preview width': 'choice', 'Capture latency': 'choice', 'FFT bands': 'choice',
-    'Capture block size': 'choice', 'Audio process': 'toggle',
-    'Display mode': 'choice', 'MIDI device': 'choice', 'MIDI preset': 'choice',
-    'Audio process Python': 'choice', 'System monitor sampling': 'slider',
+    'Preview width': 'choice', 'System monitor sampling': 'slider',
     'Tooltips': 'toggle', 'Video deck layer': 'toggle', 'Video cache edge': 'choice',
 }
+_SYSTEM_ROWS = {
+    'Display mode': 'choice', 'Capture latency': 'choice', 'FFT bands': 'choice',
+    'Capture block size': 'choice', 'Audio process': 'toggle',
+    'Audio process Python': 'choice', 'MIDI device': 'choice', 'MIDI preset': 'choice',
+    'ANSI art folder': 'text',
+}
+
+
+def test_system_rows_hold_the_machine_setup(tmp_path: Path) -> None:
+    rows = _rows(_app(tmp_path), 'System')
+    assert {n: r['kind'] for n, r in rows.items()} == _SYSTEM_ROWS
+    assert all(r['hint'] and r['section'] for r in rows.values())
+    assert [r['section'] for r in rows.values()][:2] == ['Display', 'Audio engine']
 
 
 def test_performance_rows_cover_every_core_knob(tmp_path: Path) -> None:
@@ -210,10 +233,7 @@ def test_performance_rows_cover_every_core_knob(tmp_path: Path) -> None:
     assert all(r['hint'] and r['section'] for r in rows.values())
     # Restart-only rows say so; live rows do not.
     restart = {n for n, r in rows.items() if r['badge'] == 'RESTART'}
-    assert restart == {'Capture latency', 'FFT bands', 'Capture block size',
-                       'Audio process', 'Audio process Python',
-                       'MIDI device', 'MIDI preset',
-                       'Video deck layer', 'Video cache edge'}
+    assert restart == {'Video deck layer', 'Video cache edge'}
     # Choices carry their labels; toggles/choices step by one.
     assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
     assert rows['Preview width']['choices'] == ('480', '640', '960', '1280')
@@ -269,7 +289,7 @@ def test_performance_live_rows_apply_and_persist(tmp_path: Path) -> None:
 
 def test_performance_restart_rows_persist_and_overlay_config(tmp_path: Path) -> None:
     app = _app(tmp_path)
-    specs = _specs(app, 'Performance')
+    specs = {**_specs(app, 'Performance'), **_specs(app, 'System')}
     specs['FFT bands']['set'](3.0)          # 2048
     specs['Capture block size']['set'](0.0)  # 256
     specs['Video deck layer']['set'](0.0)
@@ -282,7 +302,7 @@ def test_performance_restart_rows_persist_and_overlay_config(tmp_path: Path) -> 
     assert app.get_runtime_state('audio_latency') == 'high'
     assert any('restart' in m for m in app._overlays.messages)
     # Same session: the rows show the pending choice.
-    rows = _rows(app, 'Performance')
+    rows = {**_rows(app, 'Performance'), **_rows(app, 'System')}
     assert rows['FFT bands']['display'] == '2048'
     assert rows['Capture block size']['display'] == '256'
     assert rows['Video deck layer']['display'] == 'OFF'
@@ -385,8 +405,7 @@ def test_visuals_rows_are_show_and_overlay_settings(tmp_path: Path) -> None:
                          'Now Spinning platter', 'HUD auto-hide', 'HUD timeout',
                          'Flash messages', 'Production HUD', 'Detector BPM', 'Profile score',
                          'Recommended profile', 'Speed min', 'Speed max',
-                         'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
-                         'ANSI art folder'}
+                         'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max'}
     specs = _specs(app, 'Visuals')
     specs['Now Playing banner']['set'](0.0)
     assert app.now_playing_banner_enabled is False
@@ -579,7 +598,7 @@ def _fake_free_threaded_python(data_home: Path) -> str:
 def test_audio_process_rows_default_to_in_app_python(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'no-ft-here'))
     app = _app(tmp_path)
-    rows = _rows(app, 'Performance')
+    rows = _rows(app, 'System')
     assert rows['Audio process']['display'] == 'ON'
     assert rows['Audio process']['badge'] == 'RESTART'
     py = rows['Audio process Python']
@@ -592,7 +611,7 @@ def test_free_threaded_is_offered_but_never_chosen_by_default(tmp_path: Path, mo
     monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
     _fake_free_threaded_python(tmp_path / 'data')
     app = _app(tmp_path)
-    py = _rows(app, 'Performance')['Audio process Python']
+    py = _rows(app, 'System')['Audio process Python']
     assert py['choices'] == ('APP PYTHON', 'FREE-THREADED')
     assert py['display'] == 'APP PYTHON'
     assert app.get_runtime_state('audio_process_python') is None   # opening the menu writes nothing
@@ -602,9 +621,9 @@ def test_choosing_free_threaded_applies_on_the_next_launch(tmp_path: Path, monke
     monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
     ft = _fake_free_threaded_python(tmp_path / 'data')
     app = _app(tmp_path)
-    _specs(app, 'Performance')['Audio process Python']['set'](1.0)
+    _specs(app, 'System')['Audio process Python']['set'](1.0)
     assert app.get_runtime_state('audio_process_python') == ft
-    assert _rows(app, 'Performance')['Audio process Python']['display'] == 'FREE-THREADED'
+    assert _rows(app, 'System')['Audio process Python']['display'] == 'FREE-THREADED'
     assert any('restart' in m for m in app._overlays.messages)
     fresh = _app(tmp_path)
     fresh._apply_runtime_config_overrides()
@@ -617,10 +636,10 @@ def test_app_python_choice_overrides_a_hand_set_path(tmp_path: Path, monkeypatch
     monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'no-ft-here'))
     hand = {('audio', 'process_python'): '/opt/py/bin/python3.14t'}
     app = _app(tmp_path, cfg=_StubCfg(dict(hand)))
-    py = _rows(app, 'Performance')['Audio process Python']
+    py = _rows(app, 'System')['Audio process Python']
     assert py['choices'] == ('APP PYTHON', 'CUSTOM')      # the hand-set path is kept visible
     assert py['display'] == 'CUSTOM'
-    _specs(app, 'Performance')['Audio process Python']['set'](0.0)
+    _specs(app, 'System')['Audio process Python']['set'](0.0)
     assert app.get_runtime_state('audio_process_python') == ''
     fresh = _app(tmp_path, cfg=_StubCfg(dict(hand)))
     fresh._apply_runtime_config_overrides()
@@ -629,9 +648,9 @@ def test_app_python_choice_overrides_a_hand_set_path(tmp_path: Path, monkeypatch
 
 def test_audio_process_toggle_persists_for_the_next_launch(tmp_path: Path) -> None:
     app = _app(tmp_path)
-    _specs(app, 'Performance')['Audio process']['set'](0.0)
+    _specs(app, 'System')['Audio process']['set'](0.0)
     assert app.get_runtime_state('audio_process') is False
-    assert _rows(app, 'Performance')['Audio process']['display'] == 'OFF'
+    assert _rows(app, 'System')['Audio process']['display'] == 'OFF'
     fresh = _app(tmp_path)
     fresh._apply_runtime_config_overrides()
     assert fresh.cfg.get('audio', 'process') is False
@@ -1197,7 +1216,7 @@ def test_recording_folder_row_applies_next_rec_and_survives_a_rebuild(tmp_path: 
 
 def test_ansi_folder_row_persists_and_migrates(tmp_path: Path) -> None:
     app = _app(tmp_path, tab='Visuals')
-    _specs(app, 'Visuals')['ANSI art folder']['set']('~/art/ansi')
+    _specs(app, 'System')['ANSI art folder']['set']('~/art/ansi')
     assert app.cfg.get('ansi', 'ansi_dir_auto') == '~/art/ansi'
     assert app.get_runtime_state('ansi_dir_auto') == '~/art/ansi'
     fresh = _app(tmp_path / 'b', cfg=_FileCfg(file={('ansi', 'ansi_dir_auto'): 'assets/ansi/acid'}))
@@ -1219,10 +1238,10 @@ def test_display_rows_apply_live_and_persist(tmp_path: Path) -> None:
     app._multihead = _FakeMultiHead()
     modes_set: list[str] = []
     app.set_display_mode = lambda mode=None, reset_to_config=False: modes_set.append(mode) or mode
-    rows = _rows(app, 'Performance')
+    rows = _rows(app, 'System')
     assert rows['Display mode']['choices'] == ('SINGLE', 'SPAN INCLUDED', 'MIRROR ALL')
     assert rows['Display']['choices'] == ('0: 1920x1080', '2: 2560x1440')
-    specs = _specs(app, 'Performance')
+    specs = _specs(app, 'System')
     specs['Display mode']['set'](2.0)
     assert modes_set[-1] == 'mirror_all'
     assert app.get_runtime_state('window_display_mode') == 'mirror_all'
@@ -1232,8 +1251,8 @@ def test_display_rows_apply_live_and_persist(tmp_path: Path) -> None:
 
 
 def test_display_row_hidden_with_one_display(tmp_path: Path) -> None:
-    app = _app(tmp_path, tab='Performance')
-    assert 'Display' not in _rows(app, 'Performance')      # no multi-head, one display
+    app = _app(tmp_path)
+    assert 'Display' not in _rows(app, 'System')      # no multi-head, one display
 
 
 def test_window_overrides_apply_early_and_alone(tmp_path: Path) -> None:
@@ -1252,11 +1271,11 @@ def test_midi_rows_list_ports_and_presets_and_auto_can_override_the_file(tmp_pat
     monkeypatch.setattr(midi_mod, 'list_ports', lambda: ['APC mini mk2 0', 'DDJ-REV1 1'])
     cfg = _StubCfg({('midi', 'device'): 'APC'})
     app = _app(tmp_path, tab='Performance', cfg=cfg)
-    rows = _rows(app, 'Performance')
+    rows = _rows(app, 'System')
     assert rows['MIDI device']['choices'] == ('AUTO', 'APC mini mk2 0', 'DDJ-REV1 1')
     assert rows['MIDI device']['display'] == 'APC mini mk2 0'     # the hint matches a port
     assert rows['MIDI preset']['choices'][0] == 'NONE'
-    _specs(app, 'Performance')['MIDI device']['set'](0.0)          # AUTO
+    _specs(app, 'System')['MIDI device']['set'](0.0)          # AUTO
     assert app.get_runtime_state('midi_device') == ''
     fresh = _app(tmp_path, cfg=_StubCfg({('midi', 'device'): 'APC'}))
     fresh._apply_runtime_config_overrides()
@@ -1267,7 +1286,7 @@ def test_unplugged_midi_device_stays_selectable(tmp_path: Path, monkeypatch) -> 
     import unicornviz.midi as midi_mod
     monkeypatch.setattr(midi_mod, 'list_ports', lambda: [])
     app = _app(tmp_path, tab='Performance', cfg=_StubCfg({('midi', 'device'): 'DDJ-REV1'}))
-    row = _rows(app, 'Performance')['MIDI device']
+    row = _rows(app, 'System')['MIDI device']
     assert row['choices'] == ('AUTO', 'DDJ-REV1') and row['display'] == 'DDJ-REV1'
 
 
@@ -1382,3 +1401,30 @@ def test_effect_settings_migrate_from_config_toml_once(tmp_path: Path) -> None:
     app._migrate_config_to_menu()                 # a menu edit is never replaced
     assert app.get_runtime_state(
         'config_overrides.effects.ImageShowcase.preload_images') is False
+
+
+def test_a_row_moved_off_a_profile_tab_keeps_the_profile_value(tmp_path: Path) -> None:
+    """Auto VJ's HUD smoothing moved Visuals -> Auto VJ (machine) 2026-09-24:
+    the value the active profile saved is applied and becomes the machine
+    value once, instead of dropping back to the code default."""
+    class _VJ(_Contributor):
+        CONFIG_EDITOR_CATEGORY = 'Auto VJ'
+        applied: dict = {}
+
+        def set_config_setting(self, name, value):
+            self.applied[name] = value
+
+    vj = _VJ([{'name': 'published_bpm_smoothing_s', 'value': 4.0},
+              {'name': 'published_bpm_smoothing_enabled', 'kind': 'toggle', 'value': 1.0}])
+    app = _app(tmp_path, cfg=_FileCfg())
+    app._config_editor_contributors = lambda: [('auto_vj', vj)]
+    app._config_profile_store.save('default', {'effects': {}, 'settings': {
+        'dropin.auto_vj.published_bpm_smoothing_enabled': 0.0}})
+    app._set_active_profile('default')
+    app._migrate_config_to_menu()
+    assert vj.applied == {'published_bpm_smoothing_enabled': 0.0}
+    assert app.get_runtime_state('perf_dropin.auto_vj.published_bpm_smoothing_enabled') == 0.0
+    assert app.get_runtime_state('perf_dropin.auto_vj.published_bpm_smoothing_s') is None
+    vj.applied.clear()
+    app._migrate_config_to_menu()                  # once: the machine value wins now
+    assert vj.applied == {}

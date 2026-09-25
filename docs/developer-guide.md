@@ -605,6 +605,15 @@ class MyController:
         ...  # apply live; a 'restart' row returns {config_key: value}
 ```
 
+Tabs (2026-09-24): **Performance** is for cost knobs only (frame rates,
+worker counts, caches, re-raster toggles); **System** for how the app meets
+the machine (display, MIDI, audio engine, folders and paths, accounts);
+**Streaming** for RTMP, video out and stream chat; **Visuals** / **Audio**
+for the look (profile-backed).  A drop-in may file its rows under a tab of
+its own (`CONFIG_EDITOR_CATEGORY = 'Auto VJ'`); the tab appears while the
+drop-in is loaded and follows the machine -- add it to
+`App._MACHINE_LIVE_TABS` and `Overlays._CE_MACHINE_TABS`.
+
 Row keys: `name` (setter key), `value`, `min`/`max` (sliders), and
 optionally `tab`, `kind` (`slider` | `toggle` | `choice`), `choices`,
 `label`, `display`, `hint` (tooltip + inline on the selected row),
@@ -613,14 +622,14 @@ optionally `tab`, `kind` (`slider` | `toggle` | `choice`), `choices`,
 `kind` may also be `'text'` or `'secret'` (a string `value`; the setter
 receives the typed string; add `placeholder` for an empty field). A secret
 is masked with a SHOW toggle and never pre-filled while hidden. Give text
-rows `restart` (or put them on the Performance tab) so they persist.
+rows `restart` (or put them on a machine tab) so they persist.
 
 `config` (`'<section>.<key>'`) names the config.toml line the row replaces.
 config.toml is being retired in favor of the menu (owner, 2026-09-24): at
 the end of startup core copies a value the file actually sets (never a
 built-in default) into the row's saved setting, once, if nothing is saved
 yet (`config_overrides.<section>.<key>` for `restart` rows, the row's
-current value as `perf_dropin.<KEY>.<name>` for live Performance rows).
+current value as `perf_dropin.<KEY>.<name>` for live machine-tab rows).
 From then on the menu wins and edits to that line do nothing. Every new
 row for a setting that exists in config.toml should declare it.
 
@@ -632,9 +641,12 @@ Persistence is core's job:
   writes through to it (debounced ~0.4 s, flushed at shutdown), and it is
   loaded at the end of startup, so a row persists with no explicit save.
   Per-effect parameter edits on the Effects tab ride along the same way.
-- **Performance and Logging rows** (live) are remembered in runtime state as
-  `perf_dropin.<KEY>.<name>` and replayed through `set_config_setting`
-  at the end of the next startup.
+- **Machine-tab rows** (live rows on Performance, Logging, System,
+  Streaming or Auto VJ -- `App._MACHINE_LIVE_TABS`) are remembered in
+  runtime state as `perf_dropin.<KEY>.<name>` and replayed through
+  `set_config_setting` at the end of the next startup.  A live row that
+  moves from a profile tab to a machine tab keeps the value the active
+  profile saved for it (carried over once at startup).
 - **`restart` rows** call the setter, take its return value (a
   `{config_key: value}` dict, or the raw value under `name`) and lay it
   over the loaded config in memory, remembering it as

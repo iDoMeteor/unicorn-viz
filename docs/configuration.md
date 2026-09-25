@@ -97,7 +97,7 @@ Aliases:
 | `prefer_default_input` | bool | `true` | When true, startup prioritizes the current OS default input among candidates; when false, ranked monitor/app sources are preferred first. |
 | `require_startup` | bool | `false` | If true, Unicorn Viz exits when audio startup fails after retries. If false, startup continues without active audio and the visualizer runs in degraded mode. |
 | `start_timeout_s` | float | `4.0` | Per-attempt timeout for audio startup during app launch. |
-| `process` | bool | `true` | Run capture and analysis in the **audio process**, a helper next to the visualizer (1.0.0-beta.162). The visualizer's process owns GL and stays on one GIL; in the helper, capture and the analyzer never wait on a frame, a console raster or a gen-2 collection, and a hanging device open stalls the helper instead of the picture. dj-mixer-01 loads its engine into the same process. The main process reads each analysis frame the helper publishes every 10 ms; onsets arrive as a stream. If the helper cannot start, audio stays in-process; if it dies, the next frame restarts capture in-process. `false` keeps everything in-process. See `unicornviz/audio/process.py`. Also on the config editor's **Performance** tab as *Audio process* (applies on restart). |
+| `process` | bool | `true` | Run capture and analysis in the **audio process**, a helper next to the visualizer (1.0.0-beta.162). The visualizer's process owns GL and stays on one GIL; in the helper, capture and the analyzer never wait on a frame, a console raster or a gen-2 collection, and a hanging device open stalls the helper instead of the picture. dj-mixer-01 loads its engine into the same process. The main process reads each analysis frame the helper publishes every 10 ms; onsets arrive as a stream. If the helper cannot start, audio stays in-process; if it dies, the next frame restarts capture in-process. `false` keeps everything in-process. See `unicornviz/audio/process.py`. Also on the config editor's **System** tab as *Audio process* (applies on restart). |
 | `process_python` | str | `""` | Interpreter for the audio process (empty = the app's own). The hook for a free-threaded Python: the helper never imports moderngl and logs whether the GIL is really off. Also on the **Performance** tab as *Audio process Python* (applies on restart): APP PYTHON, FREE-THREADED when `~/.local/share/unicorn-viz/venv-ft/bin/python` exists (under `$XDG_DATA_HOME` if set), and CUSTOM for a path set here by hand. Never chosen by default; soak before live use. |
 | `start_retries` | int | `2` | Number of additional launch-time audio startup retries after the initial attempt. |
 | `start_retry_backoff_s` | float | `0.5` | Delay between launch-time audio startup retries. |
@@ -472,6 +472,10 @@ Notes:
     `logging_faulthandler` and `logging_stall_dump_s`. Logging starts before
     the app, so `unicornviz/__main__.py` applies these itself; `--log-level`
     still wins for its run.
+- The config editor's **System** tab (display, MIDI, audio engine, folders,
+    Spotify client ID), **Streaming** tab (RTMP, video out, chat username)
+    and **Auto VJ** tab (all Auto VJ rows, while Auto VJ is loaded) follow
+    the machine like Performance: none of them is part of a profile.
 - The config editor's **Drop-ins** tab holds load/start switches (RESTART),
     remembered as `config_overrides.<section>.<key>`; a nested key such as
     `[spotify.web_api] enabled` overrides only that leaf.

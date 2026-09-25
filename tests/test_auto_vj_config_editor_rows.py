@@ -75,33 +75,18 @@ def test_row_names_and_shapes() -> None:
     rows = {r['name']: r for r in c.config_editor_settings()}
     assert list(rows) == [
         'enabled',
-        'beat_tracker_engine',
-        'env_source',
-        'published_bpm_smoothing_enabled',
-        'published_bpm_smoothing_s',
-        'mode_snap_unit_build',
-        'mode_snap_unit_breakdown',
-        'mode_snap_unit_climax',
-        'mode_phrase_within_bars_breakdown',
-        'mode_phrase_within_bars_climax',
+        'beat_tracker_engine', 'env_source', 'shadow_engine', 'wide_bpm_sample_interval_s',
+        'mode_snap_unit_build', 'mode_snap_unit_breakdown', 'mode_snap_unit_climax',
+        'mode_phrase_within_bars_breakdown', 'mode_phrase_within_bars_climax',
         'mode_phrase_unit_climax',
-        'drop_trigger_threshold',
-        'drop_trigger_fastlane',
-        'drop_sustain_entry',
-        'drop_sustain_fizzle_floor',
-        'postfx_cruise_slots',
-        'shadow_engine',
-        'genre_matcher_enabled',
-        'genre_candidate_scoring_enabled',
-        'live_training_enabled',
-        'sequence_training_enabled',
+        'drop_trigger_threshold', 'drop_trigger_fastlane', 'drop_sustain_entry',
+        'drop_sustain_fizzle_floor', 'postfx_cruise_slots',
+        'genre_matcher_enabled', 'genre_candidate_scoring_enabled',
         'profile_auto_reco_eval_interval_s',
-        'detector_log_interval_s',
-        'log_decisions',
-        'log_dir',
-        'live_training_corpus_path',
+        'published_bpm_smoothing_enabled', 'published_bpm_smoothing_s',
+        'log_decisions', 'log_dir', 'detector_log_interval_s', 'live_training_enabled',
+        'live_training_corpus_path', 'sequence_training_enabled',
         'sequence_training_corpus_path',
-        'wide_bpm_sample_interval_s',
     ]
     assert all(r.get('hint') for r in rows.values())
     assert rows['shadow_engine']['kind'] == 'toggle'
@@ -171,18 +156,18 @@ def test_unknown_setting_is_ignored() -> None:
 
 
 
-def test_logging_rows_sit_on_the_logging_tab_and_name_their_config_lines() -> None:
+def test_logging_rows_group_under_logs_and_name_their_config_lines() -> None:
     c = _ctrl(_cfg={'log_decisions': True, 'log_dir': '/var/tmp/avj'})
     rows = {r['name']: r for r in c.config_editor_settings()}
     logging_rows = ('live_training_enabled', 'sequence_training_enabled', 'detector_log_interval_s',
                     'log_decisions', 'log_dir', 'live_training_corpus_path',
                     'sequence_training_corpus_path')
     for name in logging_rows:
-        assert rows[name]['tab'] == 'Logging', name
+        assert rows[name]['section'] == 'Logs and training', name
         assert rows[name]['config'] == f'auto_vj.{name}', name
     assert rows['log_decisions']['value'] == 1.0 and rows['log_decisions']['restart'] == 'auto_vj'
     assert rows['log_dir']['kind'] == 'text' and rows['log_dir']['value'] == '/var/tmp/avj'
-    assert 'tab' not in rows['wide_bpm_sample_interval_s']        # a performance knob stays put
+    assert rows['wide_bpm_sample_interval_s']['section'] == 'Detector'
 
 
 def test_logging_restart_rows_return_overrides() -> None:
@@ -202,11 +187,16 @@ def _rows(c: AutoVJController) -> dict[str, dict]:
     return {r['name']: r for r in c.config_editor_settings()}
 
 
-def test_every_new_row_names_its_config_line_and_uses_ascii_sections() -> None:
+def test_every_row_sits_on_the_auto_vj_tab_in_a_section() -> None:
     rows = _rows(_ctrl())
-    new = list(rows)[:16]
+    assert AutoVJController.CONFIG_EDITOR_CATEGORY == 'Auto VJ'
+    assert all('tab' not in r for r in rows.values())
+    listed = {n for _t, names in AutoVJController._CONFIG_MENU_SECTIONS for n in names}
+    assert set(rows) == listed                     # every row placed on purpose
+    assert all(str(r['section']).isascii() for r in rows.values())
+    new = ('enabled', 'beat_tracker_engine', 'env_source', 'postfx_cruise_slots',
+           'published_bpm_smoothing_s', 'mode_phrase_unit_climax', 'drop_sustain_entry')
     assert all(rows[n]['config'] == f'auto_vj.{n}' for n in new)
-    assert all(str(r.get('section', '')).isascii() for r in rows.values())
 
 
 def test_restart_choice_rows_read_the_config_and_round_trip() -> None:
@@ -219,9 +209,9 @@ def test_restart_choice_rows_read_the_config_and_round_trip() -> None:
         'env_source': 'dense_complex'}
 
 
-def test_hud_smoothing_rows_sit_on_visuals() -> None:
+def test_hud_smoothing_rows_group_under_hud() -> None:
     rows = _rows(_ctrl())
-    assert rows['published_bpm_smoothing_enabled']['tab'] == 'Visuals'
+    assert rows['published_bpm_smoothing_enabled']['section'] == 'HUD'
     assert rows['published_bpm_smoothing_s']['value'] == 4.0
     assert rows['published_bpm_smoothing_s']['step'] == 0.5
 

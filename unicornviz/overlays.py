@@ -374,6 +374,10 @@ class Overlays:
     _ce_capture_action = ''
     _sysmon_sample_interval = 0.45
     _config_editor_tabs: list = []
+    # Tabs whose settings follow the machine rather than the saved profile
+    # (see App._MACHINE_LIVE_TABS); the footer says so.
+    _CE_MACHINE_TABS = ('Auto VJ', 'Drop-ins', 'Logging', 'Performance', 'Recording',
+                        'Streaming', 'System')
     _config_editor_tab = 0
     _ce_params: list = []
     _ce_param_idx = 0
@@ -3131,7 +3135,7 @@ void main() {
 
         # Saved-profile chips (single row; overflow is clipped).
         self._draw_text('PROFILES', px + 22, fy, scale=1.7 * u, color=(0.55, 0.75, 1.0, 0.85))
-        if self.config_editor_tab_name in ('Drop-ins', 'Logging', 'Performance', 'Recording'):
+        if self.config_editor_tab_name in self._CE_MACHINE_TABS:
             note = 'this tab follows the machine, not the profile'
             self._draw_text(note, px + 140 * u, fy + 1, scale=1.4 * u, color=(0.5, 0.6, 0.72, 0.7))
         chip_y = fy + 24.0 * u

@@ -3671,6 +3671,9 @@ void main() {
                 continue
             default_tab = str(getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', '') or '')
             for row in rows:
+                if self._carry_profile_row_to_machine(prefix, ctrl, row, default_tab):
+                    moved.append(f'{prefix}.{row["name"]} (from profile {self._active_profile!r})')
+                    continue
                 path = str(row.get('config') or '') if isinstance(row, dict) else ''
                 if '.' not in path:
                     continue
@@ -3694,6 +3697,33 @@ void main() {
         if moved:
             log.info('Config menu now holds %d setting(s) copied from config.toml '
                      '(edits to those lines no longer apply): %s', len(moved), ', '.join(moved))
+
+    def _carry_profile_row_to_machine(self, prefix: str, ctrl: object, row: object,
+                                      default_tab: str) -> bool:
+        """A live drop-in row that moved from a profile tab to a machine tab
+        (e.g. Auto VJ's HUD smoothing, Visuals -> Auto VJ, 2026-09-24) keeps
+        the value the active profile saved for it: applied now and remembered
+        as the machine value, once.  True when it carried one over."""
+        if not isinstance(row, dict) or row.get('restart') or not row.get('name'):
+            return False
+        if str(row.get('tab') or default_tab) not in self._MACHINE_LIVE_TABS:
+            return False
+        name = str(row['name'])
+        state_key = f'perf_dropin.{prefix}.{name}'
+        if self.get_runtime_state(state_key, default=None) is not None:
+            return False
+        payload = self._config_profile_store.get(getattr(self, '_active_profile', '') or '')
+        settings = payload.get('settings', {}) if isinstance(payload, dict) else {}
+        value = settings.get(f'dropin.{prefix}.{name}') if isinstance(settings, dict) else None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        try:
+            ctrl.set_config_setting(name, float(value))
+        except Exception:
+            log.debug('Profile carry-over failed: %s.%s', prefix, name, exc_info=True)
+            return False
+        self._remember_runtime(state_key, float(value))
+        return True
 
     def load_config_profile(self, name: str) -> bool:
         """Load a profile: apply effect overrides + global/drop-in settings
@@ -3767,6 +3797,20 @@ void main() {
             rows.append({'name': name, 'value': float(values[name]), 'min': lo, 'max': hi})
         return rows
 
+    _CORE_CONFIG_TABS = ('Audio', 'Drop-ins', 'Hotkeys', 'Logging', 'Performance',
+                         'Recording', 'System', 'Visuals')
+
+    def _config_editor_tab_names(self) -> list[str]:
+        """Effects (the landing tab) first, then the rest alphabetically: the
+        core tabs plus any tab a loaded drop-in files its rows under (Auto
+        VJ, Streaming), so a drop-in's tab disappears with the drop-in."""
+        names = set(self._CORE_CONFIG_TABS)
+        for _prefix, ctrl in self._config_editor_contributors():
+            tab = str(getattr(ctrl, 'CONFIG_EDITOR_CATEGORY', '') or '')
+            if tab and tab != 'Effects':
+                names.add(tab)
+        return ['Effects'] + sorted(names)
+
     def _push_config_editor_model(self) -> None:
         """Feed the config editor its per-tab data each frame while open.
 
@@ -3791,9 +3835,7 @@ void main() {
                 log.debug('Config editor text set failed: row %r', text_req[0], exc_info=True)
         self._sync_config_editor_text_input(
             bool(getattr(overlays, 'config_editor_text_editing', False)))
-        tabs = ['Effects'] + sorted(
-            ['Audio', 'Drop-ins', 'Hotkeys', 'Logging', 'Performance', 'Recording', 'Visuals'])
-        overlays.set_config_editor_tabs(tabs)
+        overlays.set_config_editor_tabs(self._config_editor_tab_names())
 
         current = self.current_effect_class_name()
         effects = [
@@ -4085,17 +4127,12 @@ void main() {
                         fmt='{:.2f}', hint=f'Range the random-{name} hotkey picks from',
                         section='Random look',
                     ))
-            specs.append(_ce_text(
-                'visuals.ansi_dir_auto', 'ANSI art folder',
-                str(self.cfg.get('ansi', 'ansi_dir_auto', default='assets/ansi') or 'assets/ansi'),
-                self._set_ansi_dir, placeholder='assets/ansi',
-                hint='Art the ANSI viewer plays; applies the next time it starts',
-                section='Content',
-            ))
             specs.extend(self._config_editor_effect_setting_specs('Visuals'))
         elif tab == 'Performance':
             specs.extend(self._config_editor_performance_specs())
             specs.extend(self._config_editor_effect_setting_specs('Performance'))
+        elif tab == 'System':
+            specs.extend(self._config_editor_system_specs())
         elif tab == 'Drop-ins':
             specs.extend(self._config_editor_dropin_switch_specs())
         elif tab == 'Logging':
@@ -4148,6 +4185,59 @@ void main() {
             return 0
         return min(range(len(choices)), key=lambda i: abs(float(choices[i]) - cur))
 
+    def _config_editor_system_specs(self) -> list[dict]:
+        """Rows for the System tab: how the app meets this machine (display,
+        MIDI, the audio engine, folders).  Like Performance, they follow the
+        machine, not the profile."""
+        specs: list[dict] = []
+        specs.extend(self._config_editor_display_specs())
+        specs.append(_ce_choice(
+            'perf.audio_latency', 'Capture latency', self._audio_latency_index(),
+            ('LOW', 'MEDIUM', 'HIGH'), self._set_audio_latency_index, badge='RESTART',
+            hint='PortAudio latency class; raise it if xruns appear', section='Audio engine',
+        ))
+        specs.append(_ce_choice(
+            'perf.fft_bands', 'FFT bands',
+            self._choice_index(self._FFT_BANDS_CHOICES,
+                               int(self.cfg.get('audio', 'fft_bands', default=512))),
+            tuple(str(c) for c in self._FFT_BANDS_CHOICES), self._set_fft_bands_index,
+            badge='RESTART',
+            hint='Spectrum resolution; fewer bands = cheaper analysis', section='Audio engine',
+        ))
+        specs.append(_ce_choice(
+            'perf.blocksize', 'Capture block size',
+            self._choice_index(self._BLOCKSIZE_CHOICES,
+                               int(self.cfg.get('audio', 'blocksize', default=1024))),
+            tuple(str(c) for c in self._BLOCKSIZE_CHOICES), self._set_blocksize_index,
+            badge='RESTART',
+            hint='Samples per capture read; larger = fewer wakeups, more lag',
+            section='Audio engine',
+        ))
+        specs.append(_ce_toggle(
+            'perf.audio_process', 'Audio process',
+            bool(self.cfg.get('audio', 'process', default=True)),
+            self._set_audio_process_enabled, badge='RESTART',
+            hint='Capture and analysis in a helper process (the mixer engine too)',
+            section='Audio engine',
+        ))
+        py_labels, py_index = self._audio_process_python_choices()
+        specs.append(_ce_choice(
+            'perf.audio_process_python', 'Audio process Python', py_index, py_labels,
+            self._set_audio_process_python_index, badge='RESTART',
+            hint='Free-threaded interpreter for the audio process; soak before live use',
+            section='Audio engine',
+        ))
+        specs.extend(self._config_editor_midi_specs())
+        specs.append(_ce_text(
+            'visuals.ansi_dir_auto', 'ANSI art folder',
+            str(self.cfg.get('ansi', 'ansi_dir_auto', default='assets/ansi') or 'assets/ansi'),
+            self._set_ansi_dir, placeholder='assets/ansi',
+            hint='Art the ANSI viewer plays; applies the next time it starts',
+            section='Folders',
+        ))
+        specs.extend(self._config_editor_effect_setting_specs('System'))
+        return specs
+
     def _config_editor_performance_specs(self) -> list[dict]:
         """Rows for the Performance tab (core knobs only)."""
         specs: list[dict] = []
@@ -4194,45 +4284,6 @@ void main() {
             self._set_preview_width_index,
             hint='Downsampled readback width in pixels', section='Previews',
         ))
-        # -- Audio ------------------------------------------------------------
-        specs.append(_ce_choice(
-            'perf.audio_latency', 'Capture latency', self._audio_latency_index(),
-            ('LOW', 'MEDIUM', 'HIGH'), self._set_audio_latency_index, badge='RESTART',
-            hint='PortAudio latency class; raise it if xruns appear', section='Audio',
-        ))
-        specs.append(_ce_choice(
-            'perf.fft_bands', 'FFT bands',
-            self._choice_index(self._FFT_BANDS_CHOICES,
-                               int(self.cfg.get('audio', 'fft_bands', default=512))),
-            tuple(str(c) for c in self._FFT_BANDS_CHOICES), self._set_fft_bands_index,
-            badge='RESTART',
-            hint='Spectrum resolution; fewer bands = cheaper analysis', section='Audio',
-        ))
-        specs.append(_ce_choice(
-            'perf.blocksize', 'Capture block size',
-            self._choice_index(self._BLOCKSIZE_CHOICES,
-                               int(self.cfg.get('audio', 'blocksize', default=1024))),
-            tuple(str(c) for c in self._BLOCKSIZE_CHOICES), self._set_blocksize_index,
-            badge='RESTART',
-            hint='Samples per capture read; larger = fewer wakeups, more lag',
-            section='Audio',
-        ))
-        specs.append(_ce_toggle(
-            'perf.audio_process', 'Audio process',
-            bool(self.cfg.get('audio', 'process', default=True)),
-            self._set_audio_process_enabled, badge='RESTART',
-            hint='Capture and analysis in a helper process (the mixer engine too)',
-            section='Audio',
-        ))
-        py_labels, py_index = self._audio_process_python_choices()
-        specs.append(_ce_choice(
-            'perf.audio_process_python', 'Audio process Python', py_index, py_labels,
-            self._set_audio_process_python_index, badge='RESTART',
-            hint='Free-threaded interpreter for the audio process; soak before live use',
-            section='Audio',
-        ))
-        specs.extend(self._config_editor_display_specs())
-        specs.extend(self._config_editor_midi_specs())
         # -- Overlays ---------------------------------------------------------
         ov = self._overlays
         if ov is not None:
@@ -5169,7 +5220,7 @@ void main() {
     _PROFILE_TABS = ('Audio', 'Visuals')
     # Tabs whose live drop-in rows describe the machine: remembered as
     # perf_dropin.<KEY>.<name> and replayed at startup (not in profiles).
-    _MACHINE_LIVE_TABS = ('Performance', 'Logging')
+    _MACHINE_LIVE_TABS = ('Performance', 'Logging', 'Auto VJ', 'Streaming', 'System')
 
     _HUD_DETAIL_ROWS = (
         ('hud_show_detector_bpm', 'Detector BPM'),
@@ -5198,7 +5249,7 @@ void main() {
     # badge, hint).  Rows show only when the effect is registered; values
     # persist as config_overrides.effects.<Class>.<key> and most apply the
     # next time the effect loads (the effect config is rebuilt on each
-    # activation).  Paths describe the machine, so they sit on Performance.
+    # activation).  Paths describe the machine, so they sit on System.
     _EFFECT_SETTING_ROWS: tuple[tuple, ...] = (
         ('ImageShowcase', 'preload_images', 'toggle', 'Preload images at startup', False,
          0, 1, 1, 'Performance', 'RESTART',
@@ -5227,13 +5278,13 @@ void main() {
          'Render this many frames hidden when a preset loads, to hide its first-frame '
          'flash; costs a hitch per switch'),
         ('ProjectMEffect', 'projectm_library', 'text', 'libprojectM path', '',
-         0, 1, 1, 'Performance', 'RESTART',
+         0, 1, 1, 'System', 'RESTART',
          'Path to the libprojectM library; empty auto-detects'),
         ('ProjectMEffect', 'preset_dirs', 'text', 'Extra preset folders', '',
-         0, 1, 1, 'Performance', 'RESTART',
+         0, 1, 1, 'System', 'RESTART',
          'Comma-separated preset folders; the bundled presets are always included'),
         ('ProjectMEffect', 'texture_dirs', 'text', 'Preset texture folders', '',
-         0, 1, 1, 'Performance', 'NEXT LOAD',
+         0, 1, 1, 'System', 'NEXT LOAD',
          'Comma-separated folders presets can load textures from'),
     )
     _EFFECT_ROW_SECTIONS = {'ImageShowcase': 'Image Showcase', 'ProjectMEffect': 'projectM'}

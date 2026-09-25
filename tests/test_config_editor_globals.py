@@ -93,12 +93,11 @@ def test_visuals_global_rows(tmp_path: Path) -> None:
         'Now Spinning platter', 'HUD auto-hide', 'HUD timeout', 'Flash messages',
         'Production HUD', 'Detector BPM', 'Profile score', 'Recommended profile',
         'Speed min', 'Speed max', 'Reactivity min', 'Reactivity max', 'Zoom min', 'Zoom max',
-        'ANSI art folder',
     ]
     assert (rows[0]['min'], rows[0]['max']) == (10.0, 120.0)
     assert [r['kind'] for r in rows] == [
         'slider', 'slider', 'toggle', 'toggle', 'toggle', 'slider', 'toggle',
-        'toggle', 'toggle', 'toggle', 'toggle'] + ['slider'] * 6 + ['text']
+        'toggle', 'toggle', 'toggle', 'toggle'] + ['slider'] * 6
 
 
 def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:
@@ -107,7 +106,7 @@ def test_performance_rows_hold_the_render_knobs(tmp_path: Path) -> None:
     assert (rows['Render scale']['min'], rows['Render scale']['max']) == (0.5, 1.0)
     assert rows['Frame limit']['choices'] == ('DISPLAY', '24', '30', '60')
     assert rows['Frame limit']['value'] == 0.0  # config default: follow vsync
-    assert rows['Capture latency']['badge'] == 'RESTART'
+    assert 'Capture latency' not in rows          # System tab now
 
 
 def test_adjust_audio_reactivity_live(tmp_path: Path) -> None:

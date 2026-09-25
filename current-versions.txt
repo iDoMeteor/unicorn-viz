@@ -4,11 +4,11 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.179      BETA          module
+  core (unicornviz)             1.0.0-beta.180      BETA          module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.221.1             alpha ▲       module
-  media-01                      0.31.0              alpha ▲       module
+  media-01                      0.31.1              alpha ▲       module
   control-room-01               0.24.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
   banner-01                     0.14.0              alpha ▲       module
@@ -19,7 +19,7 @@
   midi-controllers-01           0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
-  auto-vj-01                    1.0.0-rc.154        RC            module
+  auto-vj-01                    1.0.0-rc.155        RC            MISMATCH (readme=1.0.0-rc.154)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   beat-flash-01                 0.10.0              alpha ▲       module
@@ -37,7 +37,7 @@
   ── RC ────────────────────────────────────────────────────────────────────
   multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
-  spotify-01                    1.0.0-rc.11         RC            module
+  spotify-01                    1.0.0-rc.12         RC            module
   unicorn-tears-01              1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -45,6 +45,11 @@
   effects-psychedelic           0.9.0               alpha ▲       module
   grand-finale-01               0.9.0               alpha ▲       module
   images-01                     0.9.0               alpha ▲       module
+
+  ── alpha ─────────────────────────────────────────────────────────────────
+  streaming-01                  0.8.1               alpha         module
+
+  ── alpha ▲ ───────────────────────────────────────────────────────────────
   textures-01                   0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
@@ -54,11 +59,10 @@
   webcam-01                     1.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
+  chat-01                       0.7.1               alpha         module
   sims-01                       0.7.2               alpha         module
-  streaming-01                  0.8.0               alpha         module
   training-kit-01               0.7.1               alpha         module
-  chat-01                       0.7.0               alpha         module
-  video-out-01                  0.7.0               alpha         module
+  video-out-01                  0.7.1               alpha         module
 
   ── alpha ▼ ───────────────────────────────────────────────────────────────
   audio-out-01                  0.6.0               alpha ▼       module
@@ -75,5 +79,5 @@
 ────────────────────────────────────────────────────────────────────────────
 
   44 components total  ·  6 RC  1 beta  37 alpha  0 unversioned
-  ⚠  1 version mismatch(es): effects-cosmic
+  ⚠  2 version mismatch(es): auto-vj-01, effects-cosmic
 
