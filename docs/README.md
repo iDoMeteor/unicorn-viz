@@ -86,6 +86,7 @@ This is the canonical map for project documentation.
 - Director placement scoring — per-call "did the scene land" metrics with chance baselines, built into packaging (2026-09-03): [docs/planning/director-placement-scoring-2026-09-03.md](planning/director-placement-scoring-2026-09-03.md)
 - E5 envelope-clock redesign patch — timing-correct onset envelope for the beat tracker, parked pending a stack re-tune (2026-09-03): [docs/planning/patches/e5-envelope-clock-redesign-2026-09-03.patch](planning/patches/e5-envelope-clock-redesign-2026-09-03.patch)
 - Active audit tracker: [docs/audits](audits)
+  - **Bug audit — core + all drop-ins, bugs only (2026-09-30; ping-pong effect leak, recording/streaming main-thread freezes, partial crash isolation, settings-store wipe, 30 findings ranked):** [docs/audits/2026-09-30-bug-audit.md](audits/2026-09-30-bug-audit.md)
   - **Config menu coverage — config.toml keys vs. menu rows, gaps, owner decisions (2026-09-24):** [docs/audits/2026-09-24-config-menu-coverage-audit.md](audits/2026-09-24-config-menu-coverage-audit.md)
   - **Drop-in performance options audit — every drop-in's cost knobs, tiered for the config editor's Performance tab (2026-09-16):** [docs/audits/2026-09-16-dropin-performance-options.md](audits/2026-09-16-dropin-performance-options.md)
   - **System audit — bugs and unexpected side effects (2026-09-05; tests overwriting owner state, store race, per-frame silent excepts, open items ranked):** [docs/audits/2026-09-05-system-audit.md](audits/2026-09-05-system-audit.md)
