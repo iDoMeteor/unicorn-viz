@@ -1,7 +1,7 @@
 # Bug remediation plan (2026-09-30)
 
 Owner: DJ Unicorn Tears
-Status: proposed — awaiting owner read-through; four decisions open (bottom)
+Status: active — owner decisions recorded 2026-09-30 (bottom); W1 teams up
 Last updated: 2026-09-30
 
 This is the working checklist for the 134 findings (14 P1) in the six
@@ -41,8 +41,8 @@ add the short hash.
   LED `try` and poll scratch mode on the main side. [mixer]
 - [ ] **G1** `--effect-duration` always rejected: default `60` → `60.0`.
   [core]
-- [ ] **G3** Ctrl+C crashes shutdown: guard `_audio_manager.stop()`.
-  Helpers ignoring SIGINT waits on decision 4. [core]
+- [ ] **G3** Ctrl+C crashes shutdown: guard `_audio_manager.stop()`, and
+  make the helper processes ignore SIGINT (decision 4). [core]
 - [ ] **AV-2** Auto VJ toggled off during a pending mode snap blocks mode
   changes for the session. [auto-vj]
 
@@ -87,8 +87,34 @@ silently die.
 
 ## Wave 5 — installed builds (Windows and everywhere)
 
-- [ ] **W1** Bundled 3.11 breaks all mixer track loads. The approach waits
-  on decision 1. [core + installer]
+- [ ] **W1** Bundled 3.11 breaks all mixer track loads. Decided: bundle
+  **Python 3.14 free-threaded** (decision 1), which also removes the 3.13+
+  `SharedMemory` break. Teams and order:
+  1. [ ] **UV Threads — critical path.** No moderngl or glcontext wheels
+     exist for 3.14 at all, and python-rtmidi has no `cp314t` wheel.
+     - Build and bundle our own `cp314t` wheels for all three, Linux and
+       Windows.
+     - Add a startup check that logs when an unmarked extension turns the
+       GIL back on (§6 of
+       [free-threaded-python-2026-09-24.md](free-threaded-python-2026-09-24.md)).
+     - The main process runs with the GIL on until moderngl is ported.
+       That's expected, not a regression.
+  2. [ ] **UV Install.**
+     - Switch `tools/packaging/fetch_runtime.sh` (`PBS_PYVER`, currently
+       3.11.10) to the python-build-standalone 3.14 free-threaded build.
+     - Install the UV Threads wheels.
+     - Fix **W2** (missing drop-in dependencies) in the same pass.
+  3. [ ] **UV Core.**
+     - Move the audio process and the dev `.venv` (plain 3.14.6 today) to
+       3.14t.
+     - Confirm `remote_objects` and the audio process under it. This is
+       where free-threading pays off first: numpy, scipy, cffi and PyAV are
+       all ready.
+  4. [ ] **Drop-in owners, later — smoke test on the bundled build:**
+     - mixer (PyAV, mutagen, demucs path);
+     - media and videos (python-vlc, PyAV);
+     - webcam (lazy mediapipe and cv2 imports; mediapipe unverified on 3.14t);
+     - sims (usd-core has no `t` build, so the USD scene needs a fallback).
 - [ ] **W2** Installers skip drop-in dependencies. [installer]
 - [ ] **W3** No WASAPI loopback, so Windows visualizes the microphone.
   [core]
@@ -115,8 +141,14 @@ silently die.
 - [ ] **Auto VJ:** AV-1 (P1, decider never leaves a prefilter-excluded
   profile), AV-3 … AV-9. [auto-vj]
 - [ ] **Hardware:**
-  - H3: "MIDI disabled" still drives the APC; waits on decision 3.
-  - H4: dead APC faders; waits on decision 2.
+  - H3: "MIDI disabled" still drives the APC. Fix: no libusb claim and no
+    injected pad actions unless the configured device is the APC (decision
+    3). Choosing the APC mid-session must claim libusb before opening its
+    MIDI ports.
+  - H4: dead APC faders. Route through the app-wide `vj_api` setters,
+    alphabetically: 48 hue, 49 reactivity, 50 rotation, 51 speed, 52 zoom.
+    Leave 53–56 unbound until the owner's mapping session with the APC team
+    (decision 2). Going through `set_speed` also fixes E1 on the MIDI path.
   [midi]
 - [ ] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1), U4,
   U5, U7. [mixer]
@@ -142,17 +174,19 @@ silently die.
 - [ ] **Effects:** E7 … E20.
 - [ ] **Hardware / GPU run:** H5 … H12, G2, G4.
 
-## Owner decisions needed
+## Owner decisions (recorded 2026-09-30)
 
-1. **W1:** raise the bundled Python to 3.13+, or rewrite the audio process
-   for 3.11? Separately, may the pre-push hook add a 3.11 test run? That's
-   an infrastructure change.
-2. **H4:** what should the dead APC faders control? Master or mixer volume,
-   PostFX mix, zoom, something else.
-3. **H3:** should "MIDI disabled" fully release the APC (no libusb claim,
-   no pad actions)?
-4. **G3:** should the helper processes ignore SIGINT and let the main app
-   stop them?
+1. **W1:** bundle **Python 3.14 free-threaded**. Teams: UV Install, UV
+   Threads, UV Core; the drop-in owners come up later (see W1 above).
+2. **H4:** APC faders drive the app-wide tweakables in alphabetical order,
+   as long as they work. The final default mapping will be redone from
+   scratch in a session with the APC team.
+3. **H3:** "MIDI disabled" fully releases the APC.
+4. **G3:** the helper processes ignore SIGINT, and the main app stops them
+   in order after saving state. This was the agent's recommendation, recorded at
+   the owner's request. The helpers already exit on their own when the
+   parent's pipe closes (`remote_objects.py:518-519`), so there's no orphan
+   risk.
 
 Waves 1–3 carry most of the live-set risk. Waves 5 and 6 are the bulk of the
 effort.
