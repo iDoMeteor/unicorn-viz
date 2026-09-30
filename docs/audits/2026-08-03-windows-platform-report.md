@@ -1,5 +1,7 @@
 # Unicorn Viz — Windows Platform Report (2026-08-03)
 
+> **Follow-up (2026-09-30):** item-by-item status and 24 new Windows findings are in [2026-09-30-windows-bug-audit.md](2026-09-30-windows-bug-audit.md).
+
 Owner: owner + Claude (master coordinator)
 Status: Complete — findings for the pre-RC1 Windows push
 Last updated: 2026-08-03
