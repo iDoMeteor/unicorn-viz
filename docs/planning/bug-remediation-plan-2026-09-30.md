@@ -92,7 +92,10 @@ silently die.
 - [ ] **W1** Bundled 3.11 breaks all mixer track loads. Decided: bundle
   **Python 3.14 free-threaded** (decision 1), which also removes the 3.13+
   `SharedMemory` break. Teams and order:
-  1. [ ] **UV Threads — critical path.** No moderngl or glcontext wheels
+  1. [ ] **UV Threads — critical path.** *Status: Linux wheels built, verified
+     and in `~/projects/_software-dist/wheelhouse/cp314t/` (see
+     [free-threaded-wheels-2026-09-30.md](free-threaded-wheels-2026-09-30.md));
+     Windows wheels await an owner decision on how to build them.* No moderngl or glcontext wheels
      exist for 3.14 at all, and python-rtmidi has no `cp314t` wheel.
      - Build and bundle our own `cp314t` wheels for all three, Linux and
        Windows.
