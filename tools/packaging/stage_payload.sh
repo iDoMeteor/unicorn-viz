@@ -17,13 +17,16 @@
 #   tools/packaging/stage_payload.sh --dest build/payload [--source-dir .]
 #                                    [--dropins <pack-file>]
 #                                    [--wheelhouse <dir> | --no-wheelhouse]
+#                                    [--wheel-platform linux|windows|all]
 #
 # --wheelhouse <dir>: stage our own prebuilt wheels (the cp314t moderngl,
 # glcontext and python-rtmidi builds that PyPI does not carry) into
 # <dest>/wheelhouse/, after verifying every wheel against the folder's
 # SHA256SUMS. Installers and bundle builders pass it to pip as --find-links.
 # Default: $UV_WHEELHOUSE, else ~/projects/_software-dist/wheelhouse/cp314t when
-# that folder exists; absent folder = no wheelhouse staged.
+# that folder exists; absent folder = no wheelhouse staged. --wheel-platform picks
+# which platform's wheels go in (default linux; the Windows bundle passes windows),
+# so a bundle never carries another platform's multi-megabyte wheels.
 #
 # --dropins <pack-file>: also stage the listed drop-ins (one per line; '#'
 # comments) under <dest>/drop-ins/<name>/ — their TRACKED files only (each is
@@ -48,6 +51,7 @@ DEST=""
 DROPINS_FILE=""
 WHEELHOUSE="${UV_WHEELHOUSE:-}"
 NO_WHEELHOUSE=0
+WHEEL_PLATFORM="linux"
 
 log() { echo "[stage-payload] $*" >&2; }
 die() { echo "[stage-payload] ERROR: $*" >&2; exit 1; }
@@ -65,6 +69,7 @@ Options:
   --wheelhouse <dir>    Prebuilt-wheel folder to stage (default: $UV_WHEELHOUSE or
                         ~/projects/_software-dist/wheelhouse/cp314t if present)
   --no-wheelhouse       Do not stage a wheelhouse
+  --wheel-platform <p>  Wheels to stage: linux (default) | windows | all
   -h, --help            Show this help text
 EOF
 }
@@ -76,6 +81,7 @@ while [[ $# -gt 0 ]]; do
     --dropins) DROPINS_FILE="$2"; shift 2 ;;
     --wheelhouse) WHEELHOUSE="$2"; shift 2 ;;
     --no-wheelhouse) NO_WHEELHOUSE=1; shift ;;
+    --wheel-platform) WHEEL_PLATFORM="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -196,6 +202,11 @@ if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
     for whl in "${WHEELHOUSE}"/*.whl; do
       [[ -e "$whl" ]] || break
       name="$(basename "$whl")"
+      case "${WHEEL_PLATFORM}:${name}" in
+        all:*|linux:*manylinux*|windows:*win_amd64*) ;;
+        linux:*|windows:*) continue ;;
+        *) die "--wheel-platform: unknown platform '${WHEEL_PLATFORM}' (linux|windows|all)" ;;
+      esac
       want="$(awk -v n="$name" '$2 == n || $2 == "*" n {print $1; exit}' "${WHEELHOUSE}/SHA256SUMS")"
       [[ -n "$want" ]] || die "--wheelhouse: ${name} is not listed in SHA256SUMS"
       have="$(sha256sum "$whl" | awk '{print $1}')"
