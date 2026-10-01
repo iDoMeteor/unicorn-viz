@@ -106,3 +106,23 @@ def test_dry_run_creates_no_log_files(win, tmp_path) -> None:
     ctx.set_log('sphn')
     ctx.run(['anything'])
     assert not (tmp_path / 'work').exists()
+
+
+def test_executables_are_resolved_on_the_build_environments_path(win, tmp_path) -> None:
+    """On Windows, subprocess looks a bare command up on the *parent's* PATH, not
+    the PATH passed in ``env``, so a tool installed into the build venv (maturin,
+    found in its Scripts dir) was 'not found' on the first CI run.  Resolve it
+    against the environment we are about to run it in."""
+    import os
+    tool = tmp_path / ('mytool.exe' if os.name == 'nt' else 'mytool')
+    tool.write_text('')
+    tool.chmod(0o755)
+    env = {'PATH': str(tmp_path), 'PATHEXT': '.EXE'}
+    assert Path(win.resolve_exe('mytool', env)).resolve() == tool.resolve()
+    absolute = str(tmp_path / 'anything')
+    assert win.resolve_exe(absolute, env) == absolute      # explicit paths are left alone
+
+
+def test_unknown_executable_is_a_clear_error(win) -> None:
+    with pytest.raises(FileNotFoundError, match='definitely-not-a-tool'):
+        win.resolve_exe('definitely-not-a-tool', {'PATH': ''})

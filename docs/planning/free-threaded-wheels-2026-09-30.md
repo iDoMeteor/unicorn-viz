@@ -296,3 +296,66 @@ rtmidi first, then glcontext, then moderngl. Nothing is started.
 3. Smoke tests that need Windows only: the GL render check is skipped on the
    runner (no GPU), so one real run of `ft_wheels_smoke.py` on a Windows machine
    with a GPU would close that gap.
+
+## 7. Provenance, for release notes
+
+The wheels are redistributed (GitHub release asset, owner-approved), so each
+one's source, build and license facts are recorded here to cite. Everything
+below was checked against the recipes or the published wheels; the one item
+that was not audited is called out.
+
+Common to all Linux wheels: built by `tools/packaging/build_ft_wheels.sh`,
+`build_ft_opencv_wheel.sh` or `build_ft_sphn_wheel.sh` in the manylinux_2_28
+image (`quay.io/pypa/manylinux_2_28_x86_64`, GCC 14, glibc 2.28) with
+free-threaded CPython 3.14.7, repaired with `auditwheel` to `manylinux_2_28`,
+and smoke-tested on python-build-standalone 20260929 / 3.14.7 freethreaded
+(`ft_wheels_smoke.py`, `ft_opencv_smoke.py`, `ft_sphn_smoke.py`).
+
+| Wheel | Source (pinned) | License (from the wheel's own metadata) |
+|---|---|---|
+| glcontext 3.0.0 | PyPI sdist, sha256 `57168edc…c1ef` | MIT |
+| moderngl 5.12.0 | PyPI sdist, sha256 `52936a98…5129b` | MIT |
+| python-rtmidi 1.5.8 (`-1`) | PyPI sdist, sha256 `7f9ade68…04fa`; C++ regenerated from the `.pyx` with Cython 3.3.0 (the sdist's pre-generated file was deleted) | MIT (`LICENSE.md`); vendors `libasound` (LGPL 2.1) |
+| opencv-python-headless 4.13.0.92 | git tag `92` of opencv/opencv-python, commit `4ddfc013fd1f13d9b9e379dbebf2cdbeb052e7f8`; OpenCV submodule commit `b4c5ec4042f097e2a5b386b9d413ec7333d0a184` (4.13.0). PyPI has no sdist for this version. | Apache-2.0; bundles FFmpeg (LGPL 2.1+), libvpx (BSD), libdrm (MIT) |
+| sphn 0.2.1 | PyPI sdist, sha256 `3b19b1fe…c7fe`, built with `--locked` (the sdist's `Cargo.lock`: 135 crates) | MIT/Apache-2.0 per its `Cargo.toml` |
+
+**Build flags worth quoting**
+
+- opencv: `ENABLE_HEADLESS=1`; the hard-coded `-DPYTHON3_LIMITED_API=ON` removed
+  from `setup.py` (the stable ABI cannot exist on a free-threaded build); built
+  against numpy 2.3.2; no Qt, contrib, AVIF, LAPACK or https.
+- sphn: Rust 1.98.1, maturin 1.15.0, `maturin build --release --locked`;
+  `CMAKE_POLICY_VERSION_MINIMUM=3.5` and a toolchain file pinning
+  `CMAKE_INSTALL_LIBDIR=lib` for the bundled libopus.
+
+**FFmpeg inside the OpenCV Linux wheel (LGPL 2.1 or later).** FFmpeg 8.0.1,
+tarball sha256 `ed1cfade43aab7711c88937a0afc15b7b22efdc528c6ff074b4027c55a3c175c`,
+configured exactly as (from `ft-opencv/Containerfile`):
+
+    ./configure --prefix=/ffmpeg_build \
+        --extra-cflags=-I/ffmpeg_build/include --extra-ldflags=-L/ffmpeg_build/lib \
+        --enable-libvpx --enable-shared --enable-pic \
+        --disable-programs --disable-doc
+
+No `--enable-gpl`, `--enable-nonfree` or `--enable-version3`; no libx264 or
+OpenSSL. libvpx v1.15.2 (commit `d168454ecd099805c675d4a98c66f4891373302a`),
+configured `--disable-examples --disable-unit-tests --enable-vp9-highbitdepth
+--as=yasm --enable-pic --enable-shared`. The built libraries report their own
+license (`avutil_license()`, `avcodec_license()`, `avformat_license()` all
+return "LGPL version 2.1 or later"), and the smoke test asserts that.
+
+**Windows OpenCV** does not build FFmpeg: OpenCV's CMake downloads its
+documented-LGPL `opencv_videoio_ffmpeg*_64.dll` plugin, pinned by hash to
+opencv_3rdparty commit `d82ad9a54a7b42a1648a9cae8fed5c2f20ea396c`; the license
+text is `3rdparty/ffmpeg/license.txt` in the OpenCV tree.
+
+**Gaps to close before the release notes are final**
+
+- The OpenCV wheel's own `LICENSE-3RD-PARTY.txt` covers FFmpeg and libvpx but
+  does **not** mention libdrm (MIT), which the Linux wheel also vendors; cite it
+  separately.
+- LGPL source availability: FFmpeg and libvpx sources are the pinned tarball
+  and commit above (public, hash-verified). The note should say so.
+- sphn statically links 135 Rust crates. Their licenses were not audited here
+  (the symphonia decoder crates are the ones to check first); a `cargo license`
+  pass over the sdist's `Cargo.lock` should precede redistribution.

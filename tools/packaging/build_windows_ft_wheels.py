@@ -91,6 +91,22 @@ def read_pins() -> dict[str, str]:
 
 
 # ------------------------------------------------------------------- run helpers
+def resolve_exe(name: str, env: dict[str, str]) -> str:
+    """The full path of command ``name`` as found on ``env``'s PATH.
+
+    On Windows, ``subprocess`` resolves a bare command name against the parent
+    process's PATH, not the ``env`` it is given, so a tool that only exists in
+    the build venv (maturin, in its Scripts directory) is "not found".  Resolve
+    it ourselves, against the environment it will run in.
+    """
+    if os.path.isabs(name) or os.sep in name or (os.altsep and os.altsep in name):
+        return name
+    found = shutil.which(name, path=env.get('PATH', ''))
+    if found is None:
+        raise FileNotFoundError(f'{name!r} not found on the build environment PATH')
+    return found
+
+
 class Ctx:
     """Everything that touches the outside world goes through here, so
     ``--dry-run`` can print the plan without doing any of it."""
@@ -124,7 +140,10 @@ class Ctx:
         if self.dry:
             return
         # Stream the child's combined output to the console and the step log.
-        proc = subprocess.Popen([str(c) for c in cmd], cwd=cwd, env=env or self.env,
+        run_env = env or self.env
+        argv = [str(c) for c in cmd]
+        argv[0] = resolve_exe(argv[0], run_env)
+        proc = subprocess.Popen(argv, cwd=cwd, env=run_env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, errors='replace', bufsize=1)
         assert proc.stdout is not None
@@ -138,7 +157,9 @@ class Ctx:
     def capture(self, cmd: list[str | Path]) -> str:
         if self.dry:
             return ''
-        return subprocess.check_output([str(c) for c in cmd], text=True, env=self.env).strip()
+        argv = [str(c) for c in cmd]
+        argv[0] = resolve_exe(argv[0], self.env)
+        return subprocess.check_output(argv, text=True, env=self.env).strip()
 
     def download(self, url: str, dest: Path, sha256: str | None) -> None:
         self.say(f'download {url} -> {dest.name}' + (f' (sha256 {sha256[:12]}...)' if sha256 else ''))
