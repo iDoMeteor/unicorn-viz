@@ -63,6 +63,17 @@ add the short hash.
     `tests/test_shm_retire_stress.py`. The coordinator verified the
     pre-fix code exits -11 under it.
 
+- [ ] **R2 (P2)** Recording fails on stock Fedora. Fedora ships
+  `ffmpeg-free` (no libx264/x265/fdk-aac; full ffmpeg is RPM Fusion's).
+  The recorder's `auto` codec probes the HW encoders, then falls back to
+  libx264 unconditionally (`recorder.py:601`), so with no working HW encoder
+  recording fails. Fix: a probe-based software fallback (libx264 →
+  libopenh264 → a valid last resort) and an audio fallback (aac → libopus).
+  Packaging: the rpm/deb depend on any ffmpeg (a file dependency), never
+  force a swap. [core: UV Core; packaging: UV Install]
+  - Owner decision 2026-10-01: drop old Fedoras; the rpm job uses
+    `ffmpeg-free`.
+
 ## After W1 — library scale (owner: start after W1, but pause for discussion first)
 
 - [ ] **SQLite library stores:** dj-mixer-01 upcoming-work item **O** (track
