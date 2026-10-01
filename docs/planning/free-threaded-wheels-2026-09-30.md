@@ -1,7 +1,7 @@
 # Free-threaded (cp314t) wheels: moderngl, glcontext, python-rtmidi
 
 Owner: UV Threads
-Status: all five Linux wheels and four of five Windows wheels built, verified and published; Windows OpenCV in progress
+Status: all five Linux and all five Windows wheels built, verified and published
 Last updated: 2026-09-30 (end of day)
 
 W1 of [the bug remediation plan](bug-remediation-plan-2026-09-30.md) bundles
@@ -265,37 +265,33 @@ Suggested order, if and when this is taken on: rtmidi first (cheap, testable,
 removes one of the four flips), then glcontext, then moderngl as its own
 project.
 
-## 6. Where we stopped (end of 2026-09-30) and next steps
+## 6. Where we are (updated 2026-10-01)
 
-**Done and published (Linux x86-64, `~/projects/_software-dist/wheelhouse/cp314t/`):**
-moderngl, glcontext, python-rtmidi (build tag `-1`), opencv-python-headless and
-sphn, all verified against the exact PBS 20260929 runtime.
+**Done and published, `~/projects/_software-dist/wheelhouse/cp314t/`** (append-only,
+`SHA256SUMS`): all five wheels for Linux x86-64 (manylinux_2_28) **and** for Windows
+x86-64 (`win_amd64`): moderngl, glcontext, python-rtmidi (build tag `-1`),
+opencv-python-headless 4.13.0.92 and sphn 0.2.1, each verified against the
+python-build-standalone 20260929 / 3.14.7 free-threaded runtime.
 
-**Windows.** `tools/packaging/build_windows_ft_wheels.py` is written
-(standard-library only; reads its pins from the Linux scripts; downloads and
-verifies the PBS Windows runtime; finds MSVC through vswhere; builds the five
-wheels; smoke-tests each in a fresh venv; only verified wheels reach `--out`).
-It has been run in `--dry-run` and covered by unit tests on Linux, and has
-**not** been run on Windows; expect the first runner run to need a fix or two.
-Interface agreed with UV Install: `--out DIR [--work DIR] [--only NAMES]
-[--dry-run]`, a `windows-2022` job (150 minute timeout), artifact
-`cp314t-win_amd64-wheels` holding the whole `--out` directory. UV Install writes
-the workflow file (`workflow_dispatch` only, an optional `only` input passed
-through as `--only`); the owner approved building on GitHub Actions. Copying the
-artifact into the wheelhouse stays a human or follow-up step (append-only).
+**Windows** is built by GitHub Actions (`windows-ft-wheels.yml`, owned by the
+installer team) running `tools/packaging/build_windows_ft_wheels.py`. Getting there
+took four real fixes, each found from the per-step logs the script writes to
+`work/<step>.log`: commands resolved on the build environment's PATH (not the
+parent's, which is what Windows subprocess uses); environment names merged
+case-insensitively (vcvars reports `Path`, Python `PATH`); `Py_GIL_DISABLED`
+defined for OpenCV (setuptools defines it, OpenCV's CMake does not; without it the
+module links the wrong library and would use the wrong object layout); and the
+OpenCV smoke test's own fixtures. The OpenCV smoke test decodes the checked-in H.264
+and VP9 clips (`tools/packaging/ft-fixtures/`) on both platforms. Still not covered
+on a Windows runner: the GL render check (no GPU on the runner), which a run of
+`ft_wheels_smoke.py` on a Windows machine with a GPU would close.
 
-**Parked pending the owner:** the `Py_mod_gil` ports (assessment in section 5):
-rtmidi first, then glcontext, then moderngl. Nothing is started.
+**Licensing.** Per-wheel facts are in section 7 (Linux) and section 8 (Windows). Notices
+for redistribution live in `docs/third-party/`: the sphn crates, libdrm (Linux OpenCV
+wheel), and OpenCV's Windows FFmpeg plugin. UV Install owns the releases.
 
-**First thing next session:**
-1. Once UV Install's workflow is merged, dispatch it with `only=sphn` first (a
-   fast iteration on the whole Windows toolchain) and fix whatever the logs show,
-   then `only=moderngl,glcontext,python-rtmidi`, and OpenCV last (the slow one).
-2. Place the resulting `win_amd64` wheels into the wheelhouse and append to
-   `SHA256SUMS`.
-3. Smoke tests that need Windows only: the GL render check is skipped on the
-   runner (no GPU), so one real run of `ft_wheels_smoke.py` on a Windows machine
-   with a GPU would close that gap.
+**Parked pending the owner:** the `Py_mod_gil` ports (section 5): rtmidi first, then
+glcontext, then moderngl. Nothing is started.
 
 ## 7. Provenance, for release notes
 
@@ -410,8 +406,9 @@ pointers and the verbatim license texts are in
 LGPL was confirmed from OpenCV's readme, from the published build recipe, and
 from the DLL itself (embedded configure string and license strings), not
 assumed. Other bundled DLLs: none expected beyond that plugin and the module;
-verify against the built wheel. The first Windows build's plugin was confirmed to
-be `cv2/opencv_videoio_ffmpeg4130_64.dll`. The smoke test decodes the checked-in
+the built wheel contains exactly two binaries, `cv2/cv2.cp314t-win_amd64.pyd` and
+`cv2/opencv_videoio_ffmpeg4130_64.dll`, the latter byte-identical (sha256
+`fcc61467…4548`) to the DLL at the pinned opencv_3rdparty commit. The smoke test decodes the checked-in
 fixture clips (`tools/packaging/ft-fixtures/`: H.264 `.mp4` and VP9 `.webm`, 20
 frames each, a bar whose position encodes the frame number), in order and after
 seeks, on Windows and Linux alike, because the CI runner has no system ffmpeg.

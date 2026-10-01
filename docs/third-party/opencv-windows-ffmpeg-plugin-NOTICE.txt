@@ -4,9 +4,10 @@ Owner: UV Threads   Last updated: 2026-10-01
 WHAT THIS COVERS
 The Windows opencv-python-headless cp314t wheel does not build FFmpeg.  OpenCV's CMake downloads
 OpenCV's own pre-built, separately-loaded plugin DLL, pinned by hash, and the wheel ships it as a
-separate file next to cv2's extension module (the file name inside the wheel is expected to be
-cv2/opencv_videoio_ffmpeg4130_64.dll, from setup.py's packaging rule; verify against the built
-wheel).  This notice documents that plugin.  (The Linux wheel's FFmpeg is a different thing, built
+separate file next to cv2's extension module: in the built wheel it is
+cv2/opencv_videoio_ffmpeg4130_64.dll, and its sha256 (below) is byte-identical to the DLL
+downloaded from the pinned opencv_3rdparty commit (checked 2026-10-01 against the wheel from
+Actions run 36865492159, which is the wheel's only DLL besides the cv2 extension module).  This notice documents that plugin.  (The Linux wheel's FFmpeg is a different thing, built
 by us; see build_ft_opencv_wheel.sh.)
 
 IDENTIFICATION
