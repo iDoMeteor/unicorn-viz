@@ -126,3 +126,21 @@ def test_executables_are_resolved_on_the_build_environments_path(win, tmp_path) 
 def test_unknown_executable_is_a_clear_error(win) -> None:
     with pytest.raises(FileNotFoundError, match='definitely-not-a-tool'):
         win.resolve_exe('definitely-not-a-tool', {'PATH': ''})
+
+
+def test_env_merge_is_case_insensitive_like_windows(win) -> None:
+    """vcvars64 reports ``Path``; Python's os.environ says ``PATH``.  Windows treats
+    them as one variable, a plain dict does not, and a duplicate pair made the
+    venv Scripts directory we prepended silently vanish (meson-python then could
+    not find ``meson``).  Merging must leave exactly one PATH, with vcvars's value."""
+    merged = win.merge_env({'PATH': 'old', 'KEEP': '1'}, 'Path=new;dirs\nFOO=bar\nnot a variable line\n')
+    assert [k for k in merged if k.upper() == 'PATH'] == ['PATH']
+    assert merged['PATH'] == 'new;dirs' and merged['FOO'] == 'bar' and merged['KEEP'] == '1'
+
+
+def test_prepend_path_edits_the_single_path_variable(win) -> None:
+    env = {'PATH': 'C:/a;C:/b', 'Path': 'stale'}
+    out = win.prepend_path(env, 'C:/venv/Scripts')
+    assert [k for k in out if k.upper() == 'PATH'] == ['PATH']
+    import os
+    assert out['PATH'].startswith('C:/venv/Scripts' + os.pathsep)

@@ -200,10 +200,36 @@ def venv_python(venv: Path) -> Path:
     return venv / ('Scripts/python.exe' if IS_WIN else 'bin/python')
 
 
+def merge_env(base: dict[str, str], dump: str) -> dict[str, str]:
+    """Overlay a ``set`` dump (``NAME=value`` lines) onto ``base``, treating names
+    case-insensitively as Windows does.
+
+    ``vcvars64.bat`` reports ``Path`` while Python's ``os.environ`` says ``PATH``;
+    in a plain dict those are two keys, the child process gets an arbitrary one
+    of them, and any directory prepended to the other vanishes.  All names are
+    stored upper-case here, the later value winning, so there is exactly one.
+    """
+    env = {k.upper(): v for k, v in base.items()}
+    for line in dump.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            if key:
+                env[key.upper()] = value
+    return env
+
+
+def prepend_path(env: dict[str, str], directory: str) -> dict[str, str]:
+    """``env`` with ``directory`` first on its single PATH variable."""
+    out = {k.upper(): v for k, v in env.items()}
+    old = out.get('PATH', '')
+    out['PATH'] = directory + (os.pathsep + old if old else '')
+    return out
+
+
 def msvc_env(ctx: Ctx) -> dict[str, str]:
     """The environment ``vcvars64.bat`` sets up (the MSVC compiler, linker and
     SDK paths), found through vswhere, so no workflow step has to do it."""
-    env = dict(os.environ)
+    env = {k.upper(): v for k, v in os.environ.items()}
     if not IS_WIN:
         return env
     vswhere = (Path(os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'))
@@ -216,12 +242,8 @@ def msvc_env(ctx: Ctx) -> dict[str, str]:
         raise SystemExit('no Visual Studio with the C++ tools found (vswhere)')
     vcvars = Path(install) / 'VC' / 'Auxiliary' / 'Build' / 'vcvars64.bat'
     dump = subprocess.check_output(f'cmd /d /s /c "call "{vcvars}" >nul && set"', shell=True, text=True)
-    for line in dump.splitlines():
-        if '=' in line:
-            key, value = line.split('=', 1)
-            env[key] = value
     ctx.say(f'MSVC environment from {vcvars}')
-    return env
+    return merge_env(env, dump)
 
 
 # ------------------------------------------------------------------ the builds
@@ -255,8 +277,7 @@ class Build:
                  f'maturin=={p["maturin_version"]}'])
         ctx.say('MSVC environment')
         ctx.env = msvc_env(ctx)
-        scripts = str(self.venv / ('Scripts' if IS_WIN else 'bin'))
-        ctx.env['PATH'] = scripts + os.pathsep + ctx.env.get('PATH', '')
+        ctx.env = prepend_path(ctx.env, str(self.venv / ('Scripts' if IS_WIN else 'bin')))
         ctx.env['CMAKE_BUILD_PARALLEL_LEVEL'] = str(os.cpu_count() or 4)
         # libopus's bundled CMakeLists predates CMake 4's floor (see build_ft_sphn_wheel.sh).
         ctx.env['CMAKE_POLICY_VERSION_MINIMUM'] = '3.5'
