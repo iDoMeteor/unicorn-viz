@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Generate the THIRD-PARTY notice for the sphn wheel's statically linked Rust crates.
+
+The sphn wheel (see docs/planning/free-threaded-wheels-2026-09-30.md) is a Rust
+extension: every crate it depends on is compiled into the one ``.so`` / ``.pyd``.
+Redistributing it means carrying those crates' license notices.  This reads the
+output of ``cargo tree --locked -e normal --prefix none --format '{p}|{l}|{r}'``
+(one file per target) and the cargo registry's unpacked sources, and writes a
+Markdown notice: what is linked, under which licenses, any copyleft called out,
+and every distinct license text once.
+
+    python tools/packaging/sphn_third_party_notice.py \\
+        --tree linux=tree-linux.txt --tree windows=tree-windows.txt \\
+        --registry ~/.cargo/registry --lock-sha256 <hex> --out NOTICE.md
+
+``audit_sphn_licenses.sh`` runs the whole pipeline.  Standard library only.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import hashlib
+import re
+import sys
+import tomllib
+from collections import defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+
+#: The wheel's own crate; not third-party.
+ROOT_CRATE = 'sphn'
+#: Files that carry license terms or notices inside a crate's source directory.
+LICENSE_FILE = re.compile(r'^(LICENSE|LICENCE|COPYING|COPYRIGHT|NOTICE|UNLICENSE)([-_.].*)?$', re.I)
+#: SPDX identifiers that deserve a sentence of their own in the notice.
+COPYLEFT_HINTS = ('GPL', 'AGPL', 'LGPL', 'MPL', 'EPL', 'CDDL', 'CPL')
+
+
+@dataclass
+class Crate:
+    name: str
+    version: str
+    license: str
+    repository: str
+    platforms: list[str] = field(default_factory=list)
+
+
+def read_crates(trees: dict[str, Path]) -> list[Crate]:
+    """Parse ``cargo tree`` outputs (``name vX.Y.Z[ (path)]|license|repository``)."""
+    found: dict[tuple[str, str], Crate] = {}
+    for platform, path in trees.items():
+        for raw in path.read_text(encoding='utf-8').splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            line = re.sub(r'\s*\(\*\)$', '', line)                 # cargo's "already shown" marker
+            pkg, _, rest = line.partition('|')
+            license_, _, repo = rest.partition('|')
+            m = re.match(r'^(\S+) v(\S+)', pkg)
+            if m is None or m[1] == ROOT_CRATE:
+                continue
+            crate = found.setdefault((m[1], m[2]), Crate(m[1], m[2], license_.strip(), repo.strip()))
+            if platform not in crate.platforms:
+                crate.platforms.append(platform)
+    return sorted(found.values(), key=lambda c: (c.name, c.version))
+
+
+def problems(crates: list[Crate]) -> list[str]:
+    return [f'{c.name} {c.version} declares no license' for c in crates if not c.license]
+
+
+def _license_files(registry: Path, name: str, version: str) -> list[Path]:
+    out: list[Path] = []
+    for src in sorted((registry / 'src').glob(f'*/{name}-{version}')):
+        out.extend(sorted(p for p in src.iterdir() if p.is_file() and LICENSE_FILE.match(p.name)))
+    return out
+
+
+def _spdx_ids(expression: str) -> list[str]:
+    """The license identifiers in an SPDX expression, operators removed."""
+    return [t for t in re.findall(r'[A-Za-z0-9.+-]+', expression)
+            if t.upper() not in ('AND', 'OR', 'WITH')]
+
+
+def _fallback_texts(crate: Crate, spdx_dir: Path | None) -> list[tuple[str, str]]:
+    """(identifier, canonical text) for a crate that ships no license file of its own."""
+    if spdx_dir is None:
+        return []
+    return [(i, (spdx_dir / f'{i}.txt').read_text(encoding='utf-8', errors='replace').strip() + '\n')
+            for i in _spdx_ids(crate.license) if (spdx_dir / f'{i}.txt').is_file()]
+
+
+def unresolved(crates: list[Crate], registry: Path, spdx_dir: Path | None) -> list[str]:
+    """Crates whose license text can be found neither in their source nor among the
+    canonical SPDX texts: a notice must not claim texts it does not carry."""
+    return [f'{c.name} {c.version} ({c.license})' for c in crates
+            if not _license_files(registry, c.name, c.version) and not _fallback_texts(c, spdx_dir)]
+
+
+def _authors(registry: Path, name: str, version: str) -> list[str]:
+    for src in sorted((registry / 'src').glob(f'*/{name}-{version}')):
+        manifest = src / 'Cargo.toml'
+        if manifest.is_file():
+            data = tomllib.loads(manifest.read_text(encoding='utf-8'))
+            return [str(a) for a in data.get('package', {}).get('authors', [])]
+    return []
+
+
+def render(crates: list[Crate], registry: Path, *, lock_sha256: str, sdist: str,
+           extra_sections: str = '', spdx_dir: Path | None = None) -> str:
+    by_license: dict[str, list[Crate]] = defaultdict(list)
+    for c in crates:
+        by_license[c.license or '(none declared)'].append(c)
+    lines = [
+        'Owner: UV Threads',
+        'Status: generated by tools/packaging/audit_sphn_licenses.sh; regenerate, do not edit by hand',
+        f'Last updated: {datetime.date.today().isoformat()}', '',
+        f'# Third-party notices for the {sdist} wheel (statically linked Rust crates)', '',
+        f'This wheel is a Rust extension: the {len(crates)} crates below are compiled into it. '
+        f'They are exactly the crates in the sdist\'s `Cargo.lock` (sha256 `{lock_sha256}`) that '
+        '`cargo tree -e normal` reports for the build targets. Proc-macro crates are included '
+        'although they only run at compile time. The wheel\'s own crate is dual-licensed '
+        'MIT/Apache-2.0.', '',
+        '## Licenses at a glance', '',
+        '| License (SPDX) | Crates |', '|---|---|',
+    ]
+    for lic, members in sorted(by_license.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        lines.append(f'| {lic} | {len(members)} |')
+    weak = [lic for lic in by_license if any(h in lic for h in COPYLEFT_HINTS)]
+    lines += ['']
+    if weak:
+        names = ', '.join(sorted(c.name for lic in weak for c in by_license[lic]))
+        lines += [
+            '**Weak copyleft.** ' + ', '.join(sorted(weak)) + ' applies to: ' + names + '. '
+            'MPL-2.0 is file-level copyleft: it covers those crates\' own source files, not the '
+            'rest of the wheel. The crates are used unmodified; their source is the published '
+            'crate at the version below (crates.io, and the repository listed), which is how '
+            'recipients can obtain it. The license text is reproduced below.', '',
+        ]
+    else:
+        lines += ['No copyleft licenses were found.', '']
+    if extra_sections:
+        lines += [extra_sections.rstrip('\n'), '']
+    lines += ['## Crates', '', '| Crate | Version | License | Platforms | Repository |', '|---|---|---|---|---|']
+    for c in crates:
+        lines.append(f'| {c.name} | {c.version} | {c.license or "(none declared)"} | '
+                     f'{", ".join(c.platforms)} | {c.repository or "-"} |')
+
+    texts: dict[str, tuple[str, list[str]]] = {}
+    no_file: list[str] = []
+    for c in crates:
+        files = _license_files(registry, c.name, c.version)
+        for f in files:
+            body = f.read_text(encoding='utf-8', errors='replace').strip() + '\n'
+            digest = hashlib.sha256(body.encode()).hexdigest()
+            texts.setdefault(digest, (body, []))[1].append(f'{c.name} {c.version} ({f.name})')
+        if not files:
+            authors = ', '.join(_authors(registry, c.name, c.version)) or 'see the crate repository'
+            no_file.append(f'{c.name} {c.version}: {c.license}; copyright holders (manifest authors): {authors}')
+            for ident, body in _fallback_texts(c, spdx_dir):
+                digest = hashlib.sha256(body.encode()).hexdigest()
+                texts.setdefault(digest, (body, []))[1].append(f'{c.name} {c.version} ({ident}, canonical SPDX text)')
+    lines += ['', '## License texts', '',
+              'Each distinct text appears once, followed by the crates (and files) it comes from.', '']
+    for body, owners in sorted(texts.values(), key=lambda t: t[1][0]):
+        lines += ['---', '', 'Applies to: ' + '; '.join(owners), '', '```text', body.rstrip('\n'), '```', '']
+    if no_file:
+        lines += ['## Crates shipping no license file', '',
+                  'These declare their license in the manifest but ship no separate text. The '
+                  'canonical SPDX text for each declared license is reproduced above under the '
+                  'crates it applies to; the copyright holders are the manifest authors listed '
+                  'here.', '']
+        lines += [f'- {entry}' for entry in no_file] + ['']
+    return '\n'.join(lines) + '\n'
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    ap.add_argument('--tree', action='append', required=True, metavar='PLATFORM=FILE',
+                    help="a `cargo tree` output; repeat per target, e.g. linux=tree-linux.txt")
+    ap.add_argument('--registry', type=Path, required=True, help='the cargo registry directory')
+    ap.add_argument('--lock-sha256', required=True)
+    ap.add_argument('--sdist', default='sphn-0.2.1')
+    ap.add_argument('--spdx-texts', type=Path, metavar='DIR',
+                    help='directory of canonical license texts named <SPDX-ID>.txt, used for '
+                         'crates that ship no license file')
+    ap.add_argument('--extra', type=Path, help='Markdown to include (e.g. the bundled C library notice)')
+    ap.add_argument('--out', type=Path, required=True)
+    args = ap.parse_args(argv)
+    trees = {}
+    for spec in args.tree:
+        platform, _, path = spec.partition('=')
+        trees[platform] = Path(path)
+    crates = read_crates(trees)
+    bad = problems(crates)
+    if bad:
+        print('license problems:', *bad, sep='\n  ', file=sys.stderr)
+        return 1
+    gaps = unresolved(crates, args.registry, args.spdx_texts)
+    if gaps:
+        print('no license text available for:', *gaps, sep='\n  ', file=sys.stderr)
+        return 1
+    extra = args.extra.read_text(encoding='utf-8') if args.extra else ''
+    args.out.write_text(render(crates, args.registry, lock_sha256=args.lock_sha256, sdist=args.sdist,
+                               extra_sections=extra, spdx_dir=args.spdx_texts), encoding='utf-8')
+    print(f'{len(crates)} crates -> {args.out}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
