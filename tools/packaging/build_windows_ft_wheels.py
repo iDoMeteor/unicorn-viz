@@ -226,6 +226,32 @@ def prepend_path(env: dict[str, str], directory: str) -> dict[str, str]:
     return out
 
 
+def opencv_build_env(base: dict[str, str], py_base: Path) -> dict[str, str]:
+    """The environment for the OpenCV build (everything OpenCV's CMake needs that
+    setuptools would otherwise provide on a free-threaded interpreter).
+
+    * ``CL=/DPy_GIL_DISABLED=1``: CPython's headers only use the free-threaded
+      object layout, and only auto-link ``python314t.lib`` (instead of
+      ``python314.lib``), when ``Py_GIL_DISABLED`` is defined.  setuptools defines it
+      for extensions; OpenCV's CMake does not, so the first Windows run died with
+      ``LNK1104: cannot open file 'python314.lib'`` and, had it linked, the module
+      would have been built against the wrong object layout.  MSVC reads ``CL`` for
+      every compile, which is also what makes the define reach OpenCV's own modules.
+    * ``LIB``: the runtime's ``libs`` directory, so the auto-linked import library
+      is found.
+    * ``CMAKE_ARGS``: explicit Python library and include paths (scikit-build may not
+      recognise the free-threaded import library's name).
+    """
+    env = {k.upper(): v for k, v in base.items()}
+    libs = (py_base / 'libs').as_posix()
+    env['CL'] = '/DPy_GIL_DISABLED=1' + (' ' + env['CL'] if env.get('CL') else '')
+    env['LIB'] = str(py_base / 'libs') + (os.pathsep + env['LIB'] if env.get('LIB') else '')
+    env.update(ENABLE_HEADLESS='1', CI_BUILD='1', OPENCV_PYTHON_SKIP_GIT_COMMANDS='1',
+               CMAKE_ARGS=f'-DPYTHON3_LIBRARY={libs}/python314t.lib '
+                          f'-DPYTHON3_INCLUDE_DIR={(py_base / "include").as_posix()}')
+    return env
+
+
 def msvc_env(ctx: Ctx) -> dict[str, str]:
     """The environment ``vcvars64.bat`` sets up (the MSVC compiler, linker and
     SDK paths), found through vswhere, so no workflow step has to do it."""
@@ -345,11 +371,7 @@ class Build:
             ctx.say('edit setup.py: remove the hard-coded "-DPYTHON3_LIMITED_API=ON",')
         py = venv_python(self.venv)
         base = Path(ctx.capture([py, '-c', 'import sys; print(sys.base_prefix)']) or str(self.py_root))
-        env = dict(ctx.env)
-        env.update(ENABLE_HEADLESS='1', CI_BUILD='1', OPENCV_PYTHON_SKIP_GIT_COMMANDS='1',
-                   # scikit-build may not recognise the free-threaded import library's name.
-                   CMAKE_ARGS=(f'-DPYTHON3_LIBRARY={(base / "libs" / "python314t.lib").as_posix()} '
-                               f'-DPYTHON3_INCLUDE_DIR={(base / "include").as_posix()}'))
+        env = opencv_build_env(ctx.env, base)
         out = self.raw / 'opencv'
         if not ctx.dry:
             shutil.rmtree(out, ignore_errors=True)
