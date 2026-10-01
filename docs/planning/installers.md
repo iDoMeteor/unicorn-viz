@@ -1366,7 +1366,25 @@ constraints, stated plainly:
        `/var/tmp/uv-install-clean/pipcache` if still present): demucs should
        now install. Otherwise the mixer's `stems_python` can point at a second,
        GIL interpreter.
-    4. Owner decision: how CI release builds get the wheelhouse.
+    4. Owner decision: how CI release builds get the wheelhouse. *(Decided
+       2026-10-01: publish the wheels as a GitHub release asset and fetch them in
+       CI against a committed SHA256SUMS.)*
+    4a. *(2026-10-01, landed)* Wheelhouse release `wheelhouse-cp314t-2026-10-01`
+       (prerelease, no app tag; five Linux wheels + SHA256SUMS, licenses and the
+       OpenCV LGPL source pointers in its notes). `release-installers.yml` runs
+       `tools/packaging/fetch_wheelhouse.sh` before the source tarball is
+       repacked with `wheelhouse/` and before `build_native.sh`
+       (`UV_WHEELHOUSE`); trust anchor is the committed
+       `tools/packaging/wheelhouse-cp314t.sha256`, never the release's own
+       sums. (A dry-run dispatch mode for the workflow was written and withdrawn
+       pending owner approval; the fetch is not yet exercised in CI until the
+       first `v*.*.*` tag.) Windows wheels: append
+       lines (and a new `# release-tag:`) to the trust file when they exist.
+    5. *(2026-10-01)* Linux installers install **CPU-only torch/torchaudio**
+       before demucs (`uv_preinstall_cpu_torch`, PyTorch CPU index, cp314t
+       wheels exist for Linux and Windows): the mixer-dependency venv is 1.4 GB
+       instead of 6.0 GB with the default CUDA wheels. `UV_TORCH_CUDA=1` opts
+       back into CUDA. Windows/macOS PyPI torch is already CPU.
     5. Drop-in owners: dj-mixer-01 should declare hidapi and send2trash (or use
        the pack file's `+hidapi +send2trash`); the self-test lists drop-in
        dependency gaps.
