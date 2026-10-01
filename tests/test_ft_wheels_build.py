@@ -117,3 +117,24 @@ def test_sphn_recipe_pins_source_and_toolchain() -> None:
 def test_sphn_script_parses() -> None:
     subprocess.run(['bash', '-n', str(SPHN_BUILD)], check=True)
     compile((ROOT / 'tools' / 'packaging' / 'ft_sphn_smoke.py').read_text(), 'ft_sphn_smoke.py', 'exec')
+
+
+def test_opencv_smoke_clips_written_without_ffmpeg_have_content_in_every_frame(tmp_path) -> None:
+    """Windows CI runners have no system ffmpeg, so the smoke test writes its own clips
+    with cv2.  The first version made frame 0 all black, and the check that rejects a
+    blank first frame failed a good wheel (an hour of CI to find out)."""
+    cv2 = pytest.importorskip('cv2')
+    import importlib.util
+    import sys as _sys
+    spec = importlib.util.spec_from_file_location('ft_opencv_smoke_t', OPENCV_SMOKE)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    clips = mod._make_clips_with_cv2(cv2, tmp_path)
+    assert clips, 'cv2 could not write any clip'
+    for path in clips.values():
+        cap = cv2.VideoCapture(str(path))
+        ok, first = cap.read()
+        cap.release()
+        assert ok and float(first.std()) >= 5, f'{path.name}: first frame is blank'

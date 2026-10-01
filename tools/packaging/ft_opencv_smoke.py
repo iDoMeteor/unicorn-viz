@@ -60,9 +60,12 @@ def _make_clips_with_cv2(cv2, dest: Path) -> dict[str, Path]:
         writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*fourcc), FPS, (W, H))
         if not writer.isOpened():
             continue
+        # Every frame has real content (a gradient plus a moving bar), including the
+        # first: an all-black frame 0 read back as "blank" and failed the first run.
+        gradient = np.tile(np.linspace(20, 235, W, dtype=np.uint8), (H, 1))
         for i in range(FRAMES):
-            frame = np.full((H, W, 3), (i * 12) % 255, np.uint8)
-            frame[:, : (i * 8) % W] = (30, 160, 220)
+            frame = np.stack([gradient, gradient[::-1], np.full((H, W), 90, np.uint8)], axis=2)
+            frame[:, (i * 8) % W: (i * 8) % W + 16] = (30, 160, 220)
             writer.write(frame)
         writer.release()
         out[name] = path
