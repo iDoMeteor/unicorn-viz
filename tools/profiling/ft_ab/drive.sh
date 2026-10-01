@@ -1,5 +1,6 @@
 #!/bin/bash
 # GIL, free-threaded, GIL, free-threaded (cancels drift), then summarize.
+# LOADED=1 seeds the mixer from the owner's state (two decks, autoplay, stems, silent).
 #   GIL_PY=... FT_PY=... tools/profiling/ft_ab/drive.sh
 # Run it only on an idle machine (check `uptime`: load under 2), from a seat
 # checkout, never the owner's main one.  It opens a 1920x1080 window and the
@@ -9,7 +10,7 @@ REPO=$(cd "$D/../../.." && pwd)
 AB=${AB:-/var/tmp/uv-ab}; export AB
 GIL_PY=${GIL_PY:-$REPO/.venv/bin/python}
 : "${FT_PY:?set FT_PY to the free-threaded venv python}"
-python3 "$D/make_config.py" "$AB" || exit 1
+python3 "$D/make_config.py" "$AB" ${LOADED:+--loaded} || exit 1
 rm -f "$AB/cpu.txt" "$AB/window.txt"
 for pair in "gil1 $GIL_PY" "ft1 $FT_PY" "gil2 $GIL_PY" "ft2 $FT_PY"; do
   set -- $pair
