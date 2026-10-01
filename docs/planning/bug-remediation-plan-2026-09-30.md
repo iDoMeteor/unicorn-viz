@@ -212,6 +212,12 @@ silently die.
      build scripts by UV Threads). This approval covers this build only. If
      it fails, fall back to a Windows **3.13 (GIL)** interim. Every
      dependency has a cp313 Windows wheel except python-rtmidi.
+   - **Wheels for CI-built artifacts** (2026-10-01): publish the cp314t
+     wheels as a **GitHub release asset** under a dedicated non-version tag.
+     The installer-building workflows fetch them and verify them against a
+     SHA256SUMS committed in the repo. UV Install owns it. The approval
+     covers that release and the fetch step only. Until it lands,
+     CI-built tarball/rpm/deb artifacts still install the 3.11 runtime.
    - **Stems on 3.14t:** the only gap is **sphn** (no cp314t wheel; torch and
      torchaudio have them). UV Threads builds it.
 2. **H4:** APC faders drive the app-wide tweakables in alphabetical order,
