@@ -286,6 +286,30 @@ reproduces on the dev box. Fedora's `python3.14t` is the stopgap.
 - With `[ui] confirm_exit` on (the default), SIGTERM and Ctrl+C open the
   "Quit Unicorn Viz?" box and wait for an answer. The A/B config turns it off.
 
+**A/B, GIL venv vs 3.14t venv, on the owner's rig (2026-10-01).** Harness:
+`tools/profiling/ft_ab/` (own config and runtime store, SIGTERM stops, silent).
+1920x1080 windowed, mixer window open, Auto VJ off, effect pinned, 30 s warm-up
+and 60 s measured per run, alternating GIL / 3.14t. In the 3.14t runs the main
+process has the GIL on (moderngl) and the audio helper has it off.
+
+| scene | rounds | main CPU GIL / 3.14t | helper CPU | slow frames/min | mixer UI mean/p95 ms |
+|---|---|---|---|---|---|
+| idle (mixer open, nothing playing) | 2 | 46.9 / 48.8 % | 12.2 / 13.9 % | no difference | 8.9 / 9.7 mean |
+| loaded (deck A with 4 stems + deck B armed, silent) | 3 | 49.2 / 52.0 % | 15.7 / 17.5 % | 4.0 / 1.3 | 10.8 / 11.1 mean, p95 18.4 / 18.7 |
+
+Reading: about +2 to 3 CPU points in the main process (+4 to 6 %), nothing
+measurable in frame time, the mixer UI or the audio engine render (about
+0.1 ms of a 10.67 ms budget). Frame time is vsync-bound at about 16.7 ms.
+Gen-2 GC pauses were 15 to 20 ms on 3.14t against under 1 ms on the GIL
+build, invisible in frame time at this heap size. Idle-scene numbers are two
+rounds (the first GIL run was a cold-start outlier); loaded-scene numbers are
+three clean rounds with background load 0.4 to 1.6 from the owner's desktop.
+Not tested: two decks audibly mixing, a much larger library in memory,
+recording or streaming. The first loaded attempt lost two of four runs to a
+helper segfault, a use-after-unmap in the shared-memory exporter (fixed in
+core beta.188, `tests/test_shm_retire_stress.py`); it hit both interpreters
+and the owner's real sessions on 2026-09-26 and 2026-09-27.
+
 **GC on 3.14t (2026-10-01).** Full-collection cost (median of 5, dict-with-list
 objects), before and after `gc.freeze()` at 200k / 1M / 2M objects:
 
