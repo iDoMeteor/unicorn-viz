@@ -1,7 +1,7 @@
 # Free-threaded (cp314t) wheels: moderngl, glcontext, python-rtmidi
 
 Owner: UV Threads
-Status: all five Linux wheels built, verified and published; Windows build script written, not yet run on Windows
+Status: all five Linux wheels and four of five Windows wheels built, verified and published; Windows OpenCV in progress
 Last updated: 2026-09-30 (end of day)
 
 W1 of [the bug remediation plan](bug-remediation-plan-2026-09-30.md) bundles
@@ -351,11 +351,36 @@ text is `3rdparty/ffmpeg/license.txt` in the OpenCV tree.
 
 **Gaps to close before the release notes are final**
 
-- The OpenCV wheel's own `LICENSE-3RD-PARTY.txt` covers FFmpeg and libvpx but
-  does **not** mention libdrm (MIT), which the Linux wheel also vendors; cite it
-  separately.
+- ~~The OpenCV wheel's own `LICENSE-3RD-PARTY.txt` does not mention libdrm.~~
+  **Done 2026-10-01:** the vendored `libdrm-b0291a67.so.2.4.0` is libdrm
+  2.4.115 (`libdrm-2.4.115-2.el8.x86_64`, matched by ELF build-id); its verbatim
+  license headers are in
+  [`docs/third-party/libdrm-2.4.115-NOTICE.txt`](../third-party/libdrm-2.4.115-NOTICE.txt).
 - LGPL source availability: FFmpeg and libvpx sources are the pinned tarball
   and commit above (public, hash-verified). The note should say so.
-- sphn statically links 135 Rust crates. Their licenses were not audited here
-  (the symphonia decoder crates are the ones to check first); a `cargo license`
-  pass over the sdist's `Cargo.lock` should precede redistribution.
+- ~~sphn's statically linked Rust crates were not audited.~~ **Done 2026-10-01:**
+  see "sphn license audit" below. The notice to attach to the release is
+  [`docs/third-party/sphn-0.2.1-THIRD-PARTY-NOTICES.md`](../third-party/sphn-0.2.1-THIRD-PARTY-NOTICES.md).
+
+### sphn license audit (2026-10-01)
+
+Method: `tools/packaging/audit_sphn_licenses.sh` runs `cargo tree --locked -e normal`
+for both wheel targets against the pinned sdist's own `Cargo.lock` (sha256
+`aafaf92a…300a`), then `sphn_third_party_notice.py` combines the result with each
+crate's own license files.
+
+- **114 third-party crates** are linked (proc-macro crates included although they
+  only run at compile time; the Linux and Windows wheels differ by a few
+  platform crates). No GPL, LGPL or AGPL.
+- **16 crates are MPL-2.0** (every `symphonia*` decoder): weak, file-level
+  copyleft. They are used unmodified, so the obligation is to keep the notices and
+  tell recipients where the source is (crates.io and the repository, listed in the
+  notice). It does not extend to the rest of the wheel.
+- The rest are permissive: MIT or Apache-2.0 (87 of them, in various
+  combinations), MIT (11), Unlicense OR MIT (3), BSD-2/BSD-3, ISC, Zlib, the
+  Unicode license, and `Apache-2.0 WITH LLVM-exception` (`target-lexicon`).
+- libopus is compiled in from C source bundled in `audiopus_sys` (ISC), under
+  Xiph's BSD 3-clause license; its `COPYING` is in the notice.
+- The symphonia crates and `realfft` ship no license file, so the notice carries
+  the canonical SPDX text (MPL-2.0, MIT) and the manifest authors for them. The
+  generator refuses to produce a notice that would claim a text it lacks.
