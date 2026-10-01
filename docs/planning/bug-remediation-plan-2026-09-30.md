@@ -50,7 +50,7 @@ add the short hash.
 
 ## Found during remediation
 
-- [ ] **R1 (P1)** The audio helper SIGSEGVs on track loads: a use-after-unmap
+- [x] **R1 (P1)** The audio helper SIGSEGVs on track loads: a use-after-unmap
   on a shared-memory segment (`remote_objects._ShmExporter`). `retire_unused()`
   unmaps a retired deck array after a 2 s grace period while a helper thread
   can still read it (numpy fancy-index read racing `munmap`). [core: UV Core]
@@ -58,6 +58,10 @@ add the short hash.
     interpreters.
   - Hit the owner's live sessions on 2026-09-26 13:07 and 2026-09-27 21:05.
     Both times the engine fell back in-process for the rest of the session.
+  - **Fixed** in core beta.188 (efc10bf): retired segments are unmapped
+    only once nothing references the adopted array. Regression test:
+    `tests/test_shm_retire_stress.py`. The coordinator verified the
+    pre-fix code exits -11 under it.
 
 ## Wave 2 — show-breakers
 

@@ -117,3 +117,70 @@ def test_sphn_recipe_pins_source_and_toolchain() -> None:
 def test_sphn_script_parses() -> None:
     subprocess.run(['bash', '-n', str(SPHN_BUILD)], check=True)
     compile((ROOT / 'tools' / 'packaging' / 'ft_sphn_smoke.py').read_text(), 'ft_sphn_smoke.py', 'exec')
+
+
+def test_opencv_smoke_clips_written_without_ffmpeg_have_content_in_every_frame(tmp_path) -> None:
+    """Windows CI runners have no system ffmpeg, so the smoke test writes its own clips
+    with cv2.  The first version made frame 0 all black, and the check that rejects a
+    blank first frame failed a good wheel (an hour of CI to find out)."""
+    cv2 = pytest.importorskip('cv2')
+    import importlib.util
+    import sys as _sys
+    spec = importlib.util.spec_from_file_location('ft_opencv_smoke_t', OPENCV_SMOKE)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    clips = mod._make_clips_with_cv2(cv2, tmp_path)
+    assert clips, 'cv2 could not write any clip'
+    for path in clips.values():
+        cap = cv2.VideoCapture(str(path))
+        ok, first = cap.read()
+        cap.release()
+        assert ok and float(first.std()) >= 5, f'{path.name}: first frame is blank'
+
+
+FIXTURES = ROOT / 'tools' / 'packaging' / 'ft-fixtures'
+
+
+def _load_opencv_smoke():
+    import importlib.util
+    import sys as _sys
+    spec = importlib.util.spec_from_file_location('ft_opencv_smoke_fx', OPENCV_SMOKE)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_fixture_clips_are_tiny_recorded_and_match_their_hashes() -> None:
+    import hashlib
+    for name in ('h264.mp4', 'vp9.webm'):
+        path = FIXTURES / name
+        assert path.is_file() and path.stat().st_size < 20_000, f'{name} must exist and stay tiny'
+    sums = dict(reversed(line.split()) for line in (FIXTURES / 'SHA256SUMS').read_text().splitlines())
+    for name, digest in sums.items():
+        assert hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() == digest, f'{name} changed'
+    readme = (FIXTURES / 'README.md').read_text()
+    assert 'libx264' in readme and 'libvpx-vp9' in readme      # the generating commands are recorded
+
+
+def test_the_smoke_checker_accepts_the_fixtures_and_rejects_a_broken_clip(tmp_path) -> None:
+    """The fixtures carry a bright bar at x = 7*N + 8 in frame N, so a decoder that
+    drops, reorders or mis-seeks frames (or returns blank ones) fails the check."""
+    cv2 = pytest.importorskip('cv2')
+    mod = _load_opencv_smoke()
+    for name in ('h264.mp4', 'vp9.webm'):
+        assert mod._check_fixture(cv2, FIXTURES / name) == [], name
+    # a clip with the same size and frame count but the bar in the wrong place
+    import numpy as np
+    broken = tmp_path / 'broken.avi'
+    writer = cv2.VideoWriter(str(broken), cv2.VideoWriter_fourcc(*'MJPG'), 10, (160, 120))
+    for _ in range(20):
+        frame = np.full((120, 160, 3), 40, np.uint8)
+        frame[:, 100:116] = 255                        # bar never moves
+        writer.write(frame)
+    writer.release()
+    problems = mod._check_fixture(cv2, broken)
+    assert problems and any('bar' in p for p in problems)

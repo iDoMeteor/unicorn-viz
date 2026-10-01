@@ -384,3 +384,34 @@ crate's own license files.
 - The symphonia crates and `realfft` ship no license file, so the notice carries
   the canonical SPDX text (MPL-2.0, MIT) and the manifest authors for them. The
   generator refuses to produce a notice that would claim a text it lacks.
+
+## 8. Windows wheels: license facts (checked against the built wheels)
+
+Built on GitHub Actions (`windows-ft-wheels.yml` running `build_windows_ft_wheels.py`);
+inspected from the downloaded artifacts of runs 36855516862 (sphn) and 36856829020
+(the GL/MIDI trio). All four are tag `cp314-cp314t-win_amd64`, contain no DLLs
+(one `.pyd` each), and link only against Windows system libraries.
+
+| Wheel | Source pins | License (wheel METADATA) | License file in the wheel | Contents |
+|---|---|---|---|---|
+| glcontext 3.0.0 | same sdist as Linux | MIT | `dist-info/licenses/LICENSE` | `glcontext/wgl.cp314t-win_amd64.pyd` (the only backend on Windows; Linux builds `egl` and `x11`) |
+| moderngl 5.12.0 | same sdist as Linux | MIT | `dist-info/licenses/LICENSE` | `moderngl/mgl.cp314t-win_amd64.pyd` |
+| python-rtmidi 1.5.8 (`-1`) | same sdist, Cython 3.3.0 regenerated | "Copyright & License" (classifier MIT) | `dist-info/LICENSE.md` | `rtmidi/_rtmidi.cp314t-win_amd64.pyd` (+ its `.lib`, a build by-product, as in upstream's wheels); uses WinMM, a system component; **no `libasound`** (Linux only) |
+| sphn 0.2.1 | same sdist, `Cargo.lock` sha256 `aafaf92a…300a` | (none in METADATA; Cargo.toml says MIT/Apache-2.0) | `dist-info/licenses/LICENSE` | `sphn/sphn.cp314t-win_amd64.pyd`; statically links the same crate set: the [notice](../third-party/sphn-0.2.1-THIRD-PARTY-NOTICES.md) covers both targets (its platform column lists the few Windows-only crates) |
+
+**OpenCV on Windows** (wheel not built yet; the first run compiled everything and
+failed only at the link, fixed by defining `Py_GIL_DISABLED`): FFmpeg is **not**
+built by us. OpenCV's CMake downloads its pre-built plugin
+`opencv_videoio_ffmpeg_64.dll` from opencv_3rdparty commit
+`d82ad9a54a7b42a1648a9cae8fed5c2f20ea396c` (md5 pinned by OpenCV). Its LGPL 2.1+
+status, FFmpeg 4.4.6 contents, libvpx and aom statically linked, source
+pointers and the verbatim license texts are in
+[`docs/third-party/opencv-windows-ffmpeg-plugin-NOTICE.txt`](../third-party/opencv-windows-ffmpeg-plugin-NOTICE.txt).
+LGPL was confirmed from OpenCV's readme, from the published build recipe, and
+from the DLL itself (embedded configure string and license strings), not
+assumed. Other bundled DLLs: none expected beyond that plugin and the module;
+verify against the built wheel. The first Windows build's plugin was confirmed to
+be `cv2/opencv_videoio_ffmpeg4130_64.dll`. The smoke test decodes the checked-in
+fixture clips (`tools/packaging/ft-fixtures/`: H.264 `.mp4` and VP9 `.webm`, 20
+frames each, a bar whose position encodes the frame number), in order and after
+seeks, on Windows and Linux alike, because the CI runner has no system ffmpeg.

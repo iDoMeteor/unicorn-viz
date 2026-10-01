@@ -144,3 +144,22 @@ def test_prepend_path_edits_the_single_path_variable(win) -> None:
     assert [k for k in out if k.upper() == 'PATH'] == ['PATH']
     import os
     assert out['PATH'].startswith('C:/venv/Scripts' + os.pathsep)
+
+
+def test_opencv_build_env_defines_py_gil_disabled_and_finds_the_import_library(win) -> None:
+    """First Windows OpenCV run: 'LNK1104: cannot open file python314.lib'.  CPython's
+    headers pick the free-threaded layout and auto-link python314t.lib only when
+    Py_GIL_DISABLED is defined, and OpenCV's CMake does not define it."""
+    import os
+    env = win.opencv_build_env({'Path': 'C:/x', 'CL': '/MP', 'LIB': 'C:/msvc/lib'}, Path('C:/runtime/python'))
+    assert env['CL'].split()[0] == '/DPy_GIL_DISABLED=1' and '/MP' in env['CL']
+    assert env['LIB'].startswith(str(Path('C:/runtime/python') / 'libs') + os.pathsep)   # first: found before the SDK's
+    assert 'C:/msvc/lib' in env['LIB']
+    assert env['ENABLE_HEADLESS'] == '1'
+    assert '-DPYTHON3_LIBRARY=C:/runtime/python/libs/python314t.lib' in env['CMAKE_ARGS']
+    assert [k for k in env if k.upper() == 'PATH'] == ['PATH']
+
+
+def test_opencv_build_env_works_without_existing_cl_and_lib(win) -> None:
+    env = win.opencv_build_env({}, Path('/rt/python'))
+    assert env['CL'] == '/DPy_GIL_DISABLED=1'
