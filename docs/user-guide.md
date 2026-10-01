@@ -37,7 +37,7 @@ pysdl2-dll
 numpy
 scipy
 sounddevice >= 0.4
-opencv-python-headless >= 4.9  (camera overlay)
+opencv-python-headless >= 4.9  (optional — camera overlay and video clips; the app runs without it)
 python-rtmidi >= 1.5           (optional — MIDI control)
 Pillow                         (screenshots)
 ```

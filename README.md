@@ -255,7 +255,7 @@ Python packages:
 - `pysdl2`, `pysdl2-dll` — SDL2 bindings
 - `numpy`, `scipy` — Numerics & signal processing
 - `sounddevice >= 0.4` — Audio I/O
-- `opencv-python-headless >= 4.9` — Camera overlay
+- `opencv-python-headless >= 4.9` (optional) — Camera overlay and video clips
 - `python-rtmidi >= 1.5` (optional) — MIDI control
 - `Pillow` — Screenshots
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.184** — OpenCV is optional. `--self-test` reports a missing `cv2` as a warning instead of a failure, so a clean free-threaded Python install (where `opencv-python-headless` has no wheel yet) passes the install check; core never imported it, and the webcam and video-clips drop-ins already guard their imports.
 - **1.0.0-beta.183** — Startup now says which interpreter it is running and whether the GIL is on. On a free-threaded Python the main process logs one INFO line naming the modules that turned the GIL back on (expected for now: moderngl, glcontext, python-rtmidi) and a WARNING for any other; the audio helper logs a WARNING if its GIL is on, since it imports none of them. The audio helper has been run on free-threaded 3.14 with the GIL off (plan W1).
 - **1.0.0-beta.182** — Ctrl+C in a terminal shuts down cleanly (G3, 2026-09-30 audit): the audio and mixer helper processes ignore the terminal's group SIGINT and stop when the app tells them to, and a helper that is already gone no longer aborts teardown, so runtime state, webcam and relay state, MIDI close and GL/SDL teardown always run.
 - **1.0.0-beta.181** — `--effect-duration` works again: the built-in default was the int `60` while the flag parses a float, so every launch example using the flag failed config validation at startup (G1, 2026-09-30 audit). An integer `effect_duration` in config.toml is still accepted.

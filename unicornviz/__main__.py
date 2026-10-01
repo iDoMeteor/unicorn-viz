@@ -525,8 +525,14 @@ _SELF_TEST_MODULES: tuple[tuple[str, str], ...] = (
     ('rtmidi', 'MIDI'),
     ('PIL', 'images'),
     ('psutil', 'system monitor'),
-    ('cv2', 'camera / OpenCV'),
     ('soundfile', 'audio files'),
+)
+# Modules whose absence is reported as a warning, never a failure: only
+# drop-ins use them and each guards the import and disables itself.  cv2
+# (webcam-01, video-clips-01) has no wheel for free-threaded 3.14 and lags
+# on Windows, so a clean free-threaded install lacks it (plan W1).
+_SELF_TEST_OPTIONAL: tuple[tuple[str, str], ...] = (
+    ('cv2', 'camera / OpenCV: the webcam and video-clips features stay off without it'),
 )
 _SELF_TEST_ASSETS: tuple[str, ...] = (
     'assets/fonts/font8x16.bin',
@@ -566,6 +572,13 @@ def _self_test() -> int:
             print(f'  [FAIL] import {module} ({role}): {exc}')
         else:
             print(f'  [ok]   import {module} ({role})')
+    for module, role in _SELF_TEST_OPTIONAL:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:  # optional: warn, never fail
+            print(f'  [!!]   optional import {module} unavailable ({role}): {exc}')
+        else:
+            print(f'  [ok]   import {module} (optional: {role.split(":")[0]})')
     # Shipped drop-ins: report each one's declared extra dependencies. A missing
     # dependency does not fail the self-test (the drop-in degrades to disabled),
     # but it is exactly what a beta tester needs to see.
