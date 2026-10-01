@@ -115,8 +115,18 @@ silently die.
        Threads wheels (core beta.183; notes in
        [free-threaded-python-2026-09-24.md](free-threaded-python-2026-09-24.md) §8).
      - [x] GIL-status line in both processes (core beta.183).
-     - [ ] Dev `.venv` (plain 3.14.6 today) to 3.14t: parallel venv built,
-       switch-over proposal sent to the coordinator; not swapped.
+     - [x] cv2 optional in core (beta.184): `--self-test` warns instead of
+       failing. Drop-in follow-ups, in their own repos: webcam-01 logs the
+       missing cv2 at ERROR (should be one WARNING); video-clips-01 warns per
+       clip on every activation.
+     - [ ] Dev `.venv` (plain 3.14.6 today) to 3.14t: parallel venv built at
+       `~/Repos/unicorn-viz.venv-ft`, switch-over plan accepted (build in
+       place, symlink flip, rollback by repointing), **not swapped.**
+       Readiness gates: (1) 3.14t suite done, 2790 pass / 2 explained;
+       (3) symlink and hook chain done in a scratch copy; **(2) the A/B is
+       outstanding** and needs an idle machine
+       (`tools/profiling/ft_ab/drive.sh`). Details in
+       [free-threaded-python-2026-09-24.md](free-threaded-python-2026-09-24.md) §8.
      - Confirm `remote_objects` and the audio process under it. This is
        where free-threading pays off first: numpy, scipy, cffi and PyAV are
        all ready.

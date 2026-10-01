@@ -211,6 +211,93 @@ Whichever way it goes, suggested first steps:
   running app (see the 2026-09-24 perf pass) should come before and after
   any port.
 
+## 8. Core results and where we stopped (UV Core, 2026-09-30)
+
+Core beta.181-184 (G1, G3, GIL-status line, cv2 optional) landed alongside
+this work; the plan's W1.3 item tracks the rest.
+
+**Verified on the owner's box**
+
+- **Audio helper on 3.14t, GIL off.** Fedora `python3.14t` (3.14.7). The
+  repo's exact pins install as wheels: numpy 2.4.4, scipy 1.17.1,
+  sounddevice 0.5.5, soundfile 0.14.0, Pillow 12.3.0, psutil 7.2.2, PySDL2,
+  plus av, cffi and mutagen. Nothing the helper imports re-enables the GIL.
+  Core helper tests and dj-mixer-01's `test_audio_process.py` pass with every
+  helper forced onto it.
+- **Whole app on 3.14t.** With UV Threads' `cp314t` wheels (moderngl,
+  glcontext, python-rtmidi) in a parallel venv the full app starts and the
+  mixer engine joins the shared helper. Main logs `Interpreter: ... GIL
+  ENABLED (turned back on by moderngl.mgl)` at INFO, the helper logs `GIL
+  disabled`. SIGTERM and group SIGINT both shut it down cleanly.
+- **Only requirement without a 3.14t wheel: `opencv-python-headless`.** A strict
+  `--only-binary` install aborts on it. Core never imported it; the install
+  check now treats it as optional (beta.184).
+- **Full core suite on the 3.14t venv: 2790 passed, 2 failed.**
+  - `test_gc_tuning::test_a_frozen_heap_makes_full_collections_cheap`: after
+    `gc.freeze()` a full collection was not 5x cheaper (22 ms against 51 ms).
+    The free-threaded collector differs from the generational one; whoever
+    owns gc tuning should look before the main process runs on 3.14t. Not
+    changed here.
+  - `test_self_test::test_cli_flag_short_circuits_before_config`: runs
+    `python -m unicornviz` from a neutral directory. The dev `.venv` has an
+    editable install of the *main checkout*, so it passes there; the new
+    venv has none. Environment difference, not a 3.14t bug. The switch-over
+    builds the editable install in (step 1 below). The same editable install
+    means subprocess tests started from a neutral directory in a *seat*
+    exercise the main checkout's code, not the seat's.
+
+**Dev `.venv` switch-over: proposal accepted, not done.** Option B is
+recommended: the python-build-standalone 3.14.7 free-threaded build the
+installers ship (UV Threads' pin), so a bug that only shows on the bundle
+reproduces on the dev box. Fedora's `python3.14t` is the stopgap.
+
+1. Build the final venv in place at `~/Repos/unicorn-viz/.venv-ft` (add a
+   `.venv-*` line to `.gitignore`): requirements minus opencv, the three
+   wheelhouse wheels, an editable install of the checkout, and the hook
+   tools at the dev venv's versions (ruff 0.15.17, bandit 1.9.4,
+   pytest 9.0.3; a floating install gave ruff 0.16.9).
+2. Venvs are not relocatable, so flip a symlink: `mv .venv .venv-gil; ln -s
+   .venv-ft .venv`. Seats link to the main checkout's `.venv`, so they follow.
+3. Verify in one seat first: full suite, a live run, group Ctrl+C.
+4. Rollback: repoint the symlink at `.venv-gil`. Keep it for one release.
+
+**Readiness gates before asking the owner for a window**
+
+1. Full suite on 3.14t: **done**, above.
+2. A/B on the owner's rig, GIL venv vs 3.14t venv (frame time, helper CPU,
+   mixer UI ms): **not done.** Wheel builds on the machine held the load
+   average near 19, so nothing measured was usable. The harness is ready:
+   `GIL_PY=... FT_PY=<3.14t venv python> tools/profiling/ft_ab/drive.sh`
+   from a seat checkout, on an idle machine (load under 2), about ten minutes,
+   opens a 1920x1080 window and the mixer window each run, runs GIL, 3.14t,
+   GIL, 3.14t and prints the table. It uses its own config and runtime
+   store; it never writes `config.toml` or `runtime/`.
+3. Seat symlinks and hooks through the new chain: **done** in a scratch
+   copy of the chain (seat link, main link, `.venv-ft`). The interpreter,
+   numpy, scipy, sounddevice, ruff, bandit and pytest all resolve through
+   both links, and five of the six pre-commit hooks pass. The sixth, the
+   scoped pytest, failed only because the scratch clone has no drop-in
+   submodules. Re-check with the real hooks at the switch-over.
+
+**Harness lessons**
+
+- A background job from a non-interactive shell starts with SIGINT ignored,
+  and the app inherits that; stop test instances with SIGTERM to the main PID.
+- With `[ui] confirm_exit` on (the default), SIGTERM and Ctrl+C open the
+  "Quit Unicorn Viz?" box and wait for an answer. The A/B config turns it off.
+
+**cv2 follow-ups (drop-in repos, not changed here)**
+
+- webcam-01 logs "opencv-python-headless not installed" at ERROR from its
+  capture thread; one WARNING at startup that says the camera is off is the
+  right level.
+- video-clips-01 logs a probe warning per clip on every activation and then
+  shows nothing; one WARNING per activation, or leave the effect out of the
+  playlist when cv2 is absent.
+
+**First thing next session:** wait for an idle machine and run the A/B (gate
+2); report the table to the coordinator for the owner's go/no-go on the swap.
+
 ## Sources
 
 - [Python support for free threading (CPython docs)](https://docs.python.org/3/howto/free-threading-python.html)
