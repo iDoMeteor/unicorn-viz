@@ -61,7 +61,7 @@ jobs:
       # sha256 file committed in this repo before they go into the tarball. With
       # a wheelhouse/ inside, the installers choose the free-threaded runtime.
       - name: Fetch the verified cp314t wheelhouse
-        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+        run: tools/packaging/fetch_wheelhouse.sh --platform linux --dest "${RUNNER_TEMP}/wheelhouse"
 
       - name: Add the wheelhouse to the source tarball
         run: |
@@ -133,7 +133,7 @@ jobs:
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
       - name: Fetch the verified cp314t wheelhouse
-        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+        run: tools/packaging/fetch_wheelhouse.sh --platform linux --dest "${RUNNER_TEMP}/wheelhouse"
 
       - name: Build .deb
         env:
@@ -200,7 +200,7 @@ jobs:
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
       - name: Fetch the verified cp314t wheelhouse
-        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+        run: tools/packaging/fetch_wheelhouse.sh --platform linux --dest "${RUNNER_TEMP}/wheelhouse"
 
       - name: Build .rpm
         env:

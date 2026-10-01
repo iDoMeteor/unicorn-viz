@@ -141,7 +141,10 @@ mkdir -p "$DEST"
 #
 # Fallback path — no git (e.g. a tag tarball extracted in CI): tar the members
 # with explicit excludes for the same ignored trees.
-if git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# Only when SOURCE_DIR is itself the top of a git work tree: a source tree extracted
+# *inside* another checkout (CI unpacks the tag archive under the workflow's repo
+# checkout) is not tracked by that parent, and `git ls-files` would stage nothing.
+if [[ "$(git -C "$SOURCE_DIR" rev-parse --show-toplevel 2>/dev/null)" == "$SOURCE_DIR" ]]; then
   log "Source is a git checkout: staging tracked files only"
   untracked="$(git -C "$SOURCE_DIR" ls-files --others --exclude-standard -- "${INCLUDE[@]}" | wc -l)"
   if [[ "$untracked" -gt 0 ]]; then

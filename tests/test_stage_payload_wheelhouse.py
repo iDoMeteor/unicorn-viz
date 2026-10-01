@@ -73,3 +73,15 @@ def test_a_checksum_mismatch_blocks_staging(tmp_path: Path) -> None:
     proc = _stage(tmp_path, _wheelhouse(tmp_path, [_LIN], bad=_LIN))
     assert proc.returncode != 0
     assert 'checksum mismatch' in proc.stderr
+
+
+def test_source_nested_in_another_checkout_is_not_mistaken_for_one(tmp_path: Path) -> None:
+    # CI unpacks the tag archive *inside* the workflow's own git checkout. The
+    # parent repo tracks none of it, so `git ls-files` there would stage nothing.
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True, env=env)
+    wh = _wheelhouse(tmp_path, [_LIN])
+    proc = _stage(tmp_path, wh)
+    assert proc.returncode == 0, proc.stderr
+    assert (tmp_path / 'out' / 'unicornviz').is_dir()
+    assert 'Source is not a git checkout' in proc.stderr  # took the tar fallback

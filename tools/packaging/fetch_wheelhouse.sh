@@ -19,6 +19,8 @@
 # Options:
 #   --dest <dir>      Where to put the wheels (required)
 #   --trust <file>    Trust file (default: wheelhouse-cp314t.sha256 beside this script)
+#   --platform <p>    linux | windows | all (default all): only wheels for that platform are
+#                     downloaded (a Linux tarball does not need the Windows OpenCV wheel)
 #   --repo <o/n>      GitHub repository (default: $GITHUB_REPOSITORY, else iDoMeteor/unicorn-viz)
 #   --base-url <url>  Override the download base (tests): <url>/<tag>/<file>
 #   -h, --help
@@ -30,6 +32,7 @@ DEST=""
 TRUST="${SCRIPT_DIR}/wheelhouse-cp314t.sha256"
 REPO="${GITHUB_REPOSITORY:-iDoMeteor/unicorn-viz}"
 BASE_URL=""
+PLATFORM="all"
 
 log() { echo "[fetch-wheelhouse] $*" >&2; }
 die() { echo "[fetch-wheelhouse] ERROR: $*" >&2; exit 1; }
@@ -40,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --dest) DEST="$2"; shift 2 ;;
     --trust) TRUST="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
+    --platform) PLATFORM="$2"; shift 2 ;;
     --base-url) BASE_URL="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -65,6 +69,11 @@ while IFS= read -r line; do
   [[ "$want" =~ ^[0-9a-f]{64}$ ]] || die "bad checksum line in ${TRUST}: ${line}"
   [[ "$name" == *.whl && "$name" != */* ]] || die "bad wheel name in ${TRUST}: ${name}"
   [[ -n "$tag" ]] || die "no '# release-tag:' line before ${name} in ${TRUST}"
+  case "${PLATFORM}:${name}" in
+    all:*|linux:*manylinux*|windows:*win_amd64*) ;;
+    linux:*|windows:*) continue ;;
+    *) die "--platform must be linux, windows or all (got '${PLATFORM}')" ;;
+  esac
 
   out="${DEST}/${name}"
   log "fetching ${name} (${tag})"

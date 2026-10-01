@@ -91,3 +91,17 @@ def test_committed_trust_file_is_well_formed() -> None:
     for ln in lines:
         sha, name = ln.split()
         assert len(sha) == 64 and name.endswith('.whl') and 'cp314t' in name
+
+
+def test_platform_filter_downloads_only_that_platforms_wheels(tmp_path: Path) -> None:
+    files = {'a-1-cp314-cp314t-manylinux_2_28_x86_64.whl': b'lin', 'a-1-cp314-cp314t-win_amd64.whl': b'win'}
+    serve = _serve(tmp_path, files)
+    trust = _trust(tmp_path, files)
+    proc = subprocess.run(
+        ['bash', str(_SCRIPT), '--dest', str(tmp_path / 'wh'), '--trust', str(trust),
+         '--base-url', f'file://{serve}', '--platform', 'linux'],
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert {p.name for p in (tmp_path / 'wh').glob('*.whl')} == {'a-1-cp314-cp314t-manylinux_2_28_x86_64.whl'}
+    assert (tmp_path / 'wh' / 'SHA256SUMS').read_text().count('.whl') == 1
