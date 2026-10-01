@@ -351,9 +351,11 @@ text is `3rdparty/ffmpeg/license.txt` in the OpenCV tree.
 
 **Gaps to close before the release notes are final**
 
-- The OpenCV wheel's own `LICENSE-3RD-PARTY.txt` covers FFmpeg and libvpx but
-  does **not** mention libdrm (MIT), which the Linux wheel also vendors; cite it
-  separately.
+- ~~The OpenCV wheel's own `LICENSE-3RD-PARTY.txt` does not mention libdrm.~~
+  **Done 2026-10-01:** the vendored `libdrm-b0291a67.so.2.4.0` is libdrm
+  2.4.115 (`libdrm-2.4.115-2.el8.x86_64`, matched by ELF build-id); its verbatim
+  license headers are in
+  [`docs/third-party/libdrm-2.4.115-NOTICE.txt`](../third-party/libdrm-2.4.115-NOTICE.txt).
 - LGPL source availability: FFmpeg and libvpx sources are the pinned tarball
   and commit above (public, hash-verified). The note should say so.
 - ~~sphn's statically linked Rust crates were not audited.~~ **Done 2026-10-01:**

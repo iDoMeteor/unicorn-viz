@@ -256,6 +256,25 @@ class _ShmExporter:
     existing mapping outlives the unlink on POSIX).  Arrays *adopted* up
     front (:func:`adopt_array`) already live in a segment, so publishing
     them copies nothing.
+
+    An adopted array is the owner's own working buffer, so its segment is
+    only unmapped once the array object itself has been garbage collected.
+    Numpy does not stop ``SharedMemory.close()`` from succeeding while a
+    view exists, and a helper thread still reading a deck's old track or
+    stems after the swap would read unmapped memory: the 2026-10-01
+    segfault (exit -11, ``memmove`` in a fancy-index copy beside
+    ``mmap.close()``).  A published *copy* has no such reader and is
+    unmapped on schedule.
+
+    What counts as "still referenced" (verified, tests/test_remote_objects.py):
+    the array itself, slices, reshapes and transposes (their ``.base`` chain),
+    ``np.frombuffer``/``memoryview``/``.data`` over it, and a ``.ctypes``
+    object.  What does not: a bare integer address (``arr.ctypes.data``) and
+    copies (safe, they own their memory).  No code in the helper keeps a raw
+    address of an adopted array (audited 2026-10-01: the deck, stems and
+    sampler readers all go through Python references; the audio callback
+    only writes its own output buffer), and a source-scan test keeps it so.
+    Do not stash ``.ctypes.data`` of a deck or sampler array.
     """
 
     GRACE_S = 2.0
@@ -265,7 +284,9 @@ class _ShmExporter:
 
     def __init__(self) -> None:
         self._live: dict[int, tuple[Any, tuple, Any]] = {}   # id -> (arr, ref, shm)
-        self._retired: list[tuple[float, Any]] = []
+        # (deadline, segment, weakref to the owner's array or None)
+        self._retired: list[tuple[float, Any, weakref.ref | None]] = []
+        self._adopted: set[int] = set()     # ids of arrays that are the owner's buffer
         self._lock = threading.Lock()
         self._touched: set[int] = set()     # shared since the last retire pass
 
@@ -297,6 +318,7 @@ class _ShmExporter:
         view[...] = src
         with self._lock:
             self._live[id(view)] = (view, (shm.name, src.shape, src.dtype.str), shm)
+            self._adopted.add(id(view))
             self._touched.add(id(view))       # not retired before its first publish
         return view
 
@@ -309,23 +331,31 @@ class _ShmExporter:
         in_use = in_use | self._touched
         self._touched = set()
         for key in [k for k in self._live if k not in in_use]:
-            _, _, shm = self._live.pop(key)
-            self._retired.append((now + self.GRACE_S, shm))
+            entry = self._live.pop(key)
+            owner = weakref.ref(entry[0]) if key in self._adopted else None
+            self._adopted.discard(key)
+            self._retired.append((now + self.GRACE_S, entry[2], owner))
+            del entry                        # no strong reference may outlive this
         keep = []
-        for deadline, shm in self._retired:
-            if deadline <= now:
-                _close_shm(shm, unlink=True)
+        for deadline, shm, owner in self._retired:
+            if deadline > now:
+                keep.append((deadline, shm, owner))
+            elif owner is not None and owner() is not None:
+                # Still referenced by the helper (a loader or analysis thread
+                # reading the old array): re-check after another grace period.
+                keep.append((now + self.GRACE_S, shm, owner))
             else:
-                keep.append((deadline, shm))
+                _close_shm(shm, unlink=True)
         self._retired = keep
 
     def close(self) -> None:
         for _, _, shm in self._live.values():
             _close_shm(shm, unlink=True)
-        for _, shm in self._retired:
+        for _, shm, _ in self._retired:
             _close_shm(shm, unlink=True)
         self._live.clear()
         self._retired.clear()
+        self._adopted.clear()
 
 
 def adopt_array(arr: Any) -> Any:

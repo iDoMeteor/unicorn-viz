@@ -1,0 +1,475 @@
+libdrm 2.4.115 -- license notice for the copy vendored in the opencv-python-headless cp314t wheel
+Owner: UV Threads   Last updated: 2026-10-01
+
+WHAT THIS COVERS
+The Linux opencv_python_headless-4.13.0.92-cp314-cp314t-manylinux_2_28_x86_64.whl
+contains opencv_python_headless.libs/libdrm-b0291a67.so.2.4.0.  auditwheel copied it
+from the manylinux_2_28 build image (AlmaLinux 8) because FFmpeg links against it.
+
+IDENTIFICATION
+  Vendored file    libdrm-b0291a67.so.2.4.0   (auditwheel's renamed copy of libdrm.so.2.4.0)
+  ELF build-id     025ba6ec5e70d7e13c515d915d8ecfcf6fcf36df   (identical in the vendored file and
+                   in /usr/lib64/libdrm.so.2.4.0 of the build image, so it is that exact library)
+  Package          libdrm-2.4.115-2.el8.x86_64   (AlmaLinux 8; RPM header "License: MIT")
+  Upstream         libdrm 2.4.115, https://dri.freedesktop.org
+  Source RPM       libdrm-2.4.115-2.el8.src.rpm   sha256 263d4053cbfcce2df8dc255ccc35303c1c7bac8e9dd281f3dee300de7d556251
+  Upstream tarball libdrm-2.4.115.tar.xz (inside that source RPM)   sha256 554cfbfe0542bddb391b4e3e05bfbbfc3e282b955bd56218d21c0616481f65eb
+  Binary RPM       libdrm-2.4.115-2.el8.x86_64.rpm   sha256 58b2a9de8e0a1f6ec8efe10022495db912bc12694a0c70566296d765b4a3e9e9
+  Source           the tarball above is the complete corresponding source; libdrm is MIT-licensed
+                   (permissive), so there is no source-offer obligation, but it is cited for completeness.
+
+WHERE THE LICENSE TEXT COMES FROM
+Neither the RPM (its file list has no license or doc entries; `rpm -qL` is empty) nor the
+upstream tarball ships a separate license file: libdrm puts the MIT license in the header
+comment of each source file, with a different copyright holder per file group.  So no
+license file exists on disk in the build image either.  The text below is therefore taken VERBATIM
+(comment delimiters and all) from the header of every file that Makefile.sources lists in
+LIBDRM_FILES (the sources compiled into libdrm.so) plus the two public headers they
+include, xf86drm.h and xf86drmMode.h.  All 14 carry the permission notice; they form the
+12 distinct texts below (files with identical text are grouped).
+
+==============================================================================
+[1 of 12]  xf86drm.c
+==============================================================================
+/*
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
+
+==============================================================================
+[2 of 12]  xf86drm.h
+==============================================================================
+/*
+ * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ */
+
+==============================================================================
+[3 of 12]  xf86drmHash.c
+==============================================================================
+/* xf86drmHash.c -- Small hash table support for integer -> integer mapping
+ * Created: Sun Apr 18 09:35:45 1999 by faith@precisioninsight.com
+ *
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: Rickard E. (Rik) Faith <faith@valinux.com>
+ *
+ * DESCRIPTION
+ *
+ * This file contains a straightforward implementation of a fixed-sized
+ * hash table using self-organizing linked lists [Knuth73, pp. 398-399] for
+ * collision resolution.  There are two potentially interesting things
+ * about this implementation:
+ *
+ * 1) The table is power-of-two sized.  Prime sized tables are more
+ * traditional, but do not have a significant advantage over power-of-two
+ * sized table, especially when double hashing is not used for collision
+ * resolution.
+ *
+ * 2) The hash computation uses a table of random integers [Hanson97,
+ * pp. 39-41].
+ *
+ * FUTURE ENHANCEMENTS
+ *
+ * With a table size of 512, the current implementation is sufficient for a
+ * few hundred keys.  Since this is well above the expected size of the
+ * tables for which this implementation was designed, the implementation of
+ * dynamic hash tables was postponed until the need arises.  A common (and
+ * naive) approach to dynamic hash table implementation simply creates a
+ * new hash table when necessary, rehashes all the data into the new table,
+ * and destroys the old table.  The approach in [Larson88] is superior in
+ * two ways: 1) only a portion of the table is expanded when needed,
+ * distributing the expansion cost over several insertions, and 2) portions
+ * of the table can be locked, enabling a scalable thread-safe
+ * implementation.
+ *
+ * REFERENCES
+ *
+ * [Hanson97] David R. Hanson.  C Interfaces and Implementations:
+ * Techniques for Creating Reusable Software.  Reading, Massachusetts:
+ * Addison-Wesley, 1997.
+ *
+ * [Knuth73] Donald E. Knuth. The Art of Computer Programming.  Volume 3:
+ * Sorting and Searching.  Reading, Massachusetts: Addison-Wesley, 1973.
+ *
+ * [Larson88] Per-Ake Larson. "Dynamic Hash Tables".  CACM 31(4), April
+ * 1988, pp. 446-457.
+ *
+ */
+
+==============================================================================
+[4 of 12]  xf86drmHash.h, xf86drmRandom.h
+==============================================================================
+/*
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: Rickard E. (Rik) Faith <faith@valinux.com>
+ */
+
+==============================================================================
+[5 of 12]  xf86drmRandom.c
+==============================================================================
+/* xf86drmRandom.c -- "Minimal Standard" PRNG Implementation
+ * Created: Mon Apr 19 08:28:13 1999 by faith@precisioninsight.com
+ *
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ * 
+ * Authors: Rickard E. (Rik) Faith <faith@valinux.com>
+ *
+ * DESCRIPTION
+ *
+ * This file contains a simple, straightforward implementation of the Park
+ * & Miller "Minimal Standard" PRNG [PM88, PMS93], which is a Lehmer
+ * multiplicative linear congruential generator (MLCG) with a period of
+ * 2^31-1.
+ *
+ * This implementation is intended to provide a reliable, portable PRNG
+ * that is suitable for testing a hash table implementation and for
+ * implementing skip lists.
+ *
+ * FUTURE ENHANCEMENTS
+ *
+ * If initial seeds are not selected randomly, two instances of the PRNG
+ * can be correlated.  [Knuth81, pp. 32-33] describes a shuffling technique
+ * that can eliminate this problem.
+ *
+ * If PRNGs are used for simulation, the period of the current
+ * implementation may be too short.  [LE88] discusses methods of combining
+ * MLCGs to produce much longer periods, and suggests some alternative
+ * values for A and M.  [LE90 and Sch92] also provide information on
+ * long-period PRNGs.
+ *
+ * REFERENCES
+ *
+ * [Knuth81] Donald E. Knuth. The Art of Computer Programming.  Volume 2:
+ * Seminumerical Algorithms.  Reading, Massachusetts: Addison-Wesley, 1981.
+ *
+ * [LE88] Pierre L'Ecuyer. "Efficient and Portable Combined Random Number
+ * Generators".  CACM 31(6), June 1988, pp. 742-774.
+ *
+ * [LE90] Pierre L'Ecuyer. "Random Numbers for Simulation". CACM 33(10,
+ * October 1990, pp. 85-97.
+ *
+ * [PM88] Stephen K. Park and Keith W. Miller. "Random Number Generators:
+ * Good Ones are Hard to Find". CACM 31(10), October 1988, pp. 1192-1201.
+ *
+ * [Sch92] Bruce Schneier. "Pseudo-Ransom Sequence Generator for 32-Bit
+ * CPUs".  Dr. Dobb's Journal 17(2), February 1992, pp. 34, 37-38, 40.
+ *
+ * [PMS93] Stephen K. Park, Keith W. Miller, and Paul K. Stockmeyer.  In
+ * "Technical Correspondence: Remarks on Choosing and Implementing Random
+ * Number Generators". CACM 36(7), July 1993, pp. 105-110.
+ *
+ */
+
+==============================================================================
+[6 of 12]  xf86drmSL.c
+==============================================================================
+/* xf86drmSL.c -- Skip list support
+ * Created: Mon May 10 09:28:13 1999 by faith@precisioninsight.com
+ *
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * PRECISION INSIGHT AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ * 
+ * Authors: Rickard E. (Rik) Faith <faith@valinux.com>
+ *
+ * DESCRIPTION
+ *
+ * This file contains a straightforward skip list implementation.n
+ *
+ * FUTURE ENHANCEMENTS
+ *
+ * REFERENCES
+ *
+ * [Pugh90] William Pugh.  Skip Lists: A Probabilistic Alternative to
+ * Balanced Trees. CACM 33(6), June 1990, pp. 668-676.
+ *
+ */
+
+==============================================================================
+[7 of 12]  xf86drmMode.c, xf86drmMode.h
+==============================================================================
+/*
+ * Copyright (c) 2007-2008 Tungsten Graphics, Inc., Cedar Park, Texas.
+ * Copyright (c) 2007-2008 Dave Airlie <airlied@linux.ie>
+ * Copyright (c) 2007-2008 Jakob Bornecrantz <wallbraker@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
+==============================================================================
+[8 of 12]  xf86atomic.h
+==============================================================================
+/*
+ * Copyright © 2009 Intel Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * Authors:
+ *    Chris Wilson <chris@chris-wilson.co.uk>
+ *
+ */
+
+==============================================================================
+[9 of 12]  libdrm_macros.h
+==============================================================================
+/*
+ * Copyright © 2014 NVIDIA Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+==============================================================================
+[10 of 12]  libdrm_lists.h
+==============================================================================
+/**************************************************************************
+ *
+ * Copyright 2006 Tungsten Graphics, Inc., Bismarck, ND. USA.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sub license, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * The above copyright notice and this permission notice (including the
+ * next paragraph) shall be included in all copies or substantial portions
+ * of the Software.
+ */
+
+==============================================================================
+[11 of 12]  util_double_list.h
+==============================================================================
+/*
+ *
+ * Copyright 2006 Tungsten Graphics, Inc., Bismarck, ND. USA.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sub license, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * The above copyright notice and this permission notice (including the
+ * next paragraph) shall be included in all copies or substantial portions
+ * of the Software.
+ *
+ */
+
+==============================================================================
+[12 of 12]  util_math.h
+==============================================================================
+/*
+ * Copyright 2014 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+*/
