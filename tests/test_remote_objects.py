@@ -248,3 +248,106 @@ def test_helper_ignores_sigint_and_stops_on_request(pair) -> None:
     assert _until(lambda: 2.0 in a.cues)
     host.close()
     assert host.proc.wait(timeout=5.0) == 0
+
+
+# --- shared-memory retirement must not unmap an array that is still alive ---
+# 2026-10-01 loaded A/B: the audio helper segfaulted (exit -11) while loading
+# tracks, on both the GIL and the 3.14t interpreter.  Core dump: a worker
+# thread inside numpy's fancy-index copy while another thread was in
+# mmap.close() -> munmap.  _ShmExporter.adopt() puts a deck's arrays in
+# SharedMemory; retire_unused() unmapped a segment 2 s after its array left the
+# published state, but numpy does not stop SharedMemory.close() from
+# succeeding, so a thread still reading the (adopted) array read unmapped memory.
+
+def _exporter(monkeypatch):
+    import numpy as np  # noqa: PLC0415
+    closed: list = []
+    monkeypatch.setattr(ro, '_close_shm', lambda shm, unlink: closed.append(shm.name))
+    ex = ro._ShmExporter()
+    ex.GRACE_S = 0.0
+    return np, ex, closed
+
+
+def test_a_retired_adopted_segment_is_not_unmapped_while_its_array_is_alive(monkeypatch) -> None:
+    import gc  # noqa: PLC0415
+    np, ex, closed = _exporter(monkeypatch)
+    view = ex.adopt(np.zeros(100_000, np.float32))
+    ex.retire_unused(set())                 # first pass: not retired before its first publish
+    ex.retire_unused(set())                 # no longer in use: retired, grace already over
+    ex.retire_unused(set())
+    assert closed == []                     # a reader may still hold ``view``
+    assert float(view.sum()) == 0.0         # still mapped: this read must not fault
+    del view
+    gc.collect()
+    ex.retire_unused(set())
+    assert len(closed) == 1                 # nobody holds it any more: unmapped
+
+
+def test_a_slice_keeps_the_adopted_segment_mapped(monkeypatch) -> None:
+    import gc  # noqa: PLC0415
+    np, ex, closed = _exporter(monkeypatch)
+    view = ex.adopt(np.arange(10_000, dtype=np.float32))
+    part = view[100:200]                    # e.g. a deck's playhead window
+    ex.retire_unused(set())
+    ex.retire_unused(set())
+    del view
+    gc.collect()
+    ex.retire_unused(set())
+    assert closed == []                     # the slice's base chain keeps the view alive
+    assert float(part[0]) == 100.0
+    del part
+    gc.collect()
+    ex.retire_unused(set())
+    assert len(closed) == 1
+
+
+def test_a_published_copy_is_still_unmapped_on_schedule(monkeypatch) -> None:
+    np, ex, closed = _exporter(monkeypatch)
+    source = np.zeros(100_000, np.float32)  # not adopted: the exporter holds a private copy
+    ex.share(source)
+    ex.retire_unused(set())
+    ex.retire_unused(set())
+    assert len(closed) == 1                 # closing is safe, the owner's array is elsewhere
+
+
+@pytest.mark.parametrize('name', ['slice', 'reshape_transpose', 'frombuffer', 'memoryview',
+                                  'data', 'ctypes_object'])
+def test_every_normal_way_of_holding_an_adopted_array_keeps_it_mapped(monkeypatch, name) -> None:
+    import gc  # noqa: PLC0415
+    np, ex, closed = _exporter(monkeypatch)
+    view = ex.adopt(np.arange(1000, dtype=np.float32))
+    holder = {
+        'slice': lambda v: v[10:20],
+        'reshape_transpose': lambda v: v.reshape(10, 100).T,
+        'frombuffer': lambda v: np.frombuffer(v, np.uint8),
+        'memoryview': lambda v: memoryview(v),
+        'data': lambda v: v.data,
+        'ctypes_object': lambda v: v.ctypes,
+    }[name](view)
+    del view
+    ex.retire_unused(set())
+    ex.retire_unused(set())
+    gc.collect()
+    ex.retire_unused(set())
+    assert closed == [], f'{name} did not keep the segment mapped'
+    del holder
+    gc.collect()
+    ex.retire_unused(set())
+    assert len(closed) == 1
+
+
+def test_no_helper_code_keeps_a_raw_address_of_an_array() -> None:
+    """A bare ``arr.ctypes.data`` integer is the one reference the retirement
+    gate cannot see.  None of the helper-side code may use it."""
+    root = Path(__file__).resolve().parents[1]
+    offenders = []
+    # The helper loads core's audio package and the mixer engine; gpu2d is
+    # main-process GL upload code and never sees an adopted array.
+    for base in (root / 'unicornviz' / 'audio', root / 'drop-ins' / 'dj-mixer-01'):
+        for path in base.rglob('*.py'):
+            if 'tests' in path.parts:
+                continue
+            text = path.read_text(encoding='utf-8', errors='replace')
+            if '.ctypes.data' in text or 'data_as(' in text or '__array_interface__' in text:
+                offenders.append(str(path.relative_to(root)))
+    assert not offenders, f'raw array address escapes the shared-memory gate: {offenders}'
