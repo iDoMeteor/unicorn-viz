@@ -15,3 +15,11 @@
 788d8b4298a1793a8657c42977c487b1c06990e33332a72dc0768d747fd18a45  opencv_python_headless-4.13.0.92-cp314-cp314t-manylinux_2_28_x86_64.whl
 1455c961b05ac62304996ffa8b19ca7bf81be8848cbc73080a38a75d99580851  python_rtmidi-1.5.8-1-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
 295b053a04d5ed7e453192636285c8a4cbf0931823973104327fa681f77a85c2  sphn-0.2.1-cp314-cp314t-manylinux_2_28_x86_64.whl
+#
+# Windows x86-64 wheels (separate release: the first release's SHA256SUMS is append-only)
+# release-tag: wheelhouse-cp314t-win-2026-10-01
+049625e8ef534d91dbe962548a61b6b826cda912b9956ff53fb77cfd4922f442  glcontext-3.0.0-cp314-cp314t-win_amd64.whl
+9cb8324857ac892157b6c3ba9b6f21d81844e88e842f369f6ec1beee7c74f26d  moderngl-5.12.0-cp314-cp314t-win_amd64.whl
+89fdd55485c6eea87a5c8c28c1b076f192262f21102d965f6d3dd55065b2f1ec  opencv_python_headless-4.13.0.92-cp314-cp314t-win_amd64.whl
+0a77eb3f6fe96faff22c06c4e26dd9f91792b260ccd956ab2d557363e5f65846  python_rtmidi-1.5.8-1-cp314-cp314t-win_amd64.whl
+f1a5ab5c22569b1020578e9a102d8d574bafd815d205fe1f43c46f8124f3266f  sphn-0.2.1-cp314-cp314t-win_amd64.whl
