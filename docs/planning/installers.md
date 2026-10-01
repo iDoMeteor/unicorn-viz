@@ -1376,8 +1376,9 @@ constraints, stated plainly:
        repacked with `wheelhouse/` and before `build_native.sh`
        (`UV_WHEELHOUSE`); trust anchor is the committed
        `tools/packaging/wheelhouse-cp314t.sha256`, never the release's own
-       sums. A manual dispatch is now a dry run (`version`, `source_ref`
-       inputs; publish still only on a `v*.*.*` tag). Windows wheels: append
+       sums. (A dry-run dispatch mode for the workflow was written and withdrawn
+       pending owner approval; the fetch is not yet exercised in CI until the
+       first `v*.*.*` tag.) Windows wheels: append
        lines (and a new `# release-tag:`) to the trust file when they exist.
     5. *(2026-10-01)* Linux installers install **CPU-only torch/torchaudio**
        before demucs (`uv_preinstall_cpu_torch`, PyTorch CPU index, cp314t
