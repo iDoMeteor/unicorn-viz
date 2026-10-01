@@ -63,6 +63,16 @@ add the short hash.
     `tests/test_shm_retire_stress.py`. The coordinator verified the
     pre-fix code exits -11 under it.
 
+## After W1 — library scale (owner: start after W1, but pause for discussion first)
+
+- [ ] **SQLite library stores:** dj-mixer-01 upcoming-work item **O** (track
+  store; the harder case, ~20k records / 16 MB rewritten in full on every
+  backup rotation), then media-01 item **A** (the same design ported).
+  - Motivation: huge-library problems, plus the free-threaded GC finding.
+    On 3.14t every gen-2 pass walks the whole long-lived heap (15–20 ms
+    today), and the library is most of that heap.
+  - **Pause for an owner discussion before any work starts.**
+
 ## Wave 2 — show-breakers
 
 - [ ] **U1** Mixer-only boot profile takes no input. [mixer + core]
@@ -227,6 +237,8 @@ silently die.
      build scripts by UV Threads). This approval covers this build only. If
      it fails, fall back to a Windows **3.13 (GIL)** interim. Every
      dependency has a cp313 Windows wheel except python-rtmidi.
+   - **Release-installers dispatch inputs** (2026-10-01): green-lit (manual
+     `version` and `source_ref` for dry runs; publishing stays tag-gated).
    - **Wheels for CI-built artifacts** (2026-10-01): publish the cp314t
      wheels as a **GitHub release asset** under a dedicated non-version tag.
      The installer-building workflows fetch them and verify them against a
