@@ -286,6 +286,28 @@ reproduces on the dev box. Fedora's `python3.14t` is the stopgap.
 - With `[ui] confirm_exit` on (the default), SIGTERM and Ctrl+C open the
   "Quit Unicorn Viz?" box and wait for an answer. The A/B config turns it off.
 
+**GC on 3.14t (2026-10-01).** Full-collection cost (median of 5, dict-with-list
+objects), before and after `gc.freeze()` at 200k / 1M / 2M objects:
+
+| build | before | after freeze | +20k new objects |
+|---|---|---|---|
+| 3.14.6 GIL | 18 / 87 / 175 ms | 0.0 / 0.0 / 0.0 ms | 0.8 ms |
+| 3.14.7t | 8.7 / 42 / 84 ms | 4.3 / 21 / 41 ms | 5 / 27 / 43 ms |
+
+The free-threaded collector is not generational, so every automatic pass is
+full and a frozen heap's pages are still walked: freeze halves the pass, it
+does not remove it. `test_gc_tuning` now asserts per build (GIL: `after <
+before/5`; free-threaded: at least 1.5x cheaper), keyed on
+`Py_GIL_DISABLED`, not `sys._is_gil_enabled()`, because the main process
+re-enables the GIL at runtime but keeps the free-threaded collector.
+`gc_tuning.GcPauseMonitor` (installed after the startup freeze) logs
+collections over 15 ms at WARNING and a DEBUG summary per minute; overhead
+measured at +0.8 us per collection on the GIL build and +86 us on 3.14t
+(against a 585 us pass on an empty heap). Open options if a live 3.14t
+session shows real hitching: raise thresholds or disable automatic
+collection and collect at safe points, or shrink the long-lived heap (the
+mixer library; see the SQLite store items in the mixer and media planning docs).
+
 **cv2 follow-ups (drop-in repos, not changed here)**
 
 - webcam-01 logs "opencv-python-headless not installed" at ERROR from its

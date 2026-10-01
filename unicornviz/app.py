@@ -29,7 +29,7 @@ from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
-from unicornviz.gc_tuning import freeze_heap
+from unicornviz.gc_tuning import freeze_heap, install_gc_pause_monitor
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
 from unicornviz.overlays import Overlays
@@ -6672,6 +6672,7 @@ void main() {
         # frames (see gc_tuning).  The one collection here runs before the
         # first frame, where a pause is harmless.
         freeze_heap('startup', collect=True)
+        install_gc_pause_monitor()   # after the startup collect, which is meant to be slow
         self._running = True
         # First-run tour: offered on the first-ever launch (missing state key)
         # and on every startup until its show-on-startup toggle is unchecked.
