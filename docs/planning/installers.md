@@ -1357,9 +1357,13 @@ constraints, stated plainly:
        `build_windows_portable.sh` to `ft` by default, build and verify the
        Windows bundle on the owner's machine.
     3. Finish the Linux clean-install check: launch the app, load a mixer
-       track, confirm the GIL-state log line. demucs on Linux 3.14t is still
-       blocked on sphn (the Windows job builds it; a Linux manylinux build is
-       the same recipe), or the mixer's `stems_python` can point at a second,
+       track, confirm the GIL-state log line. UV Threads' Linux cp314t `sphn`
+       wheel landed in the wheelhouse after this entry's demucs probe, so
+       re-run the dj-mixer-01 requirements install (`uv_pip_install_optional`
+       against `drop-ins/dj-mixer-01/requirements.txt`, wheelhouse on
+       `--find-links`; it pulls ~2 GB of CUDA torch wheels, pip cache in
+       `/var/tmp/uv-install-clean/pipcache` if still present): demucs should
+       now install. Otherwise the mixer's `stems_python` can point at a second,
        GIL interpreter.
     4. Owner decision: how CI release builds get the wheelhouse.
     5. Drop-in owners: dj-mixer-01 should declare hidapi and send2trash (or use
