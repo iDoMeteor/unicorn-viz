@@ -410,4 +410,8 @@ pointers and the verbatim license texts are in
 LGPL was confirmed from OpenCV's readme, from the published build recipe, and
 from the DLL itself (embedded configure string and license strings), not
 assumed. Other bundled DLLs: none expected beyond that plugin and the module;
-verify against the built wheel.
+verify against the built wheel. The first Windows build's plugin was confirmed to
+be `cv2/opencv_videoio_ffmpeg4130_64.dll`. The smoke test decodes the checked-in
+fixture clips (`tools/packaging/ft-fixtures/`: H.264 `.mp4` and VP9 `.webm`, 20
+frames each, a bar whose position encodes the frame number), in order and after
+seeks, on Windows and Linux alike, because the CI runner has no system ffmpeg.

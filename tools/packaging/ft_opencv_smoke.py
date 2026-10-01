@@ -35,6 +35,11 @@ import threading
 from pathlib import Path
 
 W, H, FRAMES, FPS = 160, 120, 20, 10
+#: Checked-in tiny H.264 and VP9 clips (see ft-fixtures/README.md).  Frame N has a bright
+#: bar whose centre is at x = BAR_STEP * N + BAR_WIDTH // 2, so the frame is identifiable.
+FIXTURE_DIR = Path(__file__).resolve().parent / 'ft-fixtures'
+FIXTURE_NAMES = ('h264.mp4', 'vp9.webm')
+BAR_STEP, BAR_WIDTH, BAR_TOLERANCE_PX = 7, 16, 4.0
 #: Vendored libraries that would mean a GPL or non-free FFmpeg build.
 FORBIDDEN_LIBS = ('libx264', 'libx265', 'libfdk', 'libxvid', 'libpostproc', 'libswresample-gpl')
 
@@ -126,6 +131,56 @@ def _check_clip(cv2, path: Path) -> list[str]:
     return problems
 
 
+def _bar_centre(frame) -> float:
+    """Centre column of the bright bar in a decoded fixture frame (nan if there is none)."""
+    import numpy as np
+    col = frame.astype(np.float32).mean(axis=(0, 2))            # mean brightness per column
+    weight = np.clip(col - (col.max() + col.min()) / 2, 0, None)  # only the bar's columns
+    total = float(weight.sum())
+    return float((weight * np.arange(len(weight))).sum() / total) if total > 0 else float('nan')
+
+
+def _check_fixture(cv2, path: Path) -> list[str]:
+    """Decode a checked-in fixture and assert what a correct decoder must produce: all
+    20 frames, 160x120, each non-blank with its bar at the position that frame number
+    encodes (so frames are neither dropped nor reordered), and the same after seeking
+    by frame index, which is what video-clips-01 does when a clip loops."""
+    problems: list[str] = []
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        return [f'{path.name}: VideoCapture could not open it']
+
+    def expected(n: int) -> float:
+        return BAR_STEP * n + BAR_WIDTH // 2
+
+    frames = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if frame.shape != (H, W, 3):
+            problems.append(f'{path.name}: frame {frames} has shape {frame.shape}')
+        elif float(frame.std()) < 5:
+            problems.append(f'{path.name}: frame {frames} is blank')
+        else:
+            err = abs(_bar_centre(frame) - expected(frames))
+            if not err <= BAR_TOLERANCE_PX:
+                problems.append(f'{path.name}: frame {frames}: bar is {err:.1f} px from where it should be')
+        frames += 1
+    if frames != FRAMES:
+        problems.append(f'{path.name}: decoded {frames} frames, expected {FRAMES}')
+    for target in (0, 10, FRAMES - 1, 5):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+        ok, frame = cap.read()
+        if not ok:
+            problems.append(f'{path.name}: seek to frame {target} returned nothing')
+        elif not abs(_bar_centre(frame) - expected(target)) <= BAR_TOLERANCE_PX:
+            problems.append(f'{path.name}: seek to frame {target} landed on the wrong frame (bar at '
+                            f'{_bar_centre(frame):.0f}, expected {expected(target)})')
+    cap.release()
+    return problems
+
+
 def _check_imageops(cv2) -> list[str]:
     import numpy as np
     img = np.random.default_rng(1).integers(0, 255, (H, W, 3), dtype=np.uint8)
@@ -209,15 +264,21 @@ def main(argv: list[str]) -> int:
         if not re.search(pattern, info, re.M | re.I):
             problems.append(f'build info does not show {why}')
 
+    fixtures = False
     if '--clips' in argv:
         clip_dir = Path(argv[argv.index('--clips') + 1])
         clips = {p.name: p for p in clip_dir.iterdir() if p.suffix in ('.mp4', '.webm')}
         tmp = None
+    elif '--no-fixtures' not in argv and all((FIXTURE_DIR / n).is_file() for n in FIXTURE_NAMES):
+        clips = {n: FIXTURE_DIR / n for n in FIXTURE_NAMES}      # the same clips on every platform
+        fixtures = True
+        tmp = None
+        print('  (using the checked-in fixtures: H.264 and VP9 decode exercised on this platform)')
     else:
         tmp = tempfile.TemporaryDirectory()
         clips = _make_clips(Path(tmp.name), cv2)
     for name, path in sorted(clips.items()):
-        issues = _check_clip(cv2, path)
+        issues = _check_fixture(cv2, path) if fixtures else _check_clip(cv2, path)
         print(f'  {name}: {"ok" if not issues else "; ".join(issues)}')
         problems += issues
     problems += _check_imageops(cv2)
