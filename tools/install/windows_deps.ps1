@@ -117,6 +117,8 @@ foreach ($pkg in @('rtmidi', 'moderngl')) {
 # ------------------------------------------------------- remaining deps ----
 Step 'Installing remaining requirements'
 & $venvPython -m pip install -r requirements.txt
+. (Join-Path $PSScriptRoot 'dropin_deps.ps1')
+Install-DropinRequirements -PythonExe $venvPython -ProjectRoot (Get-Location).Path
 & $venvPython -m pip install -e .
 
 # ---------------------------------------------------------------- smoke ----

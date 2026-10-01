@@ -1275,6 +1275,97 @@ constraints, stated plainly:
 
 ### Progress log
 
+- **2026-09-30 — W1/W2 (installer seat `uv-install`): free-threaded runtime,
+  wheelhouse wiring, drop-in dependencies (core beta.185).**
+  - **Runtime.** `fetch_runtime.sh --flavor gil|ft` (`UV_RUNTIME_FLAVOR`).
+    `ft` is python-build-standalone 20260929, CPython 3.14.7,
+    `freethreaded-install_only` (ABI `cp314t`). Digests are pinned for
+    linux/windows/macos on x86-64 and aarch64, normal and `_stripped`. PBS no
+    longer publishes per-asset `.sha256` files, so the old "warn and skip when the
+    checksum is missing" silently turned verification off. It is now fatal:
+    pin, then release `SHA256SUMS`, then legacy sidecar, else refuse
+    (`UV_ALLOW_UNVERIFIED_RUNTIME=1` to override). `tests/test_fetch_runtime.py`
+    runs offline against a stub `curl`.
+  - **Wheelhouse.** UV Threads' cp314t wheels live in the append-only
+    `~/projects/_software-dist/wheelhouse/cp314t/` with `SHA256SUMS`.
+    `stage_payload.sh` copies them into `<payload>/wheelhouse/` after checking
+    every wheel against the sums (`--wheelhouse`, `--no-wheelhouse`, default
+    `$UV_WHEELHOUSE` or that folder). All installers pass the payload's
+    `wheelhouse/` to pip as `--find-links`. **Flavor choice:** Linux
+    installers default to `ft` only on x86-64 *and* when a wheelhouse is
+    present (`uv_runtime_flavor`); a plain git checkout with no wheelhouse (CI,
+    the nightly installer smoke) stays on `gil`, since PyPI has no cp314t
+    moderngl/glcontext/rtmidi/OpenCV. `install.sh` boots on the default flavor
+    to read the manifest, then swaps the runtime after the download if the
+    release carries a wheelhouse. `build_native.sh` has `--runtime-flavor`
+    (default: `ft` when the staged payload has a wheelhouse).
+  - **Open consequence.** A source tarball or rpm/deb built **in CI** has no
+    wheelhouse (it is not in git), so it installs on `gil` 3.11 and W1 stays
+    open for those artifacts. Release builds made on the owner's box pick the
+    wheelhouse up automatically. To make CI releases free-threaded, the wheels
+    must reach CI (release asset or a fetch step): owner decision.
+  - **W2.** `lib.sh` (`uv_dropin_requirement_files`, `uv_pip_install_optional`)
+    and `tools/install/dropin_deps.ps1` (dot-sourced by `install_windows.ps1`
+    and `windows_deps.ps1`) install every drop-in's requirements: a packaged
+    payload's `requirements-dropins.txt` if present, else each checked-out
+    drop-in's `requirements.txt`. Each file is tried whole, then line by
+    line; a requirement with no build is a warning and the drop-in runs without
+    it. The root `requirements.txt` is a constraints file so a drop-in can't move
+    a core pin. mediapipe is installed `--no-deps` (+ absl-py, flatbuffers):
+    its chain pulls opencv-contrib-python over our cv2. `UV_NO_DROPIN_DEPS=1`
+    skips all of it. The PowerShell side is untested here (no `pwsh` on this
+    box). `build_windows_portable.sh` gained `--runtime-flavor gil|ft`
+    (default `gil`, `UV_RUNTIME_FLAVOR`); `ft` cross-installs for `cp314t`, strict
+    for the core set, per requirement for drop-ins.
+  - **Verified (Linux, clean venv from the bundled PBS 3.14.7 ft runtime +
+    wheelhouse):** root requirements install (moderngl, glcontext,
+    python-rtmidi 1.5.8-1, OpenCV 4.13.0.92 all from the wheelhouse), the
+    project installs, `sys._is_gil_enabled()` is `False` on the bare
+    interpreter, `--self-test` reports OK. **Not yet verified:** app launch
+    and a mixer track load on the clean install; the Windows bundle.
+  - **Per-dependency table, Python 3.14t** (Linux: real `pip install` into the
+    ft venv; Windows: pip cross-resolve `win_amd64`/`cp314t`, or `cp313` for the
+    interim):
+
+    | Dependency (needed by) | Linux 3.14t | Windows cp314t | Windows cp313 (GIL) |
+    |---|---|---|---|
+    | PySDL2, pysdl2-dll, sounddevice, soundfile, python-osc, Pillow, psutil, numpy, scipy | installs | installs | installs |
+    | openai, anthropic (training only) | installs | installs | installs |
+    | av (videos, postfx, mixer) | installs (19.0.0) | installs | installs (abi3) |
+    | mutagen, python-vlc, send2trash, ably | installs | installs | installs |
+    | hidapi (mixer, undeclared) | installs | installs | installs |
+    | moderngl, glcontext | our wheel | **needs our wheel (GH Actions job)** | upstream |
+    | python-rtmidi | our wheel | **needs our wheel** | **no wheel anywhere** |
+    | opencv-python-headless | our wheel (PyPI is abi3-only) | **needs our wheel** | upstream (abi3) |
+    | usd-core (sims) | installs (26.8, non-`t` wheel, import untested) | unverified | upstream |
+    | demucs (mixer stems) | **fails: sphn builds from source and fails** | needs a sphn wheel (in the GH job) | upstream |
+    | torch, torchaudio | cp314t wheels exist | cp314t wheels exist | upstream |
+    | mediapipe (webcam) | untested; whole-file resolve backtracks, so `--no-deps` | untested | upstream, `--no-deps` |
+
+    Note the earlier "torch on Windows resolution impossible" was an artifact
+    of resolving cross-platform on a Linux host: pip evaluates `platform_system
+    == "Linux"` markers (nvidia-nccl) for the host, not the target. Real
+    Windows resolves.
+  - **Where we stopped / next.**
+    1. Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH
+       job for the Windows wheels, 3.13 interim if it fails): `workflow_dispatch`
+       with an optional `only` input, `windows-2022`, 150 min, runs
+       `python tools/packaging/build_windows_ft_wheels.py --out wheels-out
+       --work work` (UV Threads' script, interface agreed), uploads artifact
+       `cp314t-win_amd64-wheels`. Wait for UV Threads' script to land first.
+    2. Then `import_gh_wheels.sh` (append-only copy + SHA256SUMS), flip
+       `build_windows_portable.sh` to `ft` by default, build and verify the
+       Windows bundle on the owner's machine.
+    3. Finish the Linux clean-install check: launch the app, load a mixer
+       track, confirm the GIL-state log line. demucs on Linux 3.14t is still
+       blocked on sphn (the Windows job builds it; a Linux manylinux build is
+       the same recipe), or the mixer's `stems_python` can point at a second,
+       GIL interpreter.
+    4. Owner decision: how CI release builds get the wheelhouse.
+    5. Drop-in owners: dj-mixer-01 should declare hidapi and send2trash (or use
+       the pack file's `+hidapi +send2trash`); the self-test lists drop-in
+       dependency gaps.
+
 - **2026-09-19 (II) — Fullscreen Optimizations diagnosis disproven by the
   owner's own test; reverted (core beta.154). New lead: the launch chain
   itself, never examined until now.** Owner manually disabled "Fullscreen

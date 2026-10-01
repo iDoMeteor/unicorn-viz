@@ -209,6 +209,8 @@ if (-not $SkipVenv) {
     Write-Host 'Installing Python packages into .venv...' -ForegroundColor Yellow
     & $venvPython -m pip install --upgrade pip wheel
     & $venvPython -m pip install -r requirements.txt
+    . (Join-Path $PSScriptRoot 'install\dropin_deps.ps1')
+    Install-DropinRequirements -PythonExe $venvPython -ProjectRoot $projectRoot
 
     Write-Host ''
     Write-Host 'Install complete.' -ForegroundColor Green

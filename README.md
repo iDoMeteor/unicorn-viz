@@ -1,6 +1,6 @@
 # Unicorn Viz
 
-**Version 1.0.0-beta.180**
+**Version 1.0.0-beta.185**
 
 ## Contact Me!
 
@@ -513,6 +513,7 @@ Issues and PRs welcome. See [Developer Guide § Contributing](docs/developer-gui
 
 ## Changelog
 
+- **1.0.0-beta.185** — Installed builds move to free-threaded Python 3.14 and finally get the drop-ins' dependencies (W1/W2, 2026-09-30 audit). The bundled runtime can now be the python-build-standalone 3.14 free-threaded build (`fetch_runtime.sh --flavor ft`), which fixes the `SharedMemory(track=)` break that stopped every mixer track, stem and sampler load on the old 3.11. It is checksum-pinned, and a runtime with no checksum is now refused instead of installed with a warning. Linux installs (one-liner, clone installer, rpm/deb) pick it automatically when the release carries our prebuilt `wheelhouse/` (moderngl, glcontext, python-rtmidi, OpenCV). Every installer also installs each drop-in's own requirements (PyAV, mutagen, python-vlc, ably, usd-core and so on); one that has no build for the interpreter is skipped with a warning instead of failing the install, and mediapipe goes in with `--no-deps` so it can't overwrite OpenCV. The Windows bundle stays on 3.11 until its Windows wheels are built (`build_windows_portable.sh --runtime-flavor ft` is ready for that day).
 - **1.0.0-beta.184** — OpenCV is optional. `--self-test` reports a missing `cv2` as a warning instead of a failure, so a clean free-threaded Python install (where `opencv-python-headless` has no wheel yet) passes the install check; core never imported it, and the webcam and video-clips drop-ins already guard their imports.
 - **1.0.0-beta.183** — Startup now says which interpreter it is running and whether the GIL is on. On a free-threaded Python the main process logs one INFO line naming the modules that turned the GIL back on (expected for now: moderngl, glcontext, python-rtmidi) and a WARNING for any other; the audio helper logs a WARNING if its GIL is on, since it imports none of them. The audio helper has been run on free-threaded 3.14 with the GIL off (plan W1).
 - **1.0.0-beta.182** — Ctrl+C in a terminal shuts down cleanly (G3, 2026-09-30 audit): the audio and mixer helper processes ignore the terminal's group SIGINT and stop when the app tells them to, and a helper that is already gone no longer aborts teardown, so runtime state, webcam and relay state, MIDI close and GL/SDL teardown always run.

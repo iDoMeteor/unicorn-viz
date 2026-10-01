@@ -64,7 +64,7 @@ if [[ "$SYSTEM_PYTHON" -eq 1 ]]; then
   PY="$PYTHON_BIN"
 else
   uv_log "Provisioning bundled Python runtime"
-  PY="$(uv_provision_runtime "$PROJECT_ROOT/.venv-runtime")"
+  PY="$(uv_provision_runtime "$PROJECT_ROOT/.venv-runtime" "$PROJECT_ROOT")"
 fi
 
 uv_create_venv_and_install "$PY" "$PROJECT_ROOT/.venv" "$PROJECT_ROOT"

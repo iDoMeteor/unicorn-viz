@@ -36,6 +36,9 @@
 #   --install-root <path>  On-target install prefix (default: /opt/unicorn-viz)
 #   --runtime-os <os>      Runtime OS for fetch_runtime (default: autodetect)
 #   --runtime-arch <arch>  Runtime arch for fetch_runtime (default: autodetect)
+#   --runtime-flavor <f>   ft (CPython 3.14 free-threaded) or gil (3.11); default:
+#                          ft for x86-64 Linux when the staged payload carries a
+#                          wheelhouse/ (our cp314t wheels; PyPI has none), else gil
 #   --no-package           Stage everything but skip fpm; keep + print the staging
 #                          tree (for local relocatability testing)
 #   -h, --help             Show this help text
@@ -62,6 +65,7 @@ OUTPUT_DIR="${REPO_ROOT}/dist"
 INSTALL_ROOT="/opt/unicorn-viz"
 RUNTIME_OS=""
 RUNTIME_ARCH=""
+RUNTIME_FLAVOR=""
 NO_PACKAGE=0
 
 log() { echo "[build-native] $*" >&2; }
@@ -78,6 +82,7 @@ while [[ $# -gt 0 ]]; do
     --install-root) INSTALL_ROOT="$2"; shift 2 ;;
     --runtime-os) RUNTIME_OS="$2"; shift 2 ;;
     --runtime-arch) RUNTIME_ARCH="$2"; shift 2 ;;
+    --runtime-flavor) RUNTIME_FLAVOR="$2"; shift 2 ;;
     --no-package) NO_PACKAGE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -128,6 +133,15 @@ log "Provisioning bundled runtime into ${RUNTIME_DIR}"
 fetch_args=(--dest "$RUNTIME_DIR")
 [[ -n "$RUNTIME_OS" ]] && fetch_args+=(--os "$RUNTIME_OS")
 [[ -n "$RUNTIME_ARCH" ]] && fetch_args+=(--arch "$RUNTIME_ARCH")
+if [[ -z "$RUNTIME_FLAVOR" ]]; then
+  eff_os="${RUNTIME_OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
+  eff_arch="${RUNTIME_ARCH:-$(uname -m)}"
+  RUNTIME_FLAVOR="gil"
+  case "${eff_os}:${eff_arch}" in
+    linux:x86_64|linux:amd64) [[ -d "${PAYLOAD_DIR}/wheelhouse" ]] && RUNTIME_FLAVOR="ft" ;;
+  esac
+fi
+fetch_args+=(--flavor "$RUNTIME_FLAVOR")
 RUNTIME_PY="$(bash "$FETCH_SCRIPT" "${fetch_args[@]}")"
 
 # 3. Install ONLY the core dependencies into the bundled runtime (not the project
@@ -136,7 +150,9 @@ log "Installing core dependencies into the bundled runtime"
 # pip writes to stdout; route it to stderr so stdout stays reserved for the
 # staging path printed at the end (the script's machine-readable contract).
 "$RUNTIME_PY" -m pip install --no-cache-dir --upgrade pip wheel >&2
-"$RUNTIME_PY" -m pip install --no-cache-dir -r "${PAYLOAD_DIR}/requirements.txt" >&2
+wheel_args=()
+[[ -d "${PAYLOAD_DIR}/wheelhouse" ]] && wheel_args=(--find-links "${PAYLOAD_DIR}/wheelhouse")
+"$RUNTIME_PY" -m pip install --no-cache-dir --prefer-binary "${wheel_args[@]}" -r "${PAYLOAD_DIR}/requirements.txt" >&2
 
 # 4. App package + assets as siblings under INSTALL_ROOT (so APP_ROOT == INSTALL_ROOT).
 cp -a "${PAYLOAD_DIR}/unicornviz" "${APP_ROOT}/"

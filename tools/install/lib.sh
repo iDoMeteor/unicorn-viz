@@ -186,11 +186,30 @@ uv_install_system_deps() {
   esac
 }
 
+# Which bundled CPython flavor to provision: ft = 3.14 free-threaded (cp314t),
+# gil = legacy 3.11.  ft is wanted (W1: 3.11 cannot load a single mixer track)
+# but only works when our cp314t wheels (moderngl, glcontext, python-rtmidi,
+# opencv) are on hand, because PyPI has none: so ft is chosen on x86-64 Linux
+# when <source_dir>/wheelhouse or $UV_WHEELHOUSE exists, and gil otherwise
+# (other arches; a plain git checkout in CI).  UV_RUNTIME_FLAVOR=gil|ft forces
+# a choice.
+uv_runtime_flavor() {
+  local source_dir="${1:-}"
+  if [[ -n "${UV_RUNTIME_FLAVOR:-}" ]]; then
+    echo "$UV_RUNTIME_FLAVOR"
+  elif [[ "$(uname -m)" == "x86_64" ]] && [[ -n "$(uv_wheelhouse_args "$source_dir")" ]]; then
+    echo "ft"
+  else
+    echo "gil"
+  fi
+}
+
 # Provision a bundled python-build-standalone runtime into <runtime_root> and
 # echo the path to its python interpreter. Locates tools/packaging/fetch_runtime.sh
 # from the clone; if absent (curl-bootstrapped install), fetches it from the repo.
 uv_provision_runtime() {
   local runtime_root="$1"
+  local source_dir="${2:-}"
   local fetch_script="${UV_LIB_DIR}/../packaging/fetch_runtime.sh"
   local tmp_fetch=""
 
@@ -212,7 +231,7 @@ uv_provision_runtime() {
   fi
 
   local python_path
-  python_path="$(bash "$fetch_script" --dest "$runtime_root" --os linux)"
+  python_path="$(bash "$fetch_script" --dest "$runtime_root" --os linux --flavor "$(uv_runtime_flavor "$source_dir")")"
   [[ -n "$tmp_fetch" ]] && rm -f "$tmp_fetch"
 
   if [[ -z "$python_path" ]]; then
@@ -233,10 +252,104 @@ uv_install_runtime_and_app() {
     python_path="${UV_SYSTEM_PYTHON}"
   else
     uv_log "Provisioning bundled Python runtime"
-    python_path="$(uv_provision_runtime "${install_root}/runtime")"
+    python_path="$(uv_provision_runtime "${install_root}/runtime" "$source_dir")"
   fi
 
   uv_create_venv_and_install "$python_path" "${install_root}/venv" "$source_dir"
+}
+
+# Echo pip's --find-links arguments for our own prebuilt wheels (cp314t
+# moderngl / glcontext / python-rtmidi that PyPI does not carry): the payload's
+# wheelhouse/ folder first, else $UV_WHEELHOUSE.  Echoes nothing when neither
+# exists, in which case pip falls back to PyPI alone.
+uv_wheelhouse_args() {
+  local source_dir="${1:-}"
+  if [[ -n "$source_dir" && -d "${source_dir}/wheelhouse" ]]; then
+    echo "--find-links ${source_dir}/wheelhouse"
+  elif [[ -n "${UV_WHEELHOUSE:-}" && -d "${UV_WHEELHOUSE}" ]]; then
+    echo "--find-links ${UV_WHEELHOUSE}"
+  fi
+}
+
+# Print the drop-in requirement files to install, one per line.  A packaged
+# payload carries the curated union (requirements-dropins.txt, already carrying
+# the pack's +pkg/-pkg edits) and wins; a clone falls back to each checked-out
+# drop-in's own requirements.txt.  Files with no active requirement lines are
+# skipped.
+uv_dropin_requirement_files() {
+  local source_dir="$1" f
+  if [[ -f "${source_dir}/requirements-dropins.txt" ]]; then
+    echo "${source_dir}/requirements-dropins.txt"
+    return 0
+  fi
+  for f in "${source_dir}"/drop-ins/*/requirements.txt; do
+    [[ -f "$f" ]] || continue
+    if grep -qvE '^[[:space:]]*(#|$)' "$f"; then echo "$f"; fi
+  done
+}
+
+# Packages that must be installed with --no-deps, with the extra packages they
+# do need installed normally.  mediapipe's dependency chain pulls
+# opencv-contrib-python, which owns the same `cv2` import path as the core's
+# opencv-python-headless and silently corrupts it (webcam-01's requirements.txt
+# explains).  Format: <package> <extra deps...>.
+UV_NODEPS_PACKAGES=("mediapipe absl-py flatbuffers")
+
+# Echo the extra deps if requirement line $1 names a UV_NODEPS_PACKAGES entry
+# (and return 0), else return 1.
+uv_nodeps_extras() {
+  local line="$1" entry name
+  for entry in "${UV_NODEPS_PACKAGES[@]}"; do
+    name="${entry%% *}"
+    if [[ "$line" =~ ^${name}([^A-Za-z0-9_.-]|$) ]]; then
+      echo "${entry#"$name"}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Install one drop-in requirements file without letting it abort the install.
+# Drop-in dependencies are optional by design (each drop-in degrades without
+# them), and some have no wheel on every interpreter (demucs, mediapipe,
+# usd-core on 3.14t), so a single unresolvable line must not take down the rest.
+# Requirements named in UV_NODEPS_PACKAGES install on their own with --no-deps.
+# The rest are tried as one file first; on failure retried one requirement at a
+# time, warning about each one skipped.  The root requirements.txt is passed as
+# a constraints file so a drop-in can never move a core pin.
+uv_pip_install_optional() {
+  local pip="$1" constraints="$2" reqfile="$3"
+  shift 3
+  local line extras filtered
+  filtered="$(mktemp)"
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | xargs)"
+    [[ -z "$line" ]] && continue
+    if extras="$(uv_nodeps_extras "$line")"; then
+      # shellcheck disable=SC2086  # extras is a space-separated package list
+      if uv_run "$pip" install --prefer-binary --no-deps "$@" "$line" \
+        && { [[ -z "$extras" ]] || uv_run "$pip" install --prefer-binary -c "$constraints" "$@" $extras; }; then
+        :
+      else
+        uv_warn "Skipped ${line} (no installable build for this interpreter); the drop-in that needs it will run without it"
+      fi
+    else
+      echo "$line" >>"$filtered"
+    fi
+  done <"$reqfile"
+
+  if [[ -s "$filtered" ]]; then
+    if ! uv_run "$pip" install --prefer-binary -c "$constraints" -r "$filtered" "$@"; then
+      uv_warn "Some dependencies in ${reqfile} did not install together; retrying one at a time"
+      while IFS= read -r line; do
+        uv_run "$pip" install --prefer-binary -c "$constraints" "$@" "$line" \
+          || uv_warn "Skipped ${line} (no installable build for this interpreter); the drop-in that needs it will run without it"
+      done <"$filtered"
+    fi
+  fi
+  rm -f "$filtered"
+  return 0
 }
 
 uv_create_venv_and_install() {
@@ -247,16 +360,36 @@ uv_create_venv_and_install() {
   if [[ "${UV_DRY_RUN}" -eq 1 ]]; then
     uv_log "dry-run: would create venv at ${venv_dir}"
     uv_log "dry-run: would install requirements from ${source_dir}/requirements.txt"
+    if [[ "${UV_NO_DROPIN_DEPS:-0}" -ne 1 ]]; then
+      local dry_f
+      while IFS= read -r dry_f; do
+        [[ -n "$dry_f" ]] && uv_log "dry-run: would install drop-in requirements from ${dry_f}"
+      done < <(uv_dropin_requirement_files "$source_dir")
+    fi
     uv_log "dry-run: would install the project from ${source_dir}"
     return 0
   fi
 
   uv_require_cmd "$python_bin"
 
+  # Word-splitting of the find-links args is intended (two shell words).
+  # shellcheck disable=SC2207
+  local wheel_args=($(uv_wheelhouse_args "$source_dir"))
+
   uv_run "$python_bin" -m venv "$venv_dir"
   uv_run "$venv_dir/bin/pip" install --upgrade pip wheel
-  uv_run "$venv_dir/bin/pip" install -r "$source_dir/requirements.txt"
-  uv_run "$venv_dir/bin/pip" install "$source_dir"
+  uv_run "$venv_dir/bin/pip" install --prefer-binary "${wheel_args[@]}" -r "$source_dir/requirements.txt"
+
+  if [[ "${UV_NO_DROPIN_DEPS:-0}" -ne 1 ]]; then
+    local reqfile
+    while IFS= read -r reqfile; do
+      [[ -z "$reqfile" ]] && continue
+      uv_log "Installing drop-in dependencies from ${reqfile}"
+      uv_pip_install_optional "$venv_dir/bin/pip" "$source_dir/requirements.txt" "$reqfile" "${wheel_args[@]}"
+    done < <(uv_dropin_requirement_files "$source_dir")
+  fi
+
+  uv_run "$venv_dir/bin/pip" install "${wheel_args[@]}" "$source_dir"
 }
 
 uv_install_desktop_entry() {

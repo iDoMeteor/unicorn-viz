@@ -58,7 +58,10 @@ dist_default() {
 }
 OUTPUT_DIR="$(dist_default)"
 SOURCE_DIR="${REPO_ROOT}"
-PYVER="3.11"
+# Runtime flavor: gil = CPython 3.11 (default until Windows cp314t wheels of
+# moderngl / glcontext / python-rtmidi / opencv exist), ft = 3.14 free-threaded.
+RUNTIME_FLAVOR="${UV_RUNTIME_FLAVOR:-gil}"
+PYVER=""
 PAYLOAD_OUT=""
 DROPINS_FILE=""
 VLC_INSTALLER=""
@@ -75,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
     --python-version) PYVER="$2"; shift 2 ;;
+    --runtime-flavor) RUNTIME_FLAVOR="$2"; shift 2 ;;
     --payload-out) PAYLOAD_OUT="$2"; shift 2 ;;
     --dropins) DROPINS_FILE="$2"; shift 2 ;;
     --vlc-installer) VLC_INSTALLER="$2"; shift 2 ;;
@@ -90,7 +94,11 @@ if [[ -z "$VERSION" ]]; then
   VERSION="$(sed -n "s/^__version__ = ['\"]\([^'\"]*\)['\"].*/\1/p" "${SOURCE_DIR}/unicornviz/__init__.py" | head -n1)"
 fi
 [[ -n "$VERSION" ]] || die "Could not determine the version (pass --version)"
-ABI="cp${PYVER//./}"
+case "$RUNTIME_FLAVOR" in
+  gil) : "${PYVER:=3.11}"; ABI="cp${PYVER//./}" ;;
+  ft)  : "${PYVER:=3.14}"; ABI="cp${PYVER//./}t" ;;
+  *) die "Unknown --runtime-flavor '${RUNTIME_FLAVOR}' (expected gil or ft)" ;;
+esac
 
 HOST_PY="${REPO_ROOT}/.venv/bin/python"
 [[ -x "$HOST_PY" ]] || HOST_PY="$(command -v python3 || true)"
@@ -111,20 +119,45 @@ stage_args=(--source-dir "$SOURCE_DIR" --dest "$APP")
 "${SCRIPT_DIR}/stage_payload.sh" "${stage_args[@]}" >/dev/null
 
 log "Provisioning the Windows runtime (python-build-standalone, x86_64)"
-"${SCRIPT_DIR}/fetch_runtime.sh" --dest "${APP}/runtime" --os windows --arch x86_64 >/dev/null
+"${SCRIPT_DIR}/fetch_runtime.sh" --dest "${APP}/runtime" --os windows --arch x86_64 --flavor "$RUNTIME_FLAVOR" >/dev/null
 [[ -f "${APP}/runtime/python/python.exe" ]] || die "python.exe missing after runtime provisioning"
 
 SITE="${APP}/runtime/python/Lib/site-packages"
-EXTRA_REQS=()
-[[ -f "${APP}/requirements-dropins.txt" ]] && EXTRA_REQS=(-r "${APP}/requirements-dropins.txt")
-log "Cross-installing pinned dependencies for win_amd64 / cp${PYVER//./} (wheels only)"
+WHEEL_ARGS=()
+[[ -d "${APP}/wheelhouse" ]] && WHEEL_ARGS=(--find-links "${APP}/wheelhouse")
+CROSS_PIP=("$HOST_PY" -m pip install --quiet --upgrade --no-compile
+  --target "$SITE"
+  --platform win_amd64 --python-version "$PYVER" --implementation cp --abi "$ABI"
+  --only-binary=:all: "${WHEEL_ARGS[@]}")
+log "Cross-installing pinned dependencies for win_amd64 / ${ABI} (wheels only)"
 # --no-compile: bytecode would be produced by the HOST interpreter (wrong
 # version for the Windows runtime); Windows compiles its own on first run.
-"$HOST_PY" -m pip install --quiet --upgrade --no-compile \
-  --target "$SITE" \
-  --platform win_amd64 --python-version "$PYVER" --implementation cp --abi "$ABI" \
-  --only-binary=:all: \
-  -r "${APP}/requirements.txt" "${EXTRA_REQS[@]}" >&2
+if [[ "$RUNTIME_FLAVOR" == "gil" ]]; then
+  EXTRA_REQS=()
+  [[ -f "${APP}/requirements-dropins.txt" ]] && EXTRA_REQS=(-r "${APP}/requirements-dropins.txt")
+  "${CROSS_PIP[@]}" -r "${APP}/requirements.txt" "${EXTRA_REQS[@]}" >&2
+else
+  # Free-threaded: the core set is strict, but drop-in dependencies are
+  # optional by design and some have no cp314t wheel (demucs, mediapipe,
+  # usd-core), so each requirement installs on its own and a miss is a warning
+  # (that drop-in runs without it) instead of a failed build.
+  "${CROSS_PIP[@]}" -r "${APP}/requirements.txt" >&2
+  if [[ -f "${APP}/requirements-dropins.txt" ]]; then
+    while IFS= read -r req; do
+      [[ -z "$req" ]] && continue
+      if [[ "$req" == mediapipe* ]]; then
+        # mediapipe's dependency chain pulls opencv-contrib-python, which owns
+        # the same cv2 path as the core's opencv-python-headless: --no-deps.
+        { "${CROSS_PIP[@]}" --no-deps "$req" >&2 \
+          && "${CROSS_PIP[@]}" -c "${APP}/requirements.txt" absl-py flatbuffers >&2; } \
+          || log "WARNING: skipped ${req}: no ${ABI} build; the drop-in that needs it runs without it"
+        continue
+      fi
+      "${CROSS_PIP[@]}" -c "${APP}/requirements.txt" "$req" >&2 \
+        || log "WARNING: skipped ${req}: no ${ABI} build; the drop-in that needs it runs without it"
+    done < "${APP}/requirements-dropins.txt"
+  fi
+fi
 find "$SITE" -type d -name __pycache__ -prune -exec rm -rf {} +
 
 # Stem-separation weights. Without --repo, demucs asks the HuggingFace hub
