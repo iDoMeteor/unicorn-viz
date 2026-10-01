@@ -1,0 +1,25 @@
+# Toolchain image for build_ft_sphn_wheel.sh: manylinux_2_28 plus a pinned Rust
+# toolchain and maturin.  sphn is a Rust/pyo3 extension; the manylinux image
+# ships neither Rust nor maturin.  rustup-init is pinned by sha256 and the
+# toolchain by version, so the build does not float with "stable".
+FROM quay.io/pypa/manylinux_2_28_x86_64:latest
+
+ARG RUST_VERSION=1.98.1
+ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
+ARG MATURIN_VERSION=1.15.0
+
+# (a loop, not curl --retry-all-errors: this image's curl is too old for it)
+RUN for i in 1 2 3 4 5; do \
+        curl -fsSL -o /tmp/rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init && break; \
+        sleep 5; \
+    done && \
+    echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum -c - && \
+    chmod +x /tmp/rustup-init && \
+    /tmp/rustup-init -y --profile minimal --default-toolchain "${RUST_VERSION}" --no-modify-path && \
+    rm /tmp/rustup-init
+
+ENV PATH=/root/.cargo/bin:$PATH
+
+RUN /opt/python/cp314-cp314t/bin/python -m venv /opt/maturin-venv && \
+    /opt/maturin-venv/bin/python -m pip install -q "maturin==${MATURIN_VERSION}" && \
+    rustc --version && cargo --version && /opt/maturin-venv/bin/maturin --version

@@ -16,10 +16,22 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
-#: Extension modules whose import is probed in a fresh interpreter each, so
-#: one extension's GIL re-enable cannot hide the next one's.
-EXTENSIONS = ('glcontext.egl', 'glcontext.x11', 'moderngl', 'rtmidi')
+def _extensions() -> tuple[str, ...]:
+    """Modules whose import is probed in a fresh interpreter each, so one
+    extension's GIL re-enable cannot hide the next one's.  glcontext ships a
+    different set of backends per platform (egl and x11 on Linux, wgl and egl on
+    Windows), so they are read from the installed package, not listed here."""
+    import importlib.util
+    spec = importlib.util.find_spec('glcontext')
+    names: list[str] = []
+    if spec is not None and spec.submodule_search_locations:
+        for loc in spec.submodule_search_locations:
+            for f in sorted(Path(loc).iterdir()):
+                if f.suffix in ('.so', '.pyd') and '.' in f.name:
+                    names.append(f'glcontext.{f.name.split(".")[0]}')
+    return (*names, 'moderngl', 'rtmidi')
 
 
 def _gil_after_import(module: str) -> str:
@@ -39,7 +51,7 @@ def main(argv: list[str]) -> int:
     if not gil_off:
         print('  (not a free-threaded interpreter with the GIL off; results below are moot)')
         failed = True
-    for module in EXTENSIONS:
+    for module in _extensions():
         state = _gil_after_import(module)
         failed |= state.startswith('IMPORT FAILED')
         print(f'  import {module:14s} -> GIL {state}')
