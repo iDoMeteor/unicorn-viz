@@ -75,7 +75,7 @@ MATE/X11 testing pending.
 | Key                  | Type   | Default        | Description                                         |
 |----------------------|--------|----------------|-----------------------------------------------------|
 | `mode`               | str    | `"sequential"` | Playlist mode: `"sequential"` or `"random"`         |
-| `effect_duration`    | int    | `20`           | Seconds before auto-advancing to the next effect    |
+| `effect_duration`    | float  | `60.0`         | Seconds before auto-advancing to the next effect (`--effect-duration`) |
 | `transition`         | str    | `"crossfade"`  | Transition type: `"crossfade"`, `"smoothfade"`, `"scanwipe"`, `"scanwipe_x"`, `"scanwipe_y"`, `"dissolve"`, `"zoomblend"`, `"shuffle"`, or `"random"` |
 | `transition_duration`| float  | `1.0`          | Transition length in seconds                        |
 

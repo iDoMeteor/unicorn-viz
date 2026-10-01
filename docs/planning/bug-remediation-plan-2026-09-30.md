@@ -39,7 +39,7 @@ add the short hash.
 
 - [ ] **H13** REV1 LEDs dead since 09-24: move `on_scratch_mode` out of the
   LED `try` and poll scratch mode on the main side. [mixer]
-- [ ] **G1** `--effect-duration` always rejected: default `60` → `60.0`.
+- [x] **G1** `--effect-duration` always rejected: default `60` → `60.0`. Landed core beta.181 (UV Core; `tests/test_cli_effect_duration.py`).
   [core]
 - [ ] **G3** Ctrl+C crashes shutdown: guard `_audio_manager.stop()`, and
   make the helper processes ignore SIGINT (decision 4). [core]

@@ -38,7 +38,7 @@ _DEFAULTS: dict[str, Any] = {
     },
     "demo": {
         "mode": "sequential",
-        "effect_duration": 60,
+        "effect_duration": 60.0,
         "transition": "shuffle",
         "transition_duration": 1.0,
         "auto_advance": True,
