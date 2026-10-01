@@ -174,9 +174,150 @@ def _probe_hw_encoder_locked(ffmpeg_path: str) -> tuple[str, list[str], str, str
         log.debug('Recording: %s unavailable (%s)', codec,
                   detail[0] if detail else f'exit {proc.returncode}')
 
-    log.info('Recording: no working hardware encoder; using software x264')
+    log.info('Recording: no working hardware encoder; using a software encoder')
     _hw_encoder_cache = False
     return None
+
+
+#: Software video encoders for ``codec = "auto"``, best-first, as
+#: ``(codec, quality_flag)``.  Which of them exists depends on the ffmpeg
+#: build: Fedora's own ``ffmpeg-free`` ships no libx264 (patents), only the
+#: full ffmpeg from RPM Fusion does; Cisco's libopenh264 is the H.264 encoder
+#: Fedora can ship, and ``mpeg4`` (MPEG-4 Part 2) is compiled into every
+#: ffmpeg, so a recording is always possible.  Each is *probed* with a real
+#: encode: being listed by ``ffmpeg -encoders`` proves nothing (Fedora's
+#: libopenh264 is listed even when the Cisco library is not installed).
+#:
+#: Quality flags differ per encoder: ``-crf`` is libx264's, libopenh264 takes
+#: a bitrate, mpeg4 a 1-31 qscale.
+_SW_VIDEO_ENCODERS: tuple[tuple[str, str], ...] = (
+    ('libx264', '-crf'),
+    ('libopenh264', '-b:v'),
+    ('mpeg4', '-q:v'),
+)
+_SW_H264 = ('libx264', 'libopenh264')
+_SW_VIDEO_CODECS = tuple(c for c, _ in _SW_VIDEO_ENCODERS)
+_HW_NAMES = tuple(e[0] for e in _HW_ENCODERS)
+#: Audio encoders tried when the configured one (``aac`` by default) is not
+#: usable, all valid in mp4 and mkv: ffmpeg's native aac is normally there,
+#: libopus / libmp3lame depend on the build, ac3 is always compiled in.
+_AUDIO_FALLBACKS: tuple[str, ...] = ('aac', 'libopus', 'libmp3lame', 'ac3')
+
+#: ``(ffmpeg_path) -> chosen codec or None`` for the software probes.
+_sw_video_cache: dict[str, str | None] = {}
+_sw_audio_cache: dict[str, str | None] = {}
+_sw_probe_lock = threading.Lock()
+
+
+class NoVideoEncoderError(RuntimeError):
+    """No video encoder of this ffmpeg could encode a test frame."""
+
+
+def _quality_flag_for(codec: str) -> str:
+    for name, flag in _SW_VIDEO_ENCODERS:
+        if name == codec:
+            return flag
+    return '-crf'
+
+
+def _bitrate_for(width: int, height: int, fps: int, crf: int) -> int:
+    """Bits per second for an encoder that wants a bitrate, from the CRF setting.
+
+    About 0.07 bits per pixel at CRF 23, doubling every 6 CRF steps toward
+    higher quality (the same slope x264 uses), clamped to a sane range.
+    """
+    bpp = 0.07 * 2 ** ((23 - crf) / 6.0)
+    return int(min(60_000_000, max(500_000, width * height * fps * bpp)))
+
+
+def _qscale_for(crf: int) -> int:
+    """mpeg4 qscale (1 best .. 31 worst) for a CRF-style number."""
+    return int(min(31, max(1, round(crf / 6))))
+
+
+def _quality_args(codec: str, flag: str, crf: int, width: int, height: int,
+                  fps: int) -> list[str]:
+    if flag == '-b:v':
+        return ['-b:v', str(_bitrate_for(width, height, fps, crf))]
+    if flag == '-q:v':
+        return ['-q:v', str(_qscale_for(crf))]
+    return [flag, str(crf)]
+
+
+def _encodes(cmd: list[str]) -> tuple[bool, str]:
+    """Run one probe encode; ``(worked, first line of ffmpeg's complaint)``."""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=_probe_timeout_s())
+    except Exception as exc:
+        return False, f'could not run: {exc}'
+    if proc.returncode == 0:
+        return True, ''
+    detail = (proc.stderr or b'').decode('utf-8', 'replace').strip().splitlines()
+    return False, detail[0] if detail else f'exit {proc.returncode}'
+
+
+def _probe_software_video(ffmpeg_path: str) -> str | None:
+    """First software video encoder that really encodes, cached per ffmpeg."""
+    if ffmpeg_path in _sw_video_cache:
+        return _sw_video_cache[ffmpeg_path]
+    with _sw_probe_lock:
+        if ffmpeg_path in _sw_video_cache:
+            return _sw_video_cache[ffmpeg_path]
+        chosen: str | None = None
+        for codec, flag in _SW_VIDEO_ENCODERS:
+            cmd = [ffmpeg_path, '-hide_banner', '-loglevel', 'error', '-y',
+                   '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=0.3',
+                   '-pix_fmt', 'yuv420p', '-frames:v', '3', '-c:v', codec,
+                   *_quality_args(codec, flag, 23, 320, 240, 30), '-f', 'null', '-']
+            ok, why = _encodes(cmd)
+            if ok:
+                chosen = codec
+                break
+            log.debug('Recording: software encoder %s unavailable (%s)', codec, why)
+        if chosen is None:
+            log.error('Recording: this ffmpeg (%s) cannot encode video at all', ffmpeg_path)
+        elif chosen not in _SW_H264:
+            log.warning(
+                'Recording: this ffmpeg has no working H.264 encoder (libx264, '
+                'libopenh264). On Fedora install the full ffmpeg from RPM Fusion '
+                '(sudo dnf swap ffmpeg-free ffmpeg --allowerasing) or enable the '
+                'Cisco openh264 repository. Recording MPEG-4 Part 2 instead, which '
+                'plays everywhere but is larger than H.264.')
+        elif chosen != _SW_VIDEO_ENCODERS[0][0]:
+            log.warning('Recording: libx264 is not available in this ffmpeg; using %s '
+                        '(a bitrate-controlled H.264 encoder)', chosen)
+        else:
+            log.info('Recording: software encoder available: %s', chosen)
+        _sw_video_cache[ffmpeg_path] = chosen
+        return chosen
+
+
+def _probe_audio_codec(ffmpeg_path: str, preferred: str) -> str | None:
+    """``preferred`` if it encodes, else the first of the fallbacks that does."""
+    key = f'{ffmpeg_path}|{preferred}'
+    if key in _sw_audio_cache:
+        return _sw_audio_cache[key]
+    with _sw_probe_lock:
+        if key in _sw_audio_cache:
+            return _sw_audio_cache[key]
+        chosen: str | None = None
+        for codec in (preferred, *[c for c in _AUDIO_FALLBACKS if c != preferred]):
+            cmd = [ffmpeg_path, '-hide_banner', '-loglevel', 'error', '-y',
+                   '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.2',
+                   '-c:a', codec, '-b:a', '64k', '-f', 'null', '-']
+            ok, why = _encodes(cmd)
+            if ok:
+                chosen = codec
+                break
+            log.debug('Recording: audio encoder %s unavailable (%s)', codec, why)
+        if chosen is None:
+            log.warning('Recording: no working audio encoder in this ffmpeg; '
+                        'recording video only')
+        elif chosen != preferred:
+            log.warning('Recording: audio encoder %s is not available in this ffmpeg; '
+                        'using %s', preferred, chosen)
+        _sw_audio_cache[key] = chosen
+        return chosen
 
 
 class Recorder:
@@ -589,21 +730,41 @@ class Recorder:
     def _resolve_encoder(self) -> tuple[str, list[str], str, str]:
         """Return ``(codec, pre_input, filter_suffix, quality_flag)`` to use.
 
-        ``codec = "auto"`` probes for a working hardware encoder and falls
-        back to software x264 when none is usable -- which is the normal
-        outcome on a stock Fedora box, where the shipped VA-API driver has
-        no H.264 encoder at all.
+        ``codec = "auto"`` probes for a working hardware encoder, then walks
+        the software chain (libx264, libopenh264, mpeg4) with real test
+        encodes, because the ffmpeg on a stock Fedora box has no libx264 and
+        often no usable VA-API H.264 encoder.  Raises
+        :class:`NoVideoEncoderError` when nothing encodes.  A named codec is
+        used as given, with its own quality flag.
         """
-        if self._codec.strip().lower() == 'auto':
+        name = self._codec.strip()
+        if name.lower() == 'auto':
             hw = _probe_hw_encoder(self._ffmpeg_path)
             if hw is not None:
                 return hw
-            return 'libx264', [], '', '-crf'
-        return self._codec, [], '', '-crf'
+            sw = _probe_software_video(self._ffmpeg_path)
+            if sw is None:
+                raise NoVideoEncoderError(
+                    f'no video encoder of {self._ffmpeg_path} could encode a test frame')
+            return sw, [], '', _quality_flag_for(sw)
+        for entry in _HW_ENCODERS:
+            if entry[0] == name:                 # a pinned hardware encoder keeps its device setup
+                device = _render_device()
+                return entry[0], [a.format(device=device) for a in entry[1]], entry[2], entry[3]
+        return name, [], '', _quality_flag_for(name)
+
+    def _resolve_audio_codec(self) -> str | None:
+        """The audio encoder to use, or None when none works.
+
+        The configured codec (``aac`` by default) is probed and, if this
+        ffmpeg lacks it, replaced by the first working fallback.
+        """
+        return _probe_audio_codec(self._ffmpeg_path, self._audio_codec)
 
     def _build_command(self, output_path: Path) -> list[str]:
         codec, pre_input, filter_suffix, quality_flag = self._resolve_encoder()
         self._active_codec = codec
+        audio_codec = self._resolve_audio_codec() if self._capture_audio else None
         command = [
             self._ffmpeg_path,
             '-y',
@@ -627,7 +788,7 @@ class Recorder:
             '-',
         ]
         self._resolved_audio_input = (
-            self._resolve_audio_input() if self._capture_audio else None
+            self._resolve_audio_input() if audio_codec is not None else None
         )
         if self._resolved_audio_input is not None:
             audio_format, audio_device = self._resolved_audio_input
@@ -656,7 +817,8 @@ class Recorder:
             # -preset is an x264 concept; hardware encoders name their own
             # speed controls differently and reject it.
             command += ['-preset', self._preset]
-        command += [quality_flag, str(self._crf)]
+        command += _quality_args(codec, quality_flag, self._crf,
+                                 self._width, self._height, self._fps)
         if not filter_suffix:
             # A GPU-surface pipeline sets its own output format; forcing one
             # here would insert a download and undo the point of the thing.
@@ -665,13 +827,16 @@ class Recorder:
         if self._resolved_audio_input is not None:
             command += [
                 '-c:a',
-                self._audio_codec,
+                audio_codec,
                 '-b:a',
                 self._audio_bitrate,
                 '-shortest',
             ]
         else:
             command.append('-an')
+        log.info('Recording encoders: video %s (%s), audio %s', codec,
+                 'hardware' if filter_suffix or codec in _HW_NAMES else 'software',
+                 audio_codec if self._resolved_audio_input is not None else 'none')
         command.append(str(output_path))
         return command
 
@@ -684,7 +849,13 @@ class Recorder:
             return True
 
         output_path = self._build_output_path()
-        command = self._build_command(output_path)
+        try:
+            command = self._build_command(output_path)
+        except NoVideoEncoderError as exc:
+            self._last_error = ('Recording unavailable: this ffmpeg has no usable video '
+                                'encoder (install the full ffmpeg, e.g. from RPM Fusion)')
+            log.error('%s (%s)', self._last_error, exc)
+            return False
         log.debug(
             'Recording start requested: size=%dx%d fps=%d codec=%s preset=%s crf=%d audio=%s output=%s',
             self._width,
@@ -786,7 +957,7 @@ class Recorder:
             log.debug('Recording stderr reader exited: %s', exc)
 
     def _retry_in_software(self) -> bool:
-        """Fall back to x264 once when a hardware encoder failed to spawn.
+        """Fall back to a software encoder once when a hardware encoder failed to spawn.
 
         The probe encodes a real frame, so a hardware encoder that gets this
         far usually works -- but a driver can still refuse the actual
@@ -795,10 +966,10 @@ class Recorder:
         than the recording.  Guarded so the retry cannot recurse.
         """
         global _hw_encoder_cache
-        if self._active_codec in ('', 'libx264') or self._retrying_software:
+        if self._active_codec in ('', *_SW_VIDEO_CODECS) or self._retrying_software:
             return False
         log.warning(
-            'Recording: %s failed to start; retrying with software x264',
+            'Recording: %s failed to start; retrying with a software encoder',
             self._active_codec,
         )
         _hw_encoder_cache = False  # do not re-pick it this session

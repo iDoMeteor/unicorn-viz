@@ -240,14 +240,14 @@ budget.
 | `ffmpeg_path`    | str    | `"ffmpeg"`  | Path to the ffmpeg executable used for recording. |
 | `container`      | str    | `"mp4"`     | Output container extension for saved recordings. |
 | `fps`            | int    | `60`         | Constant frame rate the recording is muxed at. Frames are paced to this rate on wallclock, so a slow render loop yields a real-time-length file rather than a sped-up one; the app also caps its readback here. |
-| `codec`          | str    | `"auto"`   | Video codec. `"auto"` probes for a working hardware encoder (NVENC → VA-API → QSV) and falls back to `libx264`; the probe encodes a real frame, since a built-in encoder may still be unusable. Any explicit name is used as given. |
+| `codec`          | str    | `"auto"`   | Video codec. `"auto"` probes for a working hardware encoder (NVENC → VA-API → QSV), then walks the software chain `libx264` → `libopenh264` → `mpeg4`, each with a real test encode, since a built-in encoder may still be unusable. Fedora's own `ffmpeg-free` has no libx264 (the full ffmpeg from RPM Fusion does): there it uses Cisco's libopenh264 when its repository is enabled, otherwise MPEG-4 Part 2 with a warning, and if even that fails the recording does not start and says why. The chosen encoders are logged at start. Any explicit name is used as given, with its own quality flag. |
 | `preset`         | str    | `"veryfast"`| ffmpeg encoder preset for performance/quality tradeoff. |
-| `crf`            | int    | `18`         | H.264 quality target; lower is higher quality. |
+| `crf`            | int    | `18`         | Quality target; lower is higher quality. Used as `-crf` by libx264, as a derived bitrate by libopenh264 (about 15 Mbit/s for 1080p60 at 18, halving every 6 steps) and as a qscale by mpeg4. |
 | `pixel_format`   | str    | `"yuv420p"` | Output pixel format used by ffmpeg. |
 | `capture_audio`  | bool   | `true`       | Capture audio alongside video when supported by the configured ffmpeg input backend. |
 | `audio_input_format` | str | `"pulse"`  | ffmpeg input backend used for audio capture. Linux/PipeWire setups should use `pulse`. |
 | `audio_input_device` | str | `""`       | Audio source for recording. Empty auto-resolves (see *Choosing the audio source* below); set it to pin one output permanently. |
-| `audio_codec`    | str    | `"aac"`     | Audio codec used when audio recording is enabled. |
+| `audio_codec`    | str    | `"aac"`     | Preferred audio codec when audio recording is enabled. If this ffmpeg cannot encode it, the first working one of `aac`, `libopus`, `libmp3lame`, `ac3` is used (logged); if none works the recording is video only. |
 | `audio_bitrate`  | str    | `"192k"`    | Audio bitrate passed to ffmpeg. |
 | `filename_prefix`| str    | `"unicornviz"` | Prefix used for timestamped recording filenames. |
 | `show_indicator` | bool   | `true`       | Show a live-only recording indicator while recording. It is shown only when the name overlay is visible and is never burned into saved recordings. |

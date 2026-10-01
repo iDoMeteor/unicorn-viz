@@ -14,8 +14,20 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from unicornviz.config import Config
 from unicornviz.recording import Recorder
+
+
+@pytest.fixture(autouse=True)
+def _no_real_ffmpeg_probes(monkeypatch):
+    """Encoder selection is covered in test_recording_encoder_fallback.py; these
+    tests are about the command's shape and must not need an ffmpeg binary."""
+    import unicornviz.recording as rec_mod
+    monkeypatch.setattr(rec_mod, '_probe_hw_encoder', lambda _p: None)
+    monkeypatch.setattr(rec_mod, '_probe_software_video', lambda _p: 'libx264')
+    monkeypatch.setattr(rec_mod, '_probe_audio_codec', lambda _p, preferred: preferred)
 
 
 def _cfg() -> Config:
@@ -318,6 +330,7 @@ def test_auto_falls_back_to_software_when_no_hardware(monkeypatch) -> None:
     """The normal outcome on a stock Fedora box, and it must still record."""
     import unicornviz.recording as rec_mod
     monkeypatch.setattr(rec_mod, '_probe_hw_encoder', lambda _p: None)
+    monkeypatch.setattr(rec_mod, '_probe_software_video', lambda _p: 'libx264')
     rec = _recorder(codec='auto', capture_audio=False)
     cmd = rec._build_command(Path('/tmp/o.mp4'))
     assert cmd[cmd.index('-c:v') + 1] == 'libx264'

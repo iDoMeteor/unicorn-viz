@@ -157,7 +157,8 @@ def _build_parser() -> argparse.ArgumentParser:
     recording.add_argument(
         '--record-codec',
         help="Recording video codec. 'auto' probes for a working hardware "
-             "encoder (NVENC/VA-API/QSV) and falls back to libx264; or name "
+             "encoder (NVENC/VA-API/QSV), then software libx264, libopenh264 "
+             "and mpeg4, whichever this ffmpeg can really encode; or name "
              "one explicitly, e.g. libx264, h264_vaapi, h264_nvenc.",
     )
     recording.add_argument('--ffmpeg-path', help='Path to the ffmpeg executable.')

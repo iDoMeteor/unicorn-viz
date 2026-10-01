@@ -11,7 +11,19 @@ from __future__ import annotations
 import signal
 import sys
 
+import pytest
+
 import unicornviz.recording as recording
+
+
+@pytest.fixture(autouse=True)
+def _no_real_ffmpeg_probes(monkeypatch):
+    """Encoder selection is covered in test_recording_encoder_fallback.py; these
+    tests are about the command's shape and must not need an ffmpeg binary."""
+    import unicornviz.recording as rec_mod
+    monkeypatch.setattr(rec_mod, '_probe_hw_encoder', lambda _p: None)
+    monkeypatch.setattr(rec_mod, '_probe_software_video', lambda _p: 'libx264')
+    monkeypatch.setattr(rec_mod, '_probe_audio_codec', lambda _p, preferred: preferred)
 
 
 class _Cfg:
