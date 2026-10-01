@@ -73,6 +73,14 @@ add the short hash.
   force a swap. [core: UV Core; packaging: UV Install]
   - Owner decision 2026-10-01: drop old Fedoras; the rpm job uses
     `ffmpeg-free`.
+  - [x] Core recorder: probe-based video chain (hardware, libx264,
+    libopenh264, mpeg4) and audio chain (aac, libopus, libmp3lame, ac3),
+    core beta.190 (`fd06777`). Checked against `ffmpeg-free` 8.1.3 on
+    fedora:44: libopenh264 and native aac present, no libx264.
+  - [x] streaming-01 0.9.0 (`2e361a3`): same approach, RTMP-correct
+    (hardware, libx264, libopenh264; AAC only; refuses to start with the fix
+    named; no MPEG-4). Owner: "go ahead w/it via core".
+  - [ ] Packaging (UV Install): rpm/deb file dependency on any ffmpeg.
 
 ## After W1 — library scale (owner: start after W1, but pause for discussion first)
 
