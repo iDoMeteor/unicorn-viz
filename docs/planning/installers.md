@@ -1347,7 +1347,8 @@ constraints, stated plainly:
     == "Linux"` markers (nvidia-nccl) for the host, not the target. Real
     Windows resolves.
   - **Where we stopped / next.**
-    1. Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH
+    1. *(Written 2026-10-01, `.github/workflows/windows-ft-wheels.yml`; dispatch
+       with `only=sphn` first, then the trio, then OpenCV.)* Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH
        job for the Windows wheels, 3.13 interim if it fails): `workflow_dispatch`
        with an optional `only` input, `windows-2022`, 150 min, runs
        `python tools/packaging/build_windows_ft_wheels.py --out wheels-out

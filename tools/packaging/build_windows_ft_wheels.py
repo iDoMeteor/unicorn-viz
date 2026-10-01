@@ -98,9 +98,24 @@ class Ctx:
     def __init__(self, work: Path, out: Path, dry_run: bool) -> None:
         self.work, self.out, self.dry = work, out, dry_run
         self.env: dict[str, str] = dict(os.environ)
+        self.log_path: Path | None = None
+
+    def set_log(self, step: str) -> None:
+        """Send everything from here on to ``work/<step>.log`` (as well as the
+        console): a failed run on a CI runner has to leave evidence, and the
+        workflow uploads ``work/*.log``."""
+        self.log_path = self.work / f'{step}.log'
+
+    def _write_log(self, text: str) -> None:
+        if self.dry or self.log_path is None:
+            return
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.log_path.open('a', encoding='utf-8', errors='replace') as fh:
+            fh.write(text)
 
     def say(self, msg: str) -> None:
         print(f'[build-win-ft] {msg}', flush=True)
+        self._write_log(f'[build-win-ft] {msg}\n')
 
     def run(self, cmd: list[str | Path], *, cwd: Path | None = None,
             env: dict[str, str] | None = None) -> None:
@@ -108,7 +123,17 @@ class Ctx:
         self.say(f'$ {shown}' + (f'   (in {cwd})' if cwd else ''))
         if self.dry:
             return
-        subprocess.run([str(c) for c in cmd], cwd=cwd, env=env or self.env, check=True)
+        # Stream the child's combined output to the console and the step log.
+        proc = subprocess.Popen([str(c) for c in cmd], cwd=cwd, env=env or self.env,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, errors='replace', bufsize=1)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            self._write_log(line)
+        sys.stdout.flush()
+        if proc.wait() != 0:
+            raise subprocess.CalledProcessError(proc.returncode, [str(c) for c in cmd])
 
     def capture(self, cmd: list[str | Path]) -> str:
         if self.dry:
@@ -190,6 +215,7 @@ class Build:
     # -- toolchain ---------------------------------------------------------
     def bootstrap(self) -> None:
         ctx, p = self.ctx, self.pins
+        ctx.set_log('bootstrap')
         archive = ctx.work / PBS_ASSET
         ctx.download(PBS_URL, archive, PBS_SHA256)
         ctx.say(f'extract the free-threaded {PBS_PYVER} runtime to {self.py_root}')
@@ -228,18 +254,21 @@ class Build:
     # -- targets: each returns (smoke group, wheels dir) -------------------
     def moderngl(self) -> Path:
         p = self.pins
+        self.ctx.set_log('moderngl')
         tree = self.ctx.pypi_sdist('moderngl', p['moderngl_version'], p['moderngl_sha256'], self.src)
         self._wheel_from(tree, 'moderngl')
         return self.raw / 'moderngl'
 
     def glcontext(self) -> Path:
         p = self.pins
+        self.ctx.set_log('glcontext')
         tree = self.ctx.pypi_sdist('glcontext', p['glcontext_version'], p['glcontext_sha256'], self.src)
         self._wheel_from(tree, 'glcontext')
         return self.raw / 'glcontext'
 
     def python_rtmidi(self) -> Path:
         p = self.pins
+        self.ctx.set_log('python-rtmidi')
         tree = self.ctx.pypi_sdist('python-rtmidi', p['python_rtmidi_version'],
                                    p['python_rtmidi_sha256'], self.src)
         # The sdist's pre-generated C++ came from Cython 3.0.5 (before free-threading
@@ -252,6 +281,7 @@ class Build:
 
     def opencv(self) -> Path:
         ctx, p = self.ctx, self.pins
+        ctx.set_log('opencv')
         tree = self.src / 'opencv-python'
         if not tree.exists() or ctx.dry:
             ctx.run(['git', 'clone', '-q', '--depth', '1', '--branch', p['opencv_python_tag'],
@@ -290,6 +320,7 @@ class Build:
 
     def sphn(self) -> Path:
         ctx, p = self.ctx, self.pins
+        ctx.set_log('sphn')
         tree = ctx.pypi_sdist('sphn', p['sphn_version'], p['sphn_sha256'], self.src)
         ctx.run(['rustup', 'toolchain', 'install', p['rust_version'], '--profile', 'minimal'])
         env = dict(ctx.env)
@@ -306,6 +337,7 @@ class Build:
     def smoke(self, group: str, wheel_dirs: list[Path], script: str, extra: list[str],
               needs_numpy: bool) -> None:
         ctx = self.ctx
+        ctx.set_log(f'smoke-{group}')
         venv = ctx.work / f'smoke-{group}'
         if not ctx.dry:
             shutil.rmtree(venv, ignore_errors=True)
@@ -336,6 +368,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument('--only', default=','.join(TARGETS), help=f'comma list of: {", ".join(TARGETS)}')
     ap.add_argument('--dry-run', action='store_true', help='print the plan, do nothing')
     args = ap.parse_args(argv)
+    # Compiler output can contain characters a Windows console code page cannot
+    # encode; never let that crash the build.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(errors='replace')
 
     wanted = [t.strip() for t in args.only.split(',') if t.strip()]
     unknown = [t for t in wanted if t not in TARGETS]
