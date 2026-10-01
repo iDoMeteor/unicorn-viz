@@ -1,0 +1,67 @@
+name: Windows Free-Threaded Wheels
+
+# Builds the win_amd64 cp314t wheels PyPI does not carry (moderngl, glcontext,
+# python-rtmidi, opencv-python-headless, sphn) so the Windows bundle can move to
+# free-threaded CPython 3.14 (W1, 2026-09-30 audit). Manual only: it is a
+# build-on-demand job, not part of any release gate.
+#
+# The job runs tools/packaging/build_windows_ft_wheels.py, which downloads and
+# verifies the pinned python-build-standalone Windows runtime, finds MSVC via
+# vswhere, builds each wheel and smoke-tests it before publishing it to --out.
+# The finished wheels come back as the artifact `cp314t-win_amd64-wheels`; a
+# person then copies them into the append-only wheelhouse
+# (~/projects/_software-dist/wheelhouse/cp314t/) and appends to SHA256SUMS.
+# Nothing here pushes, releases or touches secrets.
+#
+# Owner approval (2026-09-30): GitHub Actions for the Windows wheel build only;
+# fall back to the Windows 3.13 (GIL) interim if it cannot be made to work.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma list of wheels to build (moderngl, glcontext, python-rtmidi, opencv, sphn); empty = all'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheels:
+    name: Build cp314t win_amd64 wheels
+    runs-on: windows-2022
+    # OpenCV is the slow one.
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        shell: pwsh
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          $args = @('tools/packaging/build_windows_ft_wheels.py', '--out', 'wheels-out', '--work', 'work')
+          if ($env:ONLY) { $args += @('--only', $env:ONLY) }
+          New-Item -ItemType Directory -Force -Path work | Out-Null
+          python @args 2>&1 | Tee-Object -FilePath work/run.log
+          exit $LASTEXITCODE
+
+      - name: Upload wheels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp314t-win_amd64-wheels
+          path: wheels-out
+          if-no-files-found: warn
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp314t-win_amd64-logs
+          path: |
+            work/run.log
+            work/**/*.log
+          if-no-files-found: ignore
