@@ -1366,7 +1366,14 @@ constraints, stated plainly:
        `/var/tmp/uv-install-clean/pipcache` if still present): demucs should
        now install. Otherwise the mixer's `stems_python` can point at a second,
        GIL interpreter.
-    4. Owner decision: how CI release builds get the wheelhouse.
+    4. Owner decision: how CI release builds get the wheelhouse. *(Decided
+       2026-10-01: publish the wheels as a GitHub release asset and fetch them in
+       CI against a committed SHA256SUMS.)*
+    5. *(2026-10-01)* Linux installers install **CPU-only torch/torchaudio**
+       before demucs (`uv_preinstall_cpu_torch`, PyTorch CPU index, cp314t
+       wheels exist for Linux and Windows): the mixer-dependency venv is 1.4 GB
+       instead of 6.0 GB with the default CUDA wheels. `UV_TORCH_CUDA=1` opts
+       back into CUDA. Windows/macOS PyPI torch is already CPU.
     5. Drop-in owners: dj-mixer-01 should declare hidapi and send2trash (or use
        the pack file's `+hidapi +send2trash`); the self-test lists drop-in
        dependency gaps.

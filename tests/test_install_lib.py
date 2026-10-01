@@ -143,3 +143,34 @@ def test_optional_install_keeps_mediapipe_off_the_resolver(tmp_path: Path) -> No
     assert any('--no-deps' in c and 'mediapipe==1.0.0' in c for c in calls)
     assert any('absl-py' in c and 'flatbuffers' in c and '--no-deps' not in c for c in calls)
     assert (tmp_path / 'filtered.txt').read_text().split() == ['av>=13']
+
+
+def _torch_calls(tmp_path: Path, reqs: str, env: str = '') -> list[str]:
+    log = tmp_path / 'calls.log'
+    pip = tmp_path / 'pip'
+    pip.write_text(f'#!/usr/bin/env bash\necho "$*" >> "{log}"\nexit 0\n')
+    pip.chmod(0o755)
+    req = tmp_path / 'req.txt'
+    req.write_text(reqs)
+    (tmp_path / 'c.txt').write_text('')
+    proc = subprocess.run(
+        ['bash', '-c', f'source "{_LIB}"; {env} uv_preinstall_cpu_torch "{pip}" "{tmp_path}/c.txt" "{req}" --find-links /wh'],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def test_cpu_torch_is_preinstalled_for_demucs_from_the_cpu_index(tmp_path: Path) -> None:
+    calls = _torch_calls(tmp_path, 'av>=13\ndemucs>=4.0\n')
+    assert len(calls) == 2
+    assert '--no-deps' in calls[0] and 'https://download.pytorch.org/whl/cpu' in calls[0]
+    assert calls[0].endswith('torch torchaudio')
+    assert '--index-url' not in calls[1] and calls[1].endswith('torch torchaudio')
+
+
+def test_cpu_torch_is_skipped_without_torch_users_or_when_cuda_requested(tmp_path: Path) -> None:
+    (tmp_path / 'a').mkdir()
+    assert _torch_calls(tmp_path / 'a', 'av>=13\nmutagen\n') == []
+    (tmp_path / 'b').mkdir()
+    assert _torch_calls(tmp_path / 'b', 'demucs>=4.0\n', env='UV_TORCH_CUDA=1') == []
