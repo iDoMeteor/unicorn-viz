@@ -1369,6 +1369,16 @@ constraints, stated plainly:
     4. Owner decision: how CI release builds get the wheelhouse. *(Decided
        2026-10-01: publish the wheels as a GitHub release asset and fetch them in
        CI against a committed SHA256SUMS.)*
+    4a. *(2026-10-01, landed)* Wheelhouse release `wheelhouse-cp314t-2026-10-01`
+       (prerelease, no app tag; five Linux wheels + SHA256SUMS, licenses and the
+       OpenCV LGPL source pointers in its notes). `release-installers.yml` runs
+       `tools/packaging/fetch_wheelhouse.sh` before the source tarball is
+       repacked with `wheelhouse/` and before `build_native.sh`
+       (`UV_WHEELHOUSE`); trust anchor is the committed
+       `tools/packaging/wheelhouse-cp314t.sha256`, never the release's own
+       sums. A manual dispatch is now a dry run (`version`, `source_ref`
+       inputs; publish still only on a `v*.*.*` tag). Windows wheels: append
+       lines (and a new `# release-tag:`) to the trust file when they exist.
     5. *(2026-10-01)* Linux installers install **CPU-only torch/torchaudio**
        before demucs (`uv_preinstall_cpu_torch`, PyTorch CPU index, cp314t
        wheels exist for Linux and Windows): the mixer-dependency venv is 1.4 GB

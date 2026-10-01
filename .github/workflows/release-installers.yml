@@ -5,6 +5,19 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    # A manual run is a DRY RUN: nothing is published (the publish job only runs
+    # for a v*.*.* tag). It builds the installer artifacts from `source_ref`
+    # (a branch or commit) under the made-up `version`, so a change to these
+    # jobs can be proven without cutting a release.
+    inputs:
+      version:
+        description: 'Dry-run version string, e.g. 0.0.0-ci1'
+        required: false
+        default: '0.0.0-ci'
+      source_ref:
+        description: 'Dry-run source: branch or commit to download as the source tree'
+        required: false
+        default: 'master'
 
 permissions:
   contents: write
@@ -19,8 +32,17 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=refs/tags/${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${INPUT_VERSION:-0.0.0-ci}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=${INPUT_SOURCE_REF:-master}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Validate installer scripts
         run: |
@@ -32,7 +54,25 @@ jobs:
           mkdir -p dist
           curl -fsSL --retry 3 --retry-delay 2 \
             -o "dist/unicorn-viz-${VERSION}.tar.gz" \
-            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+            "https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.source_ref }}.tar.gz"
+
+      # Our cp314t wheels (moderngl, glcontext, python-rtmidi, OpenCV, sphn:
+      # PyPI has none) come from a GitHub release and are checked against the
+      # sha256 file committed in this repo before they go into the tarball. With
+      # a wheelhouse/ inside, the installers choose the free-threaded runtime.
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
+      - name: Add the wheelhouse to the source tarball
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p unpack
+          tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C unpack
+          TOP="$(find unpack -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          # install.sh expects unicorn-viz-<version>/ (a branch/commit archive names it differently).
+          [[ "$(basename "${TOP}")" == "unicorn-viz-${VERSION}" ]] || mv "${TOP}" "unpack/unicorn-viz-${VERSION}"
+          cp -r "${RUNNER_TEMP}/wheelhouse" "unpack/unicorn-viz-${VERSION}/wheelhouse"
+          tar -C unpack -czf "dist/unicorn-viz-${VERSION}.tar.gz" "unicorn-viz-${VERSION}"
 
       - name: Stage release artifacts
         run: |
@@ -55,8 +95,17 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=refs/tags/${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${INPUT_VERSION:-0.0.0-ci}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=${INPUT_SOURCE_REF:-master}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install packaging dependencies
         run: |
@@ -74,7 +123,7 @@ jobs:
           mkdir -p dist src
           curl -fsSL --retry 3 --retry-delay 2 \
             -o "dist/unicorn-viz-${VERSION}.tar.gz" \
-            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+            "https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.source_ref }}.tar.gz"
           tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C src
           SOURCE_DIR="$(find src -mindepth 1 -maxdepth 1 -type d | head -n 1)"
           if [[ -z "${SOURCE_DIR}" ]]; then
@@ -83,7 +132,12 @@ jobs:
           fi
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
       - name: Build .deb
+        env:
+          UV_WHEELHOUSE: ${{ runner.temp }}/wheelhouse
         run: |
           mkdir -p dist
           chmod +x tools/packaging/build_native.sh
@@ -109,8 +163,17 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
         run: |
-          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=refs/tags/${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${INPUT_VERSION:-0.0.0-ci}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=${INPUT_SOURCE_REF:-master}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install packaging dependencies
         run: |
@@ -127,7 +190,7 @@ jobs:
           mkdir -p dist src
           curl -fsSL --retry 3 --retry-delay 2 \
             -o "dist/unicorn-viz-${VERSION}.tar.gz" \
-            "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+            "https://github.com/${{ github.repository }}/archive/${{ steps.version.outputs.source_ref }}.tar.gz"
           tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C src
           SOURCE_DIR="$(find src -mindepth 1 -maxdepth 1 -type d | head -n 1)"
           if [[ -z "${SOURCE_DIR}" ]]; then
@@ -136,7 +199,12 @@ jobs:
           fi
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
       - name: Build .rpm
+        env:
+          UV_WHEELHOUSE: ${{ runner.temp }}/wheelhouse
         run: |
           mkdir -p dist
           chmod +x tools/packaging/build_native.sh

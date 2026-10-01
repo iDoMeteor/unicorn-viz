@@ -1,0 +1,17 @@
+# Trust anchor for the cp314t wheelhouse that CI fetches (fetch_wheelhouse.sh).
+#
+# One "<sha256>  <wheel file name>" per line. A wheel is downloaded from the
+# GitHub release named by the most recent "# release-tag:" line above it and is
+# accepted ONLY if its sha256 matches this committed file, so swapping a release
+# asset cannot change what a build ships. The release's own SHA256SUMS is never
+# trusted. Append-only: add lines (and, for a new release, a new tag line);
+# never edit or remove one. Provenance, licenses and the OpenCV LGPL source
+# pointers are in that release's notes and in
+# docs/planning/free-threaded-wheels-2026-09-30.md.
+#
+# release-tag: wheelhouse-cp314t-2026-10-01
+5bb594e40c12b8d3fa677727fc308b5fd9f44457284c16363046792a571c42e6  glcontext-3.0.0-cp314-cp314t-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
+09b38227850d5f150ab85cccaf2f23f4cdb65654270e33afd9e3f4c1d46f5c15  moderngl-5.12.0-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+788d8b4298a1793a8657c42977c487b1c06990e33332a72dc0768d747fd18a45  opencv_python_headless-4.13.0.92-cp314-cp314t-manylinux_2_28_x86_64.whl
+1455c961b05ac62304996ffa8b19ca7bf81be8848cbc73080a38a75d99580851  python_rtmidi-1.5.8-1-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+295b053a04d5ed7e453192636285c8a4cbf0931823973104327fa681f77a85c2  sphn-0.2.1-cp314-cp314t-manylinux_2_28_x86_64.whl
