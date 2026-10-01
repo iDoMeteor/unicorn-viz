@@ -64,7 +64,10 @@ def audio():
     store = _Store({'audio': {'viable': ['x']}})
     with patch('unicornviz.audio.manager.AudioCapture', audio_fake.FakeCapture):
         manager = AudioManager(cfg, state_store=store)
-    host = ro.RemoteHost.spawn(str(_FAKE), 'build', {'cfg': cfg, 'state': {'audio': {}}},
+    # The helper is seeded with the same state as the main side's baseline, as
+    # start_audio_process() does; a mismatched seed made the helper's first
+    # publication look like a change and persist {} over 'viable' (b328b46).
+    host = ro.RemoteHost.spawn(str(_FAKE), 'build', {'cfg': cfg, 'state': {'audio': {'viable': ['x']}}},
                                namespace=audio_process.NAMESPACE,
                                module_name=_spec.name)
     relay = audio_process.StateRelay({'audio': {'viable': ['x']}})
@@ -245,3 +248,97 @@ def test_claimed_devices_are_pushed_only_when_they_change() -> None:
     app._claimed_pushed = None                        # what recovery does
     app._refresh_claimed_audio_devices()
     assert len(pushes) == 3
+
+
+# --- persist_relay_state never writes an empty or stale value over a good one ---
+# Review of b328b46 (2026-10-01): the `audio` fixture seeds the helper with
+# {'audio': {}} but the main side with {'audio': {'viable': ['x']}}, so the
+# helper's first publication (its own seed) differs from the main-side baseline
+# and the fixture sees an "empty first" write.  start_audio_process() seeds both
+# sides from the same dict, so production has no such window.  These tests pin
+# that: the store only ever receives values the capture actually wrote.
+
+class _Relay:
+    def __init__(self, values) -> None:
+        self.values = values
+
+
+class _Host:
+    def __init__(self, values, persisted) -> None:
+        self.state_relay = _Relay(values)
+        self.relay_persisted = dict(persisted)
+
+
+def test_persist_writes_nothing_while_the_relay_still_holds_its_seed() -> None:
+    seed = {'audio': {'viable': ['x'], 'last_source': 'mic'}}
+    store = _Store(seed)
+    host = _Host(dict(seed), seed)                 # before the helper publishes anything
+    audio_process.persist_relay_state(host, store)
+    assert store.sets == []
+
+
+def test_persist_never_erases_a_key_the_relay_does_not_carry() -> None:
+    """A relay with no 'audio' key (helper died before publishing, or a reset
+    shadow) must not blank the store: persist only copies keys that changed."""
+    store = _Store({'audio': {'last_source': 'mic'}})
+    host = _Host({}, {'audio': {'last_source': 'mic'}})
+    audio_process.persist_relay_state(host, store)
+    assert store.sets == [] and store.data['audio'] == {'last_source': 'mic'}
+
+
+def test_the_store_only_ever_receives_what_the_capture_wrote() -> None:
+    """End to end with consistent seeds: no write of the seed, an empty dict or
+    anything else before the capture's own value."""
+    cfg = Config()
+    seed = {'audio': {'viable': ['x']}}
+    store = _Store(seed)
+    host = ro.RemoteHost.spawn(str(_FAKE), 'build', {'cfg': cfg, 'state': seed},
+                               namespace=audio_process.NAMESPACE, module_name=_spec.name)
+    try:
+        with patch('unicornviz.audio.manager.AudioCapture', audio_fake.FakeCapture):
+            manager = AudioManager(cfg, state_store=store)
+        relay = audio_process.StateRelay(dict(seed))
+        ro.attach_shadows(host, {audio_process.MANAGER_PATH: manager,
+                                 audio_process.STATE_PATH: relay}, audio_process.POLICIES)
+        host.state_relay = relay
+        host.relay_persisted = dict(seed)
+        # The window itself: the helper's first publications arrive before the
+        # capture writes anything.  With one shared seed they equal the baseline,
+        # so nothing may reach the store (a mismatched seed wrote {} here).
+        end = time.monotonic() + 0.6
+        while time.monotonic() < end:
+            audio_process.persist_relay_state(host, store)
+            time.sleep(0.02)
+        assert store.sets == []
+        manager.start(timeout_s=4.0)               # the fake writes {'last_source': 'fake kick'}
+
+        def done() -> bool:
+            audio_process.persist_relay_state(host, store)
+            return store.data.get('audio') == {'last_source': 'fake kick'}
+
+        assert _until(done)
+        assert [v for _, v in store.sets] == [{'last_source': 'fake kick'}]
+    finally:
+        host.close()
+
+
+def test_start_audio_process_seeds_helper_relay_and_baseline_identically(monkeypatch) -> None:
+    """The invariant behind the persist tests: one seed, three uses."""
+    captured = {}
+
+    class _FakeHost:
+        ready = (None, 4242)
+
+    def fake_spawn(factory_path, factory_name, args=None, **kw):
+        captured['helper_seed'] = args['state']
+        return _FakeHost()
+
+    monkeypatch.setattr(audio_process.RemoteHost, 'spawn', staticmethod(fake_spawn))
+    monkeypatch.setattr(audio_process, 'attach_shadows', lambda *a, **k: None)
+    store = _Store({'audio': {'viable': ['x'], 'last_source': 'mic'}})
+    host = audio_process.start_audio_process(object(), Config(), store)
+    assert captured['helper_seed'] == {'audio': {'viable': ['x'], 'last_source': 'mic'}}
+    assert host.state_relay.values == captured['helper_seed']
+    assert host.relay_persisted == captured['helper_seed']
+    audio_process.persist_relay_state(host, store)          # nothing changed yet
+    assert store.sets == []
