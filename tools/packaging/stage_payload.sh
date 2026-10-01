@@ -16,6 +16,14 @@
 # Usage:
 #   tools/packaging/stage_payload.sh --dest build/payload [--source-dir .]
 #                                    [--dropins <pack-file>]
+#                                    [--wheelhouse <dir> | --no-wheelhouse]
+#
+# --wheelhouse <dir>: stage our own prebuilt wheels (the cp314t moderngl,
+# glcontext and python-rtmidi builds that PyPI does not carry) into
+# <dest>/wheelhouse/, after verifying every wheel against the folder's
+# SHA256SUMS. Installers and bundle builders pass it to pip as --find-links.
+# Default: $UV_WHEELHOUSE, else ~/projects/_software-dist/wheelhouse/cp314t when
+# that folder exists; absent folder = no wheelhouse staged.
 #
 # --dropins <pack-file>: also stage the listed drop-ins (one per line; '#'
 # comments) under <dest>/drop-ins/<name>/ — their TRACKED files only (each is
@@ -38,6 +46,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SOURCE_DIR="${REPO_ROOT}"
 DEST=""
 DROPINS_FILE=""
+WHEELHOUSE="${UV_WHEELHOUSE:-}"
+NO_WHEELHOUSE=0
 
 log() { echo "[stage-payload] $*" >&2; }
 die() { echo "[stage-payload] ERROR: $*" >&2; exit 1; }
@@ -52,6 +62,9 @@ Usage:
 Options:
   --dest <dir>          Output directory for the staged payload (required)
   --source-dir <path>   Source tree root (default: repository root)
+  --wheelhouse <dir>    Prebuilt-wheel folder to stage (default: $UV_WHEELHOUSE or
+                        ~/projects/_software-dist/wheelhouse/cp314t if present)
+  --no-wheelhouse       Do not stage a wheelhouse
   -h, --help            Show this help text
 EOF
 }
@@ -61,6 +74,8 @@ while [[ $# -gt 0 ]]; do
     --dest) DEST="$2"; shift 2 ;;
     --source-dir) SOURCE_DIR="$2"; shift 2 ;;
     --dropins) DROPINS_FILE="$2"; shift 2 ;;
+    --wheelhouse) WHEELHOUSE="$2"; shift 2 ;;
+    --no-wheelhouse) NO_WHEELHOUSE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
@@ -164,6 +179,38 @@ fi
 # logs live under assets/training/ and are gitignored; only its .gitignore ships).
 if find "${DEST}/assets/training" -mindepth 1 ! -name .gitignore 2>/dev/null | read -r _; then
   die "Training session data leaked into payload under assets/training/"
+fi
+
+# Wheelhouse: our own prebuilt wheels, verified against the folder's SHA256SUMS
+# (append-only dist folder; every wheel must be listed and match, so a corrupted
+# or hand-dropped wheel can never ship).
+if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
+  if [[ -z "$WHEELHOUSE" && -d "${HOME}/projects/_software-dist/wheelhouse/cp314t" ]]; then
+    WHEELHOUSE="${HOME}/projects/_software-dist/wheelhouse/cp314t"
+  fi
+  if [[ -n "$WHEELHOUSE" ]]; then
+    [[ -d "$WHEELHOUSE" ]] || die "--wheelhouse: no such folder: ${WHEELHOUSE}"
+    [[ -f "${WHEELHOUSE}/SHA256SUMS" ]] || die "--wheelhouse: ${WHEELHOUSE}/SHA256SUMS missing; refusing to ship unverified wheels"
+    mkdir -p "${DEST}/wheelhouse"
+    wheels=0
+    for whl in "${WHEELHOUSE}"/*.whl; do
+      [[ -e "$whl" ]] || break
+      name="$(basename "$whl")"
+      want="$(awk -v n="$name" '$2 == n || $2 == "*" n {print $1; exit}' "${WHEELHOUSE}/SHA256SUMS")"
+      [[ -n "$want" ]] || die "--wheelhouse: ${name} is not listed in SHA256SUMS"
+      have="$(sha256sum "$whl" | awk '{print $1}')"
+      [[ "$want" == "$have" ]] || die "--wheelhouse: checksum mismatch for ${name}"
+      cp "$whl" "${DEST}/wheelhouse/${name}"
+      wheels=$((wheels + 1))
+    done
+    if [[ "$wheels" -eq 0 ]]; then
+      rmdir "${DEST}/wheelhouse"
+      log "Wheelhouse ${WHEELHOUSE} has no wheels; none staged"
+    else
+      grep -F -f <(cd "${DEST}/wheelhouse" && ls -1 -- *.whl) "${WHEELHOUSE}/SHA256SUMS" > "${DEST}/wheelhouse/SHA256SUMS"
+      log "Wheelhouse: ${wheels} verified wheel(s) staged from ${WHEELHOUSE}"
+    fi
+  fi
 fi
 
 # Guard against regressions: assert nothing that must never ship leaked in.

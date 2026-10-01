@@ -104,11 +104,20 @@ silently die.
        [free-threaded-python-2026-09-24.md](free-threaded-python-2026-09-24.md)).
      - The main process runs with the GIL on until moderngl is ported.
        That's expected, not a regression.
-  2. [ ] **UV Install.**
-     - Switch `tools/packaging/fetch_runtime.sh` (`PBS_PYVER`, currently
-       3.11.10) to the python-build-standalone 3.14 free-threaded build.
-     - Install the UV Threads wheels.
-     - Fix **W2** (missing drop-in dependencies) in the same pass.
+  2. [ ] **UV Install.** *Status (core beta.185): Linux done; Windows waits
+     on the GitHub Actions wheel job. Details, the per-dependency table and
+     the next steps are in the 2026-09-30 entry of
+     [installers.md](installers.md).*
+     - [x] `fetch_runtime.sh --flavor ft`: PBS 20260929 / CPython 3.14.7
+       free-threaded, digests pinned, a missing checksum is now fatal.
+     - [x] Install the UV Threads wheels (Linux): `stage_payload.sh` stages a
+       verified `wheelhouse/`, every installer uses it; ft is chosen when a
+       wheelhouse exists.
+     - [x] **W2** drop-in dependencies installed by every installer (tolerant
+       per-file/per-line, mediapipe `--no-deps`). PowerShell side untested.
+     - [ ] Windows: GH Actions job for the cp314t wheels, then flip
+       `build_windows_portable.sh` to `ft`. Fallback: 3.13 GIL interim.
+     - [ ] Linux clean-install check: app launch + mixer track load.
   3. [ ] **UV Core.**
      - [x] Audio process on 3.14t: runs with the GIL off; core and mixer
        helper tests pass on it; the whole app runs on 3.14t with the UV
@@ -125,7 +134,7 @@ silently die.
      - media and videos (python-vlc, PyAV);
      - webcam (lazy mediapipe and cv2 imports; mediapipe unverified on 3.14t);
      - sims (usd-core has no `t` build, so the USD scene needs a fallback).
-- [ ] **W2** Installers skip drop-in dependencies. [installer]
+- [x] **W2** Installers skip drop-in dependencies. [installer] Landed core beta.185 (Linux verified; PowerShell untested; demucs still blocked on sphn for 3.14t).
 - [ ] **W3** No WASAPI loopback, so Windows visualizes the microphone.
   [core]
 - [ ] **W4** Mixer output device names ambiguous across Windows host APIs.

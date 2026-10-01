@@ -241,20 +241,29 @@ run_install() {
 
   # Runtime first: besides running the app, it is the interpreter that reads
   # the manifest, so the installer never needs a system Python.
-  local python_path
+  # Which flavor the release wants (free-threaded when it carries our cp314t
+  # wheelhouse) is only known after the download, so the bootstrap runtime is
+  # the default flavor and is swapped below if the release asks for another.
+  local python_path boot_flavor
+  boot_flavor="$(uv_runtime_flavor "")"
   if [[ "$SYSTEM_PYTHON" -eq 1 ]]; then
     uv_log "Using system Python: ${PYTHON_BIN} (bundled runtime skipped)"
     uv_require_cmd "$PYTHON_BIN"
     python_path="$(command -v "$PYTHON_BIN")"
   else
     uv_log "Provisioning bundled Python runtime"
-    python_path="$(uv_provision_runtime "${PREFIX}/runtime")"
+    python_path="$(uv_provision_runtime "${PREFIX}/runtime" "")"
   fi
   export UV_JSON_PYTHON="$python_path"
 
   resolve_release
   verify_release_signature
   download_release_source
+
+  if [[ "$SYSTEM_PYTHON" -eq 0 && "$(uv_runtime_flavor "$SRC_DIR")" != "$boot_flavor" ]]; then
+    uv_log "This release carries a wheelhouse: switching the bundled runtime to $(uv_runtime_flavor "$SRC_DIR")"
+    python_path="$(uv_provision_runtime "${PREFIX}/runtime" "$SRC_DIR")"
+  fi
 
   uv_run cp -a "$SRC_DIR/assets" "$PREFIX/"
   for doc in LICENSE THIRD_PARTY_LICENSES.md README.md config.full.example.toml; do
