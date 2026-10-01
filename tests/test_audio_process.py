@@ -123,8 +123,14 @@ def test_profile_switch_runs_in_the_helper_and_comes_back(audio) -> None:
 def test_capture_state_is_persisted_by_the_main_process(audio) -> None:
     host, manager, store = audio
     manager.start(timeout_s=4.0)                           # fake writes state
-    assert _until(lambda: (audio_process.persist_relay_state(host, store)
-                           or store.sets) != [])
+    # Wait for the value itself, not for "any write": the relay can publish an empty
+    # 'audio' first and the real value a tick later (a load-dependent race that failed a
+    # full-suite push at load average ~20).
+    def persisted() -> bool:
+        audio_process.persist_relay_state(host, store)
+        return store.data.get('audio') == {'last_source': 'fake kick'}
+
+    assert _until(persisted)
     assert store.data['audio'] == {'last_source': 'fake kick'}
     n = len(store.sets)
     audio_process.persist_relay_state(host, store)         # unchanged: no write
