@@ -140,9 +140,11 @@ silently die.
        wheelhouse exists.
      - [x] **W2** drop-in dependencies installed by every installer (tolerant
        per-file/per-line, mediapipe `--no-deps`). PowerShell side untested.
-     - [ ] Windows: GH Actions job for the cp314t wheels, then flip
-       `build_windows_portable.sh` to `ft`. Fallback: 3.13 GIL interim.
-     - [ ] Linux clean-install check: app launch + mixer track load.
+     - [x] Windows: five cp314t wheels built on GH Actions and published
+       (`wheelhouse-cp314t-win-2026-10-01`); `build_windows_portable.sh` now
+       defaults to `ft` (core beta.189). **Untested on Windows.**
+     - [x] Linux clean-install check: root + mixer deps (demucs) install, real
+       mp3 loads in the audio helper (GIL off), app launches (main GIL on).
   3. [ ] **UV Core.**
      - [x] Audio process on 3.14t: runs with the GIL off; core and mixer
        helper tests pass on it; the whole app runs on 3.14t with the UV

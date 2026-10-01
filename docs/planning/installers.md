@@ -1346,6 +1346,23 @@ constraints, stated plainly:
     of resolving cross-platform on a Linux host: pip evaluates `platform_system
     == "Linux"` markers (nvidia-nccl) for the host, not the target. Real
     Windows resolves.
+  - **2026-10-01 update (core beta.189): Windows on free-threaded 3.14.** All
+    five Windows cp314t wheels (glcontext, moderngl, python-rtmidi -1, sphn,
+    OpenCV with its LGPL FFmpeg plugin) were built on GitHub Actions
+    (`windows-ft-wheels.yml`, UV Threads' `build_windows_ft_wheels.py`) and
+    published append-only as release `wheelhouse-cp314t-win-2026-10-01`
+    (prerelease; notices attached); the Linux set is `wheelhouse-cp314t-2026-10-01`.
+    `tools/packaging/wheelhouse-cp314t.sha256` lists both tags' wheels and is the
+    only trust anchor (`fetch_wheelhouse.sh`, verified against the real releases:
+    10 wheels). `stage_payload.sh --wheel-platform` filters by platform;
+    `build_windows_portable.sh` now defaults to `--runtime-flavor ft`
+    (`gil` = legacy 3.11) and drops the staged wheelhouse after installing.
+    A core-only test bundle built clean (246 MB): PBS 3.14.7 free-threaded
+    runtime with python.exe/pythonw.exe and the MSVC runtime DLLs, every
+    compiled module tagged cp314t, cv2 plus `opencv_videoio_ffmpeg4130_64.dll`,
+    no GIL-build `.pyd`. **Not run on Windows**: the owner needs to test the
+    bundle (launch, `--self-test`, a mixer track load); expect the GIL log line
+    to say the main process re-enabled the GIL (moderngl).
   - **Where we stopped / next.**
     1. *(Written 2026-10-01, `.github/workflows/windows-ft-wheels.yml`; dispatch
        with `only=sphn` first, then the trio, then OpenCV.)* Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH

@@ -17,7 +17,7 @@
 # Usage:
 #   tools/packaging/build_windows_portable.sh [--version X.Y.Z] [--output-dir dir]  # default: $UV_DIST_DIR,
 #                                             # else ~/projects/_software-dist if present, else dist/
-#                                             [--source-dir dir] [--python-version 3.11]
+#                                             [--source-dir dir] [--runtime-flavor ft|gil]  # default ft (3.14 free-threaded)
 #                                             [--payload-out dir]   # also leave the assembled
 #                                                                   # UnicornViz/ tree here for Inno Setup
 #                                             [--dropins pack.txt]  # ship a drop-in pack (see
@@ -58,9 +58,10 @@ dist_default() {
 }
 OUTPUT_DIR="$(dist_default)"
 SOURCE_DIR="${REPO_ROOT}"
-# Runtime flavor: gil = CPython 3.11 (default until Windows cp314t wheels of
-# moderngl / glcontext / python-rtmidi / opencv exist), ft = 3.14 free-threaded.
-RUNTIME_FLAVOR="${UV_RUNTIME_FLAVOR:-gil}"
+# Runtime flavor: ft = CPython 3.14 free-threaded (default; fixes W1, the
+# SharedMemory(track=) break of 3.11 that stops every mixer track load), needs
+# our win_amd64 cp314t wheels from the wheelhouse; gil = the legacy 3.11 bundle.
+RUNTIME_FLAVOR="${UV_RUNTIME_FLAVOR:-ft}"
 PYVER=""
 PAYLOAD_OUT=""
 DROPINS_FILE=""
@@ -114,7 +115,7 @@ trap 'rm -rf "$WORK"' EXIT
 APP="${WORK}/UnicornViz"
 
 log "Staging curated payload${DROPINS_FILE:+ + drop-in pack ${DROPINS_FILE}}"
-stage_args=(--source-dir "$SOURCE_DIR" --dest "$APP")
+stage_args=(--source-dir "$SOURCE_DIR" --dest "$APP" --wheel-platform windows)
 [[ -n "$DROPINS_FILE" ]] && stage_args+=(--dropins "$DROPINS_FILE")
 "${SCRIPT_DIR}/stage_payload.sh" "${stage_args[@]}" >/dev/null
 
@@ -159,6 +160,8 @@ else
   fi
 fi
 find "$SITE" -type d -name __pycache__ -prune -exec rm -rf {} +
+# The wheels are installed; the staged wheelhouse was only pip's source for them.
+rm -rf "${APP}/wheelhouse"
 
 # Stem-separation weights. Without --repo, demucs asks the HuggingFace hub
 # first and only then its torch-hub cache, so a seeded cache would not keep a
