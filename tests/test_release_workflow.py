@@ -43,3 +43,15 @@ def test_every_build_job_fetches_the_verified_wheelhouse() -> None:
     for name in ('linux-installer', 'native-deb', 'native-rpm'):
         steps = [s.get('run', '') for s in wf['jobs'][name]['steps']]
         assert any('fetch_wheelhouse.sh' in r for r in steps), name
+
+
+def test_build_jobs_do_not_install_ffmpeg_and_rpm_uses_a_supported_fedora() -> None:
+    # Nothing in the deb/rpm build runs ffmpeg (it is only a package-metadata
+    # string for the end user), and Fedora has no 'ffmpeg' package without RPM
+    # Fusion, so installing it in the build container broke the rpm job.
+    wf = _load()
+    for name in ('native-deb', 'native-rpm'):
+        for step in wf['jobs'][name]['steps']:
+            if 'Install packaging dependencies' in step.get('name', ''):
+                assert 'ffmpeg' not in step['run'], name
+    assert wf['jobs']['native-rpm']['container'] not in ('fedora:40', 'fedora:41', 'fedora:42')

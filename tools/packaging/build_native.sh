@@ -264,6 +264,9 @@ COMMON_ARGS=(
 # without it (recording is disabled), and stock Fedora cannot satisfy a hard
 # "ffmpeg" Requires without RPM Fusion — a hard dep would make `dnf install`
 # of the package fail on a clean system. The one-liner treats it the same way.
+# On RPM the weak dependency is the FILE /usr/bin/ffmpeg, not the package name,
+# so RPM Fusion's full ffmpeg and Fedora's ffmpeg-free both satisfy it and the
+# package never pulls one in over the other.
 # fpm requires all flags before the positional input dirs, so the staged trees
 # (usr/ and the INSTALL_ROOT top-level dir) come last on every invocation.
 if [[ "$FORMAT" == "deb" ]]; then
@@ -284,7 +287,7 @@ else
     --depends pipewire \
     --depends alsa-lib \
     --depends portaudio \
-    --rpm-tag 'Recommends: ffmpeg' \
+    --rpm-tag 'Recommends: /usr/bin/ffmpeg' \
     usr "$INSTALL_TOP"
 fi
 
