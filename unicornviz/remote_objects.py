@@ -52,6 +52,7 @@ import itertools
 import logging
 import os
 import pickle
+import re
 import secrets
 import signal
 import subprocess
@@ -60,6 +61,7 @@ import sysconfig
 import threading
 import time
 import types
+import warnings
 import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -708,12 +710,72 @@ class _EventLogHandler(logging.Handler):
             pass
 
 
+# Extension modules the main process is *expected* to turn the GIL back on
+# for, until moderngl / glcontext / python-rtmidi declare free-threading
+# support (plan W1; docs/planning/free-threaded-wheels-2026-09-30.md §3).
+MAIN_EXPECTED_GIL_MODULES = frozenset(
+    {'moderngl.mgl', 'glcontext.egl', 'glcontext.x11', 'rtmidi._rtmidi'})
+
+_GIL_WARNING = re.compile(r"module '([^']+)'")
+
+
+def watch_gil_warnings(sink: list[str]) -> None:
+    """Append, to ``sink``, the name of every module the interpreter turns
+    the GIL back on for.
+
+    CPython reports that only as a ``RuntimeWarning`` at import time ("The
+    global interpreter lock (GIL) has been enabled to load module 'X'...").
+    The warning is still shown; this only remembers the module name so one
+    INFO/WARNING line after startup can say who did it.
+    """
+    shown = warnings.showwarning
+
+    def _show(message, category, filename, lineno, file=None, line=None):  # noqa: ANN001
+        text = str(message)
+        if category is RuntimeWarning and 'global interpreter lock' in text.lower():
+            found = _GIL_WARNING.search(text)
+            sink.append(found.group(1) if found else text)
+        shown(message, category, filename, lineno, file, line)
+
+    warnings.showwarning = _show
+    warnings.filterwarnings('always', message=r'The global interpreter lock',
+                            category=RuntimeWarning)
+
+
+def gil_enabled() -> bool | None:
+    """True/False on a free-threaded build, None on a normal (GIL) build.
+
+    ``sys._is_gil_enabled`` does not exist before 3.13, so it is looked up
+    with ``getattr``.
+    """
+    if not sysconfig.get_config_var('Py_GIL_DISABLED'):
+        return None
+    return bool(getattr(sys, '_is_gil_enabled', lambda: True)())
+
+
+def gil_status(forced_by: list[str] | None = None) -> str:
+    """One line for the startup log: which interpreter build this is and,
+    on a free-threaded one, whether the GIL is really off.
+
+    ``forced_by`` names the modules the interpreter re-enabled the GIL for
+    (see :func:`watch_gil_warnings`).
+    """
+    ver = '.'.join(str(v) for v in sys.version_info[:3])
+    state = gil_enabled()
+    if state is None:
+        return f'CPython {ver}, GIL build'
+    if not state:
+        return f'CPython {ver} free-threaded, GIL disabled'
+    who = ', '.join(forced_by) if forced_by else 'an extension without free-threading support'
+    return f'CPython {ver} free-threaded, GIL ENABLED (turned back on by {who})'
+
+
 def _gil_report() -> str:
     """Empty on a normal build; on a free-threaded one, whether the GIL is off."""
-    if not sysconfig.get_config_var('Py_GIL_DISABLED'):
+    state = gil_enabled()
+    if state is None:
         return ''
-    enabled = getattr(sys, '_is_gil_enabled', lambda: True)()
-    return 'free-threaded, GIL ENABLED (an unready extension turned it on)' if enabled \
+    return 'free-threaded, GIL ENABLED (an unready extension turned it on)' if state \
         else 'free-threaded, GIL disabled'
 
 
@@ -735,6 +797,8 @@ def _host_main(argv: list[str]) -> int:
     # challenge on a fresh random 32-byte key handed over in our environment
     # (popped above) -- the same trust model multiprocessing itself pickles on.
     init = pickle.loads(cmd.recv())  # nosec B301
+    forced_by: list[str] = []
+    watch_gil_warnings(forced_by)               # before any extension is imported
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
     host = _Host(cmd, evt, {}, {}, 0.01)
     _ShmExporter.current = host.exporter        # for adopt_array() in factories
@@ -743,7 +807,13 @@ def _host_main(argv: list[str]) -> int:
                               init.get('namespace', ''), init.get('module_name', ''))
     gil = _gil_report()
     if gil:
-        log.info('remote host interpreter: %s', gil)
+        # This process imports none of moderngl, glcontext or rtmidi, so on a
+        # free-threaded build the GIL being on is a regression, not a known
+        # state: say so at WARNING, naming the module.
+        if gil_enabled():
+            log.warning('remote host interpreter: %s', gil_status(forced_by))
+        else:
+            log.info('remote host interpreter: %s', gil_status(forced_by))
     host.emit(('ready', paths, os.getpid(), gil))
     pub = threading.Thread(target=host.publish_forever, name='remote-publish', daemon=True)
     pub.start()

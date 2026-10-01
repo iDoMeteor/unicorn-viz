@@ -32,10 +32,40 @@ from unicornviz.stall_watchdog import StallWatchdog
 from unicornviz.config import Config, ConfigValidationError
 from unicornviz.dropins import register_dropin_config_validators
 from unicornviz.paths import APP_ROOT, resolve_path
+from unicornviz.remote_objects import watch_gil_warnings
 
 # Kept open for the process lifetime so faulthandler can still write to it
 # from the signal handler after a native crash (segfault, etc.).
 _faulthandler_file: object | None = None
+
+# Modules the interpreter re-enabled the GIL for (free-threaded builds only);
+# filled by remote_objects.watch_gil_warnings() and reported once after the
+# startup imports (see _log_interpreter_status).
+_GIL_FORCED_BY: list[str] = []
+
+
+def _log_interpreter_status() -> None:
+    """One line per process: interpreter build, and whether the GIL is really off.
+
+    The main process is expected to have the GIL on, on a free-threaded
+    build, until moderngl, glcontext and python-rtmidi ship ``cp314t``
+    wheels that declare support (plan W1): INFO for that known set, WARNING
+    for any other module (for example ``cv2`` once the webcam loads).  The
+    audio helper logs its own line from remote_objects.
+    """
+    from unicornviz.remote_objects import (  # noqa: PLC0415
+        MAIN_EXPECTED_GIL_MODULES,
+        gil_status,
+    )
+    log = logging.getLogger('unicornviz.startup')
+    unexpected = [m for m in _GIL_FORCED_BY if m not in MAIN_EXPECTED_GIL_MODULES]
+    line = gil_status(_GIL_FORCED_BY)
+    if unexpected:
+        log.warning('Interpreter: %s -- GIL turned on by %s, which is not in the '
+                    'known set (%s)', line, ', '.join(unexpected),
+                    ', '.join(sorted(MAIN_EXPECTED_GIL_MODULES)))
+    else:
+        log.info('Interpreter: %s', line)
 
 
 class _LogBandFilter(logging.Filter):
@@ -622,8 +652,10 @@ def main() -> None:
     _install_gl_debug_env(cfg)
     _install_faulthandler(cfg)
     _install_exception_logging()
+    watch_gil_warnings(_GIL_FORCED_BY)
     from unicornviz.app import App
     app = App(cfg)
+    _log_interpreter_status()           # after the startup imports, incl. moderngl
     watchdog = _install_stall_watchdog(cfg, app)
     try:
         try:

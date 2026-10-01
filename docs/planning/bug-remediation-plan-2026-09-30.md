@@ -110,8 +110,13 @@ silently die.
      - Install the UV Threads wheels.
      - Fix **W2** (missing drop-in dependencies) in the same pass.
   3. [ ] **UV Core.**
-     - Move the audio process and the dev `.venv` (plain 3.14.6 today) to
-       3.14t.
+     - [x] Audio process on 3.14t: runs with the GIL off; core and mixer
+       helper tests pass on it; the whole app runs on 3.14t with the UV
+       Threads wheels (core beta.183; notes in
+       [free-threaded-python-2026-09-24.md](free-threaded-python-2026-09-24.md) §8).
+     - [x] GIL-status line in both processes (core beta.183).
+     - [ ] Dev `.venv` (plain 3.14.6 today) to 3.14t: parallel venv built,
+       switch-over proposal sent to the coordinator; not swapped.
      - Confirm `remote_objects` and the audio process under it. This is
        where free-threading pays off first: numpy, scipy, cffi and PyAV are
        all ready.
