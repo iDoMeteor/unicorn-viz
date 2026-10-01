@@ -34,6 +34,22 @@ jobs:
             -o "dist/unicorn-viz-${VERSION}.tar.gz" \
             "https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
 
+      # Our cp314t wheels (moderngl, glcontext, python-rtmidi, OpenCV, sphn:
+      # PyPI has none) come from a GitHub release and are checked against the
+      # sha256 file committed in this repo before they go into the tarball. With
+      # a wheelhouse/ inside, the installers choose the free-threaded runtime.
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
+      - name: Add the wheelhouse to the source tarball
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p unpack
+          tar -xzf "dist/unicorn-viz-${VERSION}.tar.gz" -C unpack
+          TOP="$(find unpack -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          cp -r "${RUNNER_TEMP}/wheelhouse" "${TOP}/wheelhouse"
+          tar -C unpack -czf "dist/unicorn-viz-${VERSION}.tar.gz" "$(basename "${TOP}")"
+
       - name: Stage release artifacts
         run: |
           cp install.sh dist/install.sh
@@ -83,7 +99,12 @@ jobs:
           fi
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
       - name: Build .deb
+        env:
+          UV_WHEELHOUSE: ${{ runner.temp }}/wheelhouse
         run: |
           mkdir -p dist
           chmod +x tools/packaging/build_native.sh
@@ -136,7 +157,12 @@ jobs:
           fi
           echo "SOURCE_DIR=${SOURCE_DIR}" >> "$GITHUB_ENV"
 
+      - name: Fetch the verified cp314t wheelhouse
+        run: tools/packaging/fetch_wheelhouse.sh --dest "${RUNNER_TEMP}/wheelhouse"
+
       - name: Build .rpm
+        env:
+          UV_WHEELHOUSE: ${{ runner.temp }}/wheelhouse
         run: |
           mkdir -p dist
           chmod +x tools/packaging/build_native.sh

@@ -352,6 +352,28 @@ uv_pip_install_optional() {
   return 0
 }
 
+# PyTorch's PyPI wheels for Linux depend on the CUDA runtime stack (several GB
+# of nvidia-* wheels).  demucs stem separation runs fine on the CPU, so unless
+# UV_TORCH_CUDA=1 the CPU build of torch/torchaudio is installed first from
+# PyTorch's CPU index; demucs then finds torch already satisfied.  Only Linux
+# needs this (Windows and macOS PyPI wheels are already CPU builds).  Failure
+# is a warning: pip then falls back to the default (CUDA) wheels.
+UV_TORCH_CPU_INDEX="https://download.pytorch.org/whl/cpu"
+uv_preinstall_cpu_torch() {
+  local pip="$1" constraints="$2" reqfile="$3"
+  shift 3
+  [[ "${UV_TORCH_CUDA:-0}" -eq 1 ]] && return 0
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+  grep -qiE '^[[:space:]]*(demucs|torch|torchaudio)([^A-Za-z0-9_.-]|$)' "$reqfile" || return 0
+  uv_log "Installing CPU-only torch/torchaudio (set UV_TORCH_CUDA=1 for the CUDA build)"
+  # The CPU index only supplies the two wheels (--no-deps); their pure-Python
+  # dependencies then come from PyPI, which cannot swap the CPU builds out
+  # because they already satisfy the unpinned requirement.
+  { uv_run "$pip" install --prefer-binary --no-deps --index-url "$UV_TORCH_CPU_INDEX" "$@" torch torchaudio \
+      && uv_run "$pip" install --prefer-binary -c "$constraints" "$@" torch torchaudio; } \
+    || uv_warn "CPU torch build unavailable for this interpreter; demucs will pull the default (CUDA) torch, several GB"
+}
+
 uv_create_venv_and_install() {
   local python_bin="$1"
   local venv_dir="$2"
@@ -385,6 +407,7 @@ uv_create_venv_and_install() {
     while IFS= read -r reqfile; do
       [[ -z "$reqfile" ]] && continue
       uv_log "Installing drop-in dependencies from ${reqfile}"
+      uv_preinstall_cpu_torch "$venv_dir/bin/pip" "$source_dir/requirements.txt" "$reqfile" "${wheel_args[@]}"
       uv_pip_install_optional "$venv_dir/bin/pip" "$source_dir/requirements.txt" "$reqfile" "${wheel_args[@]}"
     done < <(uv_dropin_requirement_files "$source_dir")
   fi
