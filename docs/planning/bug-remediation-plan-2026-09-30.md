@@ -198,6 +198,13 @@ silently die.
 
 1. **W1:** bundle **Python 3.14 free-threaded**. Teams: UV Install, UV
    Threads, UV Core; the drop-in owners come up later (see W1 above).
+   - **Windows** (recorded later the same day): build the cp314t Windows
+     wheels on **GitHub Actions** (a windows-2022 job, owned by UV Install;
+     build scripts by UV Threads). This approval covers this build only. If
+     it fails, fall back to a Windows **3.13 (GIL)** interim. Every
+     dependency has a cp313 Windows wheel except python-rtmidi.
+   - **Stems on 3.14t:** the only gap is **sphn** (no cp314t wheel; torch and
+     torchaudio have them). UV Threads builds it.
 2. **H4:** APC faders drive the app-wide tweakables in alphabetical order,
    as long as they work. The final default mapping will be redone from
    scratch in a session with the APC team.
