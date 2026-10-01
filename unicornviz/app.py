@@ -8067,7 +8067,14 @@ void main() {
             self._keystroke_logger = None
         self._log_deleted_effects_summary()
         if self._audio_manager is not None:
-            self._audio_manager.stop()
+            # Guarded like the other steps: when the audio helper is already
+            # gone (it used to die of the terminal's Ctrl+C first) this raised
+            # HostGone and skipped everything below -- relay/webcam/runtime
+            # state saves, MIDI close, GL and SDL teardown (G3, 2026-09-30).
+            try:
+                self._audio_manager.stop()
+            except Exception as exc:
+                log.warning('Audio manager stop failed at shutdown: %s', exc)
         # The audio process is shared (the mixer's engine lives there too, and
         # its subsystem shut down above): close it only now, after one last
         # copy of the capture state it may have changed.

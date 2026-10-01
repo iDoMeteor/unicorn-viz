@@ -53,6 +53,7 @@ import logging
 import os
 import pickle
 import secrets
+import signal
 import subprocess
 import sys
 import sysconfig
@@ -717,6 +718,13 @@ def _gil_report() -> str:
 
 
 def _host_main(argv: list[str]) -> int:
+    # A terminal Ctrl+C goes to the whole foreground process group, so the
+    # helpers used to die of SIGINT before the app had decided anything;
+    # every later call from the main process then raised HostGone in the
+    # middle of its teardown (2026-09-30 audit, G3).  The helper takes its
+    # orders from the pipe instead: 'shutdown' from the app, or EOF when the
+    # app is gone (serve_commands), so ignoring the signal strands nothing.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     address, factory_path, factory_name = argv[:3]
     key = bytes.fromhex(os.environ.pop(_KEY_ENV, ''))
     family = 'AF_PIPE' if sys.platform == 'win32' else 'AF_UNIX'

@@ -41,8 +41,10 @@ add the short hash.
   LED `try` and poll scratch mode on the main side. [mixer]
 - [x] **G1** `--effect-duration` always rejected: default `60` → `60.0`. Landed core beta.181 (UV Core; `tests/test_cli_effect_duration.py`).
   [core]
-- [ ] **G3** Ctrl+C crashes shutdown: guard `_audio_manager.stop()`, and
-  make the helper processes ignore SIGINT (decision 4). [core]
+- [x] **G3** Ctrl+C crashes shutdown: guard `_audio_manager.stop()`, and
+  make the helper processes ignore SIGINT (decision 4). [core] Landed core
+  beta.182 (UV Core; G1 was 50b69fa). Live repro: group SIGINT, main exited
+  in 1 s, mixer state saved, helper stopped code 0, no CRITICAL.
 - [ ] **AV-2** Auto VJ toggled off during a pending mode snap blocks mode
   changes for the session. [auto-vj]
 

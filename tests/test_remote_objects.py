@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -232,3 +233,18 @@ def test_adopted_arrays_are_published_without_a_second_copy() -> None:
     finally:
         ro._ShmExporter.current = prev
         exporter.close()
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='POSIX signal delivery')
+def test_helper_ignores_sigint_and_stops_on_request(pair) -> None:
+    """G3 (2026-09-30): a terminal Ctrl+C reaches the whole process group.
+    The helper must survive it (the app decides when it stops) and still
+    exit cleanly when asked."""
+    host, a, _ = pair
+    os.kill(host.proc.pid, signal.SIGINT)
+    time.sleep(0.2)
+    assert host.alive and host.proc.poll() is None
+    a.add_cue(2.0)                              # still serving after the signal
+    assert _until(lambda: 2.0 in a.cues)
+    host.close()
+    assert host.proc.wait(timeout=5.0) == 0
