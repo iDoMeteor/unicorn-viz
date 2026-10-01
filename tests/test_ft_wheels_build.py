@@ -57,3 +57,63 @@ def test_cython_pin_understands_free_threading() -> None:
     assert m is not None
     assert (int(m[1]), int(m[2])) >= (3, 1)
     assert 'rm -f "$tree/src/_rtmidi.cpp"' in BUILD.read_text()
+
+
+OPENCV_BUILD = ROOT / 'tools' / 'packaging' / 'build_ft_opencv_wheel.sh'
+OPENCV_SMOKE = ROOT / 'tools' / 'packaging' / 'ft_opencv_smoke.py'
+OPENCV_CONTAINERFILE = ROOT / 'tools' / 'packaging' / 'ft-opencv' / 'Containerfile'
+
+
+def test_opencv_recipe_builds_the_pinned_version() -> None:
+    """PyPI has no sdist for the pinned opencv-python-headless, so the recipe
+    builds the matching git tag; its version must not drift from the pin."""
+    wanted = re.search(r'^opencv-python-headless==([0-9.]+)', (ROOT / 'requirements.txt').read_text(), re.M)
+    assert wanted is not None
+    recipe = re.search(r'^OPENCV_PYTHON_VERSION="([0-9.]+)"$', OPENCV_BUILD.read_text(), re.M)
+    assert recipe is not None and recipe[1] == wanted[1]
+    assert re.search(r'^OPENCV_PYTHON_COMMIT="[0-9a-f]{40}"$', OPENCV_BUILD.read_text(), re.M)
+    assert re.search(r'^OPENCV_COMMIT="[0-9a-f]{40}"$', OPENCV_BUILD.read_text(), re.M)
+
+
+def test_opencv_recipe_drops_the_limited_api_flag() -> None:
+    """The stable ABI cannot exist on a free-threaded build."""
+    assert "PYTHON3_LIMITED_API=ON" in OPENCV_BUILD.read_text()  # the sed that removes it
+    assert "sed -i '/\"-DPYTHON3_LIMITED_API=ON\",/d' setup.py" in OPENCV_BUILD.read_text()
+
+
+def test_opencv_ffmpeg_stays_lgpl() -> None:
+    """The wheel is redistributed: FFmpeg must stay plain LGPL."""
+    text = OPENCV_CONTAINERFILE.read_text()
+    configure = text[text.index('./configure --prefix=/ffmpeg_build \\\n        --extra-cflags'):]
+    for flag in ('--enable-gpl', '--enable-nonfree', '--enable-version3', '--enable-libx264',
+                 '--enable-libx265', '--enable-openssl', '--enable-libfdk'):
+        assert flag not in configure, f'{flag} would make the bundled FFmpeg non-LGPL'
+    assert re.search(r'^ARG FFMPEG_SHA256=[0-9a-f]{64}$', text, re.M)
+    assert re.search(r'^ARG VPX_COMMIT=[0-9a-f]{40}$', text, re.M)
+
+
+@pytest.mark.skipif(shutil.which('bash') is None, reason='no bash')
+def test_opencv_script_parses() -> None:
+    subprocess.run(['bash', '-n', str(OPENCV_BUILD)], check=True)
+    compile(OPENCV_SMOKE.read_text(), str(OPENCV_SMOKE), 'exec')
+
+
+SPHN_BUILD = ROOT / 'tools' / 'packaging' / 'build_ft_sphn_wheel.sh'
+SPHN_CONTAINERFILE = ROOT / 'tools' / 'packaging' / 'ft-sphn' / 'Containerfile'
+
+
+def test_sphn_recipe_pins_source_and_toolchain() -> None:
+    text = SPHN_BUILD.read_text()
+    assert re.search(r'^SPHN_VERSION="[0-9.]+"$', text, re.M)
+    assert re.search(r'^SPHN_SDIST_SHA256="[0-9a-f]{64}"$', text, re.M)
+    container = SPHN_CONTAINERFILE.read_text()
+    assert re.search(r'^ARG RUST_VERSION=[0-9.]+$', container, re.M)
+    assert re.search(r'^ARG RUSTUP_INIT_SHA256=[0-9a-f]{64}$', container, re.M)
+    assert re.search(r'^ARG MATURIN_VERSION=1\.[0-9.]+$', container, re.M)   # sphn needs maturin <2
+    assert '--locked' in text            # the Rust dependency set is the sdist's Cargo.lock
+
+
+@pytest.mark.skipif(shutil.which('bash') is None, reason='no bash')
+def test_sphn_script_parses() -> None:
+    subprocess.run(['bash', '-n', str(SPHN_BUILD)], check=True)
+    compile((ROOT / 'tools' / 'packaging' / 'ft_sphn_smoke.py').read_text(), 'ft_sphn_smoke.py', 'exec')

@@ -1,8 +1,8 @@
 # Free-threaded (cp314t) wheels: moderngl, glcontext, python-rtmidi
 
 Owner: UV Threads
-Status: Linux wheels built, verified and published; Windows options awaiting a decision
-Last updated: 2026-09-30
+Status: all five Linux wheels built, verified and published; Windows build script written, not yet run on Windows
+Last updated: 2026-09-30 (end of day)
 
 W1 of [the bug remediation plan](bug-remediation-plan-2026-09-30.md) bundles
 free-threaded Python 3.14. Three extensions we depend on have no wheel for it
@@ -26,6 +26,9 @@ support), and the wheelhouse never deletes anything, so the rebuild from
 Cython 3.3.0 is a distinct file that pip prefers. The superseded file stays.
 Compound tags in the filenames are normal; auditwheel lists every manylinux
 tag a wheel qualifies for.
+
+| opencv-python-headless 4.13.0.92 | git tag `92` of opencv/opencv-python (no PyPI sdist exists for this version) | `opencv_python_headless-4.13.0.92-cp314-cp314t-manylinux_2_28_x86_64.whl` |
+| sphn 0.2.1 | PyPI sdist | `sphn-0.2.1-cp314-cp314t-manylinux_2_28_x86_64.whl` |
 
 Runtime pin, agreed with UV Install: python-build-standalone release
 **20260929**, CPython **3.14.7**, `freethreaded-install_only` (Linux asset
@@ -64,6 +67,59 @@ normal machine lacks, so compiling directly against a PBS interpreter needs
 `CC=gcc CXX=g++ LDSHARED="g++ -shared"`; the container route avoids that.
 And the shared dev `.venv` is untouched.
 
+### 2b. OpenCV (`build_ft_opencv_wheel.sh`)
+
+PyPI ships opencv-python-headless only as a `cp37-abi3` wheel (OpenCV hard-codes
+`-DPYTHON3_LIMITED_API=ON`; the stable ABI does not exist on free-threaded
+builds), and has no sdist for the version `requirements.txt` pins. The recipe
+builds the matching git tag by commit (`4ddfc013…`, OpenCV submodule `b4c5ec40`
+= 4.13.0), removes the limited-API flag from `setup.py`, and builds against
+numpy 2.3.2 (oldest release with cp314t wheels; upstream's own pin for 3.14).
+
+Because `video-clips-01` decodes video files through `cv2.VideoCapture`, the
+wheel must carry an FFmpeg. `ft-opencv/Containerfile` builds FFmpeg 8.0.1 and
+libvpx 1.15.2 (both pinned by hash or commit) into a cached image first.
+
+**License of the bundled FFmpeg: plain LGPL 2.1+.** No `--enable-gpl`,
+`--enable-nonfree` or `--enable-version3`, so no libx264 or other GPL codecs.
+Upstream's recipe also passes `--enable-openssl`; it is omitted because it only
+adds `https://` and its license compatibility depends on the OpenSSL version.
+Vendored into the wheel: libavcodec, libavformat, libavutil, libswscale,
+libswresample (LGPL), libdrm (MIT), libvpx (BSD). `ft_opencv_smoke.py` asks the
+bundled libraries (`avutil_license()` and friends) and asserts no GPL or
+non-free library is present; a test pins the configure flags.
+
+Intentional differences from upstream's wheel: no Qt (headless), contrib, AVIF,
+LAPACK or https. None is used by this project.
+
+Verified on the PBS runtime: full-API (not limited-API) build; headless; FFmpeg
+and V4L2 backends present (a camera opens through V4L2); decodes real H.264
+`.mp4` and VP9 `.webm`, including seek-by-frame-index (what `video-clips-01`
+does on loop); four threads decoding at once; the image operations
+`webcam-01` uses. Importing cv2 re-enables the GIL.
+
+On Windows, OpenCV's own CMake downloads its prebuilt FFmpeg plugin DLL
+(`opencv_videoio_ffmpeg*_64.dll`, hash-pinned), which OpenCV documents as an
+LGPL build with no GPL components; nothing is built for FFmpeg there.
+
+### 2c. sphn (`build_ft_sphn_wheel.sh`)
+
+sphn 0.2.1 (audio read/write; Rust, pyo3 0.27, maturin) has cp314 wheels but no
+cp314t, and demucs (the mixer's stem separation) depends on it. No source change
+is needed: pyo3 supports free-threaded builds. The recipe builds the PyPI sdist
+with `maturin build --locked` in `ft-sphn/Containerfile` (manylinux_2_28 + Rust
+1.98.1 + maturin 1.15.0, installer pinned by hash). Two environment workarounds
+are recorded in the script: `CMAKE_POLICY_VERSION_MINIMUM=3.5` (CMake 4 refuses
+the bundled libopus's old minimum), and a one-line `CMAKE_TOOLCHAIN_FILE` that
+pins the install dir to `lib` (this image uses `lib64`, which the opus crate
+does not search).
+
+Verified: WAV write/read round trip, `durations`, `resample`, and
+`demucs 4.1.0` imports in a venv with the CPU-only torch cp314t wheel.
+`sphn.resample` pads its output to a chunk multiple (49152 samples for 24,000 in
+at 2x), identically in upstream's cp314 wheel. The module does not declare
+`gil_used = false`, so importing it re-enables the GIL.
+
 ## 3. GIL behavior today
 
 A free-threaded interpreter starts with the GIL **off** and turns it **on**
@@ -77,6 +133,8 @@ fresh process:
 | `glcontext.egl`, `glcontext.x11` | **on** |
 | `moderngl` (`moderngl.mgl`) | **on** |
 | `rtmidi` (`_rtmidi`) | **on** |
+| `cv2` (opencv, 4.13.0) | **on** |
+| `sphn` | **on** |
 
 So any process that imports moderngl or rtmidi runs with the GIL on. That is
 the expected state for the main process (plan decision 1). It must never
@@ -103,6 +161,11 @@ Suggested guard:
 `ft_wheels_smoke.py` implements the same per-module probe and is a reference.
 
 ## 4. Windows wheels: options
+
+**Decision (2026-09-30, the owner, relayed by the coordinator):** build them on
+GitHub Actions (option 1), with a Windows Python 3.13 GIL build as the interim
+fallback. The script is `tools/packaging/build_windows_ft_wheels.py` (section 6);
+the options below are kept for the reasoning.
 
 Nothing is built for Windows yet, and no CI is created without owner
 approval (workflows are an infrastructure change). All three packages are
@@ -201,3 +264,35 @@ these.
 Suggested order, if and when this is taken on: rtmidi first (cheap, testable,
 removes one of the four flips), then glcontext, then moderngl as its own
 project.
+
+## 6. Where we stopped (end of 2026-09-30) and next steps
+
+**Done and published (Linux x86-64, `~/projects/_software-dist/wheelhouse/cp314t/`):**
+moderngl, glcontext, python-rtmidi (build tag `-1`), opencv-python-headless and
+sphn, all verified against the exact PBS 20260929 runtime.
+
+**Windows.** `tools/packaging/build_windows_ft_wheels.py` is written
+(standard-library only; reads its pins from the Linux scripts; downloads and
+verifies the PBS Windows runtime; finds MSVC through vswhere; builds the five
+wheels; smoke-tests each in a fresh venv; only verified wheels reach `--out`).
+It has been run in `--dry-run` and covered by unit tests on Linux, and has
+**not** been run on Windows; expect the first runner run to need a fix or two.
+Interface agreed with UV Install: `--out DIR [--work DIR] [--only NAMES]
+[--dry-run]`, a `windows-2022` job (150 minute timeout), artifact
+`cp314t-win_amd64-wheels` holding the whole `--out` directory. UV Install writes
+the workflow file (`workflow_dispatch` only, an optional `only` input passed
+through as `--only`); the owner approved building on GitHub Actions. Copying the
+artifact into the wheelhouse stays a human or follow-up step (append-only).
+
+**Parked pending the owner:** the `Py_mod_gil` ports (assessment in section 5):
+rtmidi first, then glcontext, then moderngl. Nothing is started.
+
+**First thing next session:**
+1. Once UV Install's workflow is merged, dispatch it with `only=sphn` first (a
+   fast iteration on the whole Windows toolchain) and fix whatever the logs show,
+   then `only=moderngl,glcontext,python-rtmidi`, and OpenCV last (the slow one).
+2. Place the resulting `win_amd64` wheels into the wheelhouse and append to
+   `SHA256SUMS`.
+3. Smoke tests that need Windows only: the GL render check is skipped on the
+   runner (no GPU), so one real run of `ft_wheels_smoke.py` on a Windows machine
+   with a GPU would close that gap.

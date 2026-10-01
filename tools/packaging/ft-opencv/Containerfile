@@ -1,0 +1,53 @@
+# Dependency image for build_ft_opencv_wheel.sh: manylinux_2_28 plus the FFmpeg
+# stack OpenCV's video I/O needs, built the way opencv-python's own
+# docker/manylinux_2_28/Dockerfile_x86_64 does (FFmpeg shared, libvpx, openssl)
+# minus what a headless wheel does not need: Qt, freetype, libpng-from-source,
+# AOM/AVIF.  It exists as a separate image so the ~15 minute dependency build is
+# cached and the OpenCV build itself can be repeated cheaply.
+#
+# FFmpeg's tarball is pinned by sha256 and libvpx by commit, so the image is
+# the same bytes of source every time.
+#
+# LICENSE: FFmpeg is configured as plain LGPL 2.1+ (no --enable-gpl, no
+# --enable-version3, no --enable-nonfree; so no GPL codecs such as libx264,
+# and no OpenSSL).  Upstream's recipe also passes --enable-openssl; it is
+# omitted here because it only adds https:// protocol support (not used: this
+# project decodes local files and V4L2 cameras) and its license compatibility
+# depends on the OpenSSL version.  libvpx is BSD.  The smoke test asserts the
+# bundled libavutil reports an LGPL license.
+FROM quay.io/pypa/manylinux_2_28_x86_64:latest
+
+ARG FFMPEG_VERSION=8.0.1
+ARG FFMPEG_SHA256=ed1cfade43aab7711c88937a0afc15b7b22efdc528c6ff074b4027c55a3c175c
+ARG VPX_TAG=v1.15.2
+ARG VPX_COMMIT=d168454ecd099805c675d4a98c66f4891373302a
+
+RUN yum install -y epel-release && \
+    yum install -y yasm nasm ninja-build zlib-devel
+
+RUN git clone --depth 1 -b "${VPX_TAG}" https://chromium.googlesource.com/webm/libvpx.git /tmp/libvpx && \
+    cd /tmp/libvpx && \
+    test "$(git rev-parse HEAD)" = "${VPX_COMMIT}" && \
+    ./configure --prefix=/ffmpeg_build --disable-examples --disable-unit-tests \
+        --enable-vp9-highbitdepth --as=yasm --enable-pic --enable-shared && \
+    make -j"$(nproc)" && make install && \
+    rm -rf /tmp/libvpx
+
+# (a loop, not curl --retry-all-errors: this image's curl is too old for it)
+RUN for i in 1 2 3 4 5; do \
+        curl -fsSL -o /tmp/ffmpeg.tar.gz "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.gz" && break; \
+        sleep 5; \
+    done && \
+    echo "${FFMPEG_SHA256}  /tmp/ffmpeg.tar.gz" | sha256sum -c - && \
+    tar -xf /tmp/ffmpeg.tar.gz -C /tmp && \
+    cd "/tmp/ffmpeg-${FFMPEG_VERSION}" && \
+    PKG_CONFIG_PATH=/ffmpeg_build/lib/pkgconfig ./configure --prefix=/ffmpeg_build \
+        --extra-cflags=-I/ffmpeg_build/include --extra-ldflags=-L/ffmpeg_build/lib \
+        --enable-libvpx --enable-shared --enable-pic \
+        --disable-programs --disable-doc && \
+    make -j"$(nproc)" && make install && \
+    echo /ffmpeg_build/lib/ >> /etc/ld.so.conf && ldconfig && \
+    rm -rf /tmp/ffmpeg*
+
+ENV PKG_CONFIG_PATH=/ffmpeg_build/lib/pkgconfig
+ENV LD_LIBRARY_PATH=/ffmpeg_build/lib
