@@ -74,3 +74,35 @@ def test_refuses_to_build_for_real_off_windows(win, tmp_path, monkeypatch) -> No
 def test_dist_names_from_wheel_filenames(win) -> None:
     assert win._dist_name(Path('python_rtmidi-1.5.8-1-cp314-cp314t-win_amd64.whl')) == 'python-rtmidi'
     assert win._dist_name(Path('opencv_python_headless-4.13.0.92-cp314-cp314t-win_amd64.whl')) == 'opencv-python-headless'
+
+
+def test_command_output_is_streamed_and_logged(win, tmp_path, capsys) -> None:
+    """A failed run on a CI runner must leave evidence: every command's output goes
+    to work/<step>.log (the workflow uploads work/*.log) as well as the console."""
+    import sys as _sys
+    ctx = win.Ctx(tmp_path, tmp_path / 'out', dry_run=False)
+    ctx.set_log('sphn')
+    ctx.run([_sys.executable, '-c', 'print("hello from a build step"); '
+                                    'import sys; print("and stderr", file=sys.stderr)'])
+    shown = capsys.readouterr().out
+    logged = (tmp_path / 'sphn.log').read_text(encoding='utf-8')
+    for text in (shown, logged):
+        assert 'hello from a build step' in text and 'and stderr' in text
+    assert '$ ' in logged            # the command line itself is recorded too
+
+
+def test_a_failing_command_raises_and_is_still_logged(win, tmp_path) -> None:
+    import subprocess
+    import sys as _sys
+    ctx = win.Ctx(tmp_path, tmp_path / 'out', dry_run=False)
+    ctx.set_log('opencv')
+    with pytest.raises(subprocess.CalledProcessError):
+        ctx.run([_sys.executable, '-c', 'print("about to fail"); raise SystemExit(3)'])
+    assert 'about to fail' in (tmp_path / 'opencv.log').read_text(encoding='utf-8')
+
+
+def test_dry_run_creates_no_log_files(win, tmp_path) -> None:
+    ctx = win.Ctx(tmp_path / 'work', tmp_path / 'out', dry_run=True)
+    ctx.set_log('sphn')
+    ctx.run(['anything'])
+    assert not (tmp_path / 'work').exists()
