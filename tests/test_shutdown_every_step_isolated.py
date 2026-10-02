@@ -48,7 +48,7 @@ def _build(boom: set[str]):
 
     app._shutdown_complete = False
     app._flush_profile_autosave = fn('profile autosave')
-    app._recorder = rec('recorder', 'stop')
+    app._recorder = rec('recorder', 'shutdown')
     app._streamer = rec('streamer')
     app._auto_vj = rec('AutoVJController', 'shutdown')
     app._grand_finale = rec('GrandFinaleController', 'shutdown')
