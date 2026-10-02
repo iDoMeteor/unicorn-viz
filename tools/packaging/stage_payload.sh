@@ -207,9 +207,13 @@ if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
     for cand in "${WHEELHOUSE}"/*.whl; do
       [[ -e "$cand" ]] && candidates+=("$(basename "$cand")")
     done
-    if command -v python3 >/dev/null 2>&1 && [[ "${#candidates[@]}" -gt 0 ]]; then
-      mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | python3 "${SCRIPT_DIR}/wheel_select.py")
-    fi
+    for py in python3 python; do
+      command -v "$py" >/dev/null 2>&1 || continue
+      [[ "${#candidates[@]}" -gt 0 ]] || break
+      # An interpreter that fails or prints nothing means "keep everything".
+      mapfile -t picked < <(printf '%s\n' "${candidates[@]}" | "$py" "${SCRIPT_DIR}/wheel_select.py" 2>/dev/null | tr -d '\r')
+      if [[ "${#picked[@]}" -gt 0 ]]; then candidates=("${picked[@]}"); break; fi
+    done
     for cand in "${candidates[@]}"; do
       whl="${WHEELHOUSE}/${cand}"
       [[ -e "$whl" ]] || break

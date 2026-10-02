@@ -153,3 +153,25 @@ def test_a_crlf_trust_file_still_works(tmp_path: Path) -> None:
     proc = _run(tmp_path, serve, trust)
     assert proc.returncode == 0, proc.stderr
     assert {p.name for p in (tmp_path / 'wh').glob('*.whl')} == set(_WHEELS)
+
+
+def test_a_broken_python_means_fetch_everything_not_nothing(tmp_path: Path) -> None:
+    # On the Windows runner `python3` can exist yet fail (Store alias stub).
+    # That must degrade to "fetch every listed wheel", not to an empty wheelhouse.
+    import os  # noqa: PLC0415
+    bindir = tmp_path / 'bin'
+    bindir.mkdir()
+    for name in ('python3', 'python'):
+        fake = bindir / name
+        fake.write_text('#!/usr/bin/env bash\nexit 9\n')
+        fake.chmod(0o755)
+    serve = _serve(tmp_path, _WHEELS)
+    trust = _trust(tmp_path, _WHEELS)
+    proc = subprocess.run(
+        ['bash', str(_SCRIPT), '--dest', str(tmp_path / 'wh'), '--trust', str(trust),
+         '--base-url', f'file://{serve}'],
+        capture_output=True, text=True, timeout=60, check=False,
+        env={**os.environ, 'PATH': f'{bindir}{os.pathsep}{os.environ["PATH"]}'},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert {p.name for p in (tmp_path / 'wh').glob('*.whl')} == set(_WHEELS)
