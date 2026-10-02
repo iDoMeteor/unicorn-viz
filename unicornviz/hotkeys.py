@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import deque
 import logging
+import re
 import threading
 from typing import TYPE_CHECKING
 
@@ -227,6 +228,15 @@ def action_names() -> list[str]:
     return list(_MIDI_NOTE_KEY_BINDINGS.keys())
 
 
+#: What a swallowed chord translates to: nothing in the dispatch chain matches
+#: SDLK_UNKNOWN, so the key does nothing.
+UNBOUND_CHORD: tuple[int, int] = (sdl2.SDLK_UNKNOWN, 0)
+
+
+def _effective_chord(action: str, overrides: 'dict[str, tuple[int, int]]') -> 'tuple[int, int] | None':
+    return overrides.get(action) or _MIDI_NOTE_KEY_BINDINGS.get(action)
+
+
 def translate_override_chord(
     sym: int, mod: int, overrides: 'dict[str, tuple[int, int]]'
 ) -> tuple[int, int]:
@@ -235,17 +245,111 @@ def translate_override_chord(
     If ``(sym, mod)`` exactly matches an operator override for some action,
     return that action's *default* chord, so the existing dispatch chain
     (which still matches on default chords) fires correctly without needing
-    to know rebinding exists. If ``(sym, mod)`` matches no override, it is
-    returned unchanged.
+    to know rebinding exists.
+
+    The converse (audit 2026-09-30, P2-7): once an action is rebound its old
+    default chord is *freed* -- it returns :data:`UNBOUND_CHORD` so the
+    dispatch chain does nothing -- unless another action is still bound to
+    that chord (``audio_toggle`` and ``eq`` both default to E, and moving one
+    must not kill the other).  Any other chord is returned unchanged.
     """
     if not overrides:
         return sym, mod
-    for action, chord in overrides.items():
-        if chord == (sym, mod):
+    chord = (sym, mod)
+    for action, override in overrides.items():
+        if override == chord:
             default = _MIDI_NOTE_KEY_BINDINGS.get(action)
             if default is not None:
                 return default
+    for action, override in overrides.items():
+        if _MIDI_NOTE_KEY_BINDINGS.get(action) == chord and override != chord:
+            if not any(_effective_chord(other, overrides) == chord
+                       for other in _MIDI_NOTE_KEY_BINDINGS if other != action):
+                return UNBOUND_CHORD
     return sym, mod
+
+
+_HELP_KEY_ALIASES = {
+    'esc': 'Escape', 'enter': 'Return', 'return': 'Return', 'del': 'Delete', 'delete': 'Delete',
+    'space': 'Space', 'tab': 'Tab', 'backspace': 'Backspace', 'pageup': 'PageUp',
+    'pagedown': 'PageDown', 'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right',
+    'home': 'Home', 'end': 'End', 'insert': 'Insert',
+}
+_HELP_MODS = {'ctrl': sdl2.KMOD_CTRL, 'alt': sdl2.KMOD_ALT, 'shift': sdl2.KMOD_SHIFT,
+              'gui': sdl2.KMOD_GUI, 'cmd': sdl2.KMOD_GUI, 'win': sdl2.KMOD_GUI}
+
+
+def _parse_one_chord(text: str) -> 'tuple[int, int] | None':
+    text = text.strip()
+    if not text:
+        return None
+    mod = 0
+    rest = text
+    while True:
+        head, sep, tail = rest.partition('+')
+        if sep and tail and head.strip().lower() in _HELP_MODS:
+            mod |= _HELP_MODS[head.strip().lower()]
+            rest = tail
+            continue
+        break
+    key = rest.strip()
+    if not key or ' ' in key:                 # "Right Click", "Arrow keys", "0 - 9": descriptions
+        return None
+    if len(key) == 1:
+        return (ord(key.lower()), mod) if key.isprintable() else None
+    name = _HELP_KEY_ALIASES.get(key.lower(), key)
+    sym = sdl2.SDL_GetKeyFromName(name.encode('utf-8'))
+    if sym == sdl2.SDLK_UNKNOWN:
+        return None
+    return (int(sym), mod)
+
+
+def parse_help_chords(label: str) -> 'set[tuple[int, int]]':
+    """The key chords a help-overlay key label names, best effort.
+
+    ``'n / Right'`` -> {n, Right}; ``'Ctrl+Alt+F'`` -> {Ctrl+Alt+F}; descriptive
+    labels (``'Right Click'``, ``'Number'``, ``'0 - 9'``) name no chord.
+    """
+    chords: set[tuple[int, int]] = set()
+    for part in re.split(r'\s*/\s*|\s*,\s*', label or ''):
+        chord = _parse_one_chord(part)
+        if chord is not None:
+            chords.add(chord)
+    return chords
+
+
+_reserved_cache: 'dict[tuple[int, int], str] | None' = None
+
+
+def reserved_chords(refresh: bool = False) -> 'dict[tuple[int, int], str]':
+    """``{chord: description}`` for every chord the help documents.
+
+    Built from core's help sections and every drop-in's ``HELP_ENTRIES`` -- the
+    single source of truth for key bindings -- so a rebind can be checked
+    against keys ``handle()`` and drop-in key handlers already use, not just
+    the ~30 named actions.  Cached; ``refresh=True`` rebuilds it.
+    """
+    global _reserved_cache
+    if _reserved_cache is not None and not refresh:
+        return _reserved_cache
+    from unicornviz.dropins import discover_dropin_help_entries  # noqa: PLC0415
+    from unicornviz.overlays import Overlays  # noqa: PLC0415
+
+    found: dict[tuple[int, int], str] = {}
+    for _section, entries in Overlays.CORE_HELP_SECTIONS:
+        for label, desc in entries:
+            for chord in parse_help_chords(label):
+                found.setdefault(chord, str(desc))
+    try:
+        dropin = discover_dropin_help_entries()
+    except Exception:
+        log.debug('Drop-in help entries unavailable for conflict checking', exc_info=True)
+        dropin = []
+    for _section, label, desc in dropin:
+        for chord in parse_help_chords(str(label)):
+            found.setdefault(chord, str(desc))
+    _reserved_cache = found
+    return found
 
 
 _MIDI_CONTEXT_SLOT_BINDINGS: dict[str, dict[int, tuple[int, int]]] = {
@@ -473,7 +577,11 @@ class HotkeyHandler:
                 param = a.midi_param_for_cc(event.number)
                 if param and param in effect.parameters:
                     lo, hi = CC_PARAM_RANGE
-                    effect.parameters[param] = lo + event.value * (hi - lo)
+                    cc_value = lo + event.value * (hi - lo)
+                    if param == 'speed':
+                        a.set_current_speed(cc_value)       # phase-continuous (E1)
+                    else:
+                        effect.parameters[param] = cc_value
                     o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
                     if ks_log is not None:
                         ks_log.log_midi(
@@ -1807,13 +1915,11 @@ class HotkeyHandler:
                     o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+= — speed MAX
-                    effect.parameters["speed"] = 10.0
+                    a.set_current_speed(10.0)
                     o.flash_message("Speed  MAX", 1.5)
                 else:
                     # = — speed up
-                    effect.parameters["speed"] = min(
-                        effect.parameters["speed"] * 1.25, 10.0
-                    )
+                    a.set_current_speed(min(effect.parameters["speed"] * 1.25, 10.0))
                     o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
             else:
                 o.flash_message('Speed not available for this effect', 1.0)
@@ -1827,13 +1933,11 @@ class HotkeyHandler:
                     o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+- — speed MIN
-                    effect.parameters["speed"] = 0.05
+                    a.set_current_speed(0.05)
                     o.flash_message("Speed  MIN", 1.5)
                 else:
                     # - — speed down
-                    effect.parameters["speed"] = max(
-                        effect.parameters["speed"] * 0.8, 0.05
-                    )
+                    a.set_current_speed(max(effect.parameters["speed"] * 0.8, 0.05))
                     o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
             else:
                 o.flash_message('Speed not available for this effect', 1.0)

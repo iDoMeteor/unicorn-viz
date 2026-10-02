@@ -10,6 +10,7 @@ import logging
 import math
 import random
 import time
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -44,6 +45,70 @@ log = logging.getLogger(__name__)
 # Each character is stored as 8 bytes, one byte per row, MSB = leftmost pixel.
 # Generated from the public-domain "PC Screen Font" / Oldschool PC Font data.
 # ---------------------------------------------------------------------------
+def selector_row_window(n_rows: int, selected: int, max_rows: int) -> tuple[int, int]:
+    """``(first_row, row_count)`` of the rows to draw in a selector panel.
+
+    Shows everything when it fits; otherwise ``max_rows`` rows scrolled so the
+    selection stays visible, centred on it where there is room (U8: the audio
+    and MIDI selectors used to grow without limit and run off-screen).
+    """
+    n_rows = max(0, int(n_rows))
+    cap = max(1, int(max_rows))
+    if n_rows <= cap:
+        return 0, n_rows
+    sel = max(0, min(int(selected), n_rows - 1))
+    start = max(0, min(sel - cap // 2, n_rows - cap))
+    return start, cap
+
+
+# Overlay text is drawn from a 128-cell ASCII atlas.  Anything above 127 used to
+# be folded onto an unrelated cell with ``ord(ch) & 0x7F`` (audit U2): the
+# tour's "·" drew as "7", "—" and "→" as blanks, "é" as "i".  This table plus
+# Unicode decomposition gives every character exactly one readable ASCII
+# stand-in (so measured widths still match), and "?" for what has none.
+_ATLAS_STAND_INS: dict[str, str] = {
+    '\u00b7': '.', '\u2022': '*', '\u2023': '>', '\u25cf': '*', '\u25aa': '*', '\u2219': '.',
+    '\u2014': '-', '\u2013': '-', '\u2012': '-', '\u2015': '-', '\u2212': '-', '\u2010': '-',
+    '\u2011': '-', '\u2192': '>', '\u2190': '<', '\u2191': '^', '\u2193': 'v', '\u2194': '-',
+    '\u25b6': '>', '\u25c0': '<', '\u25b2': '^', '\u25bc': 'v', '\u2026': '.',
+    '\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2018': "'", '\u2019': "'", '\u201a': "'",
+    '\u00ab': '<', '\u00bb': '>', '\u00d7': 'x', '\u00f7': '/', '\u00b0': 'o', '\u00a0': ' ',
+    '\u2002': ' ', '\u2003': ' ', '\u2009': ' ', '\u202f': ' ', '\u200b': ' ',
+    '\u00df': 's', '\u00c6': 'A', '\u00e6': 'a', '\u00d8': 'O', '\u00f8': 'o', '\u0141': 'L',
+    '\u0142': 'l', '\u0110': 'D', '\u0111': 'd', '\u00d0': 'D', '\u00f0': 'd', '\u00de': 'P',
+    '\u00fe': 'p', '\u0152': 'O', '\u0153': 'o', '\u0131': 'i', '\u00a9': 'c', '\u00ae': 'R',
+    '\u2122': 'T', '\u00a3': 'L', '\u20ac': 'E', '\u00a5': 'Y', '\u00a2': 'c', '\u266a': '*',
+    '\u266b': '*', '\u2665': '*', '\u2605': '*', '\u2713': 'v', '\u2717': 'x',
+}
+
+
+def fold_to_atlas_ascii(text: str) -> str:
+    """Return ``text`` with every non-ASCII character replaced by one ASCII
+    character the overlay font can draw (same length, so widths are unchanged).
+
+    Table first (punctuation and symbols, a few letters Unicode does not
+    decompose), then NFKD for accented letters (base letter kept), else ``?``.
+    """
+    if text.isascii():
+        return text
+    out: list[str] = []
+    for ch in text:
+        if ord(ch) < 128:
+            out.append(ch)
+            continue
+        rep = _ATLAS_STAND_INS.get(ch)
+        if rep is None:
+            decomposed = unicodedata.normalize('NFKD', ch)
+            base = decomposed[:1]
+            if (base.isascii() and base.isalnum()
+                    and all(unicodedata.combining(c) for c in decomposed[1:])):
+                rep = base
+            else:
+                rep = '?'
+        out.append(rep)
+    return ''.join(out)
+
+
 _FONT_8X8 = [
     # 32 space
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -1186,8 +1251,8 @@ void main() {
 
         verts: list[float] = []
         cx = x
-        for ch in text:
-            code = ord(ch) & 0x7F
+        for ch in fold_to_atlas_ascii(text):
+            code = ord(ch)
             u0 = (code * self._glyph_w) / atlas_w
             u1 = u0 + float(self._glyph_w) / atlas_w
             v0 = 0.0
@@ -4013,7 +4078,11 @@ void main() {
         W = float(self._width)
         H = float(self._height)
         row_h = 38.0
-        n_rows = max(1, len(self._audio_sources))
+        entries = self._audio_sources if self._audio_sources else ['(no sources available)']
+        total_rows = len(entries)
+        # Clamp to the window and scroll around the selection (U8).
+        max_rows = max(3, int((H * 0.94 - 136.0) // row_h))
+        first_row, n_rows = selector_row_window(total_rows, self._audio_selected_idx, max_rows)
         panel_w = min(W * 0.62, 860.0)
         panel_h = 80.0 + n_rows * row_h + 56.0
         px = (W - panel_w) * 0.5
@@ -4044,9 +4113,9 @@ void main() {
             self._fit_text(f'Active: {active_name}', 2.2, panel_w - 36.0),
             px + 18, py + 48, scale=2.2, color=(0.5, 0.8, 0.5, 0.85))
 
-        entries = self._audio_sources if self._audio_sources else ['(no sources available)']
-        for i, name in enumerate(entries):
-            ry = py + 80.0 + i * row_h
+        for i in range(first_row, first_row + n_rows):
+            name = entries[i]
+            ry = py + 80.0 + (i - first_row) * row_h
             if i in self._audio_divider_rows:
                 # A group heading, not a device: no viability tag, no
                 # cursor, and visually quiet so the break reads as a break.
@@ -4081,6 +4150,8 @@ void main() {
         fy = py + panel_h - 40.0
         self._draw_text('Up/Down: navigate    T: toggle viable    Enter: apply    Esc: cancel',
                         px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
+        if total_rows > n_rows:
+            self._draw_selector_position(px, panel_w, fy - 22.0, self._audio_selected_idx, total_rows)
 
     # ------------------------------------------------------------------
     # MIDI device selector
@@ -4134,7 +4205,10 @@ void main() {
         W = float(self._width)
         H = float(self._height)
         row_h = 38.0
-        n_rows = len(self._midi_ports) + 1   # +1 for None entry
+        entries = ['(none — disable MIDI)'] + self._midi_ports   # +1 for None entry
+        total_rows = len(entries)
+        max_rows = max(3, int((H * 0.94 - 136.0) // row_h))
+        first_row, n_rows = selector_row_window(total_rows, self._midi_selected_idx, max_rows)
         panel_w = min(W * 0.62, 780.0)
         panel_h = 80.0 + n_rows * row_h + 56.0
         px = (W - panel_w) * 0.5
@@ -4167,9 +4241,9 @@ void main() {
                         color=(0.5, 0.8, 0.5, 0.85))
 
         # Port rows
-        entries = ['(none — disable MIDI)'] + self._midi_ports
-        for i, name in enumerate(entries):
-            ry = py + 80.0 + i * row_h
+        for i in range(first_row, first_row + n_rows):
+            name = entries[i]
+            ry = py + 80.0 + (i - first_row) * row_h
             is_sel = i == self._midi_selected_idx
             is_active = (i == 0 and not self._midi_current_port) or (
                 i > 0 and self._midi_ports[i - 1] == self._midi_current_port
@@ -4189,6 +4263,15 @@ void main() {
         fy = py + panel_h - 40.0
         self._draw_text('Up/Down: navigate    Enter: apply    Esc: cancel',
                         px + 18, fy, scale=2.0, color=(0.55, 0.65, 0.75, 0.80))
+        if total_rows > n_rows:
+            self._draw_selector_position(px, panel_w, fy - 22.0, self._midi_selected_idx, total_rows)
+
+    def _draw_selector_position(self, px: float, panel_w: float, y: float,
+                                selected: int, total: int) -> None:
+        """Right-aligned "n/N" for a scrolled selector, so you know where you are."""
+        text = f'{max(0, min(selected, total - 1)) + 1}/{total}'
+        self._draw_text(text, px + panel_w - 18.0 - len(text) * self._char_width(2.0), y,
+                        scale=2.0, color=(0.55, 0.85, 0.95, 0.9))
 
     # ------------------------------------------------------------------
     # Webcam editor modal

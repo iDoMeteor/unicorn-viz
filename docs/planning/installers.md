@@ -1375,6 +1375,27 @@ constraints, stated plainly:
     License check before publishing: vendored libraries and license files identical
     to the predecessors in all ten pairs; sphn crate set carried over (same sdist,
     `--locked`, partial binary-path check by UV Threads).
+  - **2026-10-02: installer-smoke, the real Windows installer, S3.**
+    - *Smoke failures:* 09-23/09-29/09-30 were Docker pull rate limits on
+      `public.ecr.aws` in the native-package-smoke job (flake; not fixed, a
+      retry would be a workflow edit: owner/coordinator approval). 10-02 was a
+      real regression: the Windows job builds core-only with no local wheelhouse,
+      and the free-threaded default found no cp314t moderngl. Fix:
+      `build_windows_portable.sh` fetches the verified win_amd64 wheels itself
+      when none are staged. The first CI runs of that fetch exposed two more bugs
+      (CRLF trust file on a Windows checkout; a broken `python3` selecting no
+      wheels), both fixed with tests. Result: run 37061421322, all jobs green,
+      including the portable zip and the **silently installed Inno installer
+      passing `--self-test` on a real windows-2022 runner on the free-threaded
+      runtime**.
+    - *Installer exe:* built by that run (version beta.194):
+      `UnicornViz-Setup-1.0.0-beta.194-CORE-ONLY-ft-from-CI.exe`, kept in
+      `_software-dist`. Uploaded to `s3://ut-software-dist/` with `.sha256`
+      sidecars, plus the beta.192 ft portable zip; `unicorn-viz-latest.exe`
+      (which had been the beta.190 *zip* renamed) now points at the Setup exe.
+      The bucket is versioned, so the replaced object is still retrievable. Public
+      URLs: `https://ut-software-dist.s3.amazonaws.com/<key>` (public-read policy);
+      `software.unicornviz.com` (CloudFront) returned 403 for every key when checked.
   - **Where we stopped / next.**
     1. *(Written 2026-10-01, `.github/workflows/windows-ft-wheels.yml`; dispatch
        with `only=sphn` first, then the trio, then OpenCV.)* Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH

@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
+from unicornviz.effects.base import apply_speed
 from unicornviz.deck_sim import DeckSimLayout
 from unicornviz.operator_panels import MAIN_PAGE, OperatorPage, OperatorPanel, sort_pages
 from unicornviz.effects.registry import get_effects
@@ -1971,7 +1972,6 @@ class VJApi:
         effect = self._app._current_effect  # noqa: SLF001
         if effect is None or 'speed' not in effect.parameters:
             return None
-        prev_speed = float(effect.parameters['speed'])
         new_speed = max(0.05, min(10.0, float(value)))
         # Intentional exception: when Auto VJ is actively running in the
         # raver profile, preserve the old discontinuous slew look on purpose.
@@ -1992,22 +1992,8 @@ class VJApi:
                 raver_scramble = True
             else:
                 raver_scramble = random.random() < (1.0 / 3.0)
-        # Keep shader phase continuous for effects that use
-        # t = iTime * (bias + scale * iSpeed).
-        # Defaults match the common t = iTime * iSpeed case.
-        if (not raver_scramble) and abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
-            try:
-                t = float(getattr(effect, 'time'))
-                bias = float(getattr(effect, 'SPEED_TIME_BIAS', 0.0))
-                scale = float(getattr(effect, 'SPEED_TIME_SCALE', 1.0))
-                prev_factor = bias + scale * prev_speed
-                next_factor = bias + scale * new_speed
-                if abs(prev_factor) > 1e-9 and abs(next_factor) > 1e-9:
-                    setattr(effect, 'time', (t * prev_factor) / next_factor)
-            except Exception:
-                # Never fail speed changes due to continuity bookkeeping.
-                pass
-        effect.parameters['speed'] = new_speed
+        # Keep shader phase continuous (the raver scramble above opts out).
+        apply_speed(effect, new_speed, continuous=not raver_scramble)
         return float(effect.parameters['speed'])
 
     def set_zoom(self, value: float) -> float | None:

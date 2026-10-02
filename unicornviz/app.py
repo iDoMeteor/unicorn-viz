@@ -29,6 +29,7 @@ from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
+from unicornviz.effects.base import apply_speed
 from unicornviz.fault_guard import CallGuard
 from unicornviz.gc_tuning import freeze_heap, install_gc_pause_monitor
 from unicornviz.audio.manager import AudioManager
@@ -3500,7 +3501,10 @@ void main() {
         self._effect_config_overrides.setdefault(str(class_name), {})[str(name)] = float(value)
         eff = self._current_effect
         if eff is not None and type(eff).__name__ == class_name and str(name) in eff.parameters:
-            eff.parameters[str(name)] = float(value)
+            if str(name) == 'speed':
+                apply_speed(eff, float(value))          # keep the shader phase continuous
+            else:
+                eff.parameters[str(name)] = float(value)
         self._profile_touched()
 
     def clear_effect_overrides(self, class_name: str) -> None:
@@ -3972,6 +3976,31 @@ void main() {
                 return action
         return None
 
+    def hotkey_conflict_for_chord(self, sym: int, mod: int,
+                                  exclude_action: 'str | None' = None) -> 'str | None':
+        """Display label of whatever already uses ``(sym, mod)``, or None.
+
+        Checks the named rebindable actions' effective bindings first, then
+        every chord the help documents (core and drop-in HELP_ENTRIES: keys
+        ``handle()`` and drop-in key handlers use that are not named actions),
+        so a rebind cannot silently shadow, say, ``V`` (recording).  A chord an
+        action was rebound away from is free, and an action's own default is
+        never a conflict with itself (P2-7, audit 2026-09-30).
+        """
+        from unicornviz.hotkeys import default_action_binding, reserved_chords  # noqa: PLC0415
+
+        action = self.hotkey_action_for_chord(sym, mod, exclude_action=exclude_action)
+        if action is not None:
+            return self._HOTKEY_ACTION_LABELS.get(action, action)
+        chord = (int(sym), int(mod))
+        if exclude_action and default_action_binding(exclude_action) == chord:
+            return None
+        freed = {default_action_binding(a) for a, c in self._hotkey_overrides.items()
+                 if default_action_binding(a) != c}
+        if chord in freed:
+            return None
+        return reserved_chords().get(chord)
+
     def start_hotkey_capture(self, action: str) -> None:
         """Enter capture mode: the next keypress becomes ``action``'s chord."""
         self._overlays.set_config_editor_capture(True, action)
@@ -3992,10 +4021,9 @@ void main() {
             return ''
         if is_modifier_keysym(sym):
             return 'Choose a non-modifier key'
-        conflict = self.hotkey_action_for_chord(sym, mod, exclude_action=action)
+        conflict = self.hotkey_conflict_for_chord(sym, mod, exclude_action=action)
         if conflict is not None:
-            label = self._HOTKEY_ACTION_LABELS.get(conflict, conflict)
-            return f'Conflicts with "{label}" - choose another key'
+            return f'Conflicts with "{conflict}" - choose another key'
         self.set_hotkey_override(action, sym, mod)
         self._overlays.set_config_editor_capture(False, '')
         label = self._HOTKEY_ACTION_LABELS.get(action, action)
@@ -9517,7 +9545,7 @@ void main() {
             return  # flag stays as-is; will apply when a supporting effect becomes active
         lo, hi = self._random_range_for('speed', 0.25, 2.50)
         value = float(self._rng.uniform(lo, hi))
-        self._current_effect.parameters['speed'] = value
+        apply_speed(self._current_effect, value)
         self._speed_randomized = True
 
     def _reset_speed(self) -> float | None:
@@ -9525,7 +9553,7 @@ void main() {
         if self._current_effect is None or 'speed' not in self._current_effect.parameters:
             return None
         default = self._current_effect._initial_parameters.get('speed', 1.0)  # noqa: SLF001
-        self._current_effect.parameters['speed'] = default
+        apply_speed(self._current_effect, default)
         self._speed_randomized = False
         return float(default)
 
@@ -9625,6 +9653,13 @@ void main() {
 
     def apply_random_speed(self) -> None:
         self._apply_random_speed()
+
+    def set_current_speed(self, value: float) -> float | None:
+        """Set the active effect's speed, keeping its shader phase continuous.
+
+        The one entry point for the speed hotkeys and MIDI speed; None when the
+        effect has no speed parameter."""
+        return apply_speed(self._current_effect, float(value))
 
     def reset_speed(self) -> float | None:
         return self._reset_speed()
