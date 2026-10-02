@@ -134,3 +134,12 @@ def test_committed_trust_file_lists_the_patched_wheels_for_both_platforms() -> N
                  'sphn-0.2.1-1', 'opencv_python_headless-4.13.0.92-1'):
         assert any(n.startswith(stem + '-') and 'manylinux' in n for n in names), stem
         assert any(n.startswith(stem + '-') and 'win_amd64' in n for n in names), stem
+
+
+def test_windows_portable_builder_fetches_the_wheelhouse_when_none_is_staged() -> None:
+    # The nightly Windows CI job has no local wheelhouse; without this fetch the
+    # free-threaded build died on 'No matching distribution found for moderngl'
+    # (installer-smoke, 2026-10-02).
+    script = (_SCRIPT.parent / 'build_windows_portable.sh').read_text()
+    assert 'fetch_wheelhouse.sh" --platform windows' in script
+    assert '"$RUNTIME_FLAVOR" == "ft" && ! -d "${APP}/wheelhouse"' in script

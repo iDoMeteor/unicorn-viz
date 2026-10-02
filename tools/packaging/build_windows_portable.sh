@@ -124,6 +124,14 @@ log "Provisioning the Windows runtime (python-build-standalone, x86_64)"
 [[ -f "${APP}/runtime/python/python.exe" ]] || die "python.exe missing after runtime provisioning"
 
 SITE="${APP}/runtime/python/Lib/site-packages"
+# A free-threaded build needs our own win_amd64 cp314t wheels (PyPI has none).
+# On the owner's box stage_payload.sh found them in the local wheelhouse; anywhere
+# else (CI) fetch them from the GitHub release, verified against the sha256 file
+# committed in the repo.
+if [[ "$RUNTIME_FLAVOR" == "ft" && ! -d "${APP}/wheelhouse" ]]; then
+  log "No local wheelhouse: fetching the verified win_amd64 cp314t wheels"
+  "${SCRIPT_DIR}/fetch_wheelhouse.sh" --platform windows --dest "${APP}/wheelhouse" >/dev/null
+fi
 WHEEL_ARGS=()
 [[ -d "${APP}/wheelhouse" ]] && WHEEL_ARGS=(--find-links "${APP}/wheelhouse")
 CROSS_PIP=("$HOST_PY" -m pip install --quiet --upgrade --no-compile
