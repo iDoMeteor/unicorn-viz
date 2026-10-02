@@ -7727,22 +7727,12 @@ void main() {
             # raising update/render logs (throttled) and is skipped, and a step
             # that fails 30 frames in a row is switched off for the session --
             # it used to propagate out of run() and take the app down.
-            guard = self._call_guard.call
-            guard('video deck layer update', self._frame_video_deck_update, dt)
+            self._call_guard.call('video deck layer update', self._frame_video_deck_update, dt)
             self._render(dt)
+            self._frame_overlay_steps(dt)
             mirror_mode_active = (
                 self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
             )
-            candy_mode_active = bool(guard(
-                'candy frame active',
-                lambda: self._candy_frame is not None and bool(self._candy_frame.active),
-                default=False))
-            guard('webcam render', self._frame_webcam, dt)
-            guard('dancing unicorn', self._frame_dancing_unicorn, dt, mirror_mode_active, candy_mode_active)
-            guard('rainbow nova', self._frame_rainbow_nova, dt, mirror_mode_active, candy_mode_active)
-            guard('grand finale overlay', self._frame_grand_finale, dt, mirror_mode_active, candy_mode_active)
-            guard('candy frame', self._frame_candy_frame, dt, mirror_mode_active, candy_mode_active)
-            guard('celebration overlay', self._frame_celebration_overlay, dt)
             self._sync_recording_overlay()
             # Render the effects-browser live preview into its offscreen FBO
             # (restores the default framebuffer) before the overlay pass draws it.
@@ -8146,7 +8136,8 @@ void main() {
         if target_width <= 0 or target_height <= 0:
             return (0, 0, max(1, target_width), max(1, target_height))
 
-        if self._candy_frame is None or not bool(self._candy_frame.active):
+        if self._candy_frame is None or not bool(self._candy_frame.active) \
+                or self._call_guard.disabled('candy frame'):
             return (0, 0, target_width, target_height)
         if not self._effect_requests_frame_scaling(effect):
             return (0, 0, target_width, target_height)
@@ -8216,6 +8207,52 @@ void main() {
         except Exception:
             # Some backends may not expose writable color masks.
             pass
+
+    # A presenting step the call guard has switched off must stop shaping the
+    # frame: _render() routes the scene into fbo_a while one is "active", and
+    # Candy Frame shrinks the effect into its frame.  Treating a disabled step
+    # as inactive keeps the scene drawn plainly instead of small or missing
+    # while the app looks healthy (review of beta.193).
+    def _candy_active(self) -> bool:
+        return (self._candy_frame is not None and bool(self._candy_frame.active)
+                and not self._projectm_manager_modal_active
+                and not self._call_guard.disabled('candy frame'))
+
+    def _nova_active(self) -> bool:
+        return (self._rainbow_nova is not None and bool(self._rainbow_nova.is_active)
+                and not self._projectm_manager_modal_active
+                and not self._call_guard.disabled('rainbow nova'))
+
+    def _finale_overlay_active(self) -> bool:
+        return (self._grand_finale is not None and bool(self._grand_finale.overlay_active)
+                and not self._projectm_manager_modal_active
+                and not self._call_guard.disabled('grand finale overlay'))
+
+    def _frame_overlay_steps(self, dt: float) -> None:
+        """Webcam, dancing unicorn, Rainbow Nova, Grand Finale, Candy Frame and the
+        celebration overlay, each contained by the call guard (P1-4).
+
+        If any of them failed this frame, GL state is normalized afterwards: a
+        step that raised after changing blend/depth/scissor or the bound
+        framebuffer must not leak that into the next one.
+        """
+        guard = self._call_guard.call
+        failures_before = self._call_guard.failures
+        mirror_mode_active = (
+            self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
+        )
+        candy_mode_active = bool(guard(
+            'candy frame active',
+            lambda: self._candy_frame is not None and bool(self._candy_frame.active),
+            default=False))
+        guard('webcam render', self._frame_webcam, dt)
+        guard('dancing unicorn', self._frame_dancing_unicorn, dt, mirror_mode_active, candy_mode_active)
+        guard('rainbow nova', self._frame_rainbow_nova, dt, mirror_mode_active, candy_mode_active)
+        guard('grand finale overlay', self._frame_grand_finale, dt, mirror_mode_active, candy_mode_active)
+        guard('candy frame', self._frame_candy_frame, dt, mirror_mode_active, candy_mode_active)
+        guard('celebration overlay', self._frame_celebration_overlay, dt)
+        if self._call_guard.failures != failures_before:
+            self._normalize_gl_render_state()
 
     def _frame_video_deck_update(self, dt: float) -> None:
         """Per-frame update of the music-video layer."""
@@ -8358,21 +8395,9 @@ void main() {
         mirror_mode = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
         manager_modal_active = self._projectm_manager_modal_active
         burst_active = self._burst_controller.active and not manager_modal_active
-        nova_active = (
-            self._rainbow_nova is not None
-            and self._rainbow_nova.is_active
-            and not manager_modal_active
-        )
-        candy_active = (
-            self._candy_frame is not None
-            and bool(self._candy_frame.active)
-            and not manager_modal_active
-        )
-        finale_overlay_active = (
-            self._grand_finale is not None
-            and self._grand_finale.overlay_active
-            and not manager_modal_active
-        )
+        nova_active = self._nova_active()
+        candy_active = self._candy_active()
+        finale_overlay_active = self._finale_overlay_active()
         # Any active global post-FX pass (postfx, colour-grade, …) routes the
         # frame through the fbo_a/fbo_b chain and is applied via _apply_post_chain.
         post_chain_active = (
