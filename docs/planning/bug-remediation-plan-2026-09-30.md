@@ -247,7 +247,8 @@ silently die.
   [midi]
 - [ ] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1), U4,
   U5, U7. [mixer]
-- [ ] **Overlays:** U2 (non-ASCII glyphs, audience-visible), U8. [core]
+- [ ] **Overlays:** U2 (non-ASCII glyphs, audience-visible), U8. [core] **U2 done**
+  (core beta.196, `overlays.fold_to_atlas_ascii`); U8 open.
 - [ ] **Core:**
   - B P2-3: blocksize truncates the FFT;
   - B P2-4: frame overlays redraw the outgoing effect during a
