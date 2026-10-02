@@ -259,12 +259,15 @@ silently die.
   dj-mixer-01 0.222.2 `1448ee1`: a release before the grid line cancels the
   press, `tests/test_momentary_pads.py`), U4, U5, U7. [mixer]
 - [ ] **Overlays:** U2 (non-ASCII glyphs, audience-visible), U8. [core] **U2 done**
-  (core beta.196, `overlays.fold_to_atlas_ascii`); U8 open.
+  (core beta.196, `overlays.fold_to_atlas_ascii`); **U8 done** (core beta.197:
+  selector panels clamp to the window and scroll around the selection).
 - [ ] **Core:**
   - B P2-3: blocksize truncates the FFT;
   - B P2-4: frame overlays redraw the outgoing effect during a
     transition;
-  - B P2-7: rebinding leaves the old key live.
+  - B P2-7: rebinding leaves the old key live. **Done** (core beta.197: the old
+    default chord is swallowed unless another action holds it; conflicts checked
+    against core and drop-in help chords).
   [core]
 - [ ] **Media:**
   - B P2-2: videos-01 seek past EOF spins;
