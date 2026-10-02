@@ -110,14 +110,19 @@ add the short hash.
 
 ## Wave 3 — data safety
 
-- [ ] **B P1-6** An unreadable `global_state.json` / `config_profiles.json`
+- [x] **B P1-6** An unreadable `global_state.json` / `config_profiles.json`
   is replaced with an empty store. Quarantine the bad file and keep going
-  read-only. [core]
+  read-only. [core] Landed core beta.191: `safe_store.quarantine` renames the bad file
+  to `.corrupt-<ts>` (bytes intact), ERROR, defaults; saves go to the original
+  path after the quarantine copy exists, and are blocked for the session if it
+  could not be moved or copied aside. Same fix for `presets.json`. Rolling
+  `.bak` copies (the audit's second suggestion) not done.
 - [ ] **U6** Backup restore undone by the next store save. [mixer]
 - [ ] **B P2-1** `set_override()` mutates `_DEFAULTS` and the parsed config.
   [core]
-- [ ] **G3 (rest)** Every teardown step guarded, so the runtime-state save
-  always runs. [core]
+- [x] **G3 (rest)** Every teardown step guarded, so the runtime-state save
+  always runs. [core] Landed core beta.191: every `_shutdown_runtime` step goes through
+  `_shutdown_step`; GL objects are released one by one.
 
 ## Wave 4 — crash isolation
 

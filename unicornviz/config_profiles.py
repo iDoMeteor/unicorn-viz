@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from unicornviz.paths import resolve_path
+from unicornviz.safe_store import keep_copy, quarantine
 
 log = logging.getLogger(__name__)
 
@@ -38,12 +39,14 @@ class ConfigProfileStore:
     caller owns their schema (see ``docs/planning/configuration-editor-plan.md``).
     """
 
-    __slots__ = ('_path', '_lock', '_profiles')
+    __slots__ = ('_path', '_lock', '_profiles', '_save_blocked', '_save_block_logged')
 
     def __init__(self, path: str | Path = 'runtime/config_profiles.json') -> None:
         self._path = resolve_path(path)
         self._lock = threading.RLock()
         self._profiles: dict[str, dict[str, Any]] = {}
+        self._save_blocked = False      # file failed to load and could not be moved aside
+        self._save_block_logged = False
         self._load()
 
     @property
@@ -52,26 +55,37 @@ class ConfigProfileStore:
         return self._path
 
     def _load(self) -> None:
+        """Load the file; an unloadable one is quarantined, never overwritten
+        (see :mod:`unicornviz.safe_store`)."""
         with self._lock:
             if not self._path.exists():
                 self._profiles = {}
                 return
             try:
                 payload = json.loads(self._path.read_text(encoding='utf-8'))
+                profiles = payload.get('profiles') if isinstance(payload, dict) else None
+                if not isinstance(profiles, dict):
+                    raise ValueError("not a profile file (no 'profiles' object)")
             except Exception as exc:
-                log.warning('Config profile load failed (%s): %s', self._path, exc)
                 self._profiles = {}
+                if quarantine(self._path, str(exc), 'Config profiles') is None:
+                    self._save_blocked = True
                 return
-            profiles = payload.get('profiles') if isinstance(payload, dict) else None
-            if isinstance(profiles, dict):
-                self._profiles = {
-                    str(k): deepcopy(v) for k, v in profiles.items() if isinstance(v, dict)
-                }
-            else:
-                self._profiles = {}
+            self._profiles = {
+                str(k): deepcopy(v) for k, v in profiles.items() if isinstance(v, dict)
+            }
+            if len(self._profiles) != len(profiles):
+                keep_copy(self._path, 'some entries are not profiles and will be dropped',
+                          'Config profiles')
 
     def _save(self) -> None:
         with self._lock:
+            if self._save_blocked:
+                if not self._save_block_logged:
+                    self._save_block_logged = True
+                    log.error('Config profiles: not saving to %s this session (the file '
+                              'failed to load and could not be moved aside)', self._path)
+                return
             try:
                 self._path.parent.mkdir(parents=True, exist_ok=True)
                 payload = {
