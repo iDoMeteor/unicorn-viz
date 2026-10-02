@@ -1,0 +1,107 @@
+name: Windows Patched Free-Threaded Wheels
+
+# Builds the PATCHED win_amd64 cp314t wheels (python-rtmidi, glcontext, moderngl,
+# sphn, opencv-python-headless) that carry our free-threading fixes, at the same
+# versions and build tags as the patched Linux wheels of the downstream wheelhouse.
+# Manual only: it is a build-on-demand job, not a release gate.
+#
+# `checks` (ubuntu, a minute) runs the script's unit tests and its --dry-run, so a
+# syntax or logic error shows up before the Windows job spends 1-2 hours.  `build`
+# (windows-2022) runs build_windows_patched_wheels.py, which downloads and
+# verifies the pinned python-build-standalone free-threaded runtime, finds MSVC
+# via vswhere, fetches every source by pinned commit, applies the patches, builds,
+# tags, smoke-tests each wheel (the GIL must stay OFF after importing it) and all
+# of them together, and only then publishes to wheels-out.
+#
+# Artifacts:
+#   cp314t-win_amd64-patched-wheels   the verified wheels + SHA256SUMS + build-info.json
+#   cp314t-win_amd64-patched-logs     work/run.log and the per-step work/*.log
+#   cp314t-win_amd64-patched-unverified  the raw tagged wheels from work/raw, including
+#                                     any that FAILED their smoke test (not for release)
+# Nothing here pushes, releases or touches secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma list of wheels to build (glcontext, moderngl, python-rtmidi, sphn, opencv); empty = all'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Unit tests and dry run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: python -m pip install pytest pyyaml
+
+      - name: Unit tests (including the pinned sources existing upstream)
+        env:
+          FT_WHEELS_ONLINE: '1'
+        run: python -m pytest -v tests
+
+      - name: Dry run of the whole plan
+        run: python build_windows_patched_wheels.py --out dry-out --work dry-work --dry-run
+
+  build:
+    name: Build cp314t win_amd64 patched wheels
+    needs: checks
+    runs-on: windows-2022
+    # OpenCV is the slow one (UV's unpatched run used the same limit).  The build step has
+    # its own, shorter limit so the artifact upload steps below still get to run.
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        timeout-minutes: 135
+        shell: pwsh
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          $buildArgs = @('build_windows_patched_wheels.py', '--out', 'wheels-out', '--work', 'work')
+          if ($env:ONLY) { $buildArgs += @('--only', $env:ONLY) }
+          New-Item -ItemType Directory -Force -Path work | Out-Null
+          python @buildArgs 2>&1 | Tee-Object -FilePath work/run.log
+          exit $LASTEXITCODE
+
+      - name: Upload wheels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp314t-win_amd64-patched-wheels
+          path: wheels-out
+          if-no-files-found: warn
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp314t-win_amd64-patched-logs
+          path: |
+            work/run.log
+            work/*.log
+          if-no-files-found: ignore
+
+      - name: Upload unverified wheels
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp314t-win_amd64-patched-unverified
+          path: work/raw/**/*.whl
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,48 @@
+{
+  "name": "opencv-python-headless",
+  "version": "4.13.0.92",
+  "build_tag": "1",
+  "file": "opencv_python_headless-4.13.0.92-1-cp314-cp314t-manylinux_2_28_x86_64.whl",
+  "sha256": "6666039637df895d43212a0e28d09e03ba78a4027f2ff707de5d3187ada542be",
+  "sources": {
+    "opencv_python_repo": "https://github.com/opencv/opencv-python.git",
+    "opencv_python_tag": "92",
+    "opencv_python_commit": "4ddfc013fd1f13d9b9e379dbebf2cdbeb052e7f8",
+    "opencv_commit": "b4c5ec4042f097e2a5b386b9d413ec7333d0a184",
+    "setup_py_change": "removed \"-DPYTHON3_LIMITED_API=ON\" (as UV does)"
+  },
+  "patch": {
+    "file": "wheels/patches/opencv-4.13.0-free-threading.patch",
+    "sha256": "1d19d901d66346bdadf5bd7df0ec0b1b60bdc14dfa582c6ae7878c5f613653f4",
+    "files": [
+      "modules/dnn/misc/python/pyopencv_dnn.hpp",
+      "modules/flann/misc/python/pyopencv_flann.hpp",
+      "modules/gapi/misc/python/pyopencv_gapi.hpp",
+      "modules/python/src2/cv2.cpp",
+      "modules/python/src2/cv2_convert.hpp",
+      "modules/python/src2/cv2_highgui.cpp",
+      "modules/python/src2/cv2_util.cpp"
+    ]
+  },
+  "toolchain": {
+    "ffmpeg": "8.0.1",
+    "ffmpeg_sha256": "ed1cfade43aab7711c88937a0afc15b7b22efdc528c6ff074b4027c55a3c175c",
+    "ffmpeg_license": "plain LGPL (no --enable-gpl/--enable-version3/--enable-nonfree)",
+    "libvpx": "v1.15.2",
+    "libvpx_commit": "d168454ecd099805c675d4a98c66f4891373302a",
+    "containerfile": "/home/jj/Repos/unicorn-viz/tools/packaging/ft-opencv/Containerfile",
+    "containerfile_sha256": "9e24235ca0fadcb8fbe8577ce38c471e796bcf5a642c36a86c348b42cbb72377",
+    "image_tag": "uv-ft-opencv-deps:1",
+    "image_id": "4641bd6ab8b0e4b73cd1d4451c1467da16ffa90303f9f378ee4731100ae39f44",
+    "image_digest": "sha256:debe84a30ac3b131f6c7f3b01b3a2e1a8ff050036d2c0013a8242226dd685225",
+    "base_image": "quay.io/pypa/manylinux_2_28_x86_64:latest (as resolved when the image was built)",
+    "numpy_build": "2.3.2",
+    "cmake": "4.4.3",
+    "ninja": "1.13.2",
+    "scikit-build": "0.19.1",
+    "auditwheel": "6.8.2",
+    "pip": "26.2.1",
+    "wheel": "0.48.0"
+  },
+  "mirrors": "/home/jj/Repos/unicorn-viz/tools/packaging/build_ft_opencv_wheel.sh (sha256 2e65fda5d73d12678dc05fee799e768ca04ab4d174c9de0607757e176693bb57)"
+}

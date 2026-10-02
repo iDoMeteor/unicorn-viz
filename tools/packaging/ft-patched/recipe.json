@@ -1,0 +1,85 @@
+{
+  "_comment": "Pins for the PATCHED free-threaded wheels published as release wheelhouse-cp314t-patched-2026-10-02. Source of truth for build_ft_wheels.sh / build_ft_sphn_wheel.sh / build_ft_opencv_wheel.sh --patched; tests/test_ft_patched_recipe.py ties it to the patch files, the release notes and the as-built manifests. Work by the upstream free-threading team (clones in ~/Repos/python-free-threading), recorded here from their manifests.",
+  "release": "wheelhouse-cp314t-patched-2026-10-02",
+  "cython": "3.3.0",
+  "manylinux_image": {
+    "repository": "quay.io/pypa/manylinux_2_28_x86_64",
+    "digest_round_1": "quay.io/pypa/manylinux_2_28_x86_64@sha256:c2261579b9c2e5d45aa93312f73e2a302182e3e977b558581a1838d6fed3d8e6",
+    "digest_round_2": "quay.io/pypa/manylinux_2_28_x86_64@sha256:1e102f2e9ed9b7fd8d64b29f798c76078c3fa8f14d34914d7a4045e39419d8e0",
+    "note": "The images the wheels were built on (the tag moves). Recorded for the record; the scripts use :latest unless --image is given."
+  },
+  "packages": {
+    "python-rtmidi": {
+      "dist": "python_rtmidi",
+      "version": "1.5.8",
+      "build_tag": "3",
+      "fork": "https://github.com/iDoMeteor/python-rtmidi",
+      "branch": "wheels/ft-1.5.8-2",
+      "commit": "355905673de5c958485b39f1b5537f98e00f5640",
+      "submodule": {
+        "path": "src/rtmidi",
+        "fork": "https://github.com/iDoMeteor/rtmidi",
+        "branch": "wheels/python-rtmidi-ft-1.5.8",
+        "commit": "cf53bcae93cc1d6dcc30b1e810318628276df082",
+        "marker": {
+          "file": "RtMidi.h",
+          "contains": "callUserCallback"
+        }
+      },
+      "image_round": 2
+    },
+    "glcontext": {
+      "dist": "glcontext",
+      "version": "3.0.0",
+      "build_tag": "2",
+      "fork": "https://github.com/iDoMeteor/glcontext",
+      "branch": "fix-error-paths",
+      "commit": "043bf2ef394bf0760face037f52e3ee4369fc982",
+      "image_round": 2
+    },
+    "moderngl": {
+      "dist": "moderngl",
+      "version": "5.12.0",
+      "build_tag": "2",
+      "fork": "https://github.com/iDoMeteor/moderngl",
+      "branch": "wheels/ft-5.12.0-2",
+      "commit": "a9b91456063819ef1fb5e0622f903fc59d4878bf",
+      "image_round": 2
+    },
+    "sphn": {
+      "dist": "sphn",
+      "version": "0.2.1",
+      "build_tag": "1",
+      "sdist_sha256": "3b19b1fece67d979d84080458bed545d1f55ddc5abac6ca5deae2672a184c7fe",
+      "patch": {
+        "file": "patches/sphn-0.2.1-gil-used-false.patch",
+        "sha256": "b55296af3f72d2f4830f24f6e7cfc4fdca34f9d0ae29f910338405b0502c1f12"
+      },
+      "equivalent_fork_commit": {
+        "fork": "https://github.com/iDoMeteor/sphn",
+        "branch": "free-threading",
+        "commit": "638b3386f7f71cf1e5d576bab619900e45843fac"
+      },
+      "image_round": 1,
+      "note": "built with UV's ft-sphn toolchain image (Rust 1.98.1, maturin 1.15.0) and the 0.2.1 sdist's Cargo.lock, --locked"
+    },
+    "opencv-python-headless": {
+      "dist": "opencv_python_headless",
+      "version": "4.13.0.92",
+      "build_tag": "1",
+      "opencv_python": {
+        "url": "https://github.com/opencv/opencv-python.git",
+        "tag": "92",
+        "commit": "4ddfc013fd1f13d9b9e379dbebf2cdbeb052e7f8"
+      },
+      "opencv": {
+        "commit": "b4c5ec4042f097e2a5b386b9d413ec7333d0a184"
+      },
+      "patch": {
+        "file": "patches/opencv-4.13.0-free-threading.patch",
+        "sha256": "1d19d901d66346bdadf5bd7df0ec0b1b60bdc14dfa582c6ae7878c5f613653f4"
+      },
+      "applied_to": "the OpenCV submodule checkout (opencv/)"
+    }
+  }
+}

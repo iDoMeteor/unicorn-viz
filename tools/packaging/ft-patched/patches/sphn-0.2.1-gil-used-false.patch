@@ -1,0 +1,13 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index a7d203e..fd2af48 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -407,7 +407,7 @@ impl OpusStreamReader {
+     }
+ }
+ 
+-#[pymodule]
++#[pymodule(gil_used = false)]
+ fn sphn(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+     m.add_class::<dataset::DatasetReader>()?;
+     m.add_class::<dataset::DatasetIter>()?;
