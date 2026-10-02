@@ -94,7 +94,13 @@ add the short hash.
 
 ## Wave 2 — show-breakers
 
-- [ ] **U1** Mixer-only boot profile takes no input. [mixer + core]
+- [x] **U1** Mixer-only boot profile takes no input. [mixer + core]
+  Landed dj-mixer-01 0.222.2 (`1448ee1`; `tests/test_hosted_input.py`).
+  `on_sdl_event` now guards on `is_open` instead of `_window is None`, and a
+  hosted console ignores the main window's own close/resize events. The fix
+  was entirely in the mixer: core already routes the main window's events to
+  the claimed handler. Tested with real SDL events against a hosted
+  `MixerWindow`; not yet seen in a live mixer-only launch.
 - [ ] **B P1-1** Ping-pong pinning leaks effect instances. [core + auto-vj]
 - [x] **B P1-2, B P1-3** Recording/streaming stop blocks, or hangs, the
   render thread. Move `stop()` and faststart off the main thread, and bound
@@ -122,7 +128,11 @@ add the short hash.
   path after the quarantine copy exists, and are blocked for the session if it
   could not be moved or copied aside. Same fix for `presets.json`. Rolling
   `.bak` copies (the audit's second suggestion) not done.
-- [ ] **U6** Backup restore undone by the next store save. [mixer]
+- [x] **U6** Backup restore undone by the next store save. [mixer]
+  Landed dj-mixer-01 0.222.2 (`1448ee1`; `tests/test_store_restore.py`).
+  `TrackStore.restore_from_backup()` drops or awaits queued writes, swaps the
+  file and reloads the running store in place, so no restart is needed. A
+  track already on a deck keeps its live marks.
 - [ ] **B P2-1** `set_override()` mutates `_DEFAULTS` and the parsed config.
   [core]
 - [x] **G3 (rest)** Every teardown step guarded, so the runtime-state save
@@ -245,8 +255,9 @@ silently die.
     Leave 53–56 unbound until the owner's mapping session with the APC team
     (decision 2). Going through `set_speed` also fixes E1 on the MIDI path.
   [midi]
-- [ ] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1), U4,
-  U5, U7. [mixer]
+- [ ] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1; **done**,
+  dj-mixer-01 0.222.2 `1448ee1`: a release before the grid line cancels the
+  press, `tests/test_momentary_pads.py`), U4, U5, U7. [mixer]
 - [ ] **Overlays:** U2 (non-ASCII glyphs, audience-visible), U8. [core] **U2 done**
   (core beta.196, `overlays.fold_to_atlas_ascii`); U8 open.
 - [ ] **Core:**
