@@ -121,24 +121,46 @@ def test_the_real_recipe_describes_fetchable_packages(fetch) -> None:
     assert marker == {'file': 'RtMidi.h', 'contains': 'callUserCallback'}
 
 
-def test_git_environment_leaking_in_from_a_hook_cannot_redirect_the_fetch(fetch, tmp_path, monkeypatch) -> None:
-    """When pytest runs inside a git hook (pre-commit, pre-push), git exports GIT_DIR, GIT_INDEX_FILE,
-    GIT_WORK_TREE and friends.  The helper's `git init` / `git fetch --depth 1` in a temp directory
-    inherited them and ran against the REAL repository: the shared .git gained a `shallow` file full
-    of this test suite's fake commits.  Plant a decoy repository, point those variables at it, and
-    require that it is not touched."""
-    decoy, _ = _repo(tmp_path / 'decoy', {'keep.txt': 'x'})
-    before = sorted(p.name for p in (decoy / '.git').iterdir())
-    for var, value in (('GIT_DIR', str(decoy / '.git')), ('GIT_WORK_TREE', str(decoy)),
-                       ('GIT_INDEX_FILE', str(decoy / '.git' / 'index')),
-                       ('GIT_OBJECT_DIRECTORY', str(decoy / '.git' / 'objects'))):
-        monkeypatch.setenv(var, value)
+def _snapshot(git_dir: Path) -> dict[str, bytes]:
+    """Every file under a .git directory with its bytes (config, HEAD, hooks, worktrees, objects, ...)."""
+    return {str(p.relative_to(git_dir)): p.read_bytes() for p in sorted(git_dir.rglob('*')) if p.is_file()}
+
+
+@pytest.mark.parametrize('leaked', [
+    ('GIT_DIR',),                                                         # what a real hook exported when this bit
+    ('GIT_DIR', 'GIT_INDEX_FILE'),
+    ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY'),
+], ids=['git_dir', 'git_dir+index', 'all'])
+def test_git_environment_leaking_in_from_a_hook_cannot_redirect_the_fetch(fetch, tmp_path, monkeypatch, leaked) -> None:
+    """When pytest runs inside a git hook (pre-commit, pre-push) from a linked worktree, git exports
+    GIT_DIR=<main>/.git/worktrees/<seat>, GIT_INDEX_FILE and friends.  The helper's `git init` /
+    `git fetch --depth 1` in a temp directory inherited them and ran against the REAL repository, and
+    left two marks on the shared repo: a `.git/shallow` file full of this suite's fake commits, and
+    ``core.bare = true`` in the MAIN repo's config (which broke pulls and submodule updates for every
+    seat).  The decoy is therefore a main repository with a linked worktree, and the leaked GIT_DIR is
+    the worktree's gitdir (a plain repository does not reproduce the core.bare flip).  Require that
+    NOTHING under the main .git changed: not the config (core.bare included), not a single byte."""
+    main, _ = _repo(tmp_path / 'decoy', {'keep.txt': 'x'})
+    _git(main, 'worktree', 'add', '-q', str(tmp_path / 'decoy-seat'), '-b', 'seat/x')
+    common = main / '.git'
+    wt_gitdir = common / 'worktrees' / 'decoy-seat'
+    assert wt_gitdir.is_dir() and 'bare = false' in (common / 'config').read_text()
+    before = _snapshot(common)
+    values = {'GIT_DIR': str(wt_gitdir), 'GIT_WORK_TREE': str(tmp_path / 'decoy-seat'),
+              'GIT_INDEX_FILE': str(wt_gitdir / 'index'), 'GIT_OBJECT_DIRECTORY': str(common / 'objects')}
+    for var in leaked:
+        monkeypatch.setenv(var, values[var])
     recipe, _, gl_sha = _recipe(tmp_path)
     fetch.fetch_all(recipe, tmp_path / 'out')
     assert (tmp_path / 'out' / 'glcontext-3.0.0' / 'setup.py').read_text() == 'gl'     # it still worked
-    after = sorted(p.name for p in (decoy / '.git').iterdir())
-    assert after == before, f'the decoy repository changed: {set(after) ^ set(before)}'
-    assert not (decoy / '.git' / 'shallow').exists()
-    objects = subprocess.run(['git', '--git-dir', str(decoy / '.git'), 'cat-file', '-e', gl_sha],
-                             capture_output=True, text=True, env={'PATH': '/usr/bin:/bin'})
-    assert objects.returncode != 0, 'the fork commit was fetched into the decoy repository'
+    after = _snapshot(common)
+    # The config first: this is the mark that broke every seat's pulls (core.bare flipped to true).
+    assert 'bare = false' in (common / 'config').read_text(), 'core.bare was changed in the decoy config'
+    assert after['config'] == before['config'], 'the decoy repository config was rewritten'
+    assert set(after) == set(before), f'files added/removed in the decoy: {set(after) ^ set(before)}'
+    changed = sorted(n for n in before if after[n] != before[n])
+    assert not changed, f'the decoy repository changed: {changed}'
+    assert not (common / 'shallow').exists()
+    probe = subprocess.run(['git', '--git-dir', str(common), 'cat-file', '-e', gl_sha],
+                           capture_output=True, text=True, env={'PATH': '/usr/bin:/bin'})
+    assert probe.returncode != 0, 'the fork commit was fetched into the decoy repository'
