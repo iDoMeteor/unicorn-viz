@@ -8611,10 +8611,17 @@ void main() {
 
                 # Transition composite — to mirror compose FBO if mirror,
                 # fbo_a when postfx is active, else directly to screen.
-                if mirror_mode or post_chain_active or video_active:
+                # Candy Frame, Rainbow Nova and the Grand Finale overlay draw from
+                # fbo_a after this.  Without routing the blend through fbo_a they
+                # sampled only the OUTGOING effect and hid the whole transition
+                # (P2-4, audit 2026-09-30).  The blend is composited into a
+                # separate target and copied into fbo_a, never drawn into the
+                # texture it is reading.
+                late_overlay = candy_active or nova_active or finale_overlay_active
+                if mirror_mode or post_chain_active or video_active or late_overlay:
                     composite_fbo = (
                         self._make_or_get_mirror_composite_fbo()
-                        if mirror_mode
+                        if (mirror_mode or (late_overlay and not (post_chain_active or video_active)))
                         else self._fbo_a
                     )
                     composite_fbo.use()
@@ -8655,6 +8662,16 @@ void main() {
                 elif video_active:
                     self._compose_video_decks('pre')
                     self._compose_video_decks('post')
+                    self._present_from_tex(self._fbo_a.color_attachments[0])
+                elif late_overlay:
+                    # Copy the blend into fbo_a (what the late overlays sample),
+                    # then present it so the screen shows the blend under them.
+                    self._fbo_a.use()
+                    ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    ctx.clear(0.0, 0.0, 0.0, 1.0)
+                    composite_fbo.color_attachments[0].use(location=0)
+                    self._present_prog['tex'].value = 0
+                    self._present_vao.render(moderngl.TRIANGLE_STRIP)
                     self._present_from_tex(self._fbo_a.color_attachments[0])
 
     def _status_pill_with_video(self) -> str:

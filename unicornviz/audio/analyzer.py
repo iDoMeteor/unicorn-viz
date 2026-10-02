@@ -233,6 +233,7 @@ class Analyzer:
         self._bands = fft_bands
         self._smoothed = np.zeros(fft_bands, dtype=np.float32)
         self._window_cache: dict[int, np.ndarray] = {}
+        self._fft_buf = np.empty(fft_bands * 2, dtype=np.float32)   # newest-window scratch (P2-3)
         self._prev_spectrum = np.zeros(fft_bands, dtype=np.float32)
         self._flux_delta = np.zeros(fft_bands, dtype=np.float32)
         self._prev_rms = 0.0
@@ -834,7 +835,21 @@ class Analyzer:
         np.multiply(pcm[:n], window, out=self._windowed_buf[:n])
         windowed = self._windowed_buf[:n]
         rms = float(np.sqrt(np.mean(windowed * windowed)))
-        fft_raw = np.fft.rfft(windowed, n=self._bands * 2)
+        # The FFT is 2 * bands long.  A longer block (the documented blocksize =
+        # 2048 xrun remedy with 512 bands) used to be cut to its OLDEST
+        # 2 * bands samples through the rising half of a block-length window, so
+        # the newest audio never reached the spectrum, flux or onsets (P2-3,
+        # audit 2026-09-30).  Take the NEWEST 2 * bands samples with a window of
+        # that length.  RMS above still covers the whole block (it is the
+        # silence gate's input).  Shorter blocks are zero-padded as before.
+        fft_len = self._bands * 2
+        if n > fft_len:
+            fft_window = self._window_for(fft_len)
+            np.multiply(pcm[n - fft_len:n], fft_window, out=self._fft_buf[:fft_len])
+            fft_in = self._fft_buf[:fft_len]
+        else:
+            fft_in = windowed
+        fft_raw = np.fft.rfft(fft_in, n=fft_len)
         np.abs(fft_raw[: self._bands], out=self._spectrum_work)
         spectrum = self._spectrum_work
 
@@ -927,8 +942,13 @@ class Analyzer:
         # so mid-band energy comes free from the existing spectrum; only
         # the side block costs one extra rfft.
         if side is not None and len(side) >= n and energy > 1e-5:
-            np.multiply(side[:n], window, out=self._windowed_buf[:n])
-            side_fft = np.fft.rfft(self._windowed_buf[:n], n=self._bands * 2)
+            if n > fft_len:                      # same newest-window as the mid channel
+                np.multiply(side[n - fft_len:n], fft_window, out=self._fft_buf[:fft_len])
+                side_in = self._fft_buf[:fft_len]
+            else:
+                np.multiply(side[:n], window, out=self._windowed_buf[:n])
+                side_in = self._windowed_buf[:n]
+            side_fft = np.fft.rfft(side_in, n=fft_len)
             np.abs(side_fft[: self._bands], out=self._side_spectrum_work)
             bin_hz = self._sample_rate / max(1, self._n_fft)
             b0 = max(1, int(_VOCAL_MS_BAND_HZ[0] / bin_hz))

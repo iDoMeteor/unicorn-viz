@@ -19,6 +19,7 @@ Usage::
 """
 from __future__ import annotations
 
+import copy
 import tomllib
 from pathlib import Path
 from typing import Any, Callable
@@ -407,18 +408,24 @@ def register_config_validator(
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
-    result = dict(base)
+    """``base`` overlaid with ``override``, sharing no mutable state with either.
+
+    Nested dicts and lists are copied, so mutating the result (``set_override``
+    writes in place) can never change the module-level ``_DEFAULTS``, the parsed
+    config.toml, or a caller's overrides dict (audit 2026-09-30, P2-1).
+    """
+    result = copy.deepcopy(base)
     for k, v in override.items():
         if isinstance(v, dict) and isinstance(result.get(k), dict):
             result[k] = _deep_merge(result[k], v)
         else:
-            result[k] = v
+            result[k] = copy.deepcopy(v)
     return result
 
 
 class Config:
     def __init__(self, path: str | Path = APP_ROOT / 'config.toml', overrides: dict[str, Any] | None = None) -> None:
-        self._data = dict(_DEFAULTS)
+        self._data = copy.deepcopy(_DEFAULTS)
         # What config.toml itself sets, apart from built-in defaults and CLI
         # overrides: the config menu copies these (and only these) into its
         # saved settings as the file is phased out (see file_value()).
@@ -428,7 +435,7 @@ class Config:
             with p.open("rb") as f:
                 user = tomllib.load(f)
             self._data = _deep_merge(self._data, user)
-            self._file_data = user
+            self._file_data = copy.deepcopy(user)      # what the file says, never the live data
         if overrides:
             self._data = _deep_merge(self._data, overrides)
 

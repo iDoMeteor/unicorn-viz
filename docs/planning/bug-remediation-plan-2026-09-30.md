@@ -133,8 +133,8 @@ add the short hash.
   `TrackStore.restore_from_backup()` drops or awaits queued writes, swaps the
   file and reloads the running store in place, so no restart is needed. A
   track already on a deck keeps its live marks.
-- [ ] **B P2-1** `set_override()` mutates `_DEFAULTS` and the parsed config.
-  [core]
+- [x] **B P2-1** `set_override()` mutates `_DEFAULTS` and the parsed config.
+  [core] Landed core beta.198: defaults, merge and parsed file data deep-copied.
 - [x] **G3 (rest)** Every teardown step guarded, so the runtime-state save
   always runs. [core] Landed core beta.191: every `_shutdown_runtime` step goes through
   `_shutdown_step`; GL objects are released one by one.
@@ -262,9 +262,11 @@ silently die.
   (core beta.196, `overlays.fold_to_atlas_ascii`); **U8 done** (core beta.197:
   selector panels clamp to the window and scroll around the selection).
 - [ ] **Core:**
-  - B P2-3: blocksize truncates the FFT;
+  - B P2-3: blocksize truncates the FFT. **Done** (core beta.198: newest 2*bands
+    samples, window of that length, mid and side);
   - B P2-4: frame overlays redraw the outgoing effect during a
-    transition;
+    transition. **Done** (core beta.198: the blend is composited into a separate
+    target and copied into fbo_a for the late overlays);
   - B P2-7: rebinding leaves the old key live. **Done** (core beta.197: the old
     default chord is swallowed unless another action holds it; conflicts checked
     against core and drop-in help chords).
