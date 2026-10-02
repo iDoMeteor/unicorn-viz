@@ -17,6 +17,7 @@ from unicornviz.audio.capture import AudioCapture
 from unicornviz.audio.analyzer import Analyzer, OnsetEvent  # noqa: F401 (OnsetEvent re-exported)
 from unicornviz.audio.profiles import AudioProfile, get_profile, list_profiles
 from unicornviz.config import Config
+from unicornviz.fault_guard import FailureThrottle, error_key
 
 if TYPE_CHECKING:
     from unicornviz.runtime_state import RuntimeStateStore
@@ -26,6 +27,12 @@ log = logging.getLogger(__name__)
 #: Onset events kept for a consumer that has fallen behind (~10 s of dense
 #: onsets); older ones are dropped rather than queued without bound.
 _ONSET_LOG_LEN = 512
+
+
+#: Consecutive analysis failures after which the analyzer's tables are rebuilt once.
+ANALYSIS_RESET_AFTER = 20
+#: Pause after a failed iteration, so a persistent fault cannot spin the thread.
+_ANALYSIS_ERROR_BACKOFF_S = 0.05
 
 
 class AudioManager:
@@ -122,6 +129,10 @@ class AudioManager:
         self._analysis_lock: threading.Lock = threading.Lock()
         self._analysis_stop: threading.Event = threading.Event()
         self._analysis_thread: threading.Thread | None = None
+        #: Exceptions contained by the analysis loop (P1-5); a rising count with
+        #: frozen audio data is how a wedged analyzer shows up.
+        self.analysis_error_count = 0
+        self._analysis_throttle = FailureThrottle(30.0)
         # The timed startup worker, kept only while a capture open is still
         # in flight after start() gave up waiting on it.  stop() must not
         # tear PortAudio down underneath it (see stop()).
@@ -348,46 +359,74 @@ class AudioManager:
         thread via ``drain_onsets()``.
         """
         last_seq: int = -1
+        streak = 0
+        reset_done = False
         log.debug('AudioManager: analysis thread running')
         while not self._analysis_stop.is_set():
-            # The silence fallback prober ticks here, on this thread, not on
-            # the render thread: a device switch that stalls (2026-09-22) now
-            # stalls analysis for a moment instead of freezing the frame.
-            # Cheap when idle -- the probe itself runs on a worker thread.
-            self._capture.maybe_fallback()
-            # Wait for a new block; releases the GIL for up to timeout_s.
-            if not self._capture.wait_for_new_block(timeout_s=0.5):
-                continue  # timeout — check stop flag and loop
-            if self._analysis_stop.is_set():
-                break
-            block, side_block, new_seq = self._capture.get_block_pair_if_new(last_seq)
-            if block is None:
-                continue
-            last_seq = new_seq
-            # 2026-08-14: sync the analyzer to the real capture rate every
-            # frame -- a cheap early-return no-op when unchanged, but keeps
-            # a mid-session device/fallback switch to a differently-rated
-            # device from silently going stale. See Analyzer.set_sample_rate.
-            self._analyzer.set_sample_rate(self._capture.sample_rate)
-            # Heavy work: numpy FFT releases the GIL → render thread runs freely.
-            self._analyzer.process(block, out=self._back_buf, side=side_block)
-            onsets = self._analyzer.drain_onsets()
-            audio_t = self._analyzer.last_audio_time
-            # Input level of the block that produced this snapshot.  Read here,
-            # on the thread that owns the analyzer, so the reader-side probe
-            # never touches analyzer internals across a thread boundary.
-            block_rms = self._analyzer.last_raw_rms
-            # Atomic publish: swap buffers, accumulate onsets, update timestamp.
-            with self._analysis_lock:
-                self._front_buf, self._back_buf = self._back_buf, self._front_buf
-                self._published_audio_time = audio_t
-                self._publish_seq += 1
-                self._publish_block_seq = new_seq
-                self._publish_rms = block_rms
-                for event in onsets:
-                    self._onset_total += 1
-                    self._onset_log.append((self._onset_total, event))
+            try:
+                last_seq = self._analysis_iteration(last_seq)
+                streak = 0
+                reset_done = False
+            except Exception as exc:                  # noqa: BLE001 - this thread must not die
+                # P1-5: any exception used to end this thread, freezing every
+                # audio-reactive value for the rest of the session with no sign.
+                self.analysis_error_count += 1
+                streak += 1
+                log_now, suppressed = self._analysis_throttle.should_log(error_key(exc))
+                if log_now:
+                    log.error('AudioManager: analysis error (continuing): %s%s', exc,
+                              f' ({suppressed} more suppressed)' if suppressed else '',
+                              exc_info=exc if not suppressed else None)
+                if streak >= ANALYSIS_RESET_AFTER and not reset_done:
+                    reset_done = True                 # once per streak
+                    try:
+                        self._analyzer.set_profile(self._profile)
+                        log.warning('AudioManager: analyzer reset after %d consecutive errors', streak)
+                    except Exception as exc2:         # noqa: BLE001
+                        log.error('AudioManager: analyzer reset failed: %s', exc2)
+                self._analysis_stop.wait(_ANALYSIS_ERROR_BACKOFF_S)
         log.debug('AudioManager: analysis thread exited')
+
+    def _analysis_iteration(self, last_seq: int) -> int:
+        """One pass of the analysis loop; returns the new last-seen block sequence."""
+        # The silence fallback prober ticks here, on this thread, not on
+        # the render thread: a device switch that stalls (2026-09-22) now
+        # stalls analysis for a moment instead of freezing the frame.
+        # Cheap when idle -- the probe itself runs on a worker thread.
+        self._capture.maybe_fallback()
+        # Wait for a new block; releases the GIL for up to timeout_s.
+        if not self._capture.wait_for_new_block(timeout_s=0.5):
+            return last_seq  # timeout -- check stop flag and loop
+        if self._analysis_stop.is_set():
+            return last_seq
+        block, side_block, new_seq = self._capture.get_block_pair_if_new(last_seq)
+        if block is None:
+            return last_seq
+        last_seq = new_seq
+        # 2026-08-14: sync the analyzer to the real capture rate every
+        # frame -- a cheap early-return no-op when unchanged, but keeps
+        # a mid-session device/fallback switch to a differently-rated
+        # device from silently going stale. See Analyzer.set_sample_rate.
+        self._analyzer.set_sample_rate(self._capture.sample_rate)
+        # Heavy work: numpy FFT releases the GIL -> render thread runs freely.
+        self._analyzer.process(block, out=self._back_buf, side=side_block)
+        onsets = self._analyzer.drain_onsets()
+        audio_t = self._analyzer.last_audio_time
+        # Input level of the block that produced this snapshot.  Read here,
+        # on the thread that owns the analyzer, so the reader-side probe
+        # never touches analyzer internals across a thread boundary.
+        block_rms = self._analyzer.last_raw_rms
+        # Atomic publish: swap buffers, accumulate onsets, update timestamp.
+        with self._analysis_lock:
+            self._front_buf, self._back_buf = self._back_buf, self._front_buf
+            self._published_audio_time = audio_t
+            self._publish_seq += 1
+            self._publish_block_seq = new_seq
+            self._publish_rms = block_rms
+            for event in onsets:
+                self._onset_total += 1
+                self._onset_log.append((self._onset_total, event))
+        return last_seq
 
     def get_reactivity(self) -> float:
         """Return current global audio reactivity multiplier."""
