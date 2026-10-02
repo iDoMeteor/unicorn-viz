@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import sdl2
 
+from unicornviz.fault_guard import FailureThrottle, error_key
 from unicornviz.catalog_browser import PANE_CATEGORIES, PANE_LIST
 from unicornviz.midi import CC_PARAM_RANGE
 from unicornviz.paths import resolve_path
@@ -377,6 +378,7 @@ class HotkeyHandler:
         self._playlist = playlist
         self._overlays = overlays
         self._audio = audio_manager
+        self._midi_failures = FailureThrottle(30.0)
         self._projectm_preview_origin_path: str = ''
         self._projectm_preview_committed_path: str = ''
         self._projectm_preview_dirty: bool = False
@@ -399,7 +401,18 @@ class HotkeyHandler:
             events = list(self._pending_midi_events)
             self._pending_midi_events.clear()
         for event in events:
-            self._dispatch_midi_event(event)
+            # One raising action must not end the app or drop the rest of this
+            # frame's batch (P1-4, audit 2026-09-30).
+            try:
+                self._dispatch_midi_event(event)
+            except Exception as exc:
+                key = f'{getattr(event, "type", "?")}:{getattr(event, "number", "?")}|{error_key(exc)}'
+                log_now, suppressed = self._midi_failures.should_log(key)
+                if log_now:
+                    log.warning('MIDI event %s %s failed: %s%s', getattr(event, 'type', '?'),
+                                getattr(event, 'number', '?'), exc,
+                                f' ({suppressed} more suppressed)' if suppressed else '',
+                                exc_info=exc if not suppressed else None)
 
     def _dispatch_midi_event(self, event: "MidiEvent") -> None:
         a = self._app

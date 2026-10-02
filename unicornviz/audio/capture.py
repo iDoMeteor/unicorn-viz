@@ -21,6 +21,7 @@ the counter each frame and skips the FFT when no new block has arrived
 """
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import subprocess
@@ -335,6 +336,34 @@ def _candidate_monitor_devices(
     return candidates
 
 
+def _serialized(method):
+    """Run ``method`` holding the capture's stream-switch lock."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._switch_lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+def _serialized_but_never_hang(method):
+    """Like :func:`_serialized`, for shutdown: wait for a switch or open in
+    progress, but only ``_STOP_LOCK_TIMEOUT_S``.  A PortAudio open can hang (OBS
+    holding PipeWire's JACK shim, 2026-09-14) while holding the lock, and
+    quitting must not wait on it forever."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        got = self._switch_lock.acquire(timeout=self._STOP_LOCK_TIMEOUT_S)
+        if not got:
+            log.warning('Audio: a stream switch/open has held the lock for %.1fs; '
+                        'stopping anyway', self._STOP_LOCK_TIMEOUT_S)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            if got:
+                self._switch_lock.release()
+    return wrapper
+
+
 class AudioCapture:
     """
     Runs a sounddevice InputStream in a background thread.
@@ -367,6 +396,12 @@ class AudioCapture:
             maxlen=int(_SAMPLE_RATE * buffer_seconds / self._blocksize) + 1
         )
         self._lock = threading.Lock()
+        # Serializes every sequence that stops/closes/opens the stream: start(),
+        # stop(), and the source switches (operator select/cycle on the main or
+        # helper command thread, auto-fallback on the analysis thread).  Two of
+        # them interleaving can double-open PortAudio (P2-10, audit 2026-09-30).
+        # Re-entrant so a path that already holds it may call another.
+        self._switch_lock = threading.RLock()
         self._stream: "sd.InputStream | None" = None
         # Blocking-read capture thread and its stop signal.
         self._stop_event: threading.Event = threading.Event()
@@ -695,6 +730,7 @@ class AudioCapture:
                 context,
             )
 
+    @_serialized
     def start(self) -> None:
         if not _SD_AVAILABLE:
             log.info("Audio capture disabled (sounddevice not available)")
@@ -1086,6 +1122,10 @@ class AudioCapture:
             return np.zeros(self._blocksize * n_blocks, dtype=np.float32)
         return np.concatenate(blocks)
 
+    #: How long stop() waits for a switch or open in progress before going ahead.
+    _STOP_LOCK_TIMEOUT_S = 3.0
+
+    @_serialized_but_never_hang
     def stop(self) -> None:
         # Set stop flag before abort so the reader's except branch stays silent.
         self._stop_event.set()
@@ -1229,6 +1269,7 @@ class AudioCapture:
             return 0
         return max(0, min(self._candidate_index, len(self._candidate_devices) - 1))
 
+    @_serialized
     def _switch_to_candidate_index(self, target_idx: int) -> str:
         """Switch capture stream to a specific candidate index."""
         if not _SD_AVAILABLE:
@@ -1292,6 +1333,7 @@ class AudioCapture:
                 self._active = False
             return self.current_source_label()
 
+    @_serialized
     def select_source(self, index: int) -> str:
         """Select a specific capture source by candidate index.
 
@@ -1318,6 +1360,7 @@ class AudioCapture:
             return self.current_source_label()
         return self._switch_to_candidate_index(index)
 
+    @_serialized
     def cycle_source(self, delta: int) -> str:
         """Switch to another candidate input source and return its label.
 
