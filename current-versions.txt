@@ -7,7 +7,7 @@
   core (unicornviz)             1.0.0-beta.199      BETA          MISMATCH (readme=1.0.0-beta.187)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
-  dj-mixer-01                   0.222.2             alpha ▲       module
+  dj-mixer-01                   0.222.3             alpha ▲       module
   media-01                      0.31.1              alpha ▲       module
   control-room-01               0.24.0              alpha ▲       module
   effects-games                 0.18.0              alpha ▲       module
@@ -38,11 +38,6 @@
   multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
   spotify-01                    1.0.0-rc.12         RC            module
-
-  ── alpha ▲ ───────────────────────────────────────────────────────────────
-  streaming-01                  0.9.1               alpha ▲       MISMATCH (readme=0.8.1)
-
-  ── RC ────────────────────────────────────────────────────────────────────
   unicorn-tears-01              1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -50,6 +45,7 @@
   effects-psychedelic           0.9.0               alpha ▲       module
   grand-finale-01               0.9.0               alpha ▲       module
   images-01                     0.9.0               alpha ▲       module
+  streaming-01                  0.9.0               alpha ▲       MISMATCH (readme=0.8.1)
   textures-01                   0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
