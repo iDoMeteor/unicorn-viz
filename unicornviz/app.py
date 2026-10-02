@@ -29,6 +29,7 @@ from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
+from unicornviz.fault_guard import CallGuard
 from unicornviz.gc_tuning import freeze_heap, install_gc_pause_monitor
 from unicornviz.audio.manager import AudioManager
 from unicornviz.playlist import Playlist
@@ -5118,7 +5119,10 @@ void main() {
                     continue
                 if str(row.get('tab') or default_tab) != tab:
                     continue
-                specs.append(self._dropin_row_spec(prefix, ctrl, title, tab, row))
+                spec = self._event_guard.call(f'config editor row {prefix}.{row.get("name")}',
+                                              self._dropin_row_spec, prefix, ctrl, title, tab, row)
+                if spec is not None:        # a row with a bad value (None, text) is skipped, not fatal
+                    specs.append(spec)
         return specs
 
     def _dropin_text_row_spec(self, prefix: str, ctrl: object, title: str, tab: str,
@@ -5433,6 +5437,12 @@ void main() {
                 overlays.flash_message(f'Reverted: {cls}', 1.4)
 
     def _config_editor_adjust(self, notches: float) -> None:
+        """Contained: a drop-in setter that raises (or a bad row value) is
+        logged and ignored instead of ending the app (P1-4)."""
+        self._event_guard.call('config editor adjust',
+                               self._config_editor_adjust_impl, notches)
+
+    def _config_editor_adjust_impl(self, notches: float) -> None:
         """Nudge the selected row by ``notches`` steps, live.
 
         Sliders move by their step (default 1/40 of the range); toggles go
@@ -5476,6 +5486,12 @@ void main() {
         spec['set'](min(hi, max(lo, float(spec['value']) + notches * step)))
 
     def _config_editor_set_text(self, index: int, text: str) -> None:
+        """Contained: a drop-in setter that raises (or a bad row value) is
+        logged and ignored instead of ending the app (P1-4)."""
+        self._event_guard.call('config editor set_text',
+                               self._config_editor_set_text_impl, index, text)
+
+    def _config_editor_set_text_impl(self, index: int, text: str) -> None:
         """Apply a committed text/secret row (the overlay only queues it)."""
         tab = self._overlays.config_editor_tab_name
         specs = self._config_editor_settings_specs(tab)
@@ -5500,6 +5516,12 @@ void main() {
             sdl2.SDL_StopTextInput()
 
     def _config_editor_set_value(self, index: int, value: float) -> None:
+        """Contained: a drop-in setter that raises (or a bad row value) is
+        logged and ignored instead of ending the app (P1-4)."""
+        self._event_guard.call('config editor set_value',
+                               self._config_editor_set_value_impl, index, value)
+
+    def _config_editor_set_value_impl(self, index: int, value: float) -> None:
         """Set row ``index`` on the active tab to an absolute ``value``.
 
         Backs pointer input (a click or drag on a slider track, a chip, a
@@ -5535,6 +5557,12 @@ void main() {
         spec['set'](clamped)
 
     def _config_editor_activate(self) -> None:
+        """Contained: a drop-in setter that raises (or a bad row value) is
+        logged and ignored instead of ending the app (P1-4)."""
+        self._event_guard.call('config editor activate',
+                               self._config_editor_activate_impl)
+
+    def _config_editor_activate_impl(self) -> None:
         """Enter on the active tab: flip a toggle, or step a choice."""
         if self._overlays.activate_config_editor_row():
             req = self._overlays.take_config_editor_value_request()
@@ -5544,6 +5572,42 @@ void main() {
     # ------------------------------------------------------------------ #
     # Effect management                                                    #
     # ------------------------------------------------------------------ #
+
+    def _instantiate_first_effect(self, playlist: Any, first_cls: Any) -> BaseEffect | None:
+        """Build the effect the show starts on; never let it stop the app booting.
+
+        A shader that fails to compile on the operator's driver, in whichever
+        effect the playlist happens to start on, used to be a startup crash
+        (P1-4).  The same call inside ``_switch_effect`` already quarantines a
+        failing effect; here the failure is logged, the class is quarantined,
+        and the next unblocked effect is tried (at most a handful), ending in
+        a black window with overlays rather than an exception.
+        """
+        if first_cls is None:
+            return None
+        cls = first_cls
+        for _ in range(16):
+            try:
+                return self._instantiate(cls)
+            except Exception as exc:
+                name = getattr(cls, 'NAME', cls.__name__)
+                log.error('First effect %s failed to start: %s', name, exc, exc_info=True)
+                self._effect_blocklist.add(cls.__name__)     # a build failure is not transient
+                cls = None
+                for _ in range(64):
+                    try:
+                        candidate = playlist.advance()
+                    except Exception:
+                        candidate = None
+                    if candidate is None:
+                        break
+                    if candidate.__name__ not in self._effect_blocklist:
+                        cls = candidate
+                        break
+                if cls is None:
+                    break
+        log.error('No effect could be started; the window stays black behind the overlays')
+        return None
 
     def _instantiate(
         self,
@@ -6180,12 +6244,10 @@ void main() {
             )
             # Decide duration based on audio during splash run
             if splash.run(self._window):
-                # User pressed Esc during splash — quit immediately
-                splash.destroy()
-                audio_manager.stop()
-                sdl2.SDL_GL_DeleteContext(self._gl_context)
-                sdl2.SDL_DestroyWindow(self._window)
-                sdl2.SDL_Quit()
+                # User pressed Esc during splash -- quit immediately, through
+                # the one teardown path (it used to do a partial hand teardown
+                # and then run again from __main__'s finally: P2-5).
+                self._quit_during_startup(splash)
                 return
             splash.destroy()
 
@@ -6548,19 +6610,26 @@ void main() {
         # Load first effect (mixer profile: no effects — the window stays
         # black behind overlays until hosted mode (P2) presents the console).
         _first_cls = playlist.current()
-        self._current_effect = (
-            self._instantiate(_first_cls) if _first_cls is not None else None
-        )
+        self._current_effect = self._instantiate_first_effect(playlist, _first_cls)
         # Optional: start locked in ProjectM-only mode.
         _pm_cfg = self.cfg.get('effects', 'ProjectMEffect', default={}) or {}
         if isinstance(_pm_cfg, dict) and bool(_pm_cfg.get('only_mode', False)):
             _pm_cls = self.vj_api.find_effect('ProjectMEffect', 'ProjectM Presets')
             if _pm_cls is not None:
+                _pm_ok = True
                 if type(self._current_effect).__name__ != 'ProjectMEffect':
-                    self._current_effect.destroy()
-                    self._current_effect = self._instantiate(_pm_cls)
-                self._effect_lock = 'ProjectM Presets'
-                log.info('Startup: ProjectM-only mode locked via config')
+                    if self._current_effect is not None:
+                        self._event_guard.call('first effect destroy', self._current_effect.destroy)
+                    try:
+                        self._current_effect = self._instantiate(_pm_cls)
+                    except Exception as exc:
+                        _pm_ok = False
+                        log.error('ProjectM-only mode: could not build ProjectM (%s); '
+                                  'continuing with the playlist', exc)
+                        self._current_effect = self._instantiate_first_effect(playlist, _first_cls)
+                if _pm_ok:
+                    self._effect_lock = 'ProjectM Presets'
+                    log.info('Startup: ProjectM-only mode locked via config')
         self._recorder = Recorder(self.cfg, self._width, self._height)
         self._apply_persisted_recording_settings()
         # Hardware-encoder probe off the main thread, but only when a recording
@@ -7654,127 +7723,26 @@ void main() {
             self._flush_profile_autosave()
 
             # Render
-            if self._video_deck_layer is not None:
-                # Reads the mixer's deck state off the bus, opens/closes
-                # sources and uploads changed frames -- before the frame is
-                # drawn so this frame composites this frame's picture.
-                self._video_deck_layer.update(self.get_deck_state())
+            # Each drop-in step below is contained (P1-4, audit 2026-09-30): one
+            # raising update/render logs (throttled) and is skipped, and a step
+            # that fails 30 frames in a row is switched off for the session --
+            # it used to propagate out of run() and take the app down.
+            guard = self._call_guard.call
+            guard('video deck layer update', self._frame_video_deck_update, dt)
             self._render(dt)
             mirror_mode_active = (
                 self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
             )
-            candy_mode_active = (
-                self._candy_frame is not None and bool(self._candy_frame.active)
-            )
-            if self._webcam_system is not None:
-                audio = self._audio or AudioData()
-                self._webcam_system.render(dt, audio.bass, audio.treble)
-            if self._dancing_unicorn is not None:
-                audio = self._audio or AudioData()
-                self._dancing_unicorn.update(
-                    dt,
-                    float(audio.bass), float(audio.mid),
-                    float(audio.treble), float(audio.beat),
-                )
-                if mirror_mode_active:
-                    self._fbo_a.use()
-                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    self._dancing_unicorn.render(
-                        self._ctx, self._render_width, self._render_height,
-                    )
-                else:
-                    if candy_mode_active:
-                        self._fbo_a.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._dancing_unicorn.render(
-                            self._ctx, self._render_width, self._render_height,
-                        )
-                    else:
-                        self._ctx.screen.use()
-                        self._ctx.viewport = (0, 0, self._width, self._height)
-                        self._dancing_unicorn.render(self._ctx, self._width, self._height)
-            if self._rainbow_nova is not None:
-                self._rainbow_nova.update(dt)
-                if self._rainbow_nova.is_active:
-                    if mirror_mode_active:
-                        # Composite nova from fbo_a into fbo_b, then copy back
-                        # so final mirror tile-blit includes the effect.
-                        self._fbo_b.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
-                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
-                    else:
-                        if candy_mode_active:
-                            self._fbo_b.use()
-                            self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                            self._rainbow_nova.render(self._fbo_a.color_attachments[0])
-                            self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
-                        else:
-                            self._ctx.screen.use()
-                            self._ctx.viewport = (0, 0, self._width, self._height)
-                            self._rainbow_nova.render(self._fbo_a.color_attachments[0])
-            if self._grand_finale is not None and self._grand_finale.overlay_active:
-                if mirror_mode_active:
-                    self._fbo_b.use()
-                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                    self._grand_finale.render_overlay(
-                        self._fbo_a.color_attachments[0],
-                        self._fbo_b,
-                        self._render_width, self._render_height,
-                    )
-                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
-                else:
-                    if candy_mode_active:
-                        self._fbo_b.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._grand_finale.render_overlay(
-                            self._fbo_a.color_attachments[0],
-                            self._fbo_b,
-                            self._render_width, self._render_height,
-                        )
-                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
-                    else:
-                        self._ctx.screen.use()
-                        self._ctx.viewport = (0, 0, self._width, self._height)
-                        self._grand_finale.render_overlay(
-                            self._fbo_a.color_attachments[0],
-                            None,
-                            self._width, self._height,
-                        )
-            if self._candy_frame is not None:
-                fill_needed = (
-                    self._effect_requests_frame_scaling(self._current_effect)
-                    or self._effect_requests_frame_scaling(self._next_effect)
-                )
-                set_needed = getattr(self._candy_frame, 'set_outer_fill_needed', None)
-                if callable(set_needed):
-                    set_needed(fill_needed)
-                audio = self._audio or AudioData()
-                self._candy_frame.update(
-                    dt,
-                    float(audio.bass),
-                    float(audio.mid),
-                    float(audio.treble),
-                    float(audio.beat),
-                )
-                if self._candy_frame.active:
-                    if mirror_mode_active:
-                        self._fbo_b.use()
-                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-                        self._candy_frame.render(self._fbo_a.color_attachments[0])
-                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
-                    else:
-                        self._ctx.screen.use()
-                        self._ctx.viewport = (0, 0, self._width, self._height)
-                        self._candy_frame.render(self._fbo_a.color_attachments[0])
-            # Fire DJ celebration overlay — on top of all other overlays, below HUD.
-            _auto_vj = getattr(self, '_auto_vj', None)
-            if _auto_vj is not None:
-                _cel_render = getattr(_auto_vj, 'render_celebration_overlay', None)
-                if callable(_cel_render):
-                    self._ctx.screen.use()
-                    self._ctx.viewport = (0, 0, self._width, self._height)
-                    _cel_render(self._width, self._height)
+            candy_mode_active = bool(guard(
+                'candy frame active',
+                lambda: self._candy_frame is not None and bool(self._candy_frame.active),
+                default=False))
+            guard('webcam render', self._frame_webcam, dt)
+            guard('dancing unicorn', self._frame_dancing_unicorn, dt, mirror_mode_active, candy_mode_active)
+            guard('rainbow nova', self._frame_rainbow_nova, dt, mirror_mode_active, candy_mode_active)
+            guard('grand finale overlay', self._frame_grand_finale, dt, mirror_mode_active, candy_mode_active)
+            guard('candy frame', self._frame_candy_frame, dt, mirror_mode_active, candy_mode_active)
+            guard('celebration overlay', self._frame_celebration_overlay, dt)
             self._sync_recording_overlay()
             # Render the effects-browser live preview into its offscreen FBO
             # (restores the default framebuffer) before the overlay pass draws it.
@@ -7937,7 +7905,9 @@ void main() {
             elif not need_frame_for_subsystems:
                 self._update_frame_capture_snapshot(None)
             if 'streaming' in due and stream_frame is not None:
-                if not self._streamer.write_frame(stream_frame):
+                if not self._call_guard.call('streamer write_frame',
+                                             self._streamer.write_frame, stream_frame,
+                                             default=True):
                     log.warning('RTMP streamer write failed: %s', self._streamer.last_error)
             if primary_overlay_view is not None:
                 vx, vy, vw, vh = primary_overlay_view
@@ -8024,6 +7994,37 @@ void main() {
         """
         if not self._shutdown_complete:
             self._shutdown_runtime()
+
+    @property
+    def _call_guard(self) -> CallGuard:
+        """Contains exceptions from per-frame drop-in calls and switches a call
+        site off after 30 consecutive failures (P1-4).  Created on first use so
+        a cold ``App`` (tests, crash isolation) has it too."""
+        guard = self.__dict__.get('_call_guard_obj')
+        if guard is None:
+            guard = self.__dict__['_call_guard_obj'] = CallGuard(log, max_consecutive=30)
+        return guard
+
+    @property
+    def _event_guard(self) -> CallGuard:
+        """Contains exceptions from user-driven actions (config editor, effect
+        teardown, ...): logged throttled, never disabled -- the next keypress
+        may be fine."""
+        guard = self.__dict__.get('_event_guard_obj')
+        if guard is None:
+            guard = self.__dict__['_event_guard_obj'] = CallGuard(log, max_consecutive=1_000_000_000)
+        return guard
+
+    def _quit_during_startup(self, splash: Any = None) -> None:
+        """Quit from inside ``run()`` before the main loop (Esc on the splash).
+
+        The splash owns GL resources, so it goes first; everything else is the
+        normal :meth:`_shutdown_runtime`, which runs once -- ``__main__``'s
+        ``ensure_shutdown()`` in its ``finally`` is then a no-op.
+        """
+        if splash is not None:
+            self._shutdown_step('splash', splash.destroy)
+        self._shutdown_runtime()
 
     def _shutdown_step(self, label: str, fn: Any, *args: Any) -> None:
         """Run one teardown step; a failure is logged and never stops the next.
@@ -8214,6 +8215,142 @@ void main() {
             # Some backends may not expose writable color masks.
             pass
 
+    def _frame_video_deck_update(self, dt: float) -> None:
+        """Per-frame update of the music-video layer."""
+        if self._video_deck_layer is not None:
+            # Reads the mixer's deck state off the bus, opens/closes
+            # sources and uploads changed frames -- before the frame is
+            # drawn so this frame composites this frame's picture.
+            self._video_deck_layer.update(self.get_deck_state())
+
+    def _frame_webcam(self, dt: float) -> None:
+        """Webcam overlay render."""
+        if self._webcam_system is not None:
+            audio = self._audio or AudioData()
+            self._webcam_system.render(dt, audio.bass, audio.treble)
+
+    def _frame_dancing_unicorn(self, dt: float, mirror_mode_active: bool, candy_mode_active: bool) -> None:
+        """Dancing-unicorn overlay update + render."""
+        if self._dancing_unicorn is not None:
+            audio = self._audio or AudioData()
+            self._dancing_unicorn.update(
+                dt,
+                float(audio.bass), float(audio.mid),
+                float(audio.treble), float(audio.beat),
+            )
+            if mirror_mode_active:
+                self._fbo_a.use()
+                self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                self._dancing_unicorn.render(
+                    self._ctx, self._render_width, self._render_height,
+                )
+            else:
+                if candy_mode_active:
+                    self._fbo_a.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._dancing_unicorn.render(
+                        self._ctx, self._render_width, self._render_height,
+                    )
+                else:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._dancing_unicorn.render(self._ctx, self._width, self._height)
+
+    def _frame_rainbow_nova(self, dt: float, mirror_mode_active: bool, candy_mode_active: bool) -> None:
+        """Rainbow Nova update + render."""
+        if self._rainbow_nova is not None:
+            self._rainbow_nova.update(dt)
+            if self._rainbow_nova.is_active:
+                if mirror_mode_active:
+                    # Composite nova from fbo_a into fbo_b, then copy back
+                    # so final mirror tile-blit includes the effect.
+                    self._fbo_b.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
+                else:
+                    if candy_mode_active:
+                        self._fbo_b.use()
+                        self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+                        self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
+                    else:
+                        self._ctx.screen.use()
+                        self._ctx.viewport = (0, 0, self._width, self._height)
+                        self._rainbow_nova.render(self._fbo_a.color_attachments[0])
+
+    def _frame_grand_finale(self, dt: float, mirror_mode_active: bool, candy_mode_active: bool) -> None:
+        """Grand Finale overlay render."""
+        if self._grand_finale is not None and self._grand_finale.overlay_active:
+            if mirror_mode_active:
+                self._fbo_b.use()
+                self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                self._grand_finale.render_overlay(
+                    self._fbo_a.color_attachments[0],
+                    self._fbo_b,
+                    self._render_width, self._render_height,
+                )
+                self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
+            else:
+                if candy_mode_active:
+                    self._fbo_b.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._grand_finale.render_overlay(
+                        self._fbo_a.color_attachments[0],
+                        self._fbo_b,
+                        self._render_width, self._render_height,
+                    )
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
+                else:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._grand_finale.render_overlay(
+                        self._fbo_a.color_attachments[0],
+                        None,
+                        self._width, self._height,
+                    )
+
+    def _frame_candy_frame(self, dt: float, mirror_mode_active: bool, candy_mode_active: bool) -> None:
+        """Candy Frame update + render."""
+        if self._candy_frame is not None:
+            fill_needed = (
+                self._effect_requests_frame_scaling(self._current_effect)
+                or self._effect_requests_frame_scaling(self._next_effect)
+            )
+            set_needed = getattr(self._candy_frame, 'set_outer_fill_needed', None)
+            if callable(set_needed):
+                set_needed(fill_needed)
+            audio = self._audio or AudioData()
+            self._candy_frame.update(
+                dt,
+                float(audio.bass),
+                float(audio.mid),
+                float(audio.treble),
+                float(audio.beat),
+            )
+            if self._candy_frame.active:
+                if mirror_mode_active:
+                    self._fbo_b.use()
+                    self._ctx.viewport = (0, 0, self._render_width, self._render_height)
+                    self._candy_frame.render(self._fbo_a.color_attachments[0])
+                    self._blit_fbo_b_to_fbo_a(self._render_width, self._render_height, clear=False)
+                else:
+                    self._ctx.screen.use()
+                    self._ctx.viewport = (0, 0, self._width, self._height)
+                    self._candy_frame.render(self._fbo_a.color_attachments[0])
+
+    def _frame_celebration_overlay(self, dt: float) -> None:
+        """Auto VJ fire-DJ celebration overlay."""
+        # Fire DJ celebration overlay — on top of all other overlays, below HUD.
+        _auto_vj = getattr(self, '_auto_vj', None)
+        if _auto_vj is not None:
+            _cel_render = getattr(_auto_vj, 'render_celebration_overlay', None)
+            if callable(_cel_render):
+                self._ctx.screen.use()
+                self._ctx.viewport = (0, 0, self._width, self._height)
+                _cel_render(self._width, self._height)
+
+
     def _render(self, dt: float) -> None:
         ctx = self._ctx
         mirror_mode = self._is_mirror_mode(self._display_mode) and bool(self._mirror_rects)
@@ -8358,9 +8495,10 @@ void main() {
                 * (1.0 + audio_impact * 0.45)
             )
             if self._transition_t >= 1.0:
-                # Finish transition
+                # Finish transition.  A raising destroy() must not kill the app on
+                # the last frame of a fade (P1-4): the next effect still takes over.
                 if self._current_effect:
-                    self._current_effect.destroy()
+                    self._event_guard.call('outgoing effect destroy', self._current_effect.destroy)
                 self._current_effect = self._next_effect
                 self._next_effect = None
                 self._re_randomize_on_scene_change()
@@ -8504,7 +8642,8 @@ void main() {
             return
         self._fbo_a.use()
         self._ctx.viewport = (0, 0, self._render_width, self._render_height)
-        layer.draw(self._render_width, self._render_height)
+        self._call_guard.call('video deck layer draw', layer.draw,
+                              self._render_width, self._render_height)
 
     def _make_or_get_mirror_composite_fbo(self) -> moderngl.Framebuffer:
         """Lazy-create a single FBO used to compose mirror transitions."""
