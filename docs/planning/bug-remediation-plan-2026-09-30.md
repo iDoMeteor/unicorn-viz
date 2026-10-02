@@ -255,9 +255,13 @@ silently die.
     Leave 53–56 unbound until the owner's mapping session with the APC team
     (decision 2). Going through `set_speed` also fixes E1 on the MIDI path.
   [midi]
-- [ ] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1; **done**,
-  dj-mixer-01 0.222.2 `1448ee1`: a release before the grid line cancels the
-  press, `tests/test_momentary_pads.py`), U4, U5, U7. [mixer]
+- [x] **Mixer UI:** U3 (quantized ROLL/TRANS tap sticks, also REV1; dj-mixer-01
+  0.222.2 `1448ee1`: a release before the grid line cancels the press,
+  `tests/test_momentary_pads.py`), U4, U5, U7 (dj-mixer-01 0.222.3 `1012c82`;
+  `tests/test_ui_audit_fixes.py`: THROW OUT targets `xfade_pos_for()` so
+  hamster no longer gives dead air; a Smart List rebuild takes a free
+  `Smart HH:MM (n)` name; `display_index`/`tooltip_delay_s` of 0 are honored).
+  [mixer]
 - [ ] **Overlays:** U2 (non-ASCII glyphs, audience-visible), U8. [core] **U2 done**
   (core beta.196, `overlays.fold_to_atlas_ascii`); **U8 done** (core beta.197:
   selector panels clamp to the window and scroll around the selection).
