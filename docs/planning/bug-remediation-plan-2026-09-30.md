@@ -220,8 +220,9 @@ silently die.
 
 ## Wave 6 — effects, as bulk fixes
 
-- [ ] **E1** Speed-change phase continuity: one helper, five call sites, 34
-  effects. [core]
+- [x] **E1** Speed-change phase continuity: one helper, five call sites, 34
+  effects. [core] Landed core beta.196: `effects.base.apply_speed` (hotkeys, random/F6,
+  G reset, MIDI CC, config editor, `vj_api.set_speed`); audit repro step 73.5 -> 1.58.
 - [ ] **E2** Float32 hash collapse: `mod` inside each hash function, 14
   effects. [effects]
 - [ ] **E4** Wrapped phases pop: pick periods per consumer, 20 effects.

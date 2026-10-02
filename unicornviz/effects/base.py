@@ -279,6 +279,41 @@ def copy_audio_data(source: AudioData, target: AudioData, *, scale: float = 1.0)
     target.bands[:] = source.bands
 
 
+def apply_speed(effect: object, new_speed: float, *, continuous: bool = True) -> float | None:
+    """Set ``effect.parameters['speed']``, keeping the shader phase continuous.
+
+    Effects that compute ``t = iTime * (bias + scale * iSpeed)`` jump to an
+    unrelated moment if ``speed`` changes while ``effect.time`` (anywhere in
+    0-10000 s) stays put.  This rescales ``time`` so the product does not move:
+    ``time' = time * prev_factor / next_factor`` with the effect's
+    ``SPEED_TIME_BIAS`` / ``SPEED_TIME_SCALE`` (defaults 0 and 1, the common
+    ``iTime * iSpeed`` case).  Every speed write -- hotkeys, random speed, the
+    G reset, MIDI CC, the config editor, ``vj_api.set_speed`` -- goes through
+    here (audit 2026-09-30, E1).  ``continuous=False`` is a plain write (the
+    raver scramble's intentional discontinuity).  Returns the new speed, or
+    None when the effect has no ``speed`` parameter.
+    """
+    params = getattr(effect, 'parameters', None)
+    if not isinstance(params, dict) or 'speed' not in params:
+        return None
+    prev_speed = float(params['speed'])
+    new_speed = float(new_speed)
+    if continuous and abs(new_speed - prev_speed) > 1e-9 and hasattr(effect, 'time'):
+        try:
+            t = float(getattr(effect, 'time'))
+            bias = float(getattr(effect, 'SPEED_TIME_BIAS', 0.0))
+            scale = float(getattr(effect, 'SPEED_TIME_SCALE', 1.0))
+            prev_factor = bias + scale * prev_speed
+            next_factor = bias + scale * new_speed
+            if abs(prev_factor) > 1e-9 and abs(next_factor) > 1e-9:
+                setattr(effect, 'time', (t * prev_factor) / next_factor)
+        except Exception:
+            # Never fail a speed change because of continuity bookkeeping.
+            pass
+    params['speed'] = new_speed
+    return new_speed
+
+
 class BaseEffect(ABC):
     """
     All effects subclass this.

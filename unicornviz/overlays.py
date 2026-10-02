@@ -10,6 +10,7 @@ import logging
 import math
 import random
 import time
+import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -44,6 +45,54 @@ log = logging.getLogger(__name__)
 # Each character is stored as 8 bytes, one byte per row, MSB = leftmost pixel.
 # Generated from the public-domain "PC Screen Font" / Oldschool PC Font data.
 # ---------------------------------------------------------------------------
+# Overlay text is drawn from a 128-cell ASCII atlas.  Anything above 127 used to
+# be folded onto an unrelated cell with ``ord(ch) & 0x7F`` (audit U2): the
+# tour's "·" drew as "7", "—" and "→" as blanks, "é" as "i".  This table plus
+# Unicode decomposition gives every character exactly one readable ASCII
+# stand-in (so measured widths still match), and "?" for what has none.
+_ATLAS_STAND_INS: dict[str, str] = {
+    '\u00b7': '.', '\u2022': '*', '\u2023': '>', '\u25cf': '*', '\u25aa': '*', '\u2219': '.',
+    '\u2014': '-', '\u2013': '-', '\u2012': '-', '\u2015': '-', '\u2212': '-', '\u2010': '-',
+    '\u2011': '-', '\u2192': '>', '\u2190': '<', '\u2191': '^', '\u2193': 'v', '\u2194': '-',
+    '\u25b6': '>', '\u25c0': '<', '\u25b2': '^', '\u25bc': 'v', '\u2026': '.',
+    '\u201c': '"', '\u201d': '"', '\u201e': '"', '\u2018': "'", '\u2019': "'", '\u201a': "'",
+    '\u00ab': '<', '\u00bb': '>', '\u00d7': 'x', '\u00f7': '/', '\u00b0': 'o', '\u00a0': ' ',
+    '\u2002': ' ', '\u2003': ' ', '\u2009': ' ', '\u202f': ' ', '\u200b': ' ',
+    '\u00df': 's', '\u00c6': 'A', '\u00e6': 'a', '\u00d8': 'O', '\u00f8': 'o', '\u0141': 'L',
+    '\u0142': 'l', '\u0110': 'D', '\u0111': 'd', '\u00d0': 'D', '\u00f0': 'd', '\u00de': 'P',
+    '\u00fe': 'p', '\u0152': 'O', '\u0153': 'o', '\u0131': 'i', '\u00a9': 'c', '\u00ae': 'R',
+    '\u2122': 'T', '\u00a3': 'L', '\u20ac': 'E', '\u00a5': 'Y', '\u00a2': 'c', '\u266a': '*',
+    '\u266b': '*', '\u2665': '*', '\u2605': '*', '\u2713': 'v', '\u2717': 'x',
+}
+
+
+def fold_to_atlas_ascii(text: str) -> str:
+    """Return ``text`` with every non-ASCII character replaced by one ASCII
+    character the overlay font can draw (same length, so widths are unchanged).
+
+    Table first (punctuation and symbols, a few letters Unicode does not
+    decompose), then NFKD for accented letters (base letter kept), else ``?``.
+    """
+    if text.isascii():
+        return text
+    out: list[str] = []
+    for ch in text:
+        if ord(ch) < 128:
+            out.append(ch)
+            continue
+        rep = _ATLAS_STAND_INS.get(ch)
+        if rep is None:
+            decomposed = unicodedata.normalize('NFKD', ch)
+            base = decomposed[:1]
+            if (base.isascii() and base.isalnum()
+                    and all(unicodedata.combining(c) for c in decomposed[1:])):
+                rep = base
+            else:
+                rep = '?'
+        out.append(rep)
+    return ''.join(out)
+
+
 _FONT_8X8 = [
     # 32 space
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
@@ -1186,8 +1235,8 @@ void main() {
 
         verts: list[float] = []
         cx = x
-        for ch in text:
-            code = ord(ch) & 0x7F
+        for ch in fold_to_atlas_ascii(text):
+            code = ord(ch)
             u0 = (code * self._glyph_w) / atlas_w
             u1 = u0 + float(self._glyph_w) / atlas_w
             v0 = 0.0

@@ -473,7 +473,11 @@ class HotkeyHandler:
                 param = a.midi_param_for_cc(event.number)
                 if param and param in effect.parameters:
                     lo, hi = CC_PARAM_RANGE
-                    effect.parameters[param] = lo + event.value * (hi - lo)
+                    cc_value = lo + event.value * (hi - lo)
+                    if param == 'speed':
+                        a.set_current_speed(cc_value)       # phase-continuous (E1)
+                    else:
+                        effect.parameters[param] = cc_value
                     o.flash_message(f'MIDI {param}: {effect.parameters[param]:.2f}', 1.0)
                     if ks_log is not None:
                         ks_log.log_midi(
@@ -1807,13 +1811,11 @@ class HotkeyHandler:
                     o.flash_message(f'Speed random ON  {effect.parameters["speed"]:.2f}  [{lo:.2f}-{hi:.2f}]', 1.6)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+= — speed MAX
-                    effect.parameters["speed"] = 10.0
+                    a.set_current_speed(10.0)
                     o.flash_message("Speed  MAX", 1.5)
                 else:
                     # = — speed up
-                    effect.parameters["speed"] = min(
-                        effect.parameters["speed"] * 1.25, 10.0
-                    )
+                    a.set_current_speed(min(effect.parameters["speed"] * 1.25, 10.0))
                     o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
             else:
                 o.flash_message('Speed not available for this effect', 1.0)
@@ -1827,13 +1829,11 @@ class HotkeyHandler:
                     o.flash_message(f'Speed random OFF  {effect.parameters["speed"]:.2f}', 1.2)
                 elif mod & sdl2.KMOD_CTRL:
                     # Ctrl+- — speed MIN
-                    effect.parameters["speed"] = 0.05
+                    a.set_current_speed(0.05)
                     o.flash_message("Speed  MIN", 1.5)
                 else:
                     # - — speed down
-                    effect.parameters["speed"] = max(
-                        effect.parameters["speed"] * 0.8, 0.05
-                    )
+                    a.set_current_speed(max(effect.parameters["speed"] * 0.8, 0.05))
                     o.flash_message(f"Speed  {effect.parameters['speed']:.2f}", 1.0)
             else:
                 o.flash_message('Speed not available for this effect', 1.0)
