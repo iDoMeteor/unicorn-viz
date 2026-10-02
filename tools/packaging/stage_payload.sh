@@ -203,7 +203,10 @@ if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
     mkdir -p "${DEST}/wheelhouse"
     wheels=0
     # Append-only wheelhouse: keep only the newest build of each wheel (wheel_select.py).
-    mapfile -t candidates < <(cd "$WHEELHOUSE" && ls -1 -- *.whl 2>/dev/null || true)
+    candidates=()
+    for cand in "${WHEELHOUSE}"/*.whl; do
+      [[ -e "$cand" ]] && candidates+=("$(basename "$cand")")
+    done
     if command -v python3 >/dev/null 2>&1 && [[ "${#candidates[@]}" -gt 0 ]]; then
       mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | python3 "${SCRIPT_DIR}/wheel_select.py")
     fi

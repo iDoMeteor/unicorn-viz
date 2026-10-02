@@ -64,7 +64,8 @@ mkdir -p "$DEST"
 # Which wheels to fetch: by default the newest build of each (the trust file is an
 # append-only record, so it also lists superseded builds nobody needs to ship).
 declare -A WANTED=()
-mapfile -t listed < <(awk '!/^[[:space:]]*(#|$)/ {print $2}' "$TRUST")
+# (tr: a Windows checkout may have turned the trust file into CRLF lines.)
+mapfile -t listed < <(tr -d '\r' < "$TRUST" | awk '!/^[[:space:]]*(#|$)/ {print $2}')
 if [[ "$FETCH_ALL" -eq 1 ]] || ! command -v python3 >/dev/null 2>&1; then
   for n in "${listed[@]}"; do WANTED["$n"]=1; done
 else
@@ -74,6 +75,7 @@ fi
 tag=""
 count=0
 while IFS= read -r line; do
+  line="${line%$'\r'}"
   if [[ "$line" =~ ^#[[:space:]]*release-tag:[[:space:]]*([^[:space:]]+) ]]; then
     tag="${BASH_REMATCH[1]}"
     continue

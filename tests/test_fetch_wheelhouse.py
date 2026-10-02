@@ -143,3 +143,13 @@ def test_windows_portable_builder_fetches_the_wheelhouse_when_none_is_staged() -
     script = (_SCRIPT.parent / 'build_windows_portable.sh').read_text()
     assert 'fetch_wheelhouse.sh" --platform windows' in script
     assert '"$RUNTIME_FLAVOR" == "ft" && ! -d "${APP}/wheelhouse"' in script
+
+
+def test_a_crlf_trust_file_still_works(tmp_path: Path) -> None:
+    # A Windows git checkout can turn the committed trust file into CRLF lines.
+    serve = _serve(tmp_path, _WHEELS)
+    trust = _trust(tmp_path, _WHEELS)
+    trust.write_bytes(trust.read_bytes().replace(b'\n', b'\r\n'))
+    proc = _run(tmp_path, serve, trust)
+    assert proc.returncode == 0, proc.stderr
+    assert {p.name for p in (tmp_path / 'wh').glob('*.whl')} == set(_WHEELS)
