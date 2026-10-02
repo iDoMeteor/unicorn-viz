@@ -1,8 +1,11 @@
 # Free-threaded (cp314t) wheels: moderngl, glcontext, python-rtmidi
 
 Owner: UV Threads
-Status: all five Linux and all five Windows wheels built, verified and published
-Last updated: 2026-09-30 (end of day)
+Status: all five Linux and all five Windows wheels built, verified and published.
+With the patched Linux wheels (2026-10-02; section 6a), nothing UV imports turns the GIL
+back on any more: rtmidi, glcontext, moderngl, sphn, cv2 and MediaPipe all keep it off.
+The upstream PRs are open (section 6a). Patched Windows wheels are published too.
+Last updated: 2026-10-02
 
 W1 of [the bug remediation plan](bug-remediation-plan-2026-09-30.md) bundles
 free-threaded Python 3.14. Three extensions we depend on have no wheel for it
@@ -10,6 +13,11 @@ upstream (moderngl and glcontext have none for 3.14 at all, and PyPI shows no
 cp314/cp313t wheel for any of the three as of today), so we build our own.
 
 ## 1. What exists
+
+*Update 2026-10-02:* patched, free-threading wheels of all five packages now sit
+alongside these, for Linux and Windows, with build tags that pip prefers. They are
+described in section 6a, and their provenance is in section 7. The table below is the
+original 2026-09-30 set.
 
 Published to `~/projects/_software-dist/wheelhouse/cp314t/` (flat,
 append-only, `SHA256SUMS` beside it):
@@ -120,25 +128,38 @@ Verified: WAV write/read round trip, `durations`, `resample`, and
 at 2x), identically in upstream's cp314 wheel. The module does not declare
 `gil_used = false`, so importing it re-enables the GIL.
 
-## 3. GIL behavior today
+## 3. GIL behavior
 
 A free-threaded interpreter starts with the GIL **off** and turns it **on**
 the first time it imports an extension module that has not declared it can
-run without one (`Py_mod_gil`). Measured with each module imported alone in a
-fresh process:
+run without one (`Py_mod_gil`). Each module was imported alone in a fresh process
+on the PBS 3.14.7t runtime:
 
-| Import | GIL afterwards |
-|---|---|
-| `glcontext` (package only; loads no extension) | off |
-| `glcontext.egl`, `glcontext.x11` | **on** |
-| `moderngl` (`moderngl.mgl`) | **on** |
-| `rtmidi` (`_rtmidi`) | **on** |
-| `cv2` (opencv, 4.13.0) | **on** |
-| `sphn` | **on** |
+| Import | Published wheels (2026-09-30) | Patched Linux wheels (2026-10-02) |
+|---|---|---|
+| `glcontext` (package only; loads no extension) | off | off |
+| `glcontext.egl`, `glcontext.x11` | **on** | off (`glcontext-3.0.0-2`) |
+| `moderngl` (`moderngl.mgl`) | **on** | off (`moderngl-5.12.0-2`) |
+| `rtmidi` (`_rtmidi`) | **on** | off (`python_rtmidi-1.5.8-3`) |
+| `cv2` (opencv, 4.13.0) | **on** | off (`opencv_python_headless-4.13.0.92-1`) |
+| `sphn` | **on** | off (`sphn-0.2.1-1`) |
+| `mediapipe` 1.0.0 (Tasks API; ctypes, no CPython extension) | off | off (unchanged; its numpy, Pillow, matplotlib, kiwisolver and cffi dependencies are free-threading ready) |
 
-So any process that imports moderngl or rtmidi runs with the GIL on. That is
-the expected state for the main process (plan decision 1). It must never
-happen in the audio helper, which imports none of them.
+**With the published wheels**, any process that imports moderngl or rtmidi runs with
+the GIL on. That was the expected state for the main process (plan decision 1), and
+it must never happen in the audio helper, which imports none of them.
+
+**With the patched Linux wheels**, the whole main process can run with the GIL off.
+MediaPipe was tested the way `webcam-01` uses it (one IMAGE-mode `ImageSegmenter` per
+camera worker thread, never closed): masks are bit-identical with the GIL off and on,
+and stress tests of that pattern are clean. MediaPipe's Python layer has two crash
+bugs, a `close()` racing an in-flight call and a double `close()`. Both exist with the
+GIL too, and UV's pattern never triggers them. A fix is prepared upstream-side, on the
+`free-threading` branch in `~/Repos/python-free-threading/mediapipe`, submitted as
+[google-ai-edge/mediapipe#6374](https://github.com/google-ai-edge/mediapipe/pull/6374)
+(it needs a signed Google CLA). The findings are in
+`~/Repos/python-free-threading/reports/mediapipe/`. If `webcam-01`
+ever starts calling `close()`, stop and join the worker first.
 
 ### The startup check (for UV Core)
 
@@ -153,9 +174,10 @@ Suggested guard:
 - **Audio helper:** log at WARNING if the GIL is on, naming the module. That
   process is where free-threading is supposed to pay off, so a silent fallback
   must not happen.
-- **Main process:** INFO only, listing the known set above
-  (`moderngl.mgl`, `glcontext.*`, `rtmidi._rtmidi`). A module outside the
-  known set (for example `cv2` once the webcam loads) is worth a WARNING.
+- **Main process:** with the published wheels, INFO only, listing the known set
+  above (`moderngl.mgl`, `glcontext.*`, `rtmidi._rtmidi`, plus `cv2` and `sphn`
+  once the webcam or the mixer loads them). With the patched wheels the known set
+  is empty, so any GIL flip is worth a WARNING that names the module.
 - Guard `sys._is_gil_enabled` with `getattr`: it does not exist before 3.13.
 
 `ft_wheels_smoke.py` implements the same per-module probe and is a reference.
@@ -198,6 +220,10 @@ redesign.
 
 ### python-rtmidi: tractable, and tested
 
+**Update 2026-10-01: done, and open upstream; see section 6a.** The original
+assessment follows; it underestimated the work, because the audit found
+lifetime bugs that predate free-threading.
+
 Cython 3.1 and later has a directive: `# cython: freethreading_compatible = True`
 at the top of `_rtmidi.pyx`. Experiment (scratch build in `/var/tmp`, not
 shipped): regenerating with Cython 3.3.0 and that directive makes
@@ -218,6 +244,11 @@ supported rule (an instance is used by one thread at a time is the normal
 one). Estimate: about a day including tests. Upstream-able as a small PR.
 
 ### glcontext: small
+
+**Update 2026-10-01: done, and open upstream; see section 6a.** Correction: the package
+builds seven single-phase modules, not two: `egl`, `x11`, `headless` and
+`windowed` on Linux, plus `wgl` (Windows), `darwin` (macOS) and `empty`. All
+need the declaration.
 
 Two single-phase C++ modules, `egl.cpp` (406 lines) and `x11.cpp` (519), each
 created with `PyModule_Create`; no `Py_BEGIN_ALLOW_THREADS`. Declaring support
@@ -261,6 +292,10 @@ GIL from the main process needs all of them, not just this one. The near-term
 win remains the audio helper, which already runs GIL-free and imports none of
 these.
 
+*Update 2026-10-02:* this is done. With the patched wheels, OpenCV is fixed too, and
+MediaPipe turned out never to flip the GIL, so the main process can run GIL-free
+(section 3).
+
 Suggested order, if and when this is taken on: rtmidi first (cheap, testable,
 removes one of the four flips), then glcontext, then moderngl as its own
 project.
@@ -290,8 +325,169 @@ on a Windows runner: the GL render check (no GPU on the runner), which a run of
 for redistribution live in `docs/third-party/`: the sphn crates, libdrm (Linux OpenCV
 wheel), and OpenCV's Windows FFmpeg plugin. UV Install owns the releases.
 
-**Parked pending the owner:** the `Py_mod_gil` ports (section 5): rtmidi first, then
-glcontext, then moderngl. Nothing is started.
+**The `Py_mod_gil` ports** (section 5) are under way, as upstream pull requests:
+rtmidi first, then glcontext, then moderngl. Progress is in section 6a.
+
+## 6a. Upstream `Py_mod_gil` work (started 2026-10-01)
+
+Done in the upstream projects, so the fixes reach everyone and our wheels can
+eventually come from releases. The clones and working notes live in
+`~/Repos/python-free-threading/`. The PRs come from the iDoMeteor GitHub account.
+
+| PR | What | State (2026-10-01) |
+|---|---|---|
+| [SpotlightKid/python-rtmidi#230](https://github.com/SpotlightKid/python-rtmidi/pull/230) | Free-threaded support, plus lifetime and threading fixes | open; CI waiting for maintainer approval |
+| [thestk/rtmidi#395](https://github.com/thestk/rtmidi/pull/395) | ALSA `closePort()` joins the wrong thread (hang) or never joins it (leak) | **merged** 2026-10-02 (retested by the maintainer) |
+| [thestk/rtmidi#396](https://github.com/thestk/rtmidi/pull/396) | `cancelCallback()` races the input thread into a null call (crash) | **merged** 2026-10-02 (retested by the maintainer on five platforms) |
+| [SpotlightKid/rtmidi#4](https://github.com/SpotlightKid/rtmidi/pull/4) | Both RtMidi fixes, backported to the branch python-rtmidi's submodule tracks | open |
+| [moderngl/glcontext#41](https://github.com/moderngl/glcontext/pull/41) | Free-threaded support for all seven modules; `release()` safe to call twice (a second x11 `release()` segfaulted, with the GIL too) | open |
+| [moderngl/moderngl#751](https://github.com/moderngl/moderngl/pull/751) | moderngl PR B: eight memory-safety fixes found in the audit (three crash the interpreter today) | open |
+| [moderngl/moderngl#752](https://github.com/moderngl/moderngl/pull/752) | moderngl PR A: objects hold their context (and program, index buffer, scope members) until deallocated; fixes the use-after-free and leaks; framebuffer use on a released context raises instead of crashing | open |
+| [kyutai-labs/sphn#23](https://github.com/kyutai-labs/sphn/pull/23) | sphn: `gil_used = false` (the audit found nothing the GIL protected) plus a cp314t CI wheel job | open |
+| [moderngl/moderngl#754](https://github.com/moderngl/moderngl/pull/754), [glcontext#42](https://github.com/moderngl/glcontext/pull/42), [python-rtmidi#231](https://github.com/SpotlightKid/python-rtmidi/pull/231) | Small fixes found in the audits (2026-10-02): moderngl attribute deletion segfaults and bad-argument handling; glcontext `load()` segfault, contexts leaked on GC (x11 runs out of X clients after about 255), X error handler restore; a python-rtmidi docstring. In the round-2 wheels. #754 later also gained fixes for >64 varyings, unchecked helper results and `ctx.gc()` on released objects. | open |
+| [moderngl/moderngl#753](https://github.com/moderngl/moderngl/pull/753) | moderngl PR C: free-threaded support. All 232 entry points lock their context; the guard costs about 5–12 ns per call on 3.14t and nothing on GIL builds. Stacked on #752. | open |
+| [moderngl/moderngl#756](https://github.com/moderngl/moderngl/pull/756) | Leaks: external objects never freed, GL query objects never deleted (adds `Query.release()`), and error paths, including about 670 loader ints per context. Stacked on #752. | open |
+| [moderngl/moderngl#755](https://github.com/moderngl/moderngl/pull/755), [glcontext#44](https://github.com/moderngl/glcontext/pull/44) | CI: free-threaded test job / build check on 3.13t and 3.14t, and cp313t/cp314t release wheels. The GIL-off assertions follow once #753 / #41 merge. | open |
+| [moderngl/glcontext#43](https://github.com/moderngl/glcontext/issues/43) (issue) | `headless`, `windowed` and `empty` are never built: dead code, or meant to be built? | open |
+| [google-ai-edge/mediapipe#6374](https://github.com/google-ai-edge/mediapipe/pull/6374) | Tasks Python: `close()` races (use-after-free, double free), `Image` lifetime and non-contiguous input, `ValueError` after `close()`. Needs a signed Google CLA. | open |
+| [opencv/opencv#27933](https://github.com/opencv/opencv/issues/27933) (comments) | The binding-layer audit and patch, offered to the maintainers, who plan their own port; plus the Windows `Py_GIL_DISABLED` point. | discussion |
+
+**What python-rtmidi#230 changes.** `import rtmidi` keeps the GIL off. Calls on one
+`MidiIn`/`MidiOut` are serialized (a per-instance critical section), so sharing an
+instance between threads stays safe. The input callback is read under a small lock,
+so replacing it can't free it under the input thread. `delete()` while another
+thread is in a call defers the free to that call. A second commit keeps reference
+cycles through callbacks collectable: the GC clears them under the same lock. It needs
+Cython 3.1 or newer.
+Verified on free-threaded 3.14.7 (the python-build-standalone runtime) and regular
+3.11, 3.12 and 3.14; Cython 3.1.0 works. An AddressSanitizer build is clean on the
+race reproducers.
+
+**Bugs in the wheel we ship today (python-rtmidi 1.5.8, all builds, GIL on or off).**
+UV Core should know about these, because the main process imports rtmidi:
+
+- **`MidiIn.close_port()` can hang forever under MIDI input.** It holds the GIL while
+  RtMidi's ALSA backend joins the input thread, which may be waiting for the GIL to
+  run a callback. Reproduced in seconds with a flooding sender; under gdb,
+  `pthread_join` waits on one side and `PyGILState_Ensure` on the other. Fixed by #230.
+  Until then, avoid closing an input port while a controller is sending. If it can't
+  be avoided, close it on a worker thread, so that a hang there doesn't freeze the UI.
+- **`del` never frees a `MidiIn`/`MidiOut`.** Since 1.4.1 the deallocator's guard is
+  always false, so the ALSA client, its ports and the input thread outlive the object.
+  If a callback was set, a later message calls through freed memory: a reproduced
+  use-after-free. Fixed by #230. Until then, call `delete()` explicitly.
+- **RtMidi's own races** (#395, #396), present in upstream RtMidi as well. Cancelling a
+  callback while messages arrive can crash. Closing a port from a thread other than
+  the one that created the `MidiIn` can, rarely, hang or leak a thread.
+
+**What glcontext#41 changes.** The modules declare `Py_MOD_GIL_NOT_USED`. Context
+methods are serialized per context, the x11 context create and release take a
+process-wide lock (the X error handler is global), and contexts are zero-initialized.
+Our render path only uses one context on one thread, so the practical gain is that
+importing glcontext no longer turns the GIL on. moderngl still does until it is ported.
+One finding for us: calling `release()` twice on an x11 context crashes the process in
+the wheel we ship today.
+
+**moderngl: audit (2026-10-01).** Unmodified moderngl builds on 3.14t and its whole
+suite (360 tests) behaves the same as on 3.12 even with `PYTHON_GIL=0`. The one
+failure, a uniform-ordering check, is Mesa 26.1 and happens on 3.12 too. Several
+threads with one standalone context each render correctly. The hazards are in
+*sharing* objects across threads:
+
+- `Framebuffer.use()` swaps the context's bound framebuffer, an owning reference,
+  without synchronization.
+- `release()` is a non-atomic check-then-set: two threads releasing one object delete
+  the GL name twice and underflow the refcount.
+- Some objects drop their context reference on `release()`, others never drop it (a
+  leak). `Sampler.release` reads the context after dropping itself (a use-after-free).
+
+Section 5's estimate holds; the design:
+
+- **Per-context serialization.** Every method of every object takes a critical section
+  on its owning `Context`, through guard templates at the method tables, so the
+  function bodies don't change. It is a no-op on GIL builds. One context per thread
+  runs fully in parallel; one context shared by threads is serialized as the GIL did.
+- **Prerequisite:** objects hold their context reference until deallocation.
+- **Upstream split into three PRs:**
+  - **A:** context reference lifetime, including the `Sampler` use-after-free.
+  - **B:** small memory bugs found on the way: an out-of-bounds write in
+    `set_color_mask`, unchecked buffer maps, and an unchecked cast in `transform()`.
+  - **C:** free-threaded support, stacked on A.
+- **Unchanged:** contention blocks rather than raising, and using a released object
+  is not newly checked.
+- **Documented:** `gc_mode="auto"` releases on whichever thread drops the last
+  reference, so the cross-thread pattern is `context_gc`.
+
+**Windows (published 2026-10-02).** The same five patched packages, as `win_amd64`:
+`python_rtmidi-1.5.8-3`, `glcontext-3.0.0-2`, `moderngl-5.12.0-2`, `sphn-0.2.1-1` and
+`opencv_python_headless-4.13.0.92-1`.
+
+- **Build:** from the same sources as the Linux round-2 wheels, on GitHub Actions
+  (`windows-2022`, MSVC 14.44) in the private repo `iDoMeteor/ft-wheels-ci`. Its script
+  is adapted from `tools/packaging/build_windows_ft_wheels.py`, and the sources are
+  pinned by commit to the `wheels/` branches on the iDoMeteor forks.
+- **Verified on the runner:**
+  - the GIL stays off after importing each module, and after importing all four
+    non-OpenCV modules together in both orders;
+  - the OpenCV H.264/VP9 fixtures decode, and the FFmpeg plugin's LGPL check passes;
+  - sphn round-trips WAV.
+- **Not verified on Windows:**
+  - GL rendering (no GPU on the runner);
+  - MIDI ports (none on the runner);
+  - importing `cv2` together with the other four in one process.
+- **Records:** build records are in `~/Repos/python-free-threading/wheels/windows/`.
+- **Not needed:** the `windows-ft-wheels.yml` run against the backport branches
+  (asked of UV Install above).
+
+**Round 2 (published 2026-10-02, later the same day).** These carry the later fixes,
+on top of everything round 1 has:
+
+| Wheel | Adds |
+|---|---|
+| `python_rtmidi-1.5.8-3` | the `close_port` docstring fix (#231) |
+| `glcontext-3.0.0-2` | #42: the `load()` segfault, native contexts leaked on GC (x11 ran out of X clients), X error handler restore, and cleanup after a failed `create_context` |
+| `moderngl-5.12.0-2` | #754 (crashes on `del` attributes and with many varyings, unchecked helper results, the buffer-view unmap) and #756 (leaks: external objects, `Query.release()`, error paths, about 670 loader ints per context) |
+
+- **Not rebuilt:** sphn stays at `-1`.
+- **Platform tag:** the moderngl wheel's tag moved from manylinux_2_17 to
+  manylinux_2_24. That's still fine for our manylinux_2_28 runtime.
+- **Verification:** GIL off, both smoke scripts pass, and pip picks these. The
+  manifest is `~/Repos/python-free-threading/wheels/patched-wheels-manifest-2.json`.
+
+**For our wheelhouse (published 2026-10-02, Linux x86-64 only).** Patched cp314t wheels
+are in `~/projects/_software-dist/wheelhouse/cp314t/` (append-only, `SHA256SUMS`
+appended). Each keeps its pinned version, and a PEP 427 build tag makes pip prefer it:
+
+| Wheel | Carries |
+|---|---|
+| `python_rtmidi-1.5.8-2-…manylinux_2_28_x86_64.whl` | python-rtmidi#230 backported to 1.5.8, plus the RtMidi fixes (#395, #396) |
+| `glcontext-3.0.0-1-…manylinux_2_28_x86_64.whl` | glcontext#41 |
+| `moderngl-5.12.0-1-…manylinux_2_28_x86_64.whl` | moderngl#751, #752 and #753 backported to 5.12.0, plus one commit reconciling #751 with #753 |
+| `sphn-0.2.1-1-…manylinux_2_28_x86_64.whl` | sphn#23 |
+
+With these four, the free-threaded runtime keeps the GIL off after importing `rtmidi`,
+`glcontext.egl`, `glcontext.x11`, `moderngl` and `sphn`. That was checked with `-W
+error::RuntimeWarning` on the PBS 3.14.7t runtime. `ft_wheels_smoke.py` and
+`ft_sphn_smoke.py` pass, and the project test suites pass against the wheels.
+
+- **Previously still turned the GIL on: `cv2` (fixed 2026-10-02).**
+  `opencv_python_headless-4.13.0.92-1-…manylinux_2_28_x86_64.whl` is UV's recipe plus
+  `~/Repos/python-free-threading/wheels/patches/opencv-4.13.0-free-threading.patch`:
+  the GIL declaration, a mutex for `redirectError`, snapshots of caller dicts/lists
+  (flann, dnn, the std::map converter, gapi) and locked dnn/highgui registries.
+  - **Verified:** with all six patched wheels, `import cv2, rtmidi, glcontext.*,
+    moderngl, sphn` keeps the GIL off; `ft_opencv_smoke.py` passes; the crash
+    reproducers crash the published wheel and pass on this one.
+  - **UV's cv2 usage** (webcam-01, video-clips-01) breaks none of the usage rules in
+    `~/Repos/python-free-threading/reports/opencv/ASSESSMENT.md`.
+  - **Upstream:** the findings and patch are offered on opencv/opencv#27933.
+  - **MediaPipe (2026-10-02):** never turned the GIL on (no CPython extension), and
+    works with the GIL off as UV uses it; see section 3.
+- **Build provenance:** the build script and manifest (source commits, sha256, image
+  digest) are in `~/Repos/python-free-threading/wheels/`. The backport branches
+  (`ft-1.5.8`, `ft-5.12.0`) are local to those clones.
+- **For UV Install:** `tools/packaging/wheelhouse-cp314t.sha256` and any pins in
+  `test_ft_wheels_build.py` are not updated for the new wheels (Linux and Windows).
 
 ## 7. Provenance, for release notes
 
@@ -357,6 +553,31 @@ text is `3rdparty/ffmpeg/license.txt` in the OpenCV tree.
 - ~~sphn's statically linked Rust crates were not audited.~~ **Done 2026-10-01:**
   see "sphn license audit" below. The notice to attach to the release is
   [`docs/third-party/sphn-0.2.1-THIRD-PARTY-NOTICES.md`](../third-party/sphn-0.2.1-THIRD-PARTY-NOTICES.md).
+
+### Patched wheels (2026-10-02)
+
+Same packages, versions and licenses as above, rebuilt from patched sources. Every
+change is ours, offered upstream under each project's own license (the PRs in section
+6a). The vendored libraries are unchanged: libasound in the Linux rtmidi wheel; FFmpeg
+8.0.1 (LGPL 2.1+), libvpx and libdrm in the Linux OpenCV wheel; the OpenCV FFmpeg
+plugin DLL in the Windows OpenCV wheel. So the license facts above, and in section 8
+for Windows, carry over.
+
+| Wheel | Source (pinned by commit) | Changes vs. the original wheel |
+|---|---|---|
+| python-rtmidi 1.5.8 (`-3`) | `iDoMeteor/python-rtmidi` branch `wheels/ft-1.5.8-2`, commit `355905673de5`, with RtMidi from `iDoMeteor/rtmidi` branch `wheels/python-rtmidi-ft-1.5.8`, commit `cf53bcae93cc`. The C++ is regenerated with Cython 3.3.0. | python-rtmidi#230 and #231 backported to 1.5.8; RtMidi #395/#396 (via SpotlightKid/rtmidi#4) |
+| glcontext 3.0.0 (`-2`) | `iDoMeteor/glcontext` branch `fix-error-paths`, commit `043bf2ef394b` | glcontext#41 and #42 |
+| moderngl 5.12.0 (`-2`) | `iDoMeteor/moderngl` branch `wheels/ft-5.12.0-2`, commit `a9b914560638` | moderngl#751–#754 and #756 backported to 5.12.0, plus three reconciling commits |
+| sphn 0.2.1 (`-1`) | PyPI sdist (same hash as above, `--locked`) plus a one-line patch, `#[pymodule(gil_used = false)]` (= `iDoMeteor/sphn` commit `638b3386f7f7`, sphn#23) | the module declares free-threading support |
+| opencv-python-headless 4.13.0.92 (`-1`) | same tag and commits as above, plus `wheels/patches/opencv-4.13.0-free-threading.patch` (sha256 `1d19d901…53f4`, 7 files in `modules/python`, flann, dnn, gapi) | the free-threading declaration, plus locking and snapshot fixes in the binding layer |
+
+- **Linux build:** UV's recipes, run by `~/Repos/python-free-threading/wheels/`
+  `build_patched_ft_wheels.sh` and `build_patched_ft_opencv_wheel.sh`. Manifests with
+  every hash are in the same directory (`patched-wheels-manifest-2.json`,
+  `opencv-wheel-manifest.json`).
+- **Windows build:** GitHub Actions in the private repo `iDoMeteor/ft-wheels-ci`
+  (`windows-2022`, MSVC 14.44, python-build-standalone 20260929 / 3.14.7). Build
+  records are in `~/Repos/python-free-threading/wheels/windows/`.
 
 ### sphn license audit (2026-10-01)
 
