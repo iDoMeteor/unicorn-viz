@@ -29,6 +29,7 @@ from unicornviz.config import Config
 from unicornviz.effects.base import AudioData, BaseEffect, copy_audio_data
 from unicornviz.effects.registry import get_effects
 from unicornviz.frame_tap import FrameTap
+from unicornviz.effects.base import apply_speed
 from unicornviz.fault_guard import CallGuard
 from unicornviz.gc_tuning import freeze_heap, install_gc_pause_monitor
 from unicornviz.audio.manager import AudioManager
@@ -3500,7 +3501,10 @@ void main() {
         self._effect_config_overrides.setdefault(str(class_name), {})[str(name)] = float(value)
         eff = self._current_effect
         if eff is not None and type(eff).__name__ == class_name and str(name) in eff.parameters:
-            eff.parameters[str(name)] = float(value)
+            if str(name) == 'speed':
+                apply_speed(eff, float(value))          # keep the shader phase continuous
+            else:
+                eff.parameters[str(name)] = float(value)
         self._profile_touched()
 
     def clear_effect_overrides(self, class_name: str) -> None:
@@ -9517,7 +9521,7 @@ void main() {
             return  # flag stays as-is; will apply when a supporting effect becomes active
         lo, hi = self._random_range_for('speed', 0.25, 2.50)
         value = float(self._rng.uniform(lo, hi))
-        self._current_effect.parameters['speed'] = value
+        apply_speed(self._current_effect, value)
         self._speed_randomized = True
 
     def _reset_speed(self) -> float | None:
@@ -9525,7 +9529,7 @@ void main() {
         if self._current_effect is None or 'speed' not in self._current_effect.parameters:
             return None
         default = self._current_effect._initial_parameters.get('speed', 1.0)  # noqa: SLF001
-        self._current_effect.parameters['speed'] = default
+        apply_speed(self._current_effect, default)
         self._speed_randomized = False
         return float(default)
 
@@ -9625,6 +9629,13 @@ void main() {
 
     def apply_random_speed(self) -> None:
         self._apply_random_speed()
+
+    def set_current_speed(self, value: float) -> float | None:
+        """Set the active effect's speed, keeping its shader phase continuous.
+
+        The one entry point for the speed hotkeys and MIDI speed; None when the
+        effect has no speed parameter."""
+        return apply_speed(self._current_effect, float(value))
 
     def reset_speed(self) -> float | None:
         return self._reset_speed()
