@@ -105,3 +105,32 @@ def test_platform_filter_downloads_only_that_platforms_wheels(tmp_path: Path) ->
     assert proc.returncode == 0, proc.stderr
     assert {p.name for p in (tmp_path / 'wh').glob('*.whl')} == {'a-1-cp314-cp314t-manylinux_2_28_x86_64.whl'}
     assert (tmp_path / 'wh' / 'SHA256SUMS').read_text().count('.whl') == 1
+
+
+def test_fetch_skips_superseded_builds_unless_all_is_asked(tmp_path: Path) -> None:
+    old = 'a-1-cp314-cp314t-manylinux_2_28_x86_64.whl'
+    new = 'a-1-2-cp314-cp314t-manylinux_2_28_x86_64.whl'
+    files = {old: b'old', new: b'new'}
+    serve = _serve(tmp_path, files)
+    trust = _trust(tmp_path, files)
+
+    def fetch(dest: str, *extra: str) -> set[str]:
+        proc = subprocess.run(
+            ['bash', str(_SCRIPT), '--dest', str(tmp_path / dest), '--trust', str(trust),
+             '--base-url', f'file://{serve}', *extra],
+            capture_output=True, text=True, timeout=60, check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        return {p.name for p in (tmp_path / dest).glob('*.whl')}
+
+    assert fetch('newest') == {new}
+    assert fetch('everything', '--all') == {old, new}
+
+
+def test_committed_trust_file_lists_the_patched_wheels_for_both_platforms() -> None:
+    names = [ln.split()[1] for ln in _COMMITTED.read_text().splitlines()
+             if ln.strip() and not ln.startswith('#')]
+    for stem in ('python_rtmidi-1.5.8-3', 'glcontext-3.0.0-2', 'moderngl-5.12.0-2',
+                 'sphn-0.2.1-1', 'opencv_python_headless-4.13.0.92-1'):
+        assert any(n.startswith(stem + '-') and 'manylinux' in n for n in names), stem
+        assert any(n.startswith(stem + '-') and 'win_amd64' in n for n in names), stem

@@ -130,17 +130,17 @@ One rule: no drop-in call or worker thread can take down the main loop or
 silently die.
 
 - [x] **B P1-4** Config-editor keys, MIDI dispatch, render-phase drop-in
-  calls, first-effect construction. [core] Landed core beta.192: `fault_guard.CallGuard`
+  calls, first-effect construction. [core] Landed core beta.193: `fault_guard.CallGuard`
   contains each call (throttled log, 30 consecutive failures switch a per-frame
   step off); config-editor keys and rows, MIDI batch, the seven render-phase
   drop-in blocks, video layer draw, streamer write, the transition's
   `destroy()` and the first effect (falls back through the playlist) are guarded.
-- [x] **B P1-5** Analysis thread exception guard. [core] Landed core beta.192: loop body
+- [x] **B P1-5** Analysis thread exception guard. [core] Landed core beta.193: loop body
   guarded, one ERROR per distinct error then every 30 s, 50 ms backoff,
   analyzer reset after 20 consecutive failures, `analysis_error_count`.
-- [x] **B P2-5** Esc during the splash double-frees SDL/GL. [core] Landed core beta.192:
+- [x] **B P2-5** Esc during the splash double-frees SDL/GL. [core] Landed core beta.193:
   `_quit_during_startup` -> `_shutdown_runtime` once.
-- [x] **B P2-10** Audio source switch on two threads without a lock. [core] Landed core beta.192:
+- [x] **B P2-10** Audio source switch on two threads without a lock. [core] Landed core beta.193:
   re-entrant `_switch_lock` on start/stop/select/cycle/switch; `stop()` waits at
   most 3 s so a hung open cannot block quitting.
 - [ ] **B P2-6** libvlc volume set from a worker thread. [media]

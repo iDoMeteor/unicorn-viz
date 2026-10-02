@@ -1363,6 +1363,18 @@ constraints, stated plainly:
     no GIL-build `.pyd`. **Not run on Windows**: the owner needs to test the
     bundle (launch, `--self-test`, a mixer track load); expect the GIL log line
     to say the main process re-enabled the GIL (moderngl).
+  - **2026-10-02: patched free-threading wheels.** All five packages were rebuilt by
+    the upstream free-threading work with the GIL declaration and thread-safety
+    fixes (rtmidi `-3`, glcontext `-2`, moderngl `-2`, sphn `-1`, OpenCV `-1`; Linux
+    and Windows) and published as release `wheelhouse-cp314t-patched-2026-10-02`
+    (prerelease, notices attached). `wheelhouse-cp314t.sha256` lists them under that
+    tag; the earlier builds stay listed as the append-only record.
+    `tools/packaging/wheel_select.py` keeps only the newest build of each wheel
+    (highest version, then build tag), used by `fetch_wheelhouse.sh` (`--all` to
+    fetch everything) and `stage_payload.sh`, so bundles don't carry both builds.
+    License check before publishing: vendored libraries and license files identical
+    to the predecessors in all ten pairs; sphn crate set carried over (same sdist,
+    `--locked`, partial binary-path check by UV Threads).
   - **Where we stopped / next.**
     1. *(Written 2026-10-01, `.github/workflows/windows-ft-wheels.yml`; dispatch
        with `only=sphn` first, then the trio, then OpenCV.)* Write `.github/workflows/windows-ft-wheels.yml` (owner approved a GH

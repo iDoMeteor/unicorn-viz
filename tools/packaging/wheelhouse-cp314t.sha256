@@ -23,3 +23,17 @@
 89fdd55485c6eea87a5c8c28c1b076f192262f21102d965f6d3dd55065b2f1ec  opencv_python_headless-4.13.0.92-cp314-cp314t-win_amd64.whl
 0a77eb3f6fe96faff22c06c4e26dd9f91792b260ccd956ab2d557363e5f65846  python_rtmidi-1.5.8-1-cp314-cp314t-win_amd64.whl
 f1a5ab5c22569b1020578e9a102d8d574bafd815d205fe1f43c46f8124f3266f  sphn-0.2.1-cp314-cp314t-win_amd64.whl
+#
+# Patched free-threading builds of all five packages, Linux + Windows (build tags that
+# pip and wheel_select.py prefer over the entries above; those stay listed as the record)
+# release-tag: wheelhouse-cp314t-patched-2026-10-02
+3932da88edb41f0b73f030cd9ac8be81efb15ede5c00f0986ae7700941c585e4  sphn-0.2.1-1-cp314-cp314t-manylinux_2_28_x86_64.whl
+640bb6b395c6ae43d42c36813aa6b3307492e9514e16a08d54713a4501797e6f  glcontext-3.0.0-2-cp314-cp314t-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
+64e9a76a6d9a2fec2522895e9efc4fa5e2b4d640c91a8ccc8009cd8d1753fa48  moderngl-5.12.0-2-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+270016188a2dbb1b7cc322edeb21f74cc08986fee81c391bd3776feda03f1939  python_rtmidi-1.5.8-3-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+6666039637df895d43212a0e28d09e03ba78a4027f2ff707de5d3187ada542be  opencv_python_headless-4.13.0.92-1-cp314-cp314t-manylinux_2_28_x86_64.whl
+04173f4f894e2018748441e554307461e700ebcca2667da2f7ab0b7a62de4514  glcontext-3.0.0-2-cp314-cp314t-win_amd64.whl
+2f0e59a7c7dc40e72b3ab4b603f2591f793245ea11083a275d7b46f1c69e6d06  moderngl-5.12.0-2-cp314-cp314t-win_amd64.whl
+817af5c83a5378e305b110f28254bd633727376ecf463e885ce0ada1edc2f5c4  opencv_python_headless-4.13.0.92-1-cp314-cp314t-win_amd64.whl
+1e810e7e8098ad6614dba7d491c6d9849176931d0032e95ea632e4b4e5e0098f  python_rtmidi-1.5.8-3-cp314-cp314t-win_amd64.whl
+3fadbd57981ba0dfa5b969123f1bba85429e4c35fdf30dfb99cf9e7275f877de  sphn-0.2.1-1-cp314-cp314t-win_amd64.whl
