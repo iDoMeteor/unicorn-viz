@@ -1,0 +1,42 @@
+{
+  "image": "quay.io/pypa/manylinux_2_28_x86_64:latest",
+  "image_id": "7d10e0a4cc2a8af1fdc62ac7008edf3446801e22acf585defe0a15e7d2ebe7c7 quay.io/pypa/manylinux_2_28_x86_64@sha256:c2261579b9c2e5d45aa93312f73e2a302182e3e977b558581a1838d6fed3d8e6",
+  "cython": "3.3.0",
+  "wheels": [
+    {
+      "name": "python-rtmidi",
+      "version": "1.5.8",
+      "build_tag": "2",
+      "file": "python_rtmidi-1.5.8-2-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "2d94035b8609bb37c2c2cdfc0ba9589ca57f3d2275fe6167f2a04c2df7e64d2b",
+      "git_commit": "39041bac430c746c2aedea62605d9250421bd8f0",
+      "rtmidi_submodule_commit": "cf53bcae93cc1d6dcc30b1e810318628276df082"
+    },
+    {
+      "name": "glcontext",
+      "version": "3.0.0",
+      "build_tag": "1",
+      "file": "glcontext-3.0.0-1-cp314-cp314t-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "d6ea89ba9d907f5d0c5097c3108ba54fe4aef536aa7260f41e83a84ee30e5316",
+      "git_commit": "6b28fdb8189d2cd422caef46b0a0db168d07ca8c"
+    },
+    {
+      "name": "moderngl",
+      "version": "5.12.0",
+      "build_tag": "1",
+      "file": "moderngl-5.12.0-1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "c62bfaa15ef0fb0e88374b716c25fb934e5a4277dec4ba2b58f5533478f1a35c",
+      "git_commit": "c470922ce1339e487f931e6b740b4963042a7126"
+    },
+    {
+      "name": "sphn",
+      "version": "0.2.1",
+      "build_tag": "1",
+      "file": "sphn-0.2.1-1-cp314-cp314t-manylinux_2_28_x86_64.whl",
+      "sha256": "3932da88edb41f0b73f030cd9ac8be81efb15ede5c00f0986ae7700941c585e4",
+      "git_commit": "638b3386f7f71cf1e5d576bab619900e45843fac",
+      "note": "built with UV's ft-sphn toolchain image (Rust 1.98.1, maturin 1.15.0) and the 0.2.1 sdist's Cargo.lock, --locked"
+    }
+  ],
+  "published_to": "~/projects/_software-dist/wheelhouse/cp314t/ (2026-10-02)"
+}

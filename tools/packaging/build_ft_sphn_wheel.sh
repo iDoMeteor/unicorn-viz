@@ -28,6 +28,10 @@
 #   --verify-python PATH a 3.14 free-threaded interpreter to smoke-test with
 #   --with-demucs        also install demucs (+ a CPU-only torch, ~200 MB) into the
 #                        verify venv and check that it imports
+#   --patched            build the PATCHED wheel of release wheelhouse-cp314t-patched-2026-10-02:
+#                        the same sdist and Cargo.lock, plus the one-line patch that declares
+#                        free-threading support (ft-patched/patches/sphn-*.patch, hash-pinned in
+#                        ft-patched/recipe.json), given PEP 427 build tag 1
 #
 # Old artifacts are never deleted: --out is only ever added to.  Windows is not
 # built here.
@@ -60,6 +64,19 @@ if [[ "${1:-}" == "--inside" ]]; then
   export CMAKE_TOOLCHAIN_FILE=/tmp/libdir-lib.cmake
   # maturin builds the extension against the interpreter it is told, as cp314t,
   # runs its own manylinux check, and strips the release binary.
+  if [[ -n "${SPHN_BUILD_TAG:-}" ]]; then
+    # PATCHED mode: build aside, give the wheel its PEP 427 build tag (so pip prefers it over the
+    # unpatched wheel of the same version, which stays in the append-only wheelhouse), then publish.
+    /opt/maturin-venv/bin/python -m pip install -q wheel
+    mkdir -p /tmp/built
+    /opt/maturin-venv/bin/maturin build --release --locked \
+      --interpreter /opt/python/cp314-cp314t/bin/python \
+      --compatibility "$MANYLINUX_PLAT" --out /tmp/built >&2
+    /opt/maturin-venv/bin/python -m wheel tags --build "$SPHN_BUILD_TAG" --remove /tmp/built/sphn-*.whl >&2
+    cp /tmp/built/*.whl /out/
+    /opt/maturin-venv/bin/python -m pip list --format=freeze > /out/sphn-patched-build-tools.txt
+    exit 0
+  fi
   /opt/maturin-venv/bin/maturin build --release --locked \
     --interpreter /opt/python/cp314-cp314t/bin/python \
     --compatibility "$MANYLINUX_PLAT" --out /out >&2
@@ -73,13 +90,15 @@ WORK=/var/tmp/uv-wheel-build
 OUT=""
 VERIFY_PY=""
 WITH_DEMUCS=0
+PATCHED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --verify-python) VERIFY_PY="$2"; shift 2 ;;
     --with-demucs) WITH_DEMUCS=1; shift ;;
-    -h|--help) sed -n '2,34p' "$0" >&2; exit 0 ;;
+    --patched) PATCHED=1; shift ;;
+    -h|--help) sed -n '2,38p' "$0" >&2; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
 done
@@ -107,6 +126,20 @@ echo "$SPHN_SDIST_SHA256  $SDIST" | sha256sum -c - >&2 || die "sphn sdist hash m
 TREE="$WORK/sphn-src/sphn-$SPHN_VERSION"
 rm -rf "$TREE"
 tar xzf "$SDIST" -C "$WORK/sphn-src"
+BUILD_TAG_ENV=()
+if [[ "$PATCHED" == 1 ]]; then
+  RECIPE="$SELF/ft-patched/recipe.json"
+  read -r PATCH_FILE PATCH_SHA BUILD_TAG < <(python3 - "$RECIPE" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))['packages']['sphn']
+print(p['patch']['file'], p['patch']['sha256'], p['build_tag'])
+PY
+)
+  echo "$PATCH_SHA  $SELF/ft-patched/$PATCH_FILE" | sha256sum -c - >&2 || die "sphn patch hash mismatch"
+  patch -p1 -d "$TREE" --no-backup-if-mismatch < "$SELF/ft-patched/$PATCH_FILE" >&2 || die "sphn patch does not apply"
+  BUILD_TAG_ENV=(-e "SPHN_BUILD_TAG=$BUILD_TAG")
+  log "sphn patched with $PATCH_FILE (sha256 ${PATCH_SHA:0:12}), build tag $BUILD_TAG"
+fi
 
 # 2. Toolchain image (cached after the first build).
 if ! "${PODMAN[@]}" image exists "$TOOLCHAIN_IMAGE"; then
@@ -118,7 +151,7 @@ fi
 BEFORE="$(ls "$OUT")"
 "${PODMAN[@]}" run --rm --security-opt label=disable \
   -v "$SELF/build_ft_sphn_wheel.sh:/build.sh:ro" -v "$TREE:/src" -v "$OUT:/out" \
-  "$TOOLCHAIN_IMAGE" bash /build.sh --inside
+  ${BUILD_TAG_ENV[@]+"${BUILD_TAG_ENV[@]}"} "$TOOLCHAIN_IMAGE" bash /build.sh --inside
 log "wheels in $OUT:"
 ls -1 "$OUT" | grep -vxF -f <(echo "$BEFORE") >&2 || true
 
@@ -135,5 +168,8 @@ if [[ -n "$VERIFY_PY" ]]; then
       --extra-index-url https://download.pytorch.org/whl/cpu \
       --find-links "$OUT" "demucs"
   fi
-  "$VENV/bin/python" "$SELF/ft_sphn_smoke.py" $([[ "$WITH_DEMUCS" == 1 ]] && echo --with-demucs)
+  SMOKE="$SELF/ft_sphn_smoke.py"
+  # The patched module declares free-threading support: its smoke test enforces GIL-off.
+  [[ "$PATCHED" == 1 ]] && SMOKE="$SELF/ft-patched/smoke/ft_sphn_smoke.py"
+  "$VENV/bin/python" "$SMOKE" $([[ "$WITH_DEMUCS" == 1 ]] && echo --with-demucs)
 fi

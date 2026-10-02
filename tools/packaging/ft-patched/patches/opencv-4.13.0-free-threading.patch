@@ -1,0 +1,295 @@
+diff --git a/modules/dnn/misc/python/pyopencv_dnn.hpp b/modules/dnn/misc/python/pyopencv_dnn.hpp
+index 0fc0c45..a2d351e 100644
+--- a/modules/dnn/misc/python/pyopencv_dnn.hpp
++++ b/modules/dnn/misc/python/pyopencv_dnn.hpp
+@@ -1,4 +1,5 @@
+ #ifdef HAVE_OPENCV_DNN
++#include <mutex>
+ typedef dnn::DictValue LayerId;
+ typedef std::vector<dnn::MatShape> vector_MatShape;
+ typedef std::vector<std::vector<dnn::MatShape> > vector_vector_MatShape;
+@@ -75,6 +76,12 @@ template<>
+ bool pyopencv_to(PyObject *o, dnn::LayerParams &lp, const ArgInfo& info)
+ {
+     CV_Assert(PyDict_Check(o));
++    // iterate over a private snapshot: PyDict_Next() returns borrowed references
++    PySafeObject dict_snapshot(PyDict_Copy(o));
++    if (!dict_snapshot)
++        CV_Error(Error::StsNoMem, "PyDict_Copy failed");
++    o = dict_snapshot;
++
+     PyObject *key, *value;
+     Py_ssize_t pos = 0;
+     std::string keyName;
+@@ -114,6 +121,7 @@ public:
+ 
+     static void registerLayer(const std::string& type, PyObject* o)
+     {
++        std::lock_guard<std::mutex> lock(pyLayersMutex);
+         std::map<std::string, std::vector<PyObject*> >::iterator it = pyLayers.find(type);
+         if (it != pyLayers.end())
+             it->second.push_back(o);
+@@ -123,6 +131,7 @@ public:
+ 
+     static void unregisterLayer(const std::string& type)
+     {
++        std::lock_guard<std::mutex> lock(pyLayersMutex);
+         std::map<std::string, std::vector<PyObject*> >::iterator it = pyLayers.find(type);
+         if (it != pyLayers.end())
+         {
+@@ -135,12 +144,19 @@ public:
+ 
+     static Ptr<dnn::Layer> create(dnn::LayerParams &params)
+     {
+-        std::map<std::string, std::vector<PyObject*> >::iterator it = pyLayers.find(params.type);
+-        if (it == pyLayers.end())
++        PyObject* pyLayer = NULL;
++        {
++            // pyLayers is also modified by (un)registerLayer() from Python threads.
++            // Only map operations happen under the lock, no Python API calls.
++            std::lock_guard<std::mutex> lock(pyLayersMutex);
++            std::map<std::string, std::vector<PyObject*> >::iterator it = pyLayers.find(params.type);
++            if (it != pyLayers.end() && !it->second.empty())
++                pyLayer = it->second.back();
++        }
++        if (!pyLayer)
+             CV_Error(Error::StsNotImplemented, "Layer with a type \"" + params.type +
+                                                "\" is not implemented");
+-        CV_Assert(!it->second.empty());
+-        return Ptr<dnn::Layer>(new pycvLayer(params, it->second.back()));
++        return Ptr<dnn::Layer>(new pycvLayer(params, pyLayer));
+     }
+ 
+     virtual bool getMemoryShapes(const std::vector<std::vector<int> > &inputs,
+@@ -196,10 +212,12 @@ public:
+ private:
+     // Map layers types to python classes.
+     static std::map<std::string, std::vector<PyObject*> > pyLayers;
++    static std::mutex pyLayersMutex;  // guards pyLayers
+     PyObject* o;  // Instance of implemented python layer.
+ };
+ 
+ std::map<std::string, std::vector<PyObject*> > pycvLayer::pyLayers;
++std::mutex pycvLayer::pyLayersMutex;
+ 
+ static PyObject *pyopencv_cv_dnn_registerLayer(PyObject*, PyObject *args, PyObject *kw)
+ {
+diff --git a/modules/flann/misc/python/pyopencv_flann.hpp b/modules/flann/misc/python/pyopencv_flann.hpp
+index 086ca5f..a4b9031 100644
+--- a/modules/flann/misc/python/pyopencv_flann.hpp
++++ b/modules/flann/misc/python/pyopencv_flann.hpp
+@@ -32,6 +32,12 @@ bool pyopencv_to(PyObject *o, cv::flann::IndexParams& p, const ArgInfo& info)
+     PyObject* value_obj = NULL;
+     Py_ssize_t key_pos = 0;
+ 
++    // iterate over a private snapshot: PyDict_Next() returns borrowed references
++    PySafeObject dict_snapshot(PyDict_Copy(o));
++    if (!dict_snapshot)
++        return false;
++    o = dict_snapshot;
++
+     while(PyDict_Next(o, &key_pos, &key_obj, &value_obj))
+     {
+         // get key
+diff --git a/modules/gapi/misc/python/pyopencv_gapi.hpp b/modules/gapi/misc/python/pyopencv_gapi.hpp
+index 6dcf308..8c3b181 100644
+--- a/modules/gapi/misc/python/pyopencv_gapi.hpp
++++ b/modules/gapi/misc/python/pyopencv_gapi.hpp
+@@ -460,6 +460,11 @@ static T extract_proto_args(PyObject* py_args)
+     using namespace cv;
+ 
+     GProtoArgs args;
++    // iterate over a private snapshot: PyList_GetItem() returns borrowed references
++    PySafeObject py_args_snapshot(PyList_GetSlice(py_args, 0, PY_SSIZE_T_MAX));
++    GAPI_Assert(py_args_snapshot);
++    py_args = py_args_snapshot;
++
+     Py_ssize_t size = PyList_Size(py_args);
+     args.reserve(size);
+     for (int i = 0; i < size; ++i)
+@@ -602,6 +607,11 @@ static cv::GRunArgs extract_run_args(const cv::GTypesInfo& info, PyObject* py_ar
+ {
+     GAPI_Assert(PyList_Check(py_args));
+ 
++    // iterate over a private snapshot: PyList_GetItem() returns borrowed references
++    PySafeObject py_args_snapshot(PyList_GetSlice(py_args, 0, PY_SSIZE_T_MAX));
++    GAPI_Assert(py_args_snapshot);
++    py_args = py_args_snapshot;
++
+     cv::GRunArgs args;
+     Py_ssize_t list_size = PyList_Size(py_args);
+     args.reserve(list_size);
+@@ -651,6 +661,11 @@ static cv::GMetaArgs extract_meta_args(const cv::GTypesInfo& info, PyObject* py_
+ {
+     GAPI_Assert(PyList_Check(py_args));
+ 
++    // iterate over a private snapshot: PyList_GetItem() returns borrowed references
++    PySafeObject py_args_snapshot(PyList_GetSlice(py_args, 0, PY_SSIZE_T_MAX));
++    GAPI_Assert(py_args_snapshot);
++    py_args = py_args_snapshot;
++
+     cv::GMetaArgs metas;
+     Py_ssize_t list_size = PyList_Size(py_args);
+     metas.reserve(list_size);
+diff --git a/modules/python/src2/cv2.cpp b/modules/python/src2/cv2.cpp
+index b7df25e..55b31d5 100644
+--- a/modules/python/src2/cv2.cpp
++++ b/modules/python/src2/cv2.cpp
+@@ -593,6 +593,14 @@ PyObject* PyInit_cv2()
+ {
+     import_array(); // from numpy
+     PyObject* m = PyModule_Create(&cv2_moduledef);
++    if (!m)
++        return NULL;
++#ifdef Py_GIL_DISABLED
++    // The binding layer's shared state is guarded (see pycvRedirectError, the
++    // PyDict_Next callers and the dnn/highgui registries), so declare that the
++    // module can run without the GIL.
++    PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
++#endif
+     if (!init_body(m))
+         return NULL;
+     return m;
+diff --git a/modules/python/src2/cv2_convert.hpp b/modules/python/src2/cv2_convert.hpp
+index 5ef8185..2adcc2d 100644
+--- a/modules/python/src2/cv2_convert.hpp
++++ b/modules/python/src2/cv2_convert.hpp
+@@ -337,6 +337,12 @@ bool pyopencv_to(PyObject *obj, std::map<K,V> &map, const ArgInfo& info)
+         return false;
+     }
+ 
++    // iterate over a private snapshot: PyDict_Next() returns borrowed references
++    PySafeObject dict_snapshot(PyDict_Copy(obj));
++    if (!dict_snapshot)
++        return false;
++    obj = dict_snapshot;
++
+     while(PyDict_Next(obj, &pos, &py_key, &py_value))
+     {
+         K cpp_key;
+diff --git a/modules/python/src2/cv2_highgui.cpp b/modules/python/src2/cv2_highgui.cpp
+index 4262043..c320d78 100644
+--- a/modules/python/src2/cv2_highgui.cpp
++++ b/modules/python/src2/cv2_highgui.cpp
+@@ -5,9 +5,35 @@
+ #include "cv2_util.hpp"
+ #include "opencv2/highgui.hpp"
+ #include <map>
++#include <mutex>
+ 
+ using namespace cv;
+ 
++// The callback registries below are process-wide and can be reached from
++// several Python threads at once. Only map operations run under the lock (no
++// Python API calls), and the replaced entry is released after unlocking.
++static std::mutex registered_callbacks_mutex;
++
++static void registerCallbackInfo(std::map<std::string, PyObject*>& registry,
++                                 const std::string& name, PyObject* py_callback_info)
++{
++    PyObject* replaced = NULL;
++    {
++        std::lock_guard<std::mutex> lock(registered_callbacks_mutex);
++        std::map<std::string, PyObject*>::iterator i = registry.find(name);
++        if (i != registry.end())
++        {
++            replaced = i->second;
++            i->second = py_callback_info;
++        }
++        else
++        {
++            registry.insert(std::pair<std::string, PyObject*>(name, py_callback_info));
++        }
++    }
++    Py_XDECREF(replaced);
++}
++
+ //======================================================================================================================
+ 
+ static void OnMouse(int event, int x, int y, int flags, void* param)
+@@ -45,16 +71,7 @@ PyObject *pycvSetMouseCallback(PyObject*, PyObject *args, PyObject *kw)
+     }
+     PyObject* py_callback_info = Py_BuildValue("OO", on_mouse, param);
+     static std::map<std::string, PyObject*> registered_callbacks;
+-    std::map<std::string, PyObject*>::iterator i = registered_callbacks.find(name);
+-    if (i != registered_callbacks.end())
+-    {
+-        Py_DECREF(i->second);
+-        i->second = py_callback_info;
+-    }
+-    else
+-    {
+-        registered_callbacks.insert(std::pair<std::string, PyObject*>(std::string(name), py_callback_info));
+-    }
++    registerCallbackInfo(registered_callbacks, name, py_callback_info);
+     ERRWRAP2(setMouseCallback(name, OnMouse, py_callback_info));
+     Py_RETURN_NONE;
+ }
+@@ -103,16 +120,7 @@ PyObject *pycvCreateTrackbar(PyObject*, PyObject *args)
+     PyObject* py_callback_info = Py_BuildValue("OO", on_change, Py_None);
+     std::string name = std::string(window_name) + ":" + std::string(trackbar_name);
+     static std::map<std::string, PyObject*> registered_callbacks;
+-    std::map<std::string, PyObject*>::iterator i = registered_callbacks.find(name);
+-    if (i != registered_callbacks.end())
+-    {
+-        Py_DECREF(i->second);
+-        i->second = py_callback_info;
+-    }
+-    else
+-    {
+-        registered_callbacks.insert(std::pair<std::string, PyObject*>(name, py_callback_info));
+-    }
++    registerCallbackInfo(registered_callbacks, name, py_callback_info);
+     ERRWRAP2(_createTrackbar(trackbar_name, window_name, value, count, OnChange, py_callback_info));
+     Py_RETURN_NONE;
+ }
+@@ -167,16 +175,7 @@ PyObject *pycvCreateButton(PyObject*, PyObject *args, PyObject *kw)
+     std::string name(button_name);
+ 
+     static std::map<std::string, PyObject*> registered_callbacks;
+-    std::map<std::string, PyObject*>::iterator i = registered_callbacks.find(name);
+-    if (i != registered_callbacks.end())
+-    {
+-        Py_DECREF(i->second);
+-        i->second = py_callback_info;
+-    }
+-    else
+-    {
+-        registered_callbacks.insert(std::pair<std::string, PyObject*>(name, py_callback_info));
+-    }
++    registerCallbackInfo(registered_callbacks, name, py_callback_info);
+     ERRWRAP2(createButton(button_name, OnButtonChange, py_callback_info, button_type, initial_button_state != 0));
+     Py_RETURN_NONE;
+ }
+diff --git a/modules/python/src2/cv2_util.cpp b/modules/python/src2/cv2_util.cpp
+index 817a4a8..0c90750 100644
+--- a/modules/python/src2/cv2_util.cpp
++++ b/modules/python/src2/cv2_util.cpp
+@@ -1,4 +1,5 @@
+ #include "cv2_util.hpp"
++#include <mutex>
+ #include "opencv2/core.hpp"
+ #include "opencv2/core/utils/configuration.private.hpp"
+ #include "opencv2/core/utils/logger.hpp"
+@@ -170,6 +171,21 @@ PyObject *pycvRedirectError(PyObject*, PyObject *args, PyObject *kw)
+ 
+     // Keep track of the previous handler parameter, so we can decref it when no longer used
+     static PyObject* last_on_error = NULL;
++    // Serialize concurrent redirectError() calls. The lock is taken with the
++    // GIL released (a thread blocked on the mutex must not hold the GIL, or
++    // the holder, which re-acquires the GIL in ~PyAllowThreads, would deadlock).
++    static std::mutex last_on_error_mutex;
++    struct ScopedLock
++    {
++        std::mutex& m;
++        explicit ScopedLock(std::mutex& m_) : m(m_)
++        {
++            PyThreadState* st = PyEval_SaveThread();
++            m.lock();
++            PyEval_RestoreThread(st);
++        }
++        ~ScopedLock() { m.unlock(); }
++    } lock(last_on_error_mutex);
+     if (last_on_error) {
+         Py_DECREF(last_on_error);
+         last_on_error = NULL;

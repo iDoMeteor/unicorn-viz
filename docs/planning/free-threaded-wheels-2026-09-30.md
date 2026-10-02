@@ -633,3 +633,17 @@ the built wheel contains exactly two binaries, `cv2/cv2.cp314t-win_amd64.pyd` an
 fixture clips (`tools/packaging/ft-fixtures/`: H.264 `.mp4` and VP9 `.webm`, 20
 frames each, a bar whose position encodes the frame number), in order and after
 seeks, on Windows and Linux alike, because the CI runner has no system ffmpeg.
+
+## 9. Reproducing the patched wheels from this repository (2026-10-02)
+
+The patched wheels of release `wheelhouse-cp314t-patched-2026-10-02` were built from iDoMeteor
+forks, an OpenCV patch and scripts that lived only in the upstream team's working directory.
+The recipe is now in the repository: [`tools/packaging/ft-patched/`](../../tools/packaging/ft-patched/README.md)
+holds the pins (`recipe.json`: fork commits, patch hashes, build tags, image digests), the two
+patch files, a source fetcher, the Windows build script, the smoke tests that enforce GIL-off, the
+as-built manifests and a snapshot of the release notes. The Linux builds are reproducible with the
+`--patched` modes of `build_ft_wheels.sh`, `build_ft_sphn_wheel.sh` and `build_ft_opencv_wheel.sh`.
+Measured: the rebuilt python-rtmidi, glcontext and moderngl wheels are byte-identical file for
+file to the published ones, and sphn differs only in build ids and LLVM symbol suffixes; OpenCV and
+the Windows wheels have not been rebuilt from here. The published hashes remain the trust anchor.
+

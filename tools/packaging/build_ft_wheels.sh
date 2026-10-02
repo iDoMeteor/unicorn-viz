@@ -27,6 +27,12 @@
 #   --work DIR           scratch + podman storage (default: /var/tmp/uv-wheel-build)
 #   --verify-python PATH a 3.14 free-threaded interpreter to smoke-test with
 #   --image REF          override the manylinux image
+#   --patched            build the PATCHED wheels (python-rtmidi, glcontext, moderngl) of release
+#                        wheelhouse-cp314t-patched-2026-10-02 instead of the PyPI sdists: sources
+#                        are fetched by pinned commit from the iDoMeteor forks listed in
+#                        ft-patched/recipe.json, built on the recipe's manylinux image digest,
+#                        and given its PEP 427 build tags.  sphn and OpenCV have their own
+#                        scripts (--patched there too); see ft-patched/README.md
 #
 # Old artifacts are never deleted: --out is only ever added to.
 #
@@ -64,6 +70,30 @@ if [[ "${1:-}" == "--inside" ]]; then
   /tmp/bv/bin/python -m pip install -q setuptools wheel "cython==$CYTHON_VERSION" meson-python meson ninja
   export PATH=/tmp/bv/bin:$PATH      # meson-python shells out to meson / ninja
   mkdir -p /tmp/src /tmp/raw /out
+  if [[ -f /patched-src/specs.tsv ]]; then
+    # PATCHED mode: the trees were fetched by commit on the host (fetch_patched_sources.py).
+    # Build in a copy (the mount is read-only and setuptools builds in tree), regenerate
+    # python-rtmidi's C++ with this Cython, repair, then give each wheel its build tag.
+    mkdir -p /tmp/build /tmp/repaired
+    /tmp/bv/bin/python -m pip list --format=freeze > /out/.patched-build-tools.txt
+    while IFS=$'\t' read -r name ver tag dir; do
+      log "$name $ver (patched, build tag $tag): build from /patched-src/$dir"
+      cp -a "/patched-src/$dir" "/tmp/build/$dir"
+      [[ "$name" == python-rtmidi ]] && rm -f "/tmp/build/$dir/src/_rtmidi.cpp"
+      /tmp/bv/bin/python -m pip wheel -q --no-build-isolation --no-deps -w /tmp/raw "/tmp/build/$dir"
+    done < /patched-src/specs.tsv
+    for w in /tmp/raw/*.whl; do
+      log "repair $(basename "$w")"
+      auditwheel repair --plat "$MANYLINUX_PLAT" -w /tmp/repaired "$w" >&2
+    done
+    while IFS=$'\t' read -r name ver tag dir; do
+      files=(/tmp/repaired/"${name//-/_}-$ver"-cp314-cp314t-*.whl)
+      [[ ${#files[@]} -eq 1 && -f "${files[0]}" ]] || die "expected one repaired $name wheel, found ${#files[@]}"
+      /tmp/bv/bin/python -m wheel tags --build "$tag" --remove "${files[0]}" >&2
+    done < /patched-src/specs.tsv
+    cp /tmp/repaired/*.whl /out/
+    exit 0
+  fi
   for spec in "moderngl:$PIN_moderngl" "glcontext:$PIN_glcontext" "python-rtmidi:$PIN_python_rtmidi"; do
     name="${spec%%:*}"; read -r ver sha <<<"${spec#*:}"
     log "$name $ver: fetch sdist"
@@ -102,21 +132,32 @@ fi
 WORK=/var/tmp/uv-wheel-build
 OUT=""
 VERIFY_PY=""
-IMAGE="$IMAGE_DEFAULT"
+IMAGE=""
+PATCHED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --verify-python) VERIFY_PY="$2"; shift 2 ;;
     --image) IMAGE="$2"; shift 2 ;;
-    -h|--help) sed -n '2,34p' "$0" >&2; exit 0 ;;
+    --patched) PATCHED=1; shift ;;
+    -h|--help) sed -n '2,42p' "$0" >&2; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
 done
 OUT="${OUT:-$WORK/out}"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECIPE="$SELF/ft-patched/recipe.json"
+if [[ -z "$IMAGE" ]]; then
+  if [[ "$PATCHED" == 1 ]]; then
+    # The exact image the patched wheels were built on (see the recipe), not a moving tag.
+    IMAGE="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['manylinux_image']['digest_round_2'])" "$RECIPE")"
+  else
+    IMAGE="$IMAGE_DEFAULT"
+  fi
+fi
 
 command -v podman >/dev/null || die "podman is required (rootless is fine)"
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$WORK/podman" "$OUT"
 # A private store: the user's default store can be unusable (a snap-versioned
 # path mismatch under VS Code) and this build should not touch it anyway.
@@ -125,10 +166,33 @@ PODMAN=(env -u XDG_DATA_HOME -u XDG_CONFIG_HOME podman
 
 log "image: $IMAGE"
 "${PODMAN[@]}" pull -q "$IMAGE" >/dev/null
+MOUNTS=()
+if [[ "$PATCHED" == 1 ]]; then
+  PSRC="$WORK/patched-src"
+  rm -rf "$PSRC"
+  python3 "$SELF/ft-patched/fetch_patched_sources.py" --recipe "$RECIPE" --dest "$PSRC" >&2
+  MOUNTS=(-v "$PSRC:/patched-src:ro")
+fi
 BEFORE="$(ls "$OUT")"
 "${PODMAN[@]}" run --rm --security-opt label=disable \
-  -v "$SELF/build_ft_wheels.sh:/build.sh:ro" -v "$OUT:/out" "$IMAGE" \
+  -v "$SELF/build_ft_wheels.sh:/build.sh:ro" -v "$OUT:/out" ${MOUNTS[@]+"${MOUNTS[@]}"} "$IMAGE" \
   bash /build.sh --inside
+if [[ "$PATCHED" == 1 ]]; then
+  # What was built, for the record: the fetched commits, the image, the build tools.
+  IMAGE_ID="$("${PODMAN[@]}" image inspect --format '{{.Id}}' "$IMAGE")"
+  python3 - "$PSRC/sources.json" "$IMAGE" "$IMAGE_ID" "$OUT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+sources, image, image_id, out = Path(sys.argv[1]), sys.argv[2], sys.argv[3], Path(sys.argv[4])
+rows = json.loads(sources.read_text())
+for row in rows.values():
+    wheels = sorted(out.glob(f"{row['name'].replace('-', '_')}-{row['version']}-{row['build_tag']}-cp314-cp314t-*.whl"))
+    assert len(wheels) == 1, (row['name'], wheels)
+    row['file'], row['sha256'] = wheels[0].name, hashlib.sha256(wheels[0].read_bytes()).hexdigest()
+(out / 'patched-build-manifest.json').write_text(json.dumps({'image': image, 'image_id': image_id, 'wheels': rows}, indent=2) + '\n')
+PY
+  mv -f "$OUT/.patched-build-tools.txt" "$OUT/patched-build-tools.txt"
+fi
 log "wheels in $OUT:"
 ls -1 "$OUT" | grep -vxF -f <(echo "$BEFORE") >&2 || true
 
@@ -139,5 +203,11 @@ if [[ -n "$VERIFY_PY" ]]; then
   "$VERIFY_PY" -m venv "$VENV"
   "$VENV/bin/python" -m pip install -q --no-index --find-links "$OUT" \
     moderngl glcontext python-rtmidi
-  "$VENV/bin/python" "$SELF/ft_wheels_smoke.py"
+  if [[ "$PATCHED" == 1 ]]; then
+    # The patched modules declare free-threading support: this smoke test ENFORCES that the
+    # GIL stays off after importing them (the unpatched one only reports it).
+    "$VENV/bin/python" "$SELF/ft-patched/smoke/ft_wheels_smoke.py"
+  else
+    "$VENV/bin/python" "$SELF/ft_wheels_smoke.py"
+  fi
 fi

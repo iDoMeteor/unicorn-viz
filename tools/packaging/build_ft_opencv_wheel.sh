@@ -31,6 +31,12 @@
 #                        (default: /var/tmp/uv-wheel-build)
 #   --verify-python PATH a 3.14 free-threaded interpreter to smoke-test with
 #   --clean              discard the previous incremental build tree first
+#   --patched            build the PATCHED wheel of release wheelhouse-cp314t-patched-2026-10-02:
+#                        the same sources, plus ft-patched/patches/opencv-4.13.0-free-threading.patch
+#                        (hash-pinned in ft-patched/recipe.json) applied to the OpenCV submodule
+#                        checkout, and PEP 427 build tag 1.  A separate source tree is used, so a
+#                        patched run never leaves the unpatched tree modified.  NOTE: the patch
+#                        changes OpenCV's Python bindings, so the result is a modified-source build
 #
 # Old artifacts are never deleted: --out is only ever added to.  Windows is
 # not built here.
@@ -77,6 +83,23 @@ if [[ "${1:-}" == "--inside" ]]; then
   log "compiling OpenCV $OPENCV_PYTHON_VERSION with $(nproc) jobs"
   rm -rf /tmp/raw && mkdir -p /tmp/raw /out
   /tmp/bv/bin/python -m pip wheel --no-build-isolation --no-deps -w /tmp/raw . >&2
+  if [[ -n "${OPENCV_BUILD_TAG:-}" ]]; then
+    # PATCHED mode: repair aside, then give the wheel its PEP 427 build tag so pip prefers it over
+    # the unpatched wheel of the same version (which stays in the append-only wheelhouse).
+    mkdir -p /tmp/repaired
+    for w in /tmp/raw/*.whl; do
+      log "repair $(basename "$w")"
+      auditwheel repair --plat "$MANYLINUX_PLAT" -w /tmp/repaired "$w" >&2
+    done
+    for w in /tmp/repaired/*.whl; do
+      log "build tag $OPENCV_BUILD_TAG: $(basename "$w")"
+      /tmp/bv/bin/python -m wheel tags --build "$OPENCV_BUILD_TAG" --remove "$w" >&2
+    done
+    cp /tmp/repaired/*.whl /out/
+    { /tmp/bv/bin/python -m pip list --format=freeze; echo "auditwheel==$(auditwheel --version | head -1 | awk '{print $2}')"; } \
+      > /out/opencv-patched-build-tools.txt
+    exit 0
+  fi
   for w in /tmp/raw/*.whl; do
     log "repair $(basename "$w")"
     auditwheel repair --plat "$MANYLINUX_PLAT" -w /out "$w" >&2
@@ -91,18 +114,23 @@ WORK=/var/tmp/uv-wheel-build
 OUT=""
 VERIFY_PY=""
 CLEAN=0
+PATCHED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     --verify-python) VERIFY_PY="$2"; shift 2 ;;
     --clean) CLEAN=1; shift ;;
-    -h|--help) sed -n '2,38p' "$0" >&2; exit 0 ;;
+    --patched) PATCHED=1; shift ;;
+    -h|--help) sed -n '2,46p' "$0" >&2; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
 done
 OUT="${OUT:-$WORK/out-opencv}"
 SRC="$WORK/opencv-python"
+# A patched build gets its own source tree: the patch modifies OpenCV's files, and the unpatched
+# build must never see them.
+[[ "$PATCHED" == 1 ]] && SRC="$WORK/opencv-python-patched"
 
 command -v podman >/dev/null || die "podman is required (rootless is fine)"
 command -v git >/dev/null || die "git is required"
@@ -124,6 +152,27 @@ git -C "$SRC" submodule update -q --init --depth 1 opencv
   || die "$SRC/opencv is not at $OPENCV_COMMIT"
 if [[ "$CLEAN" == 1 ]]; then rm -rf "$SRC/_skbuild"; fi
 
+BUILD_TAG_ENV=()
+if [[ "$PATCHED" == 1 ]]; then
+  RECIPE="$SELF/ft-patched/recipe.json"
+  read -r PATCH_FILE PATCH_SHA BUILD_TAG < <(python3 - "$RECIPE" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))['packages']['opencv-python-headless']
+print(p['patch']['file'], p['patch']['sha256'], p['build_tag'])
+PY
+)
+  echo "$PATCH_SHA  $SELF/ft-patched/$PATCH_FILE" | sha256sum -c - >&2 || die "OpenCV patch hash mismatch"
+  # Idempotent: a tree that already carries the patch is left as it is.
+  if git -C "$SRC/opencv" apply --check -R "$SELF/ft-patched/$PATCH_FILE" 2>/dev/null; then
+    log "OpenCV patch already applied in $SRC/opencv"
+  else
+    git -C "$SRC/opencv" apply --check "$SELF/ft-patched/$PATCH_FILE" || die "OpenCV patch does not apply to $OPENCV_COMMIT"
+    git -C "$SRC/opencv" apply "$SELF/ft-patched/$PATCH_FILE"
+    log "applied $PATCH_FILE (sha256 ${PATCH_SHA:0:12}) to $SRC/opencv"
+  fi
+  BUILD_TAG_ENV=(-e "OPENCV_BUILD_TAG=$BUILD_TAG")
+fi
+
 # 2. Dependency image (cached after the first build).
 if ! "${PODMAN[@]}" image exists "$DEPS_IMAGE"; then
   log "building $DEPS_IMAGE (FFmpeg + libvpx; ~15 minutes, cached afterwards)"
@@ -134,7 +183,7 @@ fi
 BEFORE="$(ls "$OUT")"
 "${PODMAN[@]}" run --rm --security-opt label=disable \
   -v "$SELF/build_ft_opencv_wheel.sh:/build.sh:ro" -v "$SRC:/src" -v "$OUT:/out" \
-  "$DEPS_IMAGE" bash /build.sh --inside
+  ${BUILD_TAG_ENV[@]+"${BUILD_TAG_ENV[@]}"} "$DEPS_IMAGE" bash /build.sh --inside
 log "wheels in $OUT:"
 ls -1 "$OUT" | grep -vxF -f <(echo "$BEFORE") >&2 || true
 
@@ -145,5 +194,10 @@ if [[ -n "$VERIFY_PY" ]]; then
   "$VERIFY_PY" -m venv "$VENV"
   "$VENV/bin/python" -m pip install -q "numpy==$NUMPY_BUILD"
   "$VENV/bin/python" -m pip install -q --no-index --find-links "$OUT" --no-deps opencv-python-headless
-  "$VENV/bin/python" "$SELF/ft_opencv_smoke.py"
+  if [[ "$PATCHED" == 1 ]]; then
+    # The patched module declares free-threading support: this smoke test enforces GIL-off.
+    "$VENV/bin/python" "$SELF/ft-patched/smoke/ft_opencv_smoke.py"
+  else
+    "$VENV/bin/python" "$SELF/ft_opencv_smoke.py"
+  fi
 fi
