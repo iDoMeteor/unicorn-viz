@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.198      BETA          MISMATCH (readme=1.0.0-beta.187)
+  core (unicornviz)             1.0.0-beta.199      BETA          MISMATCH (readme=1.0.0-beta.187)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.222.2             alpha ▲       module
@@ -14,9 +14,9 @@
   banner-01                     0.14.0              alpha ▲       module
   projectm-01                   0.12.8              alpha ▲       module
   effects-cosmic                0.11.1              alpha ▲       MISMATCH (readme=0.11.2)
+  midi-controllers-01           0.11.1              alpha ▲       module
   effects-immersive             0.10.1              alpha ▲       module
   effects-tech                  0.11.0              alpha ▲       module
-  midi-controllers-01           0.11.0              alpha ▲       module
 
   ── RC ────────────────────────────────────────────────────────────────────
   auto-vj-01                    1.0.0-rc.155        RC            MISMATCH (readme=1.0.0-rc.154)

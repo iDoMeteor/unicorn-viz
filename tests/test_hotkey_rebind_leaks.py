@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import sdl2
 
+import unicornviz.hotkeys as hotkeys_mod
 from unicornviz.app import App
 from unicornviz.hotkeys import (
     UNBOUND_CHORD,
@@ -35,10 +36,11 @@ def test_a_rebound_actions_old_default_chord_is_freed() -> None:
     assert translate_override_chord(*F, overrides) == UNBOUND_CHORD   # the old one is dead
 
 
-def test_the_old_chord_stays_when_another_action_is_still_bound_to_it() -> None:
-    # audio_toggle and eq both default to E; moving one must not kill the other.
-    overrides = {'audio_toggle': J}
+def test_the_old_chord_stays_when_another_action_is_still_bound_to_it(monkeypatch) -> None:
+    # Two actions sharing a default chord: moving one must not kill the other.
     e = (sdl2.SDLK_e, 0)
+    monkeypatch.setitem(hotkeys_mod._MIDI_NOTE_KEY_BINDINGS, 'twin_of_eq', e)
+    overrides = {'twin_of_eq': J}
     assert translate_override_chord(*e, overrides) == e
 
 

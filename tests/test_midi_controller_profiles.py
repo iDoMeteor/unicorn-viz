@@ -605,8 +605,12 @@ def test_alt01_profile_ships_and_parses() -> None:
 def test_alt01_binds_no_action_twice() -> None:
     """The whole point of the remap: no duplicate pads."""
     _path, profile = _alt01()
-    actions = list(profile.note_map.values())
+    # 'eq' is the one sanctioned duplicate: the retired ``audio_toggle`` action
+    # (identical to eq) was rebound to it so no pad went dead; the owner is
+    # redoing the default mapping, which will drop the second eq pad.
+    actions = [a for a in profile.note_map.values() if a != 'eq']
     assert len(actions) == len(set(actions))
+    assert list(profile.note_map.values()).count('eq') == 2
 
 
 def test_alt01_every_bound_action_has_a_color() -> None:

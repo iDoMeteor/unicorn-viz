@@ -185,7 +185,6 @@ _MIDI_NOTE_KEY_BINDINGS: dict[str, tuple[int, int]] = {
     'random': (sdl2.SDLK_r, 0),
     'pause': (sdl2.SDLK_SPACE, 0),
     'fullscreen': (sdl2.SDLK_f, 0),
-    'audio_toggle': (sdl2.SDLK_e, 0),
     'eq': (sdl2.SDLK_e, 0),
     'ansi': (sdl2.SDLK_a, 0),
     'audio_selector': (sdl2.SDLK_a, sdl2.KMOD_SHIFT),
@@ -250,8 +249,8 @@ def translate_override_chord(
     The converse (audit 2026-09-30, P2-7): once an action is rebound its old
     default chord is *freed* -- it returns :data:`UNBOUND_CHORD` so the
     dispatch chain does nothing -- unless another action is still bound to
-    that chord (``audio_toggle`` and ``eq`` both default to E, and moving one
-    must not kill the other).  Any other chord is returned unchanged.
+    that chord (e.g. two actions that share a default; moving one must not
+    kill the other).  Any other chord is returned unchanged.
     """
     if not overrides:
         return sym, mod

@@ -912,11 +912,7 @@ class App:
         # Rebound global-action hotkeys: {action_name: (sym, mod)} (persisted).
         # See HotkeyHandler / _ACTION_BINDINGS in hotkeys.py for the default
         # table and the translation layer that makes overrides take effect.
-        self._hotkey_overrides: dict[str, tuple[int, int]] = {
-            str(k): (int(v[0]), int(v[1]))
-            for k, v in (self._runtime_state.get('hotkeys.overrides', {}) or {}).items()
-            if isinstance(v, (list, tuple)) and len(v) == 2
-        }
+        self._hotkey_overrides: dict[str, tuple[int, int]] = self._load_hotkey_overrides()
         preset_path = self.cfg.get('presets', 'path', default='runtime/presets.json')
         self._preset_store = ShowPresetStore(str(preset_path))
         # Configuration profiles (per-effect parameter overrides). Distinct from
@@ -3885,7 +3881,6 @@ void main() {
         'random': 'Random Effects Mode',
         'pause': 'Pause / Resume',
         'fullscreen': 'Toggle Fullscreen',
-        'audio_toggle': 'Audio On/Off',
         'eq': 'EQ / Spectrum',
         'ansi': 'ANSI Viewer',
         'audio_selector': 'Audio Source Selector',
@@ -10500,6 +10495,35 @@ void main() {
     # rebound to a different key chord. HotkeyHandler translates an incoming
     # override chord back to the action's default chord before the existing,
     # unmodified dispatch chain runs, so no dispatch logic needed to change.
+
+    def _load_hotkey_overrides(self) -> dict[str, tuple[int, int]]:
+        """Persisted rebinds, with retired action names moved to their replacement.
+
+        ``audio_toggle`` was removed (it was identical to ``eq``); an override
+        saved for it becomes the ``eq`` override unless ``eq`` already has one,
+        and the stored value is rewritten so the log line appears once.
+        """
+        from unicornviz.midi import LEGACY_ACTION_ALIASES  # noqa: PLC0415
+
+        raw = self._runtime_state.get('hotkeys.overrides', {}) or {}
+        out: dict[str, tuple[int, int]] = {}
+        migrated = False
+        for k, v in raw.items():
+            if not (isinstance(v, (list, tuple)) and len(v) == 2):
+                continue
+            name = str(k)
+            new = LEGACY_ACTION_ALIASES.get(name)
+            if new is not None:
+                migrated = True
+                log.info('Hotkeys: the %r action was removed; its rebind moves to %r', name, new)
+                if new in raw:
+                    continue                        # an explicit override of the replacement wins
+                name = new
+            out[name] = (int(v[0]), int(v[1]))
+        if migrated:
+            self._runtime_state.set('hotkeys.overrides', {k: list(v) for k, v in out.items()})
+            self._runtime_state.save()
+        return out
 
     def hotkey_overrides(self) -> dict[str, tuple[int, int]]:
         """Return the current rebound-action overrides ({action: (sym, mod)})."""

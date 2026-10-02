@@ -87,11 +87,31 @@ _CC_MAP_DEFAULT: dict[int, str] = {
 # single edit rather than a hunt through two modules.
 CC_PARAM_RANGE: tuple[float, float] = (0.1, 4.0)
 
+#: Action names that used to exist and now mean something else.  ``audio_toggle``
+#: (2026-06-03 MIDI scaffolding) replayed the same E key as ``eq``; the owner
+#: dropped it (2026-10-02).  Anything saved that still names it -- a config.toml
+#: ``[midi.note_map]``, a MIDI Learn binding, a drop-in profile -- is mapped to
+#: its replacement, with a one-time log line, and never raises.
+LEGACY_ACTION_ALIASES: dict[str, str] = {'audio_toggle': 'eq'}
+_ALIAS_LOGGED: set[str] = set()
+
+
+def canonical_action(action: str) -> str:
+    """``action`` with a retired name mapped to its replacement (logged once)."""
+    new = LEGACY_ACTION_ALIASES.get(action)
+    if new is None:
+        return action
+    if action not in _ALIAS_LOGGED:
+        _ALIAS_LOGGED.add(action)
+        log.info('MIDI: action %r was removed; using %r instead', action, new)
+    return new
+
+
 # Fallback generic note → action name mapping
 _NOTE_MAP_DEFAULT: dict[int, str] = {
     60: 'next',          # C4
     62: 'prev',          # D4
-    64: 'audio_toggle',  # E4
+    64: 'eq',            # E4
     65: 'random',        # F4
     67: 'pause',         # G4
     69: 'fullscreen',    # A4
@@ -275,6 +295,7 @@ class MidiManager:
             cc.update(cc_override)
         if note_override:
             note.update(note_override)
+        note = {n: canonical_action(a) for n, a in note.items()}
         return cc, note
 
     # ------------------------------------------------------------------
@@ -349,7 +370,7 @@ class MidiManager:
 
     def set_note_binding(self, note: int, action: str) -> None:
         """Bind *note* to *action*, overriding any preset mapping."""
-        self._note_map[int(note)] = str(action)
+        self._note_map[int(note)] = canonical_action(str(action))
 
     def clear_note_binding(self, note: int) -> None:
         """Remove any binding for *note*."""
@@ -646,7 +667,8 @@ class MidiManager:
         return self._cc_map.get(cc)
 
     def note_to_action(self, note: int) -> str | None:
-        return self._note_map.get(note)
+        action = self._note_map.get(note)
+        return canonical_action(action) if action is not None else None
 
     def stop(self) -> None:
         for midi_in in self._midi_ins:
