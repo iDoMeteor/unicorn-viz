@@ -94,3 +94,22 @@ def test_only_the_newest_build_of_each_wheel_is_staged(tmp_path: Path) -> None:
     proc = _stage(tmp_path, _wheelhouse(tmp_path, [old, new, other]))
     assert proc.returncode == 0, proc.stderr
     assert _staged(tmp_path) == {new, other}
+
+
+def test_a_broken_python_stages_every_wheel_not_none(tmp_path: Path) -> None:
+    bindir = tmp_path / 'bin'
+    bindir.mkdir()
+    for name in ('python3', 'python'):
+        fake = bindir / name
+        fake.write_text('#!/usr/bin/env bash\nexit 9\n')
+        fake.chmod(0o755)
+    wh = _wheelhouse(tmp_path, [_LIN, 'b-2.0-cp314-cp314t-manylinux_2_28_x86_64.whl'])
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    env['PATH'] = f'{bindir}{os.pathsep}{env["PATH"]}'
+    proc = subprocess.run(
+        ['bash', str(_SCRIPT), '--source-dir', str(_source(tmp_path)), '--dest', str(tmp_path / 'out'),
+         '--wheelhouse', str(wh)],
+        capture_output=True, text=True, timeout=60, check=False, env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert len(_staged(tmp_path)) == 2

@@ -64,13 +64,19 @@ mkdir -p "$DEST"
 # Which wheels to fetch: by default the newest build of each (the trust file is an
 # append-only record, so it also lists superseded builds nobody needs to ship).
 declare -A WANTED=()
-# (tr: a Windows checkout may have turned the trust file into CRLF lines.)
 mapfile -t listed < <(tr -d '\r' < "$TRUST" | awk '!/^[[:space:]]*(#|$)/ {print $2}')
-if [[ "$FETCH_ALL" -eq 1 ]] || ! command -v python3 >/dev/null 2>&1; then
-  for n in "${listed[@]}"; do WANTED["$n"]=1; done
-else
-  while IFS= read -r n; do WANTED["$n"]=1; done < <(printf '%s\n' "${listed[@]}" | python3 "${SCRIPT_DIR}/wheel_select.py")
+selected=()
+if [[ "$FETCH_ALL" -eq 0 ]]; then
+  # Try python3 then python (Git Bash on Windows may only have one that works); an
+  # interpreter that fails or prints nothing means "keep everything", never "keep nothing".
+  for py in python3 python; do
+    command -v "$py" >/dev/null 2>&1 || continue
+    mapfile -t selected < <(printf '%s\n' "${listed[@]}" | "$py" "${SCRIPT_DIR}/wheel_select.py" 2>/dev/null | tr -d '\r')
+    [[ "${#selected[@]}" -gt 0 ]] && break
+  done
 fi
+[[ "${#selected[@]}" -gt 0 ]] || selected=("${listed[@]}")
+for n in "${selected[@]}"; do WANTED["$n"]=1; done
 
 tag=""
 count=0
