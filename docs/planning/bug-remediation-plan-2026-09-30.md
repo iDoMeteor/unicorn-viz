@@ -96,9 +96,14 @@ add the short hash.
 
 - [ ] **U1** Mixer-only boot profile takes no input. [mixer + core]
 - [ ] **B P1-1** Ping-pong pinning leaks effect instances. [core + auto-vj]
-- [ ] **B P1-2, B P1-3** Recording/streaming stop blocks, or hangs, the
+- [x] **B P1-2, B P1-3** Recording/streaming stop blocks, or hangs, the
   render thread. Move `stop()` and faststart off the main thread, and bound
-  `stdin.close()`. [core + media]
+  `stdin.close()`. [core + media] Landed core beta.194 + streaming-01 0.9.1
+  (`a135dcf`): `Recorder.stop()` / `RTMPStreamer.stop()` return at once, a
+  finalizer thread kills a stuck encoder before touching stdin, bounds the close,
+  then escalates; resize rotation is debounced (0.5 s), skipped when the size is
+  unchanged, writes a separately named file at the new size (the recorder never
+  adopted the new size before), and the old segment finishes in the background.
 - [ ] **E5** Camera probe (242 ms+) on the render thread. [media]
 - [ ] **H1 + H2 + H14** Controller reconnect after a USB blip:
   - keep the device hint on failure;

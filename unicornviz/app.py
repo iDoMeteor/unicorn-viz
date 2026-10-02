@@ -7777,6 +7777,7 @@ void main() {
                 self._render_subsystem_overlays(dt, self._width, self._height)
                 overlays.render(dt, include_recording_indicator=False)
             need_frame_for_recording = False
+            self._event_guard.call('recording rotation', self._service_recording_rotation)
             if self._recorder is not None:
                 _rec_failure = self._recorder.consume_failure()
                 if _rec_failure:
@@ -7854,7 +7855,8 @@ void main() {
                 # or streaming costs no extra readback at all.
                 self._last_output_frame = (stream_frame, self._width, self._height)
                 self._last_output_frame_t = _tap_now
-            if 'recording' in due and stream_frame is not None:
+            if 'recording' in due and stream_frame is not None \
+                    and self._recording_frame_fits(stream_frame):
                 self._write_recording_frame(stream_frame)
             if 'video_out' in due and stream_frame is not None and _vo is not None:
                 try:
@@ -8052,7 +8054,7 @@ void main() {
         step = self._shutdown_step
         step('profile autosave', self._flush_profile_autosave, True)   # a change made just before quitting
         if self._recorder:
-            step('recorder', self._recorder.stop)
+            step('recorder', self._recorder.shutdown)     # stop + bounded wait for the file to finish
         streamer, self._streamer = self._streamer, None
         if streamer is not None:
             step('streamer', streamer.destroy)
@@ -8656,11 +8658,40 @@ void main() {
         self._mirror_composite_fbo = self._make_fbo()
         return self._mirror_composite_fbo
 
+    #: Resize/fullscreen events arrive in bursts (dragging a window edge sends
+    #: one per pixel).  The recording is rotated once the size has been stable
+    #: this long, and only if it really changed (P1-2, audit 2026-09-30).
+    _REC_ROTATE_DEBOUNCE_S = 0.5
+    _rec_rotate_due: float = 0.0
+    _rec_rotate_reason: str = ''
+
     def _handle_recording_resize_interruption(self, reason: str) -> None:
-        """Rotate active recording when output dimensions change mid-session."""
+        """Schedule a recording rotation after an output-size change.
+
+        Frames of the new size are not written to the old-size encoder in the
+        meantime (see :meth:`_write_recording_frame`); the writer repeats the
+        last good frame, so the video holds still while the window is dragged.
+        """
         if self._recorder is None or not self._recorder.is_recording:
             return
+        self._rec_rotate_due = time.monotonic() + self._REC_ROTATE_DEBOUNCE_S
+        self._rec_rotate_reason = reason
+
+    def _service_recording_rotation(self) -> None:
+        """Per frame: perform a due rotation.  Never blocks: ``stop()`` hands the
+        old segment to a finalizer thread and the new one gets its own name."""
+        due = self._rec_rotate_due
+        if not due or time.monotonic() < due:
+            return
+        self._rec_rotate_due = 0.0
+        rec = self._recorder
+        if rec is None or not rec.is_recording:
+            return
+        if (int(self._width), int(self._height)) == rec.size:
+            return                                   # the size did not actually change
+        reason = self._rec_rotate_reason
         _stopped, stop_msg = self.stop_recording()
+        rec.resize(int(self._width), int(self._height))
         restarted, _start_msg = self.start_recording()
         if restarted:
             msg = f'{stop_msg} | Recording restarted ({reason})'
@@ -9410,6 +9441,9 @@ void main() {
         path = self._recorder.stop()
         self._sync_recording_overlay()
         if path is not None:
+            if self._recorder.is_finalizing:
+                # The faststart rewrite of a long set runs in the background.
+                return False, f'Recording stopped, finishing the file: {path}'
             return False, f'Recording saved: {path}'
         return False, 'Recording: OFF'
 
@@ -9608,6 +9642,15 @@ void main() {
             log.error('Recording capture failed: %s', exc)
             self._recorder.stop()
             self._sync_recording_overlay()
+
+    def _recording_frame_fits(self, frame: bytes) -> bool:
+        """False for a frame that is not the size the running encoder was
+        started for -- the window was resized and the debounced rotation has
+        not happened yet.  The writer repeats the last good frame meanwhile."""
+        size = getattr(self._recorder, 'size', None)
+        if size is None:
+            return True
+        return len(frame) == int(size[0]) * int(size[1]) * 3
 
     def _write_recording_frame(self, frame: bytes) -> None:
         """Write a pre-read RGB frame to the active recorder."""

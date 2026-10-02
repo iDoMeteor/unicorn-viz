@@ -27,6 +27,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from unicornviz.audio.pactl import run_pactl
 from unicornviz.config import Config
@@ -362,6 +363,10 @@ class Recorder:
         self._writer_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
         self._stderr_tail: deque[str] = deque(maxlen=20)
+        self._finalizers: list[threading.Thread] = []
+        self._finalizing_paths: set[Path] = set()
+        self._finalizer_lock = threading.Lock()
+        self._lingering_writer: threading.Thread | None = None
         self._recording_stopping: bool = False
         # Wallclock pacing state, all owned by the writer thread.
         self._pacing_start: float = 0.0
@@ -459,7 +464,14 @@ class Recorder:
     def _build_output_path(self) -> Path:
         self._directory.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return self._directory / f'{self._filename_prefix}_{ts}.{self._container}'
+        path = self._directory / f'{self._filename_prefix}_{ts}.{self._container}'
+        n = 1
+        # A segment still being finalized (a resize rotated the recording within
+        # the same second) or any existing file must never be reused.
+        while path.exists() or path in self._finalizing_paths:
+            n += 1
+            path = self._directory / f'{self._filename_prefix}_{ts}_{n}.{self._container}'
+        return path
 
     def _pactl(self, *args: str) -> str | None:
         """Cached pactl query (unicornviz.audio.pactl); None when unavailable.
@@ -847,6 +859,17 @@ class Recorder:
             return False
         if self.is_recording:
             return True
+        lingering = self._lingering_writer
+        if lingering is not None and lingering.is_alive():
+            # The previous recording's writer is stuck on a stalled encoder; its
+            # finalizer will kill it.  Two writers sharing the pacing state
+            # would corrupt both, so wait briefly and otherwise refuse.
+            lingering.join(timeout=min(self._WRITER_JOIN_TIMEOUT_S, 0.5))
+            if lingering.is_alive():
+                self._last_error = 'Previous recording is still finishing; try again in a moment'
+                log.warning(self._last_error)
+                return False
+        self._lingering_writer = None
 
         output_path = self._build_output_path()
         try:
@@ -892,7 +915,7 @@ class Recorder:
             self._write_failed = False
             self._failure_reported = False
             self._latest_frame = None
-            self._stderr_tail.clear()
+            self._stderr_tail = deque(maxlen=20)       # per recording: an old finalizer keeps its own
             self._frames_written = 0
             self._frames_duplicated = 0
             self._frames_dropped = 0
@@ -902,12 +925,14 @@ class Recorder:
             self._pacing_start = time.monotonic()
             self._stderr_thread = threading.Thread(
                 target=self._stderr_reader_worker,
+                args=(self._process, self._stderr_tail),
                 name='uv-rec-stderr',
                 daemon=True,
             )
             self._stderr_thread.start()
             self._writer_thread = threading.Thread(
                 target=self._frame_writer_worker,
+                args=(self._process, self._stderr_tail),
                 name='uv-rec-writer',
                 daemon=True,
             )
@@ -933,7 +958,7 @@ class Recorder:
             log.error(self._last_error)
             return self._retry_in_software()
 
-    def _stderr_reader_worker(self) -> None:
+    def _stderr_reader_worker(self, proc: Any = None, tail: deque[str] | None = None) -> None:
         """Daemon thread: drain ffmpeg's stderr so it can never block.
 
         A piped stderr that nobody reads fills its kernel buffer and wedges
@@ -943,7 +968,8 @@ class Recorder:
         went to DEVNULL, which is why a failed recording never explained
         itself.
         """
-        proc = self._process
+        proc = proc if proc is not None else self._process
+        tail = tail if tail is not None else self._stderr_tail
         if proc is None or proc.stderr is None:
             return
         try:
@@ -951,7 +977,7 @@ class Recorder:
                 line = raw.decode('utf-8', 'replace').strip()
                 if not line:
                     continue
-                self._stderr_tail.append(line)
+                tail.append(line)
                 log.warning('ffmpeg: %s', line)
         except Exception as exc:
             log.debug('Recording stderr reader exited: %s', exc)
@@ -1064,7 +1090,7 @@ class Recorder:
                 process.kill()
                 return process.wait(timeout=5.0)
 
-    def _frame_writer_worker(self) -> None:
+    def _frame_writer_worker(self, proc: Any = None, tail: deque[str] | None = None) -> None:
         """Daemon thread: pace the latest frame out to ffmpeg at constant rate.
 
         The output is muxed as **constant** frame rate, so the number of
@@ -1082,12 +1108,16 @@ class Recorder:
         """
         interval = 1.0 / float(self._fps)
         last_written: bytes | None = None
+        # Bound to the process (and stderr tail) of the recording it was started
+        # for, so a stopped recording's writer can never touch the next one's.
+        bound = proc if proc is not None else self._process
+        err_tail = tail if tail is not None else self._stderr_tail
         while not self._recording_stopping:
-            proc = self._process
+            proc = bound
             if proc is None or proc.stdin is None:
                 break
             if proc.poll() is not None:
-                tail = '; '.join(self._stderr_tail) or f'exit code {proc.returncode}'
+                tail = '; '.join(err_tail) or f'exit code {proc.returncode}'
                 self._last_error = f'ffmpeg exited during recording: {tail}'
                 self._write_failed = True
                 log.error(self._last_error)
@@ -1124,7 +1154,7 @@ class Recorder:
                     last_written = frame
             except (BrokenPipeError, OSError) as exc:
                 if not self._recording_stopping:
-                    tail = '; '.join(self._stderr_tail)
+                    tail = '; '.join(err_tail)
                     self._last_error = (
                         f'Recording write failed: {exc}'
                         + (f' ({tail})' if tail else '')
@@ -1132,10 +1162,11 @@ class Recorder:
                     self._write_failed = True
                     log.error(self._last_error)
                 break
-        log.debug(
-            'Recording writer thread exited: wrote=%d duplicated=%d skipped=%d',
+        log.info(
+            'Recording frames: %d written (%d duplicated to hold %d fps, %d skipped)',
             self._frames_written,
             self._frames_duplicated,
+            self._fps,
             self._frames_dropped,
         )
 
@@ -1152,37 +1183,133 @@ class Recorder:
             self._latest_frame = rgb_bytes
         return True
 
+    #: Longest the finalizer waits for the writer thread to leave on its own
+    #: before treating it as stuck inside ``stdin.write()``.
+    _WRITER_JOIN_TIMEOUT_S = 5.0
+    #: Longest ``stdin.close()`` may take before the encoder is killed.
+    _STDIN_CLOSE_TIMEOUT_S = 3.0
+
+    @property
+    def is_finalizing(self) -> bool:
+        """True while a stopped recording is still being finished in the background."""
+        with self._finalizer_lock:
+            return any(t.is_alive() for t in self._finalizers)
+
+    @property
+    def finalizing_paths(self) -> list[Path]:
+        with self._finalizer_lock:
+            return sorted(self._finalizing_paths)
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """The frame size the next (or current) recording is configured for."""
+        return (self._width, self._height)
+
+    def resize(self, width: int, height: int) -> bool:
+        """Set the frame size for the next recording; True if it changed.
+
+        The recorder used to keep the size it was built with, so a recording
+        restarted after a window resize was configured for the old geometry
+        while the new frames arrived at the new one.  Not allowed mid-recording
+        (ffmpeg's input size is fixed at spawn).
+        """
+        if self._process is not None:
+            return False
+        width, height = int(width), int(height)
+        if (width, height) == (self._width, self._height) or width <= 0 or height <= 0:
+            return False
+        self._width, self._height = width, height
+        return True
+
     def stop(self) -> Path | None:
-        """Stop the current recording and return the output path, if any."""
+        """Stop the current recording and return the output path, if any.
+
+        Returns at once: the writer join, the stdin close and ffmpeg's
+        ``+faststart`` rewrite (tens of seconds for a long set) run on a
+        finalizer thread, never on the caller's (the render thread's).  A new
+        recording may start immediately; it gets its own file name.  Use
+        :meth:`wait_finalized` (or :meth:`shutdown`) to wait for the file.
+        """
         process = self._process
         output_path = self._current_path
         if process is None:
             return output_path
         log.debug('Stopping recording: %s', output_path)
+        self._recording_stopping = True
+        writer = self._writer_thread
+        stderr_thread = self._stderr_thread
+        stderr_tail = self._stderr_tail
+        self._latest_frame = None
+        self._writer_thread = None
+        self._stderr_thread = None
+        self._process = None
+        self._current_path = None
+        self._started_at = 0.0
+        if writer is not None and writer.is_alive():
+            self._lingering_writer = writer       # start() must not overlap it
+        job = threading.Thread(
+            target=self._finalize, name='uv-rec-finalize', daemon=True,
+            args=(process, output_path, writer, stderr_thread, stderr_tail))
+        with self._finalizer_lock:
+            self._finalizers = [t for t in self._finalizers if t.is_alive()]
+            self._finalizers.append(job)
+            if output_path is not None:
+                self._finalizing_paths.add(output_path)
+        job.start()
+        return output_path
+
+    def _close_stdin_bounded(self, process: subprocess.Popen[bytes]) -> None:
+        """Close ffmpeg's stdin without ever hanging on it.
+
+        ``close()`` flushes into the pipe and needs the BufferedWriter lock, so
+        it blocks when the encoder stopped reading.  It runs on a helper thread;
+        if it is not done in ``_STDIN_CLOSE_TIMEOUT_S`` the encoder is killed,
+        which breaks the pipe and lets it return.
+        """
+        stdin = process.stdin
+        if stdin is None:
+            return
+        closer = threading.Thread(target=lambda: self._swallow(stdin.close),
+                                  name='uv-rec-close', daemon=True)
+        closer.start()
+        closer.join(timeout=self._STDIN_CLOSE_TIMEOUT_S)
+        if closer.is_alive():
+            log.warning('Recording: closing ffmpeg stdin blocked for %.1fs; killing the encoder',
+                        self._STDIN_CLOSE_TIMEOUT_S)
+            self._swallow(process.kill)
+            closer.join(timeout=2.0)
+
+    @staticmethod
+    def _swallow(fn) -> None:
         try:
-            self._recording_stopping = True
-            if self._writer_thread is not None:
-                self._writer_thread.join(timeout=5.0)
-                if self._writer_thread.is_alive():
-                    log.warning('Recording writer thread did not exit within 5.0s')
-                self._writer_thread = None
-            log.info(
-                'Recording frames: %d written (%d duplicated to hold %d fps, '
-                '%d skipped)',
-                self._frames_written,
-                self._frames_duplicated,
-                self._fps,
-                self._frames_dropped,
-            )
-            self._latest_frame = None
-            if process.stdin is not None:
-                process.stdin.close()
+            fn()
+        except Exception as exc:                 # noqa: BLE001 - teardown must finish
+            log.debug('Recording teardown step failed: %s', exc)
+
+    def _finalize(self, process: subprocess.Popen[bytes], output_path: Path | None,
+                  writer: threading.Thread | None, stderr_thread: threading.Thread | None,
+                  stderr_tail: deque[str]) -> None:
+        """Finish a stopped recording off the render thread (P1-2 / P1-3)."""
+        try:
+            if writer is not None:
+                writer.join(timeout=self._WRITER_JOIN_TIMEOUT_S)
+                if writer.is_alive():
+                    # Stuck inside stdin.write() against an encoder that stopped
+                    # reading, holding the lock close() needs: kill BEFORE
+                    # touching stdin, which breaks the pipe and frees the writer.
+                    log.warning('Recording writer thread did not exit within %.1fs; '
+                                'killing the encoder (the file may be unplayable)',
+                                self._WRITER_JOIN_TIMEOUT_S)
+                    self._swallow(process.kill)
+                    writer.join(timeout=2.0)
+                if self._lingering_writer is writer and not writer.is_alive():
+                    self._lingering_writer = None
+            self._close_stdin_bounded(process)
             return_code = self._await_finalize(process, output_path)
-            if self._stderr_thread is not None:
-                self._stderr_thread.join(timeout=2.0)
-                self._stderr_thread = None
+            if stderr_thread is not None:
+                stderr_thread.join(timeout=2.0)
             if return_code != 0:
-                tail = '; '.join(self._stderr_tail)
+                tail = '; '.join(stderr_tail)
                 self._last_error = (
                     f'Recording exited with code {return_code}'
                     + (f': {tail}' if tail else '')
@@ -1190,11 +1317,30 @@ class Recorder:
                 log.warning(self._last_error)
             elif output_path is not None:
                 log.info('Recording saved: %s', output_path)
-        except Exception as exc:
+        except Exception as exc:                 # noqa: BLE001
             self._last_error = f'Recording stop failed: {exc}'
             log.warning(self._last_error)
         finally:
-            self._process = None
-            self._current_path = None
-            self._started_at = 0.0
-        return output_path
+            with self._finalizer_lock:
+                if output_path is not None:
+                    self._finalizing_paths.discard(output_path)
+
+    def wait_finalized(self, timeout_s: float | None = None) -> bool:
+        """Wait for every background finalization; True when none is left."""
+        end = None if timeout_s is None else time.monotonic() + timeout_s
+        while True:
+            with self._finalizer_lock:
+                pending = [t for t in self._finalizers if t.is_alive()]
+            if not pending:
+                return True
+            left = None if end is None else end - time.monotonic()
+            if left is not None and left <= 0:
+                return False
+            pending[0].join(timeout=left)
+
+    def shutdown(self, timeout_s: float = 60.0) -> None:
+        """App exit: stop, then give the file time to finish (bounded)."""
+        self.stop()
+        if not self.wait_finalized(timeout_s):
+            log.warning('Recording: still finalizing after %.0fs at exit; ffmpeg '
+                        'continues on its own', timeout_s)

@@ -67,9 +67,12 @@ def test_stop_closes_stdin_and_releases_pending_frame() -> None:
     recorder._recording_stopping = False
     recorder._capture_audio = False
 
-    path = recorder.stop()
+    path = recorder.stop()                  # returns at once; the teardown is on a finalizer thread
 
     assert path == Path('recordings/test.mp4')
+    assert recorder._process is None and recorder._current_path is None
+    assert recorder._latest_frame is None
+    assert recorder.wait_finalized(5.0)     # P1-2: the old synchronous contract, now awaited
     assert process.stdin.closed is True
     # Finalize now polls for progress rather than waiting one fixed 10s
     # block, so what matters is that it waited and did not escalate.

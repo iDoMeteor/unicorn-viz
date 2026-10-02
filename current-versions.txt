@@ -4,7 +4,7 @@
   Component                     Version             Tier          Source
 ────────────────────────────────────────────────────────────────────────────
   ── BETA ──────────────────────────────────────────────────────────────────
-  core (unicornviz)             1.0.0-beta.193      BETA          MISMATCH (readme=1.0.0-beta.187)
+  core (unicornviz)             1.0.0-beta.194      BETA          MISMATCH (readme=1.0.0-beta.187)
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
   dj-mixer-01                   0.222.0             alpha ▲       module
@@ -38,6 +38,11 @@
   multi-head-01                 1.1.0-rc.3          RC            module
   postfx-01                     1.0.0-rc.2          RC            module
   spotify-01                    1.0.0-rc.12         RC            module
+
+  ── alpha ▲ ───────────────────────────────────────────────────────────────
+  streaming-01                  0.9.1               alpha ▲       MISMATCH (readme=0.8.1)
+
+  ── RC ────────────────────────────────────────────────────────────────────
   unicorn-tears-01              1.0.0-rc.3          RC            module
 
   ── alpha ▲ ───────────────────────────────────────────────────────────────
@@ -45,7 +50,6 @@
   effects-psychedelic           0.9.0               alpha ▲       module
   grand-finale-01               0.9.0               alpha ▲       module
   images-01                     0.9.0               alpha ▲       module
-  streaming-01                  0.9.0               alpha ▲       MISMATCH (readme=0.8.1)
   textures-01                   0.9.0               alpha ▲       module
 
   ── alpha ─────────────────────────────────────────────────────────────────
