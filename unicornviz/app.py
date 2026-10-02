@@ -8025,137 +8025,110 @@ void main() {
         if not self._shutdown_complete:
             self._shutdown_runtime()
 
+    def _shutdown_step(self, label: str, fn: Any, *args: Any) -> None:
+        """Run one teardown step; a failure is logged and never stops the next.
+
+        Every step of :meth:`_shutdown_runtime` goes through here (G3, audit
+        2026-09-30): ``_shutdown_complete`` is already True when teardown
+        starts, so an exception that escaped would skip the rest for good --
+        the runtime-state save, GL and SDL teardown included.
+        """
+        try:
+            fn(*args)
+        except Exception as exc:
+            log.warning('Shutdown step %s failed: %s', label, exc, exc_info=True)
+
     def _shutdown_runtime(self) -> None:
-        """Tear down subsystems, GL resources, and SDL. Runs at most once."""
+        """Tear down subsystems, GL resources, and SDL. Runs at most once.
+
+        Each step is isolated by :meth:`_shutdown_step`, so one failure cannot
+        prevent a later one -- above all the runtime-state save and the SDL
+        teardown.
+        """
         if self._shutdown_complete:
             return
         self._shutdown_complete = True
-        try:
-            self._flush_profile_autosave(force=True)   # a change made just before quitting
-        except Exception as exc:
-            log.warning('Profile autosave at shutdown failed: %s', exc)
+        step = self._shutdown_step
+        step('profile autosave', self._flush_profile_autosave, True)   # a change made just before quitting
         if self._recorder:
-            self._recorder.stop()
-        if self._streamer is not None:
-            self._streamer.destroy()
-            self._streamer = None
-        if self._auto_vj is not None:
-            try:
-                self._auto_vj.shutdown()
-            except Exception as exc:
-                log.warning('AutoVJController shutdown failed: %s', exc)
-            self._auto_vj = None
-        if self._grand_finale is not None:
-            try:
-                self._grand_finale.shutdown()
-            except Exception as exc:
-                log.warning('GrandFinaleController shutdown failed: %s', exc)
-            self._grand_finale = None
+            step('recorder', self._recorder.stop)
+        streamer, self._streamer = self._streamer, None
+        if streamer is not None:
+            step('streamer', streamer.destroy)
+        auto_vj, self._auto_vj = self._auto_vj, None
+        if auto_vj is not None:
+            step('AutoVJController', auto_vj.shutdown)
+        finale, self._grand_finale = self._grand_finale, None
+        if finale is not None:
+            step('GrandFinaleController', finale.shutdown)
         for name, subsystem in list(self._subsystems.items()):
             shutdown = getattr(subsystem, 'shutdown', None)
-            if not callable(shutdown):
-                continue
-            try:
-                shutdown()
-            except Exception as exc:
-                log.warning('%s subsystem shutdown failed: %s', name, exc)
+            if callable(shutdown):
+                step(f'{name} subsystem', shutdown)
         self._subsystems.clear()
         self._claimed_window_handlers.clear()
         self._hotkeys = None
         self._control_room = None
-        if self._keystroke_logger is not None:
-            self._keystroke_logger.close()
-            self._keystroke_logger = None
-        self._log_deleted_effects_summary()
+        keystrokes, self._keystroke_logger = self._keystroke_logger, None
+        if keystrokes is not None:
+            step('keystroke logger', keystrokes.close)
+        step('deleted-effects summary', self._log_deleted_effects_summary)
         if self._audio_manager is not None:
-            # Guarded like the other steps: when the audio helper is already
-            # gone (it used to die of the terminal's Ctrl+C first) this raised
-            # HostGone and skipped everything below -- relay/webcam/runtime
-            # state saves, MIDI close, GL and SDL teardown (G3, 2026-09-30).
-            try:
-                self._audio_manager.stop()
-            except Exception as exc:
-                log.warning('Audio manager stop failed at shutdown: %s', exc)
+            # When the audio helper is already gone (it used to die of the
+            # terminal's Ctrl+C first) this raises HostGone (G3).
+            step('audio manager', self._audio_manager.stop)
         # The audio process is shared (the mixer's engine lives there too, and
         # its subsystem shut down above): close it only now, after one last
         # copy of the capture state it may have changed.
         audio_host = getattr(self, '_audio_host', None)
         if audio_host is not None:
             self._audio_host = None
-            try:
+
+            def _persist_audio_state() -> None:
                 from unicornviz.audio import process as audio_process  # noqa: PLC0415
                 audio_process.persist_relay_state(audio_host, self._runtime_state)
-            except Exception as exc:
-                log.debug('Audio process state not persisted at shutdown: %s', exc)
-            audio_host.close()
+            step('audio process state', _persist_audio_state)
+            step('audio process', audio_host.close)
         if self._midi_manager is not None:
-            self._midi_manager.stop()
+            step('MIDI manager', self._midi_manager.stop)
         # getattr: ensure_shutdown() must work on a cold App (see the crash-
         # isolation tests), which may predate this attribute.
-        if getattr(self, '_video_deck_layer', None) is not None:
-            self._video_deck_layer.destroy()
+        layer = getattr(self, '_video_deck_layer', None)
+        if layer is not None:
             self._video_deck_layer = None
-        if self._webcam_system is not None:
-            self._persist_webcam_runtime_state()
-            self._webcam_system.destroy()
-            self._webcam_system = None
+            step('video deck layer', layer.destroy)
+        webcam, self._webcam_system = self._webcam_system, None
+        if webcam is not None:
+            step('webcam state', self._persist_webcam_runtime_state)
+            step('webcam system', webcam.destroy)
         # GL teardown can fail when shutting down after a crash (dead
-        # context); contain it so SDL teardown below still runs.
-        try:
-            if self._candy_frame is not None:
-                self._candy_frame.destroy()
-                self._candy_frame = None
-            if self._postfx_controller is not None:
-                self._postfx_controller.destroy()
-                self._postfx_controller = None
-            if self._color_grade is not None:
-                self._color_grade.destroy()
-                self._color_grade = None
-            if self._beat_flash is not None:
-                self._beat_flash.destroy()
-                self._beat_flash = None
-            if self._video_postfx is not None:
-                self._video_postfx.destroy()
-                self._video_postfx = None
-            if self._current_effect:
-                self._current_effect.destroy()
-            if self._next_effect:
-                self._next_effect.destroy()
-            overlays = getattr(self, '_overlays', None)
-            if overlays is not None:
-                overlays.destroy()
-            if self._invert_vao:
-                self._invert_vao.release()
-            if self._invert_vbo:
-                self._invert_vbo.release()
-            if self._invert_prog:
-                self._invert_prog.release()
-            if self._present_vao:
-                self._present_vao.release()
-            if self._present_vbo:
-                self._present_vbo.release()
-            if self._present_prog:
-                self._present_prog.release()
-            if self._burst_vao:
-                self._burst_vao.release()
-            if self._burst_vbo:
-                self._burst_vbo.release()
-            if self._burst_prog:
-                self._burst_prog.release()
-            self._release_readback_pbos()
-        except Exception:
-            log.warning('GL teardown failed during shutdown', exc_info=True)
-        try:
-            self._runtime_state.save()
-        except Exception:
-            log.warning('Runtime state save failed during shutdown', exc_info=True)
-        if self._gl_context:
-            sdl2.SDL_GL_DeleteContext(self._gl_context)
-            self._gl_context = None
-        if self._window:
-            sdl2.SDL_DestroyWindow(self._window)
-            self._window = None
-        sdl2.SDL_Quit()
+        # context); each object is released on its own so one failure
+        # leaves neither the others nor SDL teardown undone.
+        for attr in ('_candy_frame', '_postfx_controller', '_color_grade',
+                     '_beat_flash', '_video_postfx'):
+            obj = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if obj is not None:
+                step(f'GL {attr}', obj.destroy)
+        for attr in ('_current_effect', '_next_effect', '_overlays'):
+            obj = getattr(self, attr, None)
+            if obj:
+                step(f'GL {attr}', obj.destroy)
+        for attr in ('_invert_vao', '_invert_vbo', '_invert_prog',
+                     '_present_vao', '_present_vbo', '_present_prog',
+                     '_burst_vao', '_burst_vbo', '_burst_prog'):
+            obj = getattr(self, attr, None)
+            if obj:
+                step(f'GL {attr}', obj.release)
+        step('readback buffers', self._release_readback_pbos)
+        step('runtime state save', self._runtime_state.save)
+        context, self._gl_context = self._gl_context, None
+        if context:
+            step('GL context', sdl2.SDL_GL_DeleteContext, context)
+        window, self._window = self._window, None
+        if window:
+            step('window', sdl2.SDL_DestroyWindow, window)
+        step('SDL', sdl2.SDL_Quit)
 
     def _effect_viewport_for_target(
         self,

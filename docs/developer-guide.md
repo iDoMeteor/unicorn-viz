@@ -221,6 +221,16 @@ runtime state file.  Per-machine state is local-only by design.
 preferences in one file.  On a fresh machine, drop it back into `runtime/`
 before launching.
 
+**A file that fails to load is never overwritten** (`unicornviz/safe_store.py`; used by
+`global_state.json`, `config_profiles.json` and `presets.json`).  If the file cannot be read, is not
+valid JSON, or has the wrong shape, it is renamed to `<name>.corrupt-<timestamp>` with its bytes
+untouched, an ERROR says where it went, and the store starts from defaults.  Saves then go to the
+original path, which is safe because the quarantine copy exists.  If the file cannot even be moved
+or copied aside (read-only directory, permissions), the store **blocks saves to that path for the
+session** and says so once.  To recover, repair the `.corrupt-*` file and put it back.  A file that
+loads but contains entries the store will drop (a profile that is not an object) is copied aside
+the same way before the next save.
+
 **Transitions** are FBO-based:  both the outgoing and incoming effects render
 into separate FBOs, then a transition shader composites them to the screen
 over `transition_duration` seconds.  Supported modes: `crossfade`,

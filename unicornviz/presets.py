@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from unicornviz.paths import resolve_path
+from unicornviz.safe_store import keep_copy, quarantine
 
 log = logging.getLogger(__name__)
 
@@ -36,12 +37,14 @@ class ShowPresetStore:
     caller owns their schema.
     """
 
-    __slots__ = ('_path', '_lock', '_presets')
+    __slots__ = ('_path', '_lock', '_presets', '_save_blocked', '_save_block_logged')
 
     def __init__(self, path: str | Path = 'runtime/presets.json') -> None:
         self._path = resolve_path(path)
         self._lock = threading.RLock()
         self._presets: dict[str, dict[str, Any]] = {}
+        self._save_blocked = False      # file failed to load and could not be moved aside
+        self._save_block_logged = False
         self._load()
 
     @property
@@ -50,26 +53,37 @@ class ShowPresetStore:
         return self._path
 
     def _load(self) -> None:
+        """Load the file; an unloadable one is quarantined, never overwritten
+        (see :mod:`unicornviz.safe_store`)."""
         with self._lock:
             if not self._path.exists():
                 self._presets = {}
                 return
             try:
                 payload = json.loads(self._path.read_text(encoding='utf-8'))
+                presets = payload.get('presets') if isinstance(payload, dict) else None
+                if not isinstance(presets, dict):
+                    raise ValueError("not a preset file (no 'presets' object)")
             except Exception as exc:
-                log.warning('Preset load failed (%s): %s', self._path, exc)
                 self._presets = {}
+                if quarantine(self._path, str(exc), 'Show presets') is None:
+                    self._save_blocked = True
                 return
-            presets = payload.get('presets') if isinstance(payload, dict) else None
-            if isinstance(presets, dict):
-                self._presets = {
-                    str(k): deepcopy(v) for k, v in presets.items() if isinstance(v, dict)
-                }
-            else:
-                self._presets = {}
+            self._presets = {
+                str(k): deepcopy(v) for k, v in presets.items() if isinstance(v, dict)
+            }
+            if len(self._presets) != len(presets):
+                keep_copy(self._path, 'some entries are not presets and will be dropped',
+                          'Show presets')
 
     def _save(self) -> None:
         with self._lock:
+            if self._save_blocked:
+                if not self._save_block_logged:
+                    self._save_block_logged = True
+                    log.error('Show presets: not saving to %s this session (the file '
+                              'failed to load and could not be moved aside)', self._path)
+                return
             try:
                 self._path.parent.mkdir(parents=True, exist_ok=True)
                 payload = {

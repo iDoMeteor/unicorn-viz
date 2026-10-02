@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from unicornviz.paths import resolve_path
+from unicornviz.safe_store import quarantine
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ class RuntimeStateStore:
         self._path = resolve_path(path)
         self._lock = threading.RLock()
         self._data: dict[str, Any] = {}
+        #: True when the file failed to load and could not be moved aside: the
+        #: store then never writes to that path this session.
+        self._save_blocked = False
+        self._save_block_logged = False
         self._load()
         if self._ensure_schema_metadata():
             self.save()
@@ -38,21 +43,23 @@ class RuntimeStateStore:
         return self._path
 
     def _load(self) -> None:
+        """Load the file.  A file that cannot be read, parsed or is not a JSON
+        object is quarantined (``.corrupt-<ts>``) and never overwritten; if it
+        cannot even be moved aside, saves are blocked for the session."""
         with self._lock:
             if not self._path.exists():
                 self._data = {}
                 return
             try:
                 payload = json.loads(self._path.read_text(encoding='utf-8'))
+                if not isinstance(payload, dict):
+                    raise ValueError('not a JSON object')
             except Exception as exc:
-                log.warning('Runtime state load failed (%s): %s', self._path, exc)
                 self._data = {}
+                if quarantine(self._path, str(exc), 'Runtime state') is None:
+                    self._save_blocked = True
                 return
-            if isinstance(payload, dict):
-                self._data = payload
-            else:
-                log.warning('Runtime state file is not a JSON object: %s', self._path)
-                self._data = {}
+            self._data = payload
 
     def _ensure_schema_metadata(self) -> bool:
         """Ensure payload includes the runtime-state schema header."""
@@ -79,6 +86,12 @@ class RuntimeStateStore:
     def save(self) -> None:
         """Persist current runtime state to disk atomically."""
         with self._lock:
+            if self._save_blocked:
+                if not self._save_block_logged:
+                    self._save_block_logged = True
+                    log.error('Runtime state: not saving to %s this session (the file '
+                              'failed to load and could not be moved aside)', self._path)
+                return
             try:
                 self._path.parent.mkdir(parents=True, exist_ok=True)
                 tmp_path = self._path.with_suffix(self._path.suffix + '.tmp')
