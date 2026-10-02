@@ -202,9 +202,15 @@ if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
     [[ -f "${WHEELHOUSE}/SHA256SUMS" ]] || die "--wheelhouse: ${WHEELHOUSE}/SHA256SUMS missing; refusing to ship unverified wheels"
     mkdir -p "${DEST}/wheelhouse"
     wheels=0
-    for whl in "${WHEELHOUSE}"/*.whl; do
+    # Append-only wheelhouse: keep only the newest build of each wheel (wheel_select.py).
+    mapfile -t candidates < <(cd "$WHEELHOUSE" && ls -1 -- *.whl 2>/dev/null || true)
+    if command -v python3 >/dev/null 2>&1 && [[ "${#candidates[@]}" -gt 0 ]]; then
+      mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | python3 "${SCRIPT_DIR}/wheel_select.py")
+    fi
+    for cand in "${candidates[@]}"; do
+      whl="${WHEELHOUSE}/${cand}"
       [[ -e "$whl" ]] || break
-      name="$(basename "$whl")"
+      name="$cand"
       case "${WHEEL_PLATFORM}:${name}" in
         all:*|linux:*manylinux*|windows:*win_amd64*) ;;
         linux:*|windows:*) continue ;;

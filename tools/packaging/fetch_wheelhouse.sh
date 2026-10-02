@@ -21,6 +21,8 @@
 #   --trust <file>    Trust file (default: wheelhouse-cp314t.sha256 beside this script)
 #   --platform <p>    linux | windows | all (default all): only wheels for that platform are
 #                     downloaded (a Linux tarball does not need the Windows OpenCV wheel)
+#   --all             Fetch every listed wheel (default: only the newest build of each,
+#                     see wheel_select.py; older builds stay listed as the record)
 #   --repo <o/n>      GitHub repository (default: $GITHUB_REPOSITORY, else iDoMeteor/unicorn-viz)
 #   --base-url <url>  Override the download base (tests): <url>/<tag>/<file>
 #   -h, --help
@@ -33,6 +35,7 @@ TRUST="${SCRIPT_DIR}/wheelhouse-cp314t.sha256"
 REPO="${GITHUB_REPOSITORY:-iDoMeteor/unicorn-viz}"
 BASE_URL=""
 PLATFORM="all"
+FETCH_ALL=0
 
 log() { echo "[fetch-wheelhouse] $*" >&2; }
 die() { echo "[fetch-wheelhouse] ERROR: $*" >&2; exit 1; }
@@ -44,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --trust) TRUST="$2"; shift 2 ;;
     --repo) REPO="$2"; shift 2 ;;
     --platform) PLATFORM="$2"; shift 2 ;;
+    --all) FETCH_ALL=1; shift ;;
     --base-url) BASE_URL="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -57,6 +61,16 @@ BASE_URL="${BASE_URL:-https://github.com/${REPO}/releases/download}"
 mkdir -p "$DEST"
 : > "${DEST}/SHA256SUMS"
 
+# Which wheels to fetch: by default the newest build of each (the trust file is an
+# append-only record, so it also lists superseded builds nobody needs to ship).
+declare -A WANTED=()
+mapfile -t listed < <(awk '!/^[[:space:]]*(#|$)/ {print $2}' "$TRUST")
+if [[ "$FETCH_ALL" -eq 1 ]] || ! command -v python3 >/dev/null 2>&1; then
+  for n in "${listed[@]}"; do WANTED["$n"]=1; done
+else
+  while IFS= read -r n; do WANTED["$n"]=1; done < <(printf '%s\n' "${listed[@]}" | python3 "${SCRIPT_DIR}/wheel_select.py")
+fi
+
 tag=""
 count=0
 while IFS= read -r line; do
@@ -69,6 +83,7 @@ while IFS= read -r line; do
   [[ "$want" =~ ^[0-9a-f]{64}$ ]] || die "bad checksum line in ${TRUST}: ${line}"
   [[ "$name" == *.whl && "$name" != */* ]] || die "bad wheel name in ${TRUST}: ${name}"
   [[ -n "$tag" ]] || die "no '# release-tag:' line before ${name} in ${TRUST}"
+  [[ -n "${WANTED[$name]:-}" ]] || continue
   case "${PLATFORM}:${name}" in
     all:*|linux:*manylinux*|windows:*win_amd64*) ;;
     linux:*|windows:*) continue ;;

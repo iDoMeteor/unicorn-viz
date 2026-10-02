@@ -85,3 +85,12 @@ def test_source_nested_in_another_checkout_is_not_mistaken_for_one(tmp_path: Pat
     assert proc.returncode == 0, proc.stderr
     assert (tmp_path / 'out' / 'unicornviz').is_dir()
     assert 'Source is not a git checkout' in proc.stderr  # took the tar fallback
+
+
+def test_only_the_newest_build_of_each_wheel_is_staged(tmp_path: Path) -> None:
+    old = 'a-1.0-cp314-cp314t-manylinux_2_28_x86_64.whl'
+    new = 'a-1.0-3-cp314-cp314t-manylinux_2_28_x86_64.whl'
+    other = 'b-2.0-cp314-cp314t-manylinux_2_28_x86_64.whl'
+    proc = _stage(tmp_path, _wheelhouse(tmp_path, [old, new, other]))
+    assert proc.returncode == 0, proc.stderr
+    assert _staged(tmp_path) == {new, other}
